@@ -47,9 +47,25 @@ static int ip_vs_conn_tab_bits = CONFIG_IP_VS_TAB_BITS;
 module_param_named(conn_tab_bits, ip_vs_conn_tab_bits, int, 0444);
 MODULE_PARM_DESC(conn_tab_bits, "Set connections' hash size");
 
+bool share_ns;
+EXPORT_SYMBOL_GPL(share_ns);
+module_param_named(sharens, share_ns, bool, 0444);
+MODULE_PARM_DESC(sharens, "share network namespace in IPVS");
+
 /* size and mask values */
 int ip_vs_conn_tab_size __read_mostly;
 static int ip_vs_conn_tab_mask __read_mostly;
+
+/* retrieve origin net in skb for xmit
+ * local-out: ip_queue_xmit->skb_dst_set_noref
+ * local-in:  ip_route_input_slow set it
+ */
+struct net *ip_vs_skb_net(struct sk_buff *skb)
+{
+	if (skb_dst(skb) && skb_dst(skb)->dev)
+		return dev_net(skb_dst(skb)->dev);
+	return NULL;
+}
 
 /*
  *  Connection hash table: for input and output packets lookups of IPVS
