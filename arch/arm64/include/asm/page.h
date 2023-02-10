@@ -12,6 +12,7 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/hardirq.h>
 #include <linux/personality.h> /* for READ_IMPLIES_EXEC */
 #include <linux/types.h> /* for gfp_t */
 #include <asm/pgtable-types.h>
@@ -19,7 +20,22 @@
 struct page;
 struct vm_area_struct;
 
-extern void copy_page(void *to, const void *from);
+extern void slow_copy_page(void *to, const void *from);
+#ifdef CONFIG_KERNEL_MODE_NEON
+extern void fast_copy_page(void *to, const void *from);
+static inline void copy_page(void *to, const void *from)
+{
+	if (unlikely(in_interrupt()))
+		slow_copy_page(to, from);
+	else
+		fast_copy_page(to, from);
+}
+#else
+static inline void copy_page(void *to, const void *from)
+{
+	slow_copy_page(to, from);
+}
+#endif
 extern void clear_page(void *to);
 
 void copy_user_highpage(struct page *to, struct page *from,
