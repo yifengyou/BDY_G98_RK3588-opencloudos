@@ -2120,6 +2120,33 @@ static unsigned int max_sched_bt_lb_ms = 1024;
 extern int sysctl_remove_bt_load;
 #endif
 
+#ifdef CONFIG_ARM64
+extern struct static_key_false fast_copy_page_enabled;
+int sysctl_enable_fast_copy_page(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table t;
+	int err;
+	int state = static_branch_likely(&fast_copy_page_enabled);
+
+	if (write && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	t = *table;
+	t.data = &state;
+	err = proc_dointvec_minmax(&t, write, buffer, lenp, ppos);
+	if (err < 0)
+		return err;
+	if (write) {
+		if (state)
+			static_branch_enable(&fast_copy_page_enabled);
+		else
+			static_branch_disable(&fast_copy_page_enabled);
+	}
+	return err;
+}
+#endif
+
 static struct ctl_table kern_table[] = {
 #ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	{
@@ -2968,6 +2995,17 @@ unsigned int vm_memcg_page_cache_hit;
 unsigned long vm_pagecache_system_usage;
 
 static struct ctl_table vm_table[] = {
+#ifdef CONFIG_ARM64
+	{
+		.procname	= "fast_copy_page_enabled",
+		.data		= NULL,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sysctl_enable_fast_copy_page,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{
 		.procname	= "overcommit_memory",
 		.data		= &sysctl_overcommit_memory,
