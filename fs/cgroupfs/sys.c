@@ -7,7 +7,16 @@
 #include "cgroupfs.h"
 
 extern int cpu_get_max_cpus(struct task_struct *p);
+
+#ifdef CONFIG_X86
 extern int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once);
+#else
+static inline int cpuset_cgroups_cpu_allowed(struct task_struct *task,
+					     int cpu, int once)
+{
+	return 0;
+}
+#endif
 
 static int __attribute__((unused)) cgroupfs_dop_revalidate(
 			struct dentry *dentry, unsigned int flags)
