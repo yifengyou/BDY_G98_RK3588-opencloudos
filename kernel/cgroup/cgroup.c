@@ -5568,7 +5568,7 @@ ssize_t cgroup_role_write(struct kernfs_open_file *of,
 	if (ret)
 		return ret;
 
-	if (role < 0)
+	if (role < 0 || role > CGROUPFS_CGROUP_ROLE_POD_GROUPS)
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
@@ -5587,6 +5587,35 @@ unlock_out:
 
 	return ret ?: nbytes;
 }
+
+struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
+		struct task_struct *task, int type, int cgrp_id)
+{
+	struct cgroup_subsys_state *css, *prev_css, *orig_css;
+
+	css = task_get_css(task, cgrp_id);
+	prev_css = orig_css = css;
+
+	while (css && css->cgroup->role == type) {
+		prev_css = css;
+		css = css->parent;
+	}
+
+	if (prev_css != orig_css) {
+		css_get(prev_css);
+		css_put(orig_css);
+	}
+
+	return prev_css;
+}
+
+#else
+struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
+		struct task_struct *task, int type, int cgrp_id)
+{
+	return task_get_css(task, cgrp_id);
+}
+
 #endif
 
 int cgroup_priority_show(struct seq_file *seq, void *v)

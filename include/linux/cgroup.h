@@ -871,6 +871,10 @@ void cgroup_sli_monitor_stop(struct seq_file *seq, void *v);
 __poll_t cgroup_sli_monitor_poll(struct kernfs_open_file *of, poll_table *pt);
 #endif
 
+#define CGROUPFS_CGROUP_ROLE_POD_GROUPS 1
+struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
+		struct task_struct *task, int type, int cgrp_id);
+
 #ifdef CONFIG_CGROUP_BPF
 static inline void cgroup_bpf_get(struct cgroup *cgrp)
 {

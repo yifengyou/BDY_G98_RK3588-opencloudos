@@ -10732,7 +10732,8 @@ int container_cpuquota_aware;
 int cpu_get_max_cpus(struct task_struct *p)
 {
 	int max_cpus = INT_MAX;
-	struct cgroup_subsys_state *css = task_get_css(p, cpu_cgrp_id);
+	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(p,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
 	struct task_group *tg = container_of(css, struct task_group, css);
 
 	if (!cpu_quota_aware_enabled(tg))

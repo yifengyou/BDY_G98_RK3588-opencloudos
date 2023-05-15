@@ -1135,7 +1135,8 @@ int blkcg_cgroupfs_dkstats_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct blkcg *blkcg;
 
-	css = task_get_css(current, io_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, io_cgrp_id);
 	blkcg = css_to_blkcg(css);
 	ret = blkcg_dkstats_show_comm(m, v, blkcg);
 	css_put(css);

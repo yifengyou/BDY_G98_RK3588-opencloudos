@@ -3190,7 +3190,8 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	 * of each cpus less than total. To make sum of usage of each cpu equal to total,
 	 * set quota_aware=0 or configure quota equal to cpuset num.
 	 */
-	css = task_get_css(current, cpuacct_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
 	for_each_cpu(i, cs->cpus_allowed) {
 		struct kernel_cpustat kcs;
 		kcpustat_cpu_fetch(&kcs, i);
@@ -3297,7 +3298,8 @@ int cpuset_cgroupfs_stat_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
 
-	css = task_get_css(current, cpuset_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 	max_cpu = cpu_get_max_cpus(current);
 	if (cgroupfs_stat_show_cpuacct_info)
@@ -3468,8 +3470,13 @@ static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct 
 int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once)
 {
 	int max_cpu, i, ret, k = 0;
-	struct cgroup_subsys_state *css = task_get_css(task, cpuset_cgrp_id);
-	struct cpuset *cs = css_cs(css);
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+
+
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
+	cs = css_cs(css);
 
 	if (!once) {
 		ret = cpumask_test_cpu(cpu, cs->cpus_allowed);
@@ -3501,7 +3508,8 @@ int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
 
-	css = task_get_css(current, cpuset_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 	max_cpu = cpu_get_max_cpus(current);
 	ret = cpuset_cgroup_cpuinfo_show_comm(m, v, cs, max_cpu);
@@ -3516,7 +3524,8 @@ int cpuset_cgroupfs_get_cpu_count(void)
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
 
-	css = task_get_css(current, cpuset_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 	ret = cpumask_weight(cs->cpus_allowed);
 	css_put(css);
@@ -4974,7 +4983,8 @@ int cpuset_cgroupfs_loadavg_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
 
-	css = task_get_css(current, cpuset_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 	ret = cpuset_cgroup_loadavg_show_comm(m, v, cs);
 	css_put(css);
