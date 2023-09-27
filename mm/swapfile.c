@@ -2713,11 +2713,10 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	exit_swap_address_space(p->type);
 
 	inode = mapping->host;
-	if (S_ISBLK(inode->i_mode)) {
-		struct block_device *bdev = I_BDEV(inode);
-
-		set_blocksize(bdev, old_block_size);
-		blkdev_put(bdev, p);
+	if (p->bdev_handle) {
+		set_blocksize(p->bdev, old_block_size);
+		bdev_release(p->bdev_handle);
+		p->bdev_handle = NULL;
 	}
 
 	inode_lock(inode);
@@ -2953,13 +2952,14 @@ static int claim_swapfile(struct swap_info_struct *si, struct inode *inode)
 				"Swapping on block file over filesystem %s, file system operations may get bypassed unexpectedly and lead to data loss.\n",
 				si->swap_file->f_inode->i_sb->s_id);
 #endif
-		si->bdev = blkdev_get_by_dev(inode->i_rdev,
+		si->bdev_handle = bdev_open_by_dev(inode->i_rdev,
 				BLK_OPEN_READ | BLK_OPEN_WRITE, si, NULL);
-		if (IS_ERR(si->bdev)) {
-			error = PTR_ERR(si->bdev);
-			si->bdev = NULL;
+		if (IS_ERR(si->bdev_handle)) {
+			error = PTR_ERR(si->bdev_handle);
+			si->bdev_handle = NULL;
 			return error;
 		}
+		si->bdev = si->bdev_handle->bdev;
 		si->old_block_size = block_size(si->bdev);
 		error = set_blocksize(si->bdev, PAGE_SIZE);
 		if (error < 0)
@@ -3394,9 +3394,10 @@ free_swap_address_space:
 bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
-	if (inode && S_ISBLK(inode->i_mode) && si->bdev) {
+	if (si->bdev_handle) {
 		set_blocksize(si->bdev, si->old_block_size);
-		blkdev_put(si->bdev, si);
+		bdev_release(si->bdev_handle);
+		si->bdev_handle = NULL;
 	}
 	kfree(si->global_cluster);
 	si->global_cluster = NULL;
