@@ -66,6 +66,7 @@
 #include <linux/seq_buf.h>
 #include <linux/emm.h>
 #include <linux/sched/isolation.h>
+#include <linux/kmemleak.h>
 #include <linux/namei.h>
 #include <linux/kabi.h>
 #ifdef CONFIG_CGROUP_SLI
