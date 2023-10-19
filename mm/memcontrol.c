@@ -4766,6 +4766,8 @@ static int memcg_online_kmem(struct mem_cgroup *memcg)
 
 	objcg->memcg = memcg;
 	rcu_assign_pointer(memcg->objcg, objcg);
+	obj_cgroup_get(objcg);
+	memcg->orig_objcg = objcg;
 
 	static_branch_enable(&memcg_kmem_online_key);
 
@@ -7312,6 +7314,9 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 	free_percpu(memcg->mbd);
 	free_percpu(memcg->apcl);
 	free_percpu(memcg->apd);
+
+	if (memcg->orig_objcg)
+		obj_cgroup_put(memcg->orig_objcg);
 
 	for_each_node(node)
 		free_mem_cgroup_per_node_info(memcg, node);
