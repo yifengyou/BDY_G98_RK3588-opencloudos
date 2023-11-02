@@ -2944,7 +2944,7 @@ static void deactivate_slab(struct kmem_cache *s, struct slab *slab,
 }
 
 #ifdef CONFIG_SLUB_CPU_PARTIAL
-static void __unfreeze_partials(struct kmem_cache *s, struct slab *partial_slab)
+static void __put_partials(struct kmem_cache *s, struct slab *partial_slab)
 {
 	struct kmem_cache_node *n = NULL, *n2 = NULL;
 	struct slab *slab, *slab_to_discard = NULL;
@@ -2986,9 +2986,9 @@ static void __unfreeze_partials(struct kmem_cache *s, struct slab *partial_slab)
 }
 
 /*
- * Unfreeze all the cpu partial slabs.
+ * Put all the cpu partial slabs to the node partial list.
  */
-static void unfreeze_partials(struct kmem_cache *s)
+static void put_partials(struct kmem_cache *s)
 {
 	struct slab *partial_slab;
 	unsigned long flags;
@@ -2999,11 +2999,11 @@ static void unfreeze_partials(struct kmem_cache *s)
 	local_unlock_irqrestore(&s->cpu_slab->lock, flags);
 
 	if (partial_slab)
-		__unfreeze_partials(s, partial_slab);
+		__put_partials(s, partial_slab);
 }
 
-static void unfreeze_partials_cpu(struct kmem_cache *s,
-				  struct kmem_cache_cpu *c)
+static void put_partials_cpu(struct kmem_cache *s,
+			     struct kmem_cache_cpu *c)
 {
 	struct slab *partial_slab;
 
@@ -3011,7 +3011,7 @@ static void unfreeze_partials_cpu(struct kmem_cache *s,
 	c->partial = NULL;
 
 	if (partial_slab)
-		__unfreeze_partials(s, partial_slab);
+		__put_partials(s, partial_slab);
 }
 
 /*
@@ -3024,7 +3024,7 @@ static void unfreeze_partials_cpu(struct kmem_cache *s,
 static void put_cpu_partial(struct kmem_cache *s, struct slab *slab, int drain)
 {
 	struct slab *oldslab;
-	struct slab *slab_to_unfreeze = NULL;
+	struct slab *slab_to_put = NULL;
 	unsigned long flags;
 	int slabs = 0;
 
@@ -3039,7 +3039,7 @@ static void put_cpu_partial(struct kmem_cache *s, struct slab *slab, int drain)
 			 * per node partial list. Postpone the actual unfreezing
 			 * outside of the critical section.
 			 */
-			slab_to_unfreeze = oldslab;
+			slab_to_put = oldslab;
 			oldslab = NULL;
 		} else {
 			slabs = oldslab->slabs;
@@ -3055,17 +3055,17 @@ static void put_cpu_partial(struct kmem_cache *s, struct slab *slab, int drain)
 
 	local_unlock_irqrestore(&s->cpu_slab->lock, flags);
 
-	if (slab_to_unfreeze) {
-		__unfreeze_partials(s, slab_to_unfreeze);
+	if (slab_to_put) {
+		__put_partials(s, slab_to_put);
 		stat(s, CPU_PARTIAL_DRAIN);
 	}
 }
 
 #else	/* CONFIG_SLUB_CPU_PARTIAL */
 
-static inline void unfreeze_partials(struct kmem_cache *s) { }
-static inline void unfreeze_partials_cpu(struct kmem_cache *s,
-				  struct kmem_cache_cpu *c) { }
+static inline void put_partials(struct kmem_cache *s) { }
+static inline void put_partials_cpu(struct kmem_cache *s,
+				    struct kmem_cache_cpu *c) { }
 
 #endif	/* CONFIG_SLUB_CPU_PARTIAL */
 
@@ -3107,7 +3107,7 @@ static inline void __flush_cpu_slab(struct kmem_cache *s, int cpu)
 		stat(s, CPUSLAB_FLUSH);
 	}
 
-	unfreeze_partials_cpu(s, c);
+	put_partials_cpu(s, c);
 }
 
 struct slub_flush_work {
@@ -3135,7 +3135,7 @@ static void flush_cpu_slab(struct work_struct *w)
 	if (c->slab)
 		flush_slab(s, c);
 
-	unfreeze_partials(s);
+	put_partials(s);
 }
 
 static bool has_cpu_slab(int cpu, struct kmem_cache *s)
@@ -3566,7 +3566,7 @@ new_slab:
 		if (unlikely(!node_match(slab, node) ||
 			     !pfmemalloc_match(slab, gfpflags))) {
 			slab->next = NULL;
-			__unfreeze_partials(s, slab);
+			__put_partials(s, slab);
 			continue;
 		}
 
