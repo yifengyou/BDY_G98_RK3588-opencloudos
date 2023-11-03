@@ -1152,7 +1152,7 @@ int sanity_tests(void)
 	/* 9. Memory mapped file */
 	fd = open(progname, O_RDONLY);
 	if (fd < 0)
-		ksft_exit_fail_msg("%s Memory mapped file\n");
+		ksft_exit_fail_msg("%s Memory mapped file\n", __func__);
 
 	ret = stat(progname, &sbuf);
 	if (ret < 0)
@@ -1160,7 +1160,7 @@ int sanity_tests(void)
 
 	fmem = mmap(NULL, sbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %ld %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
 
 	tmp_buf = malloc(sbuf.st_size);
 	memcpy(tmp_buf, fmem, sbuf.st_size);
@@ -1190,7 +1190,7 @@ int sanity_tests(void)
 
 	fmem = mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %ld %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, buf_size);
 	wp_addr_range(fmem, buf_size);
@@ -1600,7 +1600,7 @@ int main(int argc, char *argv[])
 
 	fmem = mmap(NULL, sbuf.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %ld %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, sbuf.st_size);
 	wp_addr_range(fmem, sbuf.st_size);
@@ -1628,7 +1628,7 @@ int main(int argc, char *argv[])
 
 	fmem = mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %ld %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, buf_size);
 	wp_addr_range(fmem, buf_size);
