@@ -7467,6 +7467,8 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	page_counter_set_async_high(&memcg->memory, PAGE_COUNTER_MAX);
 	page_counter_set_async_low(&memcg->memory, PAGE_COUNTER_MAX);
 
+	zswap_memcg_offline_cleanup(memcg);
+
 	memcg_offline_kmem(memcg);
 	reparent_shrinker_deferred(memcg);
 	wb_memcg_offline(memcg);
