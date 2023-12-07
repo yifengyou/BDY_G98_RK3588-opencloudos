@@ -60,6 +60,7 @@
 #endif
 #include <linux/log2.h>
 #include <linux/sched/clock.h>
+#include <linux/numa_remote.h>
 
 #include "internal.h"
 #include "shuffle.h"
@@ -5323,6 +5324,10 @@ int find_next_best_node(int node, nodemask_t *used_node_mask)
 
 		/* Don't want a node to appear more than once */
 		if (node_isset(n, *used_node_mask))
+			continue;
+
+		/* Don't fallback to remote node */
+		if (numa_remote_nofallback(n))
 			continue;
 
 		/* Use the distance array to find the distance */

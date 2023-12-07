@@ -102,6 +102,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/numa_remote.h>
 
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
@@ -1937,6 +1938,15 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 			nodemask = &pol->nodes;
 		if (pol->home_node != NUMA_NO_NODE)
 			*nid = pol->home_node;
+		/*
+		 * In nofallback mode, the remote node is not in zonelists,
+		 * set remote node as preferred_nid or it will be skipped.
+		 * MPOL_PREFERRED_MANY is not supported, becase at least
+		 * one remote node that will be skipped.
+		 */
+		else if (numa_remote_nofallback(first_node(pol->nodes)))
+			*nid = first_node(pol->nodes);
+
 		/*
 		 * __GFP_THISNODE shouldn't even be used with the bind policy
 		 * because we might easily break the expectation to stay on the
