@@ -1742,7 +1742,6 @@ int generic_map_delete_batch(struct bpf_map *map,
 
 	kvfree(key);
 
-	maybe_wait_bpf_programs(map);
 	return err;
 }
 
@@ -1804,7 +1803,6 @@ int generic_map_update_batch(struct bpf_map *map, struct file *map_file,
 	kvfree(value);
 	kvfree(key);
 
-	maybe_wait_bpf_programs(map);
 	return err;
 }
 
@@ -5003,8 +5001,10 @@ static int bpf_map_do_batch(const union bpf_attr *attr,
 	else
 		BPF_DO_BATCH(map->ops->map_delete_batch, map, attr, uattr);
 err_put:
-	if (has_write)
+	if (has_write) {
+		maybe_wait_bpf_programs(map);
 		bpf_map_write_active_dec(map);
+	}
 	fdput(f);
 	return err;
 }
