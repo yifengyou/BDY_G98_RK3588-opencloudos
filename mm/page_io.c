@@ -432,7 +432,7 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 	mempool_free(sio, sio_pool);
 }
 
-static void swap_readpage_fs(struct folio *folio, struct swap_iocb **plug)
+static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
 {
 	struct swap_info_struct *sis = swp_swap_info(folio->swap);
 	struct swap_iocb *sio = NULL;
@@ -466,7 +466,7 @@ static void swap_readpage_fs(struct folio *folio, struct swap_iocb **plug)
 		*plug = sio;
 }
 
-static void swap_readpage_bdev_sync(struct folio *folio,
+static void swap_read_folio_bdev_sync(struct folio *folio,
 		struct swap_info_struct *sis)
 {
 	struct bio_vec bv;
@@ -486,7 +486,7 @@ static void swap_readpage_bdev_sync(struct folio *folio,
 	put_task_struct(current);
 }
 
-static void swap_readpage_bdev_async(struct folio *folio,
+static void swap_read_folio_bdev_async(struct folio *folio,
 		struct swap_info_struct *sis)
 {
 	struct bio *bio;
@@ -499,10 +499,10 @@ static void swap_readpage_bdev_async(struct folio *folio,
 	submit_bio(bio);
 }
 
-void swap_readpage(struct page *page, bool synchronous, struct swap_iocb **plug)
+void swap_read_folio(struct folio *folio, bool synchronous,
+		struct swap_iocb **plug)
 {
-	struct folio *folio = page_folio(page);
-	struct swap_info_struct *sis = page_swap_info(page);
+	struct swap_info_struct *sis = swp_swap_info(folio->swap);
 	bool workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	bool in_thrashing;
@@ -526,7 +526,7 @@ void swap_readpage(struct page *page, bool synchronous, struct swap_iocb **plug)
 		folio_mark_uptodate(folio);
 		folio_unlock(folio);
 	} else if (data_race(sis->flags & SWP_FS_OPS)) {
-		swap_readpage_fs(folio, plug);
+		swap_read_folio_fs(folio, plug);
 	} else if (synchronous || (sis->flags & SWP_SYNCHRONOUS_IO)) {
 		int ret = bdev_swapin_folio(sis->bdev, swap_folio_sector(folio), folio);
 		if (ret != -EOPNOTSUPP) {
@@ -534,9 +534,9 @@ void swap_readpage(struct page *page, bool synchronous, struct swap_iocb **plug)
 				count_vm_event(PSWPIN);
 			goto out;
 		}
-		swap_readpage_bdev_sync(folio, sis);
+		swap_read_folio_bdev_sync(folio, sis);
 	} else {
-		swap_readpage_bdev_async(folio, sis);
+		swap_read_folio_bdev_async(folio, sis);
 	}
 
 out:
