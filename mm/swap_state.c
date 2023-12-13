@@ -361,14 +361,12 @@ struct folio *filemap_get_incore_folio(struct address_space *mapping,
 	return folio;
 }
 
-struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
-				     struct mempolicy *mpol, pgoff_t ilx,
-				     bool *new_page_allocated,
-				     bool skip_if_exists)
+struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
+		struct mempolicy *mpol, pgoff_t ilx, bool *new_page_allocated,
+		bool skip_if_exists)
 {
 	struct swap_info_struct *si = swp_swap_info(entry);
 	struct folio *folio;
-	struct page *page;
 	void *shadow = NULL;
 
 	*new_page_allocated = false;
@@ -382,10 +380,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 */
 		folio = filemap_get_folio(swap_address_space(entry),
 						swp_offset(entry));
-		if (!IS_ERR(folio)) {
-			page = folio_file_page(folio, swp_offset(entry));
-			goto got_page;
-		}
+		if (!IS_ERR(folio))
+			goto got_folio;
 
 		/*
 		 * Just skip read ahead for unused swap slot.
@@ -394,7 +390,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			goto fail_put_swap;
 
 		/*
-		 * Get a new page to read into from swap.  Allocate it now,
+		 * Get a new folio to read into from swap.  Allocate it now,
 		 * before marking swap_map SWAP_HAS_CACHE, when -EEXIST will
 		 * cause any racers to loop around until we add it to cache.
 		 */
@@ -430,13 +426,13 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 * stumble across a swap_map entry whose SWAP_HAS_CACHE
 		 * has not yet been cleared.  Or race against another
 		 * __read_swap_cache_async(), which has set SWAP_HAS_CACHE
-		 * in swap_map, but not yet added its page to swap cache.
+		 * in swap_map, but not yet added its folio to swap cache.
 		 */
 		schedule_timeout_uninterruptible(1);
 	}
 
 	/*
-	 * The swap entry is ours to swap in. Prepare the new page.
+	 * The swap entry is ours to swap in. Prepare the new folio.
 	 */
 
 	__folio_set_locked(folio);
@@ -457,9 +453,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	/* Caller will initiate read into locked folio */
 	folio_add_lru(folio);
 	*new_page_allocated = true;
-	page = &folio->page;
-got_page:
-	return page;
+got_folio:
+	return folio;
 
 fail_unlock:
 	put_swap_folio(folio, entry);
@@ -487,22 +482,22 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	bool page_allocated;
 	struct mempolicy *mpol;
 	pgoff_t ilx;
-	struct page *page;
+	struct folio *folio;
 
 	si = get_swap_device(entry);
 	if (!si)
 		return NULL;
 
 	mpol = get_vma_policy(vma, addr, 0, &ilx);
-	page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
+	folio = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
 					&page_allocated, false);
 	mpol_cond_put(mpol);
 
 	if (page_allocated)
-		swap_readpage(page, false, plug);
+		swap_readpage(&folio->page, false, plug);
 
 	put_swap_device(si);
-	return page;
+	return folio_file_page(folio, swp_offset(entry));
 }
 EXPORT_SYMBOL(read_swap_cache_async);
 
@@ -588,7 +583,7 @@ static unsigned long swapin_nr_pages(unsigned long offset)
 struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 				    struct mempolicy *mpol, pgoff_t ilx)
 {
-	struct page *page;
+	struct folio *folio;
 	unsigned long entry_offset = swp_offset(entry);
 	unsigned long offset = entry_offset;
 	unsigned long start_offset, end_offset;
@@ -613,31 +608,31 @@ struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	blk_start_plug(&plug);
 	for (offset = start_offset; offset <= end_offset ; offset++) {
 		/* Ok, do the async read-ahead now */
-		page = __read_swap_cache_async(
+		folio = __read_swap_cache_async(
 				swp_entry(swp_type(entry), offset),
 				gfp_mask, mpol, ilx, &page_allocated, false);
-		if (!page)
+		if (!folio)
 			continue;
 		if (page_allocated) {
-			swap_readpage(page, false, &splug);
+			swap_readpage(&folio->page, false, &splug);
 			if (offset != entry_offset) {
-				SetPageReadahead(page);
+				folio_set_readahead(folio);
 				count_vm_event(SWAP_RA);
 			}
 		}
-		put_page(page);
+		folio_put(folio);
 	}
 	blk_finish_plug(&plug);
 	swap_read_unplug(splug);
 	lru_add_drain();	/* Push any new pages onto the LRU now */
 skip:
 	/* The page was likely read above, so no need for plugging here */
-	page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
+	folio = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
 					&page_allocated, false);
 	if (unlikely(page_allocated))
-		swap_readpage(page, false, NULL);
-	zswap_page_swapin(page);
-	return page;
+		swap_readpage(&folio->page, false, NULL);
+	zswap_folio_swapin(folio);
+	return folio_file_page(folio, swp_offset(entry));
 }
 
 int init_swap_address_space(struct swap_info_struct *si, unsigned long nr_pages)
@@ -760,7 +755,7 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 {
 	struct blk_plug plug;
 	struct swap_iocb *splug = NULL;
-	struct page *page;
+	struct folio *folio;
 	pte_t *pte = NULL, pentry;
 	unsigned long addr;
 	swp_entry_t entry;
@@ -793,18 +788,18 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 			continue;
 		pte_unmap(pte);
 		pte = NULL;
-		page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
+		folio = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
 						&page_allocated, false);
-		if (!page)
+		if (!folio)
 			continue;
 		if (page_allocated) {
-			swap_readpage(page, false, &splug);
+			swap_readpage(&folio->page, false, &splug);
 			if (i != ra_info.offset) {
-				SetPageReadahead(page);
+				folio_set_readahead(folio);
 				count_vm_event(SWAP_RA);
 			}
 		}
-		put_page(page);
+		folio_put(folio);
 	}
 	if (pte)
 		pte_unmap(pte);
@@ -812,13 +807,13 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 	swap_read_unplug(splug);
 	lru_add_drain();
 skip:
-	/* The page was likely read above, so no need for plugging here */
-	page = __read_swap_cache_async(targ_entry, gfp_mask, mpol, targ_ilx,
+	/* The folio was likely read above, so no need for plugging here */
+	folio = __read_swap_cache_async(targ_entry, gfp_mask, mpol, targ_ilx,
 					&page_allocated, false);
 	if (unlikely(page_allocated))
-		swap_readpage(page, false, NULL);
-	zswap_page_swapin(page);
-	return page;
+		swap_readpage(&folio->page, false, NULL);
+	zswap_folio_swapin(folio);
+	return folio_file_page(folio, swp_offset(entry));
 }
 
 /**
