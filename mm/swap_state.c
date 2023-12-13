@@ -474,9 +474,9 @@ fail_put_swap:
  * __read_swap_cache_async() call them and swap_read_folio() holds the
  * swap cache folio lock.
  */
-struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
-				   struct vm_area_struct *vma,
-				   unsigned long addr, struct swap_iocb **plug)
+struct folio *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
+		struct vm_area_struct *vma, unsigned long addr,
+		struct swap_iocb **plug)
 {
 	struct swap_info_struct *si;
 	bool page_allocated;
@@ -497,7 +497,7 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		swap_read_folio(folio, false, plug);
 
 	put_swap_device(si);
-	return folio_file_page(folio, swp_offset(entry));
+	return folio;
 }
 EXPORT_SYMBOL(read_swap_cache_async);
 
