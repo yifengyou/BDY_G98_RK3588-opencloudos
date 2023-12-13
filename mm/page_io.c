@@ -334,7 +334,7 @@ static void swap_writepage_bdev_sync(struct folio *folio,
 
 	bio_init(&bio, sis->bdev, &bv, 1,
 		 REQ_OP_WRITE | REQ_SWAP | wbc_to_write_flags(wbc));
-	bio.bi_iter.bi_sector = swap_page_sector(&folio->page);
+	bio.bi_iter.bi_sector = swap_folio_sector(folio);
 	bio_add_folio_nofail(&bio, folio, folio_size(folio), 0);
 
 	bio_associate_blkg_from_page(&bio, folio);
@@ -355,7 +355,7 @@ static void swap_writepage_bdev_async(struct folio *folio,
 	bio = bio_alloc(sis->bdev, 1,
 			REQ_OP_WRITE | REQ_SWAP | wbc_to_write_flags(wbc),
 			GFP_NOIO);
-	bio->bi_iter.bi_sector = swap_page_sector(&folio->page);
+	bio->bi_iter.bi_sector = swap_folio_sector(folio);
 	bio->bi_end_io = end_swap_bio_write;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 
@@ -373,7 +373,7 @@ int __swap_writepage(struct folio *folio, struct writeback_control *wbc)
 	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio), folio);
 
 	if (data_race(sis->flags & SWP_SYNCHRONOUS_IO)) {
-		int ret = bdev_swapout_folio(sis->bdev, swap_page_sector(&folio->page), folio, wbc);
+		int ret = bdev_swapout_folio(sis->bdev, swap_folio_sector(folio), folio, wbc);
 		if (ret != -EOPNOTSUPP) {
 			if (!ret)
 				count_swpout_vm_event(folio);
@@ -473,7 +473,7 @@ static void swap_readpage_bdev_sync(struct folio *folio,
 	struct bio bio;
 
 	bio_init(&bio, sis->bdev, &bv, 1, REQ_OP_READ);
-	bio.bi_iter.bi_sector = swap_page_sector(&folio->page);
+	bio.bi_iter.bi_sector = swap_folio_sector(folio);
 	bio_add_folio_nofail(&bio, folio, folio_size(folio), 0);
 	/*
 	 * Keep this task valid during swap readpage because the oom killer may
@@ -492,7 +492,7 @@ static void swap_readpage_bdev_async(struct folio *folio,
 	struct bio *bio;
 
 	bio = bio_alloc(sis->bdev, 1, REQ_OP_READ, GFP_KERNEL);
-	bio->bi_iter.bi_sector = swap_page_sector(&folio->page);
+	bio->bi_iter.bi_sector = swap_folio_sector(folio);
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 	count_vm_event(PSWPIN);
@@ -528,7 +528,7 @@ void swap_readpage(struct page *page, bool synchronous, struct swap_iocb **plug)
 	} else if (data_race(sis->flags & SWP_FS_OPS)) {
 		swap_readpage_fs(folio, plug);
 	} else if (synchronous || (sis->flags & SWP_SYNCHRONOUS_IO)) {
-		int ret = bdev_swapin_folio(sis->bdev, swap_page_sector(page), folio);
+		int ret = bdev_swapin_folio(sis->bdev, swap_folio_sector(folio), folio);
 		if (ret != -EOPNOTSUPP) {
 			if (!ret)
 				count_vm_event(PSWPIN);
