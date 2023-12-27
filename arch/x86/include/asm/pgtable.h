@@ -178,6 +178,7 @@ static inline bool pte_decrypted(pte_t pte)
 	return cc_mkdec(pte_val(pte)) == pte_val(pte);
 }
 
+#define pmd_dirty pmd_dirty
 static inline bool pmd_dirty(pmd_t pmd)
 {
 	return pmd_flags(pmd) & _PAGE_DIRTY_BITS;
