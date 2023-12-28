@@ -518,4 +518,13 @@ config LOONGARCH_IOMMU
 	  can isolate the DMA memory of different devices and protect the
 	  system from misbehaving device drivers or hardware.
 
+config  SMMU_BYPASS_DEV
+	bool "SMMU bypass streams for some specific devices"
+	depends on ARM_SMMU_V3=y
+	help
+	  according smmu.bypassdev cmdline, SMMU performs attribute
+	  transformation only,with no address translation.
+	  E.g:SMMU allow iMR3408/3416 Raid bypass at DMA default domain
+	  to support other devices Virtualization through.
+
 endif # IOMMU_SUPPORT
