@@ -210,7 +210,7 @@ struct scan_control {
 #endif
 
 /*
- * From 0 .. 200.  Higher means more swappy.
+ * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
  */
 int vm_swappiness = 60;
 EXPORT_SYMBOL(vm_swappiness);
@@ -2575,7 +2575,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 		swappiness = sc->emm_swappiness;
 		if (swappiness == 201) {
 			scan_balance = SCAN_ANON;
-			swappiness = 200;
+			swappiness = MAX_SWAPPINESS;
 			goto out;
 		} else if (!swappiness) {
 			scan_balance = SCAN_FILE;
@@ -2656,7 +2656,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	ap = swappiness * (total_cost + 1);
 	ap /= anon_cost + 1;
 
-	fp = (200 - swappiness) * (total_cost + 1);
+	fp = (MAX_SWAPPINESS - swappiness) * (total_cost + 1);
 	fp /= file_cost + 1;
 
 	fraction[0] = ap;
@@ -4734,7 +4734,7 @@ static int get_type_to_scan(struct lruvec *lruvec, int swappiness, int *tier_idx
 {
 	int type, tier;
 	struct ctrl_pos sp, pv;
-	int gain[ANON_AND_FILE] = { swappiness, 200 - swappiness };
+	int gain[ANON_AND_FILE] = { swappiness, MAX_SWAPPINESS - swappiness };
 
 	/*
 	 * Compare the first tier of anon with that of file to determine which
@@ -4794,7 +4794,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 		type = LRU_GEN_ANON;
 	else if (swappiness == 1)
 		type = LRU_GEN_FILE;
-	else if (swappiness == 200)
+	else if (swappiness == MAX_SWAPPINESS)
 		type = LRU_GEN_ANON;
 	else
 		type = get_type_to_scan(lruvec, swappiness, &tier);
@@ -5773,9 +5773,9 @@ static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 
 	lruvec = get_lruvec(memcg, nid);
 
-	if (swappiness < 0)
+	if (swappiness < MIN_SWAPPINESS)
 		swappiness = get_swappiness(lruvec, sc);
-	else if (swappiness > 200)
+	else if (swappiness > MAX_SWAPPINESS)
 		goto done;
 
 	switch (cmd) {
@@ -8655,8 +8655,8 @@ int memcg_lru_gen_emm_reclaim(struct mem_cgroup *memcg, int mode,
 		walk->force_full_scan = true;
 
 	/* Don't expose extended swappiness to rest of lru_gen */
-	if (swappiness > 200)
-		swappiness = 200;
+	if (swappiness > MAX_SWAPPINESS)
+		swappiness = MAX_SWAPPINESS;
 
 	blk_start_plug(&plug);
 	for_each_node_state(nid, N_MEMORY) {
