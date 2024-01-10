@@ -192,60 +192,6 @@ static void fq_flush_iotlb(struct iommu_dma_cookie *cookie)
 	atomic64_inc(&cookie->fq_flush_finish_cnt);
 }
 
-static size_t iommu_pgsize(struct iommu_domain *domain, unsigned long iova,
-			   phys_addr_t paddr, size_t size, size_t *count)
-{
-	unsigned int pgsize_idx, pgsize_idx_next;
-	unsigned long pgsizes;
-	size_t offset, pgsize, pgsize_next;
-	unsigned long addr_merge = paddr | iova;
-
-	/* Page sizes supported by the hardware and small enough for @size */
-	pgsizes = domain->pgsize_bitmap & GENMASK(__fls(size), 0);
-
-	/* Constrain the page sizes further based on the maximum alignment */
-	if (likely(addr_merge))
-		pgsizes &= GENMASK(__ffs(addr_merge), 0);
-
-	/* Make sure we have at least one suitable page size */
-	BUG_ON(!pgsizes);
-
-	/* Pick the biggest page size remaining */
-	pgsize_idx = __fls(pgsizes);
-	pgsize = BIT(pgsize_idx);
-	if (!count)
-		return pgsize;
-
-	/* Find the next biggest support page size, if it exists */
-	pgsizes = domain->pgsize_bitmap & ~GENMASK(pgsize_idx, 0);
-	if (!pgsizes)
-		goto out_set_count;
-
-	pgsize_idx_next = __ffs(pgsizes);
-	pgsize_next = BIT(pgsize_idx_next);
-
-	/*
-	 * There's no point trying a bigger page size unless the virtual
-	 * and physical addresses are similarly offset within the larger page.
-	 */
-	if ((iova ^ paddr) & (pgsize_next - 1))
-		goto out_set_count;
-
-	/* Calculate the offset to the next page size alignment boundary */
-	offset = pgsize_next - (addr_merge & (pgsize_next - 1));
-
-	/*
-	 * If size is big enough to accommodate the larger page, reduce
-	 * the number of smaller pages.
-	 */
-	if (offset + pgsize_next <= size)
-		size = offset;
-
-out_set_count:
-	*count = size >> pgsize_idx;
-	return pgsize;
-}
-
 static int __iommu_map_pages(struct iommu_domain *domain, unsigned long iova,
 			     phys_addr_t paddr, size_t size, int prot,
 			     gfp_t gfp, size_t *mapped)
