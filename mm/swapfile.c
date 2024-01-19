@@ -3367,7 +3367,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	if (error)
 		goto bad_swap_unlock_inode;
 
-	error = zswap_swapon(p->type);
+	error = zswap_swapon(si->type, maxpages);
 	if (error)
 		goto free_swap_address_space;
 
@@ -3404,7 +3404,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	error = 0;
 	goto out;
 free_swap_zswap:
-	zswap_swapoff(p->type);
+	zswap_swapoff(si->type);
 free_swap_address_space:
 	exit_swap_address_space(si->type);
 bad_swap_unlock_inode:
