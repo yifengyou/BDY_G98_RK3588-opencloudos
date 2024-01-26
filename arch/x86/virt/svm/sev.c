@@ -216,6 +216,12 @@ skip_enable:
 
 	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "x86/rmptable_init:online", __snp_enable, NULL);
 
+	/*
+	 * Setting crash_kexec_post_notifiers to 'true' to ensure that SNP panic
+	 * notifier is invoked to do SNP IOMMU shutdown before kdump.
+	 */
+	crash_kexec_post_notifiers = true;
+
 	return 0;
 
 nosnp:
@@ -552,3 +558,13 @@ void snp_leak_pages(u64 pfn, unsigned int npages)
 	spin_unlock(&snp_leaked_pages_list_lock);
 }
 EXPORT_SYMBOL_GPL(snp_leak_pages);
+
+void kdump_sev_callback(void)
+{
+	/*
+	 * Do wbinvd() on remote CPUs when SNP is enabled in order to
+	 * safely do SNP_SHUTDOWN on the local CPU.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP))
+		wbinvd();
+}
