@@ -55,6 +55,8 @@ struct sev_device {
 
 	void *cmd_buf;
 
+	bool snp_initialized;
+
 	/* Management of the Hygon RING BUFFER mode */
 	struct csv_ringbuffer_queue ring_buffer[CSV_COMMAND_PRIORITY_NUM];
 };
