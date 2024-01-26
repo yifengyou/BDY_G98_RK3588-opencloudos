@@ -269,4 +269,10 @@ static inline void snp_kexec_finish(void) { }
 static inline void snp_kexec_begin(void) { }
 #endif
 
+#ifdef CONFIG_KVM_AMD_SEV
+bool snp_probe_rmptable_info(void);
+#else
+static inline bool snp_probe_rmptable_info(void) { return false; }
+#endif
+
 #endif
