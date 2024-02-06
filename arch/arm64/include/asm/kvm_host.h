@@ -28,7 +28,6 @@
 #include <asm/kvm.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_rme.h>
-#include <asm/hisi_cpu_model.h>
 
 #define __KVM_HAVE_ARCH_INTC_INITIALIZED
 
@@ -1242,5 +1241,7 @@ extern unsigned int twedel;
 
 void kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu);
 bool kvm_arm_vcpu_stopped(struct kvm_vcpu *vcpu);
+
+extern bool kvm_ncsnp_support;
 
 #endif /* __ARM64_KVM_HOST_H__ */
