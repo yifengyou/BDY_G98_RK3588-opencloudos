@@ -4116,7 +4116,7 @@ unlock:
 }
 
 static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
-			       struct scan_control *sc, bool can_swap, bool force_scan)
+			       bool can_swap, bool force_scan)
 {
 	bool success;
 	struct lru_gen_mm_walk *walk;
@@ -5010,7 +5010,7 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, bool 
 		return nr_to_scan;
 
 	/* skip this lruvec as it's low on cold folios */
-	return try_to_inc_max_seq(lruvec, max_seq, sc, can_swap, false) ? -1 : 0;
+	return try_to_inc_max_seq(lruvec, max_seq, can_swap, false) ? -1 : 0;
 }
 
 static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
@@ -5701,7 +5701,7 @@ static const struct seq_operations lru_gen_seq_ops = {
 	.show = lru_gen_seq_show,
 };
 
-static int run_aging(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
+static int run_aging(struct lruvec *lruvec, unsigned long seq,
 		     bool can_swap, bool force_scan)
 {
 	DEFINE_MAX_SEQ(lruvec);
@@ -5716,7 +5716,7 @@ static int run_aging(struct lruvec *lruvec, unsigned long seq, struct scan_contr
 	if (!force_scan && min_seq[!can_swap] + MAX_NR_GENS - 1 <= max_seq)
 		return -ERANGE;
 
-	try_to_inc_max_seq(lruvec, max_seq, sc, can_swap, force_scan);
+	try_to_inc_max_seq(lruvec, max_seq, can_swap, force_scan);
 
 	return 0;
 }
@@ -5784,7 +5784,7 @@ static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 
 	switch (cmd) {
 	case '+':
-		err = run_aging(lruvec, seq, sc, swappiness, opt);
+		err = run_aging(lruvec, seq, swappiness, opt);
 		break;
 	case '-':
 		err = run_eviction(lruvec, seq, sc, swappiness, opt);
@@ -8682,8 +8682,9 @@ int memcg_lru_gen_emm_reclaim(struct mem_cgroup *memcg, int mode,
 		lruvec = get_lruvec(memcg, nid);
 		if (lruvec) {
 			DEFINE_MAX_SEQ(lruvec);
+
 			if (mode == EMM_AGE) {
-				ret = run_aging(lruvec, max_seq, &sc,
+				ret = run_aging(lruvec, max_seq,
 						!!swappiness, !!nr_pages);
 			} else if (mode == EMM_RECLAIM) {
 				ret = run_eviction(lruvec, max_seq - MIN_NR_GENS, &sc,
@@ -8715,7 +8716,7 @@ done:
 	if (ret < 0 || mode != EMM_RECLAIM)
 		return ret;
 
-	return nr_pages ? -EAGAIN: 0;
+	return nr_pages ? -EAGAIN : 0;
 }
 EXPORT_SYMBOL_GPL(memcg_lru_gen_emm_reclaim);
 #endif
