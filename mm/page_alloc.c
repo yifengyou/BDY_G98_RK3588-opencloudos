@@ -1082,7 +1082,7 @@ static void kernel_init_pages(struct page *page, int numpages)
 	kasan_enable_current();
 }
 
-static __always_inline bool free_pages_prepare(struct page *page,
+__always_inline bool free_pages_prepare(struct page *page,
 			unsigned int order)
 {
 	int bad = 0;
