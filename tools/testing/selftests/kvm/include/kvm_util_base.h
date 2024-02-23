@@ -309,16 +309,41 @@ static __always_inline void static_assert_is_vm(struct kvm_vm *vm) { }
 	kvm_do_ioctl((vm)->fd, cmd, arg);			\
 })
 
-#define _vm_ioctl(vm, cmd, name, arg)				\
+/*
+ * Assert that a VM or vCPU ioctl() succeeded, with extra magic to detect if
+ * the ioctl() failed because KVM killed/bugged the VM.  To detect a dead VM,
+ * probe KVM_CAP_USER_MEMORY, which (a) has been supported by KVM since before
+ * selftests existed and (b) should never outright fail, i.e. is supposed to
+ * return 0 or 1.  If KVM kills a VM, KVM returns -EIO for all ioctl()s for the
+ * VM and its vCPUs, including KVM_CHECK_EXTENSION.
+ */
+#define __TEST_ASSERT_VM_VCPU_IOCTL(cond, name, ret, vm)				\
+do {											\
+	int __errno = errno;								\
+											\
+	static_assert_is_vm(vm);							\
+											\
+	if (cond)									\
+		break;									\
+											\
+	if (errno == EIO &&								\
+	    __vm_ioctl(vm, KVM_CHECK_EXTENSION, (void *)KVM_CAP_USER_MEMORY) < 0) {	\
+		TEST_ASSERT(errno == EIO, "KVM killed the VM, should return -EIO");	\
+		TEST_FAIL("KVM killed/bugged the VM, check the kernel log for clues");	\
+	}										\
+	errno = __errno;								\
+	TEST_ASSERT(cond, __KVM_IOCTL_ERROR(name, ret));				\
+} while (0)
+
+#define TEST_ASSERT_VM_VCPU_IOCTL(cond, cmd, ret, vm)		\
+	__TEST_ASSERT_VM_VCPU_IOCTL(cond, #cmd, ret, vm)
+
+#define vm_ioctl(vm, cmd, arg)					\
 ({								\
 	int ret = __vm_ioctl(vm, cmd, arg);			\
 								\
-	TEST_ASSERT(!ret, __KVM_IOCTL_ERROR(name, ret));	\
+	__TEST_ASSERT_VM_VCPU_IOCTL(!ret, #cmd, ret, vm);		\
 })
-
-#define vm_ioctl(vm, cmd, arg)					\
-	_vm_ioctl(vm, cmd, #cmd, arg)
-
 
 static __always_inline void static_assert_is_vcpu(struct kvm_vcpu *vcpu) { }
 
