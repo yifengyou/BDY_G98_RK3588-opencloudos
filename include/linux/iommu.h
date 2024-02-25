@@ -78,6 +78,10 @@ struct iommu_fault_page_request {
 	u32	perm;
 	u64	addr;
 	u64	private_data[2];
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 /**
@@ -88,6 +92,10 @@ struct iommu_fault_page_request {
 struct iommu_fault {
 	u32 type;
 	struct iommu_fault_page_request prm;
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /**
@@ -115,12 +123,20 @@ struct iommu_page_response {
 	u32	pasid;
 	u32	grpid;
 	u32	code;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct iopf_fault {
 	struct iommu_fault fault;
 	/* node for pending lists */
 	struct list_head list;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct iopf_group {
@@ -132,6 +148,11 @@ struct iopf_group {
 	struct iommu_domain *domain;
 	/* The device's fault data parameter. */
 	struct iommu_fault_param *fault_param;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /**
@@ -144,6 +165,11 @@ struct iopf_queue {
 	struct workqueue_struct *wq;
 	struct list_head devices;
 	struct mutex lock;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /* iommu fault flags */
@@ -157,6 +183,11 @@ struct iommu_domain_geometry {
 	dma_addr_t aperture_start; /* First address that can be mapped    */
 	dma_addr_t aperture_end;   /* Last address that can be mapped     */
 	bool force_aperture;       /* DMA only allowed in mappable range? */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /* Domain feature flags */
@@ -234,6 +265,10 @@ struct iommu_domain {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
 };
 
 static inline bool iommu_is_dma_domain(struct iommu_domain *domain)
@@ -361,6 +396,8 @@ struct iommu_iotlb_gather {
 struct iommu_dirty_bitmap {
 	struct iova_bitmap *bitmap;
 	struct iommu_iotlb_gather *gather;
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /* Read but do not clear any dirty bits */
@@ -380,6 +417,8 @@ struct iommu_dirty_ops {
 				    unsigned long iova, size_t size,
 				    unsigned long flags,
 				    struct iommu_dirty_bitmap *dirty);
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**
@@ -601,6 +640,10 @@ struct iommu_ops {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
 };
 
 /**
@@ -695,6 +738,15 @@ struct iommu_domain_ops {
 			       unsigned long *bitmap, unsigned long base_iova,
 			       unsigned long bitmap_pgshift);
 	void (*free)(struct iommu_domain *domain);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
 };
 
 /**
@@ -713,6 +765,11 @@ struct iommu_device {
 	struct device *dev;
 	struct iommu_group *singleton_group;
 	u32 max_pasids;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /**
@@ -738,6 +795,11 @@ struct iommu_fault_param {
 
 	struct list_head partial;
 	struct list_head faults;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /**
@@ -767,6 +829,9 @@ struct dev_iommu {
 	u32				pci_32bit_workaround:1;
 	u32				require_direct:1;
 	u32				shadow_on_flush:1;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 int iommu_device_register(struct iommu_device *iommu,
@@ -1030,6 +1095,10 @@ extern struct iommu_group *generic_single_device_group(struct device *dev);
 struct iommu_fwspec {
 	const struct iommu_ops	*ops;
 	struct fwnode_handle	*iommu_fwnode;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+
 	u32			flags;
 	unsigned int		num_ids;
 	u32			ids[];
