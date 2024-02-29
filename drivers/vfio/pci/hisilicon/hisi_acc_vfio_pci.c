@@ -682,25 +682,11 @@ static void hisi_acc_vf_disable_fds(struct hisi_acc_vf_core_device *hisi_acc_vde
 	}
 }
 
-/*
- * This function is called in all state_mutex unlock cases to
- * handle a 'deferred_reset' if exists.
- */
-static void
-hisi_acc_vf_state_mutex_unlock(struct hisi_acc_vf_core_device *hisi_acc_vdev)
+static void hisi_acc_vf_reset(struct hisi_acc_vf_core_device *hisi_acc_vdev)
 {
-again:
-	spin_lock(&hisi_acc_vdev->reset_lock);
-	if (hisi_acc_vdev->deferred_reset) {
-		hisi_acc_vdev->deferred_reset = false;
-		spin_unlock(&hisi_acc_vdev->reset_lock);
-		hisi_acc_vdev->vf_qm_state = QM_NOT_READY;
-		hisi_acc_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
-		hisi_acc_vf_disable_fds(hisi_acc_vdev);
-		goto again;
-	}
-	mutex_unlock(&hisi_acc_vdev->state_mutex);
-	spin_unlock(&hisi_acc_vdev->reset_lock);
+	hisi_acc_vdev->vf_qm_state = QM_NOT_READY;
+	hisi_acc_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+	hisi_acc_vf_disable_fds(hisi_acc_vdev);
 }
 
 static void hisi_acc_vf_start_device(struct hisi_acc_vf_core_device *hisi_acc_vdev)
@@ -856,8 +842,10 @@ static long hisi_acc_vf_precopy_ioctl(struct file *filp,
 
 	info.dirty_bytes = 0;
 	info.initial_bytes = migf->total_length - *pos;
+	mutex_unlock(&migf->lock);
+	mutex_unlock(&hisi_acc_vdev->state_mutex);
 
-	ret = copy_to_user((void __user *)arg, &info, minsz) ? -EFAULT : 0;
+	return copy_to_user((void __user *)arg, &info, minsz) ? -EFAULT : 0;
 out:
 	mutex_unlock(&migf->lock);
 	mutex_unlock(&hisi_acc_vdev->state_mutex);
@@ -1123,7 +1111,7 @@ hisi_acc_vfio_pci_set_device_state(struct vfio_device *vdev,
 			break;
 		}
 	}
-	hisi_acc_vf_state_mutex_unlock(hisi_acc_vdev);
+	mutex_unlock(&hisi_acc_vdev->state_mutex);
 	return res;
 }
 
@@ -1144,7 +1132,7 @@ hisi_acc_vfio_pci_get_device_state(struct vfio_device *vdev,
 
 	mutex_lock(&hisi_acc_vdev->state_mutex);
 	*curr_state = hisi_acc_vdev->mig_state;
-	hisi_acc_vf_state_mutex_unlock(hisi_acc_vdev);
+	mutex_unlock(&hisi_acc_vdev->state_mutex);
 	return 0;
 }
 
@@ -1156,21 +1144,9 @@ static void hisi_acc_vf_pci_aer_reset_done(struct pci_dev *pdev)
 				VFIO_MIGRATION_STOP_COPY)
 		return;
 
-	/*
-	 * As the higher VFIO layers are holding locks across reset and using
-	 * those same locks with the mm_lock we need to prevent ABBA deadlock
-	 * with the state_mutex and mm_lock.
-	 * In case the state_mutex was taken already we defer the cleanup work
-	 * to the unlock flow of the other running context.
-	 */
-	spin_lock(&hisi_acc_vdev->reset_lock);
-	hisi_acc_vdev->deferred_reset = true;
-	if (!mutex_trylock(&hisi_acc_vdev->state_mutex)) {
-		spin_unlock(&hisi_acc_vdev->reset_lock);
-		return;
-	}
-	spin_unlock(&hisi_acc_vdev->reset_lock);
-	hisi_acc_vf_state_mutex_unlock(hisi_acc_vdev);
+	mutex_lock(&hisi_acc_vdev->state_mutex);
+	hisi_acc_vf_reset(hisi_acc_vdev);
+	mutex_unlock(&hisi_acc_vdev->state_mutex);
 }
 
 static int hisi_acc_vf_qm_init(struct hisi_acc_vf_core_device *hisi_acc_vdev)
