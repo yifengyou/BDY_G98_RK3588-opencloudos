@@ -2129,7 +2129,7 @@ bool madvise_free_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		goto out;
 	}
 
-	folio = pfn_folio(pmd_pfn(orig_pmd));
+	folio = pmd_folio(orig_pmd);
 	/*
 	 * If other processes are mapping this folio, we couldn't discard
 	 * the folio unless they all do MADV_FREE so let's skip the folio.
@@ -2399,7 +2399,7 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		if (pmd_protnone(*pmd))
 			goto unlock;
 
-		folio = page_folio(pmd_page(*pmd));
+		folio = pmd_folio(*pmd);
 		toptier = node_is_toptier(folio_nid(folio));
 		/*
 		 * Skip scanning top tier node if normal numa
@@ -2870,7 +2870,7 @@ void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 		 * Do not apply pmd_folio() to a migration entry; and folio lock
 		 * guarantees that it must be of the wrong folio anyway.
 		 */
-		if (folio && (pmd_migration || folio != page_folio(pmd_page(*pmd))))
+		if (folio && (pmd_migration || folio != pmd_folio(*pmd)))
 			goto out;
 		__split_huge_pmd_locked(vma, pmd, range.start, freeze);
 	}
