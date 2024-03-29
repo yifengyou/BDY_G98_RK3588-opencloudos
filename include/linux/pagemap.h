@@ -203,10 +203,11 @@ enum mapping_flags {
 	/* writeback related tags are not used */
 	AS_NO_WRITEBACK_TAGS = 5,
 	AS_LARGE_FOLIO_SUPPORT = 6,
-	AS_RELEASE_ALWAYS = 7,	/* Call ->release_folio(), even if no private data */
-	AS_UNMOVABLE	= 8,	/* The mapping cannot be moved, ever */
+	AS_RELEASE_ALWAYS,	/* Call ->release_folio(), even if no private data */
 	AS_STABLE_WRITES,	/* must wait for writeback before modifying
 				   folio contents */
+	AS_UNMOVABLE,		/* The mapping cannot be moved, ever */
+	AS_INACCESSIBLE,	/* Do not attempt direct R/W access to the mapping */
 #ifdef CONFIG_EMM_RAMDISK_SWAP
 	AS_RAM_SWAP,		/* ramdisk based swap space, XXX: rename to some thing commonly used */
 #endif
