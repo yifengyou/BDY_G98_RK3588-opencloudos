@@ -856,8 +856,10 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 
 #ifdef CONFIG_NVIDIA_SMI_TRAP
 #define NV_CMD "nvidia-smi"
-const unsigned int nv_ioctl_id = 0xc020462a;
-const unsigned int nv_cmd_id_get_gram = 0x800203;
+unsigned int nv_ioctl_id = 0xc020462a;
+unsigned int nv_cmd_id_get_gram = 0x800203;
+#define V525_105_17_PAD_NUM_17  17
+#define V440_33_01_PAD_NUM_9    9
 
 struct nv_get_pid_count {
 	u32 count;
@@ -865,7 +867,7 @@ struct nv_get_pid_count {
 
 struct pids {
 	u32 pid;
-	u32 pad[9];
+	u32 pad[0];
 };
 
 struct nv_get_gram {
@@ -882,6 +884,47 @@ struct nv_cmd {
 };
 
 unsigned int sysctl_nvidia_smi_trap = 0;
+
+static int get_pad_num_set_cmd_by_version(const char *version)
+{
+	int pad_num = 0;
+
+	/* version 440.33.01 pad num is 9? */
+	if (strncmp(version, "525.", 4) >= 0) {
+		/* 525.105.17, 535.183.01, 550.54.14 have been checked */
+		nv_cmd_id_get_gram = 0x2080018E;
+		pad_num = V525_105_17_PAD_NUM_17;
+	} else {
+		/* original supported version: 440.33.01 */
+		nv_cmd_id_get_gram = 0x800203;
+		pad_num = V440_33_01_PAD_NUM_9;
+	}
+	return pad_num;
+}
+
+static int read_nvidia_version(char *buf, int len)
+{
+	struct file *file;
+	ssize_t bytes_read;
+	loff_t pos = 0;
+
+	file = filp_open("/sys/module/nvidia/version", O_RDONLY, 0);
+	if (IS_ERR(file)) {
+		pr_info("Cannot open /sys/module/nvidia/version\n");
+		return PTR_ERR(file);
+	}
+
+	bytes_read = kernel_read(file, buf, len - 1, &pos);
+	if (bytes_read < 0) {
+		pr_info("Cannot read nvidia version, ret=%zd\n", bytes_read);
+		filp_close(file, NULL);
+		return bytes_read;
+	}
+
+	buf[bytes_read] = '\0';
+	filp_close(file, NULL);
+	return 0;
+}
 
 static int convert_pid_to_container(int pid_in_host)
 {
@@ -948,15 +991,16 @@ static int get_nv_pid_count(struct nv_cmd *nv_cmd)
 	return count;
 }
 
-static void change_nv_pid(struct nv_cmd *nv_cmd, int count)
+static void change_nv_pid(struct nv_cmd *nv_cmd, int count, int pad_num)
 {
 	int len;
 	struct nv_get_gram *get_gram;
 	int n, i;
 	u32 guest_pid;
 	bool write;
+	int index;
 
-	len = sizeof(struct nv_get_gram) + sizeof(struct pids) * count;
+	len = sizeof(struct nv_get_gram) + (sizeof(u32) * (1 + pad_num)) * count;
 	get_gram = (struct nv_get_gram *)kmalloc(len, GFP_KERNEL);
 	if (!get_gram) {
 		pr_err("change nv pid: malloc nv get gram failed\n");
@@ -969,16 +1013,17 @@ static void change_nv_pid(struct nv_cmd *nv_cmd, int count)
 	i = 0;
 	write = false;
 	while (i < get_gram->count) {
-		guest_pid = convert_pid_to_container(get_gram->pid[i].pid);
+		index = i * (pad_num + 1);
+		guest_pid = convert_pid_to_container(get_gram->pid[index].pid);
 		if (guest_pid > 0) {
 			/*
 			 * If process is running in other container then guest_pid will return 0, then
 			 * we should not change the pid.
 			 */
-			pr_info("change nv pid: host pid:%d, container pid:%d\n", get_gram->pid[i].pid,
+			pr_info("change nv pid: host pid:%d, container pid:%d\n", get_gram->pid[index].pid,
 					guest_pid);
 			write = true;
-			get_gram->pid[i].pid = guest_pid;
+			get_gram->pid[index].pid = guest_pid;
 		}
 		i++;
 	}
@@ -1001,7 +1046,7 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	int error;
 #ifdef CONFIG_NVIDIA_SMI_TRAP
 	struct nv_cmd nv_cmd;
-	int count;
+	int count, pad_num = 0;
 #endif
 
 	if (!f.file)
@@ -1019,13 +1064,19 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	if ((sysctl_nvidia_smi_trap == 1) &&
 		(task_active_pid_ns(current)->level) && (nv_ioctl_id == cmd)) {
 		char buf[sizeof(current->comm)];
+		char version[20] = {0};
 
 		get_task_comm(buf, current);
+		if (strcmp(buf, NV_CMD) == 0 &&
+			read_nvidia_version(version, 20) == 0)
+			pad_num = get_pad_num_set_cmd_by_version(version);
+		if (pad_num == 0)
+			return error;
 		if ((strcmp(buf, NV_CMD) == 0) && (get_nv_cmd(arg, &nv_cmd) == 0) &&
 			(nv_cmd.cmd == nv_cmd_id_get_gram)) {
 			count = get_nv_pid_count(&nv_cmd);
 			if (count > 0)
-				change_nv_pid(&nv_cmd, count);
+				change_nv_pid(&nv_cmd, count, pad_num);
 		}
 	}
 #endif
