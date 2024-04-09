@@ -57,6 +57,7 @@ struct its_vpe {
 				u8	priority;
 				bool	enabled;
 				bool	group;
+				bool    nmi;
 			}			sgi_config[16];
 		};
 	};
@@ -126,6 +127,7 @@ struct its_cmd_info {
 		struct {
 			u8		priority;
 			bool		group;
+			bool		nmi;
 		};
 	};
 };
@@ -140,7 +142,7 @@ int its_map_vlpi(int irq, struct its_vlpi_map *map);
 int its_get_vlpi(int irq, struct its_vlpi_map *map);
 int its_unmap_vlpi(int irq);
 int its_prop_update_vlpi(int irq, u8 config, bool inv);
-int its_prop_update_vsgi(int irq, u8 priority, bool group);
+int its_prop_update_vsgi(int irq, u8 priority, bool group, bool nmi);
 
 struct irq_domain_ops;
 int its_init_v4(struct irq_domain *domain,
