@@ -2726,6 +2726,7 @@ static void __init gic_acpi_setup_kvm_info(void)
 
 	gic_v3_kvm_info.has_v4 = gic_data.rdists.has_vlpis;
 	gic_v3_kvm_info.has_v4_1 = gic_data.rdists.has_rvpeid;
+	gic_v3_kvm_info.has_nmi = has_v3_3_nmi();
 	vgic_set_kvm_info(&gic_v3_kvm_info);
 }
 

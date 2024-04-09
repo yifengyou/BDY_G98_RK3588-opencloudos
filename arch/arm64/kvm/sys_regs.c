@@ -1684,7 +1684,8 @@ static int set_id_aa64pfr1_el1(struct kvm_vcpu *vcpu,
 	u8 nmi;
 
 	nmi = cpuid_feature_extract_unsigned_field(user_val, ID_AA64PFR1_EL1_NMI_SHIFT);
-	if (nmi > ID_AA64PFR1_EL1_NMI_IMP || (nmi && !system_uses_nmi()))
+	if (nmi > ID_AA64PFR1_EL1_NMI_IMP ||
+	    (nmi && (!system_uses_nmi() || static_branch_unlikely(&vgic_v3_cpuif_trap))))
 		return -EINVAL;
 
 	vcpu->kvm->arch.pfr1_nmi = nmi;
@@ -1695,7 +1696,6 @@ static int set_id_aa64pfr1_el1(struct kvm_vcpu *vcpu,
 
 	return set_id_reg(vcpu, rd, user_val);
 }
-
 
 /*
  * cpufeature ID register user accessors
