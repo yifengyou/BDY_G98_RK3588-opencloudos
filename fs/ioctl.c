@@ -896,18 +896,27 @@ static int convert_pid_to_container(int pid_in_host)
 		return 0;
 	}
 
+	rcu_read_lock();
 	tsk = find_task_by_pid_ns(pid_in_host, &init_pid_ns);
+	if (tsk)
+		get_task_struct(tsk);
+	rcu_read_unlock();
 	if (tsk == NULL) {
+		put_pid(ppid);
 		pr_err("find task for pid:%d failed\n", pid_in_host);
 		return 0;
 	}
 
 	current_pid_ns = task_active_pid_ns(current);
 	if (current_pid_ns == NULL) {
+		put_task_struct(tsk);
+		put_pid(ppid);
 		pr_err("get current pid ns failed host pid:%d\n", pid_in_host);
 		return 0;
 	}
 	new_pid = task_pid_nr_ns(tsk, ppid->numbers[current_pid_ns->level].ns);
+	put_task_struct(tsk);
+	put_pid(ppid);
 
 	return new_pid;
 }
