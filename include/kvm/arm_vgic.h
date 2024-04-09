@@ -280,6 +280,7 @@ struct vgic_dist {
 
 	struct vgic_io_device	dist_iodev;
 
+	bool                    has_nmi;
 	bool			has_its;
 	bool			table_write_in_progress;
 
