@@ -26,6 +26,7 @@
 #include <linux/perf_event.h>
 #include <linux/preempt.h>
 #include <linux/hugetlb.h>
+#include <linux/sysctl.h>
 
 #include <asm/acpi.h>
 #include <asm/bug.h>
@@ -46,6 +47,31 @@
 #include <asm/traps.h>
 #ifdef CONFIG_IEE_SIP
 #include <asm/haoc/iee-si.h>
+#endif
+
+static int sysctl_machine_check_safe = IS_ENABLED(CONFIG_ARCH_HAS_COPY_MC);
+
+#ifdef CONFIG_ARCH_HAS_COPY_MC
+static struct ctl_table machine_check_safe_sysctl_table[] = {
+	{
+		.procname       = "machine_check_safe",
+		.data           = &sysctl_machine_check_safe,
+		.maxlen         = sizeof(sysctl_machine_check_safe),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
+};
+
+static int __init machine_check_safe_sysctl_init(void)
+{
+	if (!register_sysctl("kernel", machine_check_safe_sysctl_table))
+		return -EINVAL;
+	return 0;
+}
+
+core_initcall(machine_check_safe_sysctl_init);
 #endif
 
 struct fault_info {
@@ -1727,7 +1753,9 @@ static bool do_apei_claim_sea(struct pt_regs *regs)
 		if (!apei_claim_sea(regs))
 			return true;
 	} else if (IS_ENABLED(CONFIG_ARCH_HAS_COPY_MC)) {
-		if (fixup_exception_me(regs) && !apei_claim_sea(regs))
+		if (sysctl_machine_check_safe &&
+		    fixup_exception_me(regs) &&
+		    !apei_claim_sea(regs))
 			return true;
 	}
 
