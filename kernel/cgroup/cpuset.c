@@ -3278,7 +3278,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		cgroup_rstat_flush_hold(cgrp);
 		cputime_adjust(&cgrp->bstat.cputime, &cgrp->prev_cputime,
 			       &total_usr, &total_sys);
-		cgroup_rstat_flush_release();
+		cgroup_rstat_flush_release(cgrp);
 	} else {
 		css = cgroupfs_get_parent_role_cgroup(current,
 				CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
