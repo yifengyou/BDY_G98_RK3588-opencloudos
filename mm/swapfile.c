@@ -2711,10 +2711,6 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	exit_swap_address_space(p->type);
 
 	inode = mapping->host;
-	if (p->bdev_handle) {
-		bdev_release(p->bdev_handle);
-		p->bdev_handle = NULL;
-	}
 
 	inode_lock(inode);
 	inode->i_flags &= ~S_SWAPFILE;
@@ -2947,14 +2943,7 @@ static int claim_swapfile(struct swap_info_struct *si, struct inode *inode)
 				"Swapping on block file over filesystem %s, file system operations may get bypassed unexpectedly and lead to data loss.\n",
 				si->swap_file->f_inode->i_sb->s_id);
 #endif
-		si->bdev_handle = bdev_open_by_dev(inode->i_rdev,
-				BLK_OPEN_READ | BLK_OPEN_WRITE, si, NULL);
-		if (IS_ERR(si->bdev_handle)) {
-			int error = PTR_ERR(si->bdev_handle);
-			si->bdev_handle = NULL;
-			return error;
-		}
-		si->bdev = si->bdev_handle->bdev;
+		si->bdev = I_BDEV(inode);
 		/*
 		 * Zoned block devices contain zones that have a sequential
 		 * write only restriction.  Hence zoned block devices are not
@@ -3228,7 +3217,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		name = NULL;
 		goto bad_swap;
 	}
-	swap_file = file_open_name(name, O_RDWR|O_LARGEFILE, 0);
+	swap_file = file_open_name(name, O_RDWR | O_LARGEFILE | O_EXCL, 0);
 	if (IS_ERR(swap_file)) {
 		error = PTR_ERR(swap_file);
 		swap_file = NULL;
@@ -3384,10 +3373,6 @@ free_swap_address_space:
 bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
-	if (si->bdev_handle) {
-		bdev_release(si->bdev_handle);
-		si->bdev_handle = NULL;
-	}
 	kfree(si->global_cluster);
 	si->global_cluster = NULL;
 	inode = NULL;
