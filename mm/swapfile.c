@@ -2591,7 +2591,6 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	struct inode *inode;
 	struct filename *pathname;
 	int err, found = 0;
-	unsigned int old_block_size;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -2692,7 +2691,6 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	drain_mmlist();
 
 	swap_file = p->swap_file;
-	old_block_size = p->old_block_size;
 	p->swap_file = NULL;
 	p->max = 0;
 	swap_map = p->swap_map;
@@ -2714,7 +2712,6 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 
 	inode = mapping->host;
 	if (p->bdev_handle) {
-		set_blocksize(p->bdev, old_block_size);
 		bdev_release(p->bdev_handle);
 		p->bdev_handle = NULL;
 	}
@@ -2944,8 +2941,6 @@ static struct swap_info_struct *alloc_swap_info(void)
 
 static int claim_swapfile(struct swap_info_struct *si, struct inode *inode)
 {
-	int error;
-
 	if (S_ISBLK(inode->i_mode)) {
 #ifdef CONFIG_ENHANCED_MM
 		WARN(si->swap_file->f_mapping->a_ops->swap_activate,
@@ -2955,15 +2950,11 @@ static int claim_swapfile(struct swap_info_struct *si, struct inode *inode)
 		si->bdev_handle = bdev_open_by_dev(inode->i_rdev,
 				BLK_OPEN_READ | BLK_OPEN_WRITE, si, NULL);
 		if (IS_ERR(si->bdev_handle)) {
-			error = PTR_ERR(si->bdev_handle);
+			int error = PTR_ERR(si->bdev_handle);
 			si->bdev_handle = NULL;
 			return error;
 		}
 		si->bdev = si->bdev_handle->bdev;
-		si->old_block_size = block_size(si->bdev);
-		error = set_blocksize(si->bdev, PAGE_SIZE);
-		if (error < 0)
-			return error;
 		/*
 		 * Zoned block devices contain zones that have a sequential
 		 * write only restriction.  Hence zoned block devices are not
@@ -2978,7 +2969,6 @@ static int claim_swapfile(struct swap_info_struct *si, struct inode *inode)
 
 	return 0;
 }
-
 
 /*
  * Find out how many pages are allowed for a single swap device. There
@@ -3395,7 +3385,6 @@ bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
 	if (si->bdev_handle) {
-		set_blocksize(si->bdev, si->old_block_size);
 		bdev_release(si->bdev_handle);
 		si->bdev_handle = NULL;
 	}
