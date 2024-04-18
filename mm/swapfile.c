@@ -3790,12 +3790,20 @@ static void free_swap_count_continuations(struct swap_info_struct *si)
 }
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
+static bool __has_usable_swap(void)
+{
+	return !plist_head_empty(&swap_active_head);
+}
+
 void __folio_throttle_swaprate(struct folio *folio, gfp_t gfp)
 {
 	struct swap_info_struct *si, *next;
 	int nid = folio_nid(folio);
 
 	if (!(gfp & __GFP_IO))
+		return;
+
+	if (!__has_usable_swap())
 		return;
 
 	if (!blk_cgroup_congested())
