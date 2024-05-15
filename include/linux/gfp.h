@@ -266,6 +266,8 @@ struct page *alloc_pages(gfp_t gfp, unsigned int order);
 struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 		struct mempolicy *mpol, pgoff_t ilx, int nid);
 struct folio *folio_alloc(gfp_t gfp, unsigned int order);
+struct folio *folio_alloc_mpol(gfp_t gfp, unsigned int order,
+		struct mempolicy *mpol, pgoff_t ilx, int nid);
 struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
 		unsigned long addr, bool hugepage);
 #else
@@ -281,6 +283,11 @@ static inline struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 static inline struct folio *folio_alloc(gfp_t gfp, unsigned int order)
 {
 	return __folio_alloc_node(gfp, order, numa_node_id());
+}
+static inline struct folio *folio_alloc_mpol(gfp_t gfp, unsigned int order,
+		struct mempolicy *mpol, pgoff_t ilx, int nid)
+{
+	return folio_alloc(gfp, order);
 }
 #define vma_alloc_folio(gfp, order, vma, addr, hugepage)		\
 	folio_alloc(gfp, order)
