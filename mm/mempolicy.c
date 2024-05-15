@@ -2171,17 +2171,17 @@ struct folio *folio_alloc_mpol(gfp_t gfp, unsigned int order,
  * Return: The folio on success or NULL if allocation fails.
  */
 struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
-		unsigned long addr, bool hugepage)
+			      unsigned long addr, bool hugepage)
 {
 	struct mempolicy *pol;
 	pgoff_t ilx;
-	struct page *page;
+	struct folio *folio;
 
 	pol = get_vma_policy(vma, addr, order, &ilx);
-	page = alloc_pages_mpol(gfp | __GFP_COMP, order,
-				pol, ilx, numa_node_id());
+	folio = folio_alloc_mpol(gfp | __GFP_COMP, order,
+				 pol, ilx, numa_node_id());
 	mpol_cond_put(pol);
-	return page_rmappable_folio(page);
+	return folio;
 }
 EXPORT_SYMBOL(vma_alloc_folio);
 
