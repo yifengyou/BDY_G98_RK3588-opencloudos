@@ -696,10 +696,9 @@ DEFINE_PER_CPU(unsigned, mce_poll_count);
  * is already totally * confused. In this case it's likely it will
  * not fully execute the machine check handler either.
  */
-bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
+void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 {
 	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
-	bool error_seen = false;
 	struct mce_hw_err err;
 	struct mce *m;
 	int i;
@@ -775,8 +774,6 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		continue;
 
 log_it:
-		error_seen = true;
-
 		if (flags & MCP_DONTLOG)
 			goto clear_it;
 
@@ -808,8 +805,6 @@ clear_it:
 	 */
 
 	sync_core();
-
-	return error_seen;
 }
 EXPORT_SYMBOL_GPL(machine_check_poll);
 
