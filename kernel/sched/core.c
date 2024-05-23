@@ -2192,10 +2192,20 @@ void activate_task(struct rq *rq, struct task_struct *p, int flags)
 
 void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 {
-	WRITE_ONCE(p->on_rq, (flags & DEQUEUE_SLEEP) ? 0 : TASK_ON_RQ_MIGRATING);
+	WRITE_ONCE(p->on_rq, TASK_ON_RQ_MIGRATING);
 	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
 
+	/*
+	 * Code explicitly relies on TASK_ON_RQ_MIGRATING begin set *before*
+	 * dequeue_task() and cleared *after* enqueue_task().
+	 */
 	dequeue_task(rq, p, flags);
+}
+
+static void block_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	if (dequeue_task(rq, p, DEQUEUE_SLEEP | flags))
+		__block_task(rq, p);
 }
 
 static inline int __normal_prio(int policy, int rt_prio, int nice)
@@ -6950,16 +6960,6 @@ static void __sched notrace __schedule(int sched_mode)
 			if (task_on_scx(prev) && !scx_contrib_load())
 				prev->sched_contributes_to_load = false;
 
-			if (prev->sched_contributes_to_load) {
-				rq->nr_uninterruptible++;
-#ifdef CONFIG_BT_SCHED
-				if (unlikely(prev->sched_class == &bt_sched_class)) {
-					prev->nflags |= TNF_SCHED_BT;
-					rq->bt.nr_uninterruptible++;
-				}
-#endif
-			}
-
 			/*
 			 * __schedule()			ttwu()
 			 *   prev_state = prev->state;    if (p->on_rq && ...)
@@ -6971,17 +6971,7 @@ static void __sched notrace __schedule(int sched_mode)
 			 *
 			 * After this, schedule() must not care about p->state any more.
 			 */
-			deactivate_task(rq, prev, DEQUEUE_SLEEP | DEQUEUE_NOCLOCK);
-
-			if (prev->in_iowait) {
-				atomic_inc(&rq->nr_iowait);
-				delayacct_blkio_start();
-			}
-
-#ifdef CONFIG_BT_SCHED
-			if (prev->in_iowait_bt)
-				atomic_inc(&rq->nr_iowait_bt);
-#endif
+			block_task(rq, prev, DEQUEUE_NOCLOCK);
 		}
 		switch_count = &prev->nvcsw;
 	}

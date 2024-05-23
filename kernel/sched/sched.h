@@ -69,6 +69,7 @@
 #include <linux/wait_api.h>
 #include <linux/wait_bit.h>
 #include <linux/workqueue_api.h>
+#include <linux/delayacct.h>
 
 #include <trace/events/power.h>
 #include <trace/events/sched.h>
@@ -3150,6 +3151,29 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
 
 	/* Check if we still need preemption */
 	sched_update_tick_dependency(rq);
+}
+
+static inline void __block_task(struct rq *rq, struct task_struct *p)
+{
+	WRITE_ONCE(p->on_rq, 0);
+	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
+	if (p->sched_contributes_to_load) {
+#ifdef CONFIG_BT_SCHED
+		if (unlikely(p->sched_class == &bt_sched_class)) {
+			p->nflags |= TNF_SCHED_BT;
+			rq->bt.nr_uninterruptible++;
+		}
+#endif
+		rq->nr_uninterruptible++;
+	}
+
+	if (p->in_iowait) {
+#ifdef CONFIG_BT_SCHED
+		atomic_inc(&rq->nr_iowait_bt);
+#endif
+		atomic_inc(&rq->nr_iowait);
+		delayacct_blkio_start();
+	}
 }
 
 extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
