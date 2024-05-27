@@ -4871,6 +4871,9 @@ int sched_cgroup_fork(struct task_struct *p, struct kernel_clone_args *kargs)
 	}
 #endif
 	rseq_migrate(p);
+#ifdef CONFIG_EXT_GROUP_SCHED
+	scx_cgroup_fork(p);
+#endif
 	/*
 	 * We're setting the CPU for the first time, we don't migrate,
 	 * so use __set_task_cpu().
@@ -10662,6 +10665,8 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 	struct task_group *group;
 	struct rq_flags rf;
 	struct rq *rq;
+	const struct sched_class *prev_class = tsk->sched_class;
+	int oldprio = tsk->prio;
 
 	rq = task_rq_lock(tsk, &rf);
 	/*
@@ -10687,6 +10692,7 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 	if (!for_autogroup)
 		scx_cgroup_move_task(tsk);
 
+	check_class_changing(rq, tsk, prev_class);
 	if (queued)
 		enqueue_task(rq, tsk, queue_flags);
 	if (running) {
@@ -10698,7 +10704,7 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 		 */
 		resched_curr(rq);
 	}
-
+	check_class_changed(rq, tsk, prev_class, oldprio);
 unlock:
 	task_rq_unlock(rq, tsk, &rf);
 }
@@ -11453,6 +11459,31 @@ static int cpu_quota_aware_write_u64(struct cgroup_subsys_state *css,
 
 #endif
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+static u64 cpu_scx_read_u64(struct cgroup_subsys_state *css,
+			    struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+
+	return tg->scx;
+}
+
+static int cpu_scx_write_u64(struct cgroup_subsys_state *css,
+			     struct cftype *cftype, u64 val)
+{
+	struct task_group *tg = css_tg(css);
+
+	if (val > 1)
+		return -ERANGE;
+
+	tg = css_tg(css);
+	if (tg->scx == val)
+		return 0;
+
+	return scx_cpu_cgroup_switch(tg, val);
+}
+#endif
+
 static struct cftype cpu_legacy_files[] = {
 #ifdef CONFIG_CGROUPFS
 	{
@@ -11523,6 +11554,14 @@ static struct cftype cpu_legacy_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
+	},
+#endif
+#ifdef CONFIG_EXT_GROUP_SCHED
+	{
+		.name = "scx",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_scx_read_u64,
+		.write_u64 = cpu_scx_write_u64,
 	},
 #endif
 	{ }	/* Terminate */
@@ -11740,6 +11779,14 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
+	},
+#endif
+#ifdef CONFIG_EXT_GROUP_SCHED
+	{
+		.name = "scx",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_scx_read_u64,
+		.write_u64 = cpu_scx_write_u64,
 	},
 #endif
 	{ }	/* terminate */
