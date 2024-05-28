@@ -3648,13 +3648,13 @@ static inline int acpi_rmrr_andd_probe(struct device *dev)
 
 	iommu = device_lookup_iommu(dev, &bus, &devfn);
 	if (!iommu) {
-		pr_info("dpoint-- cannot get acpi device corresponding iommu\n");
+		pr_err("cannot get acpi device corresponding iommu\n");
 		return -EINVAL;
 	}
 
 	pci_device = pci_get_domain_bus_and_slot(iommu->segment, bus, devfn);
 	if (!pci_device) {
-		pr_info("dpoint-- cannot get acpi devie corresponding pci_device\n");
+		pr_err("cannot get acpi devie corresponding pci_device\n");
 		return -EINVAL;
 	}
 	ret = acpi_rmrr_device_create_direct_mappings(iommu_get_domain_for_dev(&pci_device->dev),
