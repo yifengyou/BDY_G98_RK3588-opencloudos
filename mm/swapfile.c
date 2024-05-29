@@ -1494,6 +1494,43 @@ void swap_free(swp_entry_t entry)
 }
 EXPORT_SYMBOL(swap_free);
 
+static void cluster_swap_free_nr(struct swap_info_struct *si,
+		unsigned long offset, int nr_pages,
+		unsigned char usage)
+{
+	struct swap_cluster_info *ci;
+	unsigned long end = offset + nr_pages;
+
+	ci = lock_cluster(si, offset);
+	do {
+		if (!__swap_entry_free_locked(si, offset, usage))
+			swap_entry_range_free(si, ci, swp_entry(si->type, offset), 1);
+	} while (++offset < end);
+	unlock_cluster(ci);
+}
+
+/*
+ * Caller has made sure that the swap device corresponding to entry
+ * is still around or has not been recycled.
+ */
+void swap_free_nr(swp_entry_t entry, int nr_pages)
+{
+	int nr;
+	struct swap_info_struct *sis;
+	unsigned long offset = swp_offset(entry);
+
+	sis = _swap_info_get(entry);
+	if (!sis)
+		return;
+
+	while (nr_pages) {
+		nr = min_t(int, nr_pages, SWAPFILE_CLUSTER - offset % SWAPFILE_CLUSTER);
+		cluster_swap_free_nr(sis, offset, nr, 1);
+		offset += nr;
+		nr_pages -= nr;
+	}
+}
+
 /*
  * Called after dropping swapcache to decrease refcnt to swap entries.
  */
