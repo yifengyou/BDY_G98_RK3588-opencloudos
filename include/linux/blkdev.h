@@ -567,7 +567,7 @@ struct request_queue {
 
 enum {
 	WBT_RWQ_BG		= 0,
-	WBT_RWQ_KSWAPD,
+	WBT_RWQ_SWAP,
 	WBT_RWQ_DISCARD,
 	WBT_NUM_RWQ,
 };
