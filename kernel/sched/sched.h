@@ -3614,4 +3614,6 @@ extern void check_class_changing(struct rq *rq, struct task_struct *p,
 extern void check_class_changed(struct rq *rq, struct task_struct *p,
 				const struct sched_class *prev_class,
 				int oldprio);
+#include "ext.h"
+
 #endif /* _KERNEL_SCHED_SCHED_H */
