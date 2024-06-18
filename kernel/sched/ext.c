@@ -19,7 +19,9 @@ enum scx_consts {
 enum scx_opi {
 	SCX_OPI_BEGIN			= 0,
 	SCX_OPI_NORMAL_BEGIN		= 0,
-	SCX_OPI_NORMAL_END		= SCX_OP_IDX(init),
+	SCX_OPI_NORMAL_END		= SCX_OP_IDX(cpu_online),
+	SCX_OPI_CPU_HOTPLUG_BEGIN	= SCX_OP_IDX(cpu_online),
+	SCX_OPI_CPU_HOTPLUG_END		= SCX_OP_IDX(init),
 	SCX_OPI_END			= SCX_OP_IDX(init),
 };
 
@@ -204,6 +206,7 @@ static atomic_t scx_exit_kind = ATOMIC_INIT(SCX_EXIT_DONE);
 static struct scx_exit_info *scx_exit_info;
 
 static atomic_long_t scx_nr_rejected = ATOMIC_LONG_INIT(0);
+static atomic_long_t scx_hotplug_seq = ATOMIC_LONG_INIT(0);
 
 /*
  * The maximum amount of time in jiffies that a task may be runnable without
@@ -930,11 +933,7 @@ static void direct_dispatch(struct task_struct *p, u64 enq_flags)
 
 static bool scx_rq_online(struct rq *rq)
 {
-#ifdef CONFIG_SMP
-	return likely(rq->online);
-#else
-	return true;
-#endif
+	return likely(rq->scx.flags & SCX_RQ_ONLINE);
 }
 
 static void do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
@@ -949,6 +948,11 @@ static void do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 	if (sticky_cpu == cpu_of(rq))
 		goto local_norefill;
 
+	/*
+	 * If !scx_rq_online(), we already told the BPF scheduler that the CPU
+	 * is offline and are just running the hotplug path. Don't bother the
+	 * BPF scheduler.
+	 */
 	if (!scx_rq_online(rq))
 		goto local;
 
@@ -2184,6 +2188,42 @@ void __scx_update_idle(struct rq *rq, bool idle)
 #endif
 }
 
+static void handle_hotplug(struct rq *rq, bool online)
+{
+	int cpu = cpu_of(rq);
+
+	atomic_long_inc(&scx_hotplug_seq);
+
+	if (online && SCX_HAS_OP(cpu_online))
+		SCX_CALL_OP(SCX_KF_SLEEPABLE, cpu_online, cpu);
+	else if (!online && SCX_HAS_OP(cpu_offline))
+		SCX_CALL_OP(SCX_KF_SLEEPABLE, cpu_offline, cpu);
+	else
+		scx_ops_exit(SCX_ECODE_ACT_RESTART | SCX_ECODE_RSN_HOTPLUG,
+			     "cpu %d going %s, exiting scheduler", cpu,
+			     online ? "online" : "offline");
+}
+
+void scx_rq_activate(struct rq *rq)
+{
+	handle_hotplug(rq, true);
+}
+
+void scx_rq_deactivate(struct rq *rq)
+{
+	handle_hotplug(rq, false);
+}
+
+static void rq_online_scx(struct rq *rq)
+{
+	rq->scx.flags |= SCX_RQ_ONLINE;
+}
+
+static void rq_offline_scx(struct rq *rq)
+{
+	rq->scx.flags &= ~SCX_RQ_ONLINE;
+}
+
 #else	/* CONFIG_SMP */
 
 static bool test_and_clear_cpu_idle(int cpu) { return false; }
@@ -2615,6 +2655,9 @@ DEFINE_SCHED_CLASS(ext) = {
 	.balance		= balance_scx,
 	.select_task_rq		= select_task_rq_scx,
 	.set_cpus_allowed	= set_cpus_allowed_scx,
+
+	.rq_online		= rq_online_scx,
+	.rq_offline		= rq_offline_scx,
 #endif
 
 	.task_tick		= task_tick_scx,
@@ -2746,10 +2789,18 @@ static ssize_t scx_attr_nr_rejected_show(struct kobject *kobj,
 }
 SCX_ATTR(nr_rejected);
 
+static ssize_t scx_attr_hotplug_seq_show(struct kobject *kobj,
+					 struct kobj_attribute *ka, char *buf)
+{
+	return sysfs_emit(buf, "%ld\n", atomic_long_read(&scx_hotplug_seq));
+}
+SCX_ATTR(hotplug_seq);
+
 static struct attribute *scx_global_attrs[] = {
 	&scx_attr_state.attr,
 	&scx_attr_switch_all.attr,
 	&scx_attr_nr_rejected.attr,
+	&scx_attr_hotplug_seq.attr,
 	NULL,
 };
 
@@ -3452,6 +3503,25 @@ static struct kthread_worker *scx_create_rt_helper(const char *name)
 	return helper;
 }
 
+static void check_hotplug_seq(const struct sched_ext_ops *ops)
+{
+	unsigned long long global_hotplug_seq;
+
+	/*
+	 * If a hotplug event has occurred between when a scheduler was
+	 * initialized, and when we were able to attach, exit and notify user
+	 * space about it.
+	 */
+	if (ops->hotplug_seq) {
+		global_hotplug_seq = atomic_long_read(&scx_hotplug_seq);
+		if (ops->hotplug_seq != global_hotplug_seq) {
+			scx_ops_exit(SCX_ECODE_ACT_RESTART | SCX_ECODE_RSN_HOTPLUG,
+				     "expected hotplug seq %llu did not match actual %llu",
+				     ops->hotplug_seq, global_hotplug_seq);
+		}
+	}
+}
+
 static int validate_ops(const struct sched_ext_ops *ops)
 {
 	/*
@@ -3534,6 +3604,10 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 		}
 	}
 
+	for (i = SCX_OPI_CPU_HOTPLUG_BEGIN; i < SCX_OPI_CPU_HOTPLUG_END; i++)
+		if (((void (**)(void))ops)[i])
+			static_branch_enable_cpuslocked(&scx_has_op[i]);
+
 	cpus_read_unlock();
 
 	ret = validate_ops(ops);
@@ -3574,6 +3648,8 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 	 */
 	percpu_down_write(&scx_fork_rwsem);
 	cpus_read_lock();
+
+	check_hotplug_seq(ops);
 
 	for (i = SCX_OPI_NORMAL_BEGIN; i < SCX_OPI_NORMAL_END; i++)
 		if (((void (**)(void))ops)[i])
@@ -3884,6 +3960,9 @@ static int bpf_scx_init_member(const struct btf_type *t,
 		ops->exit_dump_len =
 			*(u32 *)(udata + moff) ?: SCX_EXIT_DUMP_DFL_LEN;
 		return 1;
+	case offsetof(struct sched_ext_ops, hotplug_seq):
+		ops->hotplug_seq = *(u64 *)(udata + moff);
+		return 1;
 	}
 
 	return 0;
@@ -3897,6 +3976,8 @@ static int bpf_scx_check_member(const struct btf_type *t,
 
 	switch (moff) {
 	case offsetof(struct sched_ext_ops, init_task):
+	case offsetof(struct sched_ext_ops, cpu_online):
+	case offsetof(struct sched_ext_ops, cpu_offline):
 	case offsetof(struct sched_ext_ops, init):
 	case offsetof(struct sched_ext_ops, exit):
 		break;
@@ -4186,6 +4267,9 @@ void __init init_sched_ext_class(void)
 		BUG_ON(!zalloc_cpumask_var(&rq->scx.cpus_to_preempt, GFP_KERNEL));
 		BUG_ON(!zalloc_cpumask_var(&rq->scx.cpus_to_wait, GFP_KERNEL));
 		init_irq_work(&rq->scx.kick_cpus_irq_work, kick_cpus_irq_workfn);
+
+		if (cpu_online(cpu))
+			cpu_rq(cpu)->scx.flags |= SCX_RQ_ONLINE;
 	}
 
 	register_sysrq_key('S', &sysrq_sched_ext_reset_op);

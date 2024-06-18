@@ -64,6 +64,29 @@ enum scx_exit_kind {
 };
 
 /*
+ * An exit code can be specified when exiting with scx_bpf_exit() or
+ * scx_ops_exit(), corresponding to exit_kind UNREG_BPF and UNREG_KERN
+ * respectively. The codes are 64bit of the format:
+ *
+ *   Bits: [63  ..  48 47   ..  32 31 .. 0]
+ *         [ SYS ACT ] [ SYS RSN ] [ USR  ]
+ *
+ *   SYS ACT: System-defined exit actions
+ *   SYS RSN: System-defined exit reasons
+ *   USR    : User-defined exit codes and reasons
+ *
+ * Using the above, users may communicate intention and context by ORing system
+ * actions and/or system reasons with a user-defined exit code.
+ */
+enum scx_exit_code {
+	/* Reasons */
+	SCX_ECODE_RSN_HOTPLUG	= 1LLU << 32,
+
+	/* Actions */
+	SCX_ECODE_ACT_RESTART	= 1LLU << 48,
+};
+
+/*
  * scx_exit_info is passed to ops.exit() to describe why the BPF scheduler is
  * being disabled.
  */
@@ -507,6 +530,32 @@ struct sched_ext_ops {
 	 */
 	void (*dump_task)(struct scx_dump_ctx *ctx, struct task_struct *p);
 
+	/*
+	 * All online ops must come before ops.cpu_online().
+	 */
+
+	/**
+	 * cpu_online - A CPU became online
+	 * @cpu: CPU which just came up
+	 *
+	 * @cpu just came online. @cpu will not call ops.enqueue() or
+	 * ops.dispatch(), nor run tasks associated with other CPUs beforehand.
+	 */
+	void (*cpu_online)(s32 cpu);
+
+	/**
+	 * cpu_offline - A CPU is going offline
+	 * @cpu: CPU which is going offline
+	 *
+	 * @cpu is going offline. @cpu will not call ops.enqueue() or
+	 * ops.dispatch(), nor run tasks associated with other CPUs afterwards.
+	 */
+	void (*cpu_offline)(s32 cpu);
+
+	/*
+	 * All CPU hotplug ops must come before ops.init().
+	 */
+
 	/**
 	 * init - Initialize the BPF scheduler
 	 */
@@ -542,6 +591,15 @@ struct sched_ext_ops {
 	 * value of 32768 is used.
 	 */
 	u32 exit_dump_len;
+
+	/**
+	 * hotplug_seq - A sequence number that may be set by the scheduler to
+	 * detect when a hotplug event has occurred during the loading process.
+	 * If 0, no detection occurs. Otherwise, the scheduler will fail to
+	 * load if the sequence number does not match @scx_hotplug_seq on the
+	 * enable path.
+	 */
+	u64 hotplug_seq;
 
 	/**
 	 * name - BPF scheduler's name
