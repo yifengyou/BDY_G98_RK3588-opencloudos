@@ -5732,6 +5732,7 @@ void scheduler_tick(void)
 	calc_global_load_tick(rq);
 	sched_core_tick(rq);
 	task_tick_mm_cid(rq, curr);
+	scx_tick(rq);
 
 #ifdef CONFIG_CGROUP_SLI
 	sli_check_longsys(curr);
