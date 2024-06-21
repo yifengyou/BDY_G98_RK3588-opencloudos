@@ -155,9 +155,11 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 
 static void sugov_get_util(struct sugov_cpu *sg_cpu)
 {
-	unsigned long util = cpu_util_cfs_boost(sg_cpu->cpu);
+	unsigned long util = scx_cpuperf_target(sg_cpu->cpu);
 	struct rq *rq = cpu_rq(sg_cpu->cpu);
 
+	if (!scx_switched_all())
+		util += cpu_util_cfs_boost(sg_cpu->cpu);
 	sg_cpu->bw_dl = cpu_bw_dl(rq);
 	sg_cpu->util = effective_cpu_util(sg_cpu->cpu, util,
 					  FREQUENCY_UTIL, NULL);
@@ -292,6 +294,14 @@ static bool sugov_hold_freq(struct sugov_cpu *sg_cpu)
 {
 	unsigned long idle_calls;
 	bool ret;
+
+	/*
+	 * The heuristics in this function is for the fair class. For SCX, the
+	 * performance target comes directly from the BPF scheduler. Let's just
+	 * follow it.
+	 */
+	if (scx_switched_all())
+		return false;
 
 	/* if capped by uclamp_max, always update to be in compliance */
 	if (uclamp_rq_is_capped(cpu_rq(sg_cpu->cpu)))
