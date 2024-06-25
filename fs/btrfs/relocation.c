@@ -2962,8 +2962,7 @@ again:
 
 	if (PageReadahead(page))
 		page_cache_async_readahead(inode->i_mapping, ra, NULL,
-				page_folio(page), page_index,
-				last_index + 1 - page_index);
+				page_folio(page), last_index + 1 - page_index);
 
 	if (!PageUptodate(page)) {
 		btrfs_read_folio(NULL, page_folio(page));
