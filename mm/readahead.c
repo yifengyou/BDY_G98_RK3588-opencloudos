@@ -590,7 +590,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	 */
 	expected = round_down(ra->start + ra->size - ra->async_size,
 			1UL << order);
-	if (index == expected || index == (ra->start + ra->size)) {
+	if (folio && index == expected) {
 		ra->start += ra->size;
 		/*
 		 * In the case of MADV_HUGEPAGE, the actual size might exceed
