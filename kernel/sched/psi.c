@@ -254,46 +254,52 @@ void __init psi_init(void)
 	group_init(&psi_system);
 }
 
-static bool test_state(unsigned int *tasks, enum psi_states state, bool oncpu)
+static u32 test_states(unsigned int *tasks, u32 state_mask)
 {
-	switch (state) {
-	case PSI_IO_SOME:
-		return unlikely(tasks[NR_IOWAIT]);
-	case PSI_IO_FULL:
-		return unlikely(tasks[NR_IOWAIT] && !tasks[NR_RUNNING]);
-	case PSI_MEM_SOME:
-		return unlikely(tasks[NR_MEMSTALL]);
-	case PSI_MEM_FULL:
-		return unlikely(tasks[NR_MEMSTALL] &&
-			tasks[NR_RUNNING] == tasks[NR_MEMSTALL_RUNNING]);
-	case PSI_CPU_SOME:
-		return unlikely(tasks[NR_RUNNING] > oncpu);
-	case PSI_CPU_FULL:
-		return unlikely(tasks[NR_RUNNING] && !oncpu);
-	case PSI_NONIDLE:
-		return tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] ||
-			tasks[NR_RUNNING];
-	default:
-		return false;
+	const bool oncpu = state_mask & PSI_ONCPU;
+
+	if (tasks[NR_IOWAIT]) {
+		state_mask |= BIT(PSI_IO_SOME);
+		if (!tasks[NR_RUNNING])
+			state_mask |= BIT(PSI_IO_FULL);
 	}
+
+	if (tasks[NR_MEMSTALL]) {
+		state_mask |= BIT(PSI_MEM_SOME);
+		if (tasks[NR_RUNNING] == tasks[NR_MEMSTALL_RUNNING])
+			state_mask |= BIT(PSI_MEM_FULL);
+	}
+
+	if (psi_dyn_stat_cpu()) {
+		if (tasks[NR_RUNNING] > oncpu)
+			state_mask |= BIT(PSI_CPU_SOME);
+
+		if (tasks[NR_RUNNING] && !oncpu)
+			state_mask |= BIT(PSI_CPU_FULL);
+	}
+
+	if (tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] || tasks[NR_RUNNING])
+		state_mask |= BIT(PSI_NONIDLE);
+
+	return state_mask;
 }
 
 /* See comments for psi_group_change_legacy */
-static bool test_state_legacy(unsigned int *tasks, enum psi_states state)
+static u32 test_states_legacy(unsigned int *tasks, u32 state_mask)
 {
-	switch (state) {
-	case PSI_IO_SOME:
-		return unlikely(tasks[NR_IOWAIT]);
-	case PSI_MEM_SOME:
-		return unlikely(tasks[NR_MEMSTALL]);
-	case PSI_CPU_SOME:
-		return unlikely(tasks[NR_RUNNING] > 1);
-	case PSI_NONIDLE:
-		return tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] ||
-			tasks[NR_RUNNING];
-	default:
-		return false;
-	}
+	if (tasks[NR_IOWAIT])
+		state_mask |= BIT(PSI_IO_SOME);
+
+	if (tasks[NR_MEMSTALL])
+		state_mask |= BIT(PSI_MEM_SOME);
+
+	if (tasks[NR_RUNNING] > 1)
+		state_mask |= BIT(PSI_CPU_SOME);
+
+	if (tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] || tasks[NR_RUNNING])
+		state_mask |= BIT(PSI_NONIDLE);
+
+	return state_mask;
 }
 
 static inline bool psi_use_legacy(void)
@@ -858,7 +864,6 @@ static void psi_group_change(struct psi_group *group, int cpu,
 {
 	struct psi_group_cpu *groupc;
 	unsigned int t;
-	enum psi_states s;
 	u32 state_mask = 0;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
@@ -909,19 +914,10 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		return;
 	}
 
-	for (s = 0; s < NR_PSI_STATES; s++) {
-		if (!psi_dyn_stat_cpu() && (s == PSI_CPU_SOME || s == PSI_CPU_FULL))
-			continue;
-
-		if (psi_use_legacy()) {
-			if (test_state_legacy(groupc->tasks, s))
-				state_mask |= (1 << s);
-			continue;
-		}
-
-		if (test_state(groupc->tasks, s, state_mask & PSI_ONCPU))
-			state_mask |= (1 << s);
-	}
+	if (psi_use_legacy())
+		state_mask = test_states_legacy(groupc->tasks, state_mask);
+	else
+		state_mask = test_states(groupc->tasks, state_mask);
 
 	/*
 	 * Since we care about lost potential, a memstall is FULL
@@ -1358,7 +1354,7 @@ void psi_cgroup_restart(struct psi_group *group)
 	/*
 	 * After we disable psi_group->enabled, we don't actually
 	 * stop percpu tasks accounting in each psi_group_cpu,
-	 * instead only stop test_state() loop, record_times()
+	 * instead only stop test_states() loop, record_times()
 	 * and averaging worker, see psi_group_change() for details.
 	 *
 	 * When disable cgroup PSI, this function has nothing to sync
@@ -1366,7 +1362,7 @@ void psi_cgroup_restart(struct psi_group *group)
 	 * would see !psi_group->enabled and only do task accounting.
 	 *
 	 * When re-enable cgroup PSI, this function use psi_group_change()
-	 * to get correct state mask from test_state() loop on tasks[],
+	 * to get correct state mask from test_states() loop on tasks[],
 	 * and restart groupc->state_start from now, use .clear = .set = 0
 	 * here since no task status really changed.
 	 */
