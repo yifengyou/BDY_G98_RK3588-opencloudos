@@ -1540,6 +1540,28 @@ static bool has_32bit_el0(const struct arm64_cpu_capabilities *entry, int scope)
 	return true;
 }
 
+#ifdef CONFIG_ARM64_LSE_ATOMICS
+static bool is_huawei_kunpeng920(void)
+{
+	unsigned long midr_el1;
+
+	asm volatile("mrs %0, MIDR_EL1" : "=r" (midr_el1));
+	if (((midr_el1 >> 24) & 0xFF) == 0x48 && ((midr_el1 >> 4) & 0xFFF) == 0xd01)
+		return true;
+	return false;
+}
+
+static bool has_cpuid_feature_lse(const struct arm64_cpu_capabilities *entry,
+		int scope)
+{
+	if (is_huawei_kunpeng920()) {
+		pr_info_once("%s OFF\n", entry->desc);
+		return false;
+	}
+	return has_cpuid_feature(entry, scope);
+}
+#endif
+
 static bool has_useable_gicv3_cpuif(const struct arm64_cpu_capabilities *entry, int scope)
 {
 	bool has_sre;
@@ -2307,7 +2329,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.desc = "LSE atomic instructions",
 		.capability = ARM64_HAS_LSE_ATOMICS,
 		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
-		.matches = has_cpuid_feature,
+		.matches = has_cpuid_feature_lse,
 		ARM64_CPUID_FIELDS(ID_AA64ISAR0_EL1, ATOMIC, IMP)
 	},
 #endif /* CONFIG_ARM64_LSE_ATOMICS */
