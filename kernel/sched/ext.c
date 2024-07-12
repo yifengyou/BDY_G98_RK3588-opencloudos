@@ -1266,6 +1266,9 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 {
 	int sticky_cpu = p->scx.sticky_cpu;
 
+	if (enq_flags & ENQUEUE_WAKEUP)
+		rq->scx.flags |= SCX_RQ_IN_WAKEUP;
+
 	enq_flags |= rq->scx.extra_enq_flags;
 
 	if (sticky_cpu >= 0)
@@ -1282,7 +1285,7 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 
 	if (p->scx.flags & SCX_TASK_QUEUED) {
 		WARN_ON_ONCE(!task_runnable(p));
-		return;
+		goto out;
 	}
 
 	set_task_runnable(rq, p);
@@ -1297,6 +1300,8 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 		touch_core_sched(rq, p);
 
 	do_enqueue_task(rq, p, enq_flags, sticky_cpu);
+out:
+	rq->scx.flags &= ~SCX_RQ_IN_WAKEUP;
 }
 
 static void ops_dequeue(struct task_struct *p, u64 deq_flags)
@@ -1859,7 +1864,7 @@ static int balance_one(struct rq *rq, struct task_struct *prev, bool local)
 	bool has_tasks = false;
 
 	lockdep_assert_rq_held(rq);
-	rq->scx.flags |= SCX_RQ_BALANCING;
+	rq->scx.flags |= SCX_RQ_IN_BALANCE;
 
 	if (static_branch_unlikely(&scx_ops_cpu_preempt) &&
 	    unlikely(rq->scx.cpu_released)) {
@@ -1953,7 +1958,7 @@ static int balance_one(struct rq *rq, struct task_struct *prev, bool local)
 has_tasks:
 	has_tasks = true;
 out:
-	rq->scx.flags &= ~SCX_RQ_BALANCING;
+	rq->scx.flags &= ~SCX_RQ_IN_BALANCE;
 	return has_tasks;
 }
 
@@ -4452,7 +4457,7 @@ static bool can_skip_idle_kick(struct rq *rq)
 	 * The race window is small and we don't and can't guarantee that @rq is
 	 * only kicked while idle anyway. Skip only when sure.
 	 */
-	return !is_idle_task(rq->curr) && !(rq->scx.flags & SCX_RQ_BALANCING);
+	return !is_idle_task(rq->curr) && !(rq->scx.flags & SCX_RQ_IN_BALANCE);
 }
 
 static bool kick_one_cpu(s32 cpu, struct rq *this_rq, unsigned long *pseqs)
