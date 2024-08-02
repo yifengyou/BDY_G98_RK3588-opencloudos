@@ -11563,6 +11563,12 @@ static struct cftype cpu_legacy_files[] = {
 		.read_u64 = cpu_scx_read_u64,
 		.write_u64 = cpu_scx_write_u64,
 	},
+	{
+		.name = "offline",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_scx_read_u64,
+		.write_u64 = cpu_scx_write_u64,
+	},
 #endif
 	{ }	/* Terminate */
 };
@@ -11784,6 +11790,12 @@ static struct cftype cpu_files[] = {
 #ifdef CONFIG_EXT_GROUP_SCHED
 	{
 		.name = "scx",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_scx_read_u64,
+		.write_u64 = cpu_scx_write_u64,
+	},
+	{
+		.name = "offline",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_scx_read_u64,
 		.write_u64 = cpu_scx_write_u64,
