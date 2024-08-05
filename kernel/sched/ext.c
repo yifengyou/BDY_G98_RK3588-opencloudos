@@ -4392,6 +4392,7 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 	struct rhashtable_iter rht_iter;
 	struct scx_dispatch_q *dsq;
 	int i, kind, cpu;
+	bool last_scx_switch_all;
 
 	kind = atomic_read(&scx_exit_kind);
 	while (true) {
@@ -4433,6 +4434,7 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 	mutex_lock(&scx_ops_enable_mutex);
 
 	static_branch_disable(&__scx_switched_all);
+	last_scx_switch_all = READ_ONCE(scx_switching_all);
 	WRITE_ONCE(scx_switching_all, false);
 
 	/*
@@ -4465,6 +4467,18 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 
 		check_class_changed(task_rq(p), p, old_class, p->prio);
 		scx_ops_exit_task(p);
+
+		if (!last_scx_switch_all &&
+				!(p->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
+				old_class == &ext_sched_class &&
+				p->sched_class != old_class) {
+
+			scx_task_iter_unlock(&sti);
+			do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
+			pr_err("scx: Unexpected scheduler unplug found, killed scx task %d (%s)\n",
+					task_pid_nr(p), p->comm);
+			scx_task_iter_relock(&sti);
+		}
 	}
 	scx_task_iter_stop(&sti);
 	percpu_up_write(&scx_fork_rwsem);
