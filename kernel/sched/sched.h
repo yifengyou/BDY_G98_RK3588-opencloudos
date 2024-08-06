@@ -72,6 +72,7 @@
 #include <trace/events/power.h>
 #include <trace/events/sched.h>
 #include <linux/sched/cputime.h>
+#include <linux/mmu_context.h>
 
 #include "../workqueue_internal.h"
 
@@ -2523,6 +2524,29 @@ extern void trigger_load_balance(struct rq *rq);
 
 extern void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx);
 
+static inline bool task_allowed_on_cpu(struct task_struct *p, int cpu)
+{
+	/* When not in the task's cpumask, no point in looking further. */
+	if (!cpumask_test_cpu(cpu, p->cpus_ptr))
+		return false;
+
+	/* Can @cpu run a user thread? */
+	if (!(p->flags & PF_KTHREAD) && !task_cpu_possible(cpu, p))
+		return false;
+
+	return true;
+}
+
+static inline cpumask_t *alloc_user_cpus_ptr(int node)
+{
+	/*
+	 * See do_set_cpus_allowed() above for the rcu_head usage.
+	 */
+	int size = max_t(int, cpumask_size(), sizeof(struct rcu_head));
+
+	return kmalloc_node(size, GFP_KERNEL, node);
+}
+
 static inline struct task_struct *get_push_task(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
@@ -2544,7 +2568,25 @@ static inline struct task_struct *get_push_task(struct rq *rq)
 
 extern int push_cpu_stop(void *arg);
 
-#endif
+#else /* !CONFIG_SMP: */
+
+static inline bool task_allowed_on_cpu(struct task_struct *p, int cpu)
+{
+	return true;
+}
+
+static inline int __set_cpus_allowed_ptr(struct task_struct *p,
+					 struct affinity_context *ctx)
+{
+	return set_cpus_allowed_ptr(p, ctx->new_mask);
+}
+
+static inline cpumask_t *alloc_user_cpus_ptr(int node)
+{
+	return NULL;
+}
+
+#endif /* !CONFIG_SMP */
 
 #ifdef CONFIG_CPU_IDLE
 static inline void idle_set_state(struct rq *rq,
