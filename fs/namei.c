@@ -3431,6 +3431,9 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		return dentry;
 	}
 
+	if (open_flag & O_CREAT)
+		audit_inode(nd->name, dir, AUDIT_INODE_PARENT);
+
 	/*
 	 * Checking write permission is tricky, bacuse we don't know if we are
 	 * going to actually need it: O_CREAT opens should work as long as the
@@ -3586,7 +3589,6 @@ static const char *open_last_lookups(struct nameidata *nd,
 			if (!unlazied)
 				return ERR_PTR(-ECHILD);
 		}
-		audit_inode(nd->name, dir, AUDIT_INODE_PARENT);
 		if (trailing_slashes(nd)) {
 			dput(dentry);
 			return ERR_PTR(-EISDIR);
