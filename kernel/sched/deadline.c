@@ -1986,13 +1986,13 @@ static void set_next_task_dl(struct rq *rq, struct task_struct *p, bool first)
 	if (!first)
 		return;
 
-	if (hrtick_enabled_dl(rq))
-		start_hrtick_dl(rq, p);
-
 	if (rq->curr->sched_class != &dl_sched_class)
 		update_dl_rq_load_avg(rq_clock_pelt(rq), rq, 0);
 
 	deadline_queue_push_tasks(rq);
+
+	if (hrtick_enabled(rq))
+		start_hrtick_dl(rq, p);
 }
 
 static struct sched_dl_entity *pick_next_dl_entity(struct dl_rq *dl_rq)
