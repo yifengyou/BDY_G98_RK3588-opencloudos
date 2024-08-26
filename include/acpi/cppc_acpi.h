@@ -164,6 +164,7 @@ extern int cppc_set_epp(int cpu, u64 epp_val);
 extern int cppc_get_auto_act_window(int cpunum, u64 *auto_act_window);
 extern int cppc_set_auto_act_window(int cpu, u64 auto_act_window);
 extern int cppc_get_auto_sel(int cpunum, u64 *auto_sel);
+extern int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator);
 #else /* !CONFIG_ACPI_CPPC_LIB */
 static inline int cppc_get_desired_perf(int cpunum, u64 *desired_perf)
 {
@@ -254,6 +255,10 @@ static inline int cppc_get_auto_sel(int cpunum, u64 *auto_sel)
 	return -EOPNOTSUPP;
 }
 
+static inline int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator)
+{
+	return -EOPNOTSUPP;
+}
 #endif /* !CONFIG_ACPI_CPPC_LIB */
 
 #endif /* _CPPC_ACPI_H*/
