@@ -627,6 +627,68 @@ static inline bool slab_update_freelist(struct kmem_cache *s, struct slab *slab,
 	return false;
 }
 
+/*
+ * See comment in calculate_sizes().
+ */
+static inline bool freeptr_outside_object(struct kmem_cache *s)
+{
+	return s->offset >= s->inuse;
+}
+
+/*
+ * Return offset of the end of info block which is inuse + free pointer if
+ * not overlapping with object.
+ */
+static inline unsigned int get_info_end(struct kmem_cache *s)
+{
+	if (freeptr_outside_object(s))
+		return s->inuse + sizeof(void *);
+	else
+		return s->inuse;
+}
+
+/*
+ * kmalloc caches has fixed sizes (mostly power of 2), and kmalloc() API
+ * family will round up the real request size to these fixed ones, so
+ * there could be an extra area than what is requested. Save the original
+ * request size in the meta data area, for better debug and sanity check.
+ */
+static inline void set_orig_size(struct kmem_cache *s,
+				void *object, unsigned int orig_size)
+{
+	void *p = kasan_reset_tag(object);
+
+	if (!slub_debug_orig_size(s))
+		return;
+
+	/*
+	 * KASAN could save its free meta data in object's data area at
+	 * offset 0, if the size is larger than 'orig_size', it will
+	 * overlap the data redzone in [orig_size+1, object_size], and
+	 * the check should be skipped.
+	 */
+	if (kasan_metadata_size(s, true) > orig_size)
+		orig_size = s->object_size;
+
+	p += get_info_end(s);
+	p += sizeof(struct track) * 2;
+
+	*(unsigned int *)p = orig_size;
+}
+
+static inline unsigned int get_orig_size(struct kmem_cache *s, void *object)
+{
+	void *p = kasan_reset_tag(object);
+
+	if (!slub_debug_orig_size(s))
+		return s->object_size;
+
+	p += get_info_end(s);
+	p += sizeof(struct track) * 2;
+
+	return *(unsigned int *)p;
+}
+
 #ifdef CONFIG_SLUB_DEBUG
 static unsigned long object_map[BITS_TO_LONGS(MAX_OBJS_PER_PAGE)];
 static DEFINE_SPINLOCK(object_map_lock);
@@ -740,26 +802,6 @@ static void print_section(char *level, char *text, u8 *addr,
 	metadata_access_disable();
 }
 
-/*
- * See comment in calculate_sizes().
- */
-static inline bool freeptr_outside_object(struct kmem_cache *s)
-{
-	return s->offset >= s->inuse;
-}
-
-/*
- * Return offset of the end of info block which is inuse + free pointer if
- * not overlapping with object.
- */
-static inline unsigned int get_info_end(struct kmem_cache *s)
-{
-	if (freeptr_outside_object(s))
-		return s->inuse + sizeof(void *);
-	else
-		return s->inuse;
-}
-
 static struct track *get_track(struct kmem_cache *s, void *object,
 	enum track_item alloc)
 {
@@ -858,50 +900,6 @@ static void print_slab_info(const struct slab *slab)
 	pr_err("Slab 0x%p objects=%u used=%u fp=0x%p flags=%pGp\n",
 	       slab, slab->objects, slab->inuse, slab->freelist,
 	       folio_flags(folio, 0));
-}
-
-/*
- * kmalloc caches has fixed sizes (mostly power of 2), and kmalloc() API
- * family will round up the real request size to these fixed ones, so
- * there could be an extra area than what is requested. Save the original
- * request size in the meta data area, for better debug and sanity check.
- */
-static inline void set_orig_size(struct kmem_cache *s,
-				void *object, unsigned int orig_size)
-{
-	void *p = kasan_reset_tag(object);
-
-	if (!slub_debug_orig_size(s))
-		return;
-
-#ifdef CONFIG_KASAN_GENERIC
-	/*
-	 * KASAN could save its free meta data in object's data area at
-	 * offset 0, if the size is larger than 'orig_size', it will
-	 * overlap the data redzone in [orig_size+1, object_size], and
-	 * the check should be skipped.
-	 */
-	if (kasan_metadata_size(s, true) > orig_size)
-		orig_size = s->object_size;
-#endif
-
-	p += get_info_end(s);
-	p += sizeof(struct track) * 2;
-
-	*(unsigned int *)p = orig_size;
-}
-
-static inline unsigned int get_orig_size(struct kmem_cache *s, void *object)
-{
-	void *p = kasan_reset_tag(object);
-
-	if (!slub_debug_orig_size(s))
-		return s->object_size;
-
-	p += get_info_end(s);
-	p += sizeof(struct track) * 2;
-
-	return *(unsigned int *)p;
 }
 
 void skip_orig_size_check(struct kmem_cache *s, const void *object)
@@ -1786,15 +1784,27 @@ static __always_inline bool slab_free_hook(struct kmem_cache *s,
 	 *
 	 * The initialization memset's clear the object and the metadata,
 	 * but don't touch the SLAB redzone.
+	 *
+	 * The object's freepointer is also avoided if stored outside the
+	 * object.
 	 */
 	if (init) {
 		int rsize;
+		unsigned int inuse, orig_size;
 
+		inuse = get_info_end(s);
+		orig_size = get_orig_size(s, x);
 		if (!kasan_has_integrated_init())
-			memset(kasan_reset_tag(x), 0, s->object_size);
+			memset(kasan_reset_tag(x), 0, orig_size);
 		rsize = (s->flags & SLAB_RED_ZONE) ? s->red_left_pad : 0;
-		memset((char *)kasan_reset_tag(x) + s->inuse, 0,
-		       s->size - s->inuse - rsize);
+		memset((char *)kasan_reset_tag(x) + inuse, 0,
+		       s->size - inuse - rsize);
+		/*
+		* Restore orig_size, otherwize kmalloc redzone overwritten
+		* would be reported
+		*/
+		set_orig_size(s, x, orig_size);
+
 	}
 	/* KASAN might put x into memory quarantine, delaying its reuse. */
 	return kasan_slab_free(s, x, init);
