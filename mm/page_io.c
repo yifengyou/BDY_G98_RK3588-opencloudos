@@ -291,6 +291,7 @@ static inline void count_swpout_vm_event(struct folio *folio)
 	}
 	count_mthp_stat(folio_order(folio), MTHP_STAT_ANON_SWPOUT);
 #endif
+	count_memcg_folio_events(folio, PSWPOUT, folio_nr_pages(folio));
 	count_vm_events(PSWPOUT, folio_nr_pages(folio));
 }
 
@@ -495,6 +496,7 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 		for (p = 0; p < sio->pages; p++) {
 			struct folio *folio = page_folio(sio->bvec[p].bv_page);
 
+			count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 			folio_mark_uptodate(folio);
 			folio_unlock(folio);
 		}
@@ -580,6 +582,7 @@ static void swap_read_folio_bdev_sync(struct folio *folio,
 	 * attempt to access it in the page fault retry time check.
 	 */
 	get_task_struct(current);
+	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 	count_vm_events(PSWPIN, folio_nr_pages(folio));
 	submit_bio_wait(&bio);
 	__end_swap_bio_read(&bio);
@@ -595,6 +598,7 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 	bio->bi_iter.bi_sector = swap_folio_sector(folio);
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
+	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 	count_vm_events(PSWPIN, folio_nr_pages(folio));
 	submit_bio(bio);
 }
@@ -638,8 +642,10 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 	} else if (synchronous) {
 		int ret = bdev_swapin_folio(sis->bdev, swap_folio_sector(folio), folio);
 		if (ret != -EOPNOTSUPP) {
-			if (!ret)
+			if (!ret) {
+				count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 				count_vm_events(PSWPIN, folio_nr_pages(folio));
+			}
 			goto finish;
 		}
 		swap_read_folio_bdev_sync(folio, sis);
