@@ -16,6 +16,12 @@ enum { sysctl_hung_task_timeout_secs = 0 };
 extern unsigned int sysctl_watch_host_pid;
 #endif
 
+#ifdef CONFIG_IDLE_REVERT
+extern unsigned int sysctl_sched_idle_revert_min;
+extern unsigned int sysctl_tg_idle_revert_enabled;
+extern unsigned int sysctl_tg_idle_revert_scan_count;
+#endif
+
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,
 	SCHED_TUNABLESCALING_LOG,

@@ -666,6 +666,9 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+#ifdef CONFIG_IDLE_REVERT
+	int				idle_revert_enabled;
+#endif
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

@@ -101,6 +101,13 @@ SCHED_FEAT(PARAL, false)
  */
 SCHED_FEAT(WARN_DOUBLE_CLOCK, false)
 
+#ifdef CONFIG_IDLE_REVERT
+/*
+ * Get a CFS task from another CPU which share LLC when it is going to newidle.
+ */
+SCHED_FEAT(IDLE_REVERT, false)
+#endif
+
 #ifdef HAVE_RT_PUSH_IPI
 /*
  * In order to avoid a thundering herd attack of CPUs that are

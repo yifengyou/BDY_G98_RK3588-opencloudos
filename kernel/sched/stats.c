@@ -3,6 +3,10 @@
  * /proc/schedstat implementation
  */
 
+#ifdef CONFIG_IDLE_REVERT
+#include "per_llc_cpu.h"
+#endif
+
 void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
 			       struct sched_statistics *stats)
 {
@@ -148,6 +152,13 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		    rq->ttwu_count, rq->ttwu_local,
 		    rq->rq_cpu_time,
 		    rq->rq_sched_info.run_delay, rq->rq_sched_info.pcount);
+#ifdef CONFIG_IDLE_REVERT
+		if (cpu_idle_revert_enabled())
+			seq_printf(seq,
+				   " %u %u",
+				   rq->idle_revert_success,
+				   rq->idle_revert_fail);
+#endif
 
 		seq_printf(seq, "\n");
 
