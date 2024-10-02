@@ -655,6 +655,10 @@ struct sched_ext_ops {
 	/**
 	 * exit - Clean up after the BPF scheduler
 	 * @info: Exit info
+	 *
+	 * ops.exit() is also called on ops.init() failure, which is a bit
+	 * unusual. This is to allow rich reporting through @info on how
+	 * ops.init() failed.
 	 */
 	void (*exit)(struct scx_exit_info *info);
 
