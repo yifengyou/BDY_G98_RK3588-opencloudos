@@ -7393,28 +7393,24 @@ int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flag
 }
 EXPORT_SYMBOL(default_wake_function);
 
-void __setscheduler_prio(struct task_struct *p, int prio)
+const struct sched_class *__setscheduler_class(struct task_struct *p, int prio)
 {
 	if (dl_prio(prio))
-		p->sched_class = &dl_sched_class;
-	else if (rt_prio(prio))
-		p->sched_class = &rt_sched_class;
+		return &dl_sched_class;
+
 #ifdef CONFIG_BT_SCHED
-	else if (bt_prio(prio))
-		p->sched_class = &bt_sched_class;
+	if (bt_prio(prio))
+		return &bt_sched_class;
 #endif
-#ifdef CONFIG_SCHED_CLASS_EXT
-	else if (task_should_scx(p))
-		p->sched_class = &ext_sched_class;
-#endif
-	else
-		p->sched_class = &fair_sched_class;
-
-	p->prio = prio;
 
 #ifdef CONFIG_SCHED_CLASS_EXT
-	scx_ignore_cpubind(p);
+	if (task_should_scx(p)) {
+		scx_ignore_cpubind(p);
+		return &ext_sched_class;
+	}
 #endif
+
+	return &fair_sched_class;
 }
 
 #ifdef CONFIG_RT_MUTEXES
@@ -7449,7 +7445,7 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 {
 	int prio, oldprio, queued, running, queue_flag =
 		DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
-	const struct sched_class *prev_class;
+	const struct sched_class *prev_class, *next_class;
 	struct rq_flags rf;
 	struct rq *rq;
 
@@ -7507,6 +7503,11 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 		queue_flag &= ~DEQUEUE_MOVE;
 
 	prev_class = p->sched_class;
+	next_class = __setscheduler_class(p, prio);
+
+	if (prev_class != next_class && p->se.sched_delayed)
+		dequeue_task(rq, p, DEQUEUE_SLEEP | DEQUEUE_DELAYED | DEQUEUE_NOCLOCK);
+
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 	if (queued)
@@ -7551,7 +7552,8 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 			p->rt.timeout = 0;
 	}
 
-	__setscheduler_prio(p, prio);
+	p->sched_class = next_class;
+	p->prio = prio;
 	check_class_changing(rq, p, prev_class);
 
 	if (queued)
@@ -8105,7 +8107,7 @@ int __sched_setscheduler(struct task_struct *p,
 {
 	int oldpolicy = -1, policy = attr->sched_policy;
 	int retval, oldprio, newprio, queued, running;
-	const struct sched_class *prev_class;
+	const struct sched_class *prev_class, *next_class;
 	struct balance_callback *head;
 	struct rq_flags rf;
 	int reset_on_fork;
@@ -8286,6 +8288,12 @@ change:
 			queue_flags &= ~DEQUEUE_MOVE;
 	}
 
+	prev_class = p->sched_class;
+	next_class = __setscheduler_class(p, newprio);
+
+	if (prev_class != next_class && p->se.sched_delayed)
+		dequeue_task(rq, p, DEQUEUE_SLEEP | DEQUEUE_DELAYED | DEQUEUE_NOCLOCK);
+
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 	if (queued)
@@ -8293,11 +8301,10 @@ change:
 	if (running)
 		put_prev_task(rq, p);
 
-	prev_class = p->sched_class;
-
 	if (!(attr->sched_flags & SCHED_FLAG_KEEP_PARAMS)) {
 		__setscheduler_params(p, attr);
-		__setscheduler_prio(p, newprio);
+		p->sched_class = next_class;
+		p->prio = newprio;
 	}
 	__setscheduler_uclamp(p, attr);
 	check_class_changing(rq, p, prev_class);
@@ -11131,7 +11138,7 @@ static void sched_change_group(struct task_struct *tsk)
 				if (tg->offline) {
 					newprio = __normal_prio(SCHED_BT, attr.sched_priority, attr.sched_nice);
 					__setscheduler_params(tsk, &attr);
-					__setscheduler_prio(tsk, newprio);
+					__setscheduler_class(tsk, newprio);
 				}
 			} else {
 				attr.sched_nice = BT_PRIO_TO_NICE(tsk->static_prio);
@@ -11139,7 +11146,7 @@ static void sched_change_group(struct task_struct *tsk)
 				if (!tg->offline) {
 					newprio = __normal_prio(SCHED_NORMAL, attr.sched_priority, attr.sched_nice);
 					__setscheduler_params(tsk, &attr);
-					__setscheduler_prio(tsk, newprio);
+					__setscheduler_class(tsk, newprio);
 				}
 			}
 		}
