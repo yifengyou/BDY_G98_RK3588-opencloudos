@@ -28,7 +28,8 @@
 
 void apei_mce_report_mem_error(int severity, struct cper_sec_mem_err *mem_err)
 {
-	struct mce m;
+	struct mce_hw_err err;
+	struct mce *m;
 	int lsb;
 
 	if (!(mem_err->validation_bits & CPER_MEM_VALID_PA))
@@ -44,28 +45,31 @@ void apei_mce_report_mem_error(int severity, struct cper_sec_mem_err *mem_err)
 	else
 		lsb = PAGE_SHIFT;
 
-	mce_prep_record(&m);
-	m.bank = -1;
+	mce_prep_record(&err);
+	m = &err.m;
+	m->bank = -1;
 	/* Fake a memory read error with unknown channel */
-	m.status = MCI_STATUS_VAL | MCI_STATUS_EN | MCI_STATUS_ADDRV | MCI_STATUS_MISCV | 0x9f;
-	m.misc = (MCI_MISC_ADDR_PHYS << 6) | lsb;
+	m->status = MCI_STATUS_VAL | MCI_STATUS_EN | MCI_STATUS_ADDRV | MCI_STATUS_MISCV | 0x9f;
+	m->misc = (MCI_MISC_ADDR_PHYS << 6) | lsb;
 
 	if (severity >= GHES_SEV_RECOVERABLE)
-		m.status |= MCI_STATUS_UC;
+		m->status |= MCI_STATUS_UC;
 
 	if (severity >= GHES_SEV_PANIC) {
-		m.status |= MCI_STATUS_PCC;
-		m.tsc = rdtsc();
+		m->status |= MCI_STATUS_PCC;
+		m->tsc = rdtsc();
 	}
 
-	m.addr = mem_err->physical_addr;
-	mce_log(&m);
+	m->addr = mem_err->physical_addr;
+	mce_log(&err);
 }
 EXPORT_SYMBOL_GPL(apei_mce_report_mem_error);
 
 void zx_apei_mce_report_mem_error(struct cper_sec_mem_err *mem_err)
 {
-	struct mce m;
+	struct mce_hw_err err;
+	struct mce *m;
+
 	int apei_error = 0;
 
 	if (boot_cpu_data.x86 != 7 || boot_cpu_data.x86_model != 91)
@@ -74,159 +78,166 @@ void zx_apei_mce_report_mem_error(struct cper_sec_mem_err *mem_err)
 	if (!(mem_err->validation_bits & CPER_MEM_VALID_PA))
 		return;
 
-	mce_prep_record(&m);
-	m.misc = 0;
-	m.misc = mem_err->module;
-	m.addr = mem_err->physical_addr;
+	mce_prep_record(&err);
+	m = &err.m;
+	m->misc = 0;
+	m->misc = mem_err->module;
+	m->addr = mem_err->physical_addr;
 	if (mem_err->card == 0)
-		m.bank = 9;
+		m->bank = 9;
 	else
-		m.bank = 10;
+		m->bank = 10;
 
 	switch (mem_err->error_type) {
 	case 2:
-		m.status = 0x9c20004000010080;
+		m->status = 0x9c20004000010080;
 		break;
 	case 3:
-		m.status = 0xbe40000000020090;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xbe40000000020090;
+		apei_error = apei_write_mce(m);
 		break;
 	case 8:
 		if (mem_err->requestor_id == 2) {
-			m.status = 0x98200040000400b0;
+			m->status = 0x98200040000400b0;
 		} else if (mem_err->requestor_id == 3) {
-			m.status = 0xba400000000600a0;
-			apei_error = apei_write_mce(&m);
+			m->status = 0xba400000000600a0;
+			apei_error = apei_write_mce(m);
 		} else if (mem_err->requestor_id == 4) {
-			m.status = 0x98200100000300b0;
+			m->status = 0x98200100000300b0;
 		} else if (mem_err->requestor_id == 5) {
-			m.status = 0xba000000000500b0;
-			apei_error = apei_write_mce(&m);
+			m->status = 0xba000000000500b0;
+			apei_error = apei_write_mce(m);
 		} else {
 			pr_info("Undefined Parity error\n");
 		}
 		break;
 	case 10:
 		if (mem_err->requestor_id == 6) {
-			m.status = 0xba400000000700a0;
-			apei_error = apei_write_mce(&m);
+			m->status = 0xba400000000700a0;
+			apei_error = apei_write_mce(m);
 		} else if (mem_err->requestor_id == 7) {
-			m.status = 0xba000000000800b0;
-			apei_error = apei_write_mce(&m);
+			m->status = 0xba000000000800b0;
+			apei_error = apei_write_mce(m);
 		} else {
 			pr_info("Undefined dvad error\n");
 		}
 		break;
 	case 13:
-		m.status = 0x9c200040000100c0;
+		m->status = 0x9c200040000100c0;
 		break;
 	case 14:
-		m.status = 0xbd000000000200c0;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xbd000000000200c0;
+		apei_error = apei_write_mce(m);
 		break;
 	}
-	mce_log(&m);
+	mce_log(&err);
 }
 EXPORT_SYMBOL_GPL(zx_apei_mce_report_mem_error);
 
 void zx_apei_mce_report_pcie_error(int severity, struct cper_sec_pcie *pcie_err)
 {
-	struct mce m;
+	struct mce_hw_err err;
+	struct mce *m;
+
 	int apei_error = 0;
 
 	if (boot_cpu_data.x86 != 7 || boot_cpu_data.x86_model != 91)
 		return;
 
-	mce_prep_record(&m);
-	m.addr = 0;
-	m.misc = 0;
-	m.misc |= (u64)pcie_err->device_id.segment << 32;
-	m.misc |= pcie_err->device_id.bus << 24;
-	m.misc |= pcie_err->device_id.device << 19;
-	m.misc |= pcie_err->device_id.function << 16;
-	m.bank = 6;
+	mce_prep_record(&err);
+	m = &err.m;
+	m->addr = 0;
+	m->misc = 0;
+	m->misc |= (u64)pcie_err->device_id.segment << 32;
+	m->misc |= pcie_err->device_id.bus << 24;
+	m->misc |= pcie_err->device_id.device << 19;
+	m->misc |= pcie_err->device_id.function << 16;
+	m->bank = 6;
 
 	switch (severity) {
 	case 1:
-		m.status = 0x9820004000020e0b;
+		m->status = 0x9820004000020e0b;
 		break;
 	case 2:
-		m.status = 0xba20000000010e0b;
+		m->status = 0xba20000000010e0b;
 		break;
 	case 3:
-		m.status = 0xbd20000000000e0b;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xbd20000000000e0b;
+		apei_error = apei_write_mce(m);
 		break;
 	default:
 		pr_info("Undefine pcie error\n");
 		break;
 	}
-	mce_log(&m);
+	mce_log(&err);
 }
 EXPORT_SYMBOL_GPL(zx_apei_mce_report_pcie_error);
 
 void zx_apei_mce_report_zdi_error(struct cper_sec_proc_generic *zdi_err)
 {
-	struct mce m;
+	struct mce_hw_err err;
+	struct mce *m;
+
 	int apei_error = 0;
 
 	if (boot_cpu_data.x86 != 7 || boot_cpu_data.x86_model != 91)
 		return;
 
-	mce_prep_record(&m);
-	m.misc = 0;
-	m.misc |= (zdi_err->requestor_id & 0xff) << 19;
-	m.misc |= ((zdi_err->requestor_id & 0xff00) >> 8) >> 24;
-	m.bank = 5;
+	mce_prep_record(&err);
+	m = &err.m;
+	m->misc = 0;
+	m->misc |= (zdi_err->requestor_id & 0xff) << 19;
+	m->misc |= ((zdi_err->requestor_id & 0xff00) >> 8) >> 24;
+	m->bank = 5;
 	switch (zdi_err->responder_id) {
 	case 2:
-		m.status = 0xba00000000040e0f;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xba00000000040e0f;
+		apei_error = apei_write_mce(m);
 		break;
 	case 3:
-		m.status = 0xba00000000030e0f;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xba00000000030e0f;
+		apei_error = apei_write_mce(m);
 		break;
 	case 4:
-		m.status = 0xba00000000020e0f;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xba00000000020e0f;
+		apei_error = apei_write_mce(m);
 		break;
 	case 5:
-		m.status = 0xba00000000010e0f;
-		apei_error = apei_write_mce(&m);
+		m->status = 0xba00000000010e0f;
+		apei_error = apei_write_mce(m);
 		break;
 	case 6:
-		m.status = 0x9820004000090e0f;
+		m->status = 0x9820004000090e0f;
 		break;
 	case 7:
-		m.status = 0x9820004000080e0f;
+		m->status = 0x9820004000080e0f;
 		break;
 	case 8:
-		m.status = 0x9820004000070e0f;
+		m->status = 0x9820004000070e0f;
 		break;
 	case 9:
-		m.status = 0x9820004000060e0f;
+		m->status = 0x9820004000060e0f;
 		break;
 	case 10:
-		m.status = 0x9820004000050e0f;
+		m->status = 0x9820004000050e0f;
 		break;
 	case 11:
 	case 12:
 	case 13:
 	case 14:
 	case 15:
-		m.status = 0x98200040000b0e0f;
+		m->status = 0x98200040000b0e0f;
 		break;
 	case 16:
 	case 17:
 	case 18:
-		m.status = 0x98200040000c0e0f;
+		m->status = 0x98200040000c0e0f;
 		break;
 	default:
 		pr_info("Undefined ZDI Error\n");
 		break;
 	}
-	mce_log(&m);
+	mce_log(&err);
 }
 EXPORT_SYMBOL_GPL(zx_apei_mce_report_zdi_error);
 
@@ -234,8 +245,9 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 {
 	const u64 *i_mce = ((const u64 *) (ctx_info + 1));
 	bool apicid_found = false;
+	struct mce_hw_err err;
 	unsigned int cpu;
-	struct mce m;
+	struct mce *m;
 
 	if (!boot_cpu_has(X86_FEATURE_SMCA))
 		return -EINVAL;
@@ -275,18 +287,20 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 	if (!apicid_found)
 		return -EINVAL;
 
-	mce_prep_record_common(&m);
-	mce_prep_record_per_cpu(cpu, &m);
+	m = &err.m;
+	memset(&err, 0, sizeof(struct mce_hw_err));
+	mce_prep_record_common(m);
+	mce_prep_record_per_cpu(cpu, m);
 
-	m.bank = (ctx_info->msr_addr >> 4) & 0xFF;
-	m.status = *i_mce;
-	m.addr = *(i_mce + 1);
-	m.misc = *(i_mce + 2);
+	m->bank = (ctx_info->msr_addr >> 4) & 0xFF;
+	m->status = *i_mce;
+	m->addr = *(i_mce + 1);
+	m->misc = *(i_mce + 2);
 	/* Skipping MCA_CONFIG */
-	m.ipid = *(i_mce + 4);
-	m.synd = *(i_mce + 5);
+	m->ipid = *(i_mce + 4);
+	m->synd = *(i_mce + 5);
 
-	mce_log(&m);
+	mce_log(&err);
 
 	return 0;
 }
