@@ -4274,14 +4274,14 @@ static const struct kset_uevent_ops scx_uevent_ops = {
  * Used by sched_fork() and __setscheduler_prio() to pick the matching
  * sched_class. dl/rt are already handled.
  */
-bool task_should_scx(struct task_struct *p)
+bool task_should_scx(int policy)
 {
 	if (!scx_enabled() ||
 	    unlikely(scx_ops_enable_state() == SCX_OPS_DISABLING))
 		return false;
 	if (READ_ONCE(scx_switching_all))
 		return true;
-	return p->policy == SCHED_EXT;
+	return policy == SCHED_EXT;
 }
 
 /**
@@ -4566,7 +4566,7 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 
 		sched_deq_and_put_task(p, DEQUEUE_SAVE | DEQUEUE_MOVE, &ctx);
 
-		p->sched_class = __setscheduler_class(p, p->prio);
+		p->sched_class = __setscheduler_class(p->policy, p->prio);
 		scx_ignore_cpubind(p);
 		check_class_changing(task_rq(p), p, old_class);
 
@@ -5394,7 +5394,7 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 		sched_deq_and_put_task(p, DEQUEUE_SAVE | DEQUEUE_MOVE, &ctx);
 
 		p->scx.slice = SCX_SLICE_DFL;
-		p->sched_class = __setscheduler_class(p, p->prio);
+		p->sched_class = __setscheduler_class(p->policy, p->prio);
 		scx_ignore_cpubind(p);
 		check_class_changing(task_rq(p), p, old_class);
 
