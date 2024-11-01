@@ -336,7 +336,9 @@ static void pswiotlb_init_io_tlb_pool(struct p_io_tlb_pool *mem, int nid, phys_a
  */
 static void add_mem_pool(struct p_io_tlb_mem *mem, struct p_io_tlb_pool *pool)
 {
-	spin_lock(&mem->lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&mem->lock, flags);
 	if (mem->capacity != mem->whole_size) {
 		mem->pool_addr[mem->whole_size] = mem->pool_addr[mem->capacity];
 		mem->pool_addr[mem->capacity] = pool;
@@ -348,7 +350,7 @@ static void add_mem_pool(struct p_io_tlb_mem *mem, struct p_io_tlb_pool *pool)
 	mem->capacity++;
 	mem->whole_size++;
 	mem->nslabs += pool->nslabs;
-	spin_unlock(&mem->lock);
+	spin_unlock_irqrestore(&mem->lock, flags);
 }
 
 static void __init *pswiotlb_memblock_alloc(unsigned long npslabs,
@@ -585,14 +587,15 @@ static void pswiotlb_prepare_release_pool(struct p_io_tlb_mem *mem,
 			struct p_io_tlb_pool *pool, int pool_idx)
 {
 	int capacity;
+	unsigned long flags;
 
-	spin_lock(&mem->lock);
+	spin_lock_irqsave(&mem->lock, flags);
 	capacity = mem->capacity;
 	mem->pool_addr[pool_idx] = mem->pool_addr[capacity - 1];
 	mem->pool_addr[capacity - 1] = pool;
 	mem->capacity--;
 	mem->nslabs -= pool->nslabs;
-	spin_unlock(&mem->lock);
+	spin_unlock_irqrestore(&mem->lock, flags);
 }
 static void pswiotlb_release_pool(struct p_io_tlb_mem *mem,
 			struct p_io_tlb_pool *pool, int pool_idx)
@@ -602,12 +605,13 @@ static void pswiotlb_release_pool(struct p_io_tlb_mem *mem,
 	struct page *page_start;
 	size_t slots_size = array_size(sizeof(*pool->slots), pool->nslabs);
 	int pool_idx1;
+	unsigned long flags;
 
-	spin_lock(&mem->lock);
+	spin_lock_irqsave(&mem->lock, flags);
 	pool_idx1 = mem->whole_size - 1;
 	mem->pool_addr[pool_idx] = mem->pool_addr[pool_idx1];
 	mem->whole_size--;
-	spin_unlock(&mem->lock);
+	spin_unlock_irqrestore(&mem->lock, flags);
 
 	bitmap_free(pool->busy_record);
 	free_pages((unsigned long)pool->slots, get_order(slots_size));
