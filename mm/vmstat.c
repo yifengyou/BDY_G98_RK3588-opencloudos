@@ -884,6 +884,28 @@ static int refresh_cpu_vm_stats(bool do_pagesets)
 	return changes;
 }
 
+/* fold all populated zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter(void)
+{
+	struct per_cpu_pages *pcp;
+	struct zone *zone;
+	int cpu;
+	long total = 0;
+
+	for_each_populated_zone(zone) {
+		cpus_read_lock();
+		for_each_online_cpu(cpu) {
+			pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+			total += pcp->count;
+		}
+		cpus_read_unlock();
+	}
+	if (total < 0)
+		total = 0;
+	return (unsigned long)total;
+}
+EXPORT_SYMBOL(fold_pcp_counter);
+
 /*
  * Fold the data for an offline cpu into the global array.
  * There cannot be any access by the offline cpu and therefore

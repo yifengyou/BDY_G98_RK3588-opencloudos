@@ -656,4 +656,7 @@ static inline void lruvec_stat_sub_folio(struct folio *folio,
 {
 	lruvec_stat_mod_folio(folio, idx, -folio_nr_pages(folio));
 }
+
+extern unsigned long fold_pcp_counter(void);
+
 #endif /* _LINUX_VMSTAT_H */

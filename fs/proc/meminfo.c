@@ -132,6 +132,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "VmallocUsed:    ", vmalloc_nr_pages());
 	show_val_kb(m, "VmallocChunk:   ", 0ul);
 	show_val_kb(m, "Percpu:         ", pcpu_nr_pages());
+	show_val_kb(m, "PCPFree:        ", fold_pcp_counter());
 
 	memtest_report_meminfo(m);
 
