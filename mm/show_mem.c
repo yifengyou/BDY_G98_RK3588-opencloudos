@@ -89,7 +89,7 @@ void si_meminfo(struct sysinfo *val)
 EXPORT_SYMBOL(si_meminfo);
 
 #ifdef CONFIG_NUMA
-void si_meminfo_node(struct sysinfo *val, int nid)
+void si_meminfo_node(struct sysinfo *val, int nid, unsigned long *pcp)
 {
 	int zone_type;		/* needs to be signed */
 	unsigned long managed_pages = 0;
@@ -97,8 +97,11 @@ void si_meminfo_node(struct sysinfo *val, int nid)
 	unsigned long free_highpages = 0;
 	pg_data_t *pgdat = NODE_DATA(nid);
 
-	for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++)
+	for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++) {
 		managed_pages += zone_managed_pages(&pgdat->node_zones[zone_type]);
+		*pcp += fold_pcp_counter_zone(&pgdat->node_zones[zone_type]);
+	}
+
 	val->totalram = managed_pages;
 	val->sharedram = node_page_state(pgdat, NR_SHMEM);
 	val->freeram = sum_zone_node_page_state(nid, NR_FREE_PAGES);

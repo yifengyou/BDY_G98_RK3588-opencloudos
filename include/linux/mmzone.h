@@ -152,7 +152,9 @@ enum zone_stat_item {
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	NR_UNACCEPTED,
 #endif
-	NR_VM_ZONE_STAT_ITEMS };
+	NR_FREE_PCP,
+	NR_VM_ZONE_STAT_ITEMS
+};
 
 enum node_stat_item {
 	NR_LRU_BASE,

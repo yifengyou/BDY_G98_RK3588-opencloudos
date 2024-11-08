@@ -886,27 +886,52 @@ static int refresh_cpu_vm_stats(bool do_pagesets)
 	return changes;
 }
 
+/* fold zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter_zone(struct zone *zone)
+{
+	int cpu;
+	struct per_cpu_pages *pcp;
+	long total = 0;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu) {
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		total += pcp->count;
+	}
+	cpus_read_unlock();
+	if (total < 0)
+		total = 0;
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_zone);
+
 /* fold all populated zone's pcp page, if the result < 0, return 0 */
 unsigned long fold_pcp_counter(void)
 {
-	struct per_cpu_pages *pcp;
 	struct zone *zone;
-	int cpu;
 	long total = 0;
 
 	for_each_populated_zone(zone) {
-		cpus_read_lock();
-		for_each_online_cpu(cpu) {
-			pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-			total += pcp->count;
-		}
-		cpus_read_unlock();
+		total += fold_pcp_counter_zone(zone);
 	}
-	if (total < 0)
-		total = 0;
 	return (unsigned long)total;
 }
 EXPORT_SYMBOL(fold_pcp_counter);
+
+unsigned long fold_pcp_counter_node(struct pglist_data *pgdat, unsigned long *pcp)
+{
+	int i;
+	struct zone *zones = pgdat->node_zones;
+	unsigned long total = 0;
+
+	*pcp = 0;
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		*pcp += fold_pcp_counter_zone(zones + i);
+		total += zone_managed_pages(zones + i);
+	}
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_node);
 
 /*
  * Fold the data for an offline cpu into the global array.
@@ -1205,6 +1230,7 @@ const char * const vmstat_text[] = {
 	"nr_zspages",
 #endif
 	"nr_free_cma",
+	"nr_pcp_free",
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	"nr_unaccepted",
 #endif
@@ -1833,6 +1859,10 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 		return ERR_PTR(-ENOMEM);
 	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
 		v[i] = global_zone_page_state(i);
+
+	v[NR_FREE_PCP] = fold_pcp_counter();
+	v[NR_FREE_PAGES] = count_pcp_in(v[NR_FREE_PCP], v[NR_FREE_PAGES],
+					totalram_pages());
 	v += NR_VM_ZONE_STAT_ITEMS;
 
 #ifdef CONFIG_NUMA
@@ -1906,6 +1936,8 @@ static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
 static DEFINE_PER_CPU(struct delayed_work, decay_pcp_work);
 int sysctl_stat_interval __read_mostly = HZ;
 int sysctl_decay_high_interval __read_mostly = 1000;
+/* default: zoro */
+int sysctl_pcp_as_free;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)
@@ -2357,6 +2389,21 @@ static int __init extfrag_debug_init(void)
 			    &extfrag_fops);
 
 	return 0;
+}
+unsigned long count_pcp_in(unsigned long pcp, unsigned long target,
+			   unsigned long totalram)
+{
+	if (!sysctl_pcp_as_free)
+		return target;
+
+	/* if pcp pages is less then 1/1024 we do not count pcp in */
+	if ((pcp << 10) < totalram)
+		return target;
+
+	/* pcp is a snapshot of all zone's per cpu pages, we guard it by totalram */
+	if (pcp + target >= totalram)
+		return target;
+	return pcp + target;
 }
 
 module_init(extfrag_debug_init);

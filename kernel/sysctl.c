@@ -2903,6 +2903,15 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif
+	{
+		.procname       = "pcp_as_free",
+		.data           = &sysctl_pcp_as_free,
+		.maxlen         = sizeof(sysctl_pcp_as_free),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
 	{ }
 };
 

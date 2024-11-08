@@ -11,6 +11,7 @@
 #include <linux/mmdebug.h>
 
 extern int sysctl_stat_interval;
+extern int sysctl_pcp_as_free;
 extern int sysctl_decay_high_interval;
 
 #ifdef CONFIG_NUMA
@@ -658,7 +659,11 @@ static inline void lruvec_stat_sub_folio(struct folio *folio,
 	lruvec_stat_mod_folio(folio, idx, -folio_nr_pages(folio));
 }
 
+extern unsigned long fold_pcp_counter_node(struct pglist_data *pgdat, unsigned long *pcp);
+extern unsigned long fold_pcp_counter_zone(struct zone *zone);
 extern unsigned long fold_pcp_counter(void);
+extern unsigned long count_pcp_in(unsigned long pcp, unsigned long target,
+				  unsigned long totalram);
 
 DECLARE_STATIC_KEY_TRUE(sysctl_deferable_decay_high);
 
