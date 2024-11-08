@@ -3091,6 +3091,22 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0600,
 		.proc_handler	= vmstat_refresh,
 	},
+	{
+		.procname	= "deferable_decay_high",
+		.data		= &sysctl_deferable_decay_high.key,
+		.maxlen		= sizeof(sysctl_deferable_decay_high),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
+	{
+		.procname	= "decay_high_interval_ms",
+		.data		= &sysctl_decay_high_interval,
+		.maxlen		= sizeof(sysctl_decay_high_interval),
+		.mode		= 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= SYSCTL_INT_MAX,
+	},
 #endif
 #ifdef CONFIG_MMU
 	{

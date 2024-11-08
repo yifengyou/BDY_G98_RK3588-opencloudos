@@ -11,6 +11,7 @@
 #include <linux/mmdebug.h>
 
 extern int sysctl_stat_interval;
+extern int sysctl_decay_high_interval;
 
 #ifdef CONFIG_NUMA
 #define ENABLE_NUMA_STAT   1
@@ -658,5 +659,7 @@ static inline void lruvec_stat_sub_folio(struct folio *folio,
 }
 
 extern unsigned long fold_pcp_counter(void);
+
+DECLARE_STATIC_KEY_TRUE(sysctl_deferable_decay_high);
 
 #endif /* _LINUX_VMSTAT_H */

@@ -31,6 +31,8 @@
 
 #include "internal.h"
 
+DEFINE_STATIC_KEY_TRUE(sysctl_deferable_decay_high);
+
 #ifdef CONFIG_NUMA
 int sysctl_vm_numa_stat = ENABLE_NUMA_STAT;
 
@@ -833,8 +835,8 @@ static int refresh_cpu_vm_stats(bool do_pagesets)
 
 		if (do_pagesets) {
 			cond_resched();
-
-			changes += decay_pcp_high(zone, this_cpu_ptr(pcp));
+			if (static_branch_likely(&sysctl_deferable_decay_high))
+				changes += decay_pcp_high(zone, this_cpu_ptr(pcp));
 #ifdef CONFIG_NUMA
 			/*
 			 * Deal with draining the remote pageset of this
@@ -1897,7 +1899,9 @@ static const struct seq_operations vmstat_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
+static DEFINE_PER_CPU(struct delayed_work, decay_pcp_work);
 int sysctl_stat_interval __read_mostly = HZ;
+int sysctl_decay_high_interval __read_mostly = 1000;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)
@@ -2042,6 +2046,49 @@ static void vmstat_shepherd(struct work_struct *w);
 
 static DECLARE_DEFERRABLE_WORK(shepherd, vmstat_shepherd);
 
+static inline bool need_decay_pcp(int cpu)
+{
+	struct zone *zone;
+	for_each_populated_zone(zone) {
+		struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		if (pcp->high > pcp->high_min)
+			return true;
+	}
+	return false;
+}
+
+static void pcp_high_decay_work(struct work_struct *work)
+{
+	struct zone *zone;
+	int freed = 0;
+
+	if (static_branch_likely(&sysctl_deferable_decay_high))
+		return;
+
+	for_each_populated_zone(zone) {
+		struct per_cpu_pages __percpu *pcp = zone->per_cpu_pageset;
+		freed += decay_pcp_high(zone, this_cpu_ptr(pcp));
+	}
+	if (!freed)
+		return;
+
+	queue_delayed_work_on(smp_processor_id(), mm_percpu_wq,
+			      this_cpu_ptr(&decay_pcp_work),
+			      round_jiffies_relative(msecs_to_jiffies(sysctl_decay_high_interval)));
+}
+
+static inline void queue_delay_work(int cpu)
+{
+	struct delayed_work *dw;
+
+	if (static_branch_likely(&sysctl_deferable_decay_high))
+		return;
+
+	dw = &per_cpu(decay_pcp_work, cpu);
+	if (!delayed_work_pending(dw) && need_decay_pcp(cpu))
+		queue_delayed_work_on(cpu, mm_percpu_wq, dw, 0);
+}
+
 static void vmstat_shepherd(struct work_struct *w)
 {
 	int cpu;
@@ -2068,6 +2115,8 @@ static void vmstat_shepherd(struct work_struct *w)
 		if (!delayed_work_pending(dw) && need_update(cpu))
 			queue_delayed_work_on(cpu, mm_percpu_wq, dw, 0);
 
+		queue_delay_work(cpu);
+
 		cond_resched();
 	}
 	cpus_read_unlock();
@@ -2080,9 +2129,12 @@ static void __init start_shepherd_timer(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu) {
 		INIT_DEFERRABLE_WORK(per_cpu_ptr(&vmstat_work, cpu),
 			vmstat_update);
+		INIT_DELAYED_WORK(per_cpu_ptr(&decay_pcp_work, cpu),
+			pcp_high_decay_work);
+	}
 
 	schedule_delayed_work(&shepherd,
 		round_jiffies_relative(sysctl_stat_interval));
@@ -2112,6 +2164,7 @@ static int vmstat_cpu_online(unsigned int cpu)
 static int vmstat_cpu_down_prep(unsigned int cpu)
 {
 	cancel_delayed_work_sync(&per_cpu(vmstat_work, cpu));
+	cancel_delayed_work_sync(&per_cpu(decay_pcp_work, cpu));
 	return 0;
 }
 
