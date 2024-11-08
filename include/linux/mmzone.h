@@ -349,6 +349,8 @@ enum lruvec_flags {
 #define MIN_NR_GENS		2U
 #define MAX_NR_GENS		4U
 
+extern int percpu_pagelist_auto_tune;
+
 /*
  * Each generation is divided into multiple tiers. A page accessed N times
  * through file descriptors is in tier order_base_2(N). A page in the first tier

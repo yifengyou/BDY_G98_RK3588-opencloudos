@@ -5603,10 +5603,13 @@ static void zone_set_pageset_high_and_batch(struct zone *zone, int cpu_online)
 		 * setting high_min and high_max to the manual value.
 		 */
 		new_high_max = new_high_min;
-	} else {
+	} else if (percpu_pagelist_auto_tune) {
 		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
 		new_high_max = zone_highsize(zone, new_batch, cpu_online,
 					     MIN_PERCPU_PAGELIST_HIGH_FRACTION);
+	} else {
+		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
+		new_high_max = new_high_min;
 	}
 
 	if (zone->pageset_high_min == new_high_min &&
@@ -6207,6 +6210,46 @@ out:
 	return ret;
 }
 
+int percpu_pagelist_auto_tune = 1;
+
+int percpu_pagelist_auto_tune_sysctl_handler(struct ctl_table *table,
+					     int write, void *buffer,
+					     size_t *length, loff_t *ppos)
+{
+	struct zone *zone;
+	int old_percpu_pagelist_auto_tune;
+	int ret;
+
+	mutex_lock(&pcp_batch_high_lock);
+	old_percpu_pagelist_auto_tune = percpu_pagelist_auto_tune;
+
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (!write || ret < 0)
+		goto out;
+
+	/* Sanity checking to avoid pcp imbalance */
+	if (percpu_pagelist_auto_tune != 0 &&
+			percpu_pagelist_auto_tune != 1) {
+		percpu_pagelist_auto_tune = old_percpu_pagelist_auto_tune;
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* No change? */
+	if (percpu_pagelist_auto_tune == old_percpu_pagelist_auto_tune)
+		goto out;
+
+	for_each_populated_zone(zone)
+		zone_set_pageset_high_and_batch(zone, 0);
+
+	/* if close the auto tune pcp drain the pcp pages */
+	if (!percpu_pagelist_auto_tune)
+		drain_all_pages(NULL);
+out:
+	mutex_unlock(&pcp_batch_high_lock);
+	return ret;
+}
+
 static struct ctl_table page_alloc_sysctl_table[] = {
 	{
 		.procname	= "min_free_kbytes",
@@ -6240,6 +6283,14 @@ static struct ctl_table page_alloc_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= percpu_pagelist_high_fraction_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
+	},
+	{
+		.procname       = "percpu_pagelist_auto_tune",
+		.data           = &percpu_pagelist_auto_tune,
+		.maxlen         = sizeof(percpu_pagelist_auto_tune),
+		.mode           = 0644,
+		.proc_handler   = percpu_pagelist_auto_tune_sysctl_handler,
+		.extra1         = SYSCTL_ZERO,
 	},
 	{
 		.procname	= "lowmem_reserve_ratio",

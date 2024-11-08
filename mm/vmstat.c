@@ -2084,6 +2084,9 @@ static inline void queue_delay_work(int cpu)
 	if (static_branch_likely(&sysctl_deferable_decay_high))
 		return;
 
+	if (!percpu_pagelist_auto_tune)
+		return;
+
 	dw = &per_cpu(decay_pcp_work, cpu);
 	if (!delayed_work_pending(dw) && need_decay_pcp(cpu))
 		queue_delayed_work_on(cpu, mm_percpu_wq, dw, 0);
