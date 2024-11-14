@@ -18,6 +18,7 @@
 #include <linux/cma.h>
 #endif
 #include <linux/zswap.h>
+#include <linux/numa_remote.h>
 #include <asm/page.h>
 #include "internal.h"
 
@@ -169,6 +170,8 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	hugetlb_report_meminfo(m);
 
 	arch_report_meminfo(m);
+
+	numa_remote_report_meminfo(m);
 
 	return 0;
 }
