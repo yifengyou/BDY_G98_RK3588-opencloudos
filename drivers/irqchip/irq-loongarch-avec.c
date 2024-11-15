@@ -30,6 +30,7 @@ struct pending_list {
 	struct list_head	head;
 };
 
+bool disable_pci_irq_limit;
 static struct cpumask intersect_mask;
 static DEFINE_PER_CPU(struct pending_list, pending_list);
 #endif
@@ -365,6 +366,7 @@ static int __init avecintc_init(struct irq_domain *parent)
 	int ret, parent_irq;
 	unsigned long value;
 
+	disable_pci_irq_limit = true;
 	raw_spin_lock_init(&loongarch_avec.lock);
 
 	loongarch_avec.fwnode = irq_domain_alloc_named_fwnode("AVECINTC");
