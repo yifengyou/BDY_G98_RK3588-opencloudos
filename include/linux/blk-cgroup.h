@@ -290,6 +290,10 @@ struct blkcg {
 #endif
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct list_head		cgwb_list;
+
+#ifdef CONFIG_BT_SCHED
+	unsigned int			rue_bt_offline;
+#endif
 #endif
 #ifdef CONFIG_BLK_CGROUP_DISKSTATS
 	unsigned int			dkstats_on;

@@ -40,6 +40,7 @@
 #include <linux/part_stat.h>
 #include <linux/sched/sysctl.h>
 #include <linux/blk-crypto.h>
+#include <linux/sched.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
@@ -698,8 +699,23 @@ static void __submit_bio_noacct_mq(struct bio *bio)
 
 void submit_bio_noacct_nocheck(struct bio *bio)
 {
+#if defined(CONFIG_BT_SCHED) && defined(CONFIG_CGROUP_WRITEBACK)
+	struct blkcg *blkcg;
+#endif
 	blk_cgroup_bio_start(bio);
 	blkcg_bio_issue_init(bio);
+
+#if defined(CONFIG_BT_SCHED) && defined(CONFIG_CGROUP_WRITEBACK)
+	if (sysctl_io_qos_enabled) {
+		blkcg = bio->bi_blkg->blkcg;
+
+		if (blkcg->rue_bt_offline) {
+			task_set_io_pending_bt();
+		} else {
+			task_clear_io_pending_bt();
+		}
+	}
+#endif
 
 	if (!bio_flagged(bio, BIO_TRACE_COMPLETION)) {
 		trace_block_bio_queue(bio);
