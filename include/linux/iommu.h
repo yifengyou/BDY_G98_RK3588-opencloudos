@@ -145,7 +145,8 @@ struct iopf_group {
 	/* list node for iommu_fault_param::faults */
 	struct list_head pending_node;
 	struct work_struct work;
-	struct iommu_attach_handle *attach_handle;
+	KABI_REPLACE(struct iommu_domain *domain,
+		     struct iommu_attach_handle *attach_handle);
 	/* The device's fault data parameter. */
 	struct iommu_fault_param *fault_param;
 
@@ -642,11 +643,10 @@ struct iommu_ops {
 	struct iommu_domain *identity_domain;
 	struct iommu_domain *blocked_domain;
 	struct iommu_domain *default_domain;
-	u8 user_pasid_table:1;
 
 	KABI_USE(1, struct iommu_domain *(*domain_alloc_sva)(struct device *dev,
 				struct mm_struct *mm));
-	KABI_RESERVE(2);
+	KABI_USE(2, u8 user_pasid_table:1);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
