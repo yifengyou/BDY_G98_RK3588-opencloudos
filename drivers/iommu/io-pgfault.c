@@ -54,8 +54,11 @@ static void __iopf_free_group(struct iopf_group *group)
 
 void iopf_free_group(struct iopf_group *group)
 {
+	struct iopf_group_extend *group_extend;
+
 	__iopf_free_group(group);
-	kfree(group);
+	group_extend = container_of(group, struct iopf_group_extend, iopf_group);
+	kfree(group_extend);
 }
 EXPORT_SYMBOL_GPL(iopf_free_group);
 
@@ -84,15 +87,17 @@ static struct iopf_group *iopf_group_alloc(struct iommu_fault_param *iopf_param,
 {
 	struct iopf_fault *iopf, *next;
 	struct iopf_group *group;
+	struct iopf_group_extend *group_extend;
 
-	group = kzalloc(sizeof(*group), GFP_KERNEL);
-	if (!group) {
+	group_extend = kzalloc(sizeof(*group_extend), GFP_KERNEL);
+	if (!group_extend) {
 		/*
 		 * We always need to construct the group as we need it to abort
 		 * the request at the driver if it can't be handled.
 		 */
 		group = abort_group;
 	}
+	group = &group_extend->iopf_group;
 
 	group->fault_param = iopf_param;
 	group->last_fault.fault = evt->fault;

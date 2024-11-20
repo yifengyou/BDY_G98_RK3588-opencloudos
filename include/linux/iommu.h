@@ -142,7 +142,6 @@ struct iopf_fault {
 struct iopf_group {
 	struct iopf_fault last_fault;
 	struct list_head faults;
-	size_t fault_count;
 	/* list node for iommu_fault_param::faults */
 	struct list_head pending_node;
 	struct work_struct work;
@@ -150,9 +149,17 @@ struct iopf_group {
 		     struct iommu_attach_handle *attach_handle);
 	/* The device's fault data parameter. */
 	struct iommu_fault_param *fault_param;
+
+	KABI_USE(1, size_t fault_count);
+	KABI_USE(2, u32 cookie);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+};
+
+struct iopf_group_extend {
+	struct iopf_group iopf_group;
 	/* Used by handler provider to hook the group on its own lists. */
 	struct list_head node;
-	u32 cookie;
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

@@ -18,7 +18,7 @@
 void iommufd_fault_destroy(struct iommufd_object *obj)
 {
 	struct iommufd_fault *fault = container_of(obj, struct iommufd_fault, obj);
-	struct iopf_group *group, *next;
+	struct iopf_group_extend *group_extend, *next;
 
 	/*
 	 * The iommufd object's reference count is zero at this point.
@@ -26,10 +26,10 @@ void iommufd_fault_destroy(struct iommufd_object *obj)
 	 * accessing this pointer. Therefore, acquiring the mutex here
 	 * is unnecessary.
 	 */
-	list_for_each_entry_safe(group, next, &fault->deliver, node) {
-		list_del(&group->node);
-		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
-		iopf_free_group(group);
+	list_for_each_entry_safe(group_extend, next, &fault->deliver, node) {
+		list_del(&group_extend->node);
+		iopf_group_response(&group_extend->iopf_group, IOMMU_PAGE_RESP_INVALID);
+		iopf_free_group(&group_extend->iopf_group);
 	}
 }
 
@@ -56,6 +56,7 @@ static ssize_t iommufd_fault_fops_read(struct file *filep, char __user *buf,
 	struct iommu_hwpt_pgfault data;
 	struct iommufd_device *idev;
 	struct iopf_group *group;
+	struct iopf_group_extend *group_extend;
 	struct iopf_fault *iopf;
 	size_t done = 0;
 	int rc = 0;
@@ -65,8 +66,9 @@ static ssize_t iommufd_fault_fops_read(struct file *filep, char __user *buf,
 
 	mutex_lock(&fault->mutex);
 	while (!list_empty(&fault->deliver) && count > done) {
-		group = list_first_entry(&fault->deliver,
-					 struct iopf_group, node);
+		group_extend = list_first_entry(&fault->deliver,
+						struct iopf_group_extend, node);
+		group = &group_extend->iopf_group;
 
 		if (group->fault_count * fault_size > count - done)
 			break;
@@ -89,7 +91,7 @@ static ssize_t iommufd_fault_fops_read(struct file *filep, char __user *buf,
 			done += fault_size;
 		}
 
-		list_del(&group->node);
+		list_del(&group_extend->node);
 	}
 	mutex_unlock(&fault->mutex);
 
