@@ -818,10 +818,9 @@ struct iommu_domain_ops {
 			       unsigned long *bitmap, unsigned long base_iova,
 			       unsigned long bitmap_pgshift);
 	void (*free)(struct iommu_domain *domain);
-	struct iommu_domain *
-		(*get_msi_mapping_domain)(struct iommu_domain *domain);
 
-	KABI_RESERVE(1);
+	KABI_USE(1, struct iommu_domain *
+			(*get_msi_mapping_domain)(struct iommu_domain *domain));
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
