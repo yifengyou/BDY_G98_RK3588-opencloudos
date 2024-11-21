@@ -658,10 +658,6 @@ struct iommu_ops {
 		     void (*remove_dev_pasid)(struct device *dev, ioasid_t pasid,
 					      struct iommu_domain *domain));
 
-	struct iommufd_viommu *(*viommu_alloc)(
-		struct device *dev, struct iommu_domain *parent_domain,
-		struct iommufd_ctx *ictx, unsigned int viommu_type);
-
 	const struct iommu_domain_ops *default_domain_ops;
 	unsigned long pgsize_bitmap;
 	struct module *owner;
@@ -672,7 +668,9 @@ struct iommu_ops {
 	KABI_USE(1, struct iommu_domain *(*domain_alloc_sva)(struct device *dev,
 				struct mm_struct *mm));
 	KABI_USE(2, u8 user_pasid_table:1);
-	KABI_RESERVE(3);
+	KABI_USE(3, struct iommufd_viommu *(*viommu_alloc)(
+			struct device *dev, struct iommu_domain *parent_domain,
+			struct iommufd_ctx *ictx, unsigned int viommu_type));
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
 	KABI_RESERVE(6);
