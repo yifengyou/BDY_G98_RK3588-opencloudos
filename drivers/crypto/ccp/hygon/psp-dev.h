@@ -123,6 +123,13 @@ int psp_mutex_unlock(struct psp_mutex *mutex);
 int fixup_hygon_psp_caps(struct psp_device *psp);
 int sp_request_hygon_psp_irq(struct sp_device *sp, irq_handler_t handler,
 			     const char *name, void *data);
+
+#ifdef CONFIG_PM_SLEEP
+void hygon_psp_dev_freeze(struct sp_device *sp);
+void hygon_psp_dev_thaw(struct sp_device *sp);
+void hygon_psp_dev_restore(struct sp_device *sp);
+#endif
+
 /**
  * When PSP_DO_CMD_OP_NOWAIT is used with psp_do_cmd_locked,
  * psp_worker_register_notify must be called first to register async notify
