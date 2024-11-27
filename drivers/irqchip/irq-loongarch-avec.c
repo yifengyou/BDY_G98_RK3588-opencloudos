@@ -84,7 +84,7 @@ static void avecintc_sync(struct avecintc_data *adata)
 		plist = per_cpu_ptr(&pending_list, adata->prev_cpu);
 		list_add_tail(&adata->entry, &plist->head);
 		adata->moving = 1;
-		smp_ops.send_ipi_single(adata->prev_cpu, SMP_CLEAR_VECTOR);
+		smp_ops.send_ipi_single(adata->prev_cpu, ACTION_CLEAR_VECTOR);
 	}
 }
 
@@ -133,6 +133,7 @@ static int avecintc_set_affinity(struct irq_data *data, const struct cpumask *de
 
 static int avecintc_cpu_online(unsigned int cpu)
 {
+	long value;
 	if (!loongarch_avec.vector_matrix)
 		return 0;
 
@@ -141,6 +142,10 @@ static int avecintc_cpu_online(unsigned int cpu)
 	irq_matrix_online(loongarch_avec.vector_matrix);
 
 	pending_list_init(cpu);
+
+	value = iocsr_read64(LOONGARCH_IOCSR_MISC_FUNC);
+	value |= IOCSR_MISC_FUNC_AVEC_EN;
+	iocsr_write64(value, LOONGARCH_IOCSR_MISC_FUNC);
 
 	raw_spin_unlock(&loongarch_avec.lock);
 
@@ -194,7 +199,7 @@ void complete_irq_moving(void)
 		}
 
 		if (isr & (1UL << (vector % VECTORS_PER_REG))) {
-			smp_ops.send_ipi_single(cpu, SMP_CLEAR_VECTOR);
+			smp_ops.send_ipi_single(cpu, ACTION_CLEAR_VECTOR);
 			continue;
 		}
 		list_del(&adata->entry);
