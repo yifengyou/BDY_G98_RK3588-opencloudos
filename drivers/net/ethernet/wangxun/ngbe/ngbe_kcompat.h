@@ -7727,4 +7727,12 @@ _kc_xdp_rxq_info_reg(struct xdp_rxq_info *xdp_rxq, struct net_device *dev,
 	_kc_xdp_rxq_info_reg(xdp_rxq, dev, queue_index, napi_id)
 #endif /* HAVE_XDP_RXQ_INFO_REG_3_PARAMS */
 
+#ifndef HAVE_ETHTOOL_EXTENDED_RINGPARAMS
+#define HAVE_ETHTOOL_EXTENDED_RINGPARAMS
+#endif
+
+#ifndef HAVE_ETHTOOL_COALESCE_EXTACK
+#define HAVE_ETHTOOL_COALESCE_EXTACK
+#endif
+
 #endif /* _KCOMPAT_H_ */

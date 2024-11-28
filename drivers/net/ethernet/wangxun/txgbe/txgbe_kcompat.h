@@ -7813,4 +7813,12 @@ _kc_bpf_warn_invalid_xdp_action(__maybe_unused struct net_device *dev,
 #endif /* HAVE_XDP_SUPPORT */
 #endif /* HAVE_NETDEV_PROG_XDP_WARN_ACTION */
 
+#ifndef HAVE_ETHTOOL_EXTENDED_RINGPARAMS
+#define HAVE_ETHTOOL_EXTENDED_RINGPARAMS
+#endif
+
+#ifndef HAVE_ETHTOOL_COALESCE_EXTACK
+#define HAVE_ETHTOOL_COALESCE_EXTACK
+#endif
+
 #endif /* _TXGBE_KYLIN_H__ */
