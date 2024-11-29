@@ -7624,10 +7624,10 @@ _kc_xsk_buff_dma_sync_for_cpu(struct xdp_buff *xdp,
 
 #ifdef NEED_ETH_HW_ADDR_SET
 #ifndef ETH_HW_ADDR_SET
-void _kc_eth_hw_addr_set(struct net_device *dev, const void *addr);
+void _kc_eth_hw_addr_set_ngbe(struct net_device *dev, const void *addr);
 #ifndef eth_hw_addr_set
 #define eth_hw_addr_set(dev, addr) \
-	_kc_eth_hw_addr_set(dev, addr)
+	_kc_eth_hw_addr_set_ngbe(dev, addr)
 #endif /* eth_hw_addr_set */
 #endif /* ETH_HW_ADDR_SET */
 #endif /* NEED_ETH_HW_ADDR_SET */

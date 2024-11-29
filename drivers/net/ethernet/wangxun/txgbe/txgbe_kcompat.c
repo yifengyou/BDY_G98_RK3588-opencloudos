@@ -3006,7 +3006,7 @@ u64 _kc_pci_get_dsn(struct pci_dev *dev)
 /*****************************************************************************/
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5,17,0))
 #ifndef ETH_HW_ADDR_SET
-void _kc_eth_hw_addr_set(struct net_device *dev, const void *addr)
+void _kc_eth_hw_addr_set_txgbe(struct net_device *dev, const void *addr)
 {
 	ether_addr_copy(dev->dev_addr, addr);
 }
