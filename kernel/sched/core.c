@@ -1291,7 +1291,7 @@ bool sched_can_stop_tick(struct rq *rq)
 	if (scx_enabled() && !scx_can_stop_tick(rq))
 		return false;
 
-	if (rq->cfs.h_nr_running > 1)
+	if (rq->cfs.h_nr_queued > 1)
 		return false;
 
 	/*
@@ -6336,10 +6336,10 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	 */
 #ifdef CONFIG_BT_SCHED
 	if (likely(!sched_class_above(prev->sched_class, &fair_sched_class) &&
-		(rq->nr_running - rq->bt_nr_running) == rq->cfs.h_nr_running)) {
+		(rq->nr_running - rq->bt_nr_running) == rq->cfs.h_nr_queued)) {
 #else
 	if (likely(!sched_class_above(prev->sched_class, &fair_sched_class) &&
-		   rq->nr_running == rq->cfs.h_nr_running)) {
+		   rq->nr_running == rq->cfs.h_nr_queued)) {
 #endif
 
 		p = pick_next_task_fair(rq, prev, rf);
