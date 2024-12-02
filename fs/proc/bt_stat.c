@@ -13,6 +13,7 @@
 #include <linux/irqnr.h>
 #include <linux/sched/cputime.h>
 #include <linux/tick.h>
+#include <linux/sched/sysctl.h>
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -26,7 +27,7 @@ extern u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu);
 extern void show_all_irqs(struct seq_file *p);
 
 #ifdef arch_idle_time
-static u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
+u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
 {
 
 	u64 iowait_bt;
@@ -37,7 +38,7 @@ static u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
 	return iowait_bt;
 }
 #else
-static u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
+u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
 {
 	u64 iowait_bt, iowait_bt_usecs = -1ULL;
 
@@ -58,7 +59,7 @@ static int __show_stat(struct seq_file *p, void *v, bool show_iowait_bt)
 {
 	int i, j;
 	u64 user, nice, system, idle, iowait, irq, softirq, steal;
-	u64 bt, iowait_bt;
+	u64 bt, iowait_bt, iowait_bt_tmp;
 	u64 guest, guest_nice;
 	u64 sum = 0;
 	u64 sum_softirq = 0;
@@ -86,6 +87,13 @@ static int __show_stat(struct seq_file *p, void *v, bool show_iowait_bt)
 		bt += kcs->cpustat[CPUTIME_BT];
 		if (show_iowait_bt)
 			iowait_bt += get_iowait_time_bt(kcs, i);
+		else {
+			if (sysctl_sched_bt_iowait) {
+				iowait_bt_tmp = min_t(u64, get_iowait_time_bt(kcs, i), iowait);
+				iowait = iowait - iowait_bt_tmp;
+				idle += iowait_bt_tmp;
+			}
+		}
 		sum += kstat_cpu_irqs_sum(i);
 		sum += arch_irq_stat_cpu(i);
 
@@ -130,6 +138,13 @@ static int __show_stat(struct seq_file *p, void *v, bool show_iowait_bt)
 		bt = kcs->cpustat[CPUTIME_BT];
 		if (show_iowait_bt)
 			iowait_bt = get_iowait_time_bt(kcs, i);
+		else {
+			if (sysctl_sched_bt_iowait) {
+				iowait_bt_tmp = min_t(u64, get_iowait_time_bt(kcs, i), iowait);
+				iowait = iowait - iowait_bt_tmp;
+				idle += iowait_bt_tmp;
+			}
+		}
 		seq_printf(p, "cpu%d", i);
 		seq_put_decimal_ull(p, " ", nsec_to_clock_t(user));
 		seq_put_decimal_ull(p, " ", nsec_to_clock_t(nice));
@@ -155,12 +170,14 @@ static int __show_stat(struct seq_file *p, void *v, bool show_iowait_bt)
 		"btime %llu\n"
 		"processes %d\n"
 		"procs_running %d\n"
-		"procs_blocked %d\n",
+		"procs_blocked %d\n"
+		"procs_blocked_bt %lu\n",
 		nr_context_switches(),
 		(unsigned long long)boottime.tv_sec,
 		nr_forks(),
 		nr_running(),
-		nr_iowait());
+		nr_iowait(),
+		nr_iowait_bt());
 
 	seq_put_decimal_ull(p, "softirq ", (unsigned long long)sum_softirq);
 

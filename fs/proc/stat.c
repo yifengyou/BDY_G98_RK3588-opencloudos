@@ -14,6 +14,7 @@
 #include <linux/irqnr.h>
 #include <linux/sched/cputime.h>
 #include <linux/tick.h>
+#include <linux/sched/sysctl.h>
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -21,6 +22,8 @@
 #ifndef arch_irq_stat
 #define arch_irq_stat() 0
 #endif
+
+extern u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu);
 
 u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
 {
@@ -83,6 +86,9 @@ static int show_stat(struct seq_file *p, void *v)
 {
 	int i, j;
 	u64 user, nice, system, idle, iowait, irq, softirq, steal, scx;
+#ifdef CONFIG_BT_SCHED
+	u64 iowait_bt_tmp;
+#endif
 	u64 guest, guest_nice;
 	u64 sum = 0;
 	u64 sum_softirq = 0;
@@ -120,6 +126,14 @@ static int show_stat(struct seq_file *p, void *v)
 #endif
 		sum		+= kstat_cpu_irqs_sum(i);
 		sum		+= arch_irq_stat_cpu(i);
+#ifdef CONFIG_BT_SCHED
+		if (sysctl_sched_bt_iowait) {
+			iowait_bt_tmp = min_t(u64,
+					get_iowait_time_bt(&kcpustat, i), iowait);
+			iowait = iowait - iowait_bt_tmp;
+			idle += iowait_bt_tmp;
+		}
+#endif
 
 		for (j = 0; j < NR_SOFTIRQS; j++) {
 			unsigned int softirq_stat = kstat_softirqs_cpu(j, i);
@@ -165,6 +179,14 @@ static int show_stat(struct seq_file *p, void *v)
 		guest_nice	= cpustat[CPUTIME_GUEST_NICE];
 #ifdef CONFIG_SCHED_CLASS_EXT
 		scx             = cpustat[CPUTIME_SCX];
+#endif
+#ifdef CONFIG_BT_SCHED
+		if (sysctl_sched_bt_iowait) {
+			iowait_bt_tmp = min_t(u64,
+					get_iowait_time_bt(&kcpustat, i), iowait);
+			iowait = iowait - iowait_bt_tmp;
+			idle += iowait_bt_tmp;
+		}
 #endif
 		seq_printf(p, "cpu%d", i);
 		seq_put_decimal_ull(p, " ", nsec_to_clock_t(user));
