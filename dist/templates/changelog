@@ -1,3 +1,39 @@
+* Tue Dec  3 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.63-17
+- smc: Enable smc as module
+- config: disable CONFIG_SYSFB_SIMPLEFB
+- Merge branch 'linuszeng/CVE-2024-50278' into 'release' (merge request !254)
+- dm cache: fix potential out-of-bounds access on the first resume
+- dm cache: optimize dirty bit checking with find_next_bit when resizing
+- dm cache: fix out-of-bounds access to the dirty bitset when resizing
+- dm cache: fix flushing uninitialized delayed_work on cache_ctr error
+- dm cache: correct the number of origin blocks to match the target length
+- Merge branch 'linuszeng/CVE-2024-53083' into 'release' (merge request !253)
+- usb: typec: qcom-pmic: init value of hdr_len/txbuf_len earlier
+- Merge branch 'linuszeng/CVE-2024-50300' into 'release' (merge request !252)
+- regulator: rtq2208: Fix uninitialized use of regulator_config
+- Merge branch 'katrinzhou/cve/release' into 'release' (merge request !236)
+- ext4: fix error message when rejecting the default hash
+- ext4: filesystems without casefold feature cannot be mounted with siphash
+- f2fs: fix to wait dio completion
+- xfs: add bounds checking to xlog_recover_process_data
+- xfs: don't walk off the end of a directory data block
+- Merge linux-6.6.63 into TK5 release branch
+- Linux 6.6.63
+- Merge branch 'cunhuang/6.6-release/CVE-2024-46775' into 'release' (merge request !251)
+- drm/amd/display: Validate function returns
+- Merge branch 'cunhuang/cve/6.6-release-24nov20' into 'release' (merge request !248)
+- drm/amd/display: Check phantom_stream before it is used
+- drm/amd/display: Add NULL check for clk_mgr and clk_mgr->funcs in dcn30_init_hw
+- Merge linux 6.6.62 into TK5 release branch
+- Linux 6.6.62
+- Merge linux 6.6.61 into TK5 release branch
+- Linux 6.6.61
+- Merge linux 6.6.60 into TK5 release branch
+- Linux 6.6.60
+- Merge linux 6.6.59 into TK5 release branch
+- Linux 6.6.59
+- cifs: Fix server re-repick on subrequest retry
+
 * Thu Nov  7 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.58-15
 - integrity: add dynamic integrity measurement (DIM) support
 - Merge branch 'honglin/release' into 'release' (merge request !220)
