@@ -30,6 +30,10 @@
 #define DRIVER_MINOR                0
 #define DRIVER_PATCHLEVEL           0
 
+int loongson_lg100_support;
+MODULE_PARM_DESC(LG100_support, "LG100 support (1 = enabled, 0 = disabled)");
+module_param_named(LG100_support, loongson_lg100_support, int, 0444);
+
 DEFINE_DRM_GEM_FOPS(lsdc_gem_fops);
 
 static const struct drm_driver lsdc_drm_driver = {
@@ -263,6 +267,11 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct drm_device *ddev;
 	struct lsdc_device *ldev;
 	int ret;
+
+	/* loongson drm driver will not be used on 7A2000 */
+	if ((enum loongson_chip_id)ent->driver_data == CHIP_LS7A2000 &&
+	     !loongson_lg100_support)
+		return -ENODEV;
 
 	descp = lsdc_device_probe(pdev, ent->driver_data);
 	if (IS_ERR_OR_NULL(descp))
