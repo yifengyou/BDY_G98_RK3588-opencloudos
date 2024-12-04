@@ -6447,6 +6447,37 @@ static ssize_t memory_async_distance_factor_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static int memory_reparent_file_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%d\n", READ_ONCE(memcg->reparent_file));
+
+	return 0;
+}
+
+static ssize_t memory_reparent_file_write(struct kernfs_open_file *of,
+				char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret, reparent;
+
+	buf = strstrip(buf);
+	if (!buf)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 0, &reparent);
+	if (ret)
+		return ret;
+
+	if (reparent != 0 && reparent != 1)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->reparent_file, reparent);
+
+	return nbytes;
+}
+
 extern unsigned int vm_memcg_latency_histogram;
 
 static int mem_cgroup_lat_seq_show(struct seq_file *m, void *v)
@@ -6826,6 +6857,12 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.release = cgroup_mbuf_release,
 	},
 #endif
+	{
+		.name = "reparent_file",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_reparent_file_show,
+		.write = memory_reparent_file_write,
+	},
 	{ },	/* terminate */
 };
 
@@ -7066,6 +7103,9 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	memcg->deferred_split_queue.split_queue_len = 0;
 #endif
 	lru_gen_init_memcg(memcg);
+
+	memcg->parent = parent ? parent : root_mem_cgroup;
+
 	return memcg;
 fail:
 	mem_cgroup_id_remove(memcg);
@@ -8848,6 +8888,12 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.write = mem_cgroup_sync_write,
 	},
+	{
+		.name = "reparent_file",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_reparent_file_show,
+		.write = memory_reparent_file_write,
+	},
 	{ }	/* terminate */
 };
 
@@ -9067,6 +9113,20 @@ int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 	int ret;
 
 	memcg = get_mem_cgroup_from_mm(mm);
+	ret = charge_memcg(folio, memcg, gfp);
+	css_put(&memcg->css);
+
+	return ret;
+}
+
+int __mem_cgroup_charge_file(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
+{
+	struct mem_cgroup *memcg;
+	int ret;
+
+	memcg = get_mem_cgroup_from_mm(mm);
+	if (memcg->reparent_file)
+		memcg = memcg->parent;
 	ret = charge_memcg(folio, memcg, gfp);
 	css_put(&memcg->css);
 

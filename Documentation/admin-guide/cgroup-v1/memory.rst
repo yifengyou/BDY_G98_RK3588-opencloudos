@@ -115,6 +115,7 @@ Brief summary of control files.
  memory.async_distance_factor        the distance between async_high and async_low, valid
                                      value is from 1 to 150000, the unit is in fractions
                                      of 1000000
+ memory.reparent_file                charge page cache of file to parent memory cgroup
 
 ==================================== ==========================================
 
