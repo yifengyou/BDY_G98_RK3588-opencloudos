@@ -310,9 +310,6 @@ struct bpf_func_state {
 	u32 callback_depth;
 
 	/* The following fields should be last. See copy_func_state() */
-	int acquired_refs;
-	int active_locks;
-	struct bpf_reference_state *refs;
 	int allocated_stack;
 	struct bpf_stack_state *stack;
 };
@@ -329,6 +326,8 @@ struct bpf_verifier_state {
 	/* call stack tracking */
 	struct bpf_func_state *frame[MAX_CALL_FRAMES];
 	struct bpf_verifier_state *parent;
+	/* Acquired reference states */
+	struct bpf_reference_state *refs;
 	/*
 	 * 'branches' field is the number of branches left to explore:
 	 * 0 - all possible paths from this state reached bpf_exit or
@@ -378,8 +377,11 @@ struct bpf_verifier_state {
 	u32 insn_idx;
 	u32 curframe;
 
-	bool speculative;
+	u32 acquired_refs;
+	u32 active_locks;
 	bool active_rcu_lock;
+
+	bool speculative;
 	/* If this state was ever pointed-to by other state's loop_entry field
 	 * this flag would be set to true. Used to avoid freeing such states
 	 * while they are still in use.
