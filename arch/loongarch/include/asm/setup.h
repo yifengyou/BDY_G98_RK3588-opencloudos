@@ -12,6 +12,7 @@
 
 #define VECSIZE 0x200
 
+extern bool disable_pci_irq_limit;
 extern unsigned long eentry;
 extern unsigned long tlbrentry;
 extern char init_command_line[COMMAND_LINE_SIZE];
