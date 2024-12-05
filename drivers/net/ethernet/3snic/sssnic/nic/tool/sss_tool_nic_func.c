@@ -36,8 +36,8 @@ static int sss_tool_get_nic_version(void *out_buf, const u32 *out_len)
 		return -EINVAL;
 	}
 
-	ret = snprintf(ver_info->ver, sizeof(ver_info->ver), "%s  %s",
-		       SSSNIC_DRV_VERSION, __TIME_STR__);
+	ret = snprintf(ver_info->ver, sizeof(ver_info->ver), "%s",
+		       SSSNIC_DRV_VERSION);
 	if (ret < 0)
 		return -EINVAL;
 

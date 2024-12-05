@@ -2,9 +2,6 @@
 # Copyright (c) 2023 3SNIC
 #
 
-SYS_TIME=$(shell date +%Y-%m-%d_%H:%M:%S)
-ccflags-y += -D __TIME_STR__=\"$(SYS_TIME)\"
-
 ccflags-y += -I$(srctree)/drivers/net/ethernet/3snic/sssnic/include
 ccflags-y += -I$(srctree)/drivers/net/ethernet/3snic/sssnic/include/hw
 ccflags-y += -I$(srctree)/drivers/net/ethernet/3snic/sssnic/include/kernel

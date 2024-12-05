@@ -446,8 +446,7 @@ static int sss_tool_get_hw_drv_version(struct sss_hal_dev *hal_dev, const void *
 		return -EINVAL;
 	}
 
-	ret = snprintf(info->ver, sizeof(info->ver), "%s  %s", SSS_DRV_VERSION,
-		       __TIME_STR__);
+	ret = snprintf(info->ver, sizeof(info->ver), "%s", SSS_DRV_VERSION);
 	if (ret < 0)
 		return -EINVAL;
 
