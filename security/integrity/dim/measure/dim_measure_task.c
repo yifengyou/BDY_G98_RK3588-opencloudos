@@ -14,14 +14,11 @@ static void call_measure_func(int mode, struct dim_measure_task *t,
 		return;
 	}
 
-	dim_info("start to call %s measure task\n", t->name);
 	ret = t->measure(mode, m);
 	if (ret < 0) {
 		dim_err("failed to call measure task %s: %d\n", t->name, ret);
 		return;
 	}
-
-	dim_info("succeed to call measure task %s\n", t->name);
 }
 
 void dim_measure_task_measure(int mode, struct dim_measure *m)
