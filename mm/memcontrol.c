@@ -7380,6 +7380,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		memcg->emm_manager = parent->emm_manager;
 		memcg->emm_oversell = parent->emm_oversell;
 #endif
+#ifdef CONFIG_ASYNC_FORK
+		memcg->async_fork = parent->async_fork;
+#endif
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);
 		page_counter_init(&memcg->kmem, &parent->kmem);

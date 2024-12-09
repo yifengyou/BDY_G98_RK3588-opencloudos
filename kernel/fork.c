@@ -531,6 +531,11 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	INIT_LIST_HEAD(&new->anon_vma_chain);
 	vma_numab_state_init(new);
 	dup_anon_vma_name(orig, new);
+#ifdef CONFIG_ASYNC_FORK
+	WARN_ON(orig->async_fork_vma);
+	new->async_fork_vma = NULL;
+	mutex_init(&new->async_fork_lock);
+#endif
 
 	return new;
 }
@@ -936,6 +941,9 @@ void __mmdrop(struct mm_struct *mm)
 	cleanup_lazy_tlbs(mm);
 
 	WARN_ON_ONCE(mm == current->active_mm);
+#ifdef CONFIG_ASYNC_FORK
+	WARN_ON(mm->async_fork_mm);
+#endif
 	mm_free_pgd(mm);
 	destroy_context(mm);
 	mmu_notifier_subscriptions_destroy(mm);
@@ -1308,6 +1316,10 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 #endif
 	mm_init_uprobes_state(mm);
 	hugetlb_count_init(mm);
+#ifdef CONFIG_ASYNC_FORK
+	mm->async_fork_mm = NULL;
+	mm->async_fork_flags = 0;
+#endif
 
 	if (current->mm) {
 		mm->flags = mmf_init_flags(current->mm->flags);

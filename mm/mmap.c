@@ -138,6 +138,9 @@ void unlink_file_vma(struct vm_area_struct *vma)
 static void remove_vma(struct vm_area_struct *vma, bool unreachable)
 {
 	might_sleep();
+#ifdef CONFIG_ASYNC_FORK
+	WARN_ON_ONCE(vma->async_fork_vma);
+#endif
 	vma_close(vma);
 	if (vma->vm_file)
 		fput(vma->vm_file);
@@ -351,6 +354,9 @@ anon_vma_interval_tree_pre_update_vma(struct vm_area_struct *vma)
 {
 	struct anon_vma_chain *avc;
 
+#ifdef CONFIG_ASYNC_FORK
+	WARN_ON_ONCE(vma->async_fork_vma);
+#endif
 	list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 		anon_vma_interval_tree_remove(avc, &avc->anon_vma->rb_root);
 }

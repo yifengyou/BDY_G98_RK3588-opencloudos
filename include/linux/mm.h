@@ -824,6 +824,9 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma_mark_detached(vma, false);
 	vma_numab_state_init(vma);
+#ifdef CONFIG_ASYNC_FORK
+	mutex_init(&vma->async_fork_lock);
+#endif
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */
