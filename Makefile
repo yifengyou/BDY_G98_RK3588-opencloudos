@@ -1611,9 +1611,9 @@ help:
 	@echo  ''
 	@echo  'Tools:'
 	@echo  '  nsdeps          - Generate missing symbol namespace dependencies'
-	@echo  '  check-kabi      - Check whether TencentOS Kennel KABI is compatible'
-	@echo  '  update-kabi     - Update TencentOS Kennel KABI file'
-	@echo  '  create-kabi     - Create TencentOS Kennel KABI file'
+	@echo  '  check-kabi      - Check whether TencentOS Kernel KABI is compatible'
+	@echo  '  update-kabi     - Update TencentOS Kernel KABI file'
+	@echo  '  create-kabi     - Create TencentOS Kernel KABI file'
 	@echo  ''
 	@echo  'Kernel selftest:'
 	@echo  '  kselftest         - Build and run kernel selftest'
@@ -1984,7 +1984,7 @@ nsdeps: export KBUILD_NSDEPS=1
 nsdeps: modules
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/nsdeps
 
-# Check whether TencentOS Kennel KABI is compatible
+# Check whether TencentOS Kernel KABI is compatible
 # ---------------------------------------------------------------------------
 
 PHONY += check-kabi
@@ -1992,7 +1992,7 @@ PHONY += check-kabi
 check-kabi:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/tos-kabi.sh check $(ARCH)
 
-# Update TencentOS Kennel KABI file
+# Update TencentOS Kernel KABI file
 # ---------------------------------------------------------------------------
 
 PHONY += update-kabi
@@ -2000,7 +2000,7 @@ PHONY += update-kabi
 update-kabi:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/tos-kabi.sh update $(ARCH)
 
-# Create TencentOS Kennel KABI file
+# Create TencentOS Kernel KABI file
 # ---------------------------------------------------------------------------
 
 PHONY += create-kabi
