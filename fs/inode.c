@@ -630,7 +630,7 @@ void dump_mapping(const struct address_space *mapping)
 	}
 
 	if (strncpy_from_kernel_nofault(fname, dentry.d_name.name, 63) < 0)
-		strscpy(fname, "<invalid>", sizeof(fname));
+		strscpy(fname, "<invalid>", 63);
 	/*
 	 * Even if strncpy_from_kernel_nofault() succeeded,
 	 * the fname could be unreliable
