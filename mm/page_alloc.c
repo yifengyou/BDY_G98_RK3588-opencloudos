@@ -1701,7 +1701,7 @@ static unsigned long find_large_buddy(unsigned long start_pfn)
 static void split_large_buddy(struct zone *zone, struct page *page,
 			      unsigned long pfn, int order)
 {
-	unsigned long end_pfn = pfn + (1 << order);
+	unsigned long end = pfn + (1 << order);
 
 	VM_WARN_ON_ONCE(order <= pageblock_order);
 	VM_WARN_ON_ONCE(pfn & (pageblock_nr_pages - 1));
@@ -1709,13 +1709,15 @@ static void split_large_buddy(struct zone *zone, struct page *page,
 	/* Caller removed page from freelist, buddy info cleared! */
 	VM_WARN_ON_ONCE(PageBuddy(page));
 
-	while (pfn != end_pfn) {
+	do {
 		int mt = get_pfnblock_migratetype(page, pfn);
 
 		__free_one_page(page, pfn, zone, pageblock_order, mt, FPI_NONE);
 		pfn += pageblock_nr_pages;
+		if (pfn == end)
+			break;
 		page = pfn_to_page(pfn);
-	}
+	} while (1);
 }
 
 /**
