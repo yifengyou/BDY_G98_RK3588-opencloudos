@@ -2474,6 +2474,8 @@ int generic_error_remove_page(struct address_space *mapping, struct page *page);
 struct vm_area_struct *lock_mm_and_find_vma(struct mm_struct *mm,
 		unsigned long address, struct pt_regs *regs);
 
+#include <linux/async_fork.h>
+
 #ifdef CONFIG_MMU
 extern vm_fault_t handle_mm_fault(struct vm_area_struct *vma,
 				  unsigned long address, unsigned int flags,
