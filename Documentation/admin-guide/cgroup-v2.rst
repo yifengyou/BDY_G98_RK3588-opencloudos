@@ -1339,6 +1339,13 @@ PAGE_SIZE multiple when read back.
 	cacluation. And when async_ratio_delta == -1, this value won't
 	take effect either when cgroup priority changes.
 
+  memory.reparent_file
+        A read-write single value file which exists on non-root cgroups.
+        The default is "0".
+
+        Set value as "1" will disable page cache of file charged to current
+        memory cgroup, but will charged to parent memory cgroup.
+
   memory.oom.group
 	A read-write single value file which exists on non-root
 	cgroups.  The default value is "0".

@@ -256,6 +256,8 @@ struct mem_cgroup {
 	struct page_counter pagecache;
 	u64 pagecache_reclaim_ratio;
 	u32 pagecache_max_ratio;
+	u32 reparent_file;
+	struct mem_cgroup *parent;
 
 	/* Legacy consumer-oriented counters */
 	struct page_counter kmem;		/* v1 only */
@@ -789,6 +791,16 @@ static inline int mem_cgroup_charge(struct folio *folio, struct mm_struct *mm,
 	if (mem_cgroup_disabled())
 		return 0;
 	return __mem_cgroup_charge(folio, mm, gfp);
+}
+
+int __mem_cgroup_charge_file(struct folio *folio, struct mm_struct *mm, gfp_t gfp);
+
+static inline int mem_cgroup_charge_file(struct folio *folio, struct mm_struct *mm,
+					     gfp_t gfp)
+{
+	if (mem_cgroup_disabled())
+		return 0;
+	return __mem_cgroup_charge_file(folio, mm, gfp);
 }
 
 int mem_cgroup_swapin_charge_folio(struct folio *folio, struct mm_struct *mm,
@@ -1365,6 +1377,12 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 }
 
 static inline int mem_cgroup_charge(struct folio *folio,
+		struct mm_struct *mm, gfp_t gfp)
+{
+	return 0;
+}
+
+static inline int mem_cgroup_charge_file(struct folio *folio,
 		struct mm_struct *mm, gfp_t gfp)
 {
 	return 0;
