@@ -284,7 +284,7 @@ no-dot-config-targets := $(clean-targets) \
 			 $(version_h) headers headers_% archheaders archscripts \
 			 %asm-generic kernelversion %src-pkg dt_binding_check \
 			 outputmakefile rustavailable rustfmt rustfmtcheck \
-			 check-kabi update-kabi create-kabi check-kapi
+			 check-kabi update-kabi create-kabi check-kapi check-std-configs
 # Installation targets should not require compiler. Unfortunately, vdso_install
 # is an exception where build artifacts may be updated. This must be fixed.
 no-compiler-targets := $(no-dot-config-targets) install dtbs_install \
@@ -1615,6 +1615,7 @@ help:
 	@echo  '  update-kabi     - Update TencentOS Kernel KABI file'
 	@echo  '  create-kabi     - Create TencentOS Kernel KABI file'
 	@echo  '  create-kapi     - Check whether TencentOS Kernel KAPI is compliant'
+	@echo  '  check-std-configs - Check whether TencentOS Kernel configs is compliant'
 	@echo  ''
 	@echo  'Kernel selftest:'
 	@echo  '  kselftest         - Build and run kernel selftest'
@@ -2016,6 +2017,14 @@ PHONY += check-kapi
 
 check-kapi:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/tos-kapi.sh $(ARCH)
+
+# Check whether TencentOS Kernel config is compliant
+# ---------------------------------------------------------------------------
+
+PHONY += check-std-configs
+
+check-std-configs:
+	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/tos-configs.sh $(ARCH)
 
 # Clang Tooling
 # ---------------------------------------------------------------------------
