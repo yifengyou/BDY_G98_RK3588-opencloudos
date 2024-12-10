@@ -1345,6 +1345,8 @@ int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 		if (end < tmp)
 			tmp = end;
 
+		async_fork_madvise_vma(vma, start, tmp);
+
 		/* Here vma->vm_start <= start < tmp <= (end|vma->vm_end). */
 		error = visit(vma, &prev, start, tmp, arg);
 		if (error)

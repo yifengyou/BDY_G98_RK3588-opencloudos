@@ -1717,6 +1717,8 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 			addr = next;
 			continue;
 		}
+
+		async_fork_fixup_pmd(vma, pmd, addr);
 		addr = zap_pte_range(tlb, vma, pmd, addr, next, details);
 		if (addr != next)
 			pmd--;
@@ -5808,6 +5810,8 @@ retry_pud:
 				return 0;
 			}
 		}
+
+		async_fork_fixup_pmd(vma, vmf.pmd, address);
 	}
 
 	return handle_pte_fault(&vmf);

@@ -514,6 +514,8 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 {
 	struct vm_area_struct *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 
+	async_fork_fixup_vma(orig);
+
 	if (!new)
 		return NULL;
 
@@ -668,7 +670,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 {
 	struct vm_area_struct *mpnt, *tmp;
 	int retval;
-	unsigned long charge = 0;
+	unsigned long async_fork, charge = 0;
 	LIST_HEAD(uf);
 	VMA_ITERATOR(old_vmi, oldmm, 0);
 	VMA_ITERATOR(vmi, mm, 0);
@@ -677,6 +679,15 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	if (mmap_write_lock_killable(oldmm)) {
 		retval = -EINTR;
 		goto fail_uprobe_end;
+	}
+
+	async_fork = is_async_fork_task(current);
+	if (async_fork) {
+		retval = async_fork_prepare(oldmm, mm);
+		if (retval) {
+			mmap_write_unlock(oldmm);
+			goto fail_uprobe_end;
+		}
 	}
 	flush_cache_dup_mm(oldmm);
 	uprobe_dup_mmap(oldmm, mm);
@@ -780,7 +791,9 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 
 		mm->map_count++;
 		if (!(tmp->vm_flags & VM_WIPEONFORK))
-			retval = copy_page_range(tmp, mpnt);
+			retval = async_fork ?
+				async_fork_fast(tmp, mpnt) :
+				copy_page_range(tmp, mpnt);
 
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
@@ -795,6 +808,8 @@ loop_out:
 	if (!retval)
 		mt_set_in_rcu(vmi.mas.tree);
 out:
+	if (async_fork)
+		async_fork_mm_bind(oldmm, mm, retval);
 	mmap_write_unlock(mm);
 	flush_tlb_mm(oldmm);
 	mmap_write_unlock(oldmm);
@@ -2769,6 +2784,7 @@ __latent_entropy struct task_struct *copy_process(
 	user_events_fork(p, clone_flags);
 
 	copy_oom_score_adj(clone_flags, p);
+	async_fork_fast_done(p->mm, 0);
 
 	return p;
 
@@ -2795,6 +2811,12 @@ bad_fork_cleanup_namespaces:
 	exit_task_namespaces(p);
 bad_fork_cleanup_mm:
 	if (p->mm) {
+#ifdef CONFIG_ASYNC_FORK
+		if (p->mm->async_fork_mm) {
+			WARN_ON_ONCE(clone_flags & CLONE_VM);
+			async_fork_fast_done(p->mm, retval);
+		}
+#endif
 		mm_clear_owner(p->mm, p);
 		mmput(p->mm);
 	}

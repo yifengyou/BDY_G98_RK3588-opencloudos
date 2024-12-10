@@ -914,6 +914,7 @@ static struct vm_area_struct
 					   pgoff, vm_userfaultfd_ctx, anon_name)) {
 			merge_prev = true;
 			vma_prev(vmi);
+			async_fork_fixup_vma(prev);
 		}
 	}
 
@@ -922,6 +923,7 @@ static struct vm_area_struct
 	    can_vma_merge_before(next, vm_flags, anon_vma, file, pgoff+pglen,
 				 vm_userfaultfd_ctx, anon_name)) {
 		merge_next = true;
+		async_fork_fixup_vma(next);
 	}
 
 	/* Verify some invariant that must be enforced by the caller. */
@@ -2041,6 +2043,8 @@ static int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 		return -ENOMEM;
 	}
 
+	async_fork_fixup_vma(vma);
+
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
 	/*
@@ -2133,6 +2137,8 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 		mas_destroy(&mas);
 		return -ENOMEM;
 	}
+
+	async_fork_fixup_vma(vma);
 
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
@@ -2401,6 +2407,8 @@ static int __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	WARN_ON(vma->vm_start >= addr);
 	WARN_ON(vma->vm_end <= addr);
 
+	async_fork_fixup_vma(vma);
+
 	if (vma->vm_ops && vma->vm_ops->may_split) {
 		err = vma->vm_ops->may_split(vma, addr);
 		if (err)
@@ -2638,7 +2646,8 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 			error = __split_vma(vmi, next, end, 0);
 			if (error)
 				goto end_split_failed;
-		}
+		} else
+			async_fork_fixup_vma(next);
 		vma_start_write(next);
 		mas_set(&mas_detach, count);
 		error = mas_store_gfp(&mas_detach, next, GFP_KERNEL);
@@ -3427,6 +3436,8 @@ void exit_mmap(struct mm_struct *mm)
 		mmap_read_unlock(mm);
 		return;
 	}
+
+	async_fork_fixup_vmas(mm);
 
 	lru_add_drain();
 	flush_cache_mm(mm);
