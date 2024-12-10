@@ -1,16 +1,32 @@
-#!/bin/sh
+#!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 #
 # 1. Check whether TencentOS Kennel KABI is compatible
 # 2. Update TencentOS Kennel KABI file
 # 3. Create TencentOS Kennel KABI file
 #
-RED='\E[1;31m'
-GREEN='\E[1;32m'
-YELLOW='\E[1;33m'
-END='\E[0m'
 
 srctree=$(dirname "$0")/../
+
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+NO_COLOR="\033[0m"
+
+function pr_err()
+{
+	printf "${RED}$1${NO_COLOR}\n"
+}
+
+function pr_info()
+{
+	printf "${GREEN}$1${NO_COLOR}\n"
+}
+
+function pr_warn()
+{
+	printf "${YELLOW}$1${NO_COLOR}\n"
+}
 
 function usage_info()
 {
@@ -32,14 +48,14 @@ function compile_kernel()
 
 	make ARCH=${arch} CROSS_COMPILE=${CROSS_COMPILE} tencentconfig tkci.config -sk 1> /dev/null
 	if [ $? -ne 0 ]; then
-		printf "${RED}make tencentconfig tkci.config failed${END}\n"
+		pr_err "make tencentconfig tkci.config failed"
 		return 1
 	fi
 
 	echo "start to compile kernel, may take a long time..."
 	make ARCH=${arch} CROSS_COMPILE=${CROSS_COMPILE} -j ${thread_num} -sk 1> /dev/null
 	if [ $? -ne 0 ]; then
-		printf "${RED}compile kernel failed${END}\n"
+		pr_err "compile kernel failed"
 		return 1
 	fi
 
@@ -52,7 +68,7 @@ function create_kabi()
 	local core_kabi_list="dist/kabi/core-kabi-list"
 
 	if [ ! -s ${core_kabi_list} ]; then
-		printf "${RED}get ${core_kabi_list} failed${END}\n"
+		pr_err "get ${core_kabi_list} failed"
 		return 1
 	fi
 
@@ -60,12 +76,12 @@ function create_kabi()
 	do
 		grep -w ${kabi} Module.symvers 1>> ${kabi_file}
 		if [ $? -ne 0 ]; then
-			printf "${YELLOW}function ${kabi} miss\n"
+			pr_warn "function ${kabi} miss"
 		fi
 	done < ${core_kabi_list}
 
 	sed -i 's/[[:space:]]*$//' ${kabi_file}
-	printf "${GREEN}create KABI file ${kabi_file} success${END}\n"
+	pr_info "create KABI file ${kabi_file} success"
 
 	return 0
 }
@@ -77,7 +93,7 @@ function update_kabi()
 	local core_kabi_list="dist/kabi/core-kabi-list"
 
 	if [ ! -s ${core_kabi_list} ]; then
-		printf "${RED}get ${core_kabi_list} failed${END}\n"
+		pr_err "get ${core_kabi_list} failed"
 		return 1
 	fi
 
@@ -86,7 +102,7 @@ function update_kabi()
 	do
 		grep -w ${kabi} Module.symvers 1>> ${new_kabi_file}
 		if [ $? -ne 0 ]; then
-			printf "${YELLOW}function ${kabi} miss\n"
+			pr_warn "function ${kabi} miss"
 		fi
 	done < ${core_kabi_list}
 	sed -i 's/[[:space:]]*$//' ${new_kabi_file}
@@ -94,12 +110,12 @@ function update_kabi()
 	diff ${kabi_file} ${new_kabi_file} > /dev/null
 	if [ $? -eq 0 ]; then
 		rm -rf ${new_kabi_file}
-		printf "${YELLOW}KABI file no change, not need update${END}\n"
+		pr_warn "KABI file no change, not need update"
 		return 0
 	fi
 
 	mv ${new_kabi_file} ${kabi_file}
-	printf "${GREEN}update KABI file ${kabi_file} success${END}\n"
+	pr_info "update KABI file ${kabi_file} success"
 
 	return 0
 }
@@ -110,10 +126,10 @@ function check_kabi()
 
 	./scripts/check-kabi -k ${kabi_file} -s Module.symvers
 	if [ $? -ne 0 ]; then
-		printf "${RED}check KABI failed${END}\n"
+		pr_err "check KABI failed"
 		return 1
 	fi
-	printf "${GREEN}check KABI success${END}\n"
+	pr_info "check KABI success"
 
 	return 0
 }
@@ -130,25 +146,25 @@ function check_param()
 	fi
 
 	if [ "${type}" != "check" ] && [ "${type}" != "update" ] && [ "${type}" != "create" ]; then
-		printf "${RED}not support type:${type}${END}\n"
+		pr_err "not support type:${type}"
 		usage_info
 		return 1
 	fi
 
 	if [ "${machine}" != "x86_64" ] && [ "${machine}" != "aarch64" ]; then
-		printf "${RED}not support machine:${machine}${END}\n"
+		pr_err "not support machine:${machine}"
 		usage_info
 		return 1
 	fi
 
 	if [ "${arch}" != "x86" ] && [ "${arch}" != "x86_64" ] && [ "${arch}" != "arm64" ]; then
-		printf "${RED}not support arch:${arch}${END}\n"
+		pr_err "not support arch:${arch}"
 		usage_info
 		return 1
 	fi
 
 	if [ "${machine}" == "aarch64" ] && [ "${arch}" == "x86" -o "${arch}" == "x86_64" ]; then
-		printf "${RED}machine aarch64 not support cross compile${END}\n"
+		pr_err "machine aarch64 not support cross compile"
 		usage_info
 		return 1
 	fi
@@ -178,12 +194,12 @@ function main()
 
 	if [ "${type}" == "create" ]; then
 		if [ -s ${kabi_file} ]; then
-			printf "${RED}${kabi_file} is exist${END}\n"
+			pr_err "${kabi_file} already exists"
 			return 1
 		fi
 	else
 		if [ ! -s ${kabi_file} ]; then
-			printf "${RED}get kabi file failed${END}\n"
+			pr_err "get kabi file failed"
 			return 1
 		fi
 	fi
