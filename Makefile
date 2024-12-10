@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 # dist_make: Tencent Dist Makefile, which contains dist-* make targets
-ifneq ($(shell echo $(MAKECMDGOALS) | grep "^dist-"),)
+ifneq ($(filter dist-%,$(MAKECMDGOALS)),)
 include dist/Makefile
 else
 
