@@ -1,3 +1,50 @@
+* Tue Dec 10 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.64-18
+- Merge linux-6.6.64 into TK5 release branch
+- Linux 6.6.64
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !285 [linux-6.6] LoongArch: Revert "drm/loongson: disable loongson drm driver by default for LS7A2000"
+- Revert "drm/loongson: disable loongson drm driver by default for LS7A2000"
+- !284 [linux-6.6/devel] drm: loongson: Always build Loongson DRM drivers Merge pull request !284 from Ming Wang/linux-6.6/devel
+- drm: loongson: Always build Loongson DRM drivers
+- !282 [devel-6.6] linkdata: ps3stor compilation optimization Merge pull request !282 from liujie_answer/linux-6.6/devel
+- scsi: linkdata ps3stor compilation optimization category: feature
+- !280 [linux6.6-devel] LoongArch: backport ptw&set_pte patches from upstream Merge pull request !280 from Ming Wang/backport
+- LoongArch: Set initial pte entry with PAGE_GLOBAL for kernel space
+- LoongArch: Improve hardware page table walker
+- LoongArch: Use accessors to page table entries instead of direct dereference
+- LoongArch: Remove superfluous flush_dcache_page() definition
+- !281 [linux-6.6/devel] LoongArch: drm/loongson: disable loongson drm driver by default for LS7A2000 Merge pull request !281 from Ming Wang/drm
+- drm/loongson: disable loongson drm driver by default for LS7A2000
+- !279 [linux-6.6/devel] Makefile: Use `filter` for dist Makefile inclusion condition Merge pull request !279 from Ming Wang/dist-style
+- Makefile: Use `filter` for dist Makefile inclusion condition
+- !278 [linux-6.6/devel] loongarch:  Enables the Advanced Extended Interrupt Controllers (AVEC) functionality in multi-node 3C6000 systems and fix irq issue.
+- irq-loongarch-avec.c: Enables the Advanced Extended Interrupt Controllers (AVEC) functionality in multi-node 3C6000 systems.
+- drivers/irqchip: Disable pci_irq_limit when using avec interrupt controller
+- !277 Intel pstate backport from6.11 Merge pull request !277 from jiayingbao/intel_pstate_backport_from6.11
+- !276 Tpmi based drivers backport from 6.11 Merge pull request !276 from jiayingbao/tpmi_based_drivers_backport_from6.11
+- !274 [devel-6.6] linkdata: add ps3stor driver support Merge pull request !274 from liujie_answer/linux-6.6/devel
+- scsi: add support for linkdata HBA/RAID Controller driver category: feature
+- !273 [linux-6.6/devel] perf/x86/zhaoxin/uncore: fix pci_driver conflict issue Merge pull request
+- perf/x86/zhaoxin/uncore: fix pci_driver conflict issue
+- Merge branch 'leonylgao/check_kconfig' into 'release' (merge request !265)
+- configs: check whether TencentOS Kennel configs is compliant
+- Merge branch 'leonylgao/check_kapi' into 'release' (merge request !264)
+- kapi: check whether TencentOS Kernel KAPI is compliant
+- tkernel: support check the compliance of KAPI
+- Merge branch 'alexyonghe/reparent_memcg' into 'release' (merge request !267)
+- mm: Reparent page cache to parent memory cgroup
+- Merge branch 'aurelianliu/origin/master_CVE-2024-49885' into 'release' (merge request !218)
+- mm, slub: avoid zeroing kmalloc redzone
+- Merge branch 'leonylgao/check_kabi' into 'release' (merge request !266)
+- kabi: use pr_xxx to print colors
+- Merge branch 'cunhuang/6.6-release/CONFIG_SCSI_HISI_SAS' into 'release' (merge request !259)
+- config: arm64: SCSI_HISI_SAS=m
+- Merge branch 'costinchen/dim' into 'release' (merge request !262)
+- dim: optimized dim logging for dynamic measurements
+- drivers,3snic: support incremental compilation
+- Merge branch 'katrinzhou/smc_module' into 'release' (merge request !261)
+- smc: Enable smc as module
+
 * Tue Dec  3 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.63-17
 - smc: Enable smc as module
 - config: disable CONFIG_SYSFB_SIMPLEFB
