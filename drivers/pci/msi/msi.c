@@ -409,6 +409,8 @@ unlock:
 }
 
 #ifdef CONFIG_LOONGARCH
+#include <asm/setup.h>
+
 static unsigned int pci_irq_numbers = 32;
 
 static int __init pci_irq_limit(char *str)
@@ -430,9 +432,11 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 	int rc;
 
 #ifdef CONFIG_LOONGARCH
-	if (maxvec > 32) {
-		maxvec = pci_irq_numbers;
-		minvec = min_t(int, pci_irq_numbers, minvec);
+	if (!disable_pci_irq_limit) {
+		if (maxvec > 32) {
+			maxvec = pci_irq_numbers;
+			minvec = min_t(int, pci_irq_numbers, minvec);
+		}
 	}
 #endif
 
@@ -807,9 +811,11 @@ int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries, int
 	int hwsize, rc, nvec = maxvec;
 
 #ifdef CONFIG_LOONGARCH
-	if (maxvec > 32) {
-		nvec = pci_irq_numbers;
-		minvec = min_t(int, pci_irq_numbers, minvec);
+	if (!disable_pci_irq_limit) {
+		if (maxvec > 32) {
+			nvec = pci_irq_numbers;
+			minvec = min_t(int, pci_irq_numbers, minvec);
+		}
 	}
 #endif
 
