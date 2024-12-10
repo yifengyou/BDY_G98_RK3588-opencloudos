@@ -61,21 +61,29 @@ function compile_kernel()
 
 function check_kapi()
 {
-	# XXX: The Ruyi config needs to be closed to compile normally.
-	./scripts/config -m CONFIG_TKERNEL_CHECK_KAPI -d CONFIG_RUE
-	if [ $? -ne 0 ]; then
-		pr_err "enable CONFIG_TKERNEL_CHECK_KAPI failed"
-		return 1
-	fi
+	local ret=0
+
+	# XXX: The Ruyi config needs to be closed to compile normally
+	./scripts/config -d CONFIG_RUE
+
+	# modify the Makefile to enable CONFIG_TKERNEL_CHECK_KAPI
+	sed -i "s/obj-\$(CONFIG_TKERNEL_CHECK_KAPI) += checkkapi/obj-m += checkkapi/g" kernel/tkernel/Makefile
+	sed -i "s/obj-\$(CONFIG_TKERNEL_CHECK_KAPI) += check_kapi/obj-m += check_kapi/g" kernel/tkernel/checkkapi/Makefile
 
 	make ARCH=${arch} CROSS_COMPILE=${CROSS_COMPILE} M=kernel/tkernel/checkkapi modules
 	if [ $? -ne 0 ]; then
 		pr_err "check KAPI failed"
-		return 1
+		ret=1
+	else
+		pr_info "check KAPI success"
+		ret=0
 	fi
-	pr_info "check KAPI success"
 
-	return 0
+	# Restore the Makefile
+	sed -i "s/obj-m += checkkapi/obj-\$(CONFIG_TKERNEL_CHECK_KAPI) += checkkapi/g" kernel/tkernel/Makefile
+	sed -i "s/obj-m += check_kapi/obj-\$(CONFIG_TKERNEL_CHECK_KAPI) += check_kapi/g" kernel/tkernel/checkkapi/Makefile
+
+	return $ret
 }
 
 function check_param()
