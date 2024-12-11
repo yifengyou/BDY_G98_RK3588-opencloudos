@@ -7570,6 +7570,7 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 	struct zone *zone;
 	unsigned long nr_reclaimed = 0;
 	unsigned int nr_locked_zones = 0;
+	pg_data_t * last_pgdat = NULL;
 	DEFINE_WAIT(wait);
 
 	prepare_to_wait(&pagecache_reclaim_wq, &wait, TASK_INTERRUPTIBLE);
@@ -7590,6 +7591,14 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 		 */
 		finish_wait(&pagecache_reclaim_wq, &wait);
 		nr_locked_zones++;
+		if (lru_gen_enabled() && !root_reclaim(sc)) {
+			if (zone->zone_pgdat == last_pgdat)
+				goto next_zone;
+			last_pgdat = zone->zone_pgdat;
+
+			shrink_node(zone->zone_pgdat, sc);
+			goto next_zone;
+		}
 
 		for_each_evictable_lru(lru) {
 			enum zone_stat_item ls = NR_ZONE_LRU_BASE + lru;
@@ -7640,6 +7649,7 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 				cond_resched();
 			}
 		}
+next_zone:
 		pagecache_reclaim_unlock_zone(zone);
 	}
 
@@ -7657,7 +7667,8 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 
 out_wakeup:
 	wake_up_interruptible(&pagecache_reclaim_wq);
-	sc->nr_reclaimed += nr_reclaimed;
+	if (!lru_gen_enabled())
+		sc->nr_reclaimed += nr_reclaimed;
 out:
 	return nr_locked_zones;
 }
@@ -7693,6 +7704,8 @@ static unsigned long __shrink_page_cache(gfp_t mask, struct mem_cgroup *memcg,
 	};
 	struct reclaim_state *old_rs = current->reclaim_state;
 
+	if (lru_gen_enabled())
+		sc.nr_to_reclaim = nr_pages;
 	/* We might sleep during direct reclaim so make atomic context
 	 * is certainly a bug.
 	 */
@@ -7727,6 +7740,7 @@ retry:
 	for (; pass <= 3; pass++) {
 		for (sc.priority = DEF_PRIORITY; sc.priority >= 0; sc.priority--) {
 			unsigned long nr_to_scan = nr_pages - ret;
+			unsigned long nr_reclaimed_before = sc.nr_reclaimed;
 			int nid;
 
 			sc.nr_scanned = 0;
@@ -7738,7 +7752,7 @@ retry:
 			if (!shrink_all_zones(nr_to_scan, pass, &sc))
 				goto retry;
 
-			ret += sc.nr_reclaimed;
+			ret += (sc.nr_reclaimed - nr_reclaimed_before);
 			if (ret >= nr_pages)
 				goto out;
 
@@ -7864,7 +7878,7 @@ void shrink_page_cache(gfp_t mask, struct page *page)
 long shrink_page_cache_memcg(gfp_t mask, struct mem_cgroup *memcg,
 			     unsigned long nr_pages)
 {
-	if (!vm_pagecache_limit_global && !lru_gen_enabled())
+	if (!vm_pagecache_limit_global)
 		return __shrink_page_cache(mask, memcg, nr_pages);
 
 	return -EINVAL;
