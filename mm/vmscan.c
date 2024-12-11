@@ -160,6 +160,9 @@ struct scan_control {
 	/* Number of pages freed so far during a call to shrink_zones() */
 	unsigned long nr_reclaimed;
 
+	/* If true, indicates that this is the pagecache limit of RUE. */
+	unsigned int is_rue;
+
 	struct {
 		unsigned int dirty;
 		unsigned int unqueued_dirty;
@@ -5747,7 +5750,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	 * them is likely futile and can cause high reclaim latency when there
 	 * is a large number of memcgs.
 	 */
-	if (!sc->may_writepage || !sc->may_unmap)
+	if ((!sc->may_writepage || !sc->may_unmap) && !sc->is_rue)
 		goto done;
 
 	lru_add_drain();
@@ -7701,15 +7704,12 @@ static unsigned long __shrink_page_cache(gfp_t mask, struct mem_cgroup *memcg,
 		.may_deactivate = DEACTIVATE_FILE,
 		.target_mem_cgroup = memcg,
 		.reclaim_idx = MAX_NR_ZONES,
+		.is_rue = 1,
 	};
 	struct reclaim_state *old_rs = current->reclaim_state;
 
 	if (lru_gen_enabled())
 		sc.nr_to_reclaim = nr_pages;
-	if (root_reclaim(&sc)) {
-		sc.may_unmap = 1;
-		sc.may_writepage = 1;
-	}
 	/* We might sleep during direct reclaim so make atomic context
 	 * is certainly a bug.
 	 */
