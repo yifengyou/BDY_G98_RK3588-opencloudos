@@ -5612,7 +5612,8 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 
 	success = try_to_shrink_lruvec(lruvec, sc);
 
-	shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
+	if (!sc->is_rue)
+		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
 
 	if (!sc->proactive)
 		vmpressure(sc->gfp_mask, memcg, false, sc->nr_scanned - scanned,
@@ -6728,7 +6729,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 		shrink_lruvec(lruvec, sc);
 
-		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
+		if (!sc->is_rue)
+			shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
 			    sc->priority);
 
 		/* Record the group's reclaim efficiency */
@@ -7759,6 +7761,9 @@ retry:
 			ret += (sc.nr_reclaimed - nr_reclaimed_before);
 			if (ret >= nr_pages)
 				goto out;
+
+			if (vm_pagecache_ignore_slab)
+				continue;
 
 			for_each_online_node(nid) {
 				struct mem_cgroup *iter;
