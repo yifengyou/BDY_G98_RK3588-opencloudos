@@ -7591,7 +7591,7 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 		 */
 		finish_wait(&pagecache_reclaim_wq, &wait);
 		nr_locked_zones++;
-		if (lru_gen_enabled() && !root_reclaim(sc)) {
+		if (lru_gen_enabled()) {
 			if (zone->zone_pgdat == last_pgdat)
 				goto next_zone;
 			last_pgdat = zone->zone_pgdat;
@@ -7706,6 +7706,10 @@ static unsigned long __shrink_page_cache(gfp_t mask, struct mem_cgroup *memcg,
 
 	if (lru_gen_enabled())
 		sc.nr_to_reclaim = nr_pages;
+	if (root_reclaim(&sc)) {
+		sc.may_unmap = 1;
+		sc.may_writepage = 1;
+	}
 	/* We might sleep during direct reclaim so make atomic context
 	 * is certainly a bug.
 	 */
@@ -7863,9 +7867,6 @@ void batch_shrink_page_cache(gfp_t mask)
 
 void shrink_page_cache(gfp_t mask, struct page *page)
 {
-	if (lru_gen_enabled())
-		return;
-
 	if (!sysctl_vm_memory_qos || !vm_pagecache_limit_global)
 		return;
 
