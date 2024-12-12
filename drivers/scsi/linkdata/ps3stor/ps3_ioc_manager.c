@@ -450,12 +450,12 @@ static inline bool ps3_pgdat_is_empty(pg_data_t *pgdat)
 	return !pgdat->node_start_pfn && !pgdat->node_spanned_pages;
 }
 
-struct pglist_data *first_online_pgdat(void)
+struct pglist_data *ps3_first_online_pgdat(void)
 {
 	return NODE_DATA(first_online_node);
 }
 
-struct pglist_data *next_online_pgdat(struct pglist_data *pgdat)
+struct pglist_data *ps3_next_online_pgdat(struct pglist_data *pgdat)
 {
 	int nid = next_online_node(pgdat->node_id);
 	if (nid == MAX_NUMNODES) {
@@ -499,7 +499,7 @@ static void ps3_get_all_numa_mem_addr(struct ps3_instance *instance)
 	if (ps3_get_numa_mem_addr(instance)) {
 		goto l_out;
 	}
-	for_each_online_pgdat(pgdata) {
+	for_each_ps3_online_pgdat(pgdata) {
 		if (ps3_pgdat_is_empty(pgdata)) {
 			continue;
 		}
