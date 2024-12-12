@@ -1079,7 +1079,7 @@ config ZONE_DEVICE
 config ASYNC_FORK
 	bool "Support copy mm asynchronously when fork"
 	depends on MMU && MEMCG
-	default n
+	default y
 	help
 	  This introduces a new mechanism to reduce block duration when parent
 	  process calls fork(2). It will be very effective for processes with
