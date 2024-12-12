@@ -886,53 +886,6 @@ static int refresh_cpu_vm_stats(bool do_pagesets)
 	return changes;
 }
 
-/* fold zone's pcp page, if the result < 0, return 0 */
-unsigned long fold_pcp_counter_zone(struct zone *zone)
-{
-	int cpu;
-	struct per_cpu_pages *pcp;
-	long total = 0;
-
-	cpus_read_lock();
-	for_each_online_cpu(cpu) {
-		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-		total += pcp->count;
-	}
-	cpus_read_unlock();
-	if (total < 0)
-		total = 0;
-	return total;
-}
-EXPORT_SYMBOL(fold_pcp_counter_zone);
-
-/* fold all populated zone's pcp page, if the result < 0, return 0 */
-unsigned long fold_pcp_counter(void)
-{
-	struct zone *zone;
-	long total = 0;
-
-	for_each_populated_zone(zone) {
-		total += fold_pcp_counter_zone(zone);
-	}
-	return (unsigned long)total;
-}
-EXPORT_SYMBOL(fold_pcp_counter);
-
-unsigned long fold_pcp_counter_node(struct pglist_data *pgdat, unsigned long *pcp)
-{
-	int i;
-	struct zone *zones = pgdat->node_zones;
-	unsigned long total = 0;
-
-	*pcp = 0;
-	for (i = 0; i < MAX_NR_ZONES; i++) {
-		*pcp += fold_pcp_counter_zone(zones + i);
-		total += zone_managed_pages(zones + i);
-	}
-	return total;
-}
-EXPORT_SYMBOL(fold_pcp_counter_node);
-
 /*
  * Fold the data for an offline cpu into the global array.
  * There cannot be any access by the offline cpu and therefore
@@ -1836,6 +1789,54 @@ static const struct seq_operations zoneinfo_op = {
 	.show	= zoneinfo_show,
 };
 
+/* fold all populated zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter(void)
+{
+	struct zone *zone;
+	long total = 0;
+
+	for_each_populated_zone(zone) {
+		total += fold_pcp_counter_zone(zone);
+	}
+	return (unsigned long)total;
+}
+EXPORT_SYMBOL(fold_pcp_counter);
+
+/* fold zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter_zone(struct zone *zone)
+{
+	int cpu;
+	struct per_cpu_pages *pcp;
+	long total = 0;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu) {
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		total += pcp->count;
+	}
+	cpus_read_unlock();
+	if (total < 0)
+		total = 0;
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_zone);
+
+
+unsigned long fold_pcp_counter_node(struct pglist_data *pgdat, unsigned long *pcp)
+{
+	int i;
+	struct zone *zones = pgdat->node_zones;
+	unsigned long total = 0;
+
+	*pcp = 0;
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		*pcp += fold_pcp_counter_zone(zones + i);
+		total += zone_managed_pages(zones + i);
+	}
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_node);
+
 #define NR_VMSTAT_ITEMS (NR_VM_ZONE_STAT_ITEMS + \
 			 NR_VM_NUMA_EVENT_ITEMS + \
 			 NR_VM_NODE_STAT_ITEMS + \
@@ -1937,7 +1938,6 @@ static DEFINE_PER_CPU(struct delayed_work, decay_pcp_work);
 int sysctl_stat_interval __read_mostly = HZ;
 int sysctl_decay_high_interval __read_mostly = 1000;
 /* default: zoro */
-int sysctl_pcp_as_free;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)
@@ -2390,6 +2390,10 @@ static int __init extfrag_debug_init(void)
 
 	return 0;
 }
+module_init(extfrag_debug_init);
+#endif
+
+int sysctl_pcp_as_free;
 unsigned long count_pcp_in(unsigned long pcp, unsigned long target,
 			   unsigned long totalram)
 {
@@ -2405,6 +2409,3 @@ unsigned long count_pcp_in(unsigned long pcp, unsigned long target,
 		return target;
 	return pcp + target;
 }
-
-module_init(extfrag_debug_init);
-#endif
