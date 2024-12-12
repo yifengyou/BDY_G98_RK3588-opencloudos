@@ -184,6 +184,9 @@ extern unsigned int __read_mostly sysctl_sched_itmt_enabled;
 /* Interface to set priority of a cpu */
 void sched_set_itmt_core_prio(int prio, int core_cpu);
 
+/* Interface to enable ITMT settings in the scheduler */
+void sched_set_itmt(void);
+
 /* Interface to notify scheduler that system supports ITMT */
 int sched_set_itmt_support(void);
 
