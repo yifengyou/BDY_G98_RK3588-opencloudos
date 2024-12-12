@@ -802,8 +802,13 @@ Bool ps3_feature_support_reg_get(struct ps3_instance *instance);
 void ps3_ioc_scsi_cmd_send(struct ps3_instance *instance,
 	struct PS3CmdWord *cmd_word);
 
-struct pglist_data *first_online_pgdat(void);
+struct pglist_data *ps3_first_online_pgdat(void);
 
-struct pglist_data *next_online_pgdat(struct pglist_data *pgdat);
+struct pglist_data *ps3_next_online_pgdat(struct pglist_data *pgdat);
+
+#define for_each_ps3_online_pgdat(pgdat)		\
+	for (pgdat = ps3_first_online_pgdat();		\
+	     pgdat;					\
+	     pgdat = ps3_next_online_pgdat(pgdat))
 
 #endif
