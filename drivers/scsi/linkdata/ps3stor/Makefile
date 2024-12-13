@@ -49,7 +49,7 @@ ps3stor-objs := \
 		./linux/ps3_dump.o \
 		./linux/ps3_pcie_err_handle.o
 
-ccflags-y += -Werror -frecord-gcc-switches
+ccflags-y += -Werror
 ccflags-y += $(call cc-option, -Wmaybe-uninitialized)
 ccflags-y += \
 	-I$(srctree)/drivers/scsi/linkdata/ps3stor \
