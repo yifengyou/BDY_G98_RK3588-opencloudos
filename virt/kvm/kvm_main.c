@@ -2661,6 +2661,10 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 
 	pte = ptep_get(ptep);
 
+#ifdef CONFIG_SW64
+	if (writable)
+		*writable = true;
+#else
 	if (write_fault && !pte_write(pte)) {
 		pfn = KVM_PFN_ERR_RO_FAULT;
 		goto out;
@@ -2668,6 +2672,7 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 
 	if (writable)
 		*writable = pte_write(pte);
+#endif
 	pfn = pte_pfn(pte);
 
 	/*
@@ -2690,7 +2695,9 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 	if (!kvm_try_get_pfn(pfn))
 		r = -EFAULT;
 
+#ifndef CONFIG_SW64
 out:
+#endif
 	pte_unmap_unlock(ptep, ptl);
 	*p_pfn = pfn;
 
