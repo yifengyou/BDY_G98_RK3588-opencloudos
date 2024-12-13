@@ -122,7 +122,6 @@ int sched_set_itmt_support(void)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sched_set_itmt_support);
 
 /**
  * sched_clear_itmt_support() - Revoke platform's support of ITMT
@@ -183,3 +182,17 @@ void sched_set_itmt_core_prio(int prio, int cpu)
 	per_cpu(sched_core_priority, cpu) = prio;
 }
 EXPORT_SYMBOL_GPL(sched_set_itmt_core_prio);
+
+/* The work item is needed to avoid CPU hotplug locking issues */
+static void sched_itmt_work_fn(struct work_struct *work)
+{
+	sched_set_itmt_support();
+}
+
+static DECLARE_WORK(sched_itmt_work, sched_itmt_work_fn);
+
+void sched_set_itmt(void)
+{
+	schedule_work(&sched_itmt_work);
+}
+EXPORT_SYMBOL_GPL(sched_set_itmt);
