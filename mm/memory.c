@@ -1206,6 +1206,103 @@ out:
 	return ret;
 }
 
+int copy_pte_range_atom(struct vm_area_struct *dst_vma,
+			struct vm_area_struct *src_vma,
+			pmd_t *dst_pmd, pmd_t *src_pmd,
+			unsigned long addr, unsigned long end)
+{
+	struct mm_struct *dst_mm = dst_vma->vm_mm;
+	struct mm_struct *src_mm = src_vma->vm_mm;
+	pte_t *orig_src_pte, *orig_dst_pte;
+	pte_t *src_pte, *dst_pte;
+	pte_t ptent;
+	spinlock_t *src_ptl, *dst_ptl;
+	int progress, ret = 0;
+	int rss[NR_MM_COUNTERS];
+	swp_entry_t entry = (swp_entry_t){0};
+	struct folio *prealloc = NULL;
+
+again:
+	progress = 0;
+	init_rss_vec(rss);
+	dst_pte = pte_alloc_map_lock(dst_mm, dst_pmd, addr, &dst_ptl);
+	if (!dst_pte) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	src_pte = pte_offset_map_nolock(src_mm, src_pmd, addr, &src_ptl);
+	if (!src_pte) {
+		pte_unmap_unlock(dst_pte, dst_ptl);
+		goto out;
+	}
+	spin_lock_nested(src_ptl, 2);
+	orig_src_pte = src_pte;
+	orig_dst_pte = dst_pte;
+	arch_enter_lazy_mmu_mode();
+
+	do {
+		ptent = ptep_get(src_pte);
+		if (pte_none(ptent))
+			continue;
+		if (unlikely(!pte_present(ptent))) {
+			ret = copy_nonpresent_pte(dst_mm, src_mm,
+						  dst_pte, src_pte,
+						  dst_vma, src_vma,
+						  addr, rss);
+			if (ret == -EIO) {
+				entry = pte_to_swp_entry(ptep_get(src_pte));
+				break;
+			} else if (ret == -EBUSY) {
+				break;
+			} else if (!ret) {
+				continue;
+			}
+
+			WARN_ON_ONCE(ret != -ENOENT);
+		}
+
+		ret = copy_present_pte(dst_vma, src_vma, dst_pte, src_pte,
+				       addr, rss, &prealloc);
+
+		if (unlikely(ret == -EAGAIN))
+			break;
+		if (unlikely(prealloc)) {
+			folio_put(prealloc);
+			prealloc = NULL;
+		}
+	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
+
+	arch_leave_lazy_mmu_mode();
+	pte_unmap_unlock(orig_src_pte, src_ptl);
+	add_mm_rss_vec(dst_mm, rss);
+	pte_unmap_unlock(orig_dst_pte, dst_ptl);
+
+	if (ret == -EIO) {
+		VM_WARN_ON_ONCE(!entry.val);
+		if (add_swap_count_continuation(entry, GFP_KERNEL) < 0) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		entry.val = 0;
+	} else if (ret == -EBUSY) {
+		goto out;
+	} else if (ret == -EAGAIN) {
+		return ret;
+	} else if (ret) {
+		VM_WARN_ON_ONCE(1);
+	}
+
+	ret = 0;
+
+	if (addr != end)
+		goto again;
+out:
+	if (unlikely(prealloc))
+		folio_put(prealloc);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(copy_pte_range_atom);
+
 static inline int
 copy_pmd_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
 	       pud_t *dst_pud, pud_t *src_pud, unsigned long addr,

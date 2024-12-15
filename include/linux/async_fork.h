@@ -168,6 +168,11 @@ static inline void async_fork_madvise_vma(struct vm_area_struct *vma,
 		ASYNC_FORK_VOID(async_fork_madvise_vma, vma, start, end);
 }
 
+extern int copy_pte_range_atom(struct vm_area_struct *dst_vma,
+			       struct vm_area_struct *src_vma,
+			       pmd_t *dst_pmd, pmd_t *src_pmd,
+			       unsigned long addr, unsigned long end);
+
 #else /* CONFIG_ASYNC_FORK */
 
 static inline bool async_fork_enabled(void)
