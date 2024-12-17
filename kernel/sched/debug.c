@@ -1094,8 +1094,7 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 		P(dl.deadline);
 	}
 #ifdef CONFIG_SCHED_CLASS_EXT
-	__PS("scx.enabled", task_on_scx(p));
-	PN(scx.dsq_vtime);
+	__PS("ext.enabled", task_on_scx(p));
 #endif
 #undef PN_SCHEDSTAT
 #undef P_SCHEDSTAT
