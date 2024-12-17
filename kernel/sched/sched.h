@@ -433,7 +433,6 @@ struct task_group {
 #ifdef CONFIG_EXT_GROUP_SCHED
 	u32			scx_flags;	/* SCX_TG_* */
 	u32			scx_weight;
-	u32			scx;
 #endif
 
 	struct rcu_head		rcu;
@@ -3667,8 +3666,6 @@ enum cpu_cftype_id {
 	CPU_CFTYPE_WEIGHT,
 	CPU_CFTYPE_WEIGHT_NICE,
 	CPU_CFTYPE_IDLE,
-	CPU_CFTYPE_SCX_SWITCH,
-	CPU_CFTYPE_OFFLINE_SWITCH,
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
 	CPU_CFTYPE_MAX,
