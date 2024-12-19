@@ -2056,7 +2056,6 @@ void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
 {
 	struct mmu_gather tlb;
 
-	lru_add_drain();
 	tlb_gather_mmu(&tlb, vma->vm_mm);
 	zap_page_range_single_batched(&tlb, vma, address, size, details);
 	tlb_finish_mmu(&tlb);
