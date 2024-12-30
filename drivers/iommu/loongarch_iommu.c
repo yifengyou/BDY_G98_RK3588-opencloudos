@@ -441,8 +441,10 @@ static int domain_id_alloc(struct loongarch_iommu *iommu)
 	if (id < MAX_DOMAIN_ID)
 		__set_bit(id, iommu->domain_bitmap);
 	spin_unlock(&iommu->domain_bitmap_lock);
-	if (id >= MAX_DOMAIN_ID)
+	if (id >= MAX_DOMAIN_ID) {
+		id = -1;
 		pr_err("LA-IOMMU: Alloc domain id over max domain id\n");
+	}
 	return id;
 }
 
@@ -593,6 +595,7 @@ static struct iommu_domain *la_iommu_domain_alloc(unsigned int type)
 	struct dom_info *info;
 
 	switch (type) {
+	case IOMMU_DOMAIN_BLOCKED:
 	case IOMMU_DOMAIN_UNMANAGED:
 		info = alloc_dom_info();
 		if (info == NULL)
@@ -830,6 +833,9 @@ static int la_iommu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	struct iommu_info *info;
 	unsigned short bdf;
 
+	if (domain != NULL && domain->type == IOMMU_DOMAIN_BLOCKED) 
+		return 0;
+
 	la_iommu_detach_dev(dev);
 
 	if (domain == NULL)
@@ -914,6 +920,7 @@ static void la_iommu_detach_dev(struct device *dev)
 	spin_lock(&iommu_entry->devlock);
 	do_detach(dev_data);
 	spin_unlock(&iommu_entry->devlock);
+	dev_data->domain = NULL;
 
 	pci_info(pdev, "%s iommu devid  %x sigment %x\n", __func__,
 			iommu->devid, iommu->segment);

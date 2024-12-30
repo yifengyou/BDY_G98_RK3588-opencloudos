@@ -128,6 +128,46 @@ e_free:
 	return ret;
 }
 
+static int csv_get_api_version(void)
+{
+	struct sev_device *sev;
+	struct sev_user_data_status *status;
+	int error = 0, ret;
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (!psp_master || !psp_master->sev_data)
+		return -ENODEV;
+
+	sev = psp_master->sev_data;
+
+	status = kzalloc(sizeof(*status), GFP_KERNEL);
+	if (!status)
+		return -ENOMEM;
+
+	ret = hygon_psp_hooks.__sev_do_cmd_locked(SEV_CMD_PLATFORM_STATUS,
+						  status, &error);
+	if (ret) {
+		dev_err(sev->dev,
+			"CSV: failed to get status. Error: %#x\n", error);
+		ret = 1;
+		goto e_free_status;
+	}
+
+	sev->api_major = status->api_major;
+	sev->api_minor = status->api_minor;
+	sev->build = status->build;
+	sev->state = status->state;
+
+	csv_update_api_version(status);
+
+	ret = 0;
+e_free_status:
+	kfree(status);
+	return ret;
+}
+
 static int csv_ioctl_do_download_firmware(struct sev_issue_cmd *argp)
 {
 	struct sev_data_download_firmware *data = NULL;
@@ -189,6 +229,9 @@ static int csv_ioctl_do_download_firmware(struct sev_issue_cmd *argp)
 		pr_err("Failed to update CSV firmware: %#x\n", argp->error);
 	else
 		pr_info("CSV firmware update successful\n");
+
+	/* Sync api version status */
+	csv_get_api_version();
 
 err_free_page:
 	__free_pages(p, order);
@@ -614,6 +657,38 @@ int csv_check_stat_queue_status(int *psp_ret)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(csv_check_stat_queue_status);
+
+int csv_get_extension_info(void *buf, size_t *size)
+{
+	/* If @hygon_csv_build is 0, this means CSV firmware doesn't exist or
+	 * the psp device doesn't exist.
+	 */
+	if (hygon_csv_build == 0)
+		return -ENODEV;
+
+	/* The caller must provide valid @buf and the @buf must >= 4 bytes in
+	 * size.
+	 */
+	if (!buf || !size || *size < sizeof(uint32_t)) {
+		if (size)
+			*size = sizeof(uint32_t);
+
+		return -EINVAL;
+	}
+
+	/* Since firmware with build id 2200, support:
+	 *   a. issue LAUNCH_ENCRYPT_DATA command more than once for a
+	 *      CSV3 guest.
+	 *   b. inject secret to a CSV3 guest.
+	 */
+	if (csv_version_greater_or_equal(2200)) {
+		*(uint32_t *)buf |= CSV_EXT_CSV3_MULT_LUP_DATA;
+		*(uint32_t *)buf |= CSV_EXT_CSV3_INJ_SECRET;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(csv_get_extension_info);
 
 #ifdef CONFIG_HYGON_CSV
 
