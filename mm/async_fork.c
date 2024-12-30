@@ -39,3 +39,16 @@ int is_async_fork_task(struct task_struct *p)
 
 	return atomic_inc_not_zero(&async_fork_staging);
 }
+
+EXPORT_SYMBOL_GPL(__pte_alloc);
+EXPORT_SYMBOL_GPL(__pmd_alloc);
+EXPORT_SYMBOL_GPL(__pud_alloc);
+EXPORT_SYMBOL_GPL(__p4d_alloc);
+EXPORT_SYMBOL_GPL(pte_alloc_one);
+EXPORT_SYMBOL_GPL(pmd_mkwrite);
+EXPORT_SYMBOL_GPL(copy_huge_pmd);
+EXPORT_SYMBOL_GPL(copy_huge_pud);
+EXPORT_SYMBOL_GPL(copy_hugetlb_page_range);
+EXPORT_SYMBOL_GPL(__mmu_notifier_invalidate_range_start);
+EXPORT_SYMBOL_GPL(__mmu_notifier_invalidate_range_end);
+EXPORT_SYMBOL_GPL(track_pfn_copy);
