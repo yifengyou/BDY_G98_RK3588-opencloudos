@@ -114,7 +114,7 @@ static bool __init __maybe_unused csv3_check_cpu_support(void)
 }
 
 /* csv3_active() indicate whether the guest is protected by CSV3 */
-bool noinstr csv3_active(void)
+bool csv3_active(void)
 {
 	if (vendor_ebx == 0 || vendor_ecx == 0 || vendor_edx == 0) {
 		u32 eax = 0;
