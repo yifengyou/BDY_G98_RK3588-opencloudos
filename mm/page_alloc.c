@@ -2186,7 +2186,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
  */
 int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 {
-	int high_min, to_drain, batch;
+	int high_min, count, batch, target;
 	int todo = 0;
 
 	high_min = READ_ONCE(pcp->high_min);
@@ -2203,14 +2203,23 @@ int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 			todo++;
 	}
 
-	to_drain = pcp->count - pcp->high;
-	if (to_drain > 0) {
-		spin_lock(&pcp->lock);
-		free_pcppages_bulk(zone, to_drain, pcp, 0);
-		spin_unlock(&pcp->lock);
+	/* this is kwork context */
+	target = pcp->count - pcp->high;
+	while (target > 0) {
 		todo++;
+		spin_lock(&pcp->lock);
+		if (!pcp->count) {
+			spin_unlock(&pcp->lock);
+			break;
+		}
+		count = pcp->count;
+		free_pcppages_bulk(zone,
+				   min(count, READ_ONCE(batch)),
+				   pcp, 0);
+		target -= (count - pcp->count);
+		spin_unlock(&pcp->lock);
+		cond_resched();
 	}
-
 	return todo;
 }
 
@@ -2227,6 +2236,7 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
 	batch = READ_ONCE(pcp->batch);
 	to_drain = min(pcp->count, batch);
 	if (to_drain > 0) {
+		/* max batch size == pcp->batch */
 		spin_lock(&pcp->lock);
 		free_pcppages_bulk(zone, to_drain, pcp, 0);
 		spin_unlock(&pcp->lock);
@@ -2257,6 +2267,34 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 }
 
 /*
+ * Drain pcplists of the indicated processor and zone.
+ */
+static void batched_drain_pages_zone(unsigned int cpu, struct zone *zone)
+{
+	struct per_cpu_pages *pcp;
+	int count;
+	int target;
+
+	pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+
+	spin_lock(&pcp->lock);
+	target = pcp->count;
+	while (target > 0) {
+		if (!pcp->count)
+			break;
+		count = pcp->count;
+		free_pcppages_bulk(zone,
+				   min(count, READ_ONCE(pcp->batch)),
+				   pcp, 0);
+		target -= (count - pcp->count);
+		spin_unlock(&pcp->lock);
+		cond_resched();
+		spin_lock(&pcp->lock);
+	}
+	spin_unlock(&pcp->lock);
+}
+
+/*
  * Drain pcplists of all zones on the indicated processor.
  */
 static void drain_pages(unsigned int cpu)
@@ -2270,6 +2308,7 @@ static void drain_pages(unsigned int cpu)
 
 /*
  * Spill all of this CPU's per-cpu pages back into the buddy allocator.
+ * this function can not switch out
  */
 void drain_local_pages(struct zone *zone)
 {
@@ -2350,12 +2389,15 @@ static void __drain_all_pages(struct zone *zone, bool force_all_cpus)
 	}
 
 	for_each_cpu(cpu, &cpus_with_pcps) {
+		struct zone *_zone;
 		if (zone)
-			drain_pages_zone(cpu, zone);
-		else
-			drain_pages(cpu);
+			batched_drain_pages_zone(cpu, zone);
+		else {
+			for_each_populated_zone(_zone) {
+				batched_drain_pages_zone(cpu, _zone);
+			}
+		}
 	}
-
 	mutex_unlock(&pcpu_drain_mutex);
 }
 
