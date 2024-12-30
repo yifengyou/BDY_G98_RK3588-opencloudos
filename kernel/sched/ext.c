@@ -619,7 +619,7 @@ static void update_curr_scx(struct rq *rq)
 	delta_exec = now - curr->se.exec_start;
 	curr->se.exec_start = now;
 	curr->se.sum_exec_runtime += delta_exec;
-	trace_sched_stat_runtime(curr, delta_exec, curr->scx.dsq_vtime);
+	trace_sched_stat_runtime(curr, delta_exec);
 	account_group_exec_runtime(curr, delta_exec);
 	cgroup_account_cputime(curr, delta_exec);
 
