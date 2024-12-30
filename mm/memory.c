@@ -1039,7 +1039,7 @@ copy_pte:
 	return 1;
 }
 
-static inline struct folio *folio_prealloc(struct mm_struct *src_mm,
+struct folio *folio_prealloc(struct mm_struct *src_mm,
 		struct vm_area_struct *vma, unsigned long addr, bool need_zero)
 {
 	struct folio *new_folio;
@@ -1060,6 +1060,7 @@ static inline struct folio *folio_prealloc(struct mm_struct *src_mm,
 
 	return new_folio;
 }
+EXPORT_SYMBOL_GPL(folio_prealloc);
 
 static int
 copy_pte_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
@@ -1209,7 +1210,9 @@ out:
 int copy_pte_range_atom(struct vm_area_struct *dst_vma,
 			struct vm_area_struct *src_vma,
 			pmd_t *dst_pmd, pmd_t *src_pmd,
-			unsigned long addr, unsigned long end)
+			unsigned long addr, unsigned long end,
+			unsigned long *prealloc_addr,
+			struct folio **prealloc)
 {
 	struct mm_struct *dst_mm = dst_vma->vm_mm;
 	struct mm_struct *src_mm = src_vma->vm_mm;
@@ -1217,13 +1220,11 @@ int copy_pte_range_atom(struct vm_area_struct *dst_vma,
 	pte_t *src_pte, *dst_pte;
 	pte_t ptent;
 	spinlock_t *src_ptl, *dst_ptl;
-	int progress, ret = 0;
+	int ret = 0;
 	int rss[NR_MM_COUNTERS];
 	swp_entry_t entry = (swp_entry_t){0};
-	struct folio *prealloc = NULL;
 
 again:
-	progress = 0;
 	init_rss_vec(rss);
 	dst_pte = pte_alloc_map_lock(dst_mm, dst_pmd, addr, &dst_ptl);
 	if (!dst_pte) {
@@ -1262,13 +1263,13 @@ again:
 		}
 
 		ret = copy_present_pte(dst_vma, src_vma, dst_pte, src_pte,
-				       addr, rss, &prealloc);
+				       addr, rss, prealloc);
 
 		if (unlikely(ret == -EAGAIN))
 			break;
-		if (unlikely(prealloc)) {
-			folio_put(prealloc);
-			prealloc = NULL;
+		if (unlikely(*prealloc)) {
+			folio_put(*prealloc);
+			*prealloc = NULL;
 		}
 	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
 
@@ -1287,6 +1288,7 @@ again:
 	} else if (ret == -EBUSY) {
 		goto out;
 	} else if (ret == -EAGAIN) {
+		*prealloc_addr = addr;
 		return ret;
 	} else if (ret) {
 		VM_WARN_ON_ONCE(1);
@@ -1297,8 +1299,8 @@ again:
 	if (addr != end)
 		goto again;
 out:
-	if (unlikely(prealloc))
-		folio_put(prealloc);
+	if (unlikely(*prealloc))
+		folio_put(*prealloc);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(copy_pte_range_atom);

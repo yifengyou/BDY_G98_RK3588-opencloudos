@@ -659,6 +659,10 @@ static inline void vma_numab_state_init(struct vm_area_struct *vma) {}
 static inline void vma_numab_state_free(struct vm_area_struct *vma) {}
 #endif /* CONFIG_NUMA_BALANCING */
 
+static inline bool is_async_fork_candidate(struct mm_struct *);
+static inline bool is_async_fork_pending(struct mm_struct *);
+static inline bool is_async_fork_fallback(struct mm_struct *);
+
 #ifdef CONFIG_PER_VMA_LOCK
 /*
  * Try to read-lock a vma. The function is allowed to occasionally yield false
@@ -2444,6 +2448,8 @@ struct folio *vm_normal_folio_pmd(struct vm_area_struct *vma,
 				  unsigned long addr, pmd_t pmd);
 struct page *vm_normal_page_pmd(struct vm_area_struct *vma, unsigned long addr,
 				pmd_t pmd);
+struct folio *folio_prealloc(struct mm_struct *, struct vm_area_struct *,
+			unsigned long addr, bool need_zero);
 
 void zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
 		  unsigned long size);
