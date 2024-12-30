@@ -1213,6 +1213,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	unsigned int order;
 	bool isolated_pageblocks;
 	struct page *page;
+	int batch;
 
 	/*
 	 * Ensure proper count is passed which otherwise would stuck in the
@@ -1226,6 +1227,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	spin_lock_irqsave(&zone->lock, flags);
 	isolated_pageblocks = has_isolate_pageblock(zone);
 
+	batch = 0;
 	while (count > 0) {
 		struct list_head *list;
 		int nr_pages;
@@ -1258,6 +1260,15 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 			__free_one_page(page, page_to_pfn(page), zone, order, mt, FPI_NONE);
 			trace_mm_page_pcpu_drain(page, order, mt);
+
+			if (++batch > READ_ONCE(pcp->batch)) {
+				batch = 0;
+				if (!spin_is_contended(&zone->lock))
+					continue;
+				spin_unlock_irqrestore(&zone->lock, flags);
+				spin_lock_irqsave(&zone->lock, flags);
+				isolated_pageblocks = has_isolate_pageblock(zone);
+			}
 		} while (count > 0 && !list_empty(list));
 	}
 
