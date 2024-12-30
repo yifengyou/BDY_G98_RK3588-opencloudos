@@ -667,6 +667,14 @@ static inline void vma_numab_state_free(struct vm_area_struct *vma) {}
  */
 static inline bool vma_start_read(struct vm_area_struct *vma)
 {
+	struct mm_struct *mm = vma->vm_mm;
+	/*
+	 * For async fork, we don't allow per vma lock.
+	 */
+	if (is_async_fork_candidate(mm) || is_async_fork_pending(mm) ||
+		is_async_fork_fallback(mm))
+		return false;
+
 	/*
 	 * Check before locking. A race might cause false locked result.
 	 * We can use READ_ONCE() for the mm_lock_seq here, and don't need
