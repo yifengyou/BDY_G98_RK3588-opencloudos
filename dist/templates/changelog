@@ -1,3 +1,127 @@
+* Tue Dec 31 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.68-20
+- emm: update emm to v0.1.7.5
+- Merge branch 'frankjpliu/release-mr-ock' into 'release' (merge request !282)
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !299 Enhanced Hygon processor's processing capabilities for large memory copying
+- [6.6][feat]Hygon: Enhanced Hygon processor's processing capabilities for large memory copying.
+- !298 Fix some known issues related to the LoongArch architecture
+- net: stmmac: dwmac-loongson: Fix slow MAC DMA reset
+- LoongArch: eiointc: Fix external interrupt routing errors
+- i2c: ls2x: Fix incorrect frequency register configuration causing functional issues
+- loongarch: Modularize Loongson DRM driver (CONFIG_DRM_LOONGSON=m)
+- pci/quirks: ls7a2000: fix pm transition of devices under pcie port
+- !297 Add CPU hardware monitoring platform driver and ACPI firmware support for Loongson SE driver
+- LoongArch: Adjust calculation method for the number of CPU packages
+- drivers/char: add ACPI firmware support for Loongson SE driver
+- LoongArch: Add CPU HWMon platform driver
+- Merge branch 'frankjpliu/release-mr-stable' into 'release' (merge request !281)
+- Merge linux 6.6.68 into TK5 release branch
+- Linux 6.6.68
+- Merge linux 6.6.67 into TK5 release branch
+- Linux 6.6.67
+- Merge linux 6.6.66 into release branch
+- Linux 6.6.66
+- Merge linux 6.6.65 into release branch
+- Linux 6.6.65
+- Merge branch 'frankjpliu/release-mr-ock' into 'release' (merge request !280)
+- !296 Fixed multiple vfio devices not working properly
+- driver/iommu: Fixed multiple vfio devices not working properly
+- !295 Hygon: kernel startup hash verification and secret injection for CSV3
+- KVM: SVM: CSV: Support inject secret to Hygon CSV3 guest
+- KVM: SVM: CSV: Support issue non-4K aligned CSV3_CMD_LAUNCH_ENCRYPT_DATA and more than once
+- KVM: SVM: CSV: Provide KVM_CSV3_SET_GUEST_PRIVATE_MEMORY ioctl interface
+- KVM: SVM: CSV: Provide KVM_CAP_HYGON_COCO_EXT interface
+- crypto: ccp: Provide csv_get_extension_info() to present extensions of newer CSV firmware
+- KVM: SVM: CSV: Ensure all the GPRs and some non-GPRs are synced before LAUNCH_ENCRYPT_VMCB
+- crypto: ccp: Get api version again when update Hygon CSV firmware at runtime
+- KVM: SVM: CSV: Fix the vm_size even if CSV3 feature is unsupported on Hygon CPUs
+- !294 Hygon: Add remote authentication support for Hygon CSV3 virtual machines
+- virt/csv-guest: Provide interface for request of CSV3 attestation report
+- x86/csv: Add support for CSV3 ATTESTATION secure call
+- x86/csv: Define ATTESTATION secure call command
+- !293 Hygon: Fix regressions on CSV2 live migration, CSV3 boot, CSV3 live migration
+- KVM: SVM: CSV: Explicitly enable LBR Virtualization after succeed to RECEIVE_ENCRYPT_CONTEXT
+- KVM: SVM: CSV: Explicitly enable LBR Virtualization after succeed to LAUNCH_ENCRYPT_VMCB
+- KVM: SVM: CSV: Explicitly enable LBR Virtualization after succeed to RECEIVE_UPDATE_VMSA
+- !286 Intel RDT monitoring support on Sub-NUMA Cluster (SNC) enabled systems
+- x86/resctrl: Fix arch_mbm_* array overrun on SNC
+- x86/resctrl: Update documentation with Sub-NUMA cluster changes
+- x86/resctrl: Detect Sub-NUMA Cluster (SNC) mode
+- x86/resctrl: Enable shared RMID mode on Sub-NUMA Cluster (SNC) systems
+- x86/resctrl: Make __mon_event_count() handle sum domains
+- x86/resctrl: Fill out rmid_read structure for smp_call*() to read a counter
+- x86/resctrl: Handle removing directories in Sub-NUMA Cluster (SNC) mode
+- x86/resctrl: Create Sub-NUMA Cluster (SNC) monitor files
+- x86/resctrl: Allocate a new field in union mon_data_bits
+- x86/resctrl: Refactor mkdir_mondata_subdir() with a helper function
+- x86/resctrl: Initialize on-stack struct rmid_read instances
+- x86/resctrl: Add a new field to struct rmid_read for summation of domains
+- x86/resctrl: Prepare for new Sub-NUMA Cluster (SNC) monitor files
+- x86/resctrl: Block use of mba_MBps mount option on Sub-NUMA Cluster (SNC) systems
+- x86/resctrl: Introduce snc_nodes_per_l3_cache
+- x86/resctrl: Add node-scope to the options for feature scope
+- x86/resctrl: Split the rdt_domain and rdt_hw_domain structures
+- x86/resctrl: Prepare for different scope for control/monitor operations
+- x86/resctrl: Prepare to split rdt_domain structure
+- x86/resctrl: Prepare for new domain scope
+- x86/resctrl: Replace open coded cacheinfo searches
+- cacheinfo: Add function to get cacheinfo for a given CPU and cache level
+- cpu: Drop "extern" from function declarations in cpuhplock.h
+- cpu: Move CPU hotplug function declarations into their own header
+- x86/resctrl: Don't try to free nonexistent RMIDs
+- x86/resctrl: Add tracepoint for llc_occupancy tracking
+- x86/resctrl: Rename pseudo_lock_event.h to trace.h
+- x86/resctrl: Simplify call convention for MSR update functions
+- x86/resctrl: Pass domain to target CPU
+- x86/resctrl: Fix uninitialized memory read when last CPU of domain goes offline
+- Documentation/x86: Document that resctrl bandwidth control units are MiB
+- x86/resctrl: Remove lockdep annotation that triggers false positive
+- x86/resctrl: Separate arch and fs resctrl locks
+- x86/resctrl: Move domain helper migration into resctrl_offline_cpu()
+- x86/resctrl: Add CPU offline callback for resctrl work
+- x86/resctrl: Allow overflow/limbo handlers to be scheduled on any-but CPU
+- x86/resctrl: Add CPU online callback for resctrl work
+- x86/resctrl: Add helpers for system wide mon/alloc capable
+- x86/resctrl: Make rdt_enable_key the arch's decision to switch
+- x86/resctrl: Move alloc/mon static keys into helpers
+- x86/resctrl: Make resctrl_mounted checks explicit
+- x86/resctrl: Allow arch to allocate memory needed in resctrl_arch_rmid_read()
+- x86/resctrl: Allow resctrl_arch_rmid_read() to sleep
+- x86/resctrl: Queue mon_event_read() instead of sending an IPI
+- x86/resctrl: Add cpumask_any_housekeeping() for limbo/overflow
+- x86/resctrl: Move CLOSID/RMID matching and setting to use helpers
+- x86/resctrl: Allocate the cleanest CLOSID by searching closid_num_dirty_rmid
+- x86/resctrl: Use __set_bit()/__clear_bit() instead of open coding
+- x86/resctrl: Track the number of dirty RMID a CLOSID has
+- x86/resctrl: Allow RMID allocation to be scoped by CLOSID
+- x86/resctrl: Access per-rmid structures by index
+- x86/resctrl: Track the closid with the rmid
+- x86/resctrl: Move RMID allocation out of mkdir_rdt_prepare()
+- x86/resctrl: Create helper for RMID allocation and mondata dir creation
+- x86/resctrl: Free rmid_ptrs from resctrl_exit()
+- tick/nohz: Move tick_nohz_full_mask declaration outside the #ifdef
+- x86/resctrl: Remove redundant variable in mbm_config_write_domain()
+- x86/resctrl: Fix unused variable warning in cache_alloc_hsw_probe()
+- x86/resctrl: Display RMID of resource group
+- x86/resctrl: Add support for the files of MON groups only
+- x86/resctrl: Display CLOSID for resource group
+- x86/resctrl: Introduce "-o debug" mount option
+- x86/resctrl: Move default group file creation to mount
+- x86/resctrl: Unwind properly from rdt_enable_ctx()
+- x86/resctrl: Rename rftype flags for consistency
+- x86/resctrl: Simplify rftype flag definitions
+- x86/resctrl: Add multiple tasks to the resctrl group at once
+- x86/resctrl: Fix remaining kernel-doc warnings
+- !290 drivers: ethernet: Add motorcomm yt6801 support
+- drivers: ethernet: Add motorcomm yt6801 support
+- !291 Fix extioi restart issue in vm
+- arch/loongarch/kvm: Fix extioi restart issue
+- Merge branch 'korantli/release-cve' into 'release' (merge request !279)
+- drm/amd/display: Check denominator crb_pipes before used
+- Merge branch 'frankjpliu/release-cves' into 'release' (merge request !274)
+- net: napi: Prevent overflow of napi_defer_hard_irqs
+- x86/mm/ident_map: Use gbpages only where full GB page should be mapped.
+
 * Tue Dec 10 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.64-18
 - Merge linux-6.6.64 into TK5 release branch
 - Linux 6.6.64
