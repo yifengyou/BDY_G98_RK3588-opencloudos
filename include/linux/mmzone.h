@@ -352,6 +352,7 @@ enum lruvec_flags {
 #define MAX_NR_GENS		4U
 
 extern int percpu_pagelist_auto_tune;
+extern int percpu_pagelist_high_max;
 
 /*
  * Each generation is divided into multiple tiers. A page accessed N times

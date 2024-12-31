@@ -5651,6 +5651,15 @@ static void __zone_set_pageset_high_and_batch(struct zone *zone, unsigned long h
 	}
 }
 
+static int pcp_limit_high_max(int high_max, int high_min)
+{
+	int new_high_max;
+
+	new_high_max = min(high_max, percpu_pagelist_high_max);
+	new_high_max = max(new_high_max, high_min);
+	return new_high_max;
+}
+
 /*
  * Calculate and set new high and batch values for all per-cpu pagesets of a
  * zone based on the zone's size.
@@ -5672,6 +5681,7 @@ static void zone_set_pageset_high_and_batch(struct zone *zone, int cpu_online)
 		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
 		new_high_max = zone_highsize(zone, new_batch, cpu_online,
 					     MIN_PERCPU_PAGELIST_HIGH_FRACTION);
+		new_high_max = pcp_limit_high_max(new_high_max, new_high_min);
 	} else {
 		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
 		new_high_max = new_high_min;
@@ -6276,6 +6286,8 @@ out:
 }
 
 int percpu_pagelist_auto_tune = 1;
+#define PCP_HIGH_MAX_DEFAULT ((int)(32 * 1024 * 1024 / PAGE_SIZE))
+int percpu_pagelist_high_max = PCP_HIGH_MAX_DEFAULT;
 
 int percpu_pagelist_auto_tune_sysctl_handler(struct ctl_table *table,
 					     int write, void *buffer,
@@ -6308,7 +6320,44 @@ int percpu_pagelist_auto_tune_sysctl_handler(struct ctl_table *table,
 		zone_set_pageset_high_and_batch(zone, 0);
 
 	/* if close the auto tune pcp drain the pcp pages */
-	if (!percpu_pagelist_auto_tune)
+	if (!percpu_pagelist_auto_tune) {
+		drain_all_pages(NULL);
+		percpu_pagelist_high_max = PCP_HIGH_MAX_DEFAULT;
+	}
+out:
+	mutex_unlock(&pcp_batch_high_lock);
+	return ret;
+}
+
+int percpu_pagelist_high_max_sysctl_handler(struct ctl_table *table,
+					     int write, void *buffer,
+					     size_t *length, loff_t *ppos)
+{
+	struct zone *zone;
+	int old_percpu_pagelist_high_max;
+	int ret;
+
+	mutex_lock(&pcp_batch_high_lock);
+
+	old_percpu_pagelist_high_max = percpu_pagelist_high_max;
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (!write || ret < 0)
+		goto out;
+
+	if (!percpu_pagelist_auto_tune) {
+		percpu_pagelist_high_max = old_percpu_pagelist_high_max;
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (old_percpu_pagelist_high_max == percpu_pagelist_high_max)
+		goto out;
+
+	for_each_populated_zone(zone) {
+		zone_set_pageset_high_and_batch(zone, 0);
+	}
+
+	if (percpu_pagelist_high_max < old_percpu_pagelist_high_max)
 		drain_all_pages(NULL);
 out:
 	mutex_unlock(&pcp_batch_high_lock);
@@ -6355,6 +6404,14 @@ static struct ctl_table page_alloc_sysctl_table[] = {
 		.maxlen         = sizeof(percpu_pagelist_auto_tune),
 		.mode           = 0644,
 		.proc_handler   = percpu_pagelist_auto_tune_sysctl_handler,
+		.extra1         = SYSCTL_ZERO,
+	},
+	{
+		.procname       = "percpu_pagelist_high_max",
+		.data           = &percpu_pagelist_high_max,
+		.maxlen         = sizeof(percpu_pagelist_high_max),
+		.mode           = 0644,
+		.proc_handler   = percpu_pagelist_high_max_sysctl_handler,
 		.extra1         = SYSCTL_ZERO,
 	},
 	{
