@@ -375,12 +375,14 @@ static void *lru_gen_eviction(struct folio *folio)
 {
 	int hist;
 	unsigned long token;
+	unsigned long min_seq;
 	struct lruvec *lruvec;
 	struct lru_gen_folio *lrugen;
 	int type = folio_is_file_lru(folio);
 	int delta = folio_nr_pages(folio);
 	int refs = folio_lru_refs(folio);
-	int tier = lru_tier_from_refs(refs);
+	bool workingset = folio_test_workingset(folio);
+	int tier = lru_tier_from_refs(refs, workingset);
 	struct mem_cgroup *memcg = folio_memcg(folio);
 	struct pglist_data *pgdat = folio_pgdat(folio);
 
@@ -388,7 +390,9 @@ static void *lru_gen_eviction(struct folio *folio)
 
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 	lrugen = &lruvec->lrugen;
-	hist = lru_hist_of_min_seq(lruvec, type);
+
+	min_seq = READ_ONCE(lrugen->min_seq[type]);
+	hist = lru_hist_from_seq(min_seq);
 
 	token = max(refs - 1, 0);
 	token <<= LRU_GEN_EVICTION_BITS;
@@ -408,11 +412,13 @@ static inline bool lru_gen_test_recent(struct lruvec *lruvec, bool type,
 				       unsigned long distance)
 {
 	int hist;
+	unsigned long min_seq;
 	unsigned long evicted = 0;
 	struct lru_gen_folio *lrugen;
 
 	lrugen = &lruvec->lrugen;
-	hist = lru_hist_of_min_seq(lruvec, type);
+	min_seq = READ_ONCE(lrugen->min_seq[type]);
+	hist = lru_hist_from_seq(min_seq);
 
 	for (int tier = 0; tier < MAX_NR_TIERS; tier++)
 		evicted += atomic_long_read(&lrugen->evicted[hist][type][tier]);
@@ -456,6 +462,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	bool workingset;
 	unsigned long token;
 	int hist, tier, refs;
+	unsigned long min_seq;
 	struct lruvec *lruvec;
 	struct mem_cgroup *memcg;
 	struct pglist_data *pgdat;
@@ -490,7 +497,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	/* see the comment in folio_lru_refs() */
 	token >>= LRU_GEN_EVICTION_BITS;
 	refs = (token & (BIT(LRU_REFS_WIDTH) - 1)) + workingset;
-	tier = lru_tier_from_refs(refs);
+	tier = lru_tier_from_refs(refs, workingset);
 
 	/*
 	 * Count the following two cases as stalls:
@@ -526,7 +533,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	}
 
 	lrugen = &lruvec->lrugen;
-	hist = lru_hist_of_min_seq(lruvec, type);
+	min_seq = READ_ONCE(lrugen->min_seq[type]);
+	hist = lru_hist_from_seq(min_seq);
 	protect_tier = tier;
 
 	/*
@@ -537,7 +545,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	if (distance <= DISTANCE_SHORT && !tier) {
 		/* The folio is referenced one more time in the shadow gen */
 		folio_set_workingset(folio);
-		protect_tier = lru_tier_from_refs(1);
+		protect_tier = lru_tier_from_refs(1, 0);
 		mod_lruvec_state(lruvec, WORKINGSET_ACTIVATE_BASE + type, delta);
 	}
 
