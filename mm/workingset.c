@@ -651,7 +651,6 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 	eviction_memcg = try_get_flush_memcg(memcgid);
 	if (!eviction_memcg)
 		return false;
-
 	/*
 	 * Flush stats (and potentially sleep) outside the RCU read section.
 	 *
@@ -734,6 +733,13 @@ void workingset_refault(struct folio *folio, void *shadow)
 	bool workingset;
 	long nr;
 
+	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
+
+	if (lru_gen_enabled()) {
+		lru_gen_refault(folio, shadow);
+		return;
+	}
+
 	/*
 	 * The activation decision for this folio is made at the level
 	 * where the eviction occurred, as that is where the LRU order
@@ -743,13 +749,6 @@ void workingset_refault(struct folio *folio, void *shadow)
 	 * is actually experiencing the refault event. Make sure the folio is
 	 * locked to guarantee folio_memcg() stability throughout.
 	 */
-	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
-
-	if (lru_gen_enabled()) {
-		lru_gen_refault(folio, shadow);
-		return;
-	}
-
 	nr = folio_nr_pages(folio);
 	memcg = folio_memcg(folio);
 	pgdat = folio_pgdat(folio);
