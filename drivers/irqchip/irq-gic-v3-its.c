@@ -49,6 +49,34 @@
 #ifdef CONFIG_VIRT_PLAT_DEV
 #include <linux/pci.h>
 
+static int iort_get_used_bus_bitmap(unsigned long **bus_bm, resource_size_t *len)
+{
+	resource_size_t idx;
+	/* PCIe bus has 8 bits */
+	const size_t BUS_MAX_NUM = 0x100;
+
+	if (bus_bm == NULL || len == NULL)
+		return -EINVAL;
+
+	*bus_bm = bitmap_zalloc(BUS_MAX_NUM, GFP_KERNEL);
+	if (*bus_bm == NULL)
+		return -ENOMEM;
+
+	*len = BUS_MAX_NUM;
+
+	if (iort_gen_used_DeviceID_bitmap(*bus_bm, *len)) {
+		bitmap_free(*bus_bm);
+		return -EINVAL;
+	}
+
+	pr_debug("generated bus bitmap :");
+	for (idx = 0; idx != BUS_MAX_NUM; ++idx)
+		pr_debug("idx[%llx] %x", idx, test_bit(idx, *bus_bm));
+
+	return 0;
+}
+#endif
+
 /* a reserved bus id region */
 struct plat_rsv_buses {
 	u8	start;	/* the first reserved bus id */
@@ -142,7 +170,6 @@ static int probe_devid_pool_one(void)
 
 	return 0;
 }
-#endif
 
 #define ITS_FLAGS_CMDQ_NEEDS_FLUSHING		(1ULL << 0)
 #define ITS_FLAGS_WORKAROUND_CAVIUM_22375	(1ULL << 1)
