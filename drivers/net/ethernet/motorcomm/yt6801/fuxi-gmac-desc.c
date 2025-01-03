@@ -761,6 +761,8 @@ static int fxgmac_map_tx_skb(struct fxgmac_channel *channel,
 
 		offset = 0;
 
+		frag = &skb_shinfo(skb)->frags[i];
+
 		for (datalen = skb_frag_size(frag); datalen;) {
 			len = min_t(unsigned int, datalen,
 				    FXGMAC_TX_MAX_BUF_SIZE);
