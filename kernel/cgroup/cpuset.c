@@ -2973,6 +2973,25 @@ static int cpuset_common_seq_show(struct seq_file *sf, void *v)
 	return ret;
 }
 
+int cpuset_cgroupfs_seq_show(struct seq_file *m, void *v)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
+	cs = css_cs(css);
+
+	spin_lock_irq(&callback_lock);
+	seq_printf(m, "%*pbl\n", cpumask_pr_args(cs->effective_cpus));
+	spin_unlock_irq(&callback_lock);
+
+	css_put(css);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cpuset_cgroupfs_seq_show);
+
 static u64 cpuset_read_u64(struct cgroup_subsys_state *css, struct cftype *cft)
 {
 	struct cpuset *cs = css_cs(css);
