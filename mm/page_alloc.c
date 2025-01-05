@@ -2187,6 +2187,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 {
 	int high_min, count, batch, target;
+	int freed, target_batch;
 	int todo = 0;
 
 	high_min = READ_ONCE(pcp->high_min);
@@ -2208,16 +2209,21 @@ int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 	while (target > 0) {
 		todo++;
 		spin_lock(&pcp->lock);
+
 		if (!pcp->count) {
 			spin_unlock(&pcp->lock);
 			break;
 		}
 		count = pcp->count;
-		free_pcppages_bulk(zone,
-				   min(count, READ_ONCE(batch)),
-				   pcp, 0);
-		target -= (count - pcp->count);
+		target_batch = min(count, batch);
+		free_pcppages_bulk(zone, target_batch, pcp, 0);
+		freed = count - pcp->count;
+		if (!pcp->count || freed < target_batch) {
+			spin_unlock(&pcp->lock);
+			break;
+		}
 		spin_unlock(&pcp->lock);
+		target -= freed;
 		cond_resched();
 	}
 	return todo;
@@ -2272,22 +2278,28 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 static void batched_drain_pages_zone(unsigned int cpu, struct zone *zone)
 {
 	struct per_cpu_pages *pcp;
-	int count;
-	int target;
+	int count, freed;
+	int target, target_batch, base_batch;
 
 	pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+	base_batch = READ_ONCE(pcp->batch);
 
 	spin_lock(&pcp->lock);
 	target = pcp->count;
 	while (target > 0) {
 		if (!pcp->count)
 			break;
+
 		count = pcp->count;
-		free_pcppages_bulk(zone,
-				   min(count, READ_ONCE(pcp->batch)),
-				   pcp, 0);
-		target -= (count - pcp->count);
+		target_batch =  min(count, base_batch);
+		free_pcppages_bulk(zone, target_batch, pcp, 0);
+		freed = count - pcp->count;
+
+		if (!pcp->count || freed < target_batch)
+			break;
+
 		spin_unlock(&pcp->lock);
+		target -= freed;
 		cond_resched();
 		spin_lock(&pcp->lock);
 	}
