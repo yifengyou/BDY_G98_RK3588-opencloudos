@@ -2450,10 +2450,11 @@ static bool free_unref_page_prepare(struct page *page, unsigned long pfn,
 static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free_high)
 {
 	int min_nr_free, max_nr_free;
+	int _batch = batch;
 
 	/* Free as much as possible if batch freeing high-order pages. */
 	if (unlikely(free_high))
-		return min(pcp->count, batch << CONFIG_PCP_BATCH_SCALE_MAX);
+		return min(pcp->count, batch);
 
 	/* Check for PCP disabled or boot pageset */
 	if (unlikely(high < batch))
@@ -2469,7 +2470,7 @@ static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free
 	 */
 	batch = clamp_t(int, pcp->free_count, min_nr_free, max_nr_free);
 
-	return batch;
+	return min(batch, _batch);
 }
 
 static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
@@ -2885,6 +2886,8 @@ static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
 			pcp->alloc_factor++;
 		batch = min(batch, max_nr_alloc);
 	}
+
+	batch = min(batch, base_batch);
 
 	/*
 	 * Scale batch relative to order if batch implies free pages
