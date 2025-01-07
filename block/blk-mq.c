@@ -30,6 +30,7 @@
 #include <linux/blk-crypto.h>
 #include <linux/part_stat.h>
 #include <linux/sli.h>
+#include <linux/rue.h>
 
 #include <trace/events/block.h>
 
@@ -918,11 +919,17 @@ void blkcg_account_io_completion(struct request *req, struct bio *bio,
 		struct blkcg *blkcg = css_to_blkcg(bio_blkcg_css(bio));
 		struct block_device *part;
 
+		if (!blkcg)
+			return;
+
 #ifdef CONFIG_CGROUP_SLI
 		if (static_branch_unlikely(&sli_io_enabled))
 			sli_iolat_stat_end_check(req->alloc_time_ns, req->io_start_time_ns,
 					bio, blkcg);
 #endif
+
+		if (!rue_io_enabled())
+			return;
 
 		part_stat_lock_rcu();
 		part = req->part;
@@ -939,11 +946,14 @@ void blkcg_account_io_done(struct request *req, struct bio *bio)
 	 * normal IO on queueing nor completion.  Accounting the
 	 * containing request is enough.
 	 */
-	if (blk_do_io_stat(req) && !(req->cmd_flags & RQF_FLUSH_SEQ)) {
+	if (rue_io_enabled() && blk_do_io_stat(req) && !(req->cmd_flags & RQF_FLUSH_SEQ)) {
 		unsigned long duration = ktime_get_ns() - req->start_time_ns;
 		const int rw = rq_data_dir(req);
 		struct block_device *part = req->part;
 		struct blkcg *blkcg = css_to_blkcg(bio_blkcg_css(bio));
+
+		if (!blkcg)
+			return;
 
 		part_stat_lock_rcu();
 		blkcg_part_stat_inc(blkcg, part, ios[rw]);

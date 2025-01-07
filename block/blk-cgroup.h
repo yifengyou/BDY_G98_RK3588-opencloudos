@@ -60,7 +60,10 @@ struct disk_stats_sum {
 
 static inline int blkcg_do_io_stat(struct blkcg *blkcg)
 {
-	return blkcg->dkstats_on;
+	if (blkcg)
+		return blkcg->dkstats_on;
+
+	return 0;
 }
 
 struct disk_stats *blkcg_dkstats_find(struct blkcg *blkcg,

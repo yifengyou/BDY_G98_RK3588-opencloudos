@@ -10,6 +10,7 @@
 #include <linux/scatterlist.h>
 #include <linux/part_stat.h>
 #include <linux/blk-cgroup.h>
+#include <linux/rue.h>
 
 #include <trace/events/block.h>
 
@@ -976,7 +977,7 @@ static void blkcg_stat_acct(struct bio *bio, struct request *req, int new_io)
 	struct blkcg *blkcg = css_to_blkcg(bio_blkcg_css(bio));
 	int rw = rq_data_dir(req);
 
-	if (!new_io) {
+	if (rue_io_enabled() && blkcg && !new_io) {
 		part_stat_lock_rcu();
 		blkcg_part_stat_inc(blkcg, part, merges[rw]);
 		part_stat_unlock_rcu();
