@@ -39,7 +39,11 @@ function check_advice()
 	local advice=$3
 	local value=$4
 
-	label="$config=$value"
+	if [ "$value" == "n" ]; then
+		label="# $config is not set"
+	else
+		label="$config=$value"
+	fi
 	grep -q "$label" "$config_file" && return
 
 	real_info=$(grep -w "$config" "$config_file")
@@ -51,12 +55,6 @@ function check_advice()
 		"Could")
 			warn_info=$(printf "[ WARN] %-64s %-64s" "$label" "$real_info")
 			pr_warn "$warn_info"
-			;;
-		"Value")
-			label="$config=\"\""
-			grep -q "$label" "$config_file" || return
-			err_info=$(printf "[ERROR] %-64s %-64s" "$config needs value" "$real_info")
-			pr_err "$err_info"
 			;;
 	esac
 }
