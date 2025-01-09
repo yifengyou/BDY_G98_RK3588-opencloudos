@@ -72,8 +72,7 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 71	CONFIG_BPF	Should	Should	Should	y	y	y
 72	CONFIG_BPF_SYSCALL	Should	Should	Should	y	y	y
 73	CONFIG_BPF_JIT	Should	Should	Should	y	y	y
-74	CONFIG_MODULE_SIG_KEY	Should	Should	Should	"certs/signing_key.pem"	"certs/signing_key.pem"	"certs/signing_key.pem"
-75	CONFIG_LSM	Should	Should	Should	"lockdown,yama,integrity,selinux,bpf"	"lockdown,yama,integrity,selinux,bpf"	"landlock,lockdown,yama,loadpin,safesetid,integrity,bpf"
+75	CONFIG_LSM	Ulimited	Ulimited	Ulimited	"lockdown,yama,integrity,selinux,bpf"	"lockdown,yama,integrity,selinux,bpf"	"landlock,lockdown,yama,loadpin,safesetid,integrity,bpf"
 76	CONFIG_CRYPTO_SM4	Should	Should	Should	m	m	y
 77	CONFIG_CRYPTO_SM4_GENERIC	Should	Should	Should	m	m	y
 78	CONFIG_SECURITY	Should	Should	Should	y	y	y
@@ -127,7 +126,6 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 126	CONFIG_CPU_FREQ	Should	Should	Should	y	y	y
 127	CONFIG_CPU_IDLE	Should	Should	N/A	y	y	N/A
 128	CONFIG_ACPI_APEI_PCIEAER	Should	Should	N/A	y	y	N/A
-129	CONFIG_ACPI_HOTPLUG_CPU	Should	Should	Should	y	y	y
 130	CONFIG_ACPI_PCI_SLOT	Should	Should	Should	y	y	y
 131	CONFIG_SYSVIPC	Should	Should	Should	y	y	y
 132	CONFIG_AUDIT	Should	Should	Should	y	y	y
@@ -427,7 +425,7 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 426	CONFIG_SCSI_HISI_SAS	N/A	Should	N/A	N/A	m	N/A
 427	CONFIG_SCSI_HISI_SAS_PCI	N/A	Should	N/A	N/A	m	N/A
 428	CONFIG_DRM_HISI_HIBMC	N/A	Should	N/A	N/A	m	N/A
-429	CONFIG_ARM64_SME	N/A	Should	N/A	N/A	y	N/A
+429	CONFIG_ARM64_SME	N/A	Ulimited	N/A	N/A	y	N/A
 430	CONFIG_SPI_HISI_KUNPENG	N/A	Should	N/A	N/A	m	N/A
 431	CONFIG_LOONGARCH	N/A	N/A	Should	N/A	N/A	y
 432	CONFIG_UNWINDER_PROLOGUE	N/A	N/A	Should	N/A	N/A	y
@@ -446,7 +444,7 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 445	CONFIG_TASKSTATS	Could	Could	Could	y	y	y
 446	CONFIG_PROC_PID_CPUSET	Could	Could	Could	y	y	y
 447	CONFIG_SCHED_AUTOGROUP	Could	Could	Could	y	y	y
-448	CONFIG_PGTABLE_LEVELS	Could	Could	Could	5	4	3
+448	CONFIG_PGTABLE_LEVELS	Could	Could	Could	5	4	4
 449	CONFIG_PROFILING	Could	Could	Could	y	y	y
 450	CONFIG_CRYPTO_CRC32	Could	Could	Could	m	m	m
 451	CONFIG_SECURITY_INFINIBAND	Could	Could	Could	y	y	y
@@ -455,11 +453,11 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 454	CONFIG_CUSE	Could	Could	Could	m	m	m
 455	CONFIG_CRYPTO_FIPS	Could	Could	Could	y	y	y
 456	CONFIG_RATIONAL	Could	Could	Could	y	y	y
-457	CONFIG_SYSTEM_TRUSTED_KEYS	Value	Value	Value	0	0	0
+457	CONFIG_SYSTEM_TRUSTED_KEYS	Ulimited	Ulimited	Ulimited	0	0	0
 458	CONFIG_MQ_IOSCHED_KYBER	Could	Could	Could	y	y	y
 459	CONFIG_BLK_PM	Could	Could	Could	y	y	y
 460	CONFIG_CRC16	Could	Could	Could	y	y	y
-461	CONFIG_BUILD_SALT	Value	Value	Value	0	0	0
+461	CONFIG_BUILD_SALT	Ulimited	Ulimited	Ulimited	0	0	0
 462	CONFIG_HZ	Could	Could	Could	1000	250	250
 463	CONFIG_ZSMALLOC	Could	Could	Could	y	y	y
 464	CONFIG_KSM	Could	Could	Could	y	y	y
@@ -591,7 +589,7 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 590	CONFIG_HISI_THERMAL	N/A	Could	N/A	N/A	m	N/A
 591	CONFIG_GENERIC_PHY	N/A	Could	N/A	N/A	y	N/A
 592	CONFIG_KUNPENG_HCCS	N/A	Could	N/A	N/A	m	N/A
-593	CONFIG_ARM64_64K_PAGES	N/A	Could	N/A	N/A	y	N/A
+593	CONFIG_ARM64_64K_PAGES	N/A	Could	N/A	N/A	n	N/A
 594	CONFIG_ARM64_VA_BITS_48	N/A	Could	N/A	N/A	y	N/A
 595	CONFIG_ARM64_PA_BITS_48	N/A	Could	N/A	N/A	y	N/A
 596	CONFIG_ARM64_LSE_ATOMICS	N/A	Could	N/A	N/A	y	N/A
@@ -614,11 +612,11 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 613	CONFIG_ARCH_STRICT_ALIGN	N/A	N/A	Could	N/A	N/A	y
 614	CONFIG_ARCH_FORCE_MAX_ORDER	N/A	N/A	Could	N/A	N/A	11
 615	CONFIG_ARCH_IOREMAP	N/A	N/A	Could	N/A	N/A	y
-616	CONFIG_16KB_3LEVEL	N/A	N/A	Could	N/A	N/A	y
-617	CONFIG_16KB_2LEVEL	N/A	N/A	Could	N/A	N/A	y
-618	CONFIG_64KB_3LEVEL	N/A	N/A	Could	N/A	N/A	y
-619	CONFIG_64KB_2LEVEL	N/A	N/A	Could	N/A	N/A	y
-620	CONFIG_4KB_3LEVEL	N/A	N/A	Could	N/A	N/A	y
+616	CONFIG_16KB_3LEVEL	N/A	N/A	Could	N/A	N/A	n
+617	CONFIG_16KB_2LEVEL	N/A	N/A	Could	N/A	N/A	n
+618	CONFIG_64KB_3LEVEL	N/A	N/A	Could	N/A	N/A	n
+619	CONFIG_64KB_2LEVEL	N/A	N/A	Could	N/A	N/A	n
+620	CONFIG_4KB_3LEVEL	N/A	N/A	Could	N/A	N/A	n
 621	CONFIG_4KB_4LEVEL	N/A	N/A	Could	N/A	N/A	y
 622	CONFIG_ARCH_WRITECOMBINE	N/A	N/A	Could	N/A	N/A	y
 623	CONFIG_CPU_HAS_LSX	N/A	N/A	Could	N/A	N/A	y
