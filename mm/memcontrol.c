@@ -4256,6 +4256,9 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 		return;
 
 	pages_used = page_counter_read(&memcg->pagecache);
+	if (pages_used < pages_max)
+		return;
+
 	limit_retry_times = READ_ONCE(vm_pagecache_limit_retry_times);
 	goal_pages_used = (100 - READ_ONCE(memcg->pagecache_reclaim_ratio))
 				* pages_max / 100;

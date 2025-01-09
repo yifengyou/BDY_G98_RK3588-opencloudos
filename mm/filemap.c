@@ -869,10 +869,12 @@ noinline int __filemap_add_folio(struct address_space *mapping,
 
 #ifdef CONFIG_MEMCG
 		/* For a successful charge, folio->memcg_data must be set. */
+	if (sysctl_vm_memory_qos && !vm_pagecache_limit_global) {
 		memcg = folio_memcg(folio);
 
 		for (; memcg; memcg = parent_mem_cgroup(memcg))
 			mem_cgroup_shrink_pagecache(memcg, gfp);
+	}
 #endif
 	}
 
