@@ -1750,7 +1750,7 @@ struct kvm_x86_ops {
 	int (*vm_move_enc_context_from)(struct kvm *kvm, unsigned int source_fd);
 	void (*guest_memory_reclaimed)(struct kvm *kvm);
 
-	int (*get_msr_feature)(struct kvm_msr_entry *entry);
+	int (*get_feature_msr)(u32 msr, u64 *data);
 
 	bool (*can_emulate_instruction)(struct kvm_vcpu *vcpu, int emul_type,
 					void *insn, int insn_len);
@@ -2268,7 +2268,8 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
 	 KVM_X86_QUIRK_OUT_7E_INC_RIP |		\
 	 KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT |	\
 	 KVM_X86_QUIRK_FIX_HYPERCALL_INSN |	\
-	 KVM_X86_QUIRK_MWAIT_NEVER_UD_FAULTS)
+	 KVM_X86_QUIRK_MWAIT_NEVER_UD_FAULTS |	\
+	 KVM_X86_QUIRK_STUFF_FEATURE_MSRS)
 
 /*
  * KVM previously used a u32 field in kvm_run to indicate the hypercall was

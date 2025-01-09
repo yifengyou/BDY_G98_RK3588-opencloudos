@@ -1413,7 +1413,9 @@ static void __svm_vcpu_reset(struct kvm_vcpu *vcpu)
 	svm_vcpu_init_msrpm(vcpu, svm->msrpm);
 
 	svm_init_osvw(vcpu);
-	vcpu->arch.microcode_version = 0x01000065;
+
+	if (kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_STUFF_FEATURE_MSRS))
+		vcpu->arch.microcode_version = 0x01000065;
 	svm->tsc_ratio_msr = kvm_caps.default_tsc_scaling_ratio;
 
 	svm->nmi_masked = false;
@@ -2848,17 +2850,17 @@ static int efer_trap(struct kvm_vcpu *vcpu)
 	return kvm_complete_insn_gp(vcpu, ret);
 }
 
-static int svm_get_msr_feature(struct kvm_msr_entry *msr)
+static int svm_get_feature_msr(u32 msr, u64 *data)
 {
-	msr->data = 0;
+	*data = 0;
 
-	switch (msr->index) {
+	switch (msr) {
 	case MSR_AMD64_DE_CFG:
 		if (cpu_feature_enabled(X86_FEATURE_LFENCE_RDTSC))
-			msr->data |= MSR_AMD64_DE_CFG_LFENCE_SERIALIZE;
+			*data |= MSR_AMD64_DE_CFG_LFENCE_SERIALIZE;
 		break;
 	default:
-		return KVM_MSR_RET_INVALID;
+		return KVM_MSR_RET_UNSUPPORTED;
 	}
 
 	return 0;
@@ -3202,18 +3204,12 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		kvm_pr_unimpl_wrmsr(vcpu, ecx, data);
 		break;
 	case MSR_AMD64_DE_CFG: {
-		struct kvm_msr_entry msr_entry;
+		u64 supported_de_cfg;
 
-		msr_entry.index = msr->index;
-		if (svm_get_msr_feature(&msr_entry))
+		if (svm_get_feature_msr(ecx, &supported_de_cfg))
 			return 1;
 
-		/* Check the supported bits */
-		if (data & ~msr_entry.data)
-			return 1;
-
-		/* Don't allow the guest to change a bit, #GP */
-		if (!msr->host_initiated && (data ^ msr_entry.data))
+		if (data & ~supported_de_cfg)
 			return 1;
 
 		svm->msr_decfg = data;
@@ -5023,7 +5019,7 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 	.vcpu_unblocking = avic_vcpu_unblocking,
 
 	.update_exception_bitmap = svm_update_exception_bitmap,
-	.get_msr_feature = svm_get_msr_feature,
+	.get_feature_msr = svm_get_feature_msr,
 	.get_msr = svm_get_msr,
 	.set_msr = svm_set_msr,
 	.get_segment_base = svm_get_segment_base,
