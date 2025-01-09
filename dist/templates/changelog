@@ -1,3 +1,46 @@
+* Thu Jan  9 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.69-21
+- Merge branch OCK linux-6.6/devel branch into TK5 release branch
+- !305 [linux-6.6/devel][bugfix]: LoongArch: set CONFIG_CMA_SIZE_MBYTES to 0
+- LoongArch: set CONFIG_CMA_SIZE_MBYTES to 0
+- !303 perf/x86/uncore: Add DF PMU support for Hygon family 18h model 4-7h and 10h
+- perf/x86/uncore: Add DF PMU support for Hygon family 18h model 4-7h and 10h
+- Merge branch 'paulning/tk5-mglru-pclimit' into 'release' (merge request !277)
+- rue/mm: support for sysctl pagecache_limit_ignore_slab when mglru enabled.
+- rue/mm: support for pagecache_limit_ignore_dirty when mglru enabled.
+- rue/mm: global pagecache limit support when mglru enabled.
+- rue/mm: check page_max in mem_cgroup_shrink_pagecache
+- rue/mm: pagecache limit feature for memcg when mglru enabled
+- Merge branch 'likexu/kvm/fixes' into 'release' (merge request !283)
+- tools headers: Sync x86 kvm and cpufeature headers with the kernel
+- KVM: SVM: Allow guest writes to set MSR_AMD64_DE_CFG bits
+- KVM: x86: Remove ordering check b/w MSR_PLATFORM_INFO and MISC_FEATURES_ENABLES
+- KVM: x86: Reject userspace attempts to access ARCH_CAPABILITIES w/o support
+- KVM: VMX: Remove restriction that PMU version > 0 for PERF_CAPABILITIES
+- KVM: x86: Reject userspace attempts to access PERF_CAPABILITIES w/o PDCM
+- KVM: x86: Quirk initialization of feature MSRs to KVM's max configuration
+- KVM: x86: Disallow changing MSR_PLATFORM_INFO after vCPU has run
+- KVM: x86: Co-locate initialization of feature MSRs in kvm_arch_vcpu_create()
+- KVM: x86: Suppress userspace access failures on unsupported, "emulated" MSRs
+- KVM: x86: Suppress failures on userspace access to advertised, unsupported MSRs
+- KVM: x86: Hoist x86.c's global msr_* variables up above kvm_do_msr_access()
+- KVM: x86: Funnel all fancy MSR return value handling into a common helper
+- KVM: x86: Refactor kvm_get_feature_msr() to avoid struct kvm_msr_entry
+- KVM: x86: Rename get_msr_feature() APIs to get_feature_msr()
+- KVM: x86: Refactor kvm_x86_ops.get_msr_feature() to avoid kvm_msr_entry
+- KVM: x86: Rename KVM_MSR_RET_INVALID to KVM_MSR_RET_UNSUPPORTED
+- KVM: x86: Move MSR_TYPE_{R,W,RW} values from VMX to x86, as enums
+- KVM: SVM: Disallow guest from changing userspace's MSR_AMD64_DE_CFG value
+- Merge branch 'katrinzhou/release-fix-errno' into 'release' (merge request !285)
+- KEYS: include header for EINVAL definition
+- rue/io: check blkcg exist before doing account cgroup IO
+- configs: update std-configs-list
+- config,loongarch: delete the duplicate configuration of CONFIG_DRM_LOONGSON
+- config: keep with wangxinban
+- Merge linux 6.6.69 into TK5 release branch
+- Linux 6.6.69
+- !300 net: yt6801: Fix NULL pointer dereference in fxgmac_map_tx_skb
+- net: yt6801: Fix NULL pointer dereference in fxgmac_map_tx_skb
+
 * Tue Dec 31 2024 Jianping Liu <frankjpliu@tencent.com> - 6.6.68-20
 - emm: update emm to v0.1.7.5
 - Merge branch 'frankjpliu/release-mr-ock' into 'release' (merge request !282)
