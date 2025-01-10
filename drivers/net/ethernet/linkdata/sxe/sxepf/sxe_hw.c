@@ -4409,7 +4409,7 @@ static const struct sxe_sec_operations sxe_sec_ops = {
 };
 #endif
 
-static const struct sxe_sec_operations sxe_sec_ops = { 0 };
+static const struct sxe_sec_operations sxe_sec_ops;
 
 
 void sxe_hw_stats_regs_clean(struct sxe_hw *hw)

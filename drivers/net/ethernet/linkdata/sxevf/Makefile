@@ -28,7 +28,7 @@ sxevf-objs += base/log/sxe_log.o \
         sxevf/sxevf_xdp.o
 
 #添加编译选项和编译宏
-ccflags-y += -Werror -Wmaybe-uninitialized -frecord-gcc-switches 
+ccflags-y += -Werror -Wmaybe-uninitialized
 ccflags-y += -I$(CURDIR)/sxevf
 ccflags-y += -I$(CURDIR)/include/sxe
 ccflags-y += -I$(CURDIR)/include

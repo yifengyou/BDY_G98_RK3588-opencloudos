@@ -1172,12 +1172,14 @@ l_end:
 
 struct sxe_phy_ops phy_ops[SXE_PHY_MAX] =
 {
-	{sxe_sfp_identify,
-	sxe_sfp_link_configure,
-	sxe_sfp_link_capabilities_get,
-	sxe_sfp_reset,
-	sxe_sfp_tx_laser_disable,
-	sxe_sfp_tx_laser_enable},
+	{
+		.identify = sxe_sfp_identify,
+		.link_configure = sxe_sfp_link_configure,
+		.get_link_capabilities = sxe_sfp_link_capabilities_get,
+		.reset = sxe_sfp_reset,
+		.sfp_tx_laser_disable = sxe_sfp_tx_laser_disable,
+		.sfp_tx_laser_enable = sxe_sfp_tx_laser_enable
+	},
 #ifdef SXE_PHY_CONFIGURE
 	{sxe_phy_identify,
 	sxe_phy_link_speed_configure,
