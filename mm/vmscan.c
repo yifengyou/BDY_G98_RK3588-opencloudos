@@ -7582,7 +7582,7 @@ static int shrink_all_zones(unsigned long nr_pages, int pass,
 	struct zone *zone;
 	unsigned long nr_reclaimed = 0;
 	unsigned int nr_locked_zones = 0;
-	pg_data_t * last_pgdat = NULL;
+	pg_data_t *last_pgdat = NULL;
 	DEFINE_WAIT(wait);
 
 	prepare_to_wait(&pagecache_reclaim_wq, &wait, TASK_INTERRUPTIBLE);
