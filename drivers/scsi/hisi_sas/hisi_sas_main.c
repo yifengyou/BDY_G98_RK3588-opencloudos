@@ -1955,14 +1955,13 @@ static bool hisi_sas_internal_abort_timeout(struct sas_task *task,
 
 	if (hisi_sas_debugfs_enable) {
 		/*
-		* If timeout occurs in device gone scenario, to avoid
-	        * circular dependency like:
-		* hisi_sas_dev_gone() -> down() -> ... ->
-		* hisi_sas_internal_abort_timeout() -> down().
-		*/
+		 * If timeout occurs in device gone scenario, to avoid
+		 * circular dependency like:
+		 * hisi_sas_dev_gone() -> down() -> ... ->
+		 * hisi_sas_internal_abort_timeout() -> down().
+		 */
 		if (!timeout->rst_ha_timeout)
 			down(&hisi_hba->sem);
-
 		hisi_hba->hw->debugfs_snapshot_regs(hisi_hba);
 		if (!timeout->rst_ha_timeout)
 			up(&hisi_hba->sem);
