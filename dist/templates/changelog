@@ -1,3 +1,17 @@
+* Fri Jan 10 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-22
+- Merge branch 'paulning/tk5-mglru-pclimit' into 'release' (merge request !297)
+- rue/mm: fix a line of code to comply with coding standards
+- Merge branch 'frankjpliu/release-mr-stable' into 'release' (merge request !295)
+- drivers,linkdata: fix tkci compile error after merge OCK linux-6.6/devel
+- Merge branch 'frankjpliu/release-mr-stable' into 'release' (merge request !294)
+- Merge branch OCK linux-6.6/devel branch into TK5 release branch
+- !301 linkdata: Add support for sxe/sxevf Controller driver in 6.6 kernel
+- fix compile error when using allyesconfig config
+- Add support for sxe/sxevf Controller driver in 6.6 kernel
+- Merge branch 'frankjpliu/release-mr-stable' into 'release' (merge request !292)
+- Merge linux 6.6.70 into TK5 release branch
+- Linux 6.6.70
+
 * Thu Jan  9 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.69-21
 - Merge branch OCK linux-6.6/devel branch into TK5 release branch
 - !305 [linux-6.6/devel][bugfix]: LoongArch: set CONFIG_CMA_SIZE_MBYTES to 0
