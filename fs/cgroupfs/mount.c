@@ -273,10 +273,6 @@ static const struct file_operations cgroupfs_dir_operations = {
 	.iterate_shared		= cgroupfs_readdir,
 };
 
-static const struct dentry_operations cgroupfs_dentry_simple_ops = {
-	.d_delete       	= always_delete_dentry,
-};
-
 struct inode *cgroupfs_get_inode(cgroupfs_entry_t *en)
 {
 	struct inode *inode;
@@ -339,7 +335,6 @@ static bool cgroupfs_new_cpu_dir(int fs_type, umode_t mode,
 					 CGROUPFS_TYPE_CPU_ONLINE, S_IFREG | 0644);
 		if (!dir)
 			return false;
-		dir->e_dops = &cgroupfs_dentry_simple_ops;
 		return true;
 	}
 
