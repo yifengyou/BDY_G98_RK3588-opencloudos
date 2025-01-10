@@ -37,7 +37,7 @@ sxe-objs += base/log/sxe_log.o \
         sxepf/sxe_tx_proc.o
 
 #添加编译选项和编译宏
-ccflags-y += -Werror -Wmaybe-uninitialized
+ccflags-y += -Werror
 ccflags-y += -I$(CURDIR)/sxepf
 ccflags-y += -I$(CURDIR)/include/sxe
 ccflags-y += -I$(CURDIR)/include
