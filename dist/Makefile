@@ -18,11 +18,11 @@ ifeq ($(DIST),oc9)
 ### Vendor mark
 VENDOR = opencloudos
 VENDOR_CAPITALIZED = OpenCloudOS
-URL = https://github.com/OpenCloudOS/OpenCloudOS-Kernel
+URL = https://gitee.com/OpenCloudOS/OpenCloudOS-Kernel
 else
 VENDOR = tencentos
 VENDOR_CAPITALIZED = TencentOS
-URL = https://git.woa.com/tlinux/tkernel5
+URL = https://gitee.com/OpenCloudOS/OpenCloudOS-Kernel
 endif
 
 ### Get native arch for binary build by default
