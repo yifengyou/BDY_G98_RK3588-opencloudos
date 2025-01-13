@@ -52,14 +52,15 @@
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
 static void free_swap_count_continuations(struct swap_info_struct *);
-static void swap_entry_range_free(struct swap_info_struct *si, swp_entry_t entry,
-				  unsigned int nr_pages);
+static void swap_entry_range_free(struct swap_info_struct *si,
+				  struct swap_cluster_info *ci,
+				  swp_entry_t entry, unsigned int nr_pages);
 static void swap_range_alloc(struct swap_info_struct *si,
 			     unsigned int nr_entries);
 static bool folio_swapcache_freeable(struct folio *folio);
 static struct swap_cluster_info *lock_cluster(struct swap_info_struct *si,
 					      unsigned long offset);
-static void unlock_cluster(struct swap_cluster_info *ci);
+static inline void unlock_cluster(struct swap_cluster_info *ci);
 
 DEFINE_SPINLOCK(swap_lock);
 EXPORT_SYMBOL(swap_lock);
@@ -239,7 +240,9 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 	folio_ref_sub(folio, nr_pages);
 	folio_set_dirty(folio);
 
-	swap_entry_range_free(si, entry, nr_pages);
+	ci = lock_cluster(si, offset);
+	swap_entry_range_free(si, ci, entry, nr_pages);
+	unlock_cluster(ci);
 	ret = nr_pages;
 out_unlock:
 	folio_unlock(folio);
@@ -1402,9 +1405,9 @@ static unsigned char __swap_entry_free(struct swap_info_struct *si,
 
 	ci = lock_cluster(si, offset);
 	usage = __swap_entry_free_locked(si, offset, 1);
-	unlock_cluster(ci);
 	if (!usage)
-		free_swap_slot(entry);
+		swap_entry_range_free(si, ci, swp_entry(si->type, offset), 1);
+	unlock_cluster(ci);
 
 	return usage;
 }
@@ -1413,15 +1416,13 @@ static unsigned char __swap_entry_free(struct swap_info_struct *si,
  * Drop the last HAS_CACHE flag of swap entries, caller have to
  * ensure all entries belong to the same cgroup.
  */
-static void swap_entry_range_free(struct swap_info_struct *si, swp_entry_t entry,
-				  unsigned int nr_pages)
+static void swap_entry_range_free(struct swap_info_struct *si,
+				  struct swap_cluster_info *ci,
+				  swp_entry_t entry, unsigned int nr_pages)
 {
 	unsigned long offset = swp_offset(entry);
 	unsigned char *map = si->swap_map + offset;
 	unsigned char *map_end = map + nr_pages;
-	struct swap_cluster_info *ci;
-
-	ci = lock_cluster(si, offset);
 
 	/* It should never free entries across different clusters */
 	VM_BUG_ON(ci != offset_to_cluster(si, offset + nr_pages - 1));
@@ -1441,7 +1442,6 @@ static void swap_entry_range_free(struct swap_info_struct *si, swp_entry_t entry
 		free_cluster(si, ci);
 	else
 		partial_free_cluster(si, ci);
-	unlock_cluster(ci);
 }
 
 /*
@@ -1473,18 +1473,12 @@ void put_swap_folio(struct folio *folio, swp_entry_t entry)
 		return;
 
 	ci = lock_cluster(si, offset);
-	if (size > 1 && swap_is_has_cache(si, offset, size)) {
-		unlock_cluster(ci);
-		swap_entry_range_free(si, entry, size);
-		return;
-	}
-	for (int i = 0; i < size; i++, entry.val++) {
-		if (!__swap_entry_free_locked(si, offset + i, SWAP_HAS_CACHE)) {
-			unlock_cluster(ci);
-			free_swap_slot(entry);
-			if (i == size - 1)
-				return;
-			lock_cluster(si, offset);
+	if (swap_is_has_cache(si, offset, size))
+		swap_entry_range_free(si, ci, entry, size);
+	else {
+		for (int i = 0; i < size; i++, entry.val++) {
+			if (!__swap_entry_free_locked(si, offset + i, SWAP_HAS_CACHE))
+				swap_entry_range_free(si, ci, entry, 1);
 		}
 	}
 	unlock_cluster(ci);
@@ -1493,6 +1487,7 @@ void put_swap_folio(struct folio *folio, swp_entry_t entry)
 void swapcache_free_entries(swp_entry_t *entries, int n)
 {
 	int i;
+	struct swap_cluster_info *ci;
 	struct swap_info_struct *si = NULL;
 
 	if (n <= 0)
@@ -1500,8 +1495,11 @@ void swapcache_free_entries(swp_entry_t *entries, int n)
 
 	for (i = 0; i < n; ++i) {
 		si = _swap_info_get(entries[i]);
-		if (si)
-			swap_entry_range_free(si, entries[i], 1);
+		if (si) {
+			ci = lock_cluster(si, swp_offset(entries[i]));
+			swap_entry_range_free(si, ci, entries[i], 1);
+			unlock_cluster(ci);
+		}
 	}
 }
 EXPORT_SYMBOL(swapcache_free_entries);
@@ -3496,9 +3494,9 @@ void swapcache_clear(struct swap_info_struct *si, swp_entry_t entry)
 
 	ci = lock_cluster(si, offset);
 	usage = __swap_entry_free_locked(si, offset, SWAP_HAS_CACHE);
-	unlock_cluster(ci);
 	if (!usage)
-		free_swap_slot(entry);
+		swap_entry_range_free(si, ci, entry, 1);
+	unlock_cluster(ci);
 }
 
 struct swap_info_struct *swp_swap_info(swp_entry_t entry)
