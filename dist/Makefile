@@ -18,7 +18,7 @@ ifeq ($(DIST),oc9)
 ### Vendor mark
 VENDOR = opencloudos
 VENDOR_CAPITALIZED = OpenCloudOS
-URL = https://github.com/OpenCloudOS/OpenCloudOS-Kernel-Stream
+URL = https://github.com/OpenCloudOS/OpenCloudOS-Kernel
 else
 VENDOR = tencentos
 VENDOR_CAPITALIZED = TencentOS
