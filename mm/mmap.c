@@ -1827,8 +1827,33 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 
 	get_area = current->mm->get_unmapped_area;
 	if (file) {
+#ifdef CONFIG_HUGETEXT
+		/*
+		 * Now, the file will defaultly allocate 2MB-aligned
+		 * address. So hugetext just performs little work:
+		 * - If hugetext is enabled, for hugetext's candidate, set
+		 *   thp_get_unmapped_area when get_unmapped_area is NULL;
+		 * - If hugetext is enabled, except for MAP_FIXED, checks
+		 *   the mapping address of files that have executable
+		 *   attribute be mapped in 2MB alignment;
+		 * - For hugetext's candidate, print warning when default
+		 *   get_unmapped_area isn't thp_get_unmapped_area;
+		 */
+		struct inode *inode = file_inode(file);
+
+		if (hugetext_enabled() && (inode->i_mode & 0111)) {
+			if (!file->f_op->get_unmapped_area)
+				get_area = thp_get_unmapped_area;
+			else {
+				/* likes file under tmpfs. */
+				get_area = file->f_op->get_unmapped_area;
+			}
+		} else if (file->f_op->get_unmapped_area)
+			get_area = file->f_op->get_unmapped_area;
+#else
 		if (file->f_op->get_unmapped_area)
 			get_area = file->f_op->get_unmapped_area;
+#endif
 	} else if (flags & MAP_SHARED) {
 		/*
 		 * mmap_region() will call shmem_zero_setup() to create a file,
