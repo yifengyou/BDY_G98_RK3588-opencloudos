@@ -1078,7 +1078,7 @@ config ZONE_DEVICE
 
 config ASYNC_FORK
 	bool "Support copy mm asynchronously when fork"
-	depends on MMU && MEMCG
+	depends on MMU && MEMCG && X86
 	default y
 	help
 	  This introduces a new mechanism to reduce block duration when parent
