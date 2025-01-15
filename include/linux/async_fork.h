@@ -235,5 +235,20 @@ static inline void async_fork_madvise_vma(struct vm_area_struct *vma,
 {
 }
 
+static inline bool is_async_fork_fallback(struct mm_struct *mm)
+{
+	return 0;
+}
+
+static inline bool is_async_fork_pending(struct mm_struct *mm)
+{
+	return 0;
+}
+
+static inline bool is_async_fork_candidate(struct mm_struct *mm)
+{
+	return 0;
+}
+
 #endif /* CONFIG_ASYNC_FORK */
 #endif /* _LINUX_ASYNC_FORK_H */
