@@ -184,6 +184,9 @@ static inline bool vma_is_hugetext(struct vm_area_struct *vma,
 		return IS_ALIGNED((vma->vm_start >> PAGE_SHIFT) - vma->vm_pgoff,
 				HPAGE_PMD_NR);
 
+	if (vma_is_anonymous(vma))
+		return true;
+
 	return false;
 }
 
