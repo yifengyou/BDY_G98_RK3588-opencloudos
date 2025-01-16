@@ -153,6 +153,7 @@
 #include <linux/prandom.h>
 #include <linux/once_lite.h>
 #include <net/netdev_rx_queue.h>
+#include <linux/security.h>
 
 #include "dev.h"
 #include "net-sysfs.h"
@@ -1296,6 +1297,7 @@ rollback:
 	write_lock(&dev_base_lock);
 	netdev_name_node_add(net, dev->name_node);
 	write_unlock(&dev_base_lock);
+	security_change_netdev(dev);
 
 	ret = call_netdevice_notifiers(NETDEV_CHANGENAME, dev);
 	ret = notifier_to_errno(ret);
@@ -10326,6 +10328,7 @@ int register_netdevice(struct net_device *dev)
 	list_netdevice(dev);
 
 	add_device_randomness(dev->dev_addr, dev->addr_len);
+	security_register_netdev(dev);
 
 	/* If the device has permanent device address, driver should
 	 * set dev_addr and also addr_assign_type should be set to
@@ -11095,6 +11098,7 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		unlist_netdevice(dev, false);
 		dev->reg_state = NETREG_UNREGISTERING;
 		write_unlock(&dev_base_lock);
+		security_unregister_netdev(dev);
 	}
 	flush_all_backlogs();
 
@@ -11332,6 +11336,7 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 
 	/* Add the device back in the hashes */
 	list_netdevice(dev);
+	security_change_netdev(dev);
 
 	/* Notify protocols, that a new device appeared. */
 	call_netdevice_notifiers(NETDEV_REGISTER, dev);

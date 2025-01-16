@@ -60,6 +60,7 @@ struct fs_parameter;
 enum fs_value_type;
 struct watch;
 struct watch_notification;
+struct net_device;
 
 /* Default (no) options for the capable function */
 #define CAP_OPT_NONE 0x0
@@ -300,6 +301,7 @@ int security_fs_context_parse_param(struct fs_context *fc, struct fs_parameter *
 int security_sb_alloc(struct super_block *sb);
 void security_sb_delete(struct super_block *sb);
 void security_sb_free(struct super_block *sb);
+int security_sb_attach_security(struct super_block *sb, struct file_system_type *type);
 void security_free_mnt_opts(void **mnt_opts);
 int security_sb_eat_lsm_opts(char *options, void **mnt_opts);
 int security_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts);
@@ -406,6 +408,7 @@ int security_file_open(struct file *file);
 int security_file_truncate(struct file *file);
 int security_task_alloc(struct task_struct *task, unsigned long clone_flags);
 void security_task_free(struct task_struct *task);
+int security_task_post_setuid(struct cred *cred);
 int security_cred_alloc_blank(struct cred *cred, gfp_t gfp);
 void security_cred_free(struct cred *cred);
 int security_prepare_creds(struct cred *new, const struct cred *old, gfp_t gfp);
@@ -659,6 +662,12 @@ static inline void security_sb_delete(struct super_block *sb)
 
 static inline void security_sb_free(struct super_block *sb)
 { }
+
+static inline int security_sb_attach_security(struct super_block *sb,
+					      struct file_system_type *type)
+{
+	return 0;
+}
 
 static inline int security_sb_eat_lsm_opts(char *options,
 					   void **mnt_opts)
@@ -1058,6 +1067,11 @@ static inline int security_task_alloc(struct task_struct *task,
 	return 0;
 }
 
+static inline int security_task_post_setuid(struct cred *cred)
+{
+	return 0;
+}
+
 static inline void security_task_free(struct task_struct *task)
 { }
 
@@ -1430,6 +1444,9 @@ static inline int security_watch_key(struct key *key)
 
 #ifdef CONFIG_SECURITY_NETWORK
 
+int security_change_netdev(struct net_device *dev);
+int security_register_netdev(struct net_device *dev);
+void security_unregister_netdev(struct net_device *dev);
 int security_unix_stream_connect(struct sock *sock, struct sock *other, struct sock *newsk);
 int security_unix_may_send(struct socket *sock,  struct socket *other);
 int security_socket_create(int family, int type, int protocol, int kern);
@@ -1449,6 +1466,7 @@ int security_socket_getsockopt(struct socket *sock, int level, int optname);
 int security_socket_setsockopt(struct socket *sock, int level, int optname);
 int security_socket_shutdown(struct socket *sock, int how);
 int security_sock_rcv_skb(struct sock *sk, struct sk_buff *skb);
+int security_sock_snd_skb(struct sock *sk, struct sk_buff *skb);
 int security_socket_getpeersec_stream(struct socket *sock, sockptr_t optval,
 				      sockptr_t optlen, unsigned int len);
 int security_socket_getpeersec_dgram(struct socket *sock, struct sk_buff *skb, u32 *secid);
@@ -1588,6 +1606,12 @@ static inline int security_sock_rcv_skb(struct sock *sk,
 	return 0;
 }
 
+static inline int security_sock_snd_skb(struct sock *sk,
+					struct sk_buff *skb)
+{
+	return 0;
+}
+
 static inline int security_socket_getpeersec_stream(struct socket *sock,
 						    sockptr_t optval,
 						    sockptr_t optlen,
@@ -1715,6 +1739,21 @@ static inline int security_mptcp_add_subflow(struct sock *sk, struct sock *ssk)
 {
 	return 0;
 }
+
+static inline int security_register_netdev(struct net_device *dev)
+{
+	return 0;
+}
+
+static inline int security_change_netdev(struct net_device *dev)
+{
+	return 0;
+}
+
+static inline void security_unregister_netdev(struct net_device *dev)
+{
+}
+
 #endif	/* CONFIG_SECURITY_NETWORK */
 
 #ifdef CONFIG_SECURITY_INFINIBAND

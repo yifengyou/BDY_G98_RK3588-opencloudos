@@ -2902,6 +2902,13 @@ static const struct pid_entry smack_attr_dir_stuff[] = {
 LSM_DIR_OPS(smack);
 #endif
 
+#ifdef CONFIG_SECURITY_BIBA
+static const struct pid_entry biba_attr_dir_stuff[] = {
+	ATTR("biba", "current",		0666),
+};
+LSM_DIR_OPS(biba);
+#endif
+
 #ifdef CONFIG_SECURITY_APPARMOR
 static const struct pid_entry apparmor_attr_dir_stuff[] = {
 	ATTR("apparmor", "current",	0666),
@@ -2925,6 +2932,10 @@ static const struct pid_entry attr_dir_stuff[] = {
 #ifdef CONFIG_SECURITY_APPARMOR
 	DIR("apparmor",			0555,
 	    proc_apparmor_attr_dir_inode_ops, proc_apparmor_attr_dir_ops),
+#endif
+#ifdef CONFIG_SECURITY_BIBA
+	DIR("biba",			0555,
+	    proc_biba_attr_dir_inode_ops, proc_biba_attr_dir_ops),
 #endif
 };
 

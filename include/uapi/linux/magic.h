@@ -13,6 +13,7 @@
 #define DEBUGFS_MAGIC          0x64626720
 #define SECURITYFS_MAGIC	0x73636673
 #define SELINUX_MAGIC		0xf97cff8c
+#define BIBA_MAGIC		0xb1ba0688
 #define SMACK_MAGIC		0x43415d53	/* "SMAC" */
 #define RAMFS_MAGIC		0x858458f6	/* some random number */
 #define TMPFS_MAGIC		0x01021994

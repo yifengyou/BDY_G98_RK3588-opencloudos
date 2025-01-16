@@ -431,6 +431,7 @@ int commit_creds(struct cred *new)
 	 */
 	if (new->user != old->user || new->user_ns != old->user_ns)
 		inc_rlimit_ucounts(new->ucounts, UCOUNT_RLIMIT_NPROC, 1);
+	security_task_post_setuid(new);
 	rcu_assign_pointer(task->real_cred, new);
 	rcu_assign_pointer(task->cred, new);
 	if (new->user != old->user || new->user_ns != old->user_ns)

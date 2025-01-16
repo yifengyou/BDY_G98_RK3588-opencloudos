@@ -83,6 +83,7 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/netlink.h>
 #include <linux/tcp.h>
+#include <linux/security.h>
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
@@ -298,7 +299,17 @@ static int ip_finish_output_gso(struct net *net, struct sock *sk,
 
 static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	int err;
 	unsigned int mtu;
+
+	/*
+	 * added security hook for output
+	 */
+	err = security_sock_snd_skb(sk, skb);
+	if(unlikely(err)) {
+		kfree_skb(skb);
+		return err;
+	}
 
 #if defined(CONFIG_NETFILTER) && defined(CONFIG_XFRM)
 	/* Policy lookup after SNAT yielded a new policy */
@@ -350,6 +361,15 @@ static int ip_mc_finish_output(struct net *net, struct sock *sk,
 	default:
 		kfree_skb_reason(skb, SKB_DROP_REASON_BPF_CGROUP_EGRESS);
 		return ret;
+	}
+
+	/*
+	 * added security hook for output
+	 */
+	err = security_sock_snd_skb(sk, skb);
+	if(unlikely(err)) {
+		kfree_skb(skb);
+		return err;
 	}
 
 	/* Reset rt_iif so that inet_iif() will return skb->skb_iif. Setting

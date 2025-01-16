@@ -65,6 +65,9 @@ struct lsm_blob_sizes {
 	int	lbs_msg_msg;
 	int	lbs_task;
 	int	lbs_xattr_count; /* number of xattr slots in new_xattrs array */
+#ifdef CONFIG_SECURITY_NETWORK
+	int	lbs_netif;
+#endif
 };
 
 /**

@@ -30,6 +30,7 @@
 #include <linux/string.h>
 #include <linux/msg.h>
 #include <net/flow.h>
+#include <linux/netdevice.h>
 
 /* How many LSMs were built into the kernel? */
 #define LSM_COUNT (__end_lsm_info - __start_lsm_info)
@@ -212,6 +213,7 @@ static void __init lsm_set_blob_sizes(struct lsm_blob_sizes *needed)
 	lsm_set_blob_size(&needed->lbs_task, &blob_sizes.lbs_task);
 	lsm_set_blob_size(&needed->lbs_xattr_count,
 			  &blob_sizes.lbs_xattr_count);
+	lsm_set_blob_size(&needed->lbs_netif, &blob_sizes.lbs_netif);
 }
 
 /* Prepare LSM for initialization. */
@@ -379,6 +381,7 @@ static void __init ordered_lsm_init(void)
 	init_debug("superblock blob size = %d\n", blob_sizes.lbs_superblock);
 	init_debug("task blob size       = %d\n", blob_sizes.lbs_task);
 	init_debug("xattr slots          = %d\n", blob_sizes.lbs_xattr_count);
+	init_debug("netdevice blob size  = %d\n", blob_sizes.lbs_netif);
 
 	/*
 	 * Create any kmem_caches needed for blobs
@@ -635,6 +638,30 @@ int lsm_inode_alloc(struct inode *inode)
 		return -ENOMEM;
 	return 0;
 }
+
+#ifdef CONFIG_SECURITY_NETWORK
+/**
+ * lsm_netdev_alloc - allocate a composite netdev blob
+ * @dev: the netdev that needs a blob
+ *
+ * Allocate the netdev blob for all the modules
+ *
+ * Returns 0, or -ENOMEM if memory can't be allocated.
+ */
+static int lsm_netdev_alloc(struct net_device *dev)
+{
+	if (blob_sizes.lbs_netif == 0) {
+		dev->security = NULL;
+		return 0;
+	}
+
+	dev->security = kzalloc(blob_sizes.lbs_netif, GFP_KERNEL);
+	if (dev->security == NULL)
+		return -ENOMEM;
+
+	return 0;
+}
+#endif
 
 /**
  * lsm_task_alloc - allocate a composite task blob
@@ -1199,6 +1226,47 @@ int security_fs_context_parse_param(struct fs_context *fc,
 	return rc;
 }
 
+#ifdef CONFIG_SECURITY_NETWORK
+/**
+ * security_unregister_netdev - during exiting, release the composite net blob
+ * @dev: the netdev that needs to free blob
+ *
+ * Free the netdev blob
+ */
+void security_unregister_netdev(struct net_device *dev)
+{
+	call_void_hook(unregister_netdev_security, dev);
+	if (dev->security != NULL)
+		kfree(dev->security);
+
+	dev->security = NULL;
+}
+
+/**
+ * security_register_netdev - during initialization allocate a composite net blob
+ * @dev: the netdev that needs a blob
+ *
+ * Allocate the netdev blob for all the modules
+ */
+int security_register_netdev(struct net_device *dev)
+{
+	int rc = lsm_netdev_alloc(dev);
+	if (rc)
+		return rc;
+
+	rc = call_int_hook(register_netdev_security, 0, dev);
+	if (unlikely(rc))
+		security_unregister_netdev(dev);
+
+	return rc;
+}
+
+int security_change_netdev(struct net_device *dev)
+{
+	return call_int_hook(change_netdev_security, 0, dev);
+}
+#endif
+
 /**
  * security_sb_alloc() - Allocate a super_block LSM blob
  * @sb: filesystem superblock
@@ -1245,6 +1313,12 @@ void security_sb_free(struct super_block *sb)
 	call_void_hook(sb_free_security, sb);
 	kfree(sb->s_security);
 	sb->s_security = NULL;
+}
+
+int security_sb_attach_security(struct super_block *sb,
+				struct file_system_type *type)
+{
+	return call_int_hook(sb_attach_security, 0, sb, type);
 }
 
 /**
@@ -2894,6 +2968,11 @@ int security_task_alloc(struct task_struct *task, unsigned long clone_flags)
 	return rc;
 }
 
+int security_task_post_setuid(struct cred *cred)
+{
+	return call_int_hook(task_post_setuid, 0, cred);
+}
+
 /**
  * security_task_free() - Free a task's LSM blob and related resources
  * @task: task
@@ -4380,6 +4459,12 @@ int security_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	return call_int_hook(socket_sock_rcv_skb, 0, sk, skb);
 }
 EXPORT_SYMBOL(security_sock_rcv_skb);
+
+int security_sock_snd_skb(struct sock *sk, struct sk_buff *skb)
+{
+	return call_int_hook(socket_sock_snd_skb, 0, sk, skb);
+}
+EXPORT_SYMBOL(security_sock_snd_skb);
 
 /**
  * security_socket_getpeersec_stream() - Get the remote peer label
