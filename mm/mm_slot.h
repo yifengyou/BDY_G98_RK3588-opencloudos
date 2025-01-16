@@ -16,6 +16,13 @@ struct mm_slot {
 	struct hlist_node hash;
 	struct list_head mm_node;
 	struct mm_struct *mm;
+
+#ifdef CONFIG_HUGETEXT
+#define MAX_EXEC_VMA       8
+	/* exec vma vm_start in this mm */
+	int nr_exec_vma;
+	unsigned long exec_vma[MAX_EXEC_VMA];
+#endif
 };
 
 #define mm_slot_entry(ptr, type, member) \

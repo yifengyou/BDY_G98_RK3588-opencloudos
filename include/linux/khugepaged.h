@@ -26,6 +26,15 @@ static inline int collapse_pte_mapped_thp(struct mm_struct *mm,
 	return 0;
 }
 #endif
+#ifdef CONFIG_HUGETEXT
+extern void khugepaged_enter_exec_vma(struct vm_area_struct *vma,
+				      unsigned long vm_flags);
+#else
+static inline void khugepaged_enter_exec_vma(struct vm_area_struct *vma,
+					     unsigned long vm_flags)
+{
+}
+#endif
 
 static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {
