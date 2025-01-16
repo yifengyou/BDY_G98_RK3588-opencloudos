@@ -14,7 +14,17 @@ DEFINE_STATIC_KEY_FALSE(async_fork_enabled_key);
 atomic_t async_fork_staging;
 EXPORT_SYMBOL_GPL(async_fork_staging);
 
-struct async_fork_ops dummy_async_fork_ops = {0};
+struct async_fork_ops dummy_async_fork_ops = {
+	.async_fork_prepare = NULL,
+	.async_fork_mm_bind = NULL,
+	.async_fork_fast = NULL,
+	.async_fork_fast_done = NULL,
+	.async_fork_rest = NULL,
+	.async_fork_fixup_pmd = NULL,
+	.async_fork_fixup_vma = NULL,
+	.async_fork_fixup_vmas = NULL,
+	.async_fork_madvise_vma = NULL,
+};
 EXPORT_SYMBOL_GPL(dummy_async_fork_ops);
 
 struct async_fork_ops *async_fork_ops = &dummy_async_fork_ops;
