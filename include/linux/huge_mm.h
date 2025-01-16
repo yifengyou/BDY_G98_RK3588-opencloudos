@@ -51,7 +51,8 @@ enum transparent_hugepage_flag {
 	TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG,
 	TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG,
 #ifdef CONFIG_HUGETEXT
-	TRANSPARENT_HUGEPAGE_HUGETEXT_ENABLED_FLAG,
+	TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
+	TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
 #endif
 };
 
@@ -86,7 +87,8 @@ extern unsigned long transparent_hugepage_flags;
 	(transparent_hugepage_flags &				       \
 	 ((1<<TRANSPARENT_HUGEPAGE_FLAG) |		       \
 	  (1<<TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG) |	\
-	  (1<<TRANSPARENT_HUGEPAGE_HUGETEXT_ENABLED_FLAG)))
+	  (1<<TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG) |	\
+	  (1<<TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG)))
 #else
 #define hugepage_flags_enabled()					       \
 	(transparent_hugepage_flags &				       \
@@ -169,7 +171,8 @@ static inline bool thp_disabled_by_hw(void)
 #ifdef CONFIG_HUGETEXT
 #define hugetext_enabled()			\
 	(transparent_hugepage_flags &		\
-	 (1<<TRANSPARENT_HUGEPAGE_HUGETEXT_ENABLED_FLAG))
+	 ((1<<TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG) |	\
+	  (1<<TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG)))
 #else
 #define hugetext_enabled()	false
 #endif /* CONFIG_HUGETEXT */
