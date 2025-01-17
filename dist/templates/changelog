@@ -1,3 +1,26 @@
+* Fri Jan 17 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-23
+- emm: update emm to v0.1.7.6
+- Merge branch 'cunhuang/arm64-mlnx-BuildRequires' into 'release' (merge request !315)
+- dist: fix BuildRequires for mlnx commercial-grade driver
+- Merge branch 'cunhuang/pick-v6.6.71_kdump' into 'release' (merge request !314)
+- x86/hyperv: Fix hv tsc page based sched_clock for hibernation
+- Revert "x86, crash: wrap crash dumping code into crash related ifdefs"
+- Revert "x86/hyperv: Fix hv tsc page based sched_clock for hibernation"
+- dist: fix the method of arch judge
+- dist: compile mlnx commercial-grade driver only on x86 and arm64
+- Merge branch 'cunhuang/kabi-vermagic-match-release' into 'release' (merge request !300)
+- kabi: modules: vermagic check match to release number
+- Merge branch 'aurelianliu/release_1030' into 'release' (merge request !298)
+- ACPI: PRM: Remove unnecessary strict handler address checks
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !306 Hygon: sync upstream bugfix patch for LRU and revert the workaround patch
+- Revert "mm/gup: don't check if a page is in lru before draining it"
+- mm: vmscan.c: fix OOM on swap stress test
+- mm/gup: clear the LRU flag of a page before adding to LRU batch
+- Revert "mm/page_alloc: don't use PCP list for THP-sized allocations when using PF_MEMALLOC_PIN"
+- dist: delete inner url for some reason
+- dist: change OC kernel URL discription
+
 * Fri Jan 10 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-22
 - Merge branch 'paulning/tk5-mglru-pclimit' into 'release' (merge request !297)
 - rue/mm: fix a line of code to comply with coding standards
