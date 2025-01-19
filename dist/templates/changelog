@@ -1,3 +1,6 @@
+* Sun Jan 19 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-24
+- emm: update emm to v0.1.7.7
+
 * Fri Jan 17 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-23
 - emm: update emm to v0.1.7.6
 - Merge branch 'cunhuang/arm64-mlnx-BuildRequires' into 'release' (merge request !315)
