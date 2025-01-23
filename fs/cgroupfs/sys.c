@@ -21,9 +21,10 @@ static int __attribute__((unused)) cgroupfs_dop_revalidate(
 int cgroupfs_cpu_dir_filter(int cpu, int *max_cpu, int *counted_cpu)
 {
 	if (*counted_cpu == -1) {
-		*max_cpu = cpu_get_max_cpus(current);
+		*max_cpu = calc_quota_cpuset_cpus();
 		*counted_cpu = 0;
 	}
+
 	if (*counted_cpu >= *max_cpu)
 		return 1;
 

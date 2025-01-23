@@ -55,7 +55,7 @@
 
 DEFINE_STATIC_KEY_FALSE(cpusets_pre_enable_key);
 DEFINE_STATIC_KEY_FALSE(cpusets_enabled_key);
-int cpuset_cpuinfo_show_realinfo __read_mostly;
+int cpuset_cpuinfo_show_realinfo __read_mostly = 1;
 
 /*
  * There could be abnormal cpuset configurations for cpu or memory
@@ -2973,21 +2973,45 @@ static int cpuset_common_seq_show(struct seq_file *sf, void *v)
 	return ret;
 }
 
-int cpuset_cgroupfs_seq_show(struct seq_file *m, void *v)
+int cpuset_cgroupfs_seq_show(struct seq_file *m, void *v, int num)
 {
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
+	int cpuid, i;
 
 	css = cgroupfs_get_parent_role_cgroup(current,
 			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 
+	if (!cpuset_cpuinfo_show_realinfo) {
+		if (num == 1)
+			seq_puts(m, "0");
+		else
+			seq_printf(m, "0-%d", num - 1);
+
+		seq_putc(m, '\n');
+
+		css_put(css);
+		return 0;
+	}
+
 	spin_lock_irq(&callback_lock);
-	seq_printf(m, "%*pbl\n", cpumask_pr_args(cs->effective_cpus));
+	if (num < cpumask_weight(cs->effective_cpus)) {
+		/* CPU quota set and smaller than cpuset number */
+		cpuid = cpumask_first(cs->effective_cpus);
+
+		seq_printf(m, "%d", cpuid);
+		for (i = 0; i < num - 1; i++) {
+			cpuid = cpumask_next(cpuid, cs->effective_cpus);
+			seq_printf(m, ",%d", cpuid);
+		}
+		seq_putc(m, '\n');
+	} else
+		seq_printf(m, "%*pbl\n", cpumask_pr_args(cs->effective_cpus));
+
 	spin_unlock_irq(&callback_lock);
 
 	css_put(css);
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cpuset_cgroupfs_seq_show);
@@ -3385,6 +3409,42 @@ static void show_cpuinfo_misc(struct seq_file *m, struct cpuinfo_x86 *c)
 }
 #endif
 
+int cpuset_cgroupfs_get_cpu_count(void)
+{
+	int ret;
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
+	cs = css_cs(css);
+	ret = cpumask_weight(cs->effective_cpus);
+	css_put(css);
+
+	return ret;
+}
+
+int calc_quota_cpuset_cpus(void)
+{
+	int online_cpus, cpu_quota, cpu_set;
+
+	online_cpus = min_t(int, nr_cpu_ids, (int)num_online_cpus());
+	cpu_quota = cpu_get_max_cpus(current);
+	cpu_set = cpuset_cgroupfs_get_cpu_count();
+
+	if (cpu_quota >= online_cpus || cpu_set <= cpu_quota || cpu_quota <= 1)
+		/* Show the cpuset state.
+		 *
+		 * cpu_quota <= 1:
+		 *   Fallback to real cpuset info in case quota <= 1 core
+		 *   when actually multiple cpuset allowed to avoid incorrect
+		 *   memory barrier fallback.
+		 */
+		return cpu_set;
+	else
+		return cpu_quota;
+}
+
 static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct cpuset *cs, int max_cpu)
 {
 	int i, j, k = 0;
@@ -3397,7 +3457,7 @@ static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct 
 	else
 		is_top_cgrp = false;
 
-	for_each_cpu(j, cs->cpus_allowed) {
+	for_each_cpu(j, cs->effective_cpus) {
 		c = &cpu_data(j);
 		if (is_top_cgrp || cpuset_cpuinfo_show_realinfo)
 			cpu = c->cpu_index;
@@ -3492,29 +3552,33 @@ int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int check_cpus
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
 
-
 	css = cgroupfs_get_parent_role_cgroup(current,
 			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 
-	if (check_cpuset) {
-		ret = cpumask_test_cpu(cpu, cs->cpus_allowed);
+	if (check_cpuset && cpuset_cpuinfo_show_realinfo) {
+		ret = cpumask_test_cpu(cpu, cs->effective_cpus);
 		goto out;
 	}
 
-	max_cpu = cpu_get_max_cpus(task);
-	for_each_cpu(i, cs->cpus_allowed) {
-		if (++k > max_cpu) {
-			ret = 0;
-			break;
-		}
-		if (i == cpu) {
-			ret = 1;
-			break;
-		}
-		if (i > cpu) {
-			ret = 0;
-			break;
+	max_cpu = calc_quota_cpuset_cpus();
+
+	if (!cpuset_cpuinfo_show_realinfo) {
+		ret = cpu < max_cpu ? 1 : 0;
+	} else {
+		for_each_cpu(i, cs->effective_cpus) {
+			if (++k > max_cpu) {
+				ret = 0;
+				break;
+			}
+			if (i == cpu) {
+				ret = 1;
+				break;
+			}
+			if (i > cpu) {
+				ret = 0;
+				break;
+			}
 		}
 	}
 out:
@@ -3531,23 +3595,10 @@ int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
 	css = cgroupfs_get_parent_role_cgroup(current,
 			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
-	max_cpu = cpu_get_max_cpus(current);
+
+	max_cpu = calc_quota_cpuset_cpus();
+
 	ret = cpuset_cgroup_cpuinfo_show_comm(m, v, cs, max_cpu);
-	css_put(css);
-
-	return ret;
-}
-
-int cpuset_cgroupfs_get_cpu_count(void)
-{
-	int ret;
-	struct cgroup_subsys_state *css;
-	struct cpuset *cs;
-
-	css = cgroupfs_get_parent_role_cgroup(current,
-			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
-	cs = css_cs(css);
-	ret = cpumask_weight(cs->cpus_allowed);
 	css_put(css);
 
 	return ret;

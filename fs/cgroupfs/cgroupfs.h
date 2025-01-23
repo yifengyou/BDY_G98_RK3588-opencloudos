@@ -7,6 +7,7 @@
 #define CGROUPFS_TYPE_LOADAVG		(1 << 4)
 #define CGROUPFS_TYPE_DKSTATS		(1 << 5)
 #define CGROUPFS_TYPE_CPU_ONLINE	(1 << 6)
+#define CGROUPFS_TYPE_CPU_QUOTA	(1 << 11)
 #define CGROUPFS_TYPE_VMSTAT		(1 << 20)
 
 
@@ -20,6 +21,7 @@ extern int cpu_get_max_cpus(struct task_struct *p);
 extern int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once);
 extern int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v);
 extern int cpuset_cgroupfs_get_cpu_count(void);
+extern int calc_quota_cpuset_cpus(void);
 #else
 static inline int cpuset_cgroups_cpu_allowed(struct task_struct *task,
 					     int cpu, int once)
@@ -33,6 +35,11 @@ static inline int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
 }
 
 static inline int cpuset_cgroupfs_get_cpu_count(void)
+{
+	return cpu_get_max_cpus(current);
+}
+
+static inline int calc_quota_cpuset_cpus(void)
 {
 	return cpu_get_max_cpus(current);
 }
@@ -59,6 +66,7 @@ typedef struct cgroupfs_entry {
 cgroupfs_entry_t *cgroupfs_alloc_private(const char *name,
 		cgroupfs_entry_t *parent, int cgroupfs_type);
 void cgroupfs_set_proc_fops(cgroupfs_entry_t *en);
+void cgroupfs_set_cgroup_fops(cgroupfs_entry_t *en);
 void cgroupfs_set_sys_dops(cgroupfs_entry_t *en);
 struct inode *cgroupfs_get_inode(cgroupfs_entry_t *en);
 

@@ -313,6 +313,8 @@ static inline cgroupfs_entry_t *cgroupfs_new_entry(struct super_block *sb,
 		cgroupfs_set_sys_dops(p);
 	if (S_ISREG(mode) && proc_type <= CGROUPFS_TYPE_VMSTAT)
 		cgroupfs_set_proc_fops(p);
+	if (S_ISREG(mode) && proc_type == CGROUPFS_TYPE_CPU_QUOTA)
+		cgroupfs_set_cgroup_fops(p);
 	if (parent)
 		cfs_subdir_insert(parent, p);
 	return p;
@@ -449,7 +451,7 @@ static int cgroupfs_fill_root(struct super_block *s, unsigned long magic, cgroup
 static int cgroupfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	int err = -ENOMEM;
-	cgroupfs_entry_t *proc, *sys, *entry, *cpu, *root_entry;
+	cgroupfs_entry_t *proc, *sys, *cgroup, *entry, *cpu, *root_entry;
 	umode_t f_mode = S_IFREG | 0644, d_mode = S_IFDIR | 0755;
 
 	root_entry = cgroupfs_new_entry(sb, "/", NULL, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
@@ -466,6 +468,12 @@ static int cgroupfs_fill_super(struct super_block *sb, void *data, int silent)
 	sys = cgroupfs_new_entry(sb, "sys", root_entry, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
 	if (!sys)
 		return err;
+	cgroup = cgroupfs_new_entry(sb, "cgroup", root_entry, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
+	if (!cgroup)
+		return err;
+	cgroupfs_new_entry(sb, "cpu.quota_period_burst_us", cgroup,
+			CGROUPFS_TYPE_CPU_QUOTA, f_mode);
+
 	cgroupfs_new_entry(sb, "meminfo", proc, CGROUPFS_TYPE_MEMINFO, f_mode);
 	cgroupfs_new_entry(sb, "cpuinfo", proc, CGROUPFS_TYPE_CPUINFO, f_mode);
 	cgroupfs_new_entry(sb, "stat", proc, CGROUPFS_TYPE_STAT, f_mode);

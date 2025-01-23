@@ -10724,35 +10724,10 @@ unlock:
 	task_rq_unlock(rq, tsk, &rf);
 }
 
-#ifdef CONFIG_CGROUPFS
+#if defined(CONFIG_CGROUPFS) || defined(CONFIG_CGROUPFS_MODULE)
 int container_cpuquota_aware;
 #define cpu_quota_aware_enabled(tg) \
     (tg && tg != &root_task_group && tg->cpuquota_aware)
-
-int cpu_get_max_cpus(struct task_struct *p)
-{
-	int max_cpus = INT_MAX;
-	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(p,
-			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
-	struct task_group *tg = container_of(css, struct task_group, css);
-
-	if (!cpu_quota_aware_enabled(tg))
-		goto out;
-
-	if (tg->cfs_bandwidth.quota == RUNTIME_INF)
-		goto out;
-
-	max_cpus = DIV_ROUND_UP(tg->cfs_bandwidth.quota, tg->cfs_bandwidth.period);
-out:
-	css_put(css);
-
-	return max_cpus;
-}
-#else /* CONFIG_CGROUPFS */
-int cpu_get_max_cpus(struct task_struct *p)
-{
-       return INT_MAX;
-}
 #endif /* CONFIG_CGROUPFS */
 
 static struct cgroup_subsys_state *
@@ -11754,6 +11729,53 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 	return ret ?: nbytes;
 }
 #endif
+
+#if defined(CONFIG_CGROUPFS) || defined(CONFIG_CGROUPFS_MODULE)
+int cpu_get_max_cpus(struct task_struct *p)
+{
+	int max_cpus = INT_MAX;
+	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(p,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
+	struct task_group *tg = container_of(css, struct task_group, css);
+
+	if (!cpu_quota_aware_enabled(tg))
+		goto out;
+
+	if (tg->cfs_bandwidth.quota == RUNTIME_INF)
+		goto out;
+
+	max_cpus = DIV_ROUND_UP(tg->cfs_bandwidth.quota, tg->cfs_bandwidth.period);
+out:
+	css_put(css);
+
+	return max_cpus;
+}
+EXPORT_SYMBOL_GPL(cpu_get_max_cpus);
+
+int cpu_cgroupfs_quota_show(struct seq_file *m, void *v)
+{
+	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
+	struct task_group *tg = container_of(css, struct task_group, css);
+
+	/* Show as "quota period" */
+	cpu_period_quota_print(m, tg_get_cfs_period(tg), tg_get_cfs_quota(tg));
+
+	css_put(css);
+	return 0;
+
+}
+EXPORT_SYMBOL_GPL(cpu_cgroupfs_quota_show);
+
+#else /* CONFIG_CGROUPFS */
+
+int cpu_get_max_cpus(struct task_struct *p)
+{
+	return INT_MAX;
+}
+EXPORT_SYMBOL_GPL(cpu_get_max_cpus);
+
+#endif /* CONFIG_CGROUPFS */
 
 struct cftype cpu_cftypes[CPU_CFTYPE_CNT + 1] = {
 #if defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_EXT_GROUP_SCHED)
