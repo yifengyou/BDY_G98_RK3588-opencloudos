@@ -2606,3 +2606,5 @@ source "arch/arm64/kvm/Kconfig"
 source "arch/arm64/kernel/haoc/Kconfig"
 
 source "kernel/livepatch/Kconfig"
+
+source "arch/arm64/mm/Kconfig"
