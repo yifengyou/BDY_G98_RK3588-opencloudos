@@ -394,7 +394,7 @@ struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		/*
 		 * Just skip read ahead for unused swap slot.
 		 */
-		if (!swap_swapcount(si, entry))
+		if (!swap_entry_swapped(si, entry))
 			goto put_and_return;
 
 		/*
