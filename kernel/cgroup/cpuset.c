@@ -3486,7 +3486,7 @@ static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct 
 
 #ifdef CONFIG_CGROUPFS
 /* return 1 if allowed, otherwise 0 is returned */
-int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once)
+int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int check_cpuset)
 {
 	int max_cpu, i, ret, k = 0;
 	struct cgroup_subsys_state *css;
@@ -3497,10 +3497,11 @@ int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once)
 			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
 	cs = css_cs(css);
 
-	if (!once) {
+	if (check_cpuset) {
 		ret = cpumask_test_cpu(cpu, cs->cpus_allowed);
 		goto out;
 	}
+
 	max_cpu = cpu_get_max_cpus(task);
 	for_each_cpu(i, cs->cpus_allowed) {
 		if (++k > max_cpu) {

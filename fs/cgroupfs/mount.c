@@ -177,7 +177,6 @@ struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, uns
 	int cpu;
 	cgroupfs_entry_t *sub, *parent = dir->i_private;
 	struct inode *inode = NULL;
-	int counted_cpu = -1, max_cpu = INT_MAX;
 
 	read_lock(&cgroupfs_subdir_lock);
 	sub = cfs_subdir_find(parent, dentry->d_name.name, dentry->d_name.len);
@@ -191,7 +190,7 @@ struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, uns
 	if (parent->cgroupfs_type & CGROUPFS_TYPE_CPUDIR &&
 	    sub->cgroupfs_type & CGROUPFS_TYPE_CPUDIR) {
 		cpu = sub->cpu;
-		if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu, 1))
+		if (!cpuset_cgroups_cpu_allowed(current, cpu, 0))
 			goto out;
 	}
 	inode = cgroupfs_get_inode(sub);
@@ -247,7 +246,7 @@ int cgroupfs_readdir(struct file *file, struct dir_context *ctx)
 		read_unlock(&cgroupfs_subdir_lock);
 		if (filter_cpu && en->cgroupfs_type & CGROUPFS_TYPE_CPUDIR) {
 			cpu = en->cpu;
-			if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu, 0)) {
+			if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu)) {
 				skip = 1;
 			}
 		}

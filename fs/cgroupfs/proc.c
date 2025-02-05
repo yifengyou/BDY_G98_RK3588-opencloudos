@@ -19,21 +19,6 @@ extern int cpuset_cgroupfs_loadavg_show(struct seq_file *m, void *v);
 extern int blkcg_cgroupfs_dkstats_show(struct seq_file *m, void *v);
 #endif
 extern int mem_cgroupfs_vmstat_show(struct seq_file *m, void *v);
-extern int cpu_get_max_cpus(struct task_struct *p);
-
-#ifdef CONFIG_X86
-extern int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v);
-extern int cpuset_cgroupfs_get_cpu_count(void);
-#else
-static inline int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
-{
-	return 0;
-}
-static inline int cpuset_cgroupfs_get_cpu_count(void)
-{
-	return cpu_get_max_cpus(current);
-}
-#endif
 
 static int cgroup_fs_show(struct seq_file *m, void *v)
 {

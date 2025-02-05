@@ -14,6 +14,30 @@
 #define CGROUPFS_TYPE_NORMAL_DIR	(1 << 22)
 #define CGROUPFS_TYPE_AUTO_MOUNT	(1 << 23)
 
+extern int cpu_get_max_cpus(struct task_struct *p);
+
+#ifdef CONFIG_X86
+extern int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once);
+extern int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v);
+extern int cpuset_cgroupfs_get_cpu_count(void);
+#else
+static inline int cpuset_cgroups_cpu_allowed(struct task_struct *task,
+					     int cpu, int once)
+{
+	return 0;
+}
+
+static inline int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
+{
+	return 0;
+}
+
+static inline int cpuset_cgroupfs_get_cpu_count(void)
+{
+	return cpu_get_max_cpus(current);
+}
+#endif
+
 typedef struct cgroupfs_entry {
 	struct rb_root subdir;
 	struct rb_node subdir_node;
@@ -44,5 +68,5 @@ static inline void cgroupfs_get_entry(cgroupfs_entry_t *en)
 }
 
 void cgroupfs_put_entry(cgroupfs_entry_t *en);
-int cgroupfs_cpu_dir_filter(int cpu, int *max_cpu, int *counted_cpu, int once);
+int cgroupfs_cpu_dir_filter(int cpu, int *max_cpu, int *counted_cpu);
 #endif
