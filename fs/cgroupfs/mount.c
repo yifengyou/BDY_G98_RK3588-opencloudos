@@ -70,7 +70,7 @@ static int cfs_name_match(const char *name, cgroupfs_entry_t *en, unsigned int l
 	return memcmp(name, en->name, len);
 }
 
-static cgroupfs_entry_t *cpu_subdir_find(cgroupfs_entry_t *dir,
+static cgroupfs_entry_t *cfs_subdir_find(cgroupfs_entry_t *dir,
 					const char *name,
 					unsigned int len)
 {
@@ -90,7 +90,7 @@ static cgroupfs_entry_t *cpu_subdir_find(cgroupfs_entry_t *dir,
 	return NULL;
 }
 
-static bool cpu_subdir_insert(cgroupfs_entry_t *dir,
+static bool cfs_subdir_insert(cgroupfs_entry_t *dir,
 				cgroupfs_entry_t *en)
 {
 	struct rb_root *root = &dir->subdir;
@@ -180,7 +180,7 @@ struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, uns
 	int counted_cpu = -1, max_cpu = INT_MAX;
 
 	read_lock(&cgroupfs_subdir_lock);
-	sub = cpu_subdir_find(parent, dentry->d_name.name, dentry->d_name.len);
+	sub = cfs_subdir_find(parent, dentry->d_name.name, dentry->d_name.len);
 	if (!sub) {
 		read_unlock(&cgroupfs_subdir_lock);
 		return ERR_PTR(-ENOENT);
@@ -315,7 +315,7 @@ static inline cgroupfs_entry_t *cgroupfs_new_entry(struct super_block *sb,
 	if (S_ISREG(mode) && proc_type <= CGROUPFS_TYPE_VMSTAT)
 		cgroupfs_set_proc_fops(p);
 	if (parent)
-		cpu_subdir_insert(parent, p);
+		cfs_subdir_insert(parent, p);
 	return p;
 }
 
