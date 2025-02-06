@@ -3432,15 +3432,15 @@ int calc_quota_cpuset_cpus(void)
 	cpu_quota = cpu_get_max_cpus(current);
 	cpu_set = cpuset_cgroupfs_get_cpu_count();
 
-	if (cpu_quota >= online_cpus || cpu_set <= cpu_quota || cpu_quota <= 1)
-		/* Show the cpuset state.
-		 *
-		 * cpu_quota <= 1:
-		 *   Fallback to real cpuset info in case quota <= 1 core
-		 *   when actually multiple cpuset allowed to avoid incorrect
+	if (cpu_quota >= online_cpus || cpu_set <= cpu_quota)
+		return cpu_set;
+	else if (cpu_quota == 1)
+		/* cpu_quota == 1 and cpu_set > 1(cpu_quota):
+		 *   Fallback to 2 cores in case quota <= 1 core when
+		 *   actually multiple cpuset allowed to avoid incorrect
 		 *   memory barrier fallback.
 		 */
-		return cpu_set;
+		return 2;
 	else
 		return cpu_quota;
 }
