@@ -289,15 +289,15 @@ static int _remove_hidden_choices(struct device *dev, void *arg)
 
 /**
  * platform_profile_choices_show - Show the available profile choices for legacy sysfs interface
- * @dev: The device
+ * @kobj: The kobject
  * @attr: The attribute
  * @buf: The buffer to write to
  *
  * Return: The number of bytes written
  */
 static ssize_t platform_profile_choices_show(struct kobject *kobj,
-					struct kobj_attribute *attr,
-					char *buf)
+					     struct kobj_attribute *attr,
+					     char *buf)
 {
 	struct aggregate_choices_data data = {
 		.aggregate = { [0 ... BITS_TO_LONGS(PLATFORM_PROFILE_LAST) - 1] = ~0UL },
@@ -371,15 +371,15 @@ static int _store_and_notify(struct device *dev, void *data)
 
 /**
  * platform_profile_show - Show the current profile for legacy sysfs interface
- * @dev: The device
+ * @kobj: The kobject
  * @attr: The attribute
  * @buf: The buffer to write to
  *
  * Return: The number of bytes written
  */
 static ssize_t platform_profile_show(struct kobject *kobj,
-					struct kobj_attribute *attr,
-					char *buf)
+				     struct kobj_attribute *attr,
+				     char *buf)
 {
 	enum platform_profile_option profile = PLATFORM_PROFILE_LAST;
 	int err;
@@ -398,9 +398,18 @@ static ssize_t platform_profile_show(struct kobject *kobj,
 	return sysfs_emit(buf, "%s\n", profile_names[profile]);
 }
 
+/**
+ * platform_profile_store - Set the profile for legacy sysfs interface
+ * @kobj: The kobject
+ * @attr: The attribute
+ * @buf: The buffer to read from
+ * @count: The number of bytes to read
+ *
+ * Return: The number of bytes read
+ */
 static ssize_t platform_profile_store(struct kobject *kobj,
-			    struct kobj_attribute *attr,
-			    const char *buf, size_t count)
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
 {
 	struct aggregate_choices_data data = {
 		.aggregate = { [0 ... BITS_TO_LONGS(PLATFORM_PROFILE_LAST) - 1] = ~0UL },
