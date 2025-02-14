@@ -35,6 +35,7 @@
 #include <linux/delayacct.h>
 #include <linux/memory.h>
 #include <linux/mm_inline.h>
+#include <trace/events/kmem.h>
 
 #include <asm/page.h>
 #include <asm/pgalloc.h>
@@ -7725,6 +7726,7 @@ struct folio *hugetlb_pool_alloc(int nid)
 		folio = ERR_PTR(-ENOMEM);
 
 out:
+	trace_hugetlb_pool_alloc(folio, nid);
 	return folio;
 }
 EXPORT_SYMBOL_GPL(hugetlb_pool_alloc);
@@ -7739,6 +7741,7 @@ int hugetlb_pool_free(struct folio *folio)
 	ret = 0;
 	folio_put(folio);
 out:
+	trace_hugetlb_pool_free(folio, ret);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(hugetlb_pool_free);
