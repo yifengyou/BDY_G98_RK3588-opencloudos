@@ -727,12 +727,10 @@ struct iommu_ops {
 
 	/* Domain allocation and freeing by the iommu driver */
 	struct iommu_domain *(*domain_alloc)(unsigned iommu_domain_type);
-	KABI_REPLACE(struct iommu_domain *(*domain_alloc_user)(
-		     struct device *dev, u32 flags, struct iommu_domain *parent,
-		     const struct iommu_user_data *user_data),
-		     struct iommu_domain *(*domain_alloc_user)(
-		     struct device *dev, u32 flags, struct iommu_domain *parent,
-		     struct kvm *kvm, const struct iommu_user_data *user_data));
+	struct iommu_domain *(*domain_alloc_user)(
+		struct device *dev, u32 flags, struct iommu_domain *parent,
+		const struct iommu_user_data *user_data);
+
 	struct iommu_domain *(*domain_alloc_paging)(struct device *dev);
 
 	struct iommu_device *(*probe_device)(struct device *dev);
@@ -777,7 +775,9 @@ struct iommu_ops {
 	KABI_RESERVE(6);
 	KABI_RESERVE(7);
 	KABI_RESERVE(8);
-	KABI_RESERVE(9);
+	KABI_USE(9, struct iommu_domain *(*domain_alloc_user_v2)(
+			struct device *dev, u32 flags, struct iommu_domain *parent,
+			struct kvm *kvm, const struct iommu_user_data *user_data));
 };
 
 /**
