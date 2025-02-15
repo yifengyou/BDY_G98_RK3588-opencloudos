@@ -104,6 +104,8 @@ static u64 new_vmid(struct kvm_vmid *kvm_vmid)
 
 	if (vmid != 0) {
 		u64 newvmid = generation | (vmid & ~VMID_MASK);
+		struct kvm_s2_mmu *kvm_s2_mmu =
+			container_of(kvm_vmid, struct kvm_s2_mmu, vmid);
 
 		if (check_update_reserved_vmid(vmid, newvmid)) {
 			atomic64_set(&kvm_vmid->id, newvmid);
@@ -115,7 +117,7 @@ static u64 new_vmid(struct kvm_vmid *kvm_vmid)
 		 * takes priority, because even if it is also pinned, we need to
 		 * update the generation into the reserved_vmids.
 		 */
-		if (refcount_read(&kvm_vmid->pinned))
+		if (refcount_read(&kvm_s2_mmu->arch->pinned))
 			return newvmid;
 
 		if (!__test_and_set_bit(vmid2idx(vmid), vmid_map)) {
@@ -188,6 +190,7 @@ unsigned long kvm_arm_pinned_vmid_get(struct kvm_vmid *kvm_vmid)
 {
 	unsigned long flags;
 	u64 vmid;
+	struct kvm_s2_mmu *kvm_s2_mmu;
 
 	if (!pinned_vmid_map)
 		return 0;
@@ -196,7 +199,8 @@ unsigned long kvm_arm_pinned_vmid_get(struct kvm_vmid *kvm_vmid)
 
 	vmid = atomic64_read(&kvm_vmid->id);
 
-	if (refcount_inc_not_zero(&kvm_vmid->pinned))
+	kvm_s2_mmu = container_of(kvm_vmid, struct kvm_s2_mmu, vmid);
+	if (refcount_inc_not_zero(&kvm_s2_mmu->arch->pinned))
 		goto out_unlock;
 
 	if (nr_pinned_vmids >= max_pinned_vmids) {
@@ -213,7 +217,7 @@ unsigned long kvm_arm_pinned_vmid_get(struct kvm_vmid *kvm_vmid)
 
 	nr_pinned_vmids++;
 	__set_bit(vmid2idx(vmid), pinned_vmid_map);
-	refcount_set(&kvm_vmid->pinned, 1);
+	refcount_set(&kvm_s2_mmu->arch->pinned, 1);
 
 out_unlock:
 	raw_spin_unlock_irqrestore(&cpu_vmid_lock, flags);
@@ -226,6 +230,7 @@ out_unlock:
 void kvm_arm_pinned_vmid_put(struct kvm_vmid *kvm_vmid)
 {
 	unsigned long flags;
+	struct kvm_s2_mmu *kvm_s2_mmu;
 	u64 vmid = atomic64_read(&kvm_vmid->id);
 
 	if (!pinned_vmid_map)
@@ -233,7 +238,8 @@ void kvm_arm_pinned_vmid_put(struct kvm_vmid *kvm_vmid)
 
 	raw_spin_lock_irqsave(&cpu_vmid_lock, flags);
 
-	if (refcount_dec_and_test(&kvm_vmid->pinned)) {
+	kvm_s2_mmu = container_of(kvm_vmid, struct kvm_s2_mmu, vmid);
+	if (refcount_dec_and_test(&kvm_s2_mmu->arch->pinned)) {
 		__clear_bit(vmid2idx(vmid), pinned_vmid_map);
 		nr_pinned_vmids--;
 	}

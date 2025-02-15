@@ -141,7 +141,6 @@ int topup_hyp_memcache(struct kvm_hyp_memcache *mc, unsigned long min_pages);
 
 struct kvm_vmid {
 	atomic64_t id;
-	refcount_t pinned;
 };
 
 struct kvm_s2_mmu {
@@ -243,7 +242,7 @@ struct kvm_arch {
 
 	/* Mandated version of PSCI */
 	u32 psci_version;
-
+	KABI_FILL_HOLE(refcount_t pinned);
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 
