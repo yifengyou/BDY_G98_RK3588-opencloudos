@@ -1130,7 +1130,12 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 {
 	u64 dram_base_addr, dram_limit_addr, dram_hole_base;
 
-	u8 die_id_shift, die_id_mask, socket_id_shift, socket_id_mask;
+	u8 die_id_shift, socket_id_shift;
+#ifdef CONFIG_CPU_SUP_HYGON
+	u16 die_id_mask, socket_id_mask;
+#else
+	u8 die_id_mask, socket_id_mask;
+#endif
 	u8 intlv_num_dies, intlv_num_chan, intlv_num_sockets;
 	u8 intlv_addr_sel, intlv_addr_bit;
 	u8 num_intlv_bits, hashed_bit;
@@ -1202,6 +1207,12 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 
 	intlv_addr_bit = intlv_addr_sel + 8;
 
+	if (hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6) {
+		if (df_indirect_read_instance(nid, 0, 0x60, umc, &ctx.tmp))
+			goto out_err;
+		intlv_num_dies = ctx.tmp & 0x3;
+	}
+
 	/* Re-use intlv_num_chan by setting it equal to log2(#channels) */
 	switch (intlv_num_chan) {
 	case 0:	intlv_num_chan = 0; break;
@@ -1245,7 +1256,12 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 
 	if (num_intlv_bits > 0) {
 		u64 temp_addr_x, temp_addr_i, temp_addr_y;
-		u8 die_id_bit, sock_id_bit, cs_fabric_id;
+		u8 die_id_bit, sock_id_bit;
+#ifdef CONFIG_CPU_SUP_HYGON
+		u16 cs_fabric_id;
+#else
+		u8 cs_fabric_id;
+#endif
 
 		/*
 		 * Read FabricBlockInstanceInformation3_CS[BlockFabricID].
@@ -1282,12 +1298,14 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 			if (hygon_f18h_m4h()) {
 				die_id_shift = (ctx.tmp >> 12) & 0xF;
 				die_id_mask  = ctx.tmp & 0x7FF;
+				cs_id |= (((cs_fabric_id & die_id_mask) >> die_id_shift) - 4) <<
+						die_id_bit;
 			} else {
 				die_id_shift = (ctx.tmp >> 24) & 0xF;
 				die_id_mask  = (ctx.tmp >> 8) & 0xFF;
+				cs_id |= ((cs_fabric_id & die_id_mask) >> die_id_shift) <<
+						die_id_bit;
 			}
-
-			cs_id |= ((cs_fabric_id & die_id_mask) >> die_id_shift) << die_id_bit;
 		}
 
 		/* If interleaved over more than 1 socket. */
@@ -3148,8 +3166,8 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	pvt->ops->get_err_info(m, &err);
 
-	if (hygon_f18h_m4h() && boot_cpu_data.x86_model == 0x6)
-		umc = err.channel << 1;
+	if (hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6)
+		umc = (err.channel << 1) + ((m->ipid & BIT(13)) >> 13);
 	else
 		umc = err.channel;
 
