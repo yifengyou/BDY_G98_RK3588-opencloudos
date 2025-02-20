@@ -1154,7 +1154,7 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 	ctx.inst_id = umc;
 
 	/* Read DramOffset, check if base 1 is used. */
-	if (hygon_f18h_m4h() &&
+	if ((hygon_f18h_m4h() || hygon_f18h_m10h()) &&
 	    df_indirect_read_instance(nid, 0, 0x214, umc, &ctx.tmp))
 		goto out_err;
 	else if (df_indirect_read_instance(nid, 0, 0x1B4, umc, &ctx.tmp))
@@ -1182,7 +1182,7 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 	}
 
 	intlv_num_sockets = 0;
-	if (hygon_f18h_m4h())
+	if (hygon_f18h_m4h() || hygon_f18h_m10h())
 		intlv_num_sockets = (ctx.tmp >> 2) & 0x3;
 	lgcy_mmio_hole_en = ctx.tmp & BIT(1);
 	intlv_num_chan	  = (ctx.tmp >> 4) & 0xF;
@@ -1200,14 +1200,15 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 	if (df_indirect_read_instance(nid, 0, 0x114 + (8 * base), umc, &ctx.tmp))
 		goto out_err;
 
-	if (!hygon_f18h_m4h())
+	if (!hygon_f18h_m4h() && !hygon_f18h_m10h())
 		intlv_num_sockets = (ctx.tmp >> 8) & 0x1;
 	intlv_num_dies	  = (ctx.tmp >> 10) & 0x3;
 	dram_limit_addr	  = ((ctx.tmp & GENMASK_ULL(31, 12)) << 16) | GENMASK_ULL(27, 0);
 
 	intlv_addr_bit = intlv_addr_sel + 8;
 
-	if (hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6) {
+	if ((hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6) ||
+	    hygon_f18h_m10h()) {
 		if (df_indirect_read_instance(nid, 0, 0x60, umc, &ctx.tmp))
 			goto out_err;
 		intlv_num_dies = ctx.tmp & 0x3;
@@ -1272,7 +1273,7 @@ static int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr
 		if (df_indirect_read_instance(nid, 0, 0x50, umc, &ctx.tmp))
 			goto out_err;
 
-		if (hygon_f18h_m4h())
+		if (hygon_f18h_m4h() || hygon_f18h_m10h())
 			cs_fabric_id = (ctx.tmp >> 8) & 0x7FF;
 		else
 			cs_fabric_id = (ctx.tmp >> 8) & 0xFF;
@@ -1655,12 +1656,29 @@ static void umc_debug_display_dimm_sizes(struct amd64_pvt *pvt, u8 ctrl)
 	}
 }
 
+static bool hygon_umc_channel_enabled(struct amd64_pvt *pvt, int channel)
+{
+	u32 enable;
+
+	if (hygon_f18h_m10h()) {
+		__df_indirect_read(pvt->mc_node_id, 1, 0x32c, 0xc, &enable);
+		if ((enable & BIT(channel)))
+			return true;
+		return false;
+	}
+
+	return true;
+}
+
 static void umc_dump_misc_regs(struct amd64_pvt *pvt)
 {
 	struct amd64_umc *umc;
 	u32 i, tmp, umc_base;
 
 	for_each_umc(i) {
+		if (!hygon_umc_channel_enabled(pvt, i))
+			continue;
+
 		if (hygon_f18h_m4h())
 			umc_base = get_umc_base_f18h_m4h(pvt->mc_node_id, i);
 		else
@@ -1777,6 +1795,9 @@ static void umc_read_base_mask(struct amd64_pvt *pvt)
 	int cs, umc;
 
 	for_each_umc(umc) {
+		if (!hygon_umc_channel_enabled(pvt, umc))
+			continue;
+
 		if (hygon_f18h_m4h())
 			umc_base = get_umc_base_f18h_m4h(pvt->mc_node_id, umc);
 		else
@@ -1885,7 +1906,9 @@ static void umc_determine_memory_type(struct amd64_pvt *pvt)
 		 * Check if the system supports the "DDR Type" field in UMC Config
 		 * and has DDR5 DIMMs in use.
 		 */
-		if ((pvt->flags.zn_regs_v2 || hygon_f18h_m4h()) &&
+		if ((pvt->flags.zn_regs_v2 ||
+		     hygon_f18h_m4h() ||
+		     hygon_f18h_m10h()) &&
 		    ((umc->umc_cfg & GENMASK(2, 0)) == 0x1)) {
 			if (umc->dimm_cfg & BIT(5))
 				umc->dram_type = MEM_LRDDR5;
@@ -3166,7 +3189,8 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	pvt->ops->get_err_info(m, &err);
 
-	if (hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6)
+	if ((hygon_f18h_m4h() && boot_cpu_data.x86_model >= 0x6) ||
+	    hygon_f18h_m10h())
 		umc = (err.channel << 1) + ((m->ipid & BIT(13)) >> 13);
 	else
 		umc = err.channel;
@@ -3245,6 +3269,9 @@ static void umc_read_mc_regs(struct amd64_pvt *pvt)
 
 	/* Read registers from each UMC */
 	for_each_umc(i) {
+		if (!hygon_umc_channel_enabled(pvt, i))
+			continue;
+
 		if (hygon_f18h_m4h())
 			umc_base = get_umc_base_f18h_m4h(pvt->mc_node_id, i);
 		else
