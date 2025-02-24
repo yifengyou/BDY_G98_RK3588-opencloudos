@@ -233,7 +233,7 @@ static inline bool is_pswiotlb_buffer(struct device *dev, int nid, phys_addr_t p
 	struct p_io_tlb_mem *mem = &dev->dma_p_io_tlb_mem[nid];
 	struct page *page;
 
-	if (!paddr)
+	if (!paddr || (paddr == DMA_MAPPING_ERROR))
 		return false;
 
 	page = pfn_to_page(PFN_DOWN(paddr));
