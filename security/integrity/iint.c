@@ -27,6 +27,112 @@ static struct kmem_cache *iint_cache __read_mostly;
 
 struct dentry *integrity_dir;
 
+bool ima_enabled = false;
+bool evm_enabled = false;
+bool dim_enabled = false;
+
+EXPORT_SYMBOL(ima_enabled);
+EXPORT_SYMBOL(evm_enabled);
+EXPORT_SYMBOL(dim_enabled);
+
+/*
+ * integrity_param - parse "integrity=" parameter to enable
+ * integrity subsystems explictly
+*/
+static int __init integrity_param(char *str) {
+	char *token, *p = str;
+
+	while ((token = strsep(&p, "|")) != NULL) {
+		if (strncmp(token, "all", 3) == 0 || strncmp(token, "1", 1) == 0) {
+			ima_enabled = true;
+			evm_enabled = true;
+			dim_enabled = true;
+			break;
+		} else if (strncmp(token, "ima", 3) == 0) {
+			ima_enabled = true;
+		} else if (strncmp(token, "evm", 3) == 0) {
+			/* EVM requires IMA to be enabled first */
+			ima_enabled = true;
+			evm_enabled = true;
+		} else if (strncmp(token, "dim", 3) == 0) {
+			dim_enabled = true;
+		} else {
+			pr_err("integrity: Invalid option '%s'\n", token);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+__setup("integrity=", integrity_param);
+
+/**
+ * integrity_read_dim_enabled - read() for <securityfs>/integrity/dim_enabled
+ * @file - file pointer, not actually used
+ * @buf: where to put the result
+ * @count: maximum to send along
+ * @ppos: where to start
+ *
+ * Returns number of bytes read or error code, as appropriate
+ * Used to read the dim_enabled status
+ */
+static ssize_t integrity_read_dim_enabled(struct file *filp, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	char temp[3];
+	ssize_t rc;
+
+	if (*ppos != 0)
+		return 0;
+
+	snprintf(temp, sizeof(temp), "%d\n", dim_enabled);
+	rc = simple_read_from_buffer(buf, count, ppos, temp, strlen(temp));
+
+	return rc;
+}
+
+/**
+ * integrity_write_dim_enabled - write() for <securityfs>/integrity/dim_enabled
+ * @file - file pointer, not actually used
+ * @buf: where to get the data from
+ * @count: bytes sent
+ * @ppos: where to start
+ *
+ * Returns number of bytes written or error code, as appropriate
+ * Used to set the dim_enabled status
+ */
+static ssize_t integrity_write_dim_enabled(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	unsigned int val;
+	int ret;
+
+	if (count == 0)
+		return -EINVAL;
+
+	if(!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	ret = kstrtouint_from_user(buf, count, 10, &val);
+
+	if (ret)
+		return ret;
+
+	/* Reject invalid values*/
+	if (val > 1)
+		return -EINVAL;
+
+	dim_enabled = val;
+
+	return count;
+}
+
+static const struct file_operations dim_enabled_ops = {
+	.read	= integrity_read_dim_enabled,
+	.write	= integrity_write_dim_enabled,
+	.llseek	= generic_file_llseek,
+};
+
 /*
  * __integrity_iint_find - return the iint associated with an inode
  */
@@ -237,6 +343,8 @@ void __init integrity_load_keys(void)
 
 static int __init integrity_fs_init(void)
 {
+	struct dentry *dim_file;
+
 	integrity_dir = securityfs_create_dir("integrity", NULL);
 	if (IS_ERR(integrity_dir)) {
 		int ret = PTR_ERR(integrity_dir);
@@ -246,6 +354,15 @@ static int __init integrity_fs_init(void)
 			       ret);
 		integrity_dir = NULL;
 		return ret;
+	}
+
+	dim_file = securityfs_create_file("dim_enabled", 0640, integrity_dir,
+		NULL, &dim_enabled_ops);
+	if (IS_ERR(dim_file)) {
+		int ret = PTR_ERR(dim_file);
+
+		if (ret != -ENODEV)
+			pr_err("Unable to create dim_enabled sysfs file: %d\n", ret);
 	}
 
 	return 0;

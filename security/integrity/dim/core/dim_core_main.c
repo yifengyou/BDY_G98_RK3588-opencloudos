@@ -41,8 +41,15 @@ MODULE_PARM_DESC(measure_interval, "Interval time (min) for automatic measuremen
 module_param(signature, bool, 0);
 MODULE_PARM_DESC(signature, "Require signature for policy and static baseline");
 
+extern bool dim_enabled;
+
 static int __init dim_core_init(void)
 {
+	if (!dim_enabled) {
+		pr_err("dim_core: boot parameter 'integrity=dim' not set.\n");
+		return -ENODEV;
+	}
+
 	int ret;
 
 	ret = dim_core_kallsyms_init();

@@ -1988,6 +1988,31 @@
 	ihash_entries=	[KNL]
 			Set number of hash buckets for inode cache.
 
+	integrity=	[SECURITY] Enable integrity subsystems
+			Format: integrity=<subsystem>[|<subsystem>...]
+
+			Enable specific kernel integrity subsystems during boot.
+			This parameter controls the initialization of integrity
+			measurement/verification mechanisms. Multiple subsystems
+			can be specified, separated by pipes (`|`) but required
+			to be wrapped in quotes (e.g. integrity="ima|evm").
+
+			If this parameter is omitted, all integrity subsystems (IMA/
+			EVM/DIM) remain disabled by default. Subsystems can only be
+			activated through explicit boot parameter configuration.
+
+			Supported subsystems:
+				ima	- Enable Integrity Measurement Architecture (IMA).
+				evm	- Enable Extended Verification Module (EVM).
+					  *Note*: EVM requires IMA. Specifying "evm" will
+					  automatically enable "ima".
+				dim	- Enable Dynamic Integrity Measurement (DIM). If
+					  DIM is built as modules, specifying "integrity=
+					  dim" is required to load dim_core/dim_monitor.
+					  Manual modprobe without the boot parameter will
+					  fail with ENODEV.
+				all/1	- Enable all supported subsystems (ima, evm, dim).
+
 	ima_appraise=	[IMA] appraise integrity measurements
 			Format: { "off" | "enforce" | "fix" | "log" }
 			default: "enforce"

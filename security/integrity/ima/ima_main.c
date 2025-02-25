@@ -1089,8 +1089,15 @@ int ima_measure_critical_data(const char *event_label,
 }
 EXPORT_SYMBOL_GPL(ima_measure_critical_data);
 
+extern bool ima_enabled;
+
 static int __init init_ima(void)
 {
+	if (!ima_enabled) {
+		pr_info("IMA is disabled by boot parameter\n");
+		return 0;
+	}
+
 	int error;
 
 	ima_appraise_parse_cmdline();
