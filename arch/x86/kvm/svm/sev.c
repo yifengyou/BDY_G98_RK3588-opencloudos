@@ -4061,6 +4061,8 @@ static int __sev_snp_update_protected_guest_state(struct kvm_vcpu *vcpu)
 
 	if (VALID_PAGE(svm->sev_es.snp_vmsa_gpa)) {
 		gfn_t gfn = gpa_to_gfn(svm->sev_es.snp_vmsa_gpa);
+		svm->sev_es.snp_vmsa_gpa = INVALID_PAGE;
+
 		struct kvm_memory_slot *slot;
 		kvm_pfn_t pfn;
 
@@ -4093,8 +4095,6 @@ static int __sev_snp_update_protected_guest_state(struct kvm_vcpu *vcpu)
 		/* Mark the vCPU as runnable */
 		vcpu->arch.pv.pv_unhalted = false;
 		vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
-
-		svm->sev_es.snp_vmsa_gpa = INVALID_PAGE;
 
 		/*
 		 * gmem pages aren't currently migratable, but if this ever
