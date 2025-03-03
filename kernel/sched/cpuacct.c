@@ -329,7 +329,8 @@ int cpuacct_cgroupfs_uptime_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct cpuacct *ca;
 
-	css = task_get_css(current, cpuacct_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
 	ca = css_ca(css);
 	ret = cpuacct_uptime_show_comm(m, v, ca);
 	css_put(css);

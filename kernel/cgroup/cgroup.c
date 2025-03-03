@@ -5533,6 +5533,91 @@ static ssize_t cgroup_threads_write(struct kernfs_open_file *of,
 	return __cgroup_procs_write(of, buf, false) ?: nbytes;
 }
 
+#ifdef CONFIG_CGROUPFS
+int cgroup_role_show(struct seq_file *seq, void *v)
+{
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+	u16 role = cgrp->role;
+
+	seq_printf(seq, "%d\n", role);
+
+	return 0;
+}
+
+
+static void cgroup_role_propagate(struct cgroup *cgrp, u16 type)
+{
+	struct cgroup *dsct;
+	struct cgroup_subsys_state *d_css;
+
+	lockdep_assert_held(&cgroup_mutex);
+	cgroup_for_each_live_descendant_pre(dsct, d_css, cgrp) {
+		dsct->role = type;
+	}
+}
+
+ssize_t cgroup_role_write(struct kernfs_open_file *of,
+			char *buf, size_t nbytes, loff_t off)
+{
+	struct cgroup *cgrp;
+	ssize_t ret;
+	u16 role, old;
+
+	buf = strstrip(buf);
+	ret = kstrtou16(buf, 0, &role);
+	if (ret)
+		return ret;
+
+	if (role < 0 || role > CGROUPFS_CGROUP_ROLE_POD_GROUPS)
+		return -ERANGE;
+
+	cgrp = cgroup_kn_lock_live(of->kn, false);
+	if (!cgrp)
+		return -ENOENT;
+
+	old = cgrp->role;
+	if (role == old)
+		goto unlock_out;
+
+	cgrp->role = role;
+	cgroup_role_propagate(cgrp, role);
+
+unlock_out:
+	cgroup_kn_unlock(of->kn);
+
+	return ret ?: nbytes;
+}
+
+struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
+		struct task_struct *task, int type, int cgrp_id)
+{
+	struct cgroup_subsys_state *css, *prev_css, *orig_css;
+
+	css = task_get_css(task, cgrp_id);
+	prev_css = orig_css = css;
+
+	while (css && css->cgroup->role == type) {
+		prev_css = css;
+		css = css->parent;
+	}
+
+	if (prev_css != orig_css) {
+		css_get(prev_css);
+		css_put(orig_css);
+	}
+
+	return prev_css;
+}
+
+#else
+struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
+		struct task_struct *task, int type, int cgrp_id)
+{
+	return task_get_css(task, cgrp_id);
+}
+
+#endif
+
 int cgroup_priority_show(struct seq_file *seq, void *v)
 {
 	struct cgroup *cgrp = seq_css(seq)->cgroup;
@@ -6195,6 +6280,9 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 	cgrp->root = root;
 	cgrp->level = level;
 	cgrp->priority = parent->priority;
+#ifdef CONFIG_CGROUPFS
+	cgrp->role = parent->role;
+#endif
 #ifdef CONFIG_RQM
 	cgrp->mbuf = NULL;
 #endif

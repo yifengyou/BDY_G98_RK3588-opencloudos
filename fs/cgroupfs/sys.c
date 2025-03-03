@@ -6,9 +6,6 @@
 #include "../internal.h"
 #include "cgroupfs.h"
 
-extern int cpu_get_max_cpus(struct task_struct *p);
-extern int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once);
-
 static int __attribute__((unused)) cgroupfs_dop_revalidate(
 			struct dentry *dentry, unsigned int flags)
 {
@@ -20,15 +17,18 @@ static int __attribute__((unused)) cgroupfs_dop_revalidate(
 	return 1;
 }
 
-int cgroupfs_cpu_dir_filter(int cpu, int *max_cpu, int *counted_cpu, int once)
+/* return 1 if not allowed, otherwise 0 is returned */
+int cgroupfs_cpu_dir_filter(int cpu, int *max_cpu, int *counted_cpu)
 {
-	if (!once && *counted_cpu == -1) {
-		*max_cpu = cpu_get_max_cpus(current);
+	if (*counted_cpu == -1) {
+		*max_cpu = calc_quota_cpuset_cpus();
 		*counted_cpu = 0;
 	}
-	if (!once && *counted_cpu >= *max_cpu)
+
+	if (*counted_cpu >= *max_cpu)
 		return 1;
-	if (!cpuset_cgroups_cpu_allowed(current, cpu, once))
+
+	if (!cpuset_cgroups_cpu_allowed(current, cpu, 1))
 		return 1;
 	*counted_cpu += 1;
 	return 0;

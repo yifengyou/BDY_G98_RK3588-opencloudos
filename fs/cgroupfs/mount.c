@@ -70,7 +70,7 @@ static int cfs_name_match(const char *name, cgroupfs_entry_t *en, unsigned int l
 	return memcmp(name, en->name, len);
 }
 
-static cgroupfs_entry_t *cpu_subdir_find(cgroupfs_entry_t *dir,
+static cgroupfs_entry_t *cfs_subdir_find(cgroupfs_entry_t *dir,
 					const char *name,
 					unsigned int len)
 {
@@ -90,7 +90,7 @@ static cgroupfs_entry_t *cpu_subdir_find(cgroupfs_entry_t *dir,
 	return NULL;
 }
 
-static bool cpu_subdir_insert(cgroupfs_entry_t *dir,
+static bool cfs_subdir_insert(cgroupfs_entry_t *dir,
 				cgroupfs_entry_t *en)
 {
 	struct rb_root *root = &dir->subdir;
@@ -177,10 +177,9 @@ struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, uns
 	int cpu;
 	cgroupfs_entry_t *sub, *parent = dir->i_private;
 	struct inode *inode = NULL;
-	int counted_cpu = -1, max_cpu = INT_MAX;
 
 	read_lock(&cgroupfs_subdir_lock);
-	sub = cpu_subdir_find(parent, dentry->d_name.name, dentry->d_name.len);
+	sub = cfs_subdir_find(parent, dentry->d_name.name, dentry->d_name.len);
 	if (!sub) {
 		read_unlock(&cgroupfs_subdir_lock);
 		return ERR_PTR(-ENOENT);
@@ -191,7 +190,7 @@ struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, uns
 	if (parent->cgroupfs_type & CGROUPFS_TYPE_CPUDIR &&
 	    sub->cgroupfs_type & CGROUPFS_TYPE_CPUDIR) {
 		cpu = sub->cpu;
-		if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu, 1))
+		if (!cpuset_cgroups_cpu_allowed(current, cpu, 0))
 			goto out;
 	}
 	inode = cgroupfs_get_inode(sub);
@@ -247,7 +246,7 @@ int cgroupfs_readdir(struct file *file, struct dir_context *ctx)
 		read_unlock(&cgroupfs_subdir_lock);
 		if (filter_cpu && en->cgroupfs_type & CGROUPFS_TYPE_CPUDIR) {
 			cpu = en->cpu;
-			if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu, 0)) {
+			if (cgroupfs_cpu_dir_filter(cpu, &max_cpu, &counted_cpu)) {
 				skip = 1;
 			}
 		}
@@ -271,10 +270,6 @@ static const struct file_operations cgroupfs_dir_operations = {
 	.llseek			= generic_file_llseek,
 	.read			= generic_read_dir,
 	.iterate_shared		= cgroupfs_readdir,
-};
-
-static const struct dentry_operations cgroupfs_dentry_simple_ops = {
-	.d_delete       	= always_delete_dentry,
 };
 
 struct inode *cgroupfs_get_inode(cgroupfs_entry_t *en)
@@ -318,8 +313,10 @@ static inline cgroupfs_entry_t *cgroupfs_new_entry(struct super_block *sb,
 		cgroupfs_set_sys_dops(p);
 	if (S_ISREG(mode) && proc_type <= CGROUPFS_TYPE_VMSTAT)
 		cgroupfs_set_proc_fops(p);
+	if (S_ISREG(mode) && proc_type == CGROUPFS_TYPE_CPU_QUOTA)
+		cgroupfs_set_cgroup_fops(p);
 	if (parent)
-		cpu_subdir_insert(parent, p);
+		cfs_subdir_insert(parent, p);
 	return p;
 }
 
@@ -339,7 +336,6 @@ static bool cgroupfs_new_cpu_dir(int fs_type, umode_t mode,
 					 CGROUPFS_TYPE_CPU_ONLINE, S_IFREG | 0644);
 		if (!dir)
 			return false;
-		dir->e_dops = &cgroupfs_dentry_simple_ops;
 		return true;
 	}
 
@@ -455,7 +451,7 @@ static int cgroupfs_fill_root(struct super_block *s, unsigned long magic, cgroup
 static int cgroupfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	int err = -ENOMEM;
-	cgroupfs_entry_t *proc, *sys, *entry, *cpu, *root_entry;
+	cgroupfs_entry_t *proc, *sys, *cgroup, *entry, *cpu, *root_entry;
 	umode_t f_mode = S_IFREG | 0644, d_mode = S_IFDIR | 0755;
 
 	root_entry = cgroupfs_new_entry(sb, "/", NULL, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
@@ -472,6 +468,12 @@ static int cgroupfs_fill_super(struct super_block *sb, void *data, int silent)
 	sys = cgroupfs_new_entry(sb, "sys", root_entry, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
 	if (!sys)
 		return err;
+	cgroup = cgroupfs_new_entry(sb, "cgroup", root_entry, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
+	if (!cgroup)
+		return err;
+	cgroupfs_new_entry(sb, "cpu.quota_period_burst_us", cgroup,
+			CGROUPFS_TYPE_CPU_QUOTA, f_mode);
+
 	cgroupfs_new_entry(sb, "meminfo", proc, CGROUPFS_TYPE_MEMINFO, f_mode);
 	cgroupfs_new_entry(sb, "cpuinfo", proc, CGROUPFS_TYPE_CPUINFO, f_mode);
 	cgroupfs_new_entry(sb, "stat", proc, CGROUPFS_TYPE_STAT, f_mode);

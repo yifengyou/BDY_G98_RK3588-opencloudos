@@ -478,6 +478,9 @@ struct cgroup {
 	u16 old_subtree_control;
 	u16 old_subtree_ss_mask;
 	u16 priority;
+#ifdef CONFIG_CGROUPFS
+	u16 role;
+#endif
 
 	/* Private pointers for each registered subsystem */
 	struct cgroup_subsys_state __rcu *subsys[CGROUP_SUBSYS_COUNT];

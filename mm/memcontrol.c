@@ -6125,7 +6125,8 @@ int mem_cgroupfs_meminfo_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct mem_cgroup *memcg;
 
-	css = task_get_css(current, memory_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, memory_cgrp_id);
 	memcg = mem_cgroup_from_css(css);
 	ret = mem_cgroup_meminfo_read_comm(m, v, memcg);
 	css_put(css);
@@ -6221,7 +6222,8 @@ int mem_cgroupfs_vmstat_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct mem_cgroup *memcg;
 
-	css = task_get_css(current, memory_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, memory_cgrp_id);
 	memcg = mem_cgroup_from_css(css);
 	ret = mem_cgroup_vmstat_read_comm(m, v, memcg);
 	css_put(css);
