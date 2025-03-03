@@ -115,8 +115,6 @@ u64 __read_mostly efer_reserved_bits = ~((u64)(EFER_SCE | EFER_LME | EFER_LMA));
 static u64 __read_mostly efer_reserved_bits = ~((u64)EFER_SCE);
 #endif
 
-static u64 __read_mostly cr4_reserved_bits = CR4_RESERVED_BITS;
-
 #define KVM_EXIT_HYPERCALL_VALID_MASK (1 << KVM_HC_MAP_GPA_RANGE)
 
 #define KVM_CAP_PMU_VALID_MASK KVM_PMU_CAP_DISABLE
@@ -1345,18 +1343,6 @@ int kvm_emulate_xsetbv(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(kvm_emulate_xsetbv);
 
-bool __kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
-{
-	if (cr4 & cr4_reserved_bits)
-		return false;
-
-	if (cr4 & vcpu->arch.cr4_guest_rsvd_bits)
-		return false;
-
-	return true;
-}
-EXPORT_SYMBOL_GPL(__kvm_is_valid_cr4);
-
 static bool kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	return __kvm_is_valid_cr4(vcpu, cr4) &&
@@ -1884,7 +1870,7 @@ static int __kvm_set_msr(struct kvm_vcpu *vcpu, u32 index, u64 data,
 	case MSR_KERNEL_GS_BASE:
 	case MSR_CSTAR:
 	case MSR_LSTAR:
-		if (is_noncanonical_address(data, vcpu))
+		if (is_noncanonical_msr_address(data, vcpu))
 			return 1;
 		break;
 	case MSR_IA32_SYSENTER_EIP:
@@ -1901,7 +1887,7 @@ static int __kvm_set_msr(struct kvm_vcpu *vcpu, u32 index, u64 data,
 		 * value, and that something deterministic happens if the guest
 		 * invokes 64-bit SYSENTER.
 		 */
-		data = __canonical_address(data, vcpu_virt_addr_bits(vcpu));
+		data = __canonical_address(data, max_host_virt_addr_bits());
 		break;
 	case MSR_TSC_AUX:
 		if (!kvm_is_supported_user_return_msr(MSR_TSC_AUX))
@@ -4439,6 +4425,20 @@ static inline bool kvm_can_mwait_in_guest(void)
 		boot_cpu_has(X86_FEATURE_ARAT);
 }
 
+static u64 kvm_get_allowed_disable_exits(void)
+{
+	u64 r = KVM_X86_DISABLE_EXITS_PAUSE;
+
+	if (!mitigate_smt_rsb) {
+		r |= KVM_X86_DISABLE_EXITS_HLT |
+			KVM_X86_DISABLE_EXITS_CSTATE;
+
+		if (kvm_can_mwait_in_guest())
+			r |= KVM_X86_DISABLE_EXITS_MWAIT;
+	}
+	return r;
+}
+
 static int kvm_ioctl_get_supported_hv_cpuid(struct kvm_vcpu *vcpu,
 					    struct kvm_cpuid2 __user *cpuid_arg)
 {
@@ -4563,15 +4563,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = KVM_CLOCK_VALID_FLAGS;
 		break;
 	case KVM_CAP_X86_DISABLE_EXITS:
-		r = KVM_X86_DISABLE_EXITS_PAUSE;
-
-		if (!mitigate_smt_rsb) {
-			r |= KVM_X86_DISABLE_EXITS_HLT |
-			     KVM_X86_DISABLE_EXITS_CSTATE;
-
-			if (kvm_can_mwait_in_guest())
-				r |= KVM_X86_DISABLE_EXITS_MWAIT;
-		}
+		r = kvm_get_allowed_disable_exits();
 		break;
 	case KVM_CAP_X86_SMM:
 		if (!IS_ENABLED(CONFIG_KVM_SMM))
@@ -6373,30 +6365,32 @@ split_irqchip_unlock:
 		break;
 	case KVM_CAP_X86_DISABLE_EXITS:
 		r = -EINVAL;
-		if (cap->args[0] & ~KVM_X86_DISABLE_VALID_EXITS)
+		if (cap->args[0] & ~kvm_get_allowed_disable_exits())
 			break;
 
-		if (cap->args[0] & KVM_X86_DISABLE_EXITS_PAUSE)
-			kvm->arch.pause_in_guest = true;
+		mutex_lock(&kvm->lock);
+		if (kvm->created_vcpus)
+			goto disable_exits_unlock;
 
 #define SMT_RSB_MSG "This processor is affected by the Cross-Thread Return Predictions vulnerability. " \
 		    "KVM_CAP_X86_DISABLE_EXITS should only be used with SMT disabled or trusted guests."
 
-		if (!mitigate_smt_rsb) {
-			if (boot_cpu_has_bug(X86_BUG_SMT_RSB) && cpu_smt_possible() &&
-			    (cap->args[0] & ~KVM_X86_DISABLE_EXITS_PAUSE))
-				pr_warn_once(SMT_RSB_MSG);
+		if (!mitigate_smt_rsb && boot_cpu_has_bug(X86_BUG_SMT_RSB) &&
+		    cpu_smt_possible() &&
+		    (cap->args[0] & ~KVM_X86_DISABLE_EXITS_PAUSE))
+			pr_warn_once(SMT_RSB_MSG);
 
-			if ((cap->args[0] & KVM_X86_DISABLE_EXITS_MWAIT) &&
-			    kvm_can_mwait_in_guest())
-				kvm->arch.mwait_in_guest = true;
-			if (cap->args[0] & KVM_X86_DISABLE_EXITS_HLT)
-				kvm->arch.hlt_in_guest = true;
-			if (cap->args[0] & KVM_X86_DISABLE_EXITS_CSTATE)
-				kvm->arch.cstate_in_guest = true;
-		}
-
+		if (cap->args[0] & KVM_X86_DISABLE_EXITS_PAUSE)
+			kvm->arch.pause_in_guest = true;
+		if (cap->args[0] & KVM_X86_DISABLE_EXITS_MWAIT)
+			kvm->arch.mwait_in_guest = true;
+		if (cap->args[0] & KVM_X86_DISABLE_EXITS_HLT)
+			kvm->arch.hlt_in_guest = true;
+		if (cap->args[0] & KVM_X86_DISABLE_EXITS_CSTATE)
+			kvm->arch.cstate_in_guest = true;
 		r = 0;
+disable_exits_unlock:
+		mutex_unlock(&kvm->lock);
 		break;
 	case KVM_CAP_MSR_PLATFORM_INFO:
 		kvm->arch.guest_can_read_msr_platform_info = cap->args[0];
@@ -8408,6 +8402,12 @@ static gva_t emulator_get_untagged_addr(struct x86_emulate_ctxt *ctxt,
 	return static_call(kvm_x86_get_untagged_addr)(emul_to_vcpu(ctxt), addr, flags);
 }
 
+static bool emulator_is_canonical_addr(struct x86_emulate_ctxt *ctxt,
+				       gva_t addr, unsigned int flags)
+{
+	return !is_noncanonical_address(addr, emul_to_vcpu(ctxt), flags);
+}
+
 static const struct x86_emulate_ops emulate_ops = {
 	.vm_bugged           = emulator_vm_bugged,
 	.read_gpr            = emulator_read_gpr,
@@ -8453,6 +8453,7 @@ static const struct x86_emulate_ops emulate_ops = {
 	.triple_fault        = emulator_triple_fault,
 	.set_xcr             = emulator_set_xcr,
 	.get_untagged_addr   = emulator_get_untagged_addr,
+	.is_canonical_addr   = emulator_is_canonical_addr,
 };
 
 static void toggle_interruptibility(struct kvm_vcpu *vcpu, u32 mask)
@@ -9639,10 +9640,6 @@ static int __kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 
 	if (!kvm_cpu_cap_has(X86_FEATURE_XSAVES))
 		kvm_caps.supported_xss = 0;
-
-#define __kvm_cpu_cap_has(UNUSED_, f) kvm_cpu_cap_has(f)
-	cr4_reserved_bits = __cr4_reserved_bits(__kvm_cpu_cap_has, UNUSED_);
-#undef __kvm_cpu_cap_has
 
 	if (kvm_caps.has_tsc_control) {
 		/*
@@ -12136,9 +12133,6 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 		goto free_emulate_ctxt;
 	}
 
-	vcpu->arch.maxphyaddr = cpuid_query_maxphyaddr(vcpu);
-	vcpu->arch.reserved_gpa_bits = kvm_vcpu_reserved_gpa_bits_raw(vcpu);
-
 	vcpu->arch.pat = MSR_IA32_CR_PAT_DEFAULT;
 
 	kvm_async_pf_hash_reset(vcpu);
@@ -12164,6 +12158,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	kvm_xen_init_vcpu(vcpu);
 	kvm_vcpu_mtrr_init(vcpu);
 	vcpu_load(vcpu);
+	kvm_vcpu_after_set_cpuid(vcpu);
 	kvm_set_tsc_khz(vcpu, vcpu->kvm->arch.default_tsc_khz);
 	kvm_vcpu_reset(vcpu, false);
 	kvm_init_mmu(vcpu);
@@ -13544,7 +13539,7 @@ int kvm_handle_invpcid(struct kvm_vcpu *vcpu, unsigned long type, gva_t gva)
 		 * invalidation.
 		 */
 		if ((!pcid_enabled && (operand.pcid != 0)) ||
-		    is_noncanonical_address(operand.gla, vcpu)) {
+		    is_noncanonical_invlpg_address(operand.gla, vcpu)) {
 			kvm_inject_gp(vcpu, 0);
 			return 1;
 		}

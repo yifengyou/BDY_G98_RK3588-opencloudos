@@ -82,15 +82,6 @@ u32 xstate_required_size(u64 xstate_bv, bool compacted)
 	return ret;
 }
 
-#define F feature_bit
-
-/* Scattered Flag - For features that are scattered by cpufeatures.h. */
-#define SF(name)						\
-({								\
-	BUILD_BUG_ON(X86_FEATURE_##name >= MAX_CPU_FEATURES);	\
-	(boot_cpu_has(X86_FEATURE_##name) ? F(name) : 0);	\
-})
-
 /*
  * Magic value used by KVM when querying userspace-provided CPUID entries and
  * doesn't care about the CPIUD index because the index of the function in
@@ -187,12 +178,26 @@ static int kvm_check_cpuid(struct kvm_vcpu *vcpu,
 	return fpu_enable_guest_xfd_features(&vcpu->arch.guest_fpu, xfeatures);
 }
 
+static void __kvm_update_cpuid_runtime(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *entries,
+				       int nent);
+
 /* Check whether the supplied CPUID data is equal to what is already set for the vCPU. */
 static int kvm_cpuid_check_equal(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *e2,
 				 int nent)
 {
 	struct kvm_cpuid_entry2 *orig;
 	int i;
+
+	/*
+	 * Apply runtime CPUID updates to the incoming CPUID entries to avoid
+	 * false positives due mismatches on KVM-owned feature flags.  Note,
+	 * runtime CPUID updates may consume other CPUID-driven vCPU state,
+	 * e.g. KVM or Xen CPUID bases.  Updating runtime state before full
+	 * CPUID processing is functionally correct only because any change in
+	 * CPUID is disallowed, i.e. using stale data is ok because the below
+	 * checks will reject the change.
+	 */
+	__kvm_update_cpuid_runtime(vcpu, e2, nent);
 
 	if (nent != vcpu->arch.cpuid_nent)
 		return -EINVAL;
@@ -352,7 +357,7 @@ static bool kvm_cpuid_has_hyperv(struct kvm_cpuid_entry2 *entries, int nent)
 	return entry && entry->eax == HYPERV_CPUID_SIGNATURE_EAX;
 }
 
-static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
+void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 	struct kvm_cpuid_entry2 *best;
@@ -361,6 +366,8 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	BUILD_BUG_ON(KVM_NR_GOVERNED_FEATURES > KVM_MAX_NR_GOVERNED_FEATURES);
 	bitmap_zero(vcpu->arch.governed_features.enabled,
 		    KVM_MAX_NR_GOVERNED_FEATURES);
+
+	kvm_update_cpuid_runtime(vcpu);
 
 	/*
 	 * If TDP is enabled, let the guest use GBPAGES if they're supported in
@@ -398,8 +405,11 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	vcpu->arch.reserved_gpa_bits = kvm_vcpu_reserved_gpa_bits_raw(vcpu);
 
 	kvm_pmu_refresh(vcpu);
-	vcpu->arch.cr4_guest_rsvd_bits =
-	    __cr4_reserved_bits(guest_cpuid_has, vcpu);
+
+#define __kvm_cpu_cap_has(UNUSED_, f) kvm_cpu_cap_has(f)
+	vcpu->arch.cr4_guest_rsvd_bits = __cr4_reserved_bits(__kvm_cpu_cap_has, UNUSED_) |
+					 __cr4_reserved_bits(guest_cpuid_has, vcpu);
+#undef __kvm_cpu_cap_has
 
 	kvm_hv_set_cpuid(vcpu, kvm_cpuid_has_hyperv(vcpu->arch.cpuid_entries,
 						    vcpu->arch.cpuid_nent));
@@ -442,8 +452,6 @@ static int kvm_set_cpuid(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *e2,
                         int nent)
 {
 	int r;
-
-	__kvm_update_cpuid_runtime(vcpu, e2, nent);
 
 	/*
 	 * KVM does not correctly handle changing guest CPUID after KVM_RUN, as
@@ -605,6 +613,15 @@ static __always_inline void kvm_cpu_cap_mask(enum cpuid_leafs leaf, u32 mask)
 	__kvm_cpu_cap_mask(leaf);
 }
 
+#define F feature_bit
+
+/* Scattered Flag - For features that are scattered by cpufeatures.h. */
+#define SF(name)						\
+({								\
+	BUILD_BUG_ON(X86_FEATURE_##name >= MAX_CPU_FEATURES);	\
+	(boot_cpu_has(X86_FEATURE_##name) ? F(name) : 0);	\
+})
+
 void kvm_set_cpu_caps(void)
 {
 #ifdef CONFIG_X86_64
@@ -669,7 +686,7 @@ void kvm_set_cpu_caps(void)
 		F(SGX_LC) | F(BUS_LOCK_DETECT)
 	);
 	/* Set LA57 based on hardware capability. */
-	if (cpuid_ecx(7) & F(LA57))
+	if (cpuid_ecx(7) & feature_bit(LA57))
 		kvm_cpu_cap_set(X86_FEATURE_LA57);
 
 	/*
@@ -843,6 +860,9 @@ void kvm_set_cpu_caps(void)
 }
 EXPORT_SYMBOL_GPL(kvm_set_cpu_caps);
 
+#undef F
+#undef SF
+
 struct kvm_cpuid_array {
 	struct kvm_cpuid_entry2 *entries;
 	int maxnent;
@@ -918,14 +938,14 @@ static int __do_cpuid_func_emulated(struct kvm_cpuid_array *array, u32 func)
 		++array->nent;
 		break;
 	case 1:
-		entry->ecx = F(MOVBE);
+		entry->ecx = feature_bit(MOVBE);
 		++array->nent;
 		break;
 	case 7:
 		entry->flags |= KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
 		entry->eax = 0;
 		if (kvm_cpu_cap_has(X86_FEATURE_RDTSCP))
-			entry->ecx = F(RDPID);
+			entry->ecx = feature_bit(RDPID);
 		++array->nent;
 		break;
 	default:
@@ -1075,7 +1095,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 			goto out;
 
 		cpuid_entry_override(entry, CPUID_D_1_EAX);
-		if (entry->eax & (F(XSAVES)|F(XSAVEC)))
+		if (entry->eax & (feature_bit(XSAVES) | feature_bit(XSAVEC)))
 			entry->ebx = xstate_required_size(permitted_xcr0 | permitted_xss,
 							  true);
 		else {
@@ -1581,10 +1601,10 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 			u64 data;
 		        if (!__kvm_get_msr(vcpu, MSR_IA32_TSX_CTRL, &data, true) &&
 			    (data & TSX_CTRL_CPUID_CLEAR))
-				*ebx &= ~(F(RTM) | F(HLE));
+				*ebx &= ~(feature_bit(RTM) | feature_bit(HLE));
 		} else if (function == 0x80000007) {
 			if (kvm_hv_invtsc_suppressed(vcpu))
-				*edx &= ~SF(CONSTANT_TSC);
+				*edx &= ~feature_bit(CONSTANT_TSC);
 		}
 	} else {
 		*eax = *ebx = *ecx = *edx = 0;
