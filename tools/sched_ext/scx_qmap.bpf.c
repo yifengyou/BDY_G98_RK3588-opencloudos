@@ -303,7 +303,7 @@ static void update_core_sched_head_seq(struct task_struct *p)
  * non-rq-lock holding BPF programs. As demonstration, this function is called
  * from qmap_dispatch() and monitor_timerfn().
  */
-static bool dispatch_highpri(bool from_timer)
+static __always_inline bool dispatch_highpri(bool from_timer)
 {
 	struct task_struct *p;
 	s32 this_cpu = bpf_get_smp_processor_id();
