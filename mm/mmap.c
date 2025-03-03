@@ -2887,6 +2887,14 @@ cannot_expand:
 		i_mmap_unlock_write(vma->vm_file->f_mapping);
 	}
 
+#ifdef CONFIG_HUGETEXT
+	/*
+	 * Mark VM_HUGEPAGE to make sure do_sync_mmap_readahead()
+	 * can allocate huge page directly.
+	 */
+	if (hugetext_vma_enabled(vma, vm_flags))
+		vm_flags_set(vma, VM_HUGEPAGE);
+#endif
 	/*
 	 * vma_merge() calls khugepaged_enter_vma() either, the below
 	 * call covers the non-merge case.
