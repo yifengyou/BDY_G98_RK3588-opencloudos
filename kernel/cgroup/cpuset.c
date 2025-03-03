@@ -3082,7 +3082,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 
 	is_top_cgrp = !cs->css.parent ? true : false;
 
-	for_each_cpu(i, cs->cpus_allowed) {
+	for_each_cpu(i, cs->effective_cpus) {
 		struct kernel_cpustat kcs;
 
 		if (++k > max_cpu)
@@ -3124,7 +3124,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 
 	j = 0;
 	k = 0;
-	for_each_cpu(i, cs->cpus_allowed) {
+	for_each_cpu(i, cs->effective_cpus) {
 		struct kernel_cpustat kcs;
 
 		/* Copy values here to work around gcc-2.95.3, gcc-2.96 */
@@ -3163,7 +3163,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	k = 0;
 	for_each_irq_nr(j) {
 		sum = 0;
-		for_each_cpu(i, cs->cpus_allowed) {
+		for_each_cpu(i, cs->effective_cpus) {
 			if (++k > max_cpu)
 				break;
 			sum += kstat_irqs_cpu(j, i);
@@ -3177,7 +3177,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	n_running = 0;
 	n_blocked = 0;
 	k = 0;
-	for_each_cpu(i, cs->cpus_allowed) {
+	for_each_cpu(i, cs->effective_cpus) {
 		if (++k > max_cpu)
 			break;
 		n_ctx_switch += nr_context_switches_cpu(i);
@@ -3235,7 +3235,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	 */
 	css = cgroupfs_get_parent_role_cgroup(current,
 			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
-	for_each_cpu(i, cs->cpus_allowed) {
+	for_each_cpu(i, cs->effective_cpus) {
 		struct kernel_cpustat kcs;
 		kcpustat_cpu_fetch(&kcs, i);
 
@@ -3306,7 +3306,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	n_running = 0;
 	n_blocked = 0;
 	k = 0;
-	for_each_cpu(i, cs->cpus_allowed) {
+	for_each_cpu(i, cs->effective_cpus) {
 		if (++k > max_cpu)
 			break;
 		n_ctx_switch += nr_context_switches_cpu(i);
