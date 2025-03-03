@@ -1,3 +1,113 @@
+* Mon Mar  3 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-26
+- Merge linux-6.6.80 into TK5 release branch
+- Linux 6.6.80
+- Merge branch 'haisu/release-fix-cgroupfs' into 'release' (merge request !350)
+- rue/cgroupfs: use effective_cpus to replace cpus_allowed
+- rue/cgroupfs: show 2 cores when quota=1 and cpuset>1
+- rue/cgroupfs: align the CPU quota_aware and cpuset show
+- rue/cgroupfs: simplify the cgroupfs_cpu_dir_filter function
+- rue/cgroupfs: rename cpu_subdir_xxx to cfs_subdir_xxx
+- rue/cgroupfs: remove the unnecessary cgroupfs_dentry_simple_ops
+- rue/cgroupfs: cpu/online show the same result of cpuset instead of number
+- fs: cgroup: fix compile errors on allyesconfig
+- cgroupfs: get data from ancestor cgroup
+- cgroupfs: add role in cgroup
+- Merge branch 'linuszeng/local_counter' into 'release' (merge request !352)
+- mm/memcontrol: add fields to memory.stat of cgroupv2
+- Merge branch 'likexu/kvm/fixes' into 'release' (merge request !344)
+- KVM: x86: Drop the now unused KVM_X86_DISABLE_VALID_EXITS
+- KVM: x86: Reject disabling of MWAIT/HLT interception when not allowed
+- KVM: x86: Disallow KVM_CAP_X86_DISABLE_EXITS after vCPU creation
+- KVM: x86: Drop now-redundant MAXPHYADDR and GPA rsvd bits from vCPU creation
+- KVM: x86/pmu: Drop now-redundant refresh() during init()
+- KVM: x86: Move __kvm_is_valid_cr4() definition to x86.h
+- KVM: x86: Account for KVM-reserved CR4 bits when passing through CR4 on VMX
+- KVM: x86: Explicitly do runtime CPUID updates "after" initial setup
+- KVM: x86: Do all post-set CPUID processing during vCPU creation
+- KVM: x86: Limit use of F() and SF() to kvm_cpu_cap_{mask,init_kvm_defined}()
+- KVM: x86: Use feature_bit() to clear CONSTANT_TSC when emulating CPUID
+- KVM: nVMX: fix canonical check of vmcs12 HOST_RIP
+- KVM: x86: model canonical checks more precisely
+- KVM: x86: Add X86EMUL_F_MSR and X86EMUL_F_DT_LOAD to aid canonical checks
+- KVM: x86: Route non-canonical checks in emulator through emulate_ops
+- KVM: x86: drop x86.h include from cpuid.h
+- Merge branch 'frankjpliu/release-mr-ock' into 'release' (merge request !353)
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !320 [linux-6.6/devel][[bugfix] LoongArch: Correct Cache Sharing, Update Flush Policy, HDA and Bluetooth Fixes
+- blutetooth/btusb: delay 1ms while suspending
+- LoongArch: Correct the cacheinfo sharing information
+- hda/pci: Add AZX_DCAPS_NO_TCSEL flag for Loongson HDA devices
+- LoongArch: Update the flush cache policy
+- !319 [linux-6.6/devel] LoongArch: Update Loongson-3 default config file
+- LoongArch: Update Loongson-3 default config file
+- !315 Backport upstream auto-tune per-CPU pageset size patchset
+- mm and cache_info: remove unnecessary CPU cache info update
+- mm, pcp: reduce detecting time of consecutive high order page freeing
+- mm, pcp: decrease PCP high if free pages < high watermark
+- mm: tune PCP high automatically
+- mm: add framework for PCP high auto-tuning
+- mm, page_alloc: scale the number of pages that are batch allocated
+- mm, pcp: reduce lock contention for draining high-order pages
+- cacheinfo: calculate size of per-CPU data cache slice
+- mm, pcp: avoid to drain PCP when process exit
+- tkernel: support kill protect feature
+- Merge branch 'costinchen/release' into 'release' (merge request !345)
+- dim: fix memory allocation size in store_task_pids()
+- integrity: Add a boot parameter to explicitly enable integrity subsystems
+- dist,copy-drivers: exit 1 if download driver fail
+- Merge linux 6.6.79 into TK5 release branch
+- Linux 6.6.79
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !314 [linux-6.6/devel]  Some eevdf scheduling enhancements from upstream
+- sched/eevdf: O(1) fastpath for task selection
+- sched/eevdf: Sort the rbtree by virtual deadline
+- !313 Add support for Hygon model 8h processor Merge pull request !313 from fuhao/linux-6.6-hygon-model8h
+- EDAC/amd64: Add support for Hygon family 18h model 8h
+- x86/amd_nb: Add support for Hygon family 18h model 8h
+- !311 [linux-6.6/devel]montage: update Mont-TSSE driver update Montage Mont-TSSE driver from 1.0.0 to 1.1.2 in 6.6.
+- montage: update Mont-TSSE driver
+- dist: check mlnx driver sha256sum before copy it
+- Merge branch linux-6.6.78 into TK5 release branch
+- Linux 6.6.78
+- Merge linux 6.6.77 into TK5 release branch
+- Linux 6.6.77
+- !310 Some fixes and optimization for Hygon model 7h10h processors
+- perf/x86/amd/core: Fix performance monitor for Hygon family 18h processor
+- EDAC/amd64: Get instance_id for Hygon family 18h model 10h
+- EDAC/amd64: Get correct memory type for Hygon family 18h model 10h
+- EDAC/amd64: Check if umc channel is enabled for Hygon family 18h model 10h
+- EDAC/amd64: Adjust address translation for Hygon family 18h model 10h
+- x86/amd_nb: Add helper function to identify Hygon family 18h model 10h
+- iommu/hygon: Add support for Hygon family 18h model 10h IOAPIC
+- EDAC/mce_amd: Add LS and IF mce types for Hygon family 18h model 7h
+- !309 Some fixes and optimization for Hygon model 4h~6h processors
+- EDAC/amd64: Get intlv_num_dies from F0x60 for Hygon family 18h model 6h
+- EDAC/amd64: Fix the calculation of instance_id for Hygon family 18h model 6h
+- EDAC/amd64: Use u16 for some umc variables for Hygon family 18h model 4h
+- EDAC/amd64: Fix the calculation of cs_id for Hygon family 18h model 4h
+- x86/amd_nb: Fix northbridge init warning in guest for Hygon family 18h model 4h
+- KVM: x86/svm: Add set_guest_pat_wb parameter for non-passthrough application scenarios
+- pinctrl: Add device HID for Hygon GPIO controller
+- !307 [linux-6.6/devel] Intel: backport KVM Fix for Clearing SGX EDECCSSA to 6.6
+- KVM: VMX: Also clear SGX EDECCSSA in KVM CPU caps when SGX is disabled
+- Merge branch 'alexyonghe/reparent_memcg' into 'release' (merge request !338)
+- selftests: cgroup: Add memory.reparent_file test case
+- mm: Drop memory cgroup css reference when reparent page cache
+- Merge branch 'haisu/rue-compile-loongarch-fix' into 'release' (merge request !335)
+- rue/io: enable CONFIG_BLK_DEV_THROTTLING_CGROUP_V1 in loongarch
+- Merge linux 6.6.76 into TK5 release branch
+- Linux 6.6.76
+- Merge linux 6.6.75 into TK5 release branch
+- Linux 6.6.75
+- Merge linux 6.6.74 into TK5 release branch
+- Linux 6.6.74
+- Merge linux 6.6.73 into TK5 release
+- Linux 6.6.73
+- Merge linux 6.6.72 into TK5 release
+- Linux 6.6.72
+- Merge linux 6.6.71 into TK5 release
+- Linux 6.6.71
+
 * Sun Jan 19 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.70-24
 - emm: update emm to v0.1.7.7
 
