@@ -19,6 +19,7 @@ enum scx_public_consts {
 
 	SCX_SLICE_DFL		= 20 * 1000000,	/* 20ms */
 	SCX_SLICE_INF		= U64_MAX,	/* infinite, implies nohz */
+	SCX_BW_PERIOD_DFL	= 100000000,    /* 0.1s, units: nanoseconds */
 };
 
 /*
@@ -197,6 +198,8 @@ struct scx_exit_task_args {
 struct scx_cgroup_init_args {
 	/* the weight of the cgroup [1..10000] */
 	u32                     weight;
+	u64                     period;
+	u64                     quota;
 };
 
 enum scx_cpu_preempt_reason {
@@ -638,6 +641,16 @@ struct sched_ext_ops {
 	 * Update @tg's weight to @weight.
 	 */
 	void (*cgroup_set_weight)(struct cgroup *cgrp, u32 weight);
+
+	/**
+	 * cgroup_set_bandwidth - A cgroup's bandwidth setting is being changed
+	 * @cgrp: cgroup whose bandwidth setting is being updated
+	 * @period: new period
+	 * @quota: new quota
+	 *
+	 * Update @tg's period to @period, and @tg's quota to @quota
+	 */
+	s32 (*cgroup_set_bandwidth)(struct cgroup *cgrp, u64 period, u64 quota);
 #endif /* CONFIG_EXT_GROUP_SCHED */
 
 	/*

@@ -435,6 +435,8 @@ struct task_group {
 	u32			scx_flags;	/* SCX_TG_* */
 	u32			scx_weight;
 	u32			scx;
+	ktime_t                 scx_bw_period;
+	u64                     scx_bw_quota;
 #endif
 
 	struct rcu_head		rcu;

@@ -3631,7 +3631,10 @@ int scx_tg_online(struct task_group *tg)
 	if (scx_cgroup_enabled) {
 		if (SCX_HAS_OP(cgroup_init)) {
 			struct scx_cgroup_init_args args =
-				{ .weight = tg->scx_weight };
+				{ .weight = tg->scx_weight,
+				  .period = ktime_to_ns(tg->scx_bw_period),
+				  .quota  = tg->scx_bw_quota,
+				};
 
 			ret = SCX_CALL_OP_RET(SCX_KF_UNLOCKED, cgroup_init,
 					      tg->css.cgroup, &args);
@@ -3779,6 +3782,30 @@ void scx_group_set_idle(struct task_group *tg, bool idle)
 	percpu_down_read(&scx_cgroup_rwsem);
 	scx_cgroup_warn_missing_idle(tg);
 	percpu_up_read(&scx_cgroup_rwsem);
+}
+
+int scx_group_set_bandwidth(struct task_group *tg, u64 period, u64 quota)
+{
+	int ret = 0;
+
+	percpu_down_read(&scx_cgroup_rwsem);
+
+	if (scx_cgroup_enabled && (tg->scx_bw_period != ns_to_ktime(period)
+				|| tg->scx_bw_quota != quota)) {
+
+		if (SCX_HAS_OP(cgroup_set_bandwidth)) {
+			ret = SCX_CALL_OP_RET(SCX_KF_UNLOCKED, cgroup_set_bandwidth,
+					tg_cgrp(tg), period, quota);
+			if (ret)
+				scx_ops_error("ops.cgroup_set_bandwidth() failed (%d)", ret);
+		}
+
+		tg->scx_bw_period = ns_to_ktime(period);
+		tg->scx_bw_quota  = quota;
+	}
+
+	percpu_up_read(&scx_cgroup_rwsem);
+	return ret;
 }
 
 static void scx_cgroup_lock(void)
@@ -4027,7 +4054,11 @@ static int scx_cgroup_init(void)
 	rcu_read_lock();
 	css_for_each_descendant_pre(css, &root_task_group.css) {
 		struct task_group *tg = css_tg(css);
-		struct scx_cgroup_init_args args = { .weight = tg->scx_weight };
+		struct scx_cgroup_init_args args = {
+			.weight = tg->scx_weight,
+			.period = ktime_to_ns(tg->scx_bw_period),
+			.quota  = tg->scx_bw_quota,
+		};
 
 		scx_cgroup_warn_missing_weight(tg);
 		scx_cgroup_warn_missing_idle(tg);
@@ -5461,6 +5492,7 @@ static s32 sched_ext_ops__cgroup_prep_move(struct task_struct *p, struct cgroup 
 static void sched_ext_ops__cgroup_move(struct task_struct *p, struct cgroup *from, struct cgroup *to) {}
 static void sched_ext_ops__cgroup_cancel_move(struct task_struct *p, struct cgroup *from, struct cgroup *to) {}
 static void sched_ext_ops__cgroup_set_weight(struct cgroup *cgrp, u32 weight) {}
+static s32 sched_ext_ops__cgroup_set_bandwidth(struct cgroup *cgrp, u64 period, u64 quota) { return -EINVAL; }
 #endif
 static void sched_ext_ops__cpu_online(s32 cpu) {}
 static void sched_ext_ops__cpu_offline(s32 cpu) {}
@@ -5501,6 +5533,7 @@ struct sched_ext_ops __bpf_ops_sched_ext_ops = {
 	.cgroup_move		= sched_ext_ops__cgroup_move,
 	.cgroup_cancel_move	= sched_ext_ops__cgroup_cancel_move,
 	.cgroup_set_weight	= sched_ext_ops__cgroup_set_weight,
+	.cgroup_set_bandwidth   = sched_ext_ops__cgroup_set_bandwidth,
 #endif
 	.cpu_online		= sched_ext_ops__cpu_online,
 	.cpu_offline		= sched_ext_ops__cpu_offline,

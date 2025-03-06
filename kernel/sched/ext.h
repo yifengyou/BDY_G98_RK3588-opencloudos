@@ -79,6 +79,7 @@ void scx_cgroup_finish_attach(void);
 void scx_cgroup_cancel_attach(struct cgroup_taskset *tset);
 void scx_group_set_weight(struct task_group *tg, unsigned long cgrp_weight);
 void scx_group_set_idle(struct task_group *tg, bool idle);
+int scx_group_set_bandwidth(struct task_group *tg, u64 period, u64 quota);
 int scx_cpu_cgroup_switch(struct task_group *tg, int val);
 #else	/* CONFIG_EXT_GROUP_SCHED */
 static inline int scx_tg_online(struct task_group *tg) { return 0; }
@@ -90,6 +91,7 @@ static inline void scx_cgroup_finish_attach(void) {}
 static inline void scx_cgroup_cancel_attach(struct cgroup_taskset *tset) {}
 static inline void scx_group_set_weight(struct task_group *tg, unsigned long cgrp_weight) {}
 static inline void scx_group_set_idle(struct task_group *tg, bool idle) {}
+static inline int scx_group_set_bandwidth(struct task_group *tg, u64 period, u64 quota) { return 0; }
 static inline int scx_cpu_cgroup_switch(struct task_group *tg, int val) { return 0; }
 #endif	/* CONFIG_EXT_GROUP_SCHED */
 #endif	/* CONFIG_CGROUP_SCHED */

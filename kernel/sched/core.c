@@ -10101,6 +10101,8 @@ void __init sched_init(void)
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 #ifdef CONFIG_EXT_GROUP_SCHED
 		root_task_group.scx_weight = CGROUP_WEIGHT_DFL;
+		root_task_group.scx_bw_period = ns_to_ktime(SCX_BW_PERIOD_DFL);
+		root_task_group.scx_bw_quota = RUNTIME_INF;
 #endif /* CONFIG_EXT_GROUP_SCHED */
 #ifdef CONFIG_RT_GROUP_SCHED
 		root_task_group.rt_se = (struct sched_rt_entity **)ptr;
@@ -10560,6 +10562,10 @@ struct task_group *sched_create_group(struct task_group *parent)
 		goto err;
 
 	scx_group_set_weight(tg, CGROUP_WEIGHT_DFL);
+#ifdef CONFIG_EXT_GROUP_SCHED
+	tg->scx_bw_period = ns_to_ktime(SCX_BW_PERIOD_DFL);
+	tg->scx_bw_quota  = RUNTIME_INF;
+#endif
 	alloc_uclamp_sched_group(tg, parent);
 
 	return tg;
@@ -11738,6 +11744,53 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 }
 #endif
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+
+static long tg_get_scx_period(struct task_group *tg)
+{
+	u64 scx_period_us;
+
+	scx_period_us = ktime_to_ns(tg->scx_bw_period);
+	do_div(scx_period_us, NSEC_PER_USEC);
+	return scx_period_us;
+}
+
+static long tg_get_scx_quota(struct task_group *tg)
+{
+	u64 quota_us;
+
+	if (tg->scx_bw_quota == RUNTIME_INF)
+		return -1;
+
+	quota_us = tg->scx_bw_quota;
+	do_div(quota_us, NSEC_PER_USEC);
+
+	return quota_us;
+}
+
+static int cpu_scx_max_show(struct seq_file *sf, void *v)
+{
+	struct task_group *tg = css_tg(seq_css(sf));
+
+	cpu_period_quota_print(sf, tg_get_scx_period(tg), tg_get_scx_quota(tg));
+	return 0;
+}
+
+static ssize_t cpu_scx_max_write(struct kernfs_open_file *of,
+			     char *buf, size_t nbytes, loff_t off)
+{
+	struct task_group *tg = css_tg(of_css(of));
+	u64 period = tg_get_scx_period(tg);
+	u64 quota;
+	int ret;
+
+	ret = cpu_period_quota_parse(buf, &period, &quota);
+	if (!ret)
+		ret = scx_group_set_bandwidth(tg, period, quota);
+	return ret ?: nbytes;
+}
+#endif
+
 static struct cftype cpu_files[] = {
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
 	{
@@ -11799,6 +11852,12 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_scx_read_u64,
 		.write_u64 = cpu_scx_write_u64,
+	},
+	{
+		.name = "max.scx",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cpu_scx_max_show,
+		.write = cpu_scx_max_write,
 	},
 #endif
 	{ }	/* terminate */
