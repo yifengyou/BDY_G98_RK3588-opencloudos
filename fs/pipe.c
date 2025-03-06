@@ -621,7 +621,7 @@ fifo_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 static long pipe_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct pipe_inode_info *pipe = filp->private_data;
-	unsigned int count, head, tail, mask;
+	unsigned int count, head, tail;
 
 	switch (cmd) {
 	case FIONREAD:
@@ -629,10 +629,9 @@ static long pipe_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		count = 0;
 		head = pipe->head;
 		tail = pipe->tail;
-		mask = pipe->ring_size - 1;
 
-		while (tail != head) {
-			count += pipe->bufs[tail & mask].len;
+		while (!pipe_empty(head, tail)) {
+			count += pipe_buf(pipe, tail)->len;
 			tail++;
 		}
 		mutex_unlock(&pipe->mutex);
