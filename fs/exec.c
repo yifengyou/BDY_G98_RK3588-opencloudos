@@ -83,6 +83,7 @@ int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
+unsigned int sysctl_max_arg_strlen = ORIG_MAX_ARG_STRLEN;
 
 void __register_binfmt(struct linux_binfmt * fmt, int insert)
 {

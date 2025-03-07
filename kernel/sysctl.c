@@ -189,6 +189,9 @@ unsigned long fork_info_flag;
 unsigned long exit_info_flag;
 #endif
 
+static unsigned int min_max_arg_strlen = ORIG_MAX_ARG_STRLEN;
+static unsigned int max_max_arg_strlen = ORIG_MAX_ARG_STRLEN * 8;
+
 #endif /* CONFIG_SYSCTL */
 
 /*
@@ -2718,6 +2721,15 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+	{
+		.procname	= "max_arg_strlen",
+		.data		= &sysctl_max_arg_strlen,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &min_max_arg_strlen,
+		.extra2		= &max_max_arg_strlen,
+	},
 	{ }
 };
 
