@@ -16,11 +16,11 @@
 #define CGROUPFS_TYPE_AUTO_MOUNT	(1 << 23)
 
 extern int cpu_get_max_cpus(struct task_struct *p);
+extern int cpuset_cgroupfs_get_cpu_count(void);
 
 #ifdef CONFIG_X86
 extern int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once);
 extern int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v);
-extern int cpuset_cgroupfs_get_cpu_count(void);
 extern int calc_quota_cpuset_cpus(void);
 #else
 static inline int cpuset_cgroups_cpu_allowed(struct task_struct *task,
@@ -32,11 +32,6 @@ static inline int cpuset_cgroups_cpu_allowed(struct task_struct *task,
 static inline int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
 {
 	return 0;
-}
-
-static inline int cpuset_cgroupfs_get_cpu_count(void)
-{
-	return cpu_get_max_cpus(current);
 }
 
 static inline int calc_quota_cpuset_cpus(void)

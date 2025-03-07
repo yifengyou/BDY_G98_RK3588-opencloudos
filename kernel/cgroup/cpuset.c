@@ -3213,15 +3213,19 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 {
 	typedef struct usage_info {
 		u64 sys, usr, idle;
+		int cpuid;
 	} u_info;
 
 	u_info *res;
+	bool is_top_cgrp;
 	struct timespec64 boottime;
 	struct cgroup_subsys_state *css;
 	u64 sys, usr, cpu_total, cpu_idle, acct_total, total_sys, total_usr, total_idle;
 	u64 n_ctx_switch, n_process, n_running, n_blocked;
 	int i, k = 0, num_cpu = nr_cpu_ids + 1;;
 	total_sys = 0, total_usr = 0, total_idle = 0;
+
+	is_top_cgrp = !cs->css.parent ? true : false;
 
 	res = kmalloc(sizeof(u_info) * num_cpu, GFP_KERNEL);
 	if (!res)
@@ -3262,6 +3266,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 			res[k].sys = sys;
 			res[k].usr = usr;
 			res[k].idle = cpu_idle;
+			res[k].cpuid = i;
 		}
 	}
 
@@ -3279,11 +3284,18 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	res[0].sys = total_sys;
 	res[0].usr = total_usr;
 	res[0].idle = total_idle;
+	/* Should not use/show res[0].cpuid */
+	res[0].cpuid = -1;
+
 	for (i = 0; i <= k && i <= max_cpu; i++) {
 		if (!i)
 			seq_printf(m, "cpu ");
-		else
-			seq_printf(m, "cpu%d", i - 1);
+		else {
+			if (is_top_cgrp || cpuset_cpuinfo_show_realinfo)
+				seq_printf(m, "cpu%d", res[i].cpuid);
+			else
+				seq_printf(m, "cpu%d", i - 1);
+		}
 		seq_put_decimal_ull(m, " ", nsec_to_clock_t(res[i].usr));
 		seq_put_decimal_ull(m, " ", 0);
 		seq_put_decimal_ull(m, " ", nsec_to_clock_t(res[i].sys));
@@ -3355,10 +3367,41 @@ int cpuset_cgroupfs_stat_show(struct seq_file *m, void *v)
 }
 #endif
 
-static int cpuset_cgroup_stat_show(struct seq_file *sf, void *v)
+int cpuset_cgroupfs_get_cpu_count(void)
 {
-	struct cpuset *cs = css_cs(seq_css(sf));
-	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX);
+	int ret;
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
+	cs = css_cs(css);
+
+	ret = cpumask_weight(cs->effective_cpus);
+	css_put(css);
+
+	return ret;
+}
+
+int calc_quota_cpuset_cpus(void)
+{
+	int online_cpus, cpu_quota, cpu_set;
+
+	online_cpus = min_t(int, nr_cpu_ids, (int)num_online_cpus());
+	cpu_quota = cpu_get_max_cpus(current);
+	cpu_set = cpuset_cgroupfs_get_cpu_count();
+
+	if (cpu_quota >= online_cpus || cpu_set <= cpu_quota)
+		return cpu_set;
+	else if (cpu_quota == 1)
+		/* cpu_quota == 1 and cpu_set > 1(cpu_quota):
+		 *   Fallback to 2 cores in case quota <= 1 core when
+		 *   actually multiple cpuset allowed to avoid incorrect
+		 *   memory barrier fallback.
+		 */
+		return 2;
+	else
+		return cpu_quota;
 }
 
 #ifdef CONFIG_X86
@@ -3408,42 +3451,6 @@ static void show_cpuinfo_misc(struct seq_file *m, struct cpuinfo_x86 *c)
 		   c->cpuid_level);
 }
 #endif
-
-int cpuset_cgroupfs_get_cpu_count(void)
-{
-	int ret;
-	struct cgroup_subsys_state *css;
-	struct cpuset *cs;
-
-	css = cgroupfs_get_parent_role_cgroup(current,
-			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
-	cs = css_cs(css);
-	ret = cpumask_weight(cs->effective_cpus);
-	css_put(css);
-
-	return ret;
-}
-
-int calc_quota_cpuset_cpus(void)
-{
-	int online_cpus, cpu_quota, cpu_set;
-
-	online_cpus = min_t(int, nr_cpu_ids, (int)num_online_cpus());
-	cpu_quota = cpu_get_max_cpus(current);
-	cpu_set = cpuset_cgroupfs_get_cpu_count();
-
-	if (cpu_quota >= online_cpus || cpu_set <= cpu_quota)
-		return cpu_set;
-	else if (cpu_quota == 1)
-		/* cpu_quota == 1 and cpu_set > 1(cpu_quota):
-		 *   Fallback to 2 cores in case quota <= 1 core when
-		 *   actually multiple cpuset allowed to avoid incorrect
-		 *   memory barrier fallback.
-		 */
-		return 2;
-	else
-		return cpu_quota;
-}
 
 static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct cpuset *cs, int max_cpu)
 {
@@ -3612,6 +3619,12 @@ static int cpuset_cgroup_cpuinfo_show(struct seq_file *sf, void *v)
 }
 
 #endif
+
+static int cpuset_cgroup_stat_show(struct seq_file *sf, void *v)
+{
+	struct cpuset *cs = css_cs(seq_css(sf));
+	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX);
+}
 
 static int cpuset_cgroup_loadavg_show(struct seq_file *sf, void *v);
 
