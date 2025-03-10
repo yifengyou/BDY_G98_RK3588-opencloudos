@@ -471,7 +471,7 @@ static int cgroupfs_fill_super(struct super_block *sb, void *data, int silent)
 	cgroup = cgroupfs_new_entry(sb, "cgroup", root_entry, CGROUPFS_TYPE_NORMAL_DIR, d_mode);
 	if (!cgroup)
 		return err;
-	cgroupfs_new_entry(sb, "cpu.quota_period_burst_us", cgroup,
+	cgroupfs_new_entry(sb, "cpu.quota_period_us", cgroup,
 			CGROUPFS_TYPE_CPU_QUOTA, f_mode);
 
 	cgroupfs_new_entry(sb, "meminfo", proc, CGROUPFS_TYPE_MEMINFO, f_mode);
