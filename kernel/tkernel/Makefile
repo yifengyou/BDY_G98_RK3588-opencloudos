@@ -10,3 +10,4 @@ obj-$(CONFIG_TKERNEL_IRQ_LATENCY) += irqlatency/
 obj-$(CONFIG_TKERNEL_KILL_HOOK) += killhook/
 obj-$(CONFIG_TKERNEL_KILL_BLOCK) += killblock/
 obj-$(CONFIG_TKERNEL_KILL_PROTECT) += killprotect/
+obj-$(CONFIG_EMM_RECLAIM) += emm/
