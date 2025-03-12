@@ -5,10 +5,10 @@ mlnx_version="23.10-3.2.2.0"
 mlnx_tgz_name="MLNX_OFED_LINUX-${mlnx_version}-rhel9.4-x86_64.tgz"
 mlnx_tgz_sha256="800b8d0f063558bf943d5b3fabf02cbbfa84a57b2690c2128a10fdaf7636d2dc"
 
-if [[ $1 == mlnx_url ]]; then
+if [[ $1 == mlnx_url0 ]]; then
 	echo "https://content.mellanox.com/ofed/MLNX_OFED-${mlnx_version}/${mlnx_tgz_name}"
 	exit 0
-elif [[ $1 == backup_url ]]; then
+elif [[ $1 == mlnx_url1 ]]; then
 	part1="https://mirror"
 	part2="s.te"
 	part3="nt.c"
