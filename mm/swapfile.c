@@ -189,6 +189,7 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 	bool need_reclaim;
 
 	folio = filemap_get_folio(address_space, offset);
+again:
 	if (IS_ERR(folio))
 		return 0;
 
@@ -205,8 +206,16 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 	if (!folio_trylock(folio))
 		goto out;
 
-	/* offset could point to the middle of a large folio */
+	/*
+	 * Offset could point to the middle of a large folio, or folio
+	 * may no longer point to the expected offset before it's locked.
+	 */
 	entry = folio->swap;
+	if (offset < swp_offset(entry) || offset >= swp_offset(entry) + nr_pages) {
+		folio_unlock(folio);
+		folio_put(folio);
+		goto again;
+	}
 	offset = swp_offset(entry);
 
 	need_reclaim = ((flags & TTRS_ANYWAY) ||
