@@ -12,3 +12,4 @@ obj-$(CONFIG_TKERNEL_KILL_BLOCK) += killblock/
 obj-$(CONFIG_TKERNEL_KILL_PROTECT) += killprotect/
 obj-$(CONFIG_EMM_RECLAIM) += emm/
 obj-$(CONFIG_MEMCG) += memcg_async/
+obj-$(CONFIG_ASYNC_FORK) += async-fork/
