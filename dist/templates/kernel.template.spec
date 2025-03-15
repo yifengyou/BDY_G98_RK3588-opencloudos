@@ -509,6 +509,14 @@ This package contains all the signed ko files.
 %endif
 %endif
 
+%package source
+Summary: source code included %{_vendor} patch
+BuildRequires: tar, xz
+BuildArch: noarch
+
+%description source
+This package provides source code included %{_vendor} patch for cross toolchains
+
 ###### common macros for build and install #####################################
 ### Signing scripts
 # If externel module signer and keygen provided, ignore built-in keygen and
@@ -598,6 +606,9 @@ case $KernUnameR in
 		echo "FATAL: error: kernel version doesn't match with kernel spec." >&2 && exit 1
 		;;
 	esac
+
+# take tarball of source code
+tar acvf %{name}-%{version}-%{release}.tar.xz *
 
 ###### Rpmbuild Build Stage ####################################################
 %build
@@ -1391,6 +1402,10 @@ done
 %endif
 #with_debuginfo
 
+# copy source code tarball to installing directory
+mkdir -p %{buildroot}%{_usrsrc}/%{name}
+cp -f %{name}-%{version}-%{release}.tar.xz  %{buildroot}%{_usrsrc}/%{name}/
+
 ###### RPM scriptslets #########################################################
 ### Core package
 # Pre
@@ -1515,6 +1530,9 @@ fi
 %postun -n kernel-tools-libs
 /sbin/ldconfig
 %endif
+
+%files source
+%{_usrsrc}/%{name}/%{name}-%{version}-%{release}.tar.xz
 
 ###### Rpmbuild packaging file list ############################################
 ### empty meta-package
