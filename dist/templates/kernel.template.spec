@@ -167,13 +167,19 @@ BuildRequires: zlib-devel binutils-devel
 # If CONFIG=generic-release and CONFIG=generic-debug both generate kernel-source-*.noarch.rpm, the rpm
 # will be same with each other, which is not necessary.
 # What's worse, building two identical kernel-debug-*.rpm packages causes the kernel build pipeline to
-# fail when attempting to download kernel-debug-*.rpm.
+# fail when attempting to download kernel-source-*.rpm.
 %global with_source 0
 # If CONFIG=generic-release, with_headers will be 1
 # If CONFIG=generic-debug, with_headers will be 0
 %if %{with_headers}
 BuildRequires: rsync
+# Because kernel-source-*.noarch.rpm is noarch, let's only generate kernel-source rpm when build x86_64
+# kernel rpms.
+# If generate kernel-source rpm in each arch's building, that will cause build pipeline fail when
+# attempting to download kernel-source-*.rpm.
+%ifarch x86_64
 %global with_source 1
+%endif
 %endif
 
 ###### Kernel packages sources #################################################
