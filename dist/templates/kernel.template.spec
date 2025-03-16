@@ -164,8 +164,16 @@ BuildRequires: /usr/bin/rst2man
 BuildRequires: zlib-devel binutils-devel
 %endif
 
+# If CONFIG=generic-release and CONFIG=generic-debug both generate kernel-source-*.noarch.rpm, the rpm
+# will be same with each other, which is not necessary.
+# What's worse, building two identical kernel-debug-*.rpm packages causes the kernel build pipeline to
+# fail when attempting to download kernel-debug-*.rpm.
+%global with_source 0
+# If CONFIG=generic-release, with_headers will be 1
+# If CONFIG=generic-debug, with_headers will be 0
 %if %{with_headers}
 BuildRequires: rsync
+%global with_source 1
 %endif
 
 ###### Kernel packages sources #################################################
@@ -509,6 +517,7 @@ This package contains all the signed ko files.
 %endif
 %endif
 
+%if %{with_source}
 %package source
 Summary: source code included %{_vendor} patch
 BuildRequires: tar, xz
@@ -516,6 +525,7 @@ BuildArch: noarch
 
 %description source
 This package provides source code included %{_vendor} patch for cross toolchains
+%endif
 
 ###### common macros for build and install #####################################
 ### Signing scripts
@@ -607,8 +617,10 @@ case $KernUnameR in
 		;;
 	esac
 
+%if %{with_source}
 # take tarball of source code
 tar acvf %{name}-%{version}-%{release}.tar.xz *
+%endif
 
 ###### Rpmbuild Build Stage ####################################################
 %build
@@ -1402,9 +1414,11 @@ done
 %endif
 #with_debuginfo
 
+%if %{with_source}
 # copy source code tarball to installing directory
 mkdir -p %{buildroot}%{_usrsrc}/%{name}
 cp -f %{name}-%{version}-%{release}.tar.xz  %{buildroot}%{_usrsrc}/%{name}/
+%endif
 
 ###### RPM scriptslets #########################################################
 ### Core package
@@ -1531,8 +1545,10 @@ fi
 /sbin/ldconfig
 %endif
 
+%if %{with_source}
 %files source
 %{_usrsrc}/%{name}/%{name}-%{version}-%{release}.tar.xz
+%endif
 
 ###### Rpmbuild packaging file list ############################################
 ### empty meta-package
