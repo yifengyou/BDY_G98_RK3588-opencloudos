@@ -124,6 +124,8 @@ static inline int get_pci_sbdf_id(struct pci_dev *pdev)
 	return PCI_SEG_DEVID_TO_SBDF(seg, devid);
 }
 
+bool amd_iommu_ht_range_ignore(void);
+
 static inline void *alloc_pgtable_page(int nid, gfp_t gfp)
 {
 	struct page *page;

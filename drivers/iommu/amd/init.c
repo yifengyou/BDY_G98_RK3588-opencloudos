@@ -269,6 +269,11 @@ int amd_iommu_get_num_iommus(void)
 	return amd_iommus_present;
 }
 
+bool amd_iommu_ht_range_ignore(void)
+{
+	return !!(amd_iommu_efr2 & FEATURE_HT_RANGE_IGNORE);
+}
+
 /*
  * Iterate through all the IOMMUs to get common EFR
  * masks among all IOMMUs and warn if found inconsistency.
