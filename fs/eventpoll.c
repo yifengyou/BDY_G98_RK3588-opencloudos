@@ -2317,6 +2317,9 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 	return do_epoll_ctl(epfd, op, fd, &epds, false);
 }
 
+/* limit minimal timeout */
+static int sysctl_min_epoll_wait_time;
+
 /*
  * Implement the event wait interface for the eventpoll file. It is the kernel
  * part of the user space epoll_wait(2).
@@ -2327,6 +2330,7 @@ static int do_epoll_wait(int epfd, struct epoll_event __user *events,
 	int error;
 	struct fd f;
 	struct eventpoll *ep;
+	struct timespec64 sysctl_to;
 
 	/* The maximum number of event must be greater than zero */
 	if (maxevents <= 0 || maxevents > EP_MAX_EVENTS)
@@ -2349,6 +2353,11 @@ static int do_epoll_wait(int epfd, struct epoll_event __user *events,
 	if (!is_file_epoll(f.file))
 		goto error_fput;
 
+	if (to && (to->tv_sec > 0 || to->tv_nsec > 0) && (sysctl_min_epoll_wait_time > 0)) {
+		ep_timeout_to_timespec(&sysctl_to, sysctl_min_epoll_wait_time);
+		if (timespec64_compare(to, &sysctl_to) < 0)
+			to = &sysctl_to;
+	}
 	/*
 	 * At this point it is safe to assume that the "private_data" contains
 	 * our own data structure.
@@ -2371,7 +2380,23 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
 	return do_epoll_wait(epfd, events, maxevents,
 			     ep_timeout_to_timespec(&to, timeout));
 }
+static struct ctl_table epoll_sysctls[] = {
+	{
+		.procname       = "min_epoll_wait_time",
+		.data           = &sysctl_min_epoll_wait_time,
+		.maxlen         = sizeof(sysctl_min_epoll_wait_time),
+		.mode           = 0644,
+		.proc_handler   = &proc_dointvec,
+	},
+	{}
+};
 
+static int __init init_fs_epoll_sysctls(void)
+{
+	register_sysctl_init("fs", epoll_sysctls);
+	return 0;
+}
+early_initcall(init_fs_epoll_sysctls);
 /*
  * Implement the event wait interface for the eventpoll file. It is the kernel
  * part of the user space epoll_pwait(2).
