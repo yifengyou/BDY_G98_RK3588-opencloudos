@@ -1,3 +1,7 @@
+* Tue Mar 18 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-28
+- dist: restrict secure boot signing to x86_64 and aarch64
+- dist: disable mlnx outtree driver
+
 * Tue Mar 18 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-27
 - Merge OCK linux-6.6/devel branch into TK5 release branch
 - !331 [linux-6.6/devel][bugfix]: LoongArch: config: enable pci host controller fdt driver
