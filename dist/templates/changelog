@@ -1,3 +1,37 @@
+* Tue Mar 18 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-27
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !331 [linux-6.6/devel][bugfix]: LoongArch: config: enable pci host controller fdt driver
+- LoongArch: config: enable pci host controller fdt driver
+- dist: only generate kernel-source rpm when build x86_64
+- Merge branch 'honglin/release' into 'release' (merge request !369)
+- rue/net: fix the association between sock and cgroup
+- Merge branch 'aurelianliu/release_0305' into 'release' (merge request !359)
+- epoll: introduce min_wait_time
+- dist: do not build kernel-source rpm in debug version
+- Merge branch OCK linux-6.6/devel into TK5 release branch
+- !327 added source subpackage for dist/rpm scripts
+- added source subpackage for dist/rpm scripts
+- !330 [linux-6.6/devel][bugfix]: LoongArch: Disable CONFIG_RT_GROUP_SCHED to prevent cgroup2 issues
+- LoongArch: Disable CONFIG_RT_GROUP_SCHED to prevent cgroup2 issues
+- !326 Backport PRM update and bugfixes up to v6.14
+- ACPI: PRM: Add PRM handler direct call support
+- ACPI: PRM: Annotate struct prm_module_info with __counted_by
+- !325 [Intel-SIG] Backport SierreForest MAXPHYSADDR support
+- KVM: selftests: x86: Prioritize getting max_gfn from GuestPhysBits
+- KVM: x86: Advertise max mappable GPA in CPUID.0x80000008.GuestPhysBits
+- !323 [Intel-SIG] 6.6: x86/cpu: KVM: Advertise CPUIDs for new instructions in Clearwater Forest (CWF)
+- x86: KVM: Advertise CPUIDs for new instructions in Clearwater Forest
+- dist: take turns to download mlnx packages from two URLs
+- emm: add empty emm kernel module
+- emm: Remove submodule emm
+- Merge branch 'cunhuang/hinic_update' into 'release' (merge request !364)
+- net/hinic: Fix several compilation warnings with aarch64-openEuler-linux toolchain
+- net/hinic: Update Huawei Intelligent Network Card Driver: hinic
+- Revert "net: hinic: Fix cleanup in create_rxqs/txqs()"
+- Merge branch 'haisu/release-cgroupfs-remove-burst' into 'release' (merge request !362)
+- rue/cgroupfs: support quota_aware to /proc/stat
+- rue/cgroupfs: remove the CPU burst field
+
 * Mon Mar  3 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-26
 - Merge linux-6.6.80 into TK5 release branch
 - Linux 6.6.80
