@@ -104,7 +104,7 @@ endif
 
 ### RPM build options
 # All params enabled by default (except kABI check, see below), ENABLED overrides DEFAULT_DISABLE.
-DISABLED = $(DEFAULT_DISABLED)
+DISABLED = ofed $(DEFAULT_DISABLED)
 ENABLED = $(DEFAULT_ENABLED)
 # Automatically disable non core package for non standard build, such as eks/cloudgame
 ifneq ($(CONFIG),generic-release)
