@@ -305,6 +305,11 @@ static void get_global_efr(void)
 	pr_info("Using global IVHD EFR:%#llx, EFR2:%#llx\n", amd_iommu_efr, amd_iommu_efr2);
 }
 
+static bool check_feature(u64 mask)
+{
+	return (amd_iommu_efr & mask);
+}
+
 static bool check_feature_on_all_iommus(u64 mask)
 {
 	return !!(amd_iommu_efr & mask);
@@ -678,7 +683,7 @@ static inline int __init alloc_dev_table(struct amd_iommu_pci_seg *pci_seg)
 static inline void free_dev_table(struct amd_iommu_pci_seg *pci_seg)
 {
 	if (!is_kdump_kernel())
-		iommu_free_pages(pci_seg->dev_table,
+		free_pages((unsigned long)pci_seg->dev_table,
 			get_order(pci_seg->dev_table_size));
 	else
 		memunmap((void *)pci_seg->dev_table);
@@ -1061,7 +1066,7 @@ static int __init alloc_iommu_buffers(struct amd_iommu *iommu)
 				return -ENOMEM;
 			iommu->cmd_sem_paddr = paddr;
 		} else {
-			iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL, 1);
+			iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL | __GFP_ZERO, 1);
 			if (!iommu->cmd_sem)
 				return -ENOMEM;
 			iommu->cmd_sem_paddr = iommu_virt_to_phys((void *)iommu->cmd_sem);
@@ -1072,7 +1077,7 @@ static int __init alloc_iommu_buffers(struct amd_iommu *iommu)
 		if (!iommu->cmd_buf)
 			return -ENOMEM;
 	} else {
-		iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL, 1);
+		iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL | __GFP_ZERO, 1);
 		if (!iommu->cmd_sem)
 			return -ENOMEM;
 		iommu->cmd_sem_paddr = iommu_virt_to_phys((void *)iommu->cmd_sem);
@@ -1082,7 +1087,7 @@ static int __init alloc_iommu_buffers(struct amd_iommu *iommu)
 		 * write commands to that buffer later and the IOMMU will execute them
 		 * asynchronously
 		 */
-		iommu->cmd_buf = iommu_alloc_pages(GFP_KERNEL,
+		iommu->cmd_buf = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
 							get_order(CMD_BUFFER_SIZE));
 	}
 
@@ -1097,12 +1102,12 @@ static void __init free_iommu_buffers(struct amd_iommu *iommu)
 			if (check_feature(FEATURE_SNP))
 				memunmap((void *)iommu->cmd_sem);
 			else
-				iommu_free_page((void *)iommu->cmd_sem);
+				free_page((unsigned long)iommu->cmd_sem);
 	}
 		memunmap((void *)iommu->cmd_buf);
 	} else {
-		iommu_free_page((void *)iommu->cmd_sem);
-		iommu_free_pages(iommu->cmd_buf, get_order(CMD_BUFFER_SIZE));
+		free_page((unsigned long)iommu->cmd_sem);
+		free_pages((unsigned long)iommu->cmd_buf, get_order(CMD_BUFFER_SIZE));
 	}
 }
 
@@ -1165,7 +1170,6 @@ static bool __reuse_device_table(struct amd_iommu *iommu)
 	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
 	phys_addr_t old_devtb_phys;
 	u32 lo, hi, old_devtb_size;
-	u64 tmp;
 	u64 entry;
 
 	/* Each IOMMU use separate device table with the same size */
