@@ -1041,6 +1041,56 @@ out:
 	return res;
 }
 
+/**
+ * get_cmdline_args() - copy the cmdline and args value to a buffer.
+ * @task:     the task whose cmdline value to copy.
+ * @buffer:   the buffer to copy to.
+ * @buflen:   the length of the buffer. Larger cmdline values are truncated
+ *            to this length.
+ *
+ * Return: the size of the cmdline field copied. Note that the copy does
+ * not guarantee an ending NULL byte.
+ */
+int get_cmdline_args(struct task_struct *task, char *buffer, int buflen)
+{
+	int res = 0;
+	unsigned int len, pos;
+	struct mm_struct *mm = get_task_mm(task);
+	unsigned long arg_start, arg_end;
+
+	if (!mm)
+		goto out;
+
+	if (!mm->arg_end)
+		goto out_mm;
+
+	spin_lock(&mm->arg_lock);
+	arg_start = mm->arg_start;
+	arg_end = mm->arg_end;
+	spin_unlock(&mm->arg_lock);
+
+	len = arg_end - arg_start;
+
+	if (len > buflen)
+		len = buflen;
+
+	res = access_process_vm(task, arg_start, buffer, len, FOLL_FORCE);
+
+	pos = strlen(buffer);
+	while (pos < res - 1) {
+		if (buffer[pos] == '\0')
+			buffer[pos] = ' ';
+
+		pos++;
+	}
+
+out_mm:
+	mmput(mm);
+out:
+	return res;
+}
+EXPORT_SYMBOL_GPL(get_cmdline_args);
+
 int __weak memcmp_pages(struct page *page1, struct page *page2)
 {
 	char *addr1, *addr2;

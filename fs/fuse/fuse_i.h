@@ -31,6 +31,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/refcount.h>
 #include <linux/user_namespace.h>
+#include <linux/mm.h>
 
 /** Default max number of pages that can be used in a single read request */
 #define FUSE_DEFAULT_MAX_PAGES_PER_REQ 32
@@ -42,7 +43,10 @@
 #define FUSE_NAME_MAX 1024
 
 /** Number of dentries for each connection in the control filesystem */
-#define FUSE_CTL_NUM_DENTRIES 5
+#define FUSE_CTL_NUM_DENTRIES 7
+
+/** FUSE task comm name max */
+#define FUSE_TASK_COMM_LEN 32
 
 /** Maximum of max_pages received in init_out */
 extern unsigned int fuse_max_pages_limit;
@@ -919,6 +923,12 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+	/* Name of the process allocating the fuse_conn, used for re-attach. */
+	char comm[FUSE_TASK_COMM_LEN];
+
+	/* Pid of the process allocating the fuse_conn, used for re-attach. */
+	char cmdline[TASK_COMM_ARGS_LEN];
 };
 
 /*

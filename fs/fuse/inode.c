@@ -955,6 +955,8 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->user_ns = get_user_ns(user_ns);
 	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
 	fc->max_pages_limit = fuse_max_pages_limit;
+	memcpy(fc->comm, current->comm, FUSE_TASK_COMM_LEN);
+	get_cmdline_args(current, fc->cmdline, TASK_COMM_ARGS_LEN);
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
