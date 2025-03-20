@@ -261,6 +261,8 @@ static unsigned long scx_watchdog_timestamp = INITIAL_JIFFIES;
 
 static struct delayed_work scx_watchdog_work;
 
+int sysctl_panic_on_scx_stall __read_mostly;
+
 /* idle tracking */
 #ifdef CONFIG_SMP
 #ifdef CONFIG_CPUMASK_OFFSTACK
@@ -2466,6 +2468,9 @@ static struct task_struct *pick_task_scx(struct rq *rq)
 	 * Once fair is fixed, remove the workaround and trigger WARN_ON_ONCE()
 	 * if pick_task_scx() is called without preceding balance_scx().
 	 */
+
+	WARN_ON_ONCE(!(rq->scx.flags & SCX_RQ_BAL_PENDING));
+
 	if (unlikely(rq->scx.flags & SCX_RQ_BAL_PENDING)) {
 		if (prev->scx.flags & SCX_TASK_QUEUED) {
 			keep_prev = true;
@@ -3162,6 +3167,7 @@ static bool check_rq_for_timeouts(struct rq *rq)
 	struct task_struct *p;
 	struct rq_flags rf;
 	bool timed_out = false;
+	u32 dur_ms;
 
 	rq_lock_irqsave(rq, &rf);
 	list_for_each_entry(p, &rq->scx.runnable_list, scx.runnable_node) {
@@ -3169,7 +3175,7 @@ static bool check_rq_for_timeouts(struct rq *rq)
 
 		if (unlikely(time_after(jiffies,
 					last_runnable + scx_watchdog_timeout))) {
-			u32 dur_ms = jiffies_to_msecs(jiffies - last_runnable);
+			dur_ms = jiffies_to_msecs(jiffies - last_runnable);
 
 			scx_ops_error_kind(SCX_EXIT_ERROR_STALL,
 					   "%s[%d] failed to run for %u.%03us",
@@ -3180,6 +3186,10 @@ static bool check_rq_for_timeouts(struct rq *rq)
 		}
 	}
 	rq_unlock_irqrestore(rq, &rf);
+
+	if (sysctl_panic_on_scx_stall && timed_out)
+		panic("SCX Stall: task %s[%d] on cpu %d stalled for %u ms\n",
+		      p->comm, p->pid, cpu_of(rq), dur_ms);
 
 	return timed_out;
 }
