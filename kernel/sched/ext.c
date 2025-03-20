@@ -4797,6 +4797,9 @@ static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 	unsigned long flags;
 	char *buf;
 	int cpu;
+	struct rhashtable_iter rht_iter;
+	struct scx_dispatch_q *dsq;
+	struct task_struct *p;
 
 	spin_lock_irqsave(&dump_lock, flags);
 
@@ -4901,6 +4904,35 @@ static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 	next:
 		rq_unlock(rq, &rf);
 	}
+
+	dump_newline(&s);
+	dump_line(&s, "User DSQs states");
+	dump_line(&s, "----------");
+	dump_newline(&s);
+
+	rhashtable_walk_enter(&dsq_hash, &rht_iter);
+	do {
+		rhashtable_walk_start(&rht_iter);
+		while ((dsq = rhashtable_walk_next(&rht_iter)) && !IS_ERR(dsq)) {
+			if (list_empty(&dsq->list))
+				continue;
+
+			dump_line(&s, "User DSQ %-5llu:  nr=%u", dsq->id, dsq->nr);
+			dump_newline(&s);
+
+			raw_spin_lock(&dsq->lock);
+
+			nldsq_for_each_task(p, dsq) {
+				dump_line(&s, "    task %s[%d] state=0x%x", p->comm, p->pid, p->__state);
+				dump_newline(&s);
+			}
+			dump_newline(&s);
+
+			raw_spin_unlock(&dsq->lock);
+		}
+		rhashtable_walk_stop(&rht_iter);
+	} while (dsq == ERR_PTR(-EAGAIN));
+	rhashtable_walk_exit(&rht_iter);
 
 	if (seq_buf_has_overflowed(&s) && dump_len >= sizeof(trunc_marker))
 		memcpy(ei->dump + dump_len - sizeof(trunc_marker),
