@@ -142,7 +142,7 @@ void __init init_IRQ(void)
 	struct page *page;
 	unsigned long node;
 
-	if (!acpi_gbl_reduced_hardware) {
+	if((!acpi_gbl_reduced_hardware) && (cpu_has_lvz)) {
 		for_each_node(node)
 			writel(0x40000000 | (node << 12),
 				(volatile void __iomem *)(0x80000efdfb000274UL + (node<<44)));
