@@ -35,7 +35,7 @@ config TKERNEL_SECURITY_MONITOR
 
 config TKERNEL_AEGIS_MODULE
 	tristate "ONION aegis module"
-	default m
+	default n
 	help
 		ONION aegis module
 
