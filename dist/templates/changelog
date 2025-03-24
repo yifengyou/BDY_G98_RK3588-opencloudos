@@ -1,3 +1,6 @@
+* Mon Mar 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-29
+- aegis: disable aegis config, default n
+
 * Tue Mar 18 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-28
 - dist: restrict secure boot signing to x86_64 and aarch64
 - dist: disable mlnx outtree driver
