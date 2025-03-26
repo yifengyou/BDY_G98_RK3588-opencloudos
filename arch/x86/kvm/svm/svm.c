@@ -726,7 +726,7 @@ static void svm_cpu_uninit(int cpu)
 	if (!sd->save_area)
 		return;
 
-	kfree(sd->sev_vcpus);
+	xa_destroy(&sd->asid_vcpu);
 	__free_page(sd->save_area);
 	sd->save_area_pa = 0;
 	sd->save_area = NULL;
@@ -742,18 +742,10 @@ static int svm_cpu_init(int cpu)
 	if (!sd->save_area)
 		return ret;
 
-	ret = sev_cpu_init(sd);
-	if (ret)
-		goto free_save_area;
+	xa_init(&sd->asid_vcpu);
 
 	sd->save_area_pa = __sme_page_pa(sd->save_area);
 	return 0;
-
-free_save_area:
-	__free_page(sd->save_area);
-	sd->save_area = NULL;
-	return ret;
-
 }
 
 static void set_dr_intercepts(struct vcpu_svm *svm)
@@ -1637,6 +1629,7 @@ static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	unsigned int asid;
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, cpu);
+	struct kvm_vcpu *prev;
 
 	if (sd->current_vmcb != svm->vmcb) {
 		sd->current_vmcb = svm->vmcb;
@@ -1650,13 +1643,13 @@ static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	if (sev_guest(vcpu->kvm)) {
 		/*
 		 * Flush the TLB when a different vCPU using the same ASID is
-		 * run on the same CPU.
+		 * run on the same CPU. xa_store() should always succeed because
+		 * the entry is reserved when the ASID is allocated.
 		 */
 		asid = sev_get_asid(vcpu->kvm);
-		if (sd->sev_vcpus[asid] != vcpu) {
-			sd->sev_vcpus[asid] = vcpu;
+		prev = xa_store(&sd->asid_vcpu, asid, vcpu, GFP_ATOMIC);
+		if (prev != vcpu || WARN_ON_ONCE(xa_err(prev)))
 			kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
-		}
 	}
 }
 
@@ -5142,6 +5135,36 @@ static void svm_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)
 		return kvm_vcpu_deliver_sipi_vector(vcpu, vector);
 
 	sev_vcpu_deliver_sipi_vector(vcpu, vector);
+}
+
+void svm_unregister_asid(unsigned int asid)
+{
+	struct svm_cpu_data *sd;
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		sd = per_cpu_ptr(&svm_data, cpu);
+		xa_erase(&sd->asid_vcpu, asid);
+	}
+}
+
+bool svm_register_asid(unsigned int asid)
+{
+	struct svm_cpu_data *sd;
+	int cpu;
+
+	/*
+	 * Preallocate entries on all CPUs for the ASID to avoid memory
+	 * allocations in the vCPU load path.
+	 */
+	for_each_possible_cpu(cpu) {
+		sd = per_cpu_ptr(&svm_data, cpu);
+		if (xa_reserve(&sd->asid_vcpu, asid, GFP_KERNEL_ACCOUNT)) {
+			svm_unregister_asid(asid);
+			return false;
+		}
+	}
+	return true;
 }
 
 static void svm_vm_destroy(struct kvm *kvm)

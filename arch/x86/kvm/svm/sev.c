@@ -253,6 +253,9 @@ again:
 		goto e_uncharge;
 	}
 
+	if (!svm_register_asid(asid))
+		goto e_uncharge;
+
 	__set_bit(asid, sev_asid_bitmap);
 
 #ifdef CONFIG_KVM_SUPPORTS_CSV_REUSE_ASID
@@ -284,8 +287,7 @@ unsigned int sev_get_asid(struct kvm *kvm)
 
 static void sev_asid_free(struct kvm_sev_info *sev)
 {
-	struct svm_cpu_data *sd;
-	int cpu;
+	svm_unregister_asid(sev->asid);
 
 	mutex_lock(&sev_bitmap_lock);
 
@@ -308,11 +310,6 @@ static void sev_asid_free(struct kvm_sev_info *sev)
 #else
 	__set_bit(sev->asid, sev_reclaim_asid_bitmap);
 #endif
-
-	for_each_possible_cpu(cpu) {
-		sd = per_cpu_ptr(&svm_data, cpu);
-		sd->sev_vcpus[sev->asid] = NULL;
-	}
 
 	mutex_unlock(&sev_bitmap_lock);
 
@@ -3282,18 +3279,6 @@ void sev_hardware_unsetup(void)
 
 	misc_cg_set_capacity(MISC_CG_RES_SEV, 0);
 	misc_cg_set_capacity(MISC_CG_RES_SEV_ES, 0);
-}
-
-int sev_cpu_init(struct svm_cpu_data *sd)
-{
-	if (!sev_enabled)
-		return 0;
-
-	sd->sev_vcpus = kcalloc(nr_asids, sizeof(void *), GFP_KERNEL);
-	if (!sd->sev_vcpus)
-		return -ENOMEM;
-
-	return 0;
 }
 
 /*
