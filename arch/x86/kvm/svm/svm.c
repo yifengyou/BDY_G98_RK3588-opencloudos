@@ -1434,12 +1434,12 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 		avic_init_vmcb(svm, vmcb);
 
 	if (vnmi)
-		svm->vmcb->control.int_ctl |= V_NMI_ENABLE_MASK;
+		control->int_ctl |= V_NMI_ENABLE_MASK;
 
 	if (vgif) {
 		svm_clr_intercept(svm, INTERCEPT_STGI);
 		svm_clr_intercept(svm, INTERCEPT_CLGI);
-		svm->vmcb->control.int_ctl |= V_GIF_ENABLE_MASK;
+		control->int_ctl |= V_GIF_ENABLE_MASK;
 	}
 
 	if (sev_guest(vcpu->kvm))
