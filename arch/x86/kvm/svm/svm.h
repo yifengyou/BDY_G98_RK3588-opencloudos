@@ -105,6 +105,8 @@ struct kvm_sev_info {
 struct kvm_svm {
 	struct kvm kvm;
 
+	unsigned int asid;
+
 	/* Struct members for AVIC */
 	u32 avic_vm_id;
 	struct page *avic_logical_id_table_page;
@@ -120,7 +122,6 @@ struct kvm_vmcb_info {
 	struct vmcb *ptr;
 	unsigned long pa;
 	int cpu;
-	uint64_t asid_generation;
 };
 
 struct vmcb_save_area_cached {
@@ -240,7 +241,6 @@ struct vcpu_svm {
 	struct vmcb *vmcb;
 	struct kvm_vmcb_info vmcb01;
 	struct kvm_vmcb_info *current_vmcb;
-	u32 asid;
 	u32 sysenter_esp_hi;
 	u32 sysenter_eip_hi;
 	uint64_t tsc_aux;
@@ -323,11 +323,6 @@ struct vcpu_svm {
 };
 
 struct svm_cpu_data {
-	u64 asid_generation;
-	u32 max_asid;
-	u32 next_asid;
-	u32 min_asid;
-
 	struct page *save_area;
 	unsigned long save_area_pa;
 
@@ -629,6 +624,7 @@ void svm_complete_interrupt_delivery(struct kvm_vcpu *vcpu, int delivery_mode,
 				     int trig_mode, int vec);
 bool svm_register_asid(unsigned int asid);
 void svm_unregister_asid(unsigned int asid);
+unsigned int svm_asid(struct kvm *kvm);
 
 /* nested.c */
 

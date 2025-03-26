@@ -688,7 +688,7 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 	vmcb02->control.iopm_base_pa = vmcb01->control.iopm_base_pa;
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 
-	/* Done at vmrun: asid.  */
+	vmcb02->control.asid = svm_asid(vcpu->kvm);
 
 	/* Also overwritten later if necessary.  */
 	vmcb_clr_flush_asid(vmcb02);
