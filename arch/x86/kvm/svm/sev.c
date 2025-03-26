@@ -311,7 +311,7 @@ static void sev_asid_free(struct kvm_sev_info *sev)
 
 	for_each_possible_cpu(cpu) {
 		sd = per_cpu_ptr(&svm_data, cpu);
-		sd->sev_vmcbs[sev->asid] = NULL;
+		sd->sev_vcpus[sev->asid] = NULL;
 	}
 
 	mutex_unlock(&sev_bitmap_lock);
@@ -3289,8 +3289,8 @@ int sev_cpu_init(struct svm_cpu_data *sd)
 	if (!sev_enabled)
 		return 0;
 
-	sd->sev_vmcbs = kcalloc(nr_asids, sizeof(void *), GFP_KERNEL);
-	if (!sd->sev_vmcbs)
+	sd->sev_vcpus = kcalloc(nr_asids, sizeof(void *), GFP_KERNEL);
+	if (!sd->sev_vcpus)
 		return -ENOMEM;
 
 	return 0;
@@ -3693,14 +3693,14 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	/*
 	 * Flush guest TLB:
 	 *
-	 * 1) when different VMCB for the same ASID is to be run on the same host CPU.
+	 * 1) when different vCPU for the same ASID is to be run on the same host CPU.
 	 * 2) or this VMCB was executed on different host CPU in previous VMRUNs.
 	 */
-	if (sd->sev_vmcbs[asid] == svm->vmcb &&
+	if (sd->sev_vcpus[asid] == &svm->vcpu &&
 	    svm->vcpu.arch.last_vmentry_cpu == cpu)
 		return 0;
 
-	sd->sev_vmcbs[asid] = svm->vmcb;
+	sd->sev_vcpus[asid] = &svm->vcpu;
 	vmcb_set_flush_asid(svm->vmcb);
 	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 	return 0;

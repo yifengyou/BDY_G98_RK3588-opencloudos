@@ -333,8 +333,8 @@ struct svm_cpu_data {
 
 	struct vmcb *current_vmcb;
 
-	/* index = sev_asid, value = vmcb pointer */
-	struct vmcb **sev_vmcbs;
+	/* index = sev_asid, value = vcpu pointer */
+	struct kvm_vcpu **sev_vcpus;
 };
 
 DECLARE_PER_CPU(struct svm_cpu_data, svm_data);

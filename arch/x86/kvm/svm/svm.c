@@ -726,7 +726,7 @@ static void svm_cpu_uninit(int cpu)
 	if (!sd->save_area)
 		return;
 
-	kfree(sd->sev_vmcbs);
+	kfree(sd->sev_vcpus);
 	__free_page(sd->save_area);
 	sd->save_area_pa = 0;
 	sd->save_area = NULL;
