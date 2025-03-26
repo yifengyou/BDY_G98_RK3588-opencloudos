@@ -3666,41 +3666,6 @@ void sev_es_unmap_ghcb(struct vcpu_svm *svm)
 	svm->sev_es.ghcb = NULL;
 }
 
-int pre_sev_run(struct vcpu_svm *svm, int cpu)
-{
-	struct kvm *kvm = svm->vcpu.kvm;
-	unsigned int asid = sev_get_asid(kvm);
-
-	/*
-	 * Reject KVM_RUN if userspace attempts to run the vCPU with an invalid
-	 * VMSA, e.g. if userspace forces the vCPU to be RUNNABLE after an SNP
-	 * AP Destroy event.
-	 */
-	if (sev_es_guest(kvm) && !VALID_PAGE(svm->vmcb->control.vmsa_pa))
-		return -EINVAL;
-
-	/* Assign the asid allocated with this SEV guest */
-	svm->asid = asid;
-
-#ifdef CONFIG_KVM_SUPPORTS_CSV_REUSE_ASID
-	/* If ASID is shared with other guests, then flush TLB before VMRUN */
-	if (is_x86_vendor_hygon() && csv_asid_userid_array &&
-	    csv_asid_userid_array[asid].userid_len)
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ASID;
-#endif
-
-	/*
-	 * Flush guest TLB if the VMCB was executed on a differet host CPU in
-	 * previous VMRUNs.
-	 */
-	if (svm->vcpu.arch.last_vmentry_cpu == cpu)
-		return 0;
-
-	vmcb_set_flush_asid(svm->vmcb);
-	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	return 0;
-}
-
 #define GHCB_SCRATCH_AREA_LIMIT		(16ULL * PAGE_SIZE)
 static int setup_vmgexit_scratch(struct vcpu_svm *svm, bool sync, u64 len)
 {

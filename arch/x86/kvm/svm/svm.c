@@ -3718,8 +3718,20 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 		svm->current_vmcb->cpu = vcpu->cpu;
         }
 
-	if (sev_guest(vcpu->kvm))
-		return pre_sev_run(svm, vcpu->cpu);
+	if (sev_guest(vcpu->kvm)) {
+		/* Assign the asid allocated with this SEV guest */
+		svm->asid = sev_get_asid(vcpu->kvm);
+
+		/*
+		 * Reject KVM_RUN if userspace attempts to run the vCPU with an invalid
+		 * VMSA, e.g. if userspace forces the vCPU to be RUNNABLE after an SNP
+		 * AP Destroy event.
+		 */
+		if (sev_es_guest(vcpu->kvm) &&
+		    !VALID_PAGE(svm->vmcb->control.vmsa_pa))
+			return -EINVAL;
+		return 0;
+	}
 
 	/* FIXME: handle wraparound of asid_generation */
 	if (svm->current_vmcb->asid_generation != sd->asid_generation)
