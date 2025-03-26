@@ -3250,7 +3250,7 @@ static struct cgroup *tg_cgrp(struct task_group *tg)
 	if (tg && tg->css.cgroup)
 		return tg->css.cgroup;
 	else
-		return &cgrp_dfl_root.cgrp;
+		return root_task_group.css.cgroup;
 }
 
 #define SCX_INIT_TASK_ARGS_CGROUP(tg)		.cgroup = tg_cgrp(tg),
@@ -7141,7 +7141,7 @@ __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 __bpf_kfunc struct cgroup *scx_bpf_task_cgroup(struct task_struct *p)
 {
 	struct task_group *tg = p->sched_task_group;
-	struct cgroup *cgrp = &cgrp_dfl_root.cgrp;
+	struct cgroup *cgrp = root_task_group.css.cgroup;
 
 	if (!scx_kf_allowed_on_arg_tasks(__SCX_KF_RQ_LOCKED, p))
 		goto out;
