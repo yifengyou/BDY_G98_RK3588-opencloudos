@@ -275,7 +275,7 @@ e_uncharge:
 	return ret;
 }
 
-static unsigned int sev_get_asid(struct kvm *kvm)
+unsigned int sev_get_asid(struct kvm *kvm)
 {
 	struct kvm_sev_info *sev = &to_kvm_svm(kvm)->sev_info;
 
@@ -3668,7 +3668,6 @@ void sev_es_unmap_ghcb(struct vcpu_svm *svm)
 
 int pre_sev_run(struct vcpu_svm *svm, int cpu)
 {
-	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, cpu);
 	struct kvm *kvm = svm->vcpu.kvm;
 	unsigned int asid = sev_get_asid(kvm);
 
@@ -3691,16 +3690,12 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 #endif
 
 	/*
-	 * Flush guest TLB:
-	 *
-	 * 1) when different vCPU for the same ASID is to be run on the same host CPU.
-	 * 2) or this VMCB was executed on different host CPU in previous VMRUNs.
+	 * Flush guest TLB if the VMCB was executed on a differet host CPU in
+	 * previous VMRUNs.
 	 */
-	if (sd->sev_vcpus[asid] == &svm->vcpu &&
-	    svm->vcpu.arch.last_vmentry_cpu == cpu)
+	if (svm->vcpu.arch.last_vmentry_cpu == cpu)
 		return 0;
 
-	sd->sev_vcpus[asid] = &svm->vcpu;
 	vmcb_set_flush_asid(svm->vmcb);
 	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 	return 0;

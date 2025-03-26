@@ -1634,6 +1634,7 @@ static void svm_prepare_host_switch(struct kvm_vcpu *vcpu)
 
 static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
+	unsigned int asid;
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, cpu);
 
@@ -1645,6 +1646,18 @@ static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	}
 	if (kvm_vcpu_apicv_active(vcpu))
 		avic_vcpu_load(vcpu, cpu);
+
+	if (sev_guest(vcpu->kvm)) {
+		/*
+		 * Flush the TLB when a different vCPU using the same ASID is
+		 * run on the same CPU.
+		 */
+		asid = sev_get_asid(vcpu->kvm);
+		if (sd->sev_vcpus[asid] != vcpu) {
+			sd->sev_vcpus[asid] = vcpu;
+			kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
+		}
+	}
 }
 
 static void svm_vcpu_put(struct kvm_vcpu *vcpu)
