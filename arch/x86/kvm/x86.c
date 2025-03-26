@@ -13952,6 +13952,64 @@ int kvm_sev_es_string_io(struct kvm_vcpu *vcpu, unsigned int size,
 }
 EXPORT_SYMBOL_GPL(kvm_sev_es_string_io);
 
+int kvm_tlb_tags_init(struct kvm_tlb_tags *tlb_tags, unsigned int min,
+		      unsigned int max)
+{
+	/*
+	 * 0 is assumed to be the host's TLB tag and is returned on failed
+	 * allocations.
+	 */
+	if (WARN_ON_ONCE(min == 0))
+		return -1;
+
+	/*
+	 * Allocate enough bits to index the bitmap directly by the tag,
+	 * potentially wasting a bit of memory.
+	 */
+	tlb_tags->bitmap = bitmap_zalloc(max + 1, GFP_KERNEL);
+	if (!tlb_tags->bitmap)
+		return -1;
+
+	tlb_tags->min = min;
+	tlb_tags->max = max;
+	spin_lock_init(&tlb_tags->lock);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(kvm_tlb_tags_init);
+
+void kvm_tlb_tags_destroy(struct kvm_tlb_tags *tlb_tags)
+{
+	bitmap_free(tlb_tags->bitmap);
+}
+EXPORT_SYMBOL_GPL(kvm_tlb_tags_destroy);
+
+unsigned int kvm_tlb_tags_alloc(struct kvm_tlb_tags *tlb_tags)
+{
+	unsigned int tag;
+
+	spin_lock(&tlb_tags->lock);
+	tag = find_next_zero_bit(tlb_tags->bitmap, tlb_tags->max + 1,
+				 tlb_tags->min);
+	if (tag <= tlb_tags->max)
+		__set_bit(tag, tlb_tags->bitmap);
+	else
+		tag = 0;
+	spin_unlock(&tlb_tags->lock);
+	return tag;
+}
+EXPORT_SYMBOL_GPL(kvm_tlb_tags_alloc);
+
+void kvm_tlb_tags_free(struct kvm_tlb_tags *tlb_tags, unsigned int tag)
+{
+	if (tag < tlb_tags->min || WARN_ON_ONCE(tag > tlb_tags->max))
+		return;
+
+	spin_lock(&tlb_tags->lock);
+	__clear_bit(tag, tlb_tags->bitmap);
+	spin_unlock(&tlb_tags->lock);
+}
+EXPORT_SYMBOL_GPL(kvm_tlb_tags_free);
+
 void kvm_arch_hypercall_init(void *func)
 {
 	kvm_arch_hypercall = func;

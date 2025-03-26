@@ -494,8 +494,7 @@ DEFINE_PER_CPU(struct vmcs *, current_vmcs);
  */
 static DEFINE_PER_CPU(struct list_head, loaded_vmcss_on_cpu);
 
-static DECLARE_BITMAP(vmx_vpid_bitmap, VMX_NR_VPIDS);
-static DEFINE_SPINLOCK(vmx_vpid_lock);
+struct kvm_tlb_tags vmx_vpids;
 
 struct vmcs_config vmcs_config __ro_after_init;
 struct vmx_capability vmx_capability __ro_after_init;
@@ -4036,31 +4035,6 @@ static void seg_setup(int seg)
 		ar |= 0x08; /* code segment */
 
 	vmcs_write32(sf->ar_bytes, ar);
-}
-
-int allocate_vpid(void)
-{
-	int vpid;
-
-	if (!enable_vpid)
-		return 0;
-	spin_lock(&vmx_vpid_lock);
-	vpid = find_first_zero_bit(vmx_vpid_bitmap, VMX_NR_VPIDS);
-	if (vpid < VMX_NR_VPIDS)
-		__set_bit(vpid, vmx_vpid_bitmap);
-	else
-		vpid = 0;
-	spin_unlock(&vmx_vpid_lock);
-	return vpid;
-}
-
-void free_vpid(int vpid)
-{
-	if (!enable_vpid || vpid == 0)
-		return;
-	spin_lock(&vmx_vpid_lock);
-	__clear_bit(vpid, vmx_vpid_bitmap);
-	spin_unlock(&vmx_vpid_lock);
 }
 
 static void vmx_msr_bitmap_l01_changed(struct vcpu_vmx *vmx)
@@ -7721,7 +7695,7 @@ static void vmx_vcpu_free(struct kvm_vcpu *vcpu)
 
 	if (enable_pml)
 		vmx_destroy_pml_buffer(vmx);
-	free_vpid(vmx->vpid);
+	kvm_tlb_tags_free(&vmx_vpids, vmx->vpid);
 	nested_vmx_free_vcpu(vcpu);
 	free_loaded_vmcs(vmx->loaded_vmcs);
 }
@@ -7739,7 +7713,7 @@ static int vmx_vcpu_create(struct kvm_vcpu *vcpu)
 
 	err = -ENOMEM;
 
-	vmx->vpid = allocate_vpid();
+	vmx->vpid = enable_vpid ? kvm_tlb_tags_alloc(&vmx_vpids) : 0;
 
 	/*
 	 * If PML is turned on, failure on enabling PML just results in failure
@@ -7828,7 +7802,7 @@ free_vmcs:
 free_pml:
 	vmx_destroy_pml_buffer(vmx);
 free_vpid:
-	free_vpid(vmx->vpid);
+	kvm_tlb_tags_free(&vmx_vpids, vmx->vpid);
 	return err;
 }
 
@@ -8515,6 +8489,7 @@ static void vmx_hardware_unsetup(void)
 		nested_vmx_hardware_unsetup();
 
 	free_kvm_area();
+	kvm_tlb_tags_destroy(&vmx_vpids);
 }
 
 #define VMX_REQUIRED_APICV_INHIBITS			\
@@ -8898,7 +8873,8 @@ static __init int hardware_setup(void)
 	kvm_caps.has_bus_lock_exit = cpu_has_vmx_bus_lock_detection();
 	kvm_caps.has_notify_vmexit = cpu_has_notify_vmexit();
 
-	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
+	/* VPID 0 is reserved for host, so min=1  */
+	kvm_tlb_tags_init(&vmx_vpids, 1, VMX_NR_VPIDS - 1);
 
 	if (enable_ept)
 		kvm_mmu_set_ept_masks(enable_ept_ad_bits,

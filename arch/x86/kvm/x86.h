@@ -600,4 +600,17 @@ int kvm_sev_es_string_io(struct kvm_vcpu *vcpu, unsigned int size,
 			 unsigned int port, void *data,  unsigned int count,
 			 int in);
 
+struct kvm_tlb_tags {
+	spinlock_t	lock;
+	unsigned long	*bitmap;
+	unsigned int	min;
+	unsigned int	max;
+};
+
+int kvm_tlb_tags_init(struct kvm_tlb_tags *tlb_tags, unsigned int min,
+		      unsigned int max);
+void kvm_tlb_tags_destroy(struct kvm_tlb_tags *tlb_tags);
+unsigned int kvm_tlb_tags_alloc(struct kvm_tlb_tags *tlb_tags);
+void kvm_tlb_tags_free(struct kvm_tlb_tags *tlb_tags, unsigned int tag);
+
 #endif
