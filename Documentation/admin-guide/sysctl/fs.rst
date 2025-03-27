@@ -342,3 +342,8 @@ filesystems:
 ``/proc/sys/fs/fuse/max_pages_limit`` is a read/write file for
 setting/getting the maximum number of pages that can be used for servicing
 requests in FUSE.
+
+``/proc/sys/fs/fuse/auto_recovery`` is a read/write file for
+setting/getting the fuse keep alive function state of allowing
+new processes to reconnect to existing FUSE mounts using
+connection characteristic values for identity verification.

@@ -47,6 +47,9 @@
 /** Maximum of max_pages received in init_out */
 extern unsigned int fuse_max_pages_limit;
 
+/** Enable/disable fuse auto recovery function */
+extern unsigned int fuse_auto_recovery;
+
 /** List of active connections */
 extern struct list_head fuse_conn_list;
 

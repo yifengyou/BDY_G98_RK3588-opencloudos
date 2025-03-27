@@ -23,6 +23,15 @@ static struct ctl_table fuse_sysctl_table[] = {
 		.extra1		= SYSCTL_ONE,
 		.extra2		= &sysctl_fuse_max_pages_limit,
 	},
+	{
+		.procname	= "auto_recovery",
+		.data		= &fuse_auto_recovery,
+		.maxlen		= sizeof(fuse_auto_recovery),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
 };
 
 int fuse_sysctl_register(void)
