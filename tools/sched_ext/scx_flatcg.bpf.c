@@ -807,6 +807,10 @@ s32 BPF_STRUCT_OPS(fcg_init_task, struct task_struct *p,
 {
 	struct fcg_task_ctx *taskc;
 	struct fcg_cgrp_ctx *cgc;
+	unsigned long flags;
+	s32 ret = 0;
+
+	bpf_local_irq_save(&flags);
 
 	/*
 	 * @p is new. Let's ensure that its task_ctx is available. We can sleep
@@ -814,17 +818,24 @@ s32 BPF_STRUCT_OPS(fcg_init_task, struct task_struct *p,
 	 */
 	taskc = bpf_task_storage_get(&task_ctx, p, 0,
 				     BPF_LOCAL_STORAGE_GET_F_CREATE);
-	if (!taskc)
-		return -ENOMEM;
+	if (!taskc) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	taskc->bypassed_at = 0;
 
-	if (!(cgc = find_cgrp_ctx(args->cgroup)))
-		return -ENOENT;
+	cgc = find_cgrp_ctx(args->cgroup);
+	if (!cgc) {
+		ret = -ENOENT;
+		goto out;
+	}
 
 	p->scx.dsq_vtime = cgc->tvtime_now;
+out:
+	bpf_local_irq_restore(&flags);
 
-	return 0;
+	return ret;
 }
 
 int BPF_STRUCT_OPS_SLEEPABLE(fcg_cgroup_init, struct cgroup *cgrp,
@@ -834,7 +845,8 @@ int BPF_STRUCT_OPS_SLEEPABLE(fcg_cgroup_init, struct cgroup *cgrp,
 	struct cgv_node *cgv_node;
 	struct cgv_node_stash empty_stash = {}, *stash;
 	u64 cgid = cgrp->kn->id;
-	int ret;
+	s32 ret = 0;
+	unsigned long flags;
 
 	/*
 	 * Technically incorrect as cgroup ID is full 64bit while dsq ID is
@@ -845,8 +857,10 @@ int BPF_STRUCT_OPS_SLEEPABLE(fcg_cgroup_init, struct cgroup *cgrp,
 	if (ret)
 		return ret;
 
+	bpf_local_irq_save(&flags);
 	cgc = bpf_cgrp_storage_get(&cgrp_ctx, cgrp, 0,
 				   BPF_LOCAL_STORAGE_GET_F_CREATE);
+	bpf_local_irq_restore(&flags);
 	if (!cgc) {
 		ret = -ENOMEM;
 		goto err_destroy_dsq;

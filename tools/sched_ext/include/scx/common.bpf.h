@@ -294,6 +294,10 @@ struct bpf_rb_node *bpf_rbtree_first(struct bpf_rb_root *root) __ksym;
 void *bpf_refcount_acquire_impl(void *kptr, void *meta) __ksym;
 #define bpf_refcount_acquire(kptr) bpf_refcount_acquire_impl(kptr, NULL)
 
+/* irq */
+extern void bpf_local_irq_save(unsigned long *) __weak __ksym;
+extern void bpf_local_irq_restore(unsigned long *) __weak __ksym;
+
 /* task */
 struct task_struct *bpf_task_from_pid(s32 pid) __ksym;
 struct task_struct *bpf_task_acquire(struct task_struct *p) __ksym;
