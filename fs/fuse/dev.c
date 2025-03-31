@@ -2353,6 +2353,47 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	return res;
 }
 
+static inline bool fuse_conn_cmdline_match(struct fuse_conn *fc,
+					    const char *cmdline)
+{
+	if (!fuse_auto_recovery)
+		return false;
+
+	return !strncmp(fc->cmdline, cmdline, TASK_COMM_ARGS_LEN);
+}
+
+static int fuse_device_attach_find(struct file *file, const char *cmdline)
+{
+	struct fuse_conn *fc;
+
+	list_for_each_entry(fc, &fuse_conn_list, entry) {
+		if (!fuse_conn_cmdline_match(fc, cmdline))
+			continue;
+		pr_info("Found valid fuse connection of command: (%s)\n", cmdline);
+		return fuse_device_clone(fc, file);
+	}
+	pr_info("No fuse connection of command: (%s)\n", cmdline);
+	return -ENOTTY;
+}
+
+static long fuse_dev_ioctl_recovery(struct file *file, __u32 __user *argp)
+{
+	struct fuse_ioctl_recovery fc_recovery;
+	int res;
+
+	if (copy_from_user(&fc_recovery, argp, sizeof(fc_recovery)))
+		return -EFAULT;
+
+	if (!fuse_auto_recovery)
+		return -EPERM;
+
+	mutex_lock(&fuse_mutex);
+	res = fuse_device_attach_find(file, fc_recovery.cmdline);
+	mutex_unlock(&fuse_mutex);
+
+	return res;
+}
+
 static long fuse_dev_ioctl_backing_open(struct file *file,
 					struct fuse_backing_map __user *argp)
 {
@@ -2396,6 +2437,9 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case FUSE_DEV_IOC_CLONE:
 		return fuse_dev_ioctl_clone(file, argp);
+
+	case FUSE_DEV_IOC_RECOVERY:
+		return fuse_dev_ioctl_recovery(file, argp);
 
 	case FUSE_DEV_IOC_BACKING_OPEN:
 		return fuse_dev_ioctl_backing_open(file, argp);
