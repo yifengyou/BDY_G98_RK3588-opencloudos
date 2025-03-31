@@ -10635,7 +10635,7 @@ void sched_release_group(struct task_group *tg)
 	spin_unlock_irqrestore(&task_group_lock, flags);
 }
 
-static struct task_group *sched_get_task_group(struct task_struct *tsk)
+static void sched_change_group(struct task_struct *tsk)
 {
 	struct task_group *tg;
 
@@ -10647,13 +10647,7 @@ static struct task_group *sched_get_task_group(struct task_struct *tsk)
 	tg = container_of(task_css_check(tsk, cpu_cgrp_id, true),
 			  struct task_group, css);
 	tg = autogroup_task_group(tsk, tg);
-
-	return tg;
-}
-
-static void sched_change_group(struct task_struct *tsk, struct task_group *group)
-{
-	tsk->sched_task_group = group;
+	tsk->sched_task_group = tg;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	if (tsk->sched_class->task_change_group)
@@ -10674,22 +10668,14 @@ void sched_move_task(struct task_struct *tsk)
 {
 	int queued, running, queue_flags =
 		DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
-	struct task_group *group;
 	struct rq_flags rf;
 	struct rq *rq;
 #ifdef CONFIG_EXT_GROUP_SCHED
 	const struct sched_class *prev_class;
+	struct task_group *group;
 #endif
 
 	rq = task_rq_lock(tsk, &rf);
-	/*
-	 * Esp. with SCHED_AUTOGROUP enabled it is possible to get superfluous
-	 * group changes.
-	 */
-	group = sched_get_task_group(tsk);
-	if (group == tsk->sched_task_group)
-		goto unlock;
-
 	update_rq_clock(rq);
 
 	running = task_current(rq, tsk);
@@ -10700,9 +10686,10 @@ void sched_move_task(struct task_struct *tsk)
 	if (running)
 		put_prev_task(rq, tsk);
 
-	sched_change_group(tsk, group);
+	sched_change_group(tsk);
 #ifdef CONFIG_EXT_GROUP_SCHED
 	prev_class = tsk->sched_class;
+	group = tsk->sched_task_group;
 	if (scx_enabled()) {
 		if (prev_class != &ext_sched_class && group->scx)
 			tsk->sched_class = &ext_sched_class;
@@ -10729,7 +10716,7 @@ void sched_move_task(struct task_struct *tsk)
 #ifdef CONFIG_EXT_GROUP_SCHED
 	check_class_changed(rq, tsk, prev_class, tsk->prio);
 #endif
-unlock:
+
 	task_rq_unlock(rq, tsk, &rf);
 }
 
