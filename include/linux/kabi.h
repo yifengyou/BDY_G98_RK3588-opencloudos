@@ -45,6 +45,8 @@ union { \
 		"kABI failure: " \
 		__stringify(_item) " is larger than reserved size (" __stringify(_size) " bytes)")
 
+#define KABI_UNIQUE_ID			__PASTE(kabi_hidden_, __LINE__)
+
 #ifdef CONFIG_KABI_RESERVE
 #define _KABI_RESERVE(n)		union {unsigned long kabi_reserved##n; }
 #else
@@ -81,7 +83,7 @@ union { \
 		_new;					\
 		struct {				\
 			_orig;				\
-		} __UNIQUE_ID(kabi_hidden_);		\
+		} KABI_UNIQUE_ID;			\
 		__KABI_CHECK_SIZE_ALIGN(struct {_orig; }, _new);	\
 	}
 #else
@@ -128,7 +130,7 @@ union { \
 #define KABI_EXTEND_WITH_SIZE(_new, _size)				\
 	KABI_EXTEND(union {						\
 		_new;							\
-		unsigned long __UNIQUE_ID(__kabi_hidden)[_size];	\
+		unsigned long KABI_UNIQUE_ID[_size];			\
 		__KABI_CHECK_SIZE(_new, 8 * (_size));			\
 	})
 
