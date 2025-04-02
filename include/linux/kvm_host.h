@@ -855,7 +855,9 @@ struct kvm {
 	struct xarray mem_attr_array;
 #endif
 	char stats_id[KVM_STATS_NAME_SIZE];
+#ifdef CONFIG_ARM64_HDBSS
 	bool enable_hdbss;
+#endif
 };
 
 #define kvm_err(fmt, ...) \
