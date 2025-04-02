@@ -1248,6 +1248,7 @@ struct kvm_ppc_resize_hpt {
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
+#define KVM_CAP_ARM_HW_DIRTY_STATE_TRACK 502
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
