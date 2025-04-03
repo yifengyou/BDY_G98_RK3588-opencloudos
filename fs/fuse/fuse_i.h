@@ -48,6 +48,12 @@
 /** FUSE task comm name max */
 #define FUSE_TASK_COMM_LEN 32
 
+/** Maximum number of outstanding background requests */
+#define FUSE_DEFAULT_MAX_BACKGROUND 12
+
+/** Congestion starts at 75% of maximum */
+#define FUSE_DEFAULT_CONGESTION_THRESHOLD (FUSE_DEFAULT_MAX_BACKGROUND * 3 / 4)
+
 /** Maximum of max_pages received in init_out */
 extern unsigned int fuse_max_pages_limit;
 
@@ -923,6 +929,11 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+	/* connection need recovery */
+	atomic_t need_recovery;
+
+	/* connection need resend */
+	atomic_t need_resend;
 
 	/* Name of the process allocating the fuse_conn, used for re-attach. */
 	char comm[FUSE_TASK_COMM_LEN];
@@ -1297,6 +1308,14 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 			   struct fuse_mount **fm);
 
 /**
+ * Scan all fuse_mounts belonging to fc to find the first where
+ * fuse_mount returns a result.
+ *
+ * The caller must hold fc->killsb.
+ */
+struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc);
+
+/**
  * File-system tells the kernel to invalidate cache for the given node id.
  */
 int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
@@ -1346,6 +1365,7 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 		    struct file *file);
 
 void fuse_set_initialized(struct fuse_conn *fc);
+void fuse_resend(struct fuse_conn *fc);
 
 void fuse_unlock_inode(struct inode *inode, bool locked);
 bool fuse_lock_inode(struct inode *inode);

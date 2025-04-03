@@ -56,12 +56,6 @@ MODULE_PARM_DESC(max_user_congthresh,
 
 #define FUSE_DEFAULT_BLKSIZE 512
 
-/** Maximum number of outstanding background requests */
-#define FUSE_DEFAULT_MAX_BACKGROUND 12
-
-/** Congestion starts at 75% of maximum */
-#define FUSE_DEFAULT_CONGESTION_THRESHOLD (FUSE_DEFAULT_MAX_BACKGROUND * 3 / 4)
-
 #ifdef CONFIG_BLOCK
 static struct file_system_type fuseblk_fs_type;
 #endif
@@ -520,6 +514,23 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 	return NULL;
 }
 
+struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc)
+{
+	struct fuse_mount *fm_iter;
+
+	WARN_ON(!rwsem_is_locked(&fc->killsb));
+	list_for_each_entry(fm_iter, &fc->mounts, fc_entry) {
+		if (!fm_iter->sb)
+			continue;
+
+		return fm_iter;
+
+	}
+
+	return NULL;
+}
+
+
 int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 			     loff_t offset, loff_t len)
 {
@@ -942,6 +953,8 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
 	atomic_set(&fc->num_waiting, 0);
+	atomic_set(&fc->need_recovery, 0);
+	atomic_set(&fc->need_resend, 0);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
@@ -1381,6 +1394,9 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 
 	fuse_set_initialized(fc);
 	wake_up_all(&fc->blocked_waitq);
+
+	if (fuse_auto_recovery && atomic_read(&fc->need_resend))
+		fuse_resend(fc);
 }
 
 void fuse_send_init(struct fuse_mount *fm)
