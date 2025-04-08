@@ -140,6 +140,22 @@ struct snp_secrets_page {
 	u8 rsvd3[3840];
 } __packed;
 
+/* PTE descriptor used for the prepare_pte_enc() operations. */
+struct pte_enc_desc {
+	pte_t *kpte;
+	int pte_level;
+	bool encrypt;
+	/* pfn of the kpte above */
+	unsigned long pfn;
+	/* physical address of @pfn */
+	unsigned long pa;
+	/* virtual address of @pfn */
+	void *va;
+	/* memory covered by the pte */
+	unsigned long size;
+	pgprot_t new_pgprot;
+};
+
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 extern void __sev_es_ist_enter(struct pt_regs *regs);
 extern void __sev_es_ist_exit(void);
@@ -195,22 +211,6 @@ static inline int pvalidate(unsigned long vaddr, bool rmp_psize, bool validate)
 
 	return rc;
 }
-
-/* PTE descriptor used for the prepare_pte_enc() operations. */
-struct pte_enc_desc {
-	pte_t *kpte;
-	int pte_level;
-	bool encrypt;
-	/* pfn of the kpte above */
-	unsigned long pfn;
-	/* physical address of @pfn */
-	unsigned long pa;
-	/* virtual address of @pfn */
-	void *va;
-	/* memory covered by the pte */
-	unsigned long size;
-	pgprot_t new_pgprot;
-};
 
 struct snp_guest_request_ioctl;
 
