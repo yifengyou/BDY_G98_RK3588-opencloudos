@@ -738,13 +738,15 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 #endif
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 	if (static_key_false((&paravirt_steal_rq_enabled))) {
-		steal = paravirt_steal_clock(cpu_of(rq));
+		u64 prev_steal;
+
+		steal = prev_steal = paravirt_steal_clock(cpu_of(rq));
 		steal -= rq->prev_steal_time_rq;
 
 		if (unlikely(steal > delta))
 			steal = delta;
 
-		rq->prev_steal_time_rq += steal;
+		rq->prev_steal_time_rq = prev_steal;
 		delta -= steal;
 	}
 #endif
@@ -1033,9 +1035,10 @@ void wake_up_q(struct wake_q_head *head)
 		struct task_struct *task;
 
 		task = container_of(node, struct task_struct, wake_q);
-		/* Task can safely be re-inserted now: */
 		node = node->next;
-		task->wake_q.next = NULL;
+		/* pairs with cmpxchg_relaxed() in __wake_q_add() */
+		WRITE_ONCE(task->wake_q.next, NULL);
+		/* Task can safely be re-inserted now. */
 
 		/*
 		 * wake_up_process() executes a full barrier, which pairs with
@@ -1197,9 +1200,9 @@ static void nohz_csd_func(void *info)
 	WARN_ON(!(flags & NOHZ_KICK_MASK));
 
 	rq->idle_balance = idle_cpu(cpu);
-	if (rq->idle_balance && !need_resched()) {
+	if (rq->idle_balance) {
 		rq->nohz_idle_balance = flags;
-		raise_softirq_irqoff(SCHED_SOFTIRQ);
+		__raise_softirq_irqoff(SCHED_SOFTIRQ);
 	}
 }
 
@@ -4565,10 +4568,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	memset(&p->stats, 0, sizeof(p->stats));
 #endif
 
-	RB_CLEAR_NODE(&p->dl.rb_node);
-	init_dl_task_timer(&p->dl);
-	init_dl_inactive_task_timer(&p->dl);
-	__dl_clear_params(p);
+	init_dl_entity(&p->dl);
 
 	INIT_LIST_HEAD(&p->rt.run_list);
 	p->rt.timeout		= 0;
@@ -7675,6 +7675,14 @@ static void __setscheduler_params(struct task_struct *p,
 	else if (fair_policy(policy))
 		p->static_prio = NICE_TO_PRIO(attr->sched_nice);
 
+	/* rt-policy tasks do not have a timerslack */
+	if (task_is_realtime(p)) {
+		p->timer_slack_ns = 0;
+	} else if (p->timer_slack_ns == 0) {
+		/* when switching back to non-rt policy, restore timerslack */
+		p->timer_slack_ns = p->default_timer_slack_ns;
+	}
+
 	/*
 	 * __sched_setscheduler() ensures attr->sched_priority == 0 when
 	 * !rt_policy. Always setting this ensures that things like
@@ -8711,7 +8719,7 @@ SYSCALL_DEFINE0(sched_yield)
 #if !defined(CONFIG_PREEMPTION) || defined(CONFIG_PREEMPT_DYNAMIC)
 int __sched __cond_resched(void)
 {
-	if (should_resched(0)) {
+	if (should_resched(0) && !irqs_disabled()) {
 		preempt_schedule_common();
 		return 1;
 	}
@@ -10629,7 +10637,7 @@ void sched_release_group(struct task_group *tg)
 	spin_unlock_irqrestore(&task_group_lock, flags);
 }
 
-static struct task_group *sched_get_task_group(struct task_struct *tsk)
+static void sched_change_group(struct task_struct *tsk)
 {
 	struct task_group *tg;
 
@@ -10641,13 +10649,7 @@ static struct task_group *sched_get_task_group(struct task_struct *tsk)
 	tg = container_of(task_css_check(tsk, cpu_cgrp_id, true),
 			  struct task_group, css);
 	tg = autogroup_task_group(tsk, tg);
-
-	return tg;
-}
-
-static void sched_change_group(struct task_struct *tsk, struct task_group *group)
-{
-	tsk->sched_task_group = group;
+	tsk->sched_task_group = tg;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	if (tsk->sched_class->task_change_group)
@@ -10668,21 +10670,12 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 {
 	int queued, running, queue_flags =
 		DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
-	struct task_group *group;
 	struct rq_flags rf;
 	struct rq *rq;
 	const struct sched_class *prev_class = tsk->sched_class;
 	int oldprio = tsk->prio;
 
 	rq = task_rq_lock(tsk, &rf);
-	/*
-	 * Esp. with SCHED_AUTOGROUP enabled it is possible to get superfluous
-	 * group changes.
-	 */
-	group = sched_get_task_group(tsk);
-	if (group == tsk->sched_task_group)
-		goto unlock;
-
 	update_rq_clock(rq);
 
 	running = task_current(rq, tsk);
@@ -10693,7 +10686,7 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 	if (running)
 		put_prev_task(rq, tsk);
 
-	sched_change_group(tsk, group);
+	sched_change_group(tsk);
 
 	if (!for_autogroup)
 		scx_cgroup_move_task(tsk);
@@ -10711,38 +10704,13 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 		resched_curr(rq);
 	}
 	check_class_changed(rq, tsk, prev_class, oldprio);
-unlock:
 	task_rq_unlock(rq, tsk, &rf);
 }
 
-#ifdef CONFIG_CGROUPFS
+#if defined(CONFIG_CGROUPFS) || defined(CONFIG_CGROUPFS_MODULE)
 int container_cpuquota_aware;
 #define cpu_quota_aware_enabled(tg) \
     (tg && tg != &root_task_group && tg->cpuquota_aware)
-
-int cpu_get_max_cpus(struct task_struct *p)
-{
-	int max_cpus = INT_MAX;
-	struct cgroup_subsys_state *css = task_get_css(p, cpu_cgrp_id);
-	struct task_group *tg = container_of(css, struct task_group, css);
-
-	if (!cpu_quota_aware_enabled(tg))
-		goto out;
-
-	if (tg->cfs_bandwidth.quota == RUNTIME_INF)
-		goto out;
-
-	max_cpus = DIV_ROUND_UP(tg->cfs_bandwidth.quota, tg->cfs_bandwidth.period);
-out:
-	css_put(css);
-
-	return max_cpus;
-}
-#else /* CONFIG_CGROUPFS */
-int cpu_get_max_cpus(struct task_struct *p)
-{
-       return INT_MAX;
-}
 #endif /* CONFIG_CGROUPFS */
 
 static struct cgroup_subsys_state *
@@ -11724,6 +11692,7 @@ static int cpu_max_show(struct seq_file *sf, void *v)
 {
 	struct task_group *tg = css_tg(seq_css(sf));
 
+	/* Show as "quota period" */
 	cpu_period_quota_print(sf, tg_get_cfs_period(tg), tg_get_cfs_quota(tg));
 	return 0;
 }
@@ -11742,6 +11711,54 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 		ret = tg_set_cfs_bandwidth(tg, period, quota, burst);
 	return ret ?: nbytes;
 }
+
+#if defined(CONFIG_CGROUPFS) || defined(CONFIG_CGROUPFS_MODULE)
+int cpu_get_max_cpus(struct task_struct *p)
+{
+	int max_cpus = INT_MAX;
+	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(p,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
+	struct task_group *tg = container_of(css, struct task_group, css);
+
+	if (!cpu_quota_aware_enabled(tg))
+		goto out;
+
+	if (tg->cfs_bandwidth.quota == RUNTIME_INF)
+		goto out;
+
+	max_cpus = DIV_ROUND_UP(tg->cfs_bandwidth.quota, tg->cfs_bandwidth.period);
+out:
+	css_put(css);
+
+	return max_cpus;
+}
+EXPORT_SYMBOL_GPL(cpu_get_max_cpus);
+
+int cpu_cgroupfs_quota_show(struct seq_file *m, void *v)
+{
+	struct cgroup_subsys_state *css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpu_cgrp_id);
+	struct task_group *tg = container_of(css, struct task_group, css);
+
+	/* Show as "quota period" */
+	cpu_period_quota_print(m, tg_get_cfs_period(tg), tg_get_cfs_quota(tg));
+
+	css_put(css);
+	return 0;
+
+}
+EXPORT_SYMBOL_GPL(cpu_cgroupfs_quota_show);
+
+#else /* CONFIG_CGROUPFS */
+
+int cpu_get_max_cpus(struct task_struct *p)
+{
+	return INT_MAX;
+}
+EXPORT_SYMBOL_GPL(cpu_get_max_cpus);
+
+#endif /* CONFIG_CGROUPFS */
+
 #endif
 
 #ifdef CONFIG_EXT_GROUP_SCHED

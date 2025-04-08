@@ -41,10 +41,6 @@ to using the steps to modify base configs as below:
 Other configs (except config.pswitch) are delta configs, which will
 overwrite the duplicate name CONFIG_* in base config (tencent.config).
 
-Related Link:
-https://iwiki.woa.com/pages/viewpage.action?pageId=4007623631
-
-
 3. Configs introduction
 tencentconfig
   TK4 x86 private release version using this config to build kernel image.
@@ -133,3 +129,8 @@ So "make dist-config CONFIG="generic-debug"" will generate the same
 Note, When running "make dist-*" command (such as make dist-config), please make
 sure all changes have commited to git repo. "make dist-*" command gets codes and
 configs from git.
+
+*******************************************************************************
+iwiki/document
+*******************************************************************************
+Related iwiki: search "method of change TK config" in tencent isearch

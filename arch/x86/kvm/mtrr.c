@@ -20,6 +20,7 @@
 
 #include "cpuid.h"
 #include "mmu.h"
+#include "x86.h"
 
 #define IA32_MTRR_DEF_TYPE_E		(1ULL << 11)
 #define IA32_MTRR_DEF_TYPE_FE		(1ULL << 10)

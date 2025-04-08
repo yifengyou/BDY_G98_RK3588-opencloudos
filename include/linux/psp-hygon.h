@@ -20,6 +20,11 @@
 
 #define CSV_FW_MAX_SIZE		0x80000	/* 512KB */
 
+#define CSV_EXT_CSV3_MULT_LUP_DATA_BIT	0
+#define CSV_EXT_CSV3_MULT_LUP_DATA	(1 << CSV_EXT_CSV3_MULT_LUP_DATA_BIT)
+#define CSV_EXT_CSV3_INJ_SECRET_BIT	1
+#define CSV_EXT_CSV3_INJ_SECRET		(1 << CSV_EXT_CSV3_INJ_SECRET_BIT)
+
 /**
  * Guest/platform management commands for CSV
  */
@@ -307,6 +312,28 @@ struct csv3_data_dbg_read_mem {
 } __packed;
 
 /**
+ * struct csv3_data_attestation_report - ATTESTATION secure call command parameters
+ *
+ * @handle: handle of the VM to process
+ * @resp_gpa: guest physical address to save the generated report
+ * @resp_length: length of the generated report
+ * @req_gpa: guest physical address of the input for the report
+ * @req_length: length of the input for the report
+ * @fw_error_code: firmware status code when generating the report
+ */
+struct csv3_data_attestation_report {
+	u32 handle;				/* Out */
+	u32 reserved1;
+	u64 resp_gpa;				/* In */
+	u8 reserved2[16];
+	u32 resp_len;				/* In/Out */
+	u32 reserved3;
+	u64 req_gpa;				/* In */
+	u32 req_len;				/* In,Out */
+	u32 fw_error_code;			/* Out */
+} __packed;
+
+/**
  * struct csv3_data_send_encrypt_data - SEND_ENCRYPT_DATA command parameters
  *
  * @handle: handle of the VM to process
@@ -508,6 +535,20 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 
 int kvm_pv_psp_forward_op(struct kvm_vpsp *vpsp, uint32_t cmd,
 				gpa_t data_gpa, uint32_t psp_ret);
+
+/**
+ * csv_get_extension_info - collect extension set of the firmware
+ *
+ * @buf: The buffer to save extension set
+ * @size: The size of the @buf
+ *
+ * Returns:
+ * 0 if @buf is filled with extension bitflags
+ * -%ENODEV if the CSV device is not available
+ * -%EINVAL if @buf is NULL or @size is too smaller
+ */
+int csv_get_extension_info(void *buf, size_t *size);
+
 #else	/* !CONFIG_CRYPTO_DEV_SP_PSP */
 
 static inline int psp_do_cmd(int cmd, void *data, int *psp_ret) { return -ENODEV; }
@@ -545,6 +586,8 @@ kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa,
 static inline int
 kvm_pv_psp_forward_op(struct kvm_vpsp *vpsp, uint32_t cmd,
 			gpa_t data_gpa, uint32_t psp_ret) { return -ENODEV; }
+
+static inline int csv_get_extension_info(void *buf, size_t *size) { return -ENODEV; }
 
 #endif	/* CONFIG_CRYPTO_DEV_SP_PSP */
 

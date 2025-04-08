@@ -58,6 +58,9 @@
 
 #define AMD64_EVENTSEL_EVENT	\
 	(ARCH_PERFMON_EVENTSEL_EVENT | (0x0FULL << 32))
+#define HYGON_F18H_EVENTSEL_EVENT	\
+	(AMD64_EVENTSEL_EVENT        |  \
+	 GENMASK_ULL(62, 61))
 #define INTEL_ARCH_EVENT_MASK	\
 	(ARCH_PERFMON_EVENTSEL_UMASK | ARCH_PERFMON_EVENTSEL_EVENT)
 
@@ -108,6 +111,19 @@
 #define AMD64_RAW_EVENT_MASK_NB		\
 	(AMD64_EVENTSEL_EVENT        |  \
 	 ARCH_PERFMON_EVENTSEL_UMASK)
+
+#define HYGON_F18H_M4H_EVENTSEL_UMASK_NB	0x0003FF00ULL
+#define HYGON_F18H_M6H_EVENTSEL_UMASK_NB	0x000FFF00ULL
+
+#define HYGON_F18H_RAW_EVENT_MASK_NB		\
+	(HYGON_F18H_EVENTSEL_EVENT  |		\
+	 ARCH_PERFMON_EVENTSEL_UMASK)
+#define HYGON_F18H_M4H_RAW_EVENT_MASK_NB	\
+	(HYGON_F18H_EVENTSEL_EVENT  |		\
+	 HYGON_F18H_M4H_EVENTSEL_UMASK_NB)
+#define HYGON_F18H_M6H_RAW_EVENT_MASK_NB	\
+	(HYGON_F18H_EVENTSEL_EVENT  |		\
+	 HYGON_F18H_M6H_EVENTSEL_UMASK_NB)
 
 #define AMD64_PERFMON_V2_EVENTSEL_EVENT_NB	\
 	(AMD64_EVENTSEL_EVENT	|		\
@@ -186,8 +202,32 @@ union cpuid10_edx {
  * detection/enumeration details:
  */
 #define ARCH_PERFMON_EXT_LEAF			0x00000023
-#define ARCH_PERFMON_NUM_COUNTER_LEAF_BIT	0x1
 #define ARCH_PERFMON_NUM_COUNTER_LEAF		0x1
+
+union cpuid35_eax {
+	struct {
+		unsigned int	leaf0:1;
+		/* Counters Sub-Leaf */
+		unsigned int    cntr_subleaf:1;
+		/* Auto Counter Reload Sub-Leaf */
+		unsigned int    acr_subleaf:1;
+		/* Events Sub-Leaf */
+		unsigned int    events_subleaf:1;
+		unsigned int	reserved:28;
+	} split;
+	unsigned int            full;
+};
+
+union cpuid35_ebx {
+	struct {
+		/* UnitMask2 Supported */
+		unsigned int    umask2:1;
+		/* EQ-bit Supported */
+		unsigned int    eq:1;
+		unsigned int	reserved:30;
+	} split;
+	unsigned int            full;
+};
 
 /*
  * Intel Architectural LBR CPUID detection/enumeration details:

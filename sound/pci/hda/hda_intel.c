@@ -2267,6 +2267,8 @@ static const struct snd_pci_quirk power_save_denylist[] = {
 	SND_PCI_QUIRK(0x1631, 0xe017, "Packard Bell NEC IMEDIA 5204", 0),
 	/* KONTRON SinglePC may cause a stall at runtime resume */
 	SND_PCI_QUIRK(0x1734, 0x1232, "KONTRON SinglePC", 0),
+	/* Dell ALC3271 */
+	SND_PCI_QUIRK(0x1028, 0x0962, "Dell ALC3271", 0),
 	{}
 };
 #endif /* CONFIG_PM */
@@ -2813,9 +2815,9 @@ static const struct pci_device_id azx_ids[] = {
 		AZX_DCAPS_NO_MSI | AZX_DCAPS_RIRB_PRE_DELAY | AZX_DCAPS_NO_64BIT },
 	/* Loongson HDAudio*/
 	{ PCI_VDEVICE(LOONGSON, PCI_DEVICE_ID_LOONGSON_HDA),
-	  .driver_data = AZX_DRIVER_LOONGSON },
+	  .driver_data = AZX_DRIVER_LOONGSON | AZX_DCAPS_NO_TCSEL},
 	{ PCI_VDEVICE(LOONGSON, PCI_DEVICE_ID_LOONGSON_HDMI),
-	  .driver_data = AZX_DRIVER_LOONGSON },
+	  .driver_data = AZX_DRIVER_LOONGSON | AZX_DCAPS_NO_TCSEL},
 	/* Hygon HDAudio */
 	{ PCI_VDEVICE(HYGON, PCI_DEVICE_ID_HYGON_18H_M05H_HDA),
 	  .driver_data = AZX_DRIVER_HYGON | AZX_DCAPS_POSFIX_LPIB | AZX_DCAPS_NO_MSI },

@@ -298,4 +298,10 @@ ssize_t cgroup_priority_write(struct kernfs_open_file *of,
 int cgroup_priority_show(struct seq_file *seq, void *v);
 int cgroup_id_show(struct seq_file *seq, void *v);
 
+#ifdef CONFIG_CGROUPFS
+int cgroup_role_show(struct seq_file *seq, void *v);
+ssize_t cgroup_role_write(struct kernfs_open_file *of,
+				char *buf, size_t nbytes, loff_t off);
+#endif
+
 #endif /* __CGROUP_INTERNAL_H */

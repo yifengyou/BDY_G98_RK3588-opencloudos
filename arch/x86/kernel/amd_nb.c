@@ -262,6 +262,20 @@ bool hygon_f18h_m4h(void)
 }
 EXPORT_SYMBOL_GPL(hygon_f18h_m4h);
 
+bool hygon_f18h_m10h(void)
+{
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		return false;
+
+	if (boot_cpu_data.x86 == 0x18 &&
+	    boot_cpu_data.x86_model >= 0x10 &&
+	    boot_cpu_data.x86_model <= 0x1f)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(hygon_f18h_m10h);
+
 u16 hygon_nb_num(void)
 {
 	return nb_num;
@@ -285,8 +299,7 @@ static int get_df_register(struct pci_dev *misc, u8 func, int offset, u32 *value
 			else
 				device = PCI_DEVICE_ID_HYGON_18H_M04H_DF_F1;
 			break;
-		case 0x6:
-		case 0x7:
+		case 0x6 ... 0x8:
 			device = PCI_DEVICE_ID_HYGON_18H_M05H_DF_F1;
 			break;
 		default:
@@ -294,8 +307,7 @@ static int get_df_register(struct pci_dev *misc, u8 func, int offset, u32 *value
 		}
 	} else if (func == 5) {
 		switch (boot_cpu_data.x86_model) {
-		case 0x6:
-		case 0x7:
+		case 0x6 ... 0x8:
 			device = PCI_DEVICE_ID_HYGON_18H_M06H_DF_F5;
 			break;
 		default:
@@ -329,7 +341,7 @@ int get_df_id(struct pci_dev *misc, u8 *id)
 	int ret;
 
 	if (boot_cpu_data.x86_model >= 0x6 &&
-	    boot_cpu_data.x86_model <= 0x7) {
+	    boot_cpu_data.x86_model <= 0xf) {
 		/* F5x180[19:16]: DF ID */
 		ret = get_df_register(misc, 5, 0x180, &value);
 		*id = (value >> 16) & 0xf;
@@ -467,8 +479,9 @@ err:
 	amd_northbridges.nb = NULL;
 
 ret:
-	pr_err("Hygon Fam%xh Model%xh northbridge init failed(%d)!\n",
-		boot_cpu_data.x86, boot_cpu_data.x86_model, err);
+	if (!boot_cpu_has(X86_FEATURE_HYPERVISOR))
+		pr_err("Hygon Fam%xh Model%xh northbridge init failed(%d)!\n",
+			boot_cpu_data.x86, boot_cpu_data.x86_model, err);
 	return err;
 }
 
@@ -606,7 +619,6 @@ bool __init early_is_amd_nb(u32 device)
 
 struct resource *amd_get_mmconfig_range(struct resource *res)
 {
-	u32 address;
 	u64 base, msr;
 	unsigned int segn_busn_bits;
 
@@ -614,12 +626,10 @@ struct resource *amd_get_mmconfig_range(struct resource *res)
 	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
 		return NULL;
 
-	/* assume all cpus from fam10h have mmconfig */
-	if (boot_cpu_data.x86 < 0x10)
+	/* Assume CPUs from Fam10h have mmconfig, although not all VMs do */
+	if (boot_cpu_data.x86 < 0x10 ||
+	    rdmsrl_safe(MSR_FAM10H_MMIO_CONF_BASE, &msr))
 		return NULL;
-
-	address = MSR_FAM10H_MMIO_CONF_BASE;
-	rdmsrl(address, msr);
 
 	/* mmconfig is not enabled */
 	if (!(msr & FAM10H_MMIO_CONF_ENABLE))
@@ -783,6 +793,10 @@ static __init void fix_erratum_688(void)
 
 static __init int init_amd_nbs(void)
 {
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
+	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		return 0;
+
 	amd_cache_northbridges();
 	amd_cache_gart();
 

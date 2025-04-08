@@ -854,10 +854,6 @@ struct kvm_ioeventfd {
 #define KVM_X86_DISABLE_EXITS_HLT            (1 << 1)
 #define KVM_X86_DISABLE_EXITS_PAUSE          (1 << 2)
 #define KVM_X86_DISABLE_EXITS_CSTATE         (1 << 3)
-#define KVM_X86_DISABLE_VALID_EXITS          (KVM_X86_DISABLE_EXITS_MWAIT | \
-                                              KVM_X86_DISABLE_EXITS_HLT | \
-                                              KVM_X86_DISABLE_EXITS_PAUSE | \
-                                              KVM_X86_DISABLE_EXITS_CSTATE)
 
 /* for KVM_ENABLE_CAP */
 struct kvm_enable_cap {
@@ -1213,6 +1209,13 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_USER_MEMORY2 231
 
 #define KVM_CAP_SEV_ES_GHCB 500
+#define KVM_CAP_HYGON_COCO_EXT 501
+/* support userspace to request firmware to build CSV3 guest's memory space */
+#define KVM_CAP_HYGON_COCO_EXT_CSV3_SET_PRIV_MEM  (1 << 0)
+/* support request to update CSV3 guest's memory region multiple times */
+#define KVM_CAP_HYGON_COCO_EXT_CSV3_MULT_LUP_DATA (1 << 1)
+/* support request to inject secret to CSV3 guest */
+#define KVM_CAP_HYGON_COCO_EXT_CSV3_INJ_SECRET    (1 << 2)
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -2343,6 +2346,8 @@ enum csv3_cmd_id {
 	KVM_CSV3_RECEIVE_ENCRYPT_DATA,
 	KVM_CSV3_RECEIVE_ENCRYPT_CONTEXT,
 	KVM_CSV3_HANDLE_MEMORY,
+
+	KVM_CSV3_SET_GUEST_PRIVATE_MEMORY = 0xc8,
 
 	KVM_CSV3_NR_MAX,
 };

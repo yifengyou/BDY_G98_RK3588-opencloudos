@@ -133,6 +133,7 @@ static void __init parse_cpu_table(const struct dmi_header *dm)
 
 	loongson_sysconf.cpuname = (void *)dmi_string_parse(dm, dmi_data[16]);
 	loongson_sysconf.cores_per_package = *(dmi_data + SMBIOS_THREAD_PACKAGE_OFFSET);
+	__max_packages++;
 
 	pr_info("CpuClock = %llu\n", cpu_clock_freq);
 }
@@ -416,6 +417,9 @@ static void __init check_kernel_sections_mem(void)
  */
 static void __init arch_mem_init(char **cmdline_p)
 {
+	/* Recalculate max_low_pfn for "mem=xxx" */
+	max_pfn = max_low_pfn = PHYS_PFN(memblock_end_of_DRAM());
+
 	if (usermem)
 		pr_info("User-defined physical RAM map overwrite\n");
 

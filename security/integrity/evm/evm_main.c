@@ -939,8 +939,15 @@ void __init evm_load_x509(void)
 }
 #endif
 
+extern bool evm_enabled;
+
 static int __init init_evm(void)
 {
+	if (!evm_enabled) {
+		pr_info("EVM is disabled by boot parameter\n");
+		return 0;
+	}
+
 	int error;
 	struct list_head *pos, *q;
 

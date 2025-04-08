@@ -18,11 +18,11 @@ ifeq ($(DIST),oc9)
 ### Vendor mark
 VENDOR = opencloudos
 VENDOR_CAPITALIZED = OpenCloudOS
-URL = https://github.com/OpenCloudOS/OpenCloudOS-Kernel-Stream
+URL = https://gitee.com/OpenCloudOS/OpenCloudOS-Kernel
 else
 VENDOR = tencentos
 VENDOR_CAPITALIZED = TencentOS
-URL = https://git.woa.com/tlinux/tkernel5
+URL = https://gitee.com/OpenCloudOS/OpenCloudOS-Kernel
 endif
 
 ### Get native arch for binary build by default
@@ -104,7 +104,7 @@ endif
 
 ### RPM build options
 # All params enabled by default (except kABI check, see below), ENABLED overrides DEFAULT_DISABLE.
-DISABLED = $(DEFAULT_DISABLED)
+DISABLED = ofed $(DEFAULT_DISABLED)
 ENABLED = $(DEFAULT_ENABLED)
 # Automatically disable non core package for non standard build, such as eks/cloudgame
 ifneq ($(CONFIG),generic-release)

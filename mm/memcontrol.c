@@ -1479,6 +1479,7 @@ void mem_cgroup_scan_tasks(struct mem_cgroup *memcg,
 {
 	struct mem_cgroup *iter;
 	int ret = 0;
+	int i = 0;
 
 #ifdef CONFIG_TEXT_UNEVICTABLE
 	if (memcg->allow_unevictable)
@@ -1490,8 +1491,12 @@ void mem_cgroup_scan_tasks(struct mem_cgroup *memcg,
 		struct task_struct *task;
 
 		css_task_iter_start(&iter->css, CSS_TASK_ITER_PROCS, &it);
-		while (!ret && (task = css_task_iter_next(&it)))
+		while (!ret && (task = css_task_iter_next(&it))) {
+			/* Avoid potential softlockup warning */
+			if ((++i & 1023) == 0)
+				cond_resched();
 			ret = fn(task, arg);
+		}
 		css_task_iter_end(&it);
 		if (ret) {
 			mem_cgroup_iter_break(memcg, iter);
@@ -1902,6 +1907,13 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 			       vm_event_name(memcg_vm_event_stat[i]),
 			       memcg_events(memcg, memcg_vm_event_stat[i]));
 	}
+
+#ifdef CONFIG_EMM_MEMCG
+	for (i = 0; i < NR_LRU_LISTS; i++)
+	seq_buf_printf(s, "local_%s %lu\n", lru_list_name(i),
+			   memcg_page_state_local(memcg, NR_LRU_BASE + i) *
+			   PAGE_SIZE);
+#endif
 
 	/* The above should easily fit into one page */
 	WARN_ON_ONCE(seq_buf_has_overflowed(s));
@@ -4256,6 +4268,9 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 		return;
 
 	pages_used = page_counter_read(&memcg->pagecache);
+	if (pages_used < pages_max)
+		return;
+
 	limit_retry_times = READ_ONCE(vm_pagecache_limit_retry_times);
 	goal_pages_used = (100 - READ_ONCE(memcg->pagecache_reclaim_ratio))
 				* pages_max / 100;
@@ -6115,7 +6130,8 @@ int mem_cgroupfs_meminfo_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct mem_cgroup *memcg;
 
-	css = task_get_css(current, memory_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, memory_cgrp_id);
 	memcg = mem_cgroup_from_css(css);
 	ret = mem_cgroup_meminfo_read_comm(m, v, memcg);
 	css_put(css);
@@ -6211,7 +6227,8 @@ int mem_cgroupfs_vmstat_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct mem_cgroup *memcg;
 
-	css = task_get_css(current, memory_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, memory_cgrp_id);
 	memcg = mem_cgroup_from_css(css);
 	ret = mem_cgroup_vmstat_read_comm(m, v, memcg);
 	css_put(css);
@@ -7103,8 +7120,6 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	memcg->deferred_split_queue.split_queue_len = 0;
 #endif
 	lru_gen_init_memcg(memcg);
-
-	memcg->parent = parent ? parent : root_mem_cgroup;
 
 	return memcg;
 fail:
@@ -9121,12 +9136,21 @@ int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 
 int __mem_cgroup_charge_file(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 {
-	struct mem_cgroup *memcg;
+	struct mem_cgroup *memcg, *parent;
 	int ret;
 
 	memcg = get_mem_cgroup_from_mm(mm);
-	if (memcg->reparent_file)
-		memcg = memcg->parent;
+	if (memcg->reparent_file) {
+		parent = parent_mem_cgroup(memcg);
+		if (parent && css_tryget_online(&parent->css)) {
+			/*
+			 * Changed charge memory cgroup to parent, drop
+			 * previous reference.
+			 */
+			css_put(&memcg->css);
+			memcg = parent;
+		}
+	}
 	ret = charge_memcg(folio, memcg, gfp);
 	css_put(&memcg->css);
 

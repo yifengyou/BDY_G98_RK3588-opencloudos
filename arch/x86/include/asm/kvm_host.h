@@ -1668,6 +1668,7 @@ struct kvm_x86_ops {
 	void (*enable_nmi_window)(struct kvm_vcpu *vcpu);
 	void (*enable_irq_window)(struct kvm_vcpu *vcpu);
 	void (*update_cr8_intercept)(struct kvm_vcpu *vcpu, int tpr, int irr);
+
 	const bool x2apic_icr_is_split;
 	const unsigned long required_apicv_inhibits;
 	bool allow_apicv_in_x2apic_without_x2apic_virtualization;
@@ -1750,7 +1751,7 @@ struct kvm_x86_ops {
 	int (*vm_move_enc_context_from)(struct kvm *kvm, unsigned int source_fd);
 	void (*guest_memory_reclaimed)(struct kvm *kvm);
 
-	int (*get_msr_feature)(struct kvm_msr_entry *entry);
+	int (*get_feature_msr)(u32 msr, u64 *data);
 
 	bool (*can_emulate_instruction)(struct kvm_vcpu *vcpu, int emul_type,
 					void *insn, int insn_len);
@@ -1777,6 +1778,8 @@ struct kvm_x86_ops {
 	int (*vm_attestation)(struct kvm *kvm, unsigned long gpa, unsigned long len);
 	int (*control_pre_system_reset)(struct kvm *kvm);
 	int (*control_post_system_reset)(struct kvm *kvm);
+	int (*get_hygon_coco_extension)(struct kvm *kvm);
+	int (*enable_hygon_coco_extension)(struct kvm *kvm, u32 arg);
 };
 
 struct kvm_x86_nested_ops {
@@ -2266,7 +2269,8 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
 	 KVM_X86_QUIRK_OUT_7E_INC_RIP |		\
 	 KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT |	\
 	 KVM_X86_QUIRK_FIX_HYPERCALL_INSN |	\
-	 KVM_X86_QUIRK_MWAIT_NEVER_UD_FAULTS)
+	 KVM_X86_QUIRK_MWAIT_NEVER_UD_FAULTS |	\
+	 KVM_X86_QUIRK_STUFF_FEATURE_MSRS)
 
 /*
  * KVM previously used a u32 field in kvm_run to indicate the hypercall was

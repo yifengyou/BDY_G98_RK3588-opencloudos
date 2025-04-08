@@ -670,6 +670,14 @@ struct cftype cgroup1_base_files[] = {
 		.seq_show = cgroup_priority_show,
 		.write = cgroup_priority_write,
 	},
+#ifdef CONFIG_CGROUPFS
+	{
+		.name = "cgroup.role",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_role_show,
+		.write = cgroup_role_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 

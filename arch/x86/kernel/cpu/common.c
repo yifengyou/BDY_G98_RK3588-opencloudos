@@ -87,6 +87,9 @@ EXPORT_SYMBOL_GPL(get_llc_id);
 /* L2 cache ID of each logical CPU */
 DEFINE_PER_CPU_READ_MOSTLY(u16, cpu_l2c_id) = BAD_APICID;
 
+DEFINE_STATIC_KEY_FALSE(hygon_lmc_key);
+EXPORT_SYMBOL_GPL(hygon_lmc_key);
+
 static struct ppin_info {
 	int	feature;
 	int	msr_ppin_ctl;
@@ -928,7 +931,7 @@ void detect_ht(struct cpuinfo_x86 *c)
 #endif
 }
 
-static void get_cpu_vendor(struct cpuinfo_x86 *c)
+void get_cpu_vendor(struct cpuinfo_x86 *c)
 {
 	char *v = c->x86_vendor_id;
 	int i;
@@ -1693,14 +1696,10 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 	detect_nopl();
 }
 
-void __init early_cpu_init(void)
+void __init init_cpu_devs(void)
 {
 	const struct cpu_dev *const *cdev;
 	int count = 0;
-
-#ifdef CONFIG_PROCESSOR_SELECT
-	pr_info("KERNEL supported cpus:\n");
-#endif
 
 	for (cdev = __x86_cpu_dev_start; cdev < __x86_cpu_dev_end; cdev++) {
 		const struct cpu_dev *cpudev = *cdev;
@@ -1709,20 +1708,30 @@ void __init early_cpu_init(void)
 			break;
 		cpu_devs[count] = cpudev;
 		count++;
+	}
+}
+
+void __init early_cpu_init(void)
+{
+#ifdef CONFIG_PROCESSOR_SELECT
+	unsigned int i, j;
+
+	pr_info("KERNEL supported cpus:\n");
+#endif
+
+	init_cpu_devs();
 
 #ifdef CONFIG_PROCESSOR_SELECT
-		{
-			unsigned int j;
-
-			for (j = 0; j < 2; j++) {
-				if (!cpudev->c_ident[j])
-					continue;
-				pr_info("  %s %s\n", cpudev->c_vendor,
-					cpudev->c_ident[j]);
-			}
+	for (i = 0; i < X86_VENDOR_NUM && cpu_devs[i]; i++) {
+		for (j = 0; j < 2; j++) {
+			if (!cpu_devs[i]->c_ident[j])
+				continue;
+			pr_info("  %s %s\n", cpu_devs[i]->c_vendor,
+				cpu_devs[i]->c_ident[j]);
 		}
-#endif
 	}
+#endif
+
 	early_identify_cpu(&boot_cpu_data);
 }
 
@@ -2393,6 +2402,17 @@ void arch_smt_update(void)
 	apic_smt_update();
 }
 
+#if defined(CONFIG_X86_HYGON_LMC_SSE2_ON) || \
+	defined(CONFIG_X86_HYGON_LMC_AVX2_ON)
+static inline void update_lmc_branch_cond(void)
+{
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+		static_branch_enable(&hygon_lmc_key);
+}
+#else
+static inline void update_lmc_branch_cond(void) { }
+#endif
+
 void __init arch_cpu_finalize_init(void)
 {
 	identify_boot_cpu();
@@ -2411,6 +2431,7 @@ void __init arch_cpu_finalize_init(void)
 	cpu_select_mitigations();
 
 	arch_smt_update();
+	update_lmc_branch_cond();
 
 	if (IS_ENABLED(CONFIG_X86_32)) {
 		/*

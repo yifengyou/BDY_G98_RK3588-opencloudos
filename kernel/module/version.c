@@ -102,28 +102,20 @@ int same_magic(const char *amagic, const char *bmagic,
 		amagic += l3;
 		bmagic += l4;
 
-		l1 = strcspn(amagic, " ");
-		l2 = strcspn(bmagic, " ");
-		l3 = strcspn(amagic, ".");
-		l4 = strcspn(bmagic, ".");
+		l5 = strcspn(amagic, ".");
+		l6 = strcspn(bmagic, ".");
 
-		if (l3 > l1 || l4 > l2)
+		if (l5 != l6)
 			goto check_all;
 
-		if (amagic[0] == '0' || bmagic[0] == '0')
-			goto check_all;
-
-		l5 = l3 + 1 + strcspn(amagic + l3 + 1, ".");
-		l6 = l4 + 1 + strcspn(bmagic + l4 + 1, ".");
-
-		if (l5 > l1 || l6 > l2)
-			goto check_all;
-
-		if (l5 != l6 || memcmp(amagic, bmagic, l5))
+		if (memcmp(amagic, bmagic, l5))
 			return false;
 
-		amagic += l1;
-		bmagic += l2;
+		l5 = strcspn(amagic, " ");
+		l6 = strcspn(bmagic, " ");
+
+		amagic += l5;
+		bmagic += l6;
 	}
 
 check_all:

@@ -125,7 +125,7 @@ KVM_X86_OP_OPTIONAL(mem_enc_unregister_region)
 KVM_X86_OP_OPTIONAL(vm_copy_enc_context_from)
 KVM_X86_OP_OPTIONAL(vm_move_enc_context_from)
 KVM_X86_OP_OPTIONAL(guest_memory_reclaimed)
-KVM_X86_OP(get_msr_feature)
+KVM_X86_OP(get_feature_msr)
 KVM_X86_OP(can_emulate_instruction)
 KVM_X86_OP(apic_init_signal_blocked)
 KVM_X86_OP_OPTIONAL(enable_l2_tlb_flush)
@@ -138,6 +138,8 @@ KVM_X86_OP_OPTIONAL(get_untagged_addr)
 KVM_X86_OP_OPTIONAL(vm_attestation)
 KVM_X86_OP_OPTIONAL(control_pre_system_reset)
 KVM_X86_OP_OPTIONAL(control_post_system_reset)
+KVM_X86_OP_OPTIONAL(get_hygon_coco_extension)
+KVM_X86_OP_OPTIONAL(enable_hygon_coco_extension)
 
 #undef KVM_X86_OP
 #undef KVM_X86_OP_OPTIONAL

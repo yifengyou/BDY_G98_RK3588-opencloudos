@@ -151,6 +151,10 @@ static inline void sock_update_classid(struct sock_cgroup_data *skcd)
 
 	classid = task_cls_classid(current);
 	sock_cgroup_set_classid(skcd, classid);
+
+	if (in_interrupt())
+		return;
+
 	rcu_read_lock();
 	skcd->cs = task_cls_state(current);
 	rcu_read_unlock();

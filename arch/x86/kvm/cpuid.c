@@ -36,6 +36,26 @@
 u32 kvm_cpu_caps[NR_KVM_CPU_CAPS] __read_mostly;
 EXPORT_SYMBOL_GPL(kvm_cpu_caps);
 
+struct cpuid_xstate_sizes {
+	u32 eax;
+	u32 ebx;
+	u32 ecx;
+};
+
+static struct cpuid_xstate_sizes xstate_sizes[XFEATURE_MAX] __ro_after_init;
+
+void __init kvm_init_xstate_sizes(void)
+{
+	u32 ign;
+	int i;
+
+	for (i = XFEATURE_YMM; i < ARRAY_SIZE(xstate_sizes); i++) {
+		struct cpuid_xstate_sizes *xs = &xstate_sizes[i];
+
+		cpuid_count(0xD, i, &xs->eax, &xs->ebx, &xs->ecx, &ign);
+	}
+}
+
 u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
 	int feature_bit = 0;
@@ -44,14 +64,15 @@ u32 xstate_required_size(u64 xstate_bv, bool compacted)
 	xstate_bv &= XFEATURE_MASK_EXTEND;
 	while (xstate_bv) {
 		if (xstate_bv & 0x1) {
-		        u32 eax, ebx, ecx, edx, offset;
-		        cpuid_count(0xD, feature_bit, &eax, &ebx, &ecx, &edx);
+			struct cpuid_xstate_sizes *xs = &xstate_sizes[feature_bit];
+			u32 offset;
+
 			/* ECX[1]: 64B alignment in compacted form */
 			if (compacted)
-				offset = (ecx & 0x2) ? ALIGN(ret, 64) : ret;
+				offset = (xs->ecx & 0x2) ? ALIGN(ret, 64) : ret;
 			else
-				offset = ebx;
-			ret = max(ret, offset + eax);
+				offset = xs->ebx;
+			ret = max(ret, offset + xs->eax);
 		}
 
 		xstate_bv >>= 1;
@@ -60,15 +81,6 @@ u32 xstate_required_size(u64 xstate_bv, bool compacted)
 
 	return ret;
 }
-
-#define F feature_bit
-
-/* Scattered Flag - For features that are scattered by cpufeatures.h. */
-#define SF(name)						\
-({								\
-	BUILD_BUG_ON(X86_FEATURE_##name >= MAX_CPU_FEATURES);	\
-	(boot_cpu_has(X86_FEATURE_##name) ? F(name) : 0);	\
-})
 
 /*
  * Magic value used by KVM when querying userspace-provided CPUID entries and
@@ -166,12 +178,26 @@ static int kvm_check_cpuid(struct kvm_vcpu *vcpu,
 	return fpu_enable_guest_xfd_features(&vcpu->arch.guest_fpu, xfeatures);
 }
 
+static void __kvm_update_cpuid_runtime(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *entries,
+				       int nent);
+
 /* Check whether the supplied CPUID data is equal to what is already set for the vCPU. */
 static int kvm_cpuid_check_equal(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *e2,
 				 int nent)
 {
 	struct kvm_cpuid_entry2 *orig;
 	int i;
+
+	/*
+	 * Apply runtime CPUID updates to the incoming CPUID entries to avoid
+	 * false positives due mismatches on KVM-owned feature flags.  Note,
+	 * runtime CPUID updates may consume other CPUID-driven vCPU state,
+	 * e.g. KVM or Xen CPUID bases.  Updating runtime state before full
+	 * CPUID processing is functionally correct only because any change in
+	 * CPUID is disallowed, i.e. using stale data is ok because the below
+	 * checks will reject the change.
+	 */
+	__kvm_update_cpuid_runtime(vcpu, e2, nent);
 
 	if (nent != vcpu->arch.cpuid_nent)
 		return -EINVAL;
@@ -331,7 +357,7 @@ static bool kvm_cpuid_has_hyperv(struct kvm_cpuid_entry2 *entries, int nent)
 	return entry && entry->eax == HYPERV_CPUID_SIGNATURE_EAX;
 }
 
-static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
+void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 	struct kvm_cpuid_entry2 *best;
@@ -340,6 +366,8 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	BUILD_BUG_ON(KVM_NR_GOVERNED_FEATURES > KVM_MAX_NR_GOVERNED_FEATURES);
 	bitmap_zero(vcpu->arch.governed_features.enabled,
 		    KVM_MAX_NR_GOVERNED_FEATURES);
+
+	kvm_update_cpuid_runtime(vcpu);
 
 	/*
 	 * If TDP is enabled, let the guest use GBPAGES if they're supported in
@@ -377,8 +405,11 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	vcpu->arch.reserved_gpa_bits = kvm_vcpu_reserved_gpa_bits_raw(vcpu);
 
 	kvm_pmu_refresh(vcpu);
-	vcpu->arch.cr4_guest_rsvd_bits =
-	    __cr4_reserved_bits(guest_cpuid_has, vcpu);
+
+#define __kvm_cpu_cap_has(UNUSED_, f) kvm_cpu_cap_has(f)
+	vcpu->arch.cr4_guest_rsvd_bits = __cr4_reserved_bits(__kvm_cpu_cap_has, UNUSED_) |
+					 __cr4_reserved_bits(guest_cpuid_has, vcpu);
+#undef __kvm_cpu_cap_has
 
 	kvm_hv_set_cpuid(vcpu, kvm_cpuid_has_hyperv(vcpu->arch.cpuid_entries,
 						    vcpu->arch.cpuid_nent));
@@ -421,8 +452,6 @@ static int kvm_set_cpuid(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *e2,
                         int nent)
 {
 	int r;
-
-	__kvm_update_cpuid_runtime(vcpu, e2, nent);
 
 	/*
 	 * KVM does not correctly handle changing guest CPUID after KVM_RUN, as
@@ -584,6 +613,15 @@ static __always_inline void kvm_cpu_cap_mask(enum cpuid_leafs leaf, u32 mask)
 	__kvm_cpu_cap_mask(leaf);
 }
 
+#define F feature_bit
+
+/* Scattered Flag - For features that are scattered by cpufeatures.h. */
+#define SF(name)						\
+({								\
+	BUILD_BUG_ON(X86_FEATURE_##name >= MAX_CPU_FEATURES);	\
+	(boot_cpu_has(X86_FEATURE_##name) ? F(name) : 0);	\
+})
+
 void kvm_set_cpu_caps(void)
 {
 #ifdef CONFIG_X86_64
@@ -648,7 +686,7 @@ void kvm_set_cpu_caps(void)
 		F(SGX_LC) | F(BUS_LOCK_DETECT)
 	);
 	/* Set LA57 based on hardware capability. */
-	if (cpuid_ecx(7) & F(LA57))
+	if (cpuid_ecx(7) & feature_bit(LA57))
 		kvm_cpu_cap_set(X86_FEATURE_LA57);
 
 	/*
@@ -678,14 +716,14 @@ void kvm_set_cpu_caps(void)
 		kvm_cpu_cap_set(X86_FEATURE_SPEC_CTRL_SSBD);
 
 	kvm_cpu_cap_mask(CPUID_7_1_EAX,
-		F(AVX_VNNI) | F(AVX512_BF16) | F(CMPCCXADD) |
-		F(FZRM) | F(FSRS) | F(FSRC) |
-		F(AMX_FP16) | F(AVX_IFMA) | F(LAM)
+		F(SHA512) | F(SM3) | F(SM4) | F(AVX_VNNI) | F(AVX512_BF16) |
+		F(CMPCCXADD) | F(FZRM) | F(FSRS) | F(FSRC) | F(AMX_FP16) |
+		F(AVX_IFMA) | F(LAM)
 	);
 
 	kvm_cpu_cap_init_kvm_defined(CPUID_7_1_EDX,
-		F(AVX_VNNI_INT8) | F(AVX_NE_CONVERT) | F(PREFETCHITI) |
-		F(AMX_COMPLEX)
+		F(AVX_VNNI_INT8) | F(AVX_NE_CONVERT) | F(AMX_COMPLEX) |
+		F(AVX_VNNI_INT16) | F(PREFETCHITI)
 	);
 
 	kvm_cpu_cap_init_kvm_defined(CPUID_7_2_EDX,
@@ -822,6 +860,9 @@ void kvm_set_cpu_caps(void)
 }
 EXPORT_SYMBOL_GPL(kvm_set_cpu_caps);
 
+#undef F
+#undef SF
+
 struct kvm_cpuid_array {
 	struct kvm_cpuid_entry2 *entries;
 	int maxnent;
@@ -897,14 +938,14 @@ static int __do_cpuid_func_emulated(struct kvm_cpuid_array *array, u32 func)
 		++array->nent;
 		break;
 	case 1:
-		entry->ecx = F(MOVBE);
+		entry->ecx = feature_bit(MOVBE);
 		++array->nent;
 		break;
 	case 7:
 		entry->flags |= KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
 		entry->eax = 0;
 		if (kvm_cpu_cap_has(X86_FEATURE_RDTSCP))
-			entry->ecx = F(RDPID);
+			entry->ecx = feature_bit(RDPID);
 		++array->nent;
 		break;
 	default:
@@ -1054,7 +1095,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 			goto out;
 
 		cpuid_entry_override(entry, CPUID_D_1_EAX);
-		if (entry->eax & (F(XSAVES)|F(XSAVEC)))
+		if (entry->eax & (feature_bit(XSAVES) | feature_bit(XSAVEC)))
 			entry->ebx = xstate_required_size(permitted_xcr0 | permitted_xss,
 							  true);
 		else {
@@ -1226,8 +1267,22 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		entry->eax = entry->ebx = entry->ecx = 0;
 		break;
 	case 0x80000008: {
+		/*
+		 * GuestPhysAddrSize (EAX[23:16]) is intended for software
+		 * use.
+		 *
+		 * KVM's ABI is to report the effective MAXPHYADDR for the
+		 * guest in PhysAddrSize (phys_as), and the maximum
+		 * *addressable* GPA in GuestPhysAddrSize (g_phys_as).
+		 *
+		 * GuestPhysAddrSize is valid if and only if TDP is enabled,
+		 * in which case the max GPA that can be addressed by KVM may
+		 * be less than the max GPA that can be legally generated by
+		 * the guest, e.g. if MAXPHYADDR>48 but the CPU doesn't
+		 * support 5-level TDP.
+		 */
 		unsigned int virt_as = max((entry->eax >> 8) & 0xff, 48U);
-		unsigned int phys_as;
+		unsigned int phys_as, g_phys_as;
 
 		/*
 		 * If TDP (NPT) is disabled use the adjusted host MAXPHYADDR as
@@ -1236,15 +1291,23 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		 * paging, too.
 		 *
 		 * If TDP is enabled, use the raw bare metal MAXPHYADDR as
-		 * reductions to the HPAs do not affect GPAs.
+		 * reductions to the HPAs do not affect GPAs.  The max
+		 * addressable GPA is the same as the max effective GPA, except
+		 * that it's capped at 48 bits if 5-level TDP isn't supported
+		 * (hardware processes bits 51:48 only when walking the fifth
+		 * level page table).
 		 */
 		if (!tdp_enabled) {
 			phys_as = boot_cpu_data.x86_phys_bits;
+			g_phys_as = 0;
 		} else {
 			phys_as = entry->eax & 0xff;
+			g_phys_as = phys_as;
+			if (kvm_mmu_get_max_tdp_level() < 5)
+				g_phys_as = min(g_phys_as, 48);
 		}
 
-		entry->eax = phys_as | (virt_as << 8);
+		entry->eax = phys_as | (virt_as << 8) | (g_phys_as << 16);
 		entry->ecx &= ~(GENMASK(31, 16) | GENMASK(11, 8));
 		entry->edx = 0;
 		cpuid_entry_override(entry, CPUID_8000_0008_EBX);
@@ -1300,7 +1363,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		entry->ecx = entry->edx = 0;
 		if (!enable_pmu || !kvm_cpu_cap_has(X86_FEATURE_PERFMON_V2)) {
-			entry->eax = entry->ebx;
+			entry->eax = entry->ebx = 0;
 			break;
 		}
 
@@ -1560,10 +1623,10 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 			u64 data;
 		        if (!__kvm_get_msr(vcpu, MSR_IA32_TSX_CTRL, &data, true) &&
 			    (data & TSX_CTRL_CPUID_CLEAR))
-				*ebx &= ~(F(RTM) | F(HLE));
+				*ebx &= ~(feature_bit(RTM) | feature_bit(HLE));
 		} else if (function == 0x80000007) {
 			if (kvm_hv_invtsc_suppressed(vcpu))
-				*edx &= ~SF(CONSTANT_TSC);
+				*edx &= ~feature_bit(CONSTANT_TSC);
 		}
 	} else {
 		*eax = *ebx = *ecx = *edx = 0;

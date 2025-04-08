@@ -8,6 +8,7 @@
 #include <asm/pvclock.h>
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
+#include "cpuid.h"
 
 struct kvm_caps {
 	/* control of guest tsc rate supported? */
@@ -210,9 +211,52 @@ static inline u8 vcpu_virt_addr_bits(struct kvm_vcpu *vcpu)
 	return kvm_is_cr4_bit_set(vcpu, X86_CR4_LA57) ? 57 : 48;
 }
 
-static inline bool is_noncanonical_address(u64 la, struct kvm_vcpu *vcpu)
+static inline u8 max_host_virt_addr_bits(void)
 {
-	return !__is_canonical_address(la, vcpu_virt_addr_bits(vcpu));
+	return kvm_cpu_cap_has(X86_FEATURE_LA57) ? 57 : 48;
+}
+
+/*
+ * x86 MSRs which contain linear addresses, x86 hidden segment bases, and
+ * IDT/GDT bases have static canonicality checks, the size of which depends
+ * only on the CPU's support for 5-level paging, rather than on the state of
+ * CR4.LA57.  This applies to both WRMSR and to other instructions that set
+ * their values, e.g. SGDT.
+ *
+ * KVM passes through most of these MSRS and also doesn't intercept the
+ * instructions that set the hidden segment bases.
+ *
+ * Because of this, to be consistent with hardware, even if the guest doesn't
+ * have LA57 enabled in its CPUID, perform canonicality checks based on *host*
+ * support for 5 level paging.
+ *
+ * Finally, instructions which are related to MMU invalidation of a given
+ * linear address, also have a similar static canonical check on address.
+ * This allows for example to invalidate 5-level addresses of a guest from a
+ * host which uses 4-level paging.
+ */
+static inline bool is_noncanonical_address(u64 la, struct kvm_vcpu *vcpu,
+					   unsigned int flags)
+{
+	if (flags & (X86EMUL_F_INVLPG | X86EMUL_F_MSR | X86EMUL_F_DT_LOAD))
+		return !__is_canonical_address(la, max_host_virt_addr_bits());
+	else
+		return !__is_canonical_address(la, vcpu_virt_addr_bits(vcpu));
+}
+
+static inline bool is_noncanonical_msr_address(u64 la, struct kvm_vcpu *vcpu)
+{
+	return is_noncanonical_address(la, vcpu, X86EMUL_F_MSR);
+}
+
+static inline bool is_noncanonical_base_address(u64 la, struct kvm_vcpu *vcpu)
+{
+	return is_noncanonical_address(la, vcpu, X86EMUL_F_DT_LOAD);
+}
+
+static inline bool is_noncanonical_invlpg_address(u64 la, struct kvm_vcpu *vcpu)
+{
+	return is_noncanonical_address(la, vcpu, X86EMUL_F_INVLPG);
 }
 
 static inline void vcpu_cache_mmio_info(struct kvm_vcpu *vcpu,
@@ -488,19 +532,36 @@ static inline void kvm_machine_check(void)
 void kvm_load_guest_xsave_state(struct kvm_vcpu *vcpu);
 void kvm_load_host_xsave_state(struct kvm_vcpu *vcpu);
 int kvm_spec_ctrl_test_value(u64 value);
-bool __kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4);
 int kvm_handle_memory_failure(struct kvm_vcpu *vcpu, int r,
 			      struct x86_exception *e);
 int kvm_handle_invpcid(struct kvm_vcpu *vcpu, unsigned long type, gva_t gva);
 bool kvm_msr_allowed(struct kvm_vcpu *vcpu, u32 index, u32 type);
 
+enum kvm_msr_access {
+	MSR_TYPE_R	= BIT(0),
+	MSR_TYPE_W	= BIT(1),
+	MSR_TYPE_RW	= MSR_TYPE_R | MSR_TYPE_W,
+};
+
 /*
  * Internal error codes that are used to indicate that MSR emulation encountered
- * an error that should result in #GP in the guest, unless userspace
- * handles it.
+ * an error that should result in #GP in the guest, unless userspace handles it.
+ * Note, '1', '0', and negative numbers are off limits, as they are used by KVM
+ * as part of KVM's lightly documented internal KVM_RUN return codes.
+ *
+ * UNSUPPORTED	- The MSR isn't supported, either because it is completely
+ *		  unknown to KVM, or because the MSR should not exist according
+ *		  to the vCPU model.
+ *
+ * FILTERED	- Access to the MSR is denied by a userspace MSR filter.
  */
-#define  KVM_MSR_RET_INVALID	2	/* in-kernel MSR emulation #GP condition */
-#define  KVM_MSR_RET_FILTERED	3	/* #GP due to userspace MSR filter */
+#define  KVM_MSR_RET_UNSUPPORTED	2
+#define  KVM_MSR_RET_FILTERED		3
+
+static inline bool __kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
+{
+	return !(cr4 & vcpu->arch.cr4_guest_rsvd_bits);
+}
 
 #define __cr4_reserved_bits(__cpu_has, __c)             \
 ({                                                      \

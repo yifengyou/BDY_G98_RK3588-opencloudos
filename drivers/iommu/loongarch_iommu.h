@@ -169,7 +169,7 @@ struct dom_entry {
 struct la_iommu_dev_data {
 	struct list_head	list;		/* for iommu_entry->dev_list */
 	struct loongarch_iommu	*iommu;
-	struct iommu_info		*iommu_entry;
+	struct iommu_info	*iommu_entry;
 	struct iommu_domain	*domain;
 	struct device		*dev;
 	unsigned short		bdf;

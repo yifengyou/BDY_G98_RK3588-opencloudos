@@ -6,6 +6,15 @@
 #include <linux/unistd.h>
 #include <asm/exec.h>
 #include <uapi/linux/binfmts.h>
+// Must be placed after uapi/linux/binfmts.h
+#define ORIG_MAX_ARG_STRLEN (PAGE_SIZE * 32)
+#if MAX_ARG_STRLEN != ORIG_MAX_ARG_STRLEN
+#error "MAX_ARG_STRLEN has been modified, adaptation is required"
+#else
+#undef MAX_ARG_STRLEN
+#define MAX_ARG_STRLEN sysctl_max_arg_strlen
+extern unsigned int sysctl_max_arg_strlen;
+#endif
 
 struct filename;
 struct coredump_params;
@@ -42,7 +51,9 @@ struct linux_binprm {
 		 * Set when errors can no longer be returned to the
 		 * original userspace.
 		 */
-		point_of_no_return:1;
+		point_of_no_return:1,
+		/* Set when "comm" must come from the dentry. */
+		comm_from_dentry:1;
 	struct file *executable; /* Executable to pass to the interpreter */
 	struct file *interpreter;
 	struct file *file;

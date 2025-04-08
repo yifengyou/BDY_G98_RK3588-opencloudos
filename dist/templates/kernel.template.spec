@@ -164,8 +164,22 @@ BuildRequires: /usr/bin/rst2man
 BuildRequires: zlib-devel binutils-devel
 %endif
 
+# If CONFIG=generic-release and CONFIG=generic-debug both generate kernel-source-*.noarch.rpm, the rpm
+# will be same with each other, which is not necessary.
+# What's worse, building two identical kernel-debug-*.rpm packages causes the kernel build pipeline to
+# fail when attempting to download kernel-source-*.rpm.
+%global with_source 0
+# If CONFIG=generic-release, with_headers will be 1
+# If CONFIG=generic-debug, with_headers will be 0
 %if %{with_headers}
 BuildRequires: rsync
+# Because kernel-source-*.noarch.rpm is noarch, let's only generate kernel-source rpm when build x86_64
+# kernel rpms.
+# If generate kernel-source rpm in each arch's building, that will cause build pipeline fail when
+# attempting to download kernel-source-*.rpm.
+%ifarch x86_64
+%global with_source 1
+%endif
 %endif
 
 ###### Kernel packages sources #################################################
@@ -484,6 +498,13 @@ This package provides debug information for the bpftool package.
 %define with_ofed 0
 %endif
 
+# If the arch is riscv64 or loongarch64, don't compile mlnx commercial-grade quality driver.
+%ifnarch x86_64
+%ifnarch aarch64
+%define with_ofed 0
+%endif
+%endif
+
 %if %{with_ofed}
 %ifarch x86_64
 %package -n mlnx-ofed-dist
@@ -500,6 +521,16 @@ BuildRequires: pciutils
 %description -n mlnx-ofed-dist
 This package contains all the signed ko files.
 %endif
+%endif
+
+%if %{with_source}
+%package source
+Summary: source code included %{_vendor} patch
+BuildRequires: tar, xz
+BuildArch: noarch
+
+%description source
+This package provides source code included %{_vendor} patch for cross toolchains
 %endif
 
 ###### common macros for build and install #####################################
@@ -592,6 +623,11 @@ case $KernUnameR in
 		;;
 	esac
 
+%if %{with_source}
+# take tarball of source code
+tar acvf %{name}-%{version}-%{release}.tar.xz *
+%endif
+
 ###### Rpmbuild Build Stage ####################################################
 %build
 
@@ -641,9 +677,9 @@ BuildConfig() {
 	pushd ${_KernSrc}/drivers/thirdparty
 	%if %{with_ofed}
 		rm -f download-and-copy-drivers.sh; cp -a %{SOURCE3000} ./
-		## Real MLNX_OFED_LINUX-*.tgz will more than 1024 bytes.
-		## Dummy MLNX_OFED_LINUX-*.tgz will less than 1024 bytes.
-		if [ $(stat -c%s %{SOURCE3001}) -gt 1024 ]; then
+		mlnx_tgz_sha256=$(release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_sha256)
+		sha256_tmp=$(sha256sum %{SOURCE3001} | awk '{printf $1}')
+		if [[ $sha256_tmp == $mlnx_tgz_sha256 ]]; then
 			cp -a %{SOURCE3001} release-drivers/mlnx/
 			./copy-drivers.sh without_mlnx
 		else
@@ -883,11 +919,13 @@ InstKernelBasic() {
 		popd
 	fi
 
+	%ifarch x86_64 aarch64
 	# Sign the vmlinuz for supporting secure boot feature only when
 	# external efi secure boot signer provided.
 	%if 0%{?_sb_signer:1}
 	%{_sb_signer vmlinuz vmlinuz.signed}
 	mv vmlinuz.signed vmlinuz
+	%endif
 	%endif
 
 	# Install Arch vmlinuz
@@ -1384,6 +1422,12 @@ done
 %endif
 #with_debuginfo
 
+%if %{with_source}
+# copy source code tarball to installing directory
+mkdir -p %{buildroot}%{_usrsrc}/%{name}
+cp -f %{name}-%{version}-%{release}.tar.xz  %{buildroot}%{_usrsrc}/%{name}/
+%endif
+
 ###### RPM scriptslets #########################################################
 ### Core package
 # Pre
@@ -1507,6 +1551,11 @@ fi
 
 %postun -n kernel-tools-libs
 /sbin/ldconfig
+%endif
+
+%if %{with_source}
+%files source
+%{_usrsrc}/%{name}/%{name}-%{version}-%{release}.tar.xz
 %endif
 
 ###### Rpmbuild packaging file list ############################################

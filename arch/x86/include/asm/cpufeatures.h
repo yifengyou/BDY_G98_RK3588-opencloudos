@@ -338,6 +338,9 @@
 #define X86_FEATURE_ZEN1		(11*32+31) /* "" CPU based on Zen1 microarchitecture */
 
 /* Intel-defined CPU features, CPUID level 0x00000007:1 (EAX), word 12 */
+#define X86_FEATURE_SHA512		(12*32+ 0) /* SHA512 instructions */
+#define X86_FEATURE_SM3			(12*32+ 1) /* SM3 instructions */
+#define X86_FEATURE_SM4			(12*32+ 2) /* SM4 instructions */
 #define X86_FEATURE_AVX_VNNI		(12*32+ 4) /* AVX VNNI instructions */
 #define X86_FEATURE_AVX512_BF16		(12*32+ 5) /* AVX512 BFLOAT16 instructions */
 #define X86_FEATURE_CMPCCXADD           (12*32+ 7) /* "" CMPccXADD instructions */
@@ -481,8 +484,8 @@
 #define X86_FEATURE_SRSO_NO		(20*32+29) /* "" CPU is not affected by SRSO */
 
 /* HYGON-defined CPU features, CPUID level 0x8c860000:0 (EDX), word 29 */
-#define X86_FEATURE_SM3			(29*32 + 1) /* SM3 instructions */
-#define X86_FEATURE_SM4			(29*32 + 2) /* SM4 instructions */
+#define X86_FEATURE_HYGON_SM3		(29*32 + 1) /* "sm3" SM3 instructions */
+#define X86_FEATURE_HYGON_SM4		(29*32 + 2) /* "sm4" SM4 instructions */
 
 /* VIA/Cyrix/Centaur-defined CPU features, CPUID level 0xC0000006, word 21 */
 #define X86_FEATURE_ZXPAUSE		(30*32 + 0) /* ZHAOXIN ZXPAUSE */

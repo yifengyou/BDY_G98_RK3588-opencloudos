@@ -1135,7 +1135,8 @@ int blkcg_cgroupfs_dkstats_show(struct seq_file *m, void *v)
 	struct cgroup_subsys_state *css;
 	struct blkcg *blkcg;
 
-	css = task_get_css(current, io_cgrp_id);
+	css = cgroupfs_get_parent_role_cgroup(current,
+			CGROUPFS_CGROUP_ROLE_POD_GROUPS, io_cgrp_id);
 	blkcg = css_to_blkcg(css);
 	ret = blkcg_dkstats_show_comm(m, v, blkcg);
 	css_put(css);
@@ -1613,6 +1614,7 @@ static void blkcg_fill_root_iostats(void)
 		blkg_iostat_set(&blkg->iostat.cur, &tmp);
 		u64_stats_update_end_irqrestore(&blkg->iostat.sync, flags);
 	}
+	class_dev_iter_exit(&iter);
 }
 
 static void blkcg_print_one_stat(struct blkcg_gq *blkg, struct seq_file *s)
@@ -1870,10 +1872,14 @@ void blkcg_unpin_online(struct cgroup_subsys_state *blkcg_css)
 	struct blkcg *blkcg = css_to_blkcg(blkcg_css);
 
 	do {
+		struct blkcg *parent;
+
 		if (!refcount_dec_and_test(&blkcg->online_pin))
 			break;
+
+		parent = blkcg_parent(blkcg);
 		blkcg_destroy_blkgs(blkcg);
-		blkcg = blkcg_parent(blkcg);
+		blkcg = parent;
 	} while (blkcg);
 }
 
