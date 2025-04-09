@@ -210,12 +210,11 @@ restart:
 		       stats[FCG_STAT_CNS_EXPIRE],
 		       stats[FCG_STAT_CNS_EMPTY],
 		       stats[FCG_STAT_CNS_GONE]);
-		printf("PNC   next:%6llu  empty:%6llu nocgrp:%6llu  gone:%6llu race:%6llu fail:%6llu\n",
+		printf("PNC   next:%6llu  empty:%6llu nocgrp:%6llu  gone:%6llu fail:%6llu\n",
 		       stats[FCG_STAT_PNC_NEXT],
 		       stats[FCG_STAT_PNC_EMPTY],
 		       stats[FCG_STAT_PNC_NO_CGRP],
 		       stats[FCG_STAT_PNC_GONE],
-		       stats[FCG_STAT_PNC_RACE],
 		       stats[FCG_STAT_PNC_FAIL]);
 		printf("BAD remove:%6llu\n",
 		       acc_stats[FCG_STAT_BAD_REMOVAL]);

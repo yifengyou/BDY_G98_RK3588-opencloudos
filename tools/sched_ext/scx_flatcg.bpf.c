@@ -272,7 +272,7 @@ static void cgrp_cap_budget(struct cgv_node *cgv_node, struct fcg_cgrp_ctx *cgc)
 	cgv_node->cvtime = cvtime;
 }
 
-static void cgrp_enqueued(struct cgroup *cgrp, struct fcg_cgrp_ctx *cgc)
+static void cgrp_enqueued(struct cgroup *cgrp, struct fcg_cgrp_ctx *cgc, bool update)
 {
 	struct cgv_node_stash *stash;
 	struct cgv_node *cgv_node;
@@ -298,7 +298,8 @@ static void cgrp_enqueued(struct cgroup *cgrp, struct fcg_cgrp_ctx *cgc)
 	}
 
 	bpf_spin_lock(&cgv_tree_lock);
-	cgrp_cap_budget(cgv_node, cgc);
+	if (update)
+		cgrp_cap_budget(cgv_node, cgc);
 	bpf_rbtree_add(&cgv_tree, &cgv_node->rb_node, cgv_node_less);
 	bpf_spin_unlock(&cgv_tree_lock);
 }
@@ -387,6 +388,12 @@ void BPF_STRUCT_OPS(fcg_enqueue, struct task_struct *p, u64 enq_flags)
 	if (!cgc)
 		goto out_release;
 
+	if (cgrp->kn->id == 1) {
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, SCX_SLICE_DFL,
+				enq_flags);
+		goto out_release;
+	}
+
 	if (fifo_sched) {
 		scx_bpf_dsq_insert(p, cgrp->kn->id, SCX_SLICE_DFL, enq_flags);
 	} else {
@@ -402,8 +409,22 @@ void BPF_STRUCT_OPS(fcg_enqueue, struct task_struct *p, u64 enq_flags)
 		scx_bpf_dsq_insert_vtime(p, cgrp->kn->id, SCX_SLICE_DFL,
 					 tvtime, enq_flags);
 	}
+out_release:
+	bpf_cgroup_release(cgrp);
+}
 
-	cgrp_enqueued(cgrp, cgc);
+void BPF_STRUCT_OPS(fcg_queued, struct task_struct *p, u64 enq_flags)
+{
+	struct cgroup *cgrp;
+	struct fcg_cgrp_ctx *cgc;
+
+	cgrp = __COMPAT_scx_bpf_task_cgroup(p);
+	if (cgrp->kn->id == 1)
+		goto out_release;
+	cgc = find_cgrp_ctx(cgrp);
+	if (!cgc)
+		goto out_release;
+	cgrp_enqueued(cgrp, cgc, true);
 out_release:
 	bpf_cgroup_release(cgrp);
 }
@@ -661,7 +682,6 @@ static bool try_pick_next_cgroup(u64 *cgidp)
 	}
 
 	if (!scx_bpf_dsq_move_to_local(cgid)) {
-		bpf_cgroup_release(cgrp);
 		stat_inc(FCG_STAT_PNC_EMPTY);
 		goto out_stash;
 	}
@@ -693,7 +713,15 @@ static bool try_pick_next_cgroup(u64 *cgidp)
 out_stash:
 	stash = bpf_map_lookup_elem(&cgv_node_stash, &cgid);
 	if (!stash) {
+		bpf_cgroup_release(cgrp);
 		stat_inc(FCG_STAT_PNC_GONE);
+		goto out_free;
+	}
+
+	cgv_node = bpf_kptr_xchg(&stash->node, cgv_node);
+	if (cgv_node) {
+		bpf_cgroup_release(cgrp);
+		scx_bpf_error("unexpected !NULL cgv_node stash");
 		goto out_free;
 	}
 
@@ -704,18 +732,10 @@ out_stash:
 	 */
 	__sync_val_compare_and_swap(&cgc->queued, 1, 0);
 
-	if (scx_bpf_dsq_nr_queued(cgid)) {
-		bpf_spin_lock(&cgv_tree_lock);
-		bpf_rbtree_add(&cgv_tree, &cgv_node->rb_node, cgv_node_less);
-		bpf_spin_unlock(&cgv_tree_lock);
-		stat_inc(FCG_STAT_PNC_RACE);
-	} else {
-		cgv_node = bpf_kptr_xchg(&stash->node, cgv_node);
-		if (cgv_node) {
-			scx_bpf_error("unexpected !NULL cgv_node stash");
-			goto out_free;
-		}
-	}
+	if (scx_bpf_dsq_nr_queued(cgid))
+		cgrp_enqueued(cgrp, cgc, false);
+
+	bpf_cgroup_release(cgrp);
 
 	return false;
 
@@ -952,6 +972,7 @@ void BPF_STRUCT_OPS(fcg_exit, struct scx_exit_info *ei)
 SCX_OPS_DEFINE(flatcg_ops,
 	       .select_cpu		= (void *)fcg_select_cpu,
 	       .enqueue			= (void *)fcg_enqueue,
+	       .queued                  = (void *)fcg_queued,
 	       .dispatch		= (void *)fcg_dispatch,
 	       .runnable		= (void *)fcg_runnable,
 	       .running			= (void *)fcg_running,
