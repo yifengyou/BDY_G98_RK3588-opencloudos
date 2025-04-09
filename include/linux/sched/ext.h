@@ -287,6 +287,15 @@ struct sched_ext_ops {
 	 * skipped.
 	 */
 	void (*enqueue)(struct task_struct *p, u64 enq_flags);
+	/**
+	 * @enqued: A task is queued on the BPF scheduler
+	 * @p: task enqueued
+	 * @enq_flags: %SCX_ENQ_*
+	 *
+	 * @p is ready to run and has been commit into a user DSQ.
+	 */
+	void (*queued)(struct task_struct *p, u64 enq_flags);
+
 
 	/**
 	 * dequeue - Remove a task from the BPF scheduler

@@ -1142,6 +1142,8 @@ static void dispatch_enqueue(struct scx_dispatch_q *dsq, struct task_struct *p,
 			resched_curr(rq);
 	} else {
 		raw_spin_unlock(&dsq->lock);
+		if (SCX_HAS_OP(queued))
+			SCX_CALL_OP_TASK(SCX_KF_REST, queued, p, enq_flags);
 	}
 }
 
@@ -5513,6 +5515,7 @@ static int bpf_scx_validate(void *kdata)
 
 static s32 sched_ext_ops__select_cpu(struct task_struct *p, s32 prev_cpu, u64 wake_flags) { return -EINVAL; }
 static void sched_ext_ops__enqueue(struct task_struct *p, u64 enq_flags) {}
+static void sched_ext_ops__queued(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__dequeue(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__dispatch(s32 prev_cpu, struct task_struct *prev__nullable) {}
 static void sched_ext_ops__tick(struct task_struct *p) {}
@@ -5554,6 +5557,7 @@ extern struct sched_ext_ops __bpf_ops_sched_ext_ops;
 struct sched_ext_ops __bpf_ops_sched_ext_ops = {
 	.select_cpu		= sched_ext_ops__select_cpu,
 	.enqueue		= sched_ext_ops__enqueue,
+	.queued 		= sched_ext_ops__queued,
 	.dequeue		= sched_ext_ops__dequeue,
 	.dispatch		= sched_ext_ops__dispatch,
 	.tick			= sched_ext_ops__tick,
