@@ -6908,9 +6908,11 @@ bool ptlock_alloc(struct ptdesc *ptdesc)
 	ptdesc->ptl = ptl;
 	return true;
 }
+EXPORT_SYMBOL_GPL(ptlock_alloc);
 
 void ptlock_free(struct ptdesc *ptdesc)
 {
 	kmem_cache_free(page_ptl_cachep, ptdesc->ptl);
 }
+EXPORT_SYMBOL_GPL(ptlock_free);
 #endif
