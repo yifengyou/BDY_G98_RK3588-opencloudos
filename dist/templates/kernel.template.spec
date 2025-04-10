@@ -1521,6 +1521,17 @@ if (( $rm_public_ko == 1 )); then
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/drivers/gpu/drm/nouveau/*
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/net/wireless/*
 fi
+if ! [ -f "/etc/modules-load.d/disk.conf" ]; then
+cat > /etc/modules-load.d/disk.conf << EOF
+# Load disk ko at boot
+libata
+libahci
+ahci
+sd_mod
+nvme-core
+nvme
+EOF
+fi
 
 %posttrans modules
 if [ -f %{_localstatedir}/lib/rpm-state/%{name}-%{version}-%{version}%{?dist}.need_to_run_dracut ]; then\
