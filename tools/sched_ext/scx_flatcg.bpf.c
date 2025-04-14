@@ -56,6 +56,8 @@ enum {
 
 char _license[] SEC("license") = "GPL";
 
+const volatile bool is_cgroup2;
+const volatile int hierarchy_id;
 const volatile u32 nr_cpus = 32;	/* !0 for veristat, set during init */
 const volatile u64 cgrp_slice_ns;
 const volatile bool fifo_sched;
@@ -668,7 +670,11 @@ static bool try_pick_next_cgroup(u64 *cgidp)
 	 * If lookup fails, the cgroup's gone. Free and move on. See
 	 * fcg_cgroup_exit().
 	 */
-	cgrp = bpf_cgroup_from_id(cgid);
+	if (is_cgroup2)
+		cgrp = bpf_cgroup_from_id(cgid);
+	else
+		cgrp = bpf_cgroup1_from_id(cgid, hierarchy_id);
+
 	if (!cgrp) {
 		stat_inc(FCG_STAT_PNC_GONE);
 		goto out_free;
@@ -773,7 +779,11 @@ void BPF_STRUCT_OPS(fcg_dispatch, s32 cpu, struct task_struct *prev)
 	 * The current cgroup is expiring. It was already charged a full slice.
 	 * Calculate the actual usage and accumulate the delta.
 	 */
-	cgrp = bpf_cgroup_from_id(cpuc->cur_cgid);
+	if (is_cgroup2)
+		cgrp = bpf_cgroup_from_id(cpuc->cur_cgid);
+	else
+		cgrp = bpf_cgroup1_from_id(cpuc->cur_cgid, hierarchy_id);
+
 	if (!cgrp) {
 		stat_inc(FCG_STAT_CNS_GONE);
 		goto pick_next_cgroup;

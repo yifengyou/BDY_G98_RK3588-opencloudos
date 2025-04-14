@@ -306,6 +306,7 @@ void bpf_task_release(struct task_struct *p) __ksym;
 /* cgroup */
 struct cgroup *bpf_cgroup_ancestor(struct cgroup *cgrp, int level) __ksym;
 void bpf_cgroup_release(struct cgroup *cgrp) __ksym;
+struct cgroup *bpf_cgroup1_from_id(u64 cgid, int hierarchy_id) __ksym;
 struct cgroup *bpf_cgroup_from_id(u64 cgid) __ksym;
 
 /* css iteration */

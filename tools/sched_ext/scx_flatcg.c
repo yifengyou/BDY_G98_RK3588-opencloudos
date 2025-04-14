@@ -16,6 +16,7 @@
 #include <scx/common.h>
 #include "scx_flatcg.h"
 #include "scx_flatcg.bpf.skel.h"
+#include "scx_helpers.h"
 
 #ifndef FILEID_KERNFS
 #define FILEID_KERNFS		0xfe
@@ -129,6 +130,7 @@ int main(int argc, char **argv)
 	unsigned long seq = 0;
 	__s32 opt;
 	__u64 ecode;
+	int hid;
 
 	libbpf_set_print(libbpf_print_fn);
 	signal(SIGINT, sigint_handler);
@@ -136,6 +138,14 @@ int main(int argc, char **argv)
 restart:
 	skel = SCX_OPS_OPEN(flatcg_ops, scx_flatcg);
 
+	hid = is_cgroup2() ? 0 : get_cgroup1_hierarchy_id("cpu");
+	if (hid < 0) {
+		fprintf(stderr, "unexpected hierarchy id for cpu controller: %d\n", hid);
+		return 0;
+	}
+
+	skel->rodata->is_cgroup2 = is_cgroup2();
+	skel->rodata->hierarchy_id = hid;
 	skel->rodata->nr_cpus = libbpf_num_possible_cpus();
 	skel->rodata->cgrp_slice_ns = __COMPAT_ENUM_OR_ZERO("scx_public_consts", "SCX_SLICE_DFL");
 
