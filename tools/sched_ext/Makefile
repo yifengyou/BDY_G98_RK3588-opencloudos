@@ -178,14 +178,23 @@ SCX_COMMON_DEPS := include/scx/common.h include/scx/user_exit_info.h | $(BINDIR)
 
 c-sched-targets = scx_simple scx_qmap scx_central scx_flatcg
 
+c-common-obj = scx_helpers
+
+SCX_COMMON_OBJ := $(addprefix $(SCXOBJ_DIR)/, $(c-common-obj))
+
+$(SCX_COMMON_OBJ): $(SCXOBJ_DIR)/%: %.c $(wildcard %.h)
+	$(eval common-obj=$(notdir $@))
+	$(CC) $(CFLAGS) -c $(common-obj).c -o $(SCXOBJ_DIR)/$(common-obj).o
+
 $(addprefix $(BINDIR)/,$(c-sched-targets)): \
 	$(BINDIR)/%: \
 		$(filter-out %.bpf.c,%.c) \
 		$(INCLUDE_DIR)/%.bpf.skel.h \
-		$(SCX_COMMON_DEPS)
+		$(SCX_COMMON_DEPS) \
+		$(SCX_COMMON_OBJ)
 	$(eval sched=$(notdir $@))
 	$(CC) $(CFLAGS) -c $(sched).c -o $(SCXOBJ_DIR)/$(sched).o
-	$(CC) -o $@ $(SCXOBJ_DIR)/$(sched).o $(HOST_BPFOBJ) $(LDFLAGS)
+	$(CC) -o $@ $(SCXOBJ_DIR)/$(sched).o $(addsuffix .o, $(SCX_COMMON_OBJ)) $(HOST_BPFOBJ) $(LDFLAGS)
 
 $(c-sched-targets): %: $(BINDIR)/%
 
