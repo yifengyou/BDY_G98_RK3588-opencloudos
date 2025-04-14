@@ -2261,6 +2261,23 @@ __bpf_kfunc struct cgroup *bpf_cgroup_ancestor(struct cgroup *cgrp, int level)
 }
 
 /**
+ * bpf_cgroup1_from_id - Find a cgroup from its ID within a specific cgroup1
+ * hierarchy. A cgroup returned by this kfunc which is not subsequently stored
+ * in a map, must be released by calling bpf_cgroup_release().
+ * @cgid: cgroup id.
+ * @hierarchy_id: cgroup1 hierarchy id.
+ */
+__bpf_kfunc struct cgroup *bpf_cgroup1_from_id(u64 cgid, int hierarchy_id)
+{
+	struct cgroup *cgrp;
+
+	cgrp = cgroup1_get_from_id(cgid, hierarchy_id);
+	if (IS_ERR(cgrp))
+		return NULL;
+	return cgrp;
+}
+
+/**
  * bpf_cgroup_from_id - Find a cgroup from its ID. A cgroup returned by this
  * kfunc which is not subsequently stored in a map, must be released by calling
  * bpf_cgroup_release().
@@ -2671,6 +2688,7 @@ BTF_ID_FLAGS(func, bpf_rbtree_first, KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_cgroup_acquire, KF_ACQUIRE | KF_RCU | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_cgroup_release, KF_RELEASE)
 BTF_ID_FLAGS(func, bpf_cgroup_ancestor, KF_ACQUIRE | KF_RCU | KF_RET_NULL)
+BTF_ID_FLAGS(func, bpf_cgroup1_from_id, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_cgroup_from_id, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_task_under_cgroup, KF_RCU)
 #endif

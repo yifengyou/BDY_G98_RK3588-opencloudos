@@ -6841,6 +6841,79 @@ void cgroup_path_from_kernfs_id(u64 id, char *buf, size_t buflen)
 }
 
 /*
+ * cgroup1_get_from_id : get the cgroup associated with cgroup id
+ * within a specific cgroup1 hierarchy.
+ * @id: cgroup id
+ * @hierarchy_id: cgroup1 hierarchy id
+ * On success return the cgrp or ERR_PTR on failure
+ * Only cgroups within current task's cgroup NS are valid.
+ */
+struct cgroup *cgroup1_get_from_id(u64 id, int hierarchy_id)
+{
+	struct kernfs_node *kn;
+	struct cgroup *cgrp, *root_cgrp;
+	struct cgroup_root *root;
+	struct css_set *cset;
+
+	rcu_read_lock();
+	for_each_root(root) {
+		/* cgroup1 only*/
+		if (root == &cgrp_dfl_root)
+			continue;
+		if (root->hierarchy_id != hierarchy_id)
+			continue;
+		break;
+	}
+
+	kn = kernfs_find_and_get_node_by_id(root->kf_root, id);
+	if (!kn) {
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	if (kernfs_type(kn) != KERNFS_DIR) {
+		kernfs_put(kn);
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
+	if (cgrp && !cgroup_tryget(cgrp))
+		cgrp = NULL;
+
+	kernfs_put(kn);
+
+	if (!cgrp) {
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	if (current->nsproxy) {
+		cset = current->nsproxy->cgroup_ns->root_cset;
+		root_cgrp = __cset_cgroup_from_root(cset, root);
+	} else {
+		/*
+		 * NOTE: This function may be called from bpf_cgroup1_from_id()
+		 * on a task which has already passed exit_task_namespaces() and
+		 * nsproxy == NULL. Fall back to cgrp_dfl_root which will make all
+		 * cgroups visible for lookups.
+		 */
+		root_cgrp = &root->cgrp;
+	}
+
+	if (!cgroup_is_descendant(cgrp, root_cgrp)) {
+		cgroup_put(cgrp);
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+out:
+	rcu_read_unlock();
+	return cgrp;
+}
+EXPORT_SYMBOL_GPL(cgroup1_get_from_id);
+
+/*
  * cgroup_get_from_id : get the cgroup associated with cgroup id
  * @id: cgroup id
  * On success return the cgrp or ERR_PTR on failure
