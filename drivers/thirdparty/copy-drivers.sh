@@ -40,6 +40,19 @@ thirdparty_mpt3sas(){
 	fi
 }
 
+thirdparty_i40e(){
+	if [ -e release-drivers/i40e ]; then
+		rm -rf ../../drivers/net/ethernet/intel/i40e
+		cp -a release-drivers/i40e ../../drivers/net/ethernet/intel/
+
+		## Use sed to replace "I40E" with "I40E && !THIRDPARTY_I40E" in
+		## drivers/infiniband/hw/irdma/Kconfig
+		## Avoid compiling native kernel irdma when using thirdparty i40e due to compatibility concerns.
+		sed -i 's/\(I40E\)/\1 \&\& !THIRDPARTY_I40E/g' ../../drivers/infiniband/hw/irdma/Kconfig
+		echo "thirdparty_i40e: has overriden thirdparty i40e driver code to kernel native dir."
+	fi
+}
+
 ##
 ## main , script start run at here.
 ##
@@ -50,3 +63,5 @@ fi
 thirdparty_bnxt
 
 thirdparty_mpt3sas
+
+thirdparty_i40e

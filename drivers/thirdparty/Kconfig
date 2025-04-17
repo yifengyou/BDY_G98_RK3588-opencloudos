@@ -5,4 +5,8 @@ config THIRDPARTY_BNXT
 	bool
 	default y
 
+config THIRDPARTY_I40E
+	bool
+	default y
+
 endmenu
