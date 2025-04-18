@@ -53,6 +53,19 @@ thirdparty_i40e(){
 	fi
 }
 
+thirdparty_ice(){
+	if [ -e release-drivers/ice ]; then
+		rm -rf ../../drivers/net/ethernet/intel/ice
+		cp -a release-drivers/ice ../../drivers/net/ethernet/intel/
+
+		## Use sed to replace "ICE" with "ICE && !THIRDPARTY_ICE" in
+		## drivers/infiniband/hw/irdma/Kconfig
+		## Avoid compiling native kernel irdma when using thirdparty ice due to compatibility concerns.
+		sed -i 's/\(ICE\)/\1 \&\& !THIRDPARTY_ICE/g' ../../drivers/infiniband/hw/irdma/Kconfig
+		echo "thirdparty_ice: has overriden thirdparty ice driver code to kernel native dir."
+	fi
+}
+
 ##
 ## main , script start run at here.
 ##
@@ -65,3 +78,5 @@ thirdparty_bnxt
 thirdparty_mpt3sas
 
 thirdparty_i40e
+
+thirdparty_ice

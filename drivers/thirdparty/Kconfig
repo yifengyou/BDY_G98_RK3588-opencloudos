@@ -9,4 +9,8 @@ config THIRDPARTY_I40E
 	bool
 	default y
 
+config THIRDPARTY_ICE
+	bool
+	default y
+
 endmenu
