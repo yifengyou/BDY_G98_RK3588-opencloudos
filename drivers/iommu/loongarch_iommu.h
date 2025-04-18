@@ -134,6 +134,7 @@ struct  loongarch_iommu {
 	struct pci_dev		*pdev;
 	/* Handle for IOMMU core code */
 	struct iommu_device iommu_dev;
+	bool			disabled;
 } loongarch_iommu;
 
 struct iommu_rlookup_entry {
