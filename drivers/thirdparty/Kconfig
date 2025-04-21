@@ -13,4 +13,8 @@ config THIRDPARTY_ICE
 	bool
 	default y
 
+config THIRDPARTY_IAVF
+	bool
+	default y
+
 endmenu

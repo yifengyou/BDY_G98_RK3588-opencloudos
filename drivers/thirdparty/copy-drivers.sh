@@ -66,6 +66,13 @@ thirdparty_ice(){
 	fi
 }
 
+thirdparty_iavf(){
+	if [ -e release-drivers/iavf ]; then
+		rm -rf ../../drivers/net/ethernet/intel/iavf
+		cp -a release-drivers/iavf ../../drivers/net/ethernet/intel/
+	fi
+}
+
 ##
 ## main , script start run at here.
 ##
@@ -80,3 +87,5 @@ thirdparty_mpt3sas
 thirdparty_i40e
 
 thirdparty_ice
+
+thirdparty_iavf
