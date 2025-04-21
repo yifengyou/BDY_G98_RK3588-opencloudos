@@ -9755,6 +9755,22 @@ static struct cftype memory_files[] = {
 		.write_u64 = mem_cgroup_async_fork_write,
 	},
 #endif
+#ifdef CONFIG_TEXT_UNEVICTABLE
+   {
+       .name = "allow_text_unevictable",
+       .read_u64 = mem_cgroup_allow_unevictable_read,
+       .write_u64 = mem_cgroup_allow_unevictable_write,
+   },
+   {
+       .name = "text_unevictable_percent",
+       .read_u64 = mem_cgroup_unevictable_percent_read,
+       .write_u64 = mem_cgroup_unevictable_percent_write,
+   },
+   {
+       .name = "text_unevictable_size",
+       .seq_show = memcg_unevict_size_show,
+   },
+#endif
 	{ }	/* terminate */
 };
 
