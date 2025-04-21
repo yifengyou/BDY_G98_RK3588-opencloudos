@@ -73,6 +73,13 @@ thirdparty_iavf(){
 	fi
 }
 
+thirdparty_ixgbe(){
+	if [ -e release-drivers/ixgbe ]; then
+		rm -rf ../../drivers/net/ethernet/intel/ixgbe
+		cp -a release-drivers/ixgbe ../../drivers/net/ethernet/intel/
+	fi
+}
+
 ##
 ## main , script start run at here.
 ##
@@ -89,3 +96,5 @@ thirdparty_i40e
 thirdparty_ice
 
 thirdparty_iavf
+
+thirdparty_ixgbe

@@ -17,4 +17,8 @@ config THIRDPARTY_IAVF
 	bool
 	default y
 
+config THIRDPARTY_IXGBE
+	bool
+	default y
+
 endmenu
