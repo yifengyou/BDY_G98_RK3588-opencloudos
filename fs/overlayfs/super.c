@@ -34,14 +34,22 @@ static struct dentry *ovl_d_real(struct dentry *dentry,
 	struct dentry *real = NULL, *lower;
 	int err;
 
-	/* It's an overlay file */
+	/*
+	 * vfs is only expected to call d_real() with NULL from d_real_inode()
+	 * and with overlay inode from file_dentry() on an overlay file.
+	 *
+	 * TODO: remove @inode argument from d_real() API, remove code in this
+	 * function that deals with non-NULL @inode and remove d_real() call
+	 * from file_dentry().
+	 */
 	if (inode && d_inode(dentry) == inode)
 		return dentry;
+	else if (inode)
+		goto bug;
 
 	if (!d_is_reg(dentry)) {
-		if (!inode || inode == d_inode(dentry))
-			return dentry;
-		goto bug;
+		/* d_real_inode() is only relevant for regular files */
+		return dentry;
 	}
 
 	real = ovl_dentry_upper(dentry);
@@ -437,68 +445,6 @@ static bool ovl_workdir_ok(struct dentry *workdir, struct dentry *upperdir)
 	return ok;
 }
 
-static int ovl_own_xattr_get(const struct xattr_handler *handler,
-			     struct dentry *dentry, struct inode *inode,
-			     const char *name, void *buffer, size_t size)
-{
-	return -EOPNOTSUPP;
-}
-
-static int ovl_own_xattr_set(const struct xattr_handler *handler,
-			     struct mnt_idmap *idmap,
-			     struct dentry *dentry, struct inode *inode,
-			     const char *name, const void *value,
-			     size_t size, int flags)
-{
-	return -EOPNOTSUPP;
-}
-
-static int ovl_other_xattr_get(const struct xattr_handler *handler,
-			       struct dentry *dentry, struct inode *inode,
-			       const char *name, void *buffer, size_t size)
-{
-	return ovl_xattr_get(dentry, inode, name, buffer, size);
-}
-
-static int ovl_other_xattr_set(const struct xattr_handler *handler,
-			       struct mnt_idmap *idmap,
-			       struct dentry *dentry, struct inode *inode,
-			       const char *name, const void *value,
-			       size_t size, int flags)
-{
-	return ovl_xattr_set(dentry, inode, name, value, size, flags);
-}
-
-static const struct xattr_handler ovl_own_trusted_xattr_handler = {
-	.prefix	= OVL_XATTR_TRUSTED_PREFIX,
-	.get = ovl_own_xattr_get,
-	.set = ovl_own_xattr_set,
-};
-
-static const struct xattr_handler ovl_own_user_xattr_handler = {
-	.prefix	= OVL_XATTR_USER_PREFIX,
-	.get = ovl_own_xattr_get,
-	.set = ovl_own_xattr_set,
-};
-
-static const struct xattr_handler ovl_other_xattr_handler = {
-	.prefix	= "", /* catch all */
-	.get = ovl_other_xattr_get,
-	.set = ovl_other_xattr_set,
-};
-
-static const struct xattr_handler *ovl_trusted_xattr_handlers[] = {
-	&ovl_own_trusted_xattr_handler,
-	&ovl_other_xattr_handler,
-	NULL
-};
-
-static const struct xattr_handler *ovl_user_xattr_handlers[] = {
-	&ovl_own_user_xattr_handler,
-	&ovl_other_xattr_handler,
-	NULL
-};
-
 static int ovl_setup_trap(struct super_block *sb, struct dentry *dir,
 			  struct inode **ptrap, const char *name)
 {
@@ -639,7 +585,7 @@ static int ovl_check_rename_whiteout(struct ovl_fs *ofs)
 	if (IS_ERR(whiteout))
 		goto cleanup_temp;
 
-	err = ovl_is_whiteout(whiteout);
+	err = ovl_upper_is_whiteout(ofs, whiteout);
 
 	/* Best effort cleanup of whiteout and temp file */
 	if (err)
@@ -879,15 +825,20 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 {
 	struct vfsmount *mnt = ovl_upper_mnt(ofs);
 	struct dentry *indexdir;
+	struct dentry *origin = ovl_lowerstack(oe)->dentry;
+	const struct ovl_fh *fh;
 	int err;
+
+	fh = ovl_get_origin_fh(ofs, origin);
+	if (IS_ERR(fh))
+		return PTR_ERR(fh);
 
 	err = mnt_want_write(mnt);
 	if (err)
-		return err;
+		goto out_free_fh;
 
 	/* Verify lower root is upper root origin */
-	err = ovl_verify_origin(ofs, upperpath->dentry,
-				ovl_lowerstack(oe)->dentry, true);
+	err = ovl_verify_origin_fh(ofs, upperpath->dentry, fh, true);
 	if (err) {
 		pr_err("failed to verify upper root origin\n");
 		goto out;
@@ -919,9 +870,10 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 		 * directory entries.
 		 */
 		if (ovl_check_origin_xattr(ofs, ofs->indexdir)) {
-			err = ovl_verify_set_fh(ofs, ofs->indexdir,
-						OVL_XATTR_ORIGIN,
-						upperpath->dentry, true, false);
+			err = ovl_verify_origin_xattr(ofs, ofs->indexdir,
+						      OVL_XATTR_ORIGIN,
+						      upperpath->dentry, true,
+						      false);
 			if (err)
 				pr_err("failed to verify index dir 'origin' xattr\n");
 		}
@@ -939,6 +891,8 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 
 out:
 	mnt_drop_write(mnt);
+out_free_fh:
+	kfree(fh);
 	return err;
 }
 
@@ -1296,6 +1250,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 				   struct ovl_entry *oe)
 {
 	struct dentry *root;
+	struct ovl_fs *ofs = OVL_FS(sb);
 	struct ovl_path *lowerpath = ovl_lowerstack(oe);
 	unsigned long ino = d_inode(lowerpath->dentry)->i_ino;
 	int fsid = lowerpath->layer->fsid;
@@ -1315,6 +1270,20 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 		ovl_dentry_set_upper_alias(root);
 		if (ovl_is_impuredir(sb, upperdentry))
 			ovl_set_flag(OVL_IMPURE, d_inode(root));
+	}
+
+	/* Look for xwhiteouts marker except in the lowermost layer */
+	for (int i = 0; i < ovl_numlower(oe) - 1; i++, lowerpath++) {
+		struct path path = {
+			.mnt = lowerpath->layer->mnt,
+			.dentry = lowerpath->dentry,
+		};
+
+		/* overlay.opaque=x means xwhiteouts directory */
+		if (ovl_get_opaquedir_val(ofs, &path) == 'x') {
+			ovl_layer_set_xwhiteouts(ofs, lowerpath->layer);
+			ovl_dentry_set_xwhiteouts(root);
+		}
 	}
 
 	/* Root is always merge -> can have whiteouts */
@@ -1488,8 +1457,7 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	cap_lower(cred->cap_effective, CAP_SYS_RESOURCE);
 
 	sb->s_magic = OVERLAYFS_SUPER_MAGIC;
-	sb->s_xattr = ofs->config.userxattr ? ovl_user_xattr_handlers :
-		ovl_trusted_xattr_handlers;
+	sb->s_xattr = ovl_xattr_handlers(ofs);
 	sb->s_fs_info = ofs;
 	sb->s_flags |= SB_POSIXACL;
 	sb->s_iflags |= SB_I_SKIP_SYNC;
@@ -1540,14 +1508,10 @@ static int __init ovl_init(void)
 	if (ovl_inode_cachep == NULL)
 		return -ENOMEM;
 
-	err = ovl_aio_request_cache_init();
-	if (!err) {
-		err = register_filesystem(&ovl_fs_type);
-		if (!err)
-			return 0;
+	err = register_filesystem(&ovl_fs_type);
+	if (!err)
+		return 0;
 
-		ovl_aio_request_cache_destroy();
-	}
 	kmem_cache_destroy(ovl_inode_cachep);
 
 	return err;
@@ -1563,7 +1527,6 @@ static void __exit ovl_exit(void)
 	 */
 	rcu_barrier();
 	kmem_cache_destroy(ovl_inode_cachep);
-	ovl_aio_request_cache_destroy();
 }
 
 module_init(ovl_init);

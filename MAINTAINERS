@@ -10981,6 +10981,15 @@ T:	git git://git.kernel.org/pub/scm/fs/xfs/xfs-linux.git
 F:	fs/iomap/
 F:	include/linux/iomap.h
 
+FILESYSTEMS [STACKABLE]
+M:	Miklos Szeredi <miklos@szeredi.hu>
+M:	Amir Goldstein <amir73il@gmail.com>
+L:	linux-fsdevel@vger.kernel.org
+L:	linux-unionfs@vger.kernel.org
+S:	Maintained
+F:	fs/backing-file.c
+F:	include/linux/backing-file.h
+
 IOMMU DMA-API LAYER
 M:	Robin Murphy <robin.murphy@arm.com>
 L:	iommu@lists.linux.dev

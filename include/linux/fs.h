@@ -2060,9 +2060,6 @@ int __generic_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 int generic_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 				  struct file *file_out, loff_t pos_out,
 				  loff_t *count, unsigned int remap_flags);
-extern loff_t do_clone_file_range(struct file *file_in, loff_t pos_in,
-				  struct file *file_out, loff_t pos_out,
-				  loff_t len, unsigned int remap_flags);
 extern loff_t vfs_clone_file_range(struct file *file_in, loff_t pos_in,
 				   struct file *file_out, loff_t pos_out,
 				   loff_t len, unsigned int remap_flags);
@@ -2544,24 +2541,21 @@ struct file *dentry_open(const struct path *path, int flags,
 			 const struct cred *creds);
 struct file *dentry_create(const struct path *path, int flags, umode_t mode,
 			   const struct cred *cred);
-struct file *backing_file_open(const struct path *path, int flags,
-			       const struct path *real_path,
-			       const struct cred *cred);
-struct path *backing_file_real_path(struct file *f);
+struct path *backing_file_user_path(struct file *f);
 
 /*
- * file_real_path - get the path corresponding to f_inode
+ * file_user_path - get the path to display for memory mapped file
  *
- * When opening a backing file for a stackable filesystem (e.g.,
- * overlayfs) f_path may be on the stackable filesystem and f_inode on
- * the underlying filesystem.  When the path associated with f_inode is
- * needed, this helper should be used instead of accessing f_path
- * directly.
-*/
-static inline const struct path *file_real_path(struct file *f)
+ * When mmapping a file on a stackable filesystem (e.g., overlayfs), the file
+ * stored in ->vm_file is a backing file whose f_inode is on the underlying
+ * filesystem.  When the mapped file path is displayed to user (e.g. via
+ * /proc/<pid>/maps), this helper should be used to get the path to display
+ * to the user, which is the path of the fd that user has requested to map.
+ */
+static inline const struct path *file_user_path(struct file *f)
 {
 	if (unlikely(f->f_mode & FMODE_BACKING))
-		return backing_file_real_path(f);
+		return backing_file_user_path(f);
 	return &f->f_path;
 }
 
