@@ -373,7 +373,7 @@ static ssize_t write_bps_dev_limit(struct kernfs_open_file *of,
 	kfree(limit_bw_config[ifindex].name);
 
 	limit_bw_config[ifindex].name = name;
-	strscpy(limit_bw_config[ifindex].name, dev_name, strlen(dev_name));
+	strscpy(limit_bw_config[ifindex].name, dev_name, len);
 
 	if (!rx_rate)
 		cs->rx_dev_scale[ifindex] = WND_DIVISOR;
@@ -615,7 +615,7 @@ static ssize_t write_dev_online_bps_max(struct kernfs_open_file *of,
 	kfree(online_max_config[ifindex].name);
 
 	online_max_config[ifindex].name = name;
-	strscpy(online_max_config[ifindex].name, dev_name, strlen(dev_name));
+	strscpy(online_max_config[ifindex].name, dev_name, len);
 
 	if (rx_rate > -1) {
 		online_max_config[ifindex].rx_bps_max = rx_rate;
@@ -726,7 +726,7 @@ static ssize_t write_dev_online_bps_min(struct kernfs_open_file *of,
 	kfree(online_min_config[ifindex].name);
 
 	online_min_config[ifindex].name = name;
-	strscpy(online_min_config[ifindex].name, dev_name, strlen(dev_name));
+	strscpy(online_min_config[ifindex].name, dev_name, len);
 
 	if (rx_rate > -1)
 		RUE_CALL_INT(NET, write_rx_online_bps_min, cs, ifindex, rx_rate);
@@ -835,7 +835,7 @@ static ssize_t write_dev_bps_config(struct kernfs_open_file *of,
 		kfree(bw_config[ifindex].name);
 
 		bw_config[ifindex].name = name;
-		strscpy(bw_config[ifindex].name, dev_name, strlen(dev_name));
+		strscpy(bw_config[ifindex].name, dev_name, len);
 
 		if (v[0] > -1 && v[1] > -1) {
 			bw_config[ifindex].rx_bps_min = v[0];
