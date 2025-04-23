@@ -978,7 +978,7 @@ static void unshare_all_memory(void)
 			data = per_cpu(runtime_data, cpu);
 			ghcb = (unsigned long)&data->ghcb_page;
 
-			if (addr <= ghcb && ghcb <= addr + size) {
+			if (addr == ghcb && ghcb <= addr + size) {
 				skipped_addr = true;
 				break;
 			}
