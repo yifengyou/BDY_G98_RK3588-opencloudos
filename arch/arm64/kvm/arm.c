@@ -353,6 +353,8 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	kvm_destroy_realm(kvm);
 }
 
+extern struct static_key_false ipiv_enable;
+
 int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 {
 	int r;
@@ -479,6 +481,12 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = sdev_enable;
 		break;
 #endif
+	case KVM_CAP_ARM_IPIV_MODE:
+		if (static_branch_unlikely(&ipiv_enable))
+			r = 1;
+		else
+			r = 0;
+		break;
 	default:
 		r = 0;
 	}
