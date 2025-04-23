@@ -577,7 +577,7 @@ static int blkdev_open(struct inode *inode, struct file *filp)
 	 * during an unstable branch.
 	 */
 	filp->f_flags |= O_LARGEFILE;
-	filp->f_mode |= FMODE_BUF_RASYNC | FMODE_CAN_ODIRECT;
+	filp->f_mode |= FMODE_CAN_ODIRECT;
 
 	/*
 	 * Use the file private data to store the holder for exclusive openes.
@@ -840,6 +840,7 @@ const struct file_operations def_blk_fops = {
 	.splice_read	= filemap_splice_read,
 	.splice_write	= iter_file_splice_write,
 	.fallocate	= blkdev_fallocate,
+	.fop_flags	= FOP_BUFFER_RASYNC,
 };
 
 static __init int blkdev_init(void)
