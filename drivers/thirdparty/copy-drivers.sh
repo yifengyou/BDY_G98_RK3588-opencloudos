@@ -40,6 +40,53 @@ thirdparty_mpt3sas(){
 	fi
 }
 
+thirdparty_i40e(){
+	if [ -e release-drivers/i40e ]; then
+		rm -rf ../../drivers/net/ethernet/intel/i40e
+		cp -a release-drivers/i40e ../../drivers/net/ethernet/intel/
+
+		## Use sed to replace "I40E" with "I40E && !THIRDPARTY_I40E" in
+		## drivers/infiniband/hw/irdma/Kconfig
+		## Avoid compiling native kernel irdma when using thirdparty i40e due to compatibility concerns.
+		sed -i 's/\(I40E\)/\1 \&\& !THIRDPARTY_I40E/g' ../../drivers/infiniband/hw/irdma/Kconfig
+		echo "thirdparty_i40e: has overriden thirdparty i40e driver code to kernel native dir."
+	fi
+}
+
+thirdparty_ice(){
+	if [ -e release-drivers/ice ]; then
+		rm -rf ../../drivers/net/ethernet/intel/ice
+		cp -a release-drivers/ice ../../drivers/net/ethernet/intel/
+
+		## Use sed to replace "ICE" with "ICE && !THIRDPARTY_ICE" in
+		## drivers/infiniband/hw/irdma/Kconfig
+		## Avoid compiling native kernel irdma when using thirdparty ice due to compatibility concerns.
+		sed -i 's/\(ICE\)/\1 \&\& !THIRDPARTY_ICE/g' ../../drivers/infiniband/hw/irdma/Kconfig
+		echo "thirdparty_ice: has overriden thirdparty ice driver code to kernel native dir."
+	fi
+}
+
+thirdparty_iavf(){
+	if [ -e release-drivers/iavf ]; then
+		rm -rf ../../drivers/net/ethernet/intel/iavf
+		cp -a release-drivers/iavf ../../drivers/net/ethernet/intel/
+	fi
+}
+
+thirdparty_ixgbe(){
+	if [ -e release-drivers/ixgbe ]; then
+		rm -rf ../../drivers/net/ethernet/intel/ixgbe
+		cp -a release-drivers/ixgbe ../../drivers/net/ethernet/intel/
+	fi
+}
+
+thirdparty_ixgbevf(){
+	if [ -e release-drivers/ixgbevf ]; then
+		rm -rf ../../drivers/net/ethernet/intel/ixgbevf
+		cp -a release-drivers/ixgbevf ../../drivers/net/ethernet/intel/
+	fi
+}
+
 ##
 ## main , script start run at here.
 ##
@@ -50,3 +97,13 @@ fi
 thirdparty_bnxt
 
 thirdparty_mpt3sas
+
+thirdparty_i40e
+
+thirdparty_ice
+
+thirdparty_iavf
+
+thirdparty_ixgbe
+
+thirdparty_ixgbevf
