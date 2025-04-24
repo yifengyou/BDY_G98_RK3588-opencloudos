@@ -81,6 +81,7 @@ struct io_tlb_slot {
 
 static bool swiotlb_force_bounce;
 static bool swiotlb_force_disable;
+static bool swiotlb_any;
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 
@@ -184,6 +185,9 @@ static unsigned int limit_nareas(unsigned int nareas, unsigned long nslots)
 static int __init
 setup_io_tlb_npages(char *str)
 {
+	if (!str)
+		return -EINVAL;
+
 	if (isdigit(*str)) {
 		/* avoid tail segment of size < IO_TLB_SEGSIZE */
 		default_nslabs =
@@ -195,10 +199,20 @@ setup_io_tlb_npages(char *str)
 		swiotlb_adjust_nareas(simple_strtoul(str, &str, 0));
 	if (*str == ',')
 		++str;
-	if (!strcmp(str, "force"))
-		swiotlb_force_bounce = true;
-	else if (!strcmp(str, "noforce"))
-		swiotlb_force_disable = true;
+
+	while (*str) {
+		if (!strncmp(str, "force", 5))
+			swiotlb_force_bounce = true;
+		else if (!strncmp(str, "noforce", 7))
+			swiotlb_force_disable = true;
+
+		if (!strncmp(str, "any", 3))
+			swiotlb_any = true;
+
+		str += strcspn(str, ",");
+		if (*str == ',')
+			++str;
+	}
 
 	return 0;
 }
@@ -327,7 +341,7 @@ static void __init *swiotlb_memblock_alloc(unsigned long nslabs,
 	 * allow to pick a location everywhere for hypervisors with guest
 	 * memory encryption.
 	 */
-	if (flags & SWIOTLB_ANY)
+	if ((flags & SWIOTLB_ANY) || (swiotlb_any == true))
 		tlb = memblock_alloc(bytes, PAGE_SIZE);
 	else
 		tlb = memblock_alloc_low(bytes, PAGE_SIZE);
@@ -371,7 +385,7 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 	if (!remap)
 		io_tlb_default_mem.can_grow = true;
-	if (flags & SWIOTLB_ANY)
+	if ((flags & SWIOTLB_ANY) || (swiotlb_any == true))
 		io_tlb_default_mem.phys_limit = virt_to_phys(high_memory - 1);
 	else
 		io_tlb_default_mem.phys_limit = ARCH_LOW_ADDRESS_LIMIT;

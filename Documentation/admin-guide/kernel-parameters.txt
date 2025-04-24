@@ -6424,6 +6424,7 @@
 			force -- force using of bounce buffers even if they
 			         wouldn't be automatically used by the kernel
 			noforce -- Never use bounce buffers (for debugging)
+			any -- Reserve memory without limitation
 
 	switches=	[HW,M68k]
 
