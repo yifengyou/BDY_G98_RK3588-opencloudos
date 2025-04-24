@@ -1082,6 +1082,8 @@ struct fuse_backing_map {
 struct fuse_ioctl_recovery {
 #define TASK_COMM_ARGS_LEN 256
 	char	cmdline[TASK_COMM_ARGS_LEN];
+#define FUSE_MOUNTP_MAX 256
+	char	mountp[FUSE_MOUNTP_MAX];
 };
 
 /* Device ioctls: */

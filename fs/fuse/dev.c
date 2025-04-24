@@ -2363,26 +2363,47 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	return res;
 }
 
-static inline bool fuse_conn_cmdline_match(struct fuse_conn *fc,
-					    const char *cmdline)
+static inline bool fuse_conn_cmd_mp_match(struct fuse_conn *fc,
+		struct fuse_ioctl_recovery *data)
 {
 	if (!fuse_auto_recovery)
 		return false;
 
-	return !strncmp(fc->cmdline, cmdline, TASK_COMM_ARGS_LEN);
+	return !strncmp(fc->cmdline, data->cmdline, TASK_COMM_ARGS_LEN) &&
+		!strncmp(fc->mountp, data->mountp, FUSE_MOUNTP_MAX);
 }
 
-static int fuse_device_attach_find(struct file *file, const char *cmdline)
+static int fuse_device_attach_find(struct file *file,
+		struct fuse_ioctl_recovery *data)
 {
+	unsigned int match_cnt = 0;
 	struct fuse_conn *fc;
+	struct fuse_conn *match_fc;
 
 	list_for_each_entry(fc, &fuse_conn_list, entry) {
-		if (!fuse_conn_cmdline_match(fc, cmdline))
+		if (!fuse_conn_cmd_mp_match(fc, data) || !atomic_read(&fc->need_recovery))
 			continue;
-		pr_info("Found valid fuse connection of command: (%s)\n", cmdline);
-		return fuse_device_clone(fc, file);
+
+		pr_debug("Found valid fuse connection to attach. cmd/mountp: (%s)/(%s),\n",
+				data->cmdline, data->mountp);
+
+		match_cnt += 1;
+		match_fc = fc;
 	}
-	pr_info("No fuse connection of command: (%s)\n", cmdline);
+
+	if (match_cnt > 1) {
+		pr_info("Too many (%u) valid connections found.\n", match_cnt);
+		return -EINVAL;
+	}
+
+	if (match_cnt == 1) {
+		pr_debug("Found only one valid fuse connection, try attach to recovery\n");
+		WARN_ON(!list_empty(&match_fc->devices));
+		return fuse_device_clone(match_fc, file);
+	}
+
+	pr_debug("No fuse connection to attach. cmd/mountp: (%s)/(%s)\n",
+			data->cmdline, data->mountp);
 	return -ENOTTY;
 }
 
@@ -2419,7 +2440,7 @@ static long fuse_dev_ioctl_recovery(struct file *file, __u32 __user *argp)
 		return -EPERM;
 
 	mutex_lock(&fuse_mutex);
-	res = fuse_device_attach_find(file, fc_recovery.cmdline);
+	res = fuse_device_attach_find(file, &fc_recovery);
 	mutex_unlock(&fuse_mutex);
 
 	if (res)
