@@ -888,7 +888,10 @@ void pswiotlb_store_local_node(struct pci_dev *dev, struct pci_bus *bus)
  */
 static unsigned int pswiotlb_align_offset(struct device *dev, u64 addr)
 {
-	return addr & dma_get_min_align_mask(dev) & (P_IO_TLB_SIZE - 1);
+	if (dma_get_min_align_mask(dev))
+		return addr & dma_get_min_align_mask(dev) & (P_IO_TLB_SIZE - 1);
+	else
+		return addr & (P_IO_TLB_SIZE - 1);
 }
 /*
  * Bounce: copy the pswiotlb buffer from or back to the original dma location
