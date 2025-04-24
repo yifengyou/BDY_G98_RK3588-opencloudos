@@ -43,10 +43,13 @@
 #define FUSE_NAME_MAX 1024
 
 /** Number of dentries for each connection in the control filesystem */
-#define FUSE_CTL_NUM_DENTRIES 7
+#define FUSE_CTL_NUM_DENTRIES 8
 
 /** FUSE task comm name max */
 #define FUSE_TASK_COMM_LEN 32
+
+/** FUSE mount point path max */
+#define FUSE_MOUNTP_MAX 256
 
 /** Maximum number of outstanding background requests */
 #define FUSE_DEFAULT_MAX_BACKGROUND 12
@@ -588,6 +591,9 @@ struct fuse_fs_context {
 	unsigned int blksize;
 	const char *subtype;
 
+	/* FUSE mountpoint in ns */
+	char *mountpoint;
+
 	/* DAX device, may be NULL */
 	struct dax_device *dax_dev;
 
@@ -940,6 +946,9 @@ struct fuse_conn {
 
 	/* Pid of the process allocating the fuse_conn, used for re-attach. */
 	char cmdline[TASK_COMM_ARGS_LEN];
+
+	/* mount point of allocating the fuse_conn, used for re-attach. */
+	char mountp[FUSE_MOUNTP_MAX];
 };
 
 /*

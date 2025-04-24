@@ -64,6 +64,26 @@ static ssize_t fuse_conn_waiting_read(struct file *file, char __user *buf,
 	return simple_read_from_buffer(buf, len, ppos, tmp, size);
 }
 
+static ssize_t fuse_conn_mountp_read(struct file *file, char __user *buf,
+				      size_t len, loff_t *ppos)
+{
+	char tmp[FUSE_MOUNTP_MAX + 1];
+	struct fuse_conn *fc;
+	size_t size;
+
+	if (*ppos > 0)
+		return 0;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		return 0;
+
+	size = snprintf(tmp, FUSE_MOUNTP_MAX + 1, "%s\n", fc->mountp);
+	fuse_conn_put(fc);
+
+	return simple_read_from_buffer(buf, len, ppos, tmp, size);
+}
+
 static ssize_t fuse_conn_comm_read(struct file *file, char __user *buf,
 				      size_t len, loff_t *ppos)
 {
@@ -250,6 +270,12 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.llseek = no_llseek,
 };
 
+static const struct file_operations fuse_ctl_mountp_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_mountp_read,
+	.llseek = no_llseek,
+};
+
 static const struct file_operations fuse_ctl_comm_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_comm_read,
@@ -331,6 +357,8 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
 				 S_IFREG | 0600, 1, NULL,
 				 &fuse_conn_congestion_threshold_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "mountpoint", S_IFREG | 0400, 1,
+				 NULL, &fuse_ctl_mountp_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "comm", S_IFREG | 0400, 1,
 				 NULL, &fuse_ctl_comm_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "cmdline", S_IFREG | 0400, 1,

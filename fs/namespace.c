@@ -3325,6 +3325,27 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 	return error;
 }
 
+static int parse_fuse_data(struct fs_context *fc, struct path *path)
+{
+	int err = 0;
+	char *buf, *mntpath;
+
+	buf = (char *)__get_free_page(GFP_KERNEL);
+	if (buf)
+		mntpath = d_path(path, buf, PAGE_SIZE);
+	else
+		mntpath = ERR_PTR(-ENOMEM);
+	if (IS_ERR(mntpath))
+		mntpath = "(unknown)";
+
+	err = vfs_parse_fs_string(fc, "mountpoint", mntpath, strlen(mntpath));
+
+	if (buf)
+		free_page((unsigned long)buf);
+
+	return err;
+}
+
 /*
  * create a new mount for userspace and request it to be added into the
  * namespace's tree
@@ -3369,6 +3390,8 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (subtype)
 		err = vfs_parse_fs_string(fc, "subtype",
 					  subtype, strlen(subtype));
+	if (!err && !strcmp(type->name, "fuse"))
+		err = parse_fuse_data(fc, path);
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
 	if (!err)

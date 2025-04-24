@@ -750,6 +750,7 @@ enum {
 	OPT_ALLOW_OTHER,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
+	OPT_MOUNTPOINT,
 	OPT_ERR
 };
 
@@ -764,6 +765,7 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("max_read",		OPT_MAX_READ),
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
+	fsparam_string	("mountpoint",		OPT_MOUNTPOINT),
 	{}
 };
 
@@ -861,6 +863,13 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		if (!ctx->is_bdev)
 			return invalfc(fsc, "blksize only supported for fuseblk");
 		ctx->blksize = result.uint_32;
+		break;
+
+	case OPT_MOUNTPOINT:
+		if (ctx->mountpoint)
+			return invalfc(fsc, "Multiple mountpoint specified");
+		ctx->mountpoint = param->string;
+		param->string = NULL;
 		break;
 
 	default:
@@ -1872,6 +1881,8 @@ static int fuse_get_tree(struct fs_context *fsc)
 
 	fuse_conn_init(fc, fm, fsc->user_ns, &fuse_dev_fiq_ops, NULL);
 	fc->release = fuse_free_conn;
+	if (ctx->mountpoint)
+		memcpy(fc->mountp, ctx->mountpoint, FUSE_MOUNTP_MAX);
 
 	fsc->s_fs_info = fm;
 
