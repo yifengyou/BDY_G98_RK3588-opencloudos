@@ -25,6 +25,13 @@ do
 			echo "copying file failed :("
 			exit 1
 		fi
+
+		# remove the same conflict name only different "*.ko.xz",
+		# these .ko.xz modules are provided by kernel-core rpm,
+		# now mlnx_ofed full packages has been installed, remove old.
+		if [ -f ${line}.xz ]; then
+			rm  ${line}.xz
+		fi
 	fi
 done
 
