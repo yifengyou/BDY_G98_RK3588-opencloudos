@@ -334,7 +334,7 @@ struct sched_ext_ops {
 	 * ops.dispatch() returns. To keep executing @prev, return without
 	 * dispatching or consuming any tasks. Also see %SCX_OPS_ENQ_LAST.
 	 */
-	void (*dispatch)(s32 cpu, struct task_struct *prev);
+	s32 (*dispatch)(s32 cpu, struct task_struct *prev);
 
 	/**
 	 * tick - Periodic tick
