@@ -2472,8 +2472,6 @@ static struct task_struct *pick_task_scx(struct rq *rq)
 	 * if pick_task_scx() is called without preceding balance_scx().
 	 */
 
-	WARN_ON_ONCE(!(rq->scx.flags & SCX_RQ_BAL_PENDING));
-
 	if (unlikely(rq->scx.flags & SCX_RQ_BAL_PENDING)) {
 		if (prev->scx.flags & SCX_TASK_QUEUED) {
 			keep_prev = true;
