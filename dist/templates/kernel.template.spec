@@ -1180,36 +1180,28 @@ CollectKernelFile() {
 
 ## Build MLNX OFED
 BuildInstMLNXOFED() {
-	inst_mod() {
-		src_mod=$1
-		src_mod_name=$(basename "$src_mod")
-		dest=""
-
-		# Replace old module
-		for mod in $(find $KernModule -name "*$src_mod_name*"); do
-			echo "MLNX_OFED: REPLACING: kernel module $mod"
-			dest=$(dirname "$mod")
-			rm -f "$mod"
-		done
-
-		# Install new module
-		if [ ! -d "$dest" ]; then
-			echo "MLNX_OFED: NEW: kernel module $dest/$mod"
-			dest="$KernModule/kernel/drivers/ofed_addon"
-			mkdir -p $dest
-		fi
-
-		cp -f "$src_mod" "$dest/"
-	}
 
 	handle_rpm() {
 		rm -rf extracted
 		mkdir -p extracted && pushd extracted
 
 		rpm2cpio $1 | cpio -id
-		find . -name "*.ko" -or -name "*.ko.xz" | while read -r mod; do
-			inst_mod "$mod"
-		done
+		num=`find . -name "*.ko" -or -name "*.ko.xz" | wc -l`
+		if [ $num -gt 0 ]; then
+			# fixed MLNX_OFED not support TencentOS, it will create error
+			# direcotry %install_mod_dir, copy it into extra.
+			if [ -d ./lib/modules/$KernUnameR/"%install_mod_dir" ]; then
+				if [ ! -d $KernModule/extra/ ]; then
+					mkdir $KernModule/extra/
+				fi
+				%{_module_signer} "$KernUnameR" "$_KernBuild" "./" || exit $?
+				cp -r ./lib/modules/$KernUnameR/%install_mod_dir/* $KernModule/extra/
+			elif [ -d ./lib/modules/$KernUnameR ]; then
+				%{_module_signer} "$KernUnameR" "$_KernBuild" "./" || exit $?
+				cp -r ./lib/modules/$KernUnameR/* $KernModule
+			fi
+		fi
+
 		# find . -name "*.debug" | while read -r mod; do
 		#       inst_debuginfo "$mod"
 		# done
@@ -1293,7 +1285,7 @@ BuildInstMLNXOFED() {
 	rpm_rp=$(realpath MLNX_OFED_LINUX-*/RPMS)
 	pushd workdir
 	find $rpm_rp -name "*.rpm" -type f | while read -r pkg; do
-		if rpm -qlp $pkg | grep "\.ko$" | grep "6.6" >> ../ko.location; then
+		if rpm -qlp $pkg | grep "\.ko$" | grep "6\.6" >> ../ko.location; then
 			rpm_bn=$(basename $pkg)
 			mkdir $rpm_bn && pushd $rpm_bn
 			rpm2cpio $rpm_rp/$rpm_bn | cpio -id
