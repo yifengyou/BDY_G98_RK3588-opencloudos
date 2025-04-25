@@ -381,6 +381,7 @@ mock_domain_alloc_nested(struct iommu_domain *parent, u32 flags,
 static struct iommu_domain *
 mock_domain_alloc_user(struct device *dev, u32 flags,
 		       struct iommu_domain *parent,
+		       struct kvm *kvm,
 		       const struct iommu_user_data *user_data)
 {
 	bool has_dirty_flag = flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING;
