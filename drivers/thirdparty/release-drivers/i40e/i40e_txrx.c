@@ -1854,32 +1854,6 @@ void i40e_release_rx_desc(struct i40e_ring *rx_ring, u32 val)
 	writel(val, rx_ring->tail);
 }
 
-#ifdef HAVE_XDP_BUFF_FRAME_SZ
-/**
- * i40e_rx_frame_truesize - Returns an actual size of Rx frame in memory
- * @rx_ring: Rx ring we are requesting the frame size of
- * @size: Packet length from rx_desc
- *
- * Returns an actual size of Rx frame in memory, considering page size
- * and SKB data alignment.
- */
-static unsigned int i40e_rx_frame_truesize(struct i40e_ring *rx_ring,
-					   unsigned int size)
-{
-	unsigned int truesize;
-
-#if (PAGE_SIZE < 8192)
-	truesize = i40e_rx_pg_size(rx_ring) / 2; /* Must be power-of-2 */
-#else
-	truesize = i40e_rx_offset(rx_ring) ?
-		SKB_DATA_ALIGN(size + i40e_rx_offset(rx_ring)) +
-		SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) :
-		SKB_DATA_ALIGN(size);
-#endif
-	return truesize;
-}
-#endif /* HAVE_XDP_BUFF_FRAME_SZ */
-
 #ifdef CONFIG_I40E_DISABLE_PACKET_SPLIT
 static bool i40e_alloc_mapped_skb(struct i40e_ring *rx_ring,
 				  struct i40e_rx_buffer *bi)
@@ -1986,8 +1960,34 @@ static bool i40e_alloc_mapped_page(struct i40e_ring *rx_ring,
 
 	return true;
 }
-
 #endif /* CONFIG_I40E_DISABLE_PACKET_SPLIT */
+
+#ifdef HAVE_XDP_BUFF_FRAME_SZ
+/**
+ * i40e_rx_frame_truesize - Returns an actual size of Rx frame in memory
+ * @rx_ring: Rx ring we are requesting the frame size of
+ * @size: Packet length from rx_desc
+ *
+ * Returns an actual size of Rx frame in memory, considering page size
+ * and SKB data alignment.
+ */
+static unsigned int i40e_rx_frame_truesize(struct i40e_ring *rx_ring,
+					   unsigned int size)
+{
+	unsigned int truesize;
+
+#if (PAGE_SIZE < 8192)
+	truesize = i40e_rx_pg_size(rx_ring) / 2; /* Must be power-of-2 */
+#else
+	truesize = i40e_rx_offset(rx_ring) ?
+		SKB_DATA_ALIGN(size + i40e_rx_offset(rx_ring)) +
+		SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) :
+		SKB_DATA_ALIGN(size);
+#endif
+	return truesize;
+}
+#endif /* HAVE_XDP_BUFF_FRAME_SZ */
+
 /**
  * i40e_receive_skb - Send a completed packet up the stack
  * @rx_ring:  rx ring in play
