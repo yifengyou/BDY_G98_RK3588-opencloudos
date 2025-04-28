@@ -1300,7 +1300,7 @@ BuildInstMLNXOFED() {
 	done
 
 	# Now we're about to sign them.
-	%{_module_signer} "$KernUnameR" "$_KernBuild" "ko_files" x509 || exit $?
+	%{_module_signer} "$KernUnameR" "$_KernBuild" "ko_files" || exit $?
 
 	# Compress it into a new tgz file.
 	if [[ "${DISTRO}" != "tl3" ]]; then
