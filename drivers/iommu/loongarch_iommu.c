@@ -1793,6 +1793,7 @@ static const struct pci_device_id loongson_iommu_pci_tbl[] = {
 	{ PCI_DEVICE(0x14, 0x7a1f) },
 	{ 0, }
 };
+MODULE_DEVICE_TABLE(pci, loongson_iommu_pci_tbl);
 
 static struct pci_driver loongarch_iommu_driver = {
 	.name = "loongarch-iommu",
