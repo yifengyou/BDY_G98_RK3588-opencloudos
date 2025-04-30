@@ -1777,7 +1777,7 @@ static void free_iommu_rlookup_entry(void)
 	}
 }
 
-static int __init la_iommu_setup(char *str)
+static int __init __maybe_unused la_iommu_setup(char *str)
 {
 	if (!str)
 		return -EINVAL;
