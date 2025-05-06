@@ -479,6 +479,10 @@ static int __init_memblock memblock_double_array(struct memblock_type *type,
 	memblock_dbg("memblock: %s is doubled to %ld at [%pa-%pa]",
 			type->name, type->max * 2, &addr, &new_end);
 
+	/* The returned memory may not have been accepted. */
+	if (!use_slab)
+		accept_memory(addr, addr + new_size);
+
 	/*
 	 * Found space, we now need to move the array over before we add the
 	 * reserved region since it may be our reserved array itself that is
