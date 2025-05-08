@@ -10691,7 +10691,9 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 	if (!for_autogroup)
 		scx_cgroup_move_task(tsk);
 
-	check_class_changing(rq, tsk, prev_class);
+	if (scx_enabled() && !dl_task(tsk))
+		check_class_changing(rq, tsk, prev_class);
+
 	if (queued)
 		enqueue_task(rq, tsk, queue_flags);
 	if (running) {
@@ -10703,7 +10705,9 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 		 */
 		resched_curr(rq);
 	}
-	check_class_changed(rq, tsk, prev_class, oldprio);
+	if (scx_enabled() && !dl_task(tsk))
+		check_class_changed(rq, tsk, prev_class, oldprio);
+
 	task_rq_unlock(rq, tsk, &rf);
 }
 
