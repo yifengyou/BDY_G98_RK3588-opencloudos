@@ -152,6 +152,7 @@ static struct workqueue_struct *iou_wq __ro_after_init;
 
 static int __read_mostly sysctl_io_uring_disabled;
 static int __read_mostly sysctl_io_uring_group = -1;
+static int __read_mostly sysctl_io_uring_enable_iowait = 1;
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table kernel_io_uring_disabled_table[] = {
@@ -170,6 +171,15 @@ static struct ctl_table kernel_io_uring_disabled_table[] = {
 		.maxlen		= sizeof(gid_t),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "io_uring_enable_iowait",
+		.data		= &sysctl_io_uring_enable_iowait,
+		.maxlen		= sizeof(sysctl_io_uring_enable_iowait),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{},
 };
@@ -2557,7 +2567,7 @@ static inline int io_cqring_wait_schedule(struct io_ring_ctx *ctx,
 	 * can take into account that the task is waiting for IO - turns out
 	 * to be important for low QD IO.
 	 */
-	if (current_pending_io())
+	if (current_pending_io() && sysctl_io_uring_enable_iowait)
 		current->in_iowait = 1;
 	ret = 0;
 	if (iowq->timeout == KTIME_MAX)
