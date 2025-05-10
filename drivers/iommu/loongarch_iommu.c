@@ -675,6 +675,13 @@ struct loongarch_iommu *find_iommu_by_dev(struct pci_dev  *pdev)
 				pcisegment);
 		return iommu;
 	}
+
+	if (devid > la_iommu_last_bdf) {
+		pci_warn(pdev, "The deviceid %x is greater than the maximum bdf number %x\n",
+			 devid, la_iommu_last_bdf);
+		return iommu;
+	}
+
 	iommu = rlookupentry->rlookup_table[devid];
 	if (iommu && (!iommu->confbase))
 		iommu = NULL;
