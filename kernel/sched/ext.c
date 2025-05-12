@@ -4999,7 +4999,7 @@ static int validate_ops(const struct sched_ext_ops *ops)
 	return 0;
 }
 
-static int scx_ops_enable(struct sched_ext_ops *ops)
+static int __attribute__((unused)) scx_ops_enable(struct sched_ext_ops *ops)
 {
 	struct scx_task_iter sti;
 	struct task_struct *p;
@@ -5450,13 +5450,13 @@ static int bpf_scx_check_member(const struct btf_type *t,
 
 static int bpf_scx_reg(void *kdata)
 {
-	return scx_ops_enable(kdata);
+	pr_err("SCX: not supported yet!");
+	return -EOPNOTSUPP;
 }
 
 static void bpf_scx_unreg(void *kdata)
 {
-	scx_ops_disable(SCX_EXIT_UNREG);
-	kthread_flush_work(&scx_ops_disable_work);
+	return;
 }
 
 static int bpf_scx_init(struct btf *btf)
