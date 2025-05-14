@@ -1,3 +1,149 @@
+* Mon Apr 28 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-31
+- dist: fixed mlnx_ofed modules x509 signing and install.sh error
+
+* Sun Apr 27 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-30
+- Merge linux 6.6.68 into tk5 release branch
+- Linux 6.6.88
+- Merge ock linux-6.6/devel branch into tk5 release branch
+- !363 Default enable mucse ethernet driver for x86
+- !360 [linux-6.6/devel][bugfix]: LoongArch: configs: Enable ORC unwinder in loongson3_defconfig
+- !359 [linux-6.6/devel][bugfix]: drm: LoongArch: fix rx550/gfx6/gfx7/gfx8 error
+- drm/amdgpu: Fix RX550 pcie order dislocation.
+- drm/amdgpu: make duplicated EOP packet for GFX6 have real content
+- drm/amdgpu: make duplicated EOP packet for GFX7/8 have real content
+- drm/radeon: repeat the same EOP packet for EOP workaround on CIK
+- drm/amdgpu: Fix pcie order dislocation
+- Merge branch 'TK5-6.6-release_fix_CVE-2022-49087' into 'release-cve' (merge request !415)
+- rxrpc: fix a race in rxrpc_exit_net()
+- Merge branch 'katrinzhou/cve/release' into 'release-cve' (merge request !416)
+- f2fs: fix double free of f2fs_sb_info
+- exfat: fix out-of-bounds access of directory entries
+- exfat: change to get file size from DataLength
+- fs/ntfs3: Mark inode as bad as soon as error detected in mi_enum_attr()
+- CIFS: New mount option for cifs.upcall namespace resolution
+- jfs: add check read-only before txBeginAnon() call
+- nfsd: don't ignore the return code of svc_proc_register()
+- ksmbd: fix null pointer dereference in alloc_preauth_hash()
+- ext4: goto right label 'out_mmap_sem' in ext4_setattr()
+- dlm: prevent NPD when writing a positive value to event_done
+- f2fs: quota: fix to avoid warning in dquot_writeback_dquots()
+- f2fs: move release of block devices to after kill_block_super()
+- btrfs: fix block group refcount race in btrfs_create_pending_block_groups()
+- Merge branch 'olice/rpmspec_v3' into 'release' (merge request !408)
+- dist: remove the same name modules when install mlnx_ofed
+- dist: fixed 5.14 modules introduced by mlnx_ofed pakcge
+- dist: support mlnx_ofed modules update to update and extra
+- Revert "dist: disable mlnx outtree driver"
+- Merge branch 'leonylgao/thirdparty_intel_net_drivers' into 'release' (merge request !400)
+- drivers,thirdparty: add ixgbevf commercial-quality ethernet driver
+- drivers,thirdparty: add ixgbe commercial-quality ethernet driver
+- drivers,thirdparty: add iavf commercial-quality ethernet driver
+- drivers,thirdparty: add ice commercial-quality ethernet driver
+- drivers,thirdparty: add i40e commercial-quality ethernet driver
+- Merge branch 'cunhuang/disk_order' into 'release' (merge request !389)
+- dist: spec: create disk modules-load file while install kernel-modules rpm
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !354 Add mucse 1G and 10G ethernet driver for linux 6.6
+- !348 [linux-6.6/devel][bugfix]: objtool: Fix C jump table annotations for Clang
+- !349 [linux-6.6/devel][Feature]: LoongArch: wst: crypto: add Wst-se driver
+- !351 [linux-6.6/devel][bugfix]: ice: fix unaligned access in ice_create_lag_recipe
+- !350 [linux-6.6/devel][bugfix]: LoongArch: Export some signal functions to fix some issues.
+- LoongArch: Export some signal functions
+- LoongArch: Make some signal and ptrace functions non-static
+- LoongArch: Handle fp, lsx, lasx and lbt assembly symbols
+- !352 [linux-6.6/devel][bugfix]:LoongArch: Preserve firmware configuration if ACPI requires.
+- !344 drivers/pci: Enable pci bridge acs capability
+- drivers/pci: Enable pci bridge acs capability
+- driver/iommu: Set iommu driver buildin kernel
+- LoongArch: KVM: Repair the restart pressure test virtual machine hang dead problem
+- LoongArch: KVM: Add interrupt checking with Loongson AVEC
+- LoongArch: KVM: Reload guest CSR registers after S4
+- LoongArch: KVM: add virt extioi cpu encode support
+- LoongArch: KVM: Fixed VM migration failure after ptw was enabled
+- LoongArch: KVM: Add reset function for irqchip
+- LoongArch: fix compile error when enable CONFIG_PARAVIRT
+- LoongArch: KVM: enable ptw for kvm
+- LoongArch:LSVZ: Clear LLBCTL if secondary mmu mapping is changed
+- Merge branch 'katrinzhou/cve/release' into 'release' (merge request !384)
+- CIFS: New mount option for cifs.upcall namespace resolution
+- Merge branch 'leonylgao/fix-kabi-pahole' into 'release' (merge request !381)
+- kabi: deduplication friendly structs
+- Merge branch 'haisu/release-fuse-passthrough' into 'release' (merge request !356)
+- remap_range: merge do_clone_file_range() into vfs_clone_file_range()
+- ovl: relax WARN_ON in ovl_verify_area()
+- ovl: add permission hooks outside of do_splice_direct()
+- ovl: mark xwhiteouts directory with overlay.opaque='x'
+- ovl: fix dentry reference leak after changes to underlying layers
+- fuse: remove stray debug line
+- fuse: update inode size after extending passthrough write
+- fs: pass offset and result to backing_file end_write() callback
+- fuse: allow O_PATH fd for FUSE_DEV_IOC_BACKING_OPEN
+- fuse: respect FOPEN_KEEP_CACHE on opendir
+- fuse: use exclusive lock when FUSE_I_CACHE_IO_MODE is set
+- fuse: disable the combination of passthrough and writeback cache
+- backing-file: convert to using fops->splice_write
+- fuse: verify zero padding in fuse_backing_map
+- fuse: fix parallel dio write on file open in passthrough mode
+- fuse: fix wrong ff->iomode state changes from parallel dio write
+- fuse: get rid of ff->readdir.lock
+- fuse: implement passthrough for mmap
+- fuse: implement splice read/write passthrough
+- fuse: implement read/write passthrough
+- fuse: implement open in passthrough mode
+- fuse: prepare for opening file in passthrough mode
+- fuse: implement ioctls to manage backing files
+- fuse: introduce FUSE_PASSTHROUGH capability
+- fuse: factor out helper for FUSE_DEV_IOC_CLONE
+- fuse: allow parallel dio writes with FUSE_DIRECT_IO_ALLOW_MMAP
+- fuse: introduce inode io modes
+- fuse: prepare for failing open response
+- fuse: break up fuse_open_common()
+- fuse: allocate ff->release_args only if release is needed
+- fuse: factor out helper fuse_truncate_update_attr()
+- fuse: add fuse_dio_lock/unlock helper functions
+- fuse: create helper function if DIO write needs exclusive lock
+- fs: factor out backing_file_mmap() helper
+- fs: factor out backing_file_splice_{read,write}() helpers
+- fs: factor out backing_file_{read,write}_iter() helpers
+- fs: prepare for stackable filesystems backing file helpers
+- fs: store real path instead of fake path in backing file f_path
+- fs: create helper file_user_path() for user displayed mapped file path
+- ovl: Add documentation on nesting of overlayfs mounts
+- ovl: Add an alternative type of whiteout
+- ovl: Support escaped overlay.* xattrs
+- ovl: Add OVL_XATTR_TRUSTED/USER_PREFIX_LEN macros
+- ovl: Move xattr support to new xattrs.c file
+- ovl: do not encode lower fh with upper sb_writers held
+- ovl: do not open/llseek lower file with upper sb_writers held
+- ovl: reorder ovl_want_write() after ovl_inode_lock()
+- ovl: split ovl_want_write() into two helpers
+- fs: get mnt_writers count for an open backing file's real path
+- fs: export mnt_{get,put}_write_access() to modules
+- fs: rename __mnt_{want,drop}_write*() helpers
+- ovl: add helper ovl_file_modified()
+- ovl: protect copying of realinode attributes to ovl inode
+- ovl: punt write aio completion to workqueue
+- ovl: propagate IOCB_APPEND flag on writes to realfile
+- ovl: use simpler function to convert iocb to rw flags
+- Merge branch 'herberthbli/dev_0326_v2' into 'release' (merge request !378)
+- rue/net: fix dev name bug
+- Merge linux 6.6.86 and 6.6.87 into TK5 release branch
+- Linux 6.6.87
+- Linux 6.6.86
+- Merge linux 6.6.85 into TK5 release branch
+- Linux 6.6.85
+- Merge linux 6.6.84 into TK5 release branch
+- Linux 6.6.84
+- Merge linux 6.6.83 into TK5 release branch
+- Linux 6.6.83
+- Merge linux 6.6.82 into TK5 release branch
+- Linux 6.6.82
+- Merge linux 6.6.81 into TK5 release branch
+- Linux 6.6.81
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !336 [olk-6.6] perf/x86/uncore: Add DF PMU support for Hygon family 18h model 8h
+- !332 [bugfix]: LoongArch: Fix boot failure in virtual machines by checking cpu_has_lvz
+
 * Mon Mar 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.80-29
 - aegis: disable aegis config, default n
 

@@ -309,7 +309,7 @@ static int kvm_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 {
 	int ret = RESUME_GUEST;
 	unsigned long estat = vcpu->arch.host_estat;
-	u32 intr = estat & 0x1fff; /* Ignore NMI */
+	u32 intr = estat & CSR_ESTAT_IS;
 	u32 ecode = (estat & CSR_ESTAT_EXC) >> CSR_ESTAT_EXC_SHIFT;
 
 	vcpu->mode = OUTSIDE_GUEST_MODE;
@@ -870,8 +870,18 @@ static int kvm_set_one_reg(struct kvm_vcpu *vcpu,
 			break;
 		case KVM_REG_LOONGARCH_VCPU_RESET:
 			vcpu->arch.st.guest_addr = 0;
-			if (vcpu->vcpu_id == 0)
+			if (vcpu->vcpu_id == 0) {
 				kvm_loongarch_reset_extioi(vcpu->kvm);
+				kvm_loongarch_reset_pch(vcpu->kvm);
+			}
+
+			kvm_loongarch_reset_ipi(vcpu);
+			/*
+			 * When the vcpu resets, clear the ESTAT and GINTC registers,
+			 * and clear other CSR registers through the _kvm_set_csr register.
+			 */
+			kvm_write_sw_gcsr(vcpu->arch.csr, LOONGARCH_CSR_GINTC, 0);
+			kvm_write_sw_gcsr(vcpu->arch.csr, LOONGARCH_CSR_ESTAT, 0);
 			memset(&vcpu->arch.irq_pending, 0, sizeof(vcpu->arch.irq_pending));
 			memset(&vcpu->arch.irq_clear, 0, sizeof(vcpu->arch.irq_clear));
 			break;

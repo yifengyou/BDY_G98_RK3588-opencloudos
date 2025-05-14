@@ -4784,6 +4784,7 @@ S:	Maintained
 F:	Documentation/admin-guide/module-signing.rst
 F:	certs/
 F:	scripts/sign-file.c
+F:	scripts/ssl-common.h
 F:	tools/certs/
 
 CFAG12864B LCD DRIVER
@@ -10980,6 +10981,15 @@ S:	Supported
 T:	git git://git.kernel.org/pub/scm/fs/xfs/xfs-linux.git
 F:	fs/iomap/
 F:	include/linux/iomap.h
+
+FILESYSTEMS [STACKABLE]
+M:	Miklos Szeredi <miklos@szeredi.hu>
+M:	Amir Goldstein <amir73il@gmail.com>
+L:	linux-fsdevel@vger.kernel.org
+L:	linux-unionfs@vger.kernel.org
+S:	Maintained
+F:	fs/backing-file.c
+F:	include/linux/backing-file.h
 
 IOMMU DMA-API LAYER
 M:	Robin Murphy <robin.murphy@arm.com>
