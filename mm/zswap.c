@@ -1064,6 +1064,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	u8 *src, *tmp = NULL;
 	unsigned int dlen;
 	int ret;
+	struct swap_info_struct *si;
 	struct writeback_control wbc = {
 		.sync_mode = WB_SYNC_NONE,
 	};
@@ -1075,8 +1076,13 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	}
 
 	/* try to allocate swap cache page */
+	si = get_swap_device(swpentry);
+	if (!si)
+		return -EEXIST;
+
 	page = __read_swap_cache_async(swpentry, GFP_KERNEL, NULL, 0,
 				       &page_was_allocated);
+	put_swap_device(si);
 	if (!page) {
 		ret = -ENOMEM;
 		goto fail;

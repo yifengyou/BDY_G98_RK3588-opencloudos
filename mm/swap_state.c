@@ -415,15 +415,12 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			struct vm_area_struct *vma, unsigned long addr,
 			bool *new_page_allocated)
 {
-	struct swap_info_struct *si;
+	struct swap_info_struct *si = swp_swap_info(entry);
 	struct folio *folio;
 	struct page *page;
 	void *shadow = NULL;
 
 	*new_page_allocated = false;
-	si = get_swap_device(entry);
-	if (!si)
-		return NULL;
 
 	for (;;) {
 		int err;
@@ -504,7 +501,6 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	*new_page_allocated = true;
 	page = &folio->page;
 got_page:
-	put_swap_device(si);
 	return page;
 
 fail_unlock:
@@ -512,7 +508,6 @@ fail_unlock:
 	folio_unlock(folio);
 	folio_put(folio);
 fail_put_swap:
-	put_swap_device(si);
 	return NULL;
 }
 
@@ -530,13 +525,20 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 				   struct vm_area_struct *vma,
 				   unsigned long addr, struct swap_iocb **plug)
 {
+	struct swap_info_struct *si;
 	bool page_was_allocated;
+
+	si = get_swap_device(entry);
+	if (!si)
+		return NULL;
+
 	struct page *retpage = __read_swap_cache_async(entry, gfp_mask,
 			vma, addr, &page_was_allocated);
 
 	if (page_was_allocated)
 		swap_readpage(retpage, false, plug);
 
+	put_swap_device(si);
 	return retpage;
 }
 EXPORT_SYMBOL(read_swap_cache_async);
