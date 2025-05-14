@@ -66,6 +66,7 @@
 #include <linux/emm.h>
 #include <linux/sched/isolation.h>
 #include <linux/namei.h>
+#include <linux/kabi.h>
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
@@ -670,6 +671,11 @@ struct memcg_vmstats_percpu {
 	/* Cgroup1: threshold notifications & softlimit tree updates */
 	unsigned long		nr_page_events;
 	unsigned long		targets[MEM_CGROUP_NTARGETS];
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 } ____cacheline_aligned;
 
 struct memcg_vmstats {

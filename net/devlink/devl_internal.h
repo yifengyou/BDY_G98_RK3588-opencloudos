@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
+#include <linux/kabi.h>
 #include <net/devlink.h>
 #include <net/net_namespace.h>
 #include <net/rtnetlink.h>
@@ -55,6 +56,9 @@ struct devlink {
 	u8 reload_failed:1;
 	refcount_t refcount;
 	struct rcu_work rwork;
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+
 	char priv[] __aligned(NETDEV_ALIGN);
 };
 

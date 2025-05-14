@@ -24,6 +24,7 @@
 #include <linux/sbitmap.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
+#include <linux/kabi.h>
 
 struct module;
 struct request_queue;
@@ -555,6 +556,13 @@ struct request_queue {
 	struct mutex		debugfs_mutex;
 
 	bool			mq_sysfs_init_done;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
 };
 
 enum {
@@ -1058,6 +1066,10 @@ struct blk_plug {
 	bool has_elevator;
 
 	struct list_head cb_list; /* md requires an unplug callback */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 struct blk_plug_cb;

@@ -7,6 +7,7 @@
 #include <linux/mutex.h>
 #include <linux/tty_buffer.h>
 #include <linux/wait.h>
+#include <linux/kabi.h>
 
 struct attribute_group;
 struct tty_driver;
@@ -121,6 +122,9 @@ struct tty_port {
 	int			drain_delay;
 	struct kref		kref;
 	void			*client_data;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /* tty_port::iflags bits -- use atomic bit ops */

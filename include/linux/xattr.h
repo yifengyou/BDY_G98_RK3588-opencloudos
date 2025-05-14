@@ -17,6 +17,7 @@
 #include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <linux/user_namespace.h>
+#include <linux/kabi.h>
 #include <uapi/linux/xattr.h>
 
 struct inode;
@@ -45,6 +46,9 @@ struct xattr_handler {
 		   struct mnt_idmap *idmap, struct dentry *dentry,
 		   struct inode *inode, const char *name, const void *buffer,
 		   size_t size, int flags);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**

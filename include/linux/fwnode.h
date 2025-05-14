@@ -173,6 +173,9 @@ struct fwnode_operations {
 	void __iomem *(*iomap)(struct fwnode_handle *fwnode, int index);
 	int (*irq_get)(const struct fwnode_handle *fwnode, unsigned int index);
 	int (*add_links)(struct fwnode_handle *fwnode);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 #define fwnode_has_op(fwnode, op)					\

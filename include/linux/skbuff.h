@@ -19,6 +19,7 @@
 #include <linux/rbtree.h>
 #include <linux/socket.h>
 #include <linux/refcount.h>
+#include <linux/kabi.h>
 
 #include <linux/atomic.h>
 #include <asm/types.h>
@@ -1060,6 +1061,12 @@ struct sk_buff {
 	/* only useable after checking ->active_extensions != 0 */
 	struct skb_ext		*extensions;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
 };
 
 /* if you move pkt_type around you also must adapt those constants */

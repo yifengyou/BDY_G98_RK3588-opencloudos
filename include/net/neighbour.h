@@ -87,6 +87,9 @@ struct neigh_parms {
 	u32	qlen;
 	int	data[NEIGH_VAR_DATA_MAX];
 	DECLARE_BITMAP(data_state, NEIGH_VAR_DATA_MAX);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 static inline void neigh_var_set(struct neigh_parms *p, int index, int val)
@@ -239,6 +242,9 @@ struct neigh_table {
 	struct neigh_statistics	__percpu *stats;
 	struct neigh_hash_table __rcu *nht;
 	struct pneigh_entry	**phash_buckets;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 enum {

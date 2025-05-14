@@ -8,6 +8,7 @@
 #include <linux/btf.h> /* for struct btf and btf_id() */
 #include <linux/filter.h> /* for MAX_BPF_STACK */
 #include <linux/tnum.h>
+#include <linux/kabi.h>
 
 /* Maximum variable offset umax_value permitted when resolving memory accesses.
  * In practice this is far bigger than any realistic pointer offset; this limit
@@ -314,6 +315,8 @@ struct bpf_func_state {
 	/* The following fields should be last. See copy_func_state() */
 	int allocated_stack;
 	struct bpf_stack_state *stack;
+
+	KABI_RESERVE(1);
 };
 
 struct bpf_idx_pair {
@@ -527,6 +530,11 @@ struct bpf_insn_aux_data {
 	 * accepts callback function as a parameter.
 	 */
 	bool calls_callback;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 #define MAX_USED_MAPS 64 /* max number of maps accessed by one eBPF program */
@@ -677,6 +685,13 @@ struct bpf_verifier_env {
 	 * e.g., in reg_type_str() to generate reg_type string
 	 */
 	char tmp_str_buf[TMP_STR_BUF_LEN];
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
 };
 
 __printf(2, 0) void bpf_verifier_vlog(struct bpf_verifier_log *log,

@@ -13,6 +13,7 @@
 #include <linux/notifier.h>
 #include <linux/route.h>
 #include <linux/types.h>
+#include <linux/kabi.h>
 #include <net/ip_fib.h>
 #include <net/ip6_fib.h>
 #include <net/netlink.h>
@@ -114,6 +115,9 @@ struct nh_grp_entry {
 
 	struct list_head nh_list;
 	struct nexthop	*nh_parent;  /* nexthop of group with this entry */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct nh_group {

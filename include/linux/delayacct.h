@@ -7,6 +7,7 @@
 #ifndef _LINUX_DELAYACCT_H
 #define _LINUX_DELAYACCT_H
 
+#include <linux/kabi.h>
 #include <uapi/linux/taskstats.h>
 
 #ifdef CONFIG_TASK_DELAY_ACCT
@@ -55,6 +56,9 @@ struct task_delay_info {
 	u32 compact_count;	/* total count of memory compact */
 	u32 wpcopy_count;	/* total count of write-protect copy */
 	u32 irq_count;	/* total count of IRQ/SOFTIRQ */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 #endif
 

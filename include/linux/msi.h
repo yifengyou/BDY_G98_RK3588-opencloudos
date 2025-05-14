@@ -26,6 +26,7 @@
 #include <linux/list.h>
 #include <linux/irq.h>
 #include <linux/bits.h>
+#include <linux/kabi.h>
 
 #include <asm/msi.h>
 
@@ -203,6 +204,10 @@ struct msi_desc {
 		struct pci_msi_desc	pci;
 		struct msi_desc_data	data;
 	};
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 /*

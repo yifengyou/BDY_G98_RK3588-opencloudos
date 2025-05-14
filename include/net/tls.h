@@ -265,6 +265,10 @@ struct tls_context {
 	struct list_head list;
 	refcount_t refcount;
 	struct rcu_head rcu;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 enum tls_offload_ctx_dir {

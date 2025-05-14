@@ -28,6 +28,7 @@
 #ifndef DRM_ATOMIC_H_
 #define DRM_ATOMIC_H_
 
+#include <linux/kabi.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_util.h>
 
@@ -239,6 +240,9 @@ struct drm_private_state_funcs {
 	 */
 	void (*atomic_print_state)(struct drm_printer *p,
 				   const struct drm_private_state *state);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**
@@ -338,6 +342,9 @@ struct drm_private_state {
 	 * @obj: backpointer to the private object
 	 */
 	struct drm_private_obj *obj;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct __drm_private_objs_state {

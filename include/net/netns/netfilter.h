@@ -3,6 +3,7 @@
 #define __NETNS_NETFILTER_H
 
 #include <linux/netfilter_defs.h>
+#include <linux/kabi.h>
 
 struct proc_dir_entry;
 struct nf_logger;
@@ -33,5 +34,10 @@ struct netns_nf {
 #if IS_ENABLED(CONFIG_NF_DEFRAG_IPV6)
 	unsigned int defrag_ipv6_users;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 #endif

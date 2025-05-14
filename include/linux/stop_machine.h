@@ -6,6 +6,7 @@
 #include <linux/cpumask.h>
 #include <linux/smp.h>
 #include <linux/list.h>
+#include <linux/kabi.h>
 
 /*
  * stop_cpu[s]() is simplistic per-cpu maximum priority cpu
@@ -27,6 +28,9 @@ struct cpu_stop_work {
 	unsigned long		caller;
 	void			*arg;
 	struct cpu_stop_done	*done;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg);
@@ -47,6 +51,9 @@ struct cpu_stop_work {
 	struct work_struct	work;
 	cpu_stop_fn_t		fn;
 	void			*arg;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 static inline int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)

@@ -18,6 +18,7 @@
 #include <linux/types.h>
 #include <linux/time.h>
 #include <linux/uidgid.h>
+#include <linux/kabi.h>
 
 struct kstat {
 	u32		result_mask;	/* What fields the user got */
@@ -53,6 +54,11 @@ struct kstat {
 	u32		dio_mem_align;
 	u32		dio_offset_align;
 	u64		change_cookie;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /* These definitions are internal to the kernel for now. Mainly used by nfsd. */

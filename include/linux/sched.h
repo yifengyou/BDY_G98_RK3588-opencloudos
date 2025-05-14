@@ -426,6 +426,11 @@ struct sched_info {
 	unsigned long			utime;
 #endif
 
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
 #endif /* CONFIG_SCHED_INFO */
 };
 
@@ -596,6 +601,18 @@ struct sched_statistics {
 #ifdef CONFIG_SCHED_CORE
 	u64				core_forceidle_sum;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
+	KABI_RESERVE(9);
+	KABI_RESERVE(10);
+	KABI_RESERVE(11);
 #endif /* CONFIG_SCHEDSTATS */
 } ____cacheline_aligned;
 

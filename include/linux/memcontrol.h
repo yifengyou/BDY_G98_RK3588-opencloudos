@@ -21,6 +21,7 @@
 #include <linux/vmstat.h>
 #include <linux/writeback.h>
 #include <linux/page-flags.h>
+#include <linux/kabi.h>
 
 #define MEM_LATENCY_MAX_SLOTS 64
 
@@ -95,6 +96,10 @@ struct rue_mem_ops {
 struct mem_cgroup_id {
 	int id;
 	refcount_t ref;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 /*
@@ -169,6 +174,11 @@ struct mem_cgroup_per_node {
 	bool			on_tree;
 	struct mem_cgroup	*memcg;		/* Back pointer, we cannot */
 						/* use container_of	   */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct mem_cgroup_threshold {

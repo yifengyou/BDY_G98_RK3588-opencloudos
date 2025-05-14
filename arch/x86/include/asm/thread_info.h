@@ -9,6 +9,7 @@
 #define _ASM_X86_THREAD_INFO_H
 
 #include <linux/compiler.h>
+#include <linux/kabi.h>
 #include <asm/page.h>
 #include <asm/percpu.h>
 #include <asm/types.h>
@@ -60,6 +61,9 @@ struct thread_info {
 #ifdef CONFIG_SMP
 	u32			cpu;		/* current CPU */
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 #define INIT_THREAD_INFO(tsk)			\

@@ -20,6 +20,7 @@
 #include <linux/smp.h>
 #include <linux/types.h>
 #include <linux/wait.h>
+#include <linux/kabi.h>
 
 struct seq_file;
 
@@ -82,6 +83,11 @@ struct sbitmap {
 	 * cachelines until the map is exhausted.
 	 */
 	unsigned int __percpu *alloc_hint;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 #define SBQ_WAIT_QUEUES 8

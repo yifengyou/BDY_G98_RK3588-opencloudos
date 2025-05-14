@@ -21,6 +21,7 @@
 #include <linux/kobject_ns.h>
 #include <linux/stat.h>
 #include <linux/atomic.h>
+#include <linux/kabi.h>
 
 struct kobject;
 struct module;
@@ -183,6 +184,8 @@ struct bin_attribute {
 			 char *, loff_t, size_t);
 	int (*mmap)(struct file *, struct kobject *, struct bin_attribute *attr,
 		    struct vm_area_struct *vma);
+
+	KABI_RESERVE(1);
 };
 
 /**

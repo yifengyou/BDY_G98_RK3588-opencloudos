@@ -7,6 +7,7 @@
 #include <linux/lockdep.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
+#include <linux/kabi.h>
 
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
@@ -153,6 +154,9 @@ struct drm_client_buffer {
 	 * @fb: DRM framebuffer
 	 */
 	struct drm_framebuffer *fb;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct drm_client_buffer *
