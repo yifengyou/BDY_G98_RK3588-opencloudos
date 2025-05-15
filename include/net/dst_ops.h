@@ -45,6 +45,10 @@ struct dst_ops {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
 
 	struct percpu_counter	pcpuc_entries ____cacheline_aligned_in_smp;
 };
