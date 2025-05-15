@@ -136,6 +136,12 @@ const char *ulp_tc_hdr_comp_field_names[] = {
 	"BNXT_ULP_CF_IDX_LAST"
 };
 
+const char *ulp_tc_hdr_bth_field_names[] = {
+	"BTH Opcode",
+	"BTH Dest QP",
+	"BTH Flags"
+};
+
 const char *ulp_tc_hdr_svif_names[] = {
 	"Wild Card",
 	"SVIF",
@@ -235,11 +241,22 @@ const char *ulp_mapper_resource_func_names[] = {
 	[BNXT_ULP_RESOURCE_FUNC_UDCC_V6SUBNET_TABLE] = "v6 Subnet Table",
 	[BNXT_ULP_RESOURCE_FUNC_KEY_RECIPE_TABLE] = "Key Recipe Table",
 	[BNXT_ULP_RESOURCE_FUNC_ALLOCATOR_TABLE] = "Allocator Table",
+	[BNXT_ULP_RESOURCE_FUNC_STATS_CACHE] = "Stats Cache Table",
 };
 
 const char *ulp_mapper_res_ulp_global_names[] = {
-	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN] = "Custom VxLAN",
-	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_ECPRI] = "Custom eCPRI"
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN] =
+	"Custom VxLAN",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_ECPRI] =
+	"Custom eCPRI",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN_GPE] =
+	"Custom Vxlan GPE",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN_GPE_V6] =
+	"Custom Vxlan GPEv6",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN_IP] =
+	"Custom Vxlan IP",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_GENEVE] =
+	"Custom Geneve",
 };
 
 const char *ulp_mapper_res_key_recipe_names[] = {
@@ -288,8 +305,6 @@ const char *ulp_mapper_res_generic_names[] = {
 		"Meter Profile Tbl Cache",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_SHARED_METER_TBL_CACHE] =
 		"Meter Tbl Cache",
-	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_GLOBAL_REGISTER_TBL] =
-		"Global Register Table",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_TABLE_SCOPE_CACHE] =
 		"Table Scope Cache",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_GENEVE_ENCAP_REC_CACHE] =
@@ -304,6 +319,10 @@ const char *ulp_mapper_res_generic_names[] = {
 		"Flow Chain Cache",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_FLOW_CHAIN_L2_CNTXT] =
 		"Flow Chain L2 context",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_TUNNEL_GPARSE_CACHE] =
+	"Tunnel Gparse Cache",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_MULTI_FLOW_TUNNEL_CACHE] =
+	"Multiflow Tunnel Cache",
 };
 
 /* Utility Function to dump a simple buffer of a given length. */
@@ -474,6 +493,12 @@ void ulp_parser_hdr_info_dump(struct ulp_tc_parser_params *params)
 					      f_idx,
 					      BNXT_ULP_PROTO_HDR_UDP_NUM);
 			f_idx += BNXT_ULP_PROTO_HDR_UDP_NUM;
+		} else if (ULP_BITMAP_ISSET(hdr_bit, BNXT_ULP_HDR_BIT_O_BTH)) {
+			ulp_parser_field_dump(ulp_ctx, hdr_field,
+					      ulp_tc_hdr_bth_field_names,
+					      f_idx,
+					      BNXT_ULP_PROTO_HDR_BTH_NUM);
+			f_idx += BNXT_ULP_PROTO_HDR_BTH_NUM;
 		} else if (ULP_BITMAP_ISSET(hdr_bit, BNXT_ULP_HDR_BIT_O_TCP) ||
 			   ULP_BITMAP_ISSET(hdr_bit, BNXT_ULP_HDR_BIT_I_TCP)) {
 			ulp_parser_field_dump(ulp_ctx, hdr_field,
@@ -912,6 +937,18 @@ ulp_mapper_key_recipe_type_to_str(u32 sub_type)
 	return ulp_mapper_res_key_recipe_names[sub_type];
 }
 
+void
+ulp_mapper_global_register_tbl_dump(struct bnxt_ulp_context *ulp_ctx,
+				    u32 sub_type, u16 port)
+{
+	if (port)
+		netdev_dbg(ulp_ctx->bp->dev, "Global Register Tbl[%s] Set port %u\n",
+			   ulp_mapper_res_ulp_global_names[sub_type], port);
+	else
+		netdev_dbg(ulp_ctx->bp->dev, "Global Register Tbl[%s] Reset default\n",
+			   ulp_mapper_res_ulp_global_names[sub_type]);
+}
+
 #else /* TC_BNXT_TRUFLOW_DEBUG */
 
 /* Function to dump the Pattern header bitmaps and fields. */
@@ -995,6 +1032,12 @@ void ulp_mapper_gen_tbl_dump(struct bnxt_ulp_context *ulp_ctx, u32 sub_type,
 const char *ulp_mapper_key_recipe_type_to_str(u32 sub_type)
 {
 	return NULL;
+}
+
+void
+ulp_mapper_global_register_tbl_dump(struct bnxt_ulp_context *ulp_ctx,
+				    u32 sub_type, u16 port)
+{
 }
 #endif /* TC_BNXT_TRUFLOW_DEBUG */
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

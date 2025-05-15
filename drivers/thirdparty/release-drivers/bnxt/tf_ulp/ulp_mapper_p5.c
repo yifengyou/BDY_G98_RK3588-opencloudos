@@ -5,6 +5,9 @@
 
 #include "linux/kernel.h"
 #include "bnxt_compat.h"
+#include "bnxt_hsi.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "ulp_mapper.h"
 #include "ulp_flow_db.h"
 #include "tf_util.h"
@@ -1327,6 +1330,26 @@ ulp_mapper_tf_handle_to_offset(struct bnxt_ulp_mapper_parms *parms,
 	return -EINVAL;
 }
 
+static int
+ulp_mapper_tf_mpc_batch_start(struct tfc_mpc_batch_info_t *batch_info)
+{
+	return 0;
+}
+
+static int
+ulp_mapper_tf_mpc_batch_end(struct bnxt *bp,
+			    void *tfcp,
+			    struct tfc_mpc_batch_info_t *batch_info)
+{
+	return 0;
+}
+
+static bool
+ulp_mapper_tf_mpc_batch_started(struct tfc_mpc_batch_info_t *batch_info)
+{
+	return false;
+}
+
 const struct ulp_mapper_core_ops ulp_mapper_tf_core_ops = {
 	.ulp_mapper_core_tcam_tbl_process = ulp_mapper_tf_tcam_tbl_process,
 	.ulp_mapper_core_tcam_entry_free = ulp_mapper_tf_tcam_entry_free,
@@ -1344,6 +1367,9 @@ const struct ulp_mapper_core_ops ulp_mapper_tf_core_ops = {
 		ulp_mapper_tf_index_tbl_alloc_process,
 	.ulp_mapper_core_app_glb_res_info_init =
 		ulp_mapper_tf_app_glb_resource_info_init,
-	.ulp_mapper_core_handle_to_offset = ulp_mapper_tf_handle_to_offset
+	.ulp_mapper_core_handle_to_offset = ulp_mapper_tf_handle_to_offset,
+	.ulp_mapper_mpc_batch_started = ulp_mapper_tf_mpc_batch_started,
+	.ulp_mapper_mpc_batch_start = ulp_mapper_tf_mpc_batch_start,
+	.ulp_mapper_mpc_batch_end = ulp_mapper_tf_mpc_batch_end,
 };
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

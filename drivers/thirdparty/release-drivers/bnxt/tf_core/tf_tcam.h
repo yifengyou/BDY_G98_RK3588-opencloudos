@@ -27,7 +27,6 @@ struct tf_tcam_cfg_parms {
 	u16				num_elements;
 	struct tf_rm_element_cfg	*cfg;
 	struct tf_shadow_tcam_cfg	*shadow_cfg;
-	bool				shadow_copy;
 	struct tf_session_resources	*resources;
 	enum tf_wc_num_slice		wc_num_slices;
 };

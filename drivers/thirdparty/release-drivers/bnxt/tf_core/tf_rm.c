@@ -340,11 +340,7 @@ static int tf_rm_update_parent_reservations(struct tf *tfp,
 
 		/* If I am a parent */
 		if (cfg[parent].cfg_type == TF_RM_ELEM_CFG_HCAPI_BA_PARENT) {
-			u8 p_slices = 1;
-
-			/* Shared session doesn't support slices */
-			if (!shared_session)
-				p_slices = cfg[parent].slices;
+			u8 p_slices = cfg[parent].slices;
 
 			WARN_ON(!p_slices);
 

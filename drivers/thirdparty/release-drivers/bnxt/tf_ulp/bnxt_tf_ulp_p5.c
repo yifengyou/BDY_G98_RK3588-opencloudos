@@ -7,11 +7,13 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_vfr.h"
 #include "bnxt_tf_ulp.h"
 #include "bnxt_tf_ulp_p5.h"
 #include "bnxt_ulp_flow.h"
 #include "bnxt_tf_common.h"
+#include "ulp_tc_parser.h"
 #include "tf_core.h"
 #include "tf_ext_flow_handle.h"
 
@@ -448,7 +450,11 @@ ulp_tf_cntxt_app_caps_init(struct bnxt *bp,
 					       info[i].min_flow_priority);
 		bnxt_ulp_max_flow_priority_set(ulp_ctx,
 					       info[i].max_flow_priority);
-		ulp_ctx->cfg_data->feature_bits = info[i].feature_bits;
+		/* Update the capability feature bits*/
+		if (bnxt_ulp_cap_feat_process(info[i].feature_bits,
+					      &ulp_ctx->cfg_data->feature_bits))
+			return -EINVAL;
+
 		bnxt_ulp_cntxt_ptr2_default_class_bits_set(ulp_ctx,
 							   info[i].default_class_bits);
 		bnxt_ulp_cntxt_ptr2_default_act_bits_set(ulp_ctx,
@@ -1151,6 +1157,7 @@ ulp_tf_ctx_attach(struct bnxt *bp,
 {
 	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
 	u32 flags, dev_id = BNXT_ULP_DEVICE_ID_LAST;
+	bool dscp_insert = false;
 	struct tf *tfp;
 	int rc = 0;
 	u8 app_id;
@@ -1216,6 +1223,18 @@ ulp_tf_ctx_attach(struct bnxt *bp,
 		netdev_dbg(bp->dev,
 			   "Failed attach to shared session: %d\n",
 			   rc);
+	}
+
+	/* Changing sriov_dscp_insert nvm config while TF is
+	 * already running on another port is not allowed.
+	 */
+	bnxt_hwrm_get_sriov_dscp_insert(bp, -1, &dscp_insert);
+	if (ulp_ctx->cfg_data->dscp_remap.sriov_dscp_insert !=
+	    dscp_insert) {
+		netdev_warn(bp->dev,
+			    "Inconsistent DSCP insert mode: %d\n",
+			    dscp_insert);
+		return -EINVAL;
 	}
 	return rc;
 }
@@ -1295,6 +1314,9 @@ ulp_tf_deinit(struct bnxt *bp,
 	if (!bp->ulp_ctx || !ulp_ctx->cfg_data)
 		return;
 
+	bnxt_tc_uninit_dscp_remap(bp, &ulp_ctx->cfg_data->dscp_remap,
+				  BNXT_ULP_FLOW_ATTR_EGRESS);
+
 	/* cleanup the eem table scope */
 	ulp_tf_eem_tbl_scope_deinit(bp, ulp_ctx);
 
@@ -1325,12 +1347,43 @@ ulp_tf_deinit(struct bnxt *bp,
 					 TF_TUNNEL_ENCAP_NAT,
 					 BNXT_ULP_NAT_OUTER_MOST_FLAGS, 0);
 
+	/* Disable meter feature */
+	(void)bnxt_flow_meter_deinit(bp);
+
 	/* free the flow db lock */
 	mutex_destroy(&ulp_ctx->cfg_data->flow_db_lock);
 
 	/* Delete the ulp context and tf session and free the ulp context */
 	ulp_tf_ctx_deinit(bp, session);
 	netdev_dbg(bp->dev, "ulp ctx has been deinitialized\n");
+}
+
+static void
+ulp_dscp_remap_init(struct bnxt *bp)
+{
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	bool dscp_insert = false;
+
+	if (!ulp_ctx->cfg_data->meter_initialized)
+		return;
+
+	/* func_qcfg read during the driver load for PF can be stale,
+	 * because the nvm configuration can be updated after the driver
+	 * load. So we need to read this flag again and update our
+	 * own db for PF case only. For VFs we still depend on the
+	 * bp->fw_cap_ext to insert dscp or not in the packets.
+	 */
+	bnxt_hwrm_get_sriov_dscp_insert(bp, -1, &dscp_insert);
+	ulp_ctx->cfg_data->dscp_remap.sriov_dscp_insert = dscp_insert;
+
+	/* Initialization of DSCP Remap framework needs to be done after
+	 * reading the sriov_dscp_insert capability. Also note that this
+	 * capability is per card; so the capability should be enabled
+	 * in nvm before TF is initialized on any PF. This initialization
+	 * will not be done when TF is initialized on subsequent PFs.
+	 */
+	bnxt_tc_init_dscp_remap(bp, &ulp_ctx->cfg_data->dscp_remap,
+				BNXT_ULP_FLOW_ATTR_EGRESS);
 }
 
 /*
@@ -1453,6 +1506,8 @@ ulp_tf_init(struct bnxt *bp,
 		}
 		rc = 0;
 	}
+
+	ulp_dscp_remap_init(bp);
 
 	netdev_dbg(bp->dev, "ulp ctx has been initialized\n");
 	return rc;

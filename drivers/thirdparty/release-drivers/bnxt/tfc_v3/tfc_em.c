@@ -27,9 +27,59 @@
 
 #define TFC_EM_DYNAMIC_BUCKET_RECORD_SIZE 1
 
-int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
+static int tfc_em_insert_response(struct bnxt *bp,
+				  struct cfa_bld_mpcinfo *mpc_info,
+				  struct bnxt_mpc_mbuf *mpc_msg_out,
+				  uint8_t *rx_msg,
+				  uint32_t *hash)
 {
 	struct cfa_mpc_data_obj fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_MAX_FLD];
+	int rc;
+	int i;
+
+	/* Process response */
+	for (i = 0; i < CFA_BLD_MPC_EM_INSERT_CMP_MAX_FLD; i++)
+		fields_cmp[i].field_id = INVALID_U16;
+
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD;
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_BKT_NUM_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_BKT_NUM_FLD;
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_NUM_ENTRIES_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_NUM_ENTRIES_FLD;
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD;
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_CHAIN_UPD_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_CHAIN_UPD_FLD;
+	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_HASH_MSB_FLD].field_id =
+		CFA_BLD_MPC_EM_INSERT_CMP_HASH_MSB_FLD;
+
+	rc = mpc_info->mpcops->cfa_bld_mpc_parse_em_insert(rx_msg,
+							   mpc_msg_out->msg_size,
+							   fields_cmp);
+	if (rc) {
+		netdev_dbg(bp->dev,
+			   "%s: EM insert parse failed: %d\n",
+			   __func__, rc);
+		return -EINVAL;
+	}
+
+	if (fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val != CFA_BLD_MPC_OK) {
+		netdev_dbg(bp->dev,
+			   "%s: MPC failed with status code:%d\n",
+			   __func__,
+			   (uint32_t)fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val);
+		rc = ((int)fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val) * -1;
+		return rc;
+	}
+
+	*hash = fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD].val;
+
+	return rc;
+}
+
+int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
+{
 	struct cfa_mpc_data_obj fields_cmd[CFA_BLD_MPC_EM_INSERT_CMD_MAX_FLD];
 	u32 entry_offset, i, num_contig_records, buff_len;
 	u32 mpc_opaque = TFC_MPC_OPAQUE_VAL;
@@ -47,6 +97,7 @@ int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
 	u16 pool_id, max_pools;
 	u8 *tx_msg, *rx_msg;
 	struct tfc_cmm *cmm;
+	uint32_t hash = 0;
 	int cleanup_rc;
 	bool valid;
 	int rc;
@@ -229,8 +280,10 @@ int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
 	netdev_dbg(bp->dev, "Lkup key data: size;%d entry_offset:%d\n",
 		   (parms->lkup_key_sz_words * 32),
 		   entry_offset + mem_cfg.lkup_rec_start_offset);
+#ifdef TFC_EM_MSG_DEBUG
 	bnxt_tfc_buf_dump(bp, "lkup key", (uint8_t *)parms->lkup_key_data,
 			  (parms->lkup_key_sz_words * 32), 4, 4);
+#endif
 
 	tx_msg = kzalloc(TFC_MPC_MAX_TX_BYTES, GFP_KERNEL);
 	rx_msg = kzalloc(TFC_MPC_MAX_RX_BYTES, GFP_KERNEL);
@@ -252,8 +305,10 @@ int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
 		goto cleanup;
 	}
 
+#ifdef TFC_EM_MSG_DEBUG
 	netdev_dbg(bp->dev, "Tx Msg: size:%d\n", buff_len);
 	bnxt_tfc_buf_dump(bp, "EM insert", (uint8_t *)tx_msg, buff_len, 4, 4);
+#endif
 
 	/* Send MPC */
 	mpc_msg_in.chnl_id = (parms->dir == CFA_DIR_TX ?
@@ -268,52 +323,40 @@ int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
 	rc = bnxt_mpc_send(tfcp->bp,
 			   &mpc_msg_in,
 			   &mpc_msg_out,
-			   &mpc_opaque);
+			   &mpc_opaque,
+			   TFC_MPC_EM_INSERT,
+			   parms->batch_info);
 	if (rc) {
 		netdev_dbg(bp->dev, "%s: EM insert send failed: %d\n",
 			   __func__, rc);
 		goto cleanup;
 	}
 
+#ifdef TFC_EM_MSG_DEBUG
 	netdev_dbg(bp->dev, "Rx Msg: size:%d\n", mpc_msg_out.msg_size);
 	bnxt_tfc_buf_dump(bp, "EM insert", (uint8_t *)rx_msg, buff_len, 4, 4);
+#endif
 
-	/* Process response */
-	for (i = 0; i < CFA_BLD_MPC_EM_INSERT_CMP_MAX_FLD; i++)
-		fields_cmp[i].field_id = INVALID_U16;
-
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD;
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_BKT_NUM_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_BKT_NUM_FLD;
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_NUM_ENTRIES_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_NUM_ENTRIES_FLD;
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD;
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_CHAIN_UPD_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_CHAIN_UPD_FLD;
-	fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_HASH_MSB_FLD].field_id =
-		CFA_BLD_MPC_EM_INSERT_CMP_HASH_MSB_FLD;
-
-	rc = mpc_info->mpcops->cfa_bld_mpc_parse_em_insert(rx_msg,
-							   mpc_msg_out.msg_size,
-							   fields_cmp);
-	if (rc) {
-		netdev_dbg(bp->dev, "%s: EM insert parse failed: %d\n",
-			   __func__, rc);
-		goto cleanup;
+	if ((parms->batch_info && !parms->batch_info->enabled) || !parms->batch_info) {
+		rc = tfc_em_insert_response(bp,
+					    mpc_info,
+					    &mpc_msg_out,
+					    rx_msg,
+					    &hash);
+		if (rc) {
+			netdev_dbg(bp->dev,
+				   "%s: EM insert tfc_em_insert_response() failed: %d\n",
+				   __func__, rc);
+			goto cleanup;
+		}
+	} else {
+		parms->batch_info->comp_info[parms->batch_info->count - 1].bp = bp;
 	}
 
-	netdev_dbg(bp->dev, "Hash MSB:0x%0x\n",
-		   (u32)fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_HASH_MSB_FLD].val);
-
-	if (fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val != CFA_BLD_MPC_OK) {
-		netdev_dbg(bp->dev, "%s: MPC failed with status code:%d\n",
-			   __func__,
-			   (u32)fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val);
-		rc = ((int)fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_STATUS_FLD].val) * -1;
-		goto cleanup;
-	}
+	*parms->flow_handle = tfc_create_flow_handle(tsid,
+						     num_contig_records, /* Based on key size */
+						     entry_offset,
+						     hash);
 
 	/* Update CPM info so it will determine best pool to use next alloc */
 	rc = tfc_cpm_set_usage(cpm_lkup, pool_id, aparms.used_count, aparms.all_used);
@@ -322,11 +365,6 @@ int tfc_em_insert(struct tfc *tfcp, u8 tsid, struct tfc_em_insert_parms *parms)
 			   __func__, rc);
 		goto cleanup;
 	}
-
-	*parms->flow_handle = tfc_create_flow_handle(tsid,
-						     num_contig_records, /* Based on key size */
-						     entry_offset,
-					fields_cmp[CFA_BLD_MPC_EM_INSERT_CMP_TABLE_INDEX3_FLD].val);
 
 	kfree(tx_msg);
 	kfree(rx_msg);
@@ -354,9 +392,46 @@ cleanup:
 	return rc;
 }
 
-int tfc_em_delete_raw(struct tfc *tfcp, u8 tsid, enum cfa_dir dir, u32 offset, u32 static_bucket)
+static int tfc_em_delete_response(struct bnxt *bp,
+				  struct cfa_bld_mpcinfo *mpc_info,
+				  struct bnxt_mpc_mbuf *mpc_msg_out,
+				  u8 *rx_msg)
 {
 	struct cfa_mpc_data_obj fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_MAX_FLD];
+	int rc;
+	int i;
+
+	/* Process response */
+	for (i = 0; i < CFA_BLD_MPC_EM_DELETE_CMP_MAX_FLD; i++)
+		fields_cmp[i].field_id = INVALID_U16;
+
+	fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].field_id =
+		CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD;
+
+	rc = mpc_info->mpcops->cfa_bld_mpc_parse_em_delete(rx_msg,
+							   mpc_msg_out->msg_size,
+							   fields_cmp);
+	if (rc) {
+		netdev_dbg(bp->dev, "%s: delete parse failed:%d\n",
+			   __func__, -rc);
+		return -EINVAL;
+	}
+
+	if (fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val != CFA_BLD_MPC_OK) {
+		netdev_dbg(bp->dev, "%s: MPC failed with status code:%d\n",
+			   __func__,
+			   (uint32_t)fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val);
+		rc = ((int)fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val) * -1;
+		return rc;
+	}
+
+	return 0;
+}
+
+int tfc_em_delete_raw(struct tfc *tfcp, u8 tsid,
+		      enum cfa_dir dir, u32 offset,
+		      u32 static_bucket, struct tfc_mpc_batch_info_t *batch_info)
+{
 	struct cfa_mpc_data_obj fields_cmd[CFA_BLD_MPC_EM_DELETE_CMD_MAX_FLD];
 	u32 mpc_opaque = TFC_MPC_OPAQUE_VAL;
 	struct cfa_bld_mpcinfo *mpc_info;
@@ -405,8 +480,10 @@ int tfc_em_delete_raw(struct tfc *tfcp, u8 tsid, enum cfa_dir dir, u32 offset, u
 		return -EINVAL;
 	}
 
+#ifdef TFC_EM_MSG_DEBUG
 	netdev_dbg(bp->dev, "Tx Msg: size:%d\n", buff_len);
 	bnxt_tfc_buf_dump(bp, "EM delete", (uint8_t *)tx_msg, buff_len, 4, 4);
+#endif
 
 	/* Send MPC */
 	mpc_msg_in.chnl_id = (dir == CFA_DIR_TX ?
@@ -417,43 +494,37 @@ int tfc_em_delete_raw(struct tfc *tfcp, u8 tsid, enum cfa_dir dir, u32 offset, u
 	mpc_msg_out.cmp_type = MPC_CMP_TYPE_MID_PATH_LONG;
 	mpc_msg_out.msg_data = &rx_msg[TFC_MPC_HEADER_SIZE_BYTES];
 	mpc_msg_out.msg_size = TFC_MPC_MAX_RX_BYTES;
-
-	netdev_dbg(bp->dev, "Tx Msg: size:%d\n", mpc_msg_out.msg_size);
-	bnxt_tfc_buf_dump(bp, "EM Delete", (uint8_t *)tx_msg, buff_len, 4, 4);
+	mpc_msg_out.chnl_id = 0;
 
 	rc = bnxt_mpc_send(tfcp->bp,
 			   &mpc_msg_in,
 			   &mpc_msg_out,
-			   &mpc_opaque);
+			   &mpc_opaque,
+			   TFC_MPC_EM_DELETE,
+			   batch_info);
 	if (rc) {
 		netdev_dbg(bp->dev, "%s: delete MPC send failed: %d\n", __func__, rc);
 		return -EINVAL;
 	}
 
+#ifdef TFC_EM_MSG_DEBUG
 	netdev_dbg(bp->dev, "Rx Msg: size:%d\n", mpc_msg_out.msg_size);
 	bnxt_tfc_buf_dump(bp, "EM delete", (uint8_t *)rx_msg, buff_len, 4, 4);
+#endif
 
-	/* Process response */
-	for (i = 0; i < CFA_BLD_MPC_EM_DELETE_CMP_MAX_FLD; i++)
-		fields_cmp[i].field_id = INVALID_U16;
-
-	fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].field_id =
-		CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD;
-
-	rc = mpc_info->mpcops->cfa_bld_mpc_parse_em_delete(rx_msg,
-							   mpc_msg_out.msg_size,
-							   fields_cmp);
-	if (rc) {
-		netdev_dbg(bp->dev, "%s: delete parse failed: %d\n", __func__, rc);
-		return -EINVAL;
+	if ((batch_info && !batch_info->enabled) || !batch_info) {
+		rc = tfc_em_delete_response(bp,
+					    mpc_info,
+					    &mpc_msg_out,
+					    rx_msg);
+	} else {
+		batch_info->comp_info[batch_info->count - 1].bp = bp;
 	}
 
-	if (fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val != CFA_BLD_MPC_OK) {
-		netdev_dbg(bp->dev, "%s: MPC failed with status code:%d\n", __func__,
-			   (u32)fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val);
-		rc = ((int)fields_cmp[CFA_BLD_MPC_EM_DELETE_CMP_STATUS_FLD].val) * -1;
-		return rc;
-	}
+	if (rc)
+		netdev_dbg(bp->dev,
+			   "%s: EM insert tfc_em_delete_response() failed: %d\n",
+			   __func__, rc);
 
 	return rc;
 }
@@ -521,7 +592,8 @@ int tfc_em_delete(struct tfc *tfcp, struct tfc_em_delete_parms *parms)
 			       parms->dir,
 			       record_offset +
 			       mem_cfg.lkup_rec_start_offset,
-			       static_bucket);
+			       static_bucket,
+			       parms->batch_info);
 	if (rc) {
 		netdev_dbg(bp->dev, "%s: failed to delete em raw record, offset %u: %d\n",
 			   __func__, record_offset + mem_cfg.lkup_rec_start_offset, rc);
@@ -582,7 +654,7 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 			      u32 type,
 			      u32 offset,
 			      u8 words,
-			      u8 *data,
+			      dma_addr_t data_pa,
 			      u8 debug)
 {
 	struct cfa_mpc_data_obj fields_cmd[CFA_BLD_MPC_READ_CMD_MAX_FLD];
@@ -594,7 +666,6 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 	u8 tx_msg[TFC_MPC_MAX_TX_BYTES];
 	u8 rx_msg[TFC_MPC_MAX_RX_BYTES];
 	struct bnxt *bp = tfcp->bp;
-	phys_addr_t host_address;
 	bool is_shared, valid;
 	u8 discard_data[128];
 	u32 buff_len;
@@ -615,15 +686,6 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 		return -EINVAL;
 	}
 
-	/* Check that data pointer is word aligned */
-	if (((u64)data) & 0x1fULL) {
-		netdev_dbg(bp->dev, "%s: Table read data pointer not word aligned\n",
-			   __func__);
-		return -EINVAL;
-	}
-
-	host_address = (phys_addr_t)virt_to_phys(data);
-
 	/* Check that MPC APIs are bound */
 	if (!mpc_info->mpcops) {
 		netdev_dbg(bp->dev, "%s: MPC not initialized\n",
@@ -636,7 +698,7 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 
 	if (debug)
 		netdev_dbg(bp->dev,
-			   "%s: Debug read table type:%s %d words32B at way:%d set:%d debug:%d words32B\n",
+			   "%s: Debug read table type:%s %d words 32B at way:%d set:%d debug:%d words32B\n",
 			   __func__,
 			   (type == 0 ? "Lookup" : "Action"),
 			   words,
@@ -680,7 +742,7 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 
 	fields_cmd[CFA_BLD_MPC_READ_CMD_HOST_ADDRESS_FLD].field_id =
 		CFA_BLD_MPC_READ_CMD_HOST_ADDRESS_FLD;
-	fields_cmd[CFA_BLD_MPC_READ_CMD_HOST_ADDRESS_FLD].val = (u64)host_address;
+	fields_cmd[CFA_BLD_MPC_READ_CMD_HOST_ADDRESS_FLD].val = data_pa;
 
 	if (debug) {
 		fields_cmd[CFA_BLD_MPC_READ_CMD_CACHE_OPTION_FLD].field_id =
@@ -712,7 +774,9 @@ static int tfc_mpc_table_read(struct tfc *tfcp,
 	rc = bnxt_mpc_send(tfcp->bp,
 			   &mpc_msg_in,
 			   &mpc_msg_out,
-			   &mpc_opaque);
+			   &mpc_opaque,
+			   TFC_MPC_TABLE_READ,
+			   NULL);
 	if (rc) {
 		netdev_dbg(bp->dev, "%s: Table read MPC send failed: %d\n",
 			   __func__, rc);
@@ -757,7 +821,8 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 				     enum cfa_dir dir,
 				     u16 pool_id,
 				     u8 debug,
-				     u8 *data)
+				     void *data_va,
+				     dma_addr_t data_pa)
 {
 	struct tfc_ts_mem_cfg mem_cfg;
 	struct bucket_info_t *bucket;
@@ -765,6 +830,7 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 	struct bnxt *bp = tfcp->bp;
 	bool is_bs_owner;
 	u32 offset;
+	u32 *entry;
 	int rc;
 	int i;
 	int j;
@@ -807,7 +873,7 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 					CFA_REGION_TYPE_LKUP,
 					offset,
 					TFC_MPC_MAX_TABLE_READ_WORDS,
-					data,
+					data_pa,
 					debug);
 		if (rc) {
 			netdev_dbg(bp->dev,
@@ -819,8 +885,9 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 
 		for (i = 0; (i < TFC_MPC_MAX_TABLE_READ_WORDS) &&
 		     (offset < mem_cfg.lkup_rec_start_offset); i++) {
+			entry = data_va;
 			/* Walk static bucket entry pointers */
-			bucket_decode((u32 *)&data[i * TFC_MPC_BYTES_PER_WORD],
+			bucket_decode(&entry[i * TFC_MPC_BYTES_PER_WORD],
 				      bucket);
 
 			for (j = 0; j < TFC_BUCKET_ENTRIES; j++) {
@@ -832,7 +899,8 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 							       tsid,
 							       dir,
 							       bucket->entries[j].entry_ptr,
-							       offset);
+							       offset,
+							       NULL);
 					if (rc) {
 						netdev_dbg(bp->dev,
 							   "%s: EM delete failed offset:0x%08x %d\n",
@@ -850,5 +918,140 @@ int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 	}
 
 	kfree(bucket);
+	return rc;
+}
+
+int tfc_mpc_batch_start(struct tfc_mpc_batch_info_t *batch_info)
+{
+	if (unlikely(batch_info->enabled))
+		return -EBUSY;
+
+	batch_info->enabled = true;
+	batch_info->count = 0;
+	batch_info->error = false;
+	return 0;
+}
+
+bool tfc_mpc_batch_started(struct tfc_mpc_batch_info_t *batch_info)
+{
+	if (unlikely(!batch_info))
+		return false;
+
+	return (batch_info->enabled && batch_info->count > 0);
+}
+
+int tfc_mpc_batch_end(void *p,
+		      struct tfc *tfcp,
+		      struct tfc_mpc_batch_info_t *batch_info)
+{
+	struct bnxt *bp = (struct bnxt *)p;
+	struct cfa_bld_mpcinfo *mpc_info;
+	u8 rx_msg[TFC_MPC_MAX_RX_BYTES];
+	u32 hash = 0;
+	int rc = 0;
+	int i;
+
+	if (!batch_info || (batch_info && !batch_info->enabled))
+		return -EBUSY;
+
+	if (!batch_info->count) {
+		batch_info->enabled = false;
+		return 0;
+	}
+
+	tfo_mpcinfo_get(tfcp->tfo, &mpc_info);
+
+	if (!mpc_info->mpcops) {
+		netdev_err(bp->dev, "%s: MPC not initialized\n",
+			   __func__);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < batch_info->count; i++) {
+		/* From this point on the bp must be the bp specific to the MPC command */
+		bp = batch_info->comp_info[i].bp;
+
+		netdev_dbg(bp->dev, "%s: completion:%d type:%d\n",
+			   __func__, i, batch_info->comp_info[i].type);
+		batch_info->comp_info[i].out_msg.msg_data = &rx_msg[TFC_MPC_HEADER_SIZE_BYTES];
+
+		rc =  bnxt_mpc_cmd_cmpl(bp,
+					&batch_info->comp_info[i].out_msg,
+					batch_info->comp_info[i].ctx);
+
+		if (unlikely(rc)) {
+			netdev_err(bp->dev,
+				   "%s: cmpl failure completion:%d type:%d bp:%p bp:%p\n",
+				   __func__,
+				   i,
+				   batch_info->comp_info[i].type,
+				   bp,
+				   batch_info->comp_info[i].bp);
+			goto batch_error;
+		}
+
+		switch (batch_info->comp_info[i].type) {
+		case TFC_MPC_EM_INSERT:
+			rc = tfc_em_insert_response(bp,
+						    mpc_info,
+						    &batch_info->comp_info[i].out_msg,
+						    rx_msg,
+						    &hash);
+			/*
+			 * If the handle is non NULL it should reference a
+			 * flow DB entry that requires the flow_handle
+			 * contained within to be updated.
+			 */
+			batch_info->em_hdl[i] =
+				tfc_create_flow_handle2(batch_info->em_hdl[i],
+							hash);
+			batch_info->em_error = rc;
+			break;
+
+		case TFC_MPC_EM_DELETE:
+			rc = tfc_em_delete_response(bp,
+						    mpc_info,
+						    &batch_info->comp_info[i].out_msg,
+						    rx_msg);
+			break;
+		case TFC_MPC_TABLE_WRITE:
+			rc = tfc_act_set_response(bp,
+						  mpc_info,
+						  &batch_info->comp_info[i].out_msg,
+						  rx_msg);
+			break;
+
+		case TFC_MPC_TABLE_READ:
+			rc = tfc_act_get_only_response(bp,
+						       mpc_info,
+						       &batch_info->comp_info[i].out_msg,
+						       rx_msg,
+						       &batch_info->comp_info[i].read_words);
+			break;
+
+		case TFC_MPC_TABLE_READ_CLEAR:
+			rc = tfc_act_get_clear_response(bp,
+							mpc_info,
+							&batch_info->comp_info[i].out_msg,
+							rx_msg,
+							&batch_info->comp_info[i].read_words);
+			break;
+
+		default:
+			netdev_dbg(bp->dev,
+				   "%s: MPC Batch not supported for type: %d\n",
+				   __func__, batch_info->comp_info[i].type);
+			return -1;
+		}
+
+batch_error:
+		batch_info->result[i] = rc;
+		if (rc)
+			batch_info->error = true;
+	}
+
+	batch_info->enabled = false;
+	batch_info->count = 0;
+
 	return rc;
 }

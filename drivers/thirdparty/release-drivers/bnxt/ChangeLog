@@ -1,3 +1,447 @@
+commit e3b3a87967cef1fa157d93fd726960b1b812401d
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Tue Aug 22 14:51:42 2023 -0700
+
+    bnxt: use the NAPI skb allocation cache
+    
+    All callers of build_skb() (*) in bnxt are in NAPI context.
+    The budget checking is somewhat convoluted because in the shared
+    completion queue cases Rx packets are discarded by netpoll
+    by forcing an error (E). But that happens before skb allocation.
+    Only a call chain starting at __bnxt_poll_work() can lead to
+    an skb allocation and it checks budget (b).
+    
+    * bnxt_rx_multi_page_skb
+    * bnxt_rx_skb
+      ` bp->rx_skb_func
+      * bnxt_tpa_end
+        ` bnxt_rx_pkt
+          E bnxt_force_rx_discard
+          E bnxt_poll_nitroa0
+          b __bnxt_poll_work
+    
+    Use napi_build_skb() to take advantage of the skb cache.
+    In iperf tests with HW-GRO enabled it barely makes a difference
+    but in cases where HW-GRO is not as effective (or disabled) it
+    can give even a >10% boost (20.7Gbps -> 23.1Gbps).
+    
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: David S. Miller <davem@davemloft.net>
+
+commit 8becd1961c734cb4bf96e3f98c50a644e8b8be2a
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Thu Aug 17 16:19:11 2023 -0700
+
+    bnxt_en: Add tx_resets ring counter
+    
+    Add a new tx_resets ring counter.  This counter will be saved as
+    tx_total_resets across any reset.  Since we currently do a full reset
+    in bnxt_sched_reset_txr(), the per ring counter will always be cleared
+    during reset.  Only the tx_total_resets count will be meaningful and we
+    only display this under ethtool -S.
+    
+    Link: https://lore.kernel.org/netdev/CACKFLimD-bKmJ1tGZOLYRjWzEwxkri-Mw7iFme1x2Dr0twdCeg@mail.gmail.com/
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-7-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit a080b47a04c503674c30dfe697b6fa1b98c3bb6b
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Thu Aug 17 16:19:10 2023 -0700
+
+    bnxt_en: Display the ring error counters under ethtool -S
+    
+    The existing driver displays the sum of 4 ring counters under ethtool -S.
+    These counters are in the array bnxt_sw_func_stats.  These counters are
+    summed at the time of ethtool -S and will be lost when the device is reset.
+    
+    Replace these counters with the new total ring error counters added in the
+    last patch.  These new counters are saved before reset.  ethtool -S will
+    now display the sum of the saved counters plus the current counters.
+    
+    Link: https://lore.kernel.org/netdev/CACKFLimD-bKmJ1tGZOLYRjWzEwxkri-Mw7iFme1x2Dr0twdCeg@mail.gmail.com/
+    Reviewed-by: Andy Gospodarek <andrew.gospodarek@broadcom.com>
+    Reviewed-by: Ajit Khaparde <ajit.khaparde@broadcom.com>
+    Reviewed-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-6-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 4c70dbe3c0087b439b9e5015057e3e378cf5d8b1
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Thu Aug 17 16:19:09 2023 -0700
+
+    bnxt_en: Save ring error counters across reset
+    
+    Currently, the ring counters are stored in the per ring datastructure.
+    During reset, all the rings are freed together with the associated
+    datastructures.  As a result, all the ring error counters will be reset
+    to zero.
+    
+    Add logic to keep track of the total error counts of all the rings
+    and save them before reset (including ifdown).  The next patch will
+    display these total ring error counters under ethtool -S.
+    
+    Link: https://lore.kernel.org/netdev/CACKFLimD-bKmJ1tGZOLYRjWzEwxkri-Mw7iFme1x2Dr0twdCeg@mail.gmail.com/
+    Reviewed-by: Ajit Khaparde <ajit.khaparde@broadcom.com>
+    Reviewed-by: Andy Gospodarek <andrew.gospodarek@broadcom.com>
+    Reviewed-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-5-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit d38c19b13b1087890973ac24ae2798797b8a411b
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Thu Aug 17 16:19:08 2023 -0700
+
+    bnxt_en: Increment rx_resets counter in bnxt_disable_napi()
+    
+    If we are doing a complete reset with irq_re_init set to true in
+    bnxt_close_nic(), all the ring structures will be freed.  New
+    structures will be allocated in bnxt_open_nic().  The current code
+    increments rx_resets counter in bnxt_enable_napi() if bnapi->in_reset
+    is true.  In a complete reset, bnapi->in_reset will never be true
+    since the structure is just allocated.
+    
+    Increment the rx_resets counter in bnxt_disable_napi() instead.  This
+    will allow us to save all the ring error counters including the
+    rx_resets counters in the next patch.
+    
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-4-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 578fcfd26e2a1d0e687b347057959228567e2af8
+Author: Somnath Kotur <somnath.kotur@broadcom.com>
+Date:   Thu Aug 17 16:19:07 2023 -0700
+
+    bnxt_en: Let the page pool manage the DMA mapping
+    
+    Use the page pool's ability to maintain DMA mappings for us.
+    This avoids re-mapping of the recycled pages.
+    
+    Link: https://lore.kernel.org/netdev/20230728231829.235716-4-michael.chan@broadcom.com/
+    Signed-off-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-3-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 86b05508f7759f41b530c6fec8858124745eada4
+Author: Somnath Kotur <somnath.kotur@broadcom.com>
+Date:   Thu Aug 17 16:19:06 2023 -0700
+
+    bnxt_en: Use the unified RX page pool buffers for XDP and non-XDP
+    
+    Convert to use the page pool buffers for the aggregation ring when
+    running in non-XDP mode.  This simplifies the driver and we benefit
+    from the recycling of pages.  Adjust the page pool size to account
+    for the aggregation ring size.
+    
+    Signed-off-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230817231911.165035-2-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 3d5ecada049f4afdad71be09295c4cd0bbf105c3
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Mon Aug 7 07:57:20 2023 -0700
+
+    bnxt_en: Fix W=stringop-overflow warning in bnxt_dcb.c
+    
+    Fix the following warning:
+    
+    drivers/net/ethernet/broadcom/bnxt/bnxt_dcb.c: In function ‘bnxt_hwrm_queue_cos2bw_cfg’:
+    cc1: error: writing 12 bytes into a region of size 1 [-Werror=stringop-overflow ]
+    In file included from drivers/net/ethernet/broadcom/bnxt/bnxt_dcb.c:19:
+    drivers/net/ethernet/broadcom/bnxt/bnxt_hsi.h:6045:17: note: destination object ‘unused_0’ of size 1
+     6045 |         u8      unused_0;
+    
+    Fix it by modifying struct hwrm_queue_cos2bw_cfg_input to use an array
+    of sub struct similar to the previous patch.  This will eliminate the
+    pointer arithmetc to calculate the destination pointer passed to
+    memcpy().
+    
+    Link: https://lore.kernel.org/netdev/CACKFLinikvXmKcxr4kjWO9TPYxTd2cb5agT1j=w9Qyj5-24s5A@mail.gmail.com/
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Reviewed-by: Gustavo A. R. Silva <gustavoars@kernel.org>
+    Link: https://lore.kernel.org/r/20230807145720.159645-3-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit ac1b8c978a7acce25a530b02e7b3f0e74ac931c8
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Mon Aug 7 07:57:19 2023 -0700
+
+    bnxt_en: Fix W=1 warning in bnxt_dcb.c from fortify memcpy()
+    
+    Fix the following warning:
+    
+    inlined from ‘bnxt_hwrm_queue_cos2bw_qcfg’ at drivers/net/ethernet/broadcom/bnxt/bnxt_dcb.c:165:3,
+    ./include/linux/fortify-string.h:592:4: error: call to ‘__read_overflow2_field’ declared with attribute warning: detected read beyond size of field (2nd parameter); maybe use struct_group()? [-Werror]
+        __read_overflow2_field(q_size_field, size);
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    Modify the FW interface defintion of struct hwrm_queue_cos2bw_qcfg_output
+    to use an array of sub struct for the queue1 to queue7 fields.  Note that
+    the layout of the queue0 fields are different and these are not part of
+    the array.  This makes the code much cleaner by removing the pointer
+    arithmetic for memcpy().
+    
+    Link: https://lore.kernel.org/netdev/20230727190726.1859515-2-kuba@kernel.org/
+    Reviewed-by: Andy Gospodarek <andrew.gospodarek@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Reviewed-by: Gustavo A. R. Silva <gustavoars@kernel.org>
+    Link: https://lore.kernel.org/r/20230807145720.159645-2-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit a9ca9f9ceff382b58b488248f0c0da9e157f5d06
+Author: Yunsheng Lin <linyunsheng@huawei.com>
+Date:   Fri Aug 4 20:05:24 2023 +0200
+
+    page_pool: split types and declarations from page_pool.h
+    
+    Split types and pure function declarations from page_pool.h
+    and add them in page_page/types.h, so that C sources can
+    include page_pool.h and headers should generally only include
+    page_pool/types.h as suggested by jakub.
+    Rename page_pool.h to page_pool/helpers.h to have both in
+    one place.
+    
+    Signed-off-by: Yunsheng Lin <linyunsheng@huawei.com>
+    Suggested-by: Jakub Kicinski <kuba@kernel.org>
+    Signed-off-by: Alexander Lobakin <aleksander.lobakin@intel.com>
+    Reviewed-by: Alexander Duyck <alexanderduyck@fb.com>
+    Link: https://lore.kernel.org/r/20230804180529.2483231-2-aleksander.lobakin@intel.com
+    [Jakub: change microsoft/mana, fix kdoc paths in Documentation]
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 08450ea98ae98d5a35145b675b76db616046ea11
+Author: Michael Chan <michael.chan@broadcom.com>
+Date:   Mon Jul 31 07:20:43 2023 -0700
+
+    bnxt_en: Fix max_mtu setting for multi-buf XDP
+    
+    The existing code does not allow the MTU to be set to the maximum even
+    after an XDP program supporting multiple buffers is attached.  Fix it
+    to set the netdev->max_mtu to the maximum value if the attached XDP
+    program supports mutiple buffers, regardless of the current MTU value.
+    
+    Also use a local variable dev instead of repeatedly using bp->dev.
+    
+    Fixes: 1dc4c557bfed ("bnxt: adding bnxt_xdp_build_skb to build skb from multibuffer xdp_buff")
+    Reviewed-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Reviewed-by: Ajit Khaparde <ajit.khaparde@broadcom.com>
+    Reviewed-by: Andy Gospodarek <andrew.gospodarek@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230731142043.58855-3-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit f6974b4c2d8e1062b5a52228ee47293c15b4ee1e
+Author: Somnath Kotur <somnath.kotur@broadcom.com>
+Date:   Mon Jul 31 07:20:42 2023 -0700
+
+    bnxt_en: Fix page pool logic for page size >= 64K
+    
+    The RXBD length field on all bnxt chips is 16-bit and so we cannot
+    support a full page when the native page size is 64K or greater.
+    The non-XDP (non page pool) code path has logic to handle this but
+    the XDP page pool code path does not handle this.  Add the missing
+    logic to use page_pool_dev_alloc_frag() to allocate 32K chunks if
+    the page size is 64K or greater.
+    
+    Fixes: 9f4b28301ce6 ("bnxt: XDP multibuffer enablement")
+    Link: https://lore.kernel.org/netdev/20230728231829.235716-2-michael.chan@broadcom.com/
+    Reviewed-by: Andy Gospodarek <andrew.gospodarek@broadcom.com>
+    Signed-off-by: Somnath Kotur <somnath.kotur@broadcom.com>
+    Signed-off-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230731142043.58855-2-michael.chan@broadcom.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 37b61cda9c1606cd8b6445d900ca9dc03185e8b6
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Fri Jul 28 13:50:20 2023 -0700
+
+    bnxt: don't handle XDP in netpoll
+    
+    Similarly to other recently fixed drivers make sure we don't
+    try to access XDP or page pool APIs when NAPI budget is 0.
+    NAPI budget of 0 may mean that we are in netpoll.
+    
+    This may result in running software IRQs in hard IRQ context,
+    leading to deadlocks or crashes.
+    
+    To make sure bnapi->tx_pkts don't get wiped without handling
+    the events, move clearing the field into the handler itself.
+    Remember to clear tx_pkts after reset (bnxt_enable_napi())
+    as it's technically possible that netpoll will accumulate
+    some tx_pkts and then a reset will happen, leaving tx_pkts
+    out of sync with reality.
+    
+    Fixes: 322b87ca55f2 ("bnxt_en: add page_pool support")
+    Reviewed-by: Andy Gospodarek <gospo@broadcom.com>
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230728205020.2784844-1-kuba@kernel.org
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 2b3082c6ef3b0104d822f6f18d2afbe5fc9a5c2c
+Author: Ratheesh Kannoth <rkannoth@marvell.com>
+Date:   Sat Jul 29 04:52:15 2023 +0530
+
+    net: flow_dissector: Use 64bits for used_keys
+    
+    As 32bits of dissector->used_keys are exhausted,
+    increase the size to 64bits.
+    
+    This is base change for ESP/AH flow dissector patch.
+    Please find patch and discussions at
+    https://lore.kernel.org/netdev/ZMDNjD46BvZ5zp5I@corigine.com/T/#t
+    
+    Signed-off-by: Ratheesh Kannoth <rkannoth@marvell.com>
+    Reviewed-by: Petr Machata <petrm@nvidia.com> # for mlxsw
+    Tested-by: Petr Machata <petrm@nvidia.com>
+    Reviewed-by: Martin Habets <habetsm.xilinx@gmail.com>
+    Reviewed-by: Simon Horman <simon.horman@corigine.com>
+    Reviewed-by: Vladimir Oltean <vladimir.oltean@nxp.com>
+    Signed-off-by: David S. Miller <davem@davemloft.net>
+
+commit 9f49db62f58eceffd8345abe8ec110f1fb142ab6
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Thu Jul 27 12:07:26 2023 -0700
+
+    eth: bnxt: fix warning for define in struct_group
+    
+    Fix C=1 warning with sparse 0.6.4:
+    
+    drivers/net/ethernet/broadcom/bnxt/bnxt.c: note: in included file:
+    drivers/net/ethernet/broadcom/bnxt/bnxt_dcb.h:30:1: warning: directive in macro's argument list
+    
+    Don't put defines in a struct_group().
+    
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230727190726.1859515-3-kuba@kernel.org
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 833c4a8105ac8c2df42ec061be09a5a682454f69
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Thu Jul 27 12:07:25 2023 -0700
+
+    eth: bnxt: fix one of the W=1 warnings about fortified memcpy()
+    
+    Fix a W=1 warning with gcc 13.1:
+    
+    In function ‘fortify_memcpy_chk’,
+        inlined from ‘bnxt_hwrm_queue_cos2bw_cfg’ at drivers/net/ethernet/broadcom/bnxt/bnxt_dcb.c:133:3:
+    include/linux/fortify-string.h:592:25: warning: call to ‘__read_overflow2_field’ declared with attribute warning: detected read beyond size of field (2nd parameter); maybe use struct_group()? [-Wattribute-warning]
+      592 |                         __read_overflow2_field(q_size_field, size);
+          |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    The field group is already defined and starts at queue_id:
+    
+    struct bnxt_cos2bw_cfg {
+            u8                      pad[3];
+            struct_group_attr(cfg, __packed,
+                    u8              queue_id;
+                    __le32          min_bw;
+    
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Link: https://lore.kernel.org/r/20230727190726.1859515-2-kuba@kernel.org
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 61220e098e858951f1926d66c1490a96351e1c85
+Author: Chandramohan Akula <chandramohan.akula@broadcom.com>
+Date:   Tue Jul 18 22:02:52 2023 -0700
+
+    bnxt_en: Share the bar0 address with the RoCE driver
+    
+    Add a parameter in the bnxt_en_dev structure to share the bar0 address
+    with RoCE driver.
+    
+    Link: https://lore.kernel.org/r/1689742977-9128-3-git-send-email-selvin.xavier@broadcom.com
+    CC: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: Chandramohan Akula <chandramohan.akula@broadcom.com>
+    Signed-off-by: Selvin Xavier <selvin.xavier@broadcom.com>
+    Signed-off-by: Jason Gunthorpe <jgg@nvidia.com>
+
+commit cf1694f09894e760f4e2cf068ee6519d11cd0ede
+Author: Chandramohan Akula <chandramohan.akula@broadcom.com>
+Date:   Tue Jul 18 22:02:51 2023 -0700
+
+    bnxt_en: Update HW interface headers
+    
+    Updating the HW structures for the doorbell pacing related
+    information. Newly added interface structures will be used in
+    the followup patches.
+    
+    Link: https://lore.kernel.org/r/1689742977-9128-2-git-send-email-selvin.xavier@broadcom.com
+    CC: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: Chandramohan Akula <chandramohan.akula@broadcom.com>
+    Signed-off-by: Selvin Xavier <selvin.xavier@broadcom.com>
+    Signed-off-by: Jason Gunthorpe <jgg@nvidia.com>
+
+commit 2b56b3d9924160d84c37d085628525666e3b1cea
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Wed Jul 19 18:04:40 2023 -0700
+
+    eth: bnxt: handle invalid Tx completions more gracefully
+    
+    Invalid Tx completions should never happen (tm) but when they do
+    they crash the host, because driver blindly trusts that there is
+    a valid skb pointer on the ring.
+    
+    The completions I've seen appear to be some form of FW / HW
+    miscalculation or staleness, they have typical (small) values
+    (<100), but they are most often higher than number of queued
+    descriptors. They usually happen after boot.
+    
+    Instead of crashing, print a warning and schedule a reset.
+    
+    Link: https://lore.kernel.org/r/20230720010440.1967136-4-kuba@kernel.org
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 9b1a00fda61ee9874e11c24c6be7ddc36e8a4598
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Wed Jul 19 18:04:39 2023 -0700
+
+    eth: bnxt: take the bit to set as argument of bnxt_queue_sp_work()
+    
+    Most callers of bnxt_queue_sp_work() set a bit to indicate what work
+    to perform right before calling it. Pass it to the function instead.
+    
+    Link: https://lore.kernel.org/r/20230720010440.1967136-3-kuba@kernel.org
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit fea2993aecd74d5d11ede1ebbd60e478ebfed996
+Author: Jakub Kicinski <kuba@kernel.org>
+Date:   Wed Jul 19 18:04:38 2023 -0700
+
+    eth: bnxt: move and rename reset helpers
+    
+    Move the reset helpers, subsequent patches will need some
+    of them on the Tx path.
+    
+    While at it rename bnxt_sched_reset(), on more recent chips
+    it schedules a queue reset, instead of a fuller reset.
+    
+    Link: https://lore.kernel.org/r/20230720010440.1967136-2-kuba@kernel.org
+    Reviewed-by: Michael Chan <michael.chan@broadcom.com>
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit 47b7acfb016b9fdc950cb501c351faf5723b1868
+Author: Menglong Dong <imagedong@tencent.com>
+Date:   Mon Jul 10 17:47:47 2023 +0800
+
+    bnxt_en: use dev_consume_skb_any() in bnxt_tx_int
+    
+    Replace dev_kfree_skb_any() with dev_consume_skb_any() in bnxt_tx_int()
+    to clear the unnecessary noise of "kfree_skb" event.
+    
+    Signed-off-by: Menglong Dong <imagedong@tencent.com>
+    Reviewed-by: Leon Romanovsky <leonro@nvidia.com>
+    Link: https://lore.kernel.org/r/20230710094747.943782-1-imagedong@tencent.com
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
 commit 1eb4ef12591348c440ac9d6efcf7521e73cf2b10
 Author: Somnath Kotur <somnath.kotur@broadcom.com>
 Date:   Wed Jun 7 00:54:09 2023 -0700
@@ -1600,6 +2044,28 @@ Date:   Fri Sep 16 02:49:32 2022 +0300
     Reviewed-by: Andy Gospodarek <gospo@broadcom.com>
     Reviewed-by: Michael Chan <michael.chan@broadcom.com>
     Link: https://lore.kernel.org/r/20220915234932.25497-1-vfedorenko@novek.ru
+    Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+commit f029c781dd6d8e2f13593c927c66db7e8826ed28
+Author: Wolfram Sang <wsa+renesas@sang-engineering.com>
+Date:   Tue Aug 30 22:14:54 2022 +0200
+
+    net: ethernet: move from strlcpy with unused retval to strscpy
+    
+    Follow the advice of the below link and prefer 'strscpy' in this
+    subsystem. Conversion is 1:1 because the return value is not used.
+    Generated by a coccinelle script.
+    
+    Link: https://lore.kernel.org/r/CAHk-=wgfRnXz0W3D37d01q3JFkr_i_uTL=V6A6G1oUZcprmknw@mail.gmail.com/
+    Signed-off-by: Wolfram Sang <wsa+renesas@sang-engineering.com>
+    Reviewed-by: Petr Machata <petrm@nvidia.com> # For drivers/net/ethernet/mellanox/mlxsw
+    Acked-by: Geoff Levand <geoff@infradead.org> # For ps3_gelic_net and spider_net_ethtool
+    Acked-by: Tom Lendacky <thomas.lendacky@amd.com> # For drivers/net/ethernet/amd/xgbe/xgbe-ethtool.c
+    Acked-by: Marcin Wojtas <mw@semihalf.com> # For drivers/net/ethernet/marvell/mvpp2
+    Reviewed-by: Leon Romanovsky <leonro@nvidia.com> # For drivers/net/ethernet/mellanox/mlx{4|5}
+    Reviewed-by: Shay Agroskin <shayagr@amazon.com> # For drivers/net/ethernet/amazon/ena
+    Acked-by: Krzysztof Hałasa <khalasa@piap.pl> # For IXP4xx Ethernet
+    Link: https://lore.kernel.org/r/20220830201457.7984-3-wsa+renesas@sang-engineering.com
     Signed-off-by: Jakub Kicinski <kuba@kernel.org>
 
 commit 366c304741729e64d778c80555d9eb422cf5cc89

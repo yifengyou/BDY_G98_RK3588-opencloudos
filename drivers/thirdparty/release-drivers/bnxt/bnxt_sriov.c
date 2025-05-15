@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2014-2016 Broadcom Corporation
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,9 @@
 #include "tfc_vf2pf_msg.h"
 
 #ifdef CONFIG_BNXT_SRIOV
+static int bnxt_create_vf_stat_worker(struct bnxt *bp);
+static void bnxt_destroy_vf_stat_worker(struct bnxt *bp);
+
 static int bnxt_hwrm_fwd_async_event_cmpl(struct bnxt *bp,
 					  struct bnxt_vf_info *vf,
 					  u16 event_id)
@@ -197,6 +200,12 @@ int bnxt_set_vf_trust(struct net_device *dev, int vf_id, bool trusted)
 	struct bnxt *bp = netdev_priv(dev);
 	struct bnxt_vf_info *vf;
 
+	/* For specific tf app check if switchdev is enabled
+	 * if yes then exit.
+	 */
+	if (!bnxt_tf_can_enable_vf_trust(bp))
+		return -EOPNOTSUPP;
+
 	vf = bnxt_vf_ndo_prep(bp, vf_id);
 	if (IS_ERR(vf))
 		return -EINVAL;
@@ -209,178 +218,6 @@ int bnxt_set_vf_trust(struct net_device *dev, int vf_id, bool trusted)
 	bnxt_hwrm_set_trusted_vf(bp, vf);
 	bnxt_vf_ndo_end(bp);
 	return 0;
-}
-#endif
-
-#ifdef HAVE_NDO_SET_VF_QUEUES
-static bool bnxt_param_ok(int new, u16 curr, u16 avail)
-{
-	int delta;
-
-	if (new <= curr)
-		return true;
-
-	delta = new - curr;
-	if (delta <= avail)
-		return true;
-	return false;
-}
-
-static void bnxt_adjust_ring_resc(struct bnxt *bp, struct bnxt_vf_info *vf,
-				  struct hwrm_func_vf_resource_cfg_input *req)
-{
-	struct bnxt_hw_resc *hw_resc = &bp->hw_resc;
-	u16 cp = 0, grp = 0, stat = 0, vnic = 0;
-	u16 min_l2, max_l2, min_rss, max_rss;
-	u16 min_tx, max_tx, min_rx, max_rx;
-
-	min_tx = le16_to_cpu(req->min_tx_rings);
-	max_tx = le16_to_cpu(req->max_tx_rings);
-	min_rx = le16_to_cpu(req->min_rx_rings);
-	max_rx = le16_to_cpu(req->max_rx_rings);
-	min_rss = le16_to_cpu(req->min_rsscos_ctx);
-	max_rss = le16_to_cpu(req->max_rsscos_ctx);
-	min_l2 = le16_to_cpu(req->min_l2_ctxs);
-	max_l2 = le16_to_cpu(req->max_l2_ctxs);
-	if (!min_tx && !max_tx && !min_rx && !max_rx) {
-		min_rss = 0;
-		max_rss = 0;
-		min_l2 = 0;
-		max_l2 = 0;
-	} else if (bp->pf.vf_resv_strategy == BNXT_VF_RESV_STRATEGY_MAXIMAL) {
-		u16 avail_cp_rings, avail_stat_ctx;
-		u16 avail_vnics, avail_ring_grps;
-
-		avail_cp_rings = bnxt_get_avail_cp_rings_for_en(bp);
-		avail_stat_ctx = bnxt_get_avail_stat_ctxs_for_en(bp);
-		avail_ring_grps = hw_resc->max_hw_ring_grps - bp->rx_nr_rings;
-		avail_vnics = hw_resc->max_vnics - bp->nr_vnics;
-
-		cp = max_t(u16, 2 * min_tx, min_rx);
-		if (cp > vf->min_cp_rings)
-			cp = min_t(u16, cp, avail_cp_rings + vf->min_cp_rings);
-		grp = min_tx;
-		if (grp > vf->min_ring_grps)
-			grp = min_t(u16, avail_ring_grps + vf->min_ring_grps,
-				    grp);
-		stat = min_rx;
-		if (stat > vf->min_stat_ctxs)
-			stat = min_t(u16, avail_stat_ctx + vf->min_stat_ctxs,
-				     stat);
-		vnic = min_rx;
-		if (vnic > vf->min_vnics)
-			vnic = min_t(u16, vnic, avail_vnics + vf->min_vnics);
-
-	} else {
-		return;
-	}
-	req->min_cmpl_rings = cpu_to_le16(cp);
-	req->max_cmpl_rings = cpu_to_le16(cp);
-	req->min_hw_ring_grps = cpu_to_le16(grp);
-	req->max_hw_ring_grps = cpu_to_le16(grp);
-	req->min_stat_ctx = cpu_to_le16(stat);
-	req->max_stat_ctx = cpu_to_le16(stat);
-	req->min_vnics = cpu_to_le16(vnic);
-	req->max_vnics = cpu_to_le16(vnic);
-	req->min_rsscos_ctx = cpu_to_le16(min_rss);
-	req->max_rsscos_ctx = cpu_to_le16(max_rss);
-	req->min_l2_ctxs = cpu_to_le16(min_l2);
-	req->max_l2_ctxs = cpu_to_le16(max_l2);
-}
-
-static void bnxt_record_ring_resc(struct bnxt *bp, struct bnxt_vf_info *vf,
-				  struct hwrm_func_vf_resource_cfg_input *req)
-{
-	struct bnxt_hw_resc *hw_resc = &bp->hw_resc;
-
-	hw_resc->max_tx_rings += vf->min_tx_rings;
-	hw_resc->max_rx_rings += vf->min_rx_rings;
-	vf->min_tx_rings = le16_to_cpu(req->min_tx_rings);
-	vf->max_tx_rings = le16_to_cpu(req->max_tx_rings);
-	vf->min_rx_rings = le16_to_cpu(req->min_rx_rings);
-	vf->max_rx_rings = le16_to_cpu(req->max_rx_rings);
-	hw_resc->max_tx_rings -= vf->min_tx_rings;
-	hw_resc->max_rx_rings -= vf->min_rx_rings;
-	if (bp->pf.vf_resv_strategy == BNXT_VF_RESV_STRATEGY_MAXIMAL) {
-		hw_resc->max_cp_rings += vf->min_cp_rings;
-		hw_resc->max_hw_ring_grps += vf->min_ring_grps;
-		hw_resc->max_stat_ctxs += vf->min_stat_ctxs;
-		hw_resc->max_vnics += vf->min_vnics;
-		vf->min_cp_rings = le16_to_cpu(req->min_cmpl_rings);
-		vf->min_ring_grps = le16_to_cpu(req->min_hw_ring_grps);
-		vf->min_stat_ctxs = le16_to_cpu(req->min_stat_ctx);
-		vf->min_vnics = le16_to_cpu(req->min_vnics);
-		hw_resc->max_cp_rings -= vf->min_cp_rings;
-		hw_resc->max_hw_ring_grps -= vf->min_ring_grps;
-		hw_resc->max_stat_ctxs -= vf->min_stat_ctxs;
-		hw_resc->max_vnics -= vf->min_vnics;
-	}
-}
-
-int bnxt_set_vf_queues(struct net_device *dev, int vf_id, int min_txq,
-		       int max_txq, int min_rxq, int max_rxq)
-{
-	struct hwrm_func_vf_resource_cfg_input *req;
-	struct bnxt *bp = netdev_priv(dev);
-	u16 avail_tx_rings, avail_rx_rings;
-	struct bnxt_hw_resc *hw_resc;
-	struct bnxt_vf_info *vf;
-	int rc;
-
-	vf = bnxt_vf_ndo_prep(bp, vf_id);
-	if (IS_ERR(vf))
-		return -EINVAL;
-
-	if (!BNXT_NEW_RM(bp) ||
-	    !(bp->fw_cap & BNXT_FW_CAP_VF_RES_MIN_GUARANTEED)) {
-		bnxt_vf_ndo_end(bp);
-		return -EOPNOTSUPP;
-	}
-
-	hw_resc = &bp->hw_resc;
-
-	avail_tx_rings = hw_resc->max_tx_rings - bp->tx_nr_rings;
-	if (bp->flags & BNXT_FLAG_AGG_RINGS)
-		avail_rx_rings = hw_resc->max_rx_rings - bp->rx_nr_rings * 2;
-	else
-		avail_rx_rings = hw_resc->max_rx_rings - bp->rx_nr_rings;
-
-	if (!bnxt_param_ok(min_txq, vf->min_tx_rings, avail_tx_rings) ||
-	    !bnxt_param_ok(min_rxq, vf->min_rx_rings, avail_rx_rings) ||
-	    !bnxt_param_ok(max_txq, vf->max_tx_rings, avail_tx_rings) ||
-	    !bnxt_param_ok(max_rxq, vf->max_rx_rings, avail_rx_rings)) {
-		bnxt_vf_ndo_end(bp);
-		return -ENOBUFS;
-	}
-
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_VF_RESOURCE_CFG);
-	if (rc) {
-		bnxt_vf_ndo_end(bp);
-		return rc;
-	}
-
-	rc = hwrm_req_replace(bp, req, &bp->vf_resc_cfg_input, sizeof(*req));
-	if (rc) {
-		bnxt_vf_ndo_end(bp);
-		return rc;
-	}
-
-	req->vf_id = cpu_to_le16(vf->fw_fid);
-	req->min_tx_rings = cpu_to_le16(min_txq);
-	req->min_rx_rings = cpu_to_le16(min_rxq);
-	req->max_tx_rings = cpu_to_le16(max_txq);
-	req->max_rx_rings = cpu_to_le16(max_rxq);
-	req->flags = cpu_to_le16(FUNC_VF_RESOURCE_CFG_REQ_FLAGS_MIN_GUARANTEED);
-
-	bnxt_adjust_ring_resc(bp, vf, req);
-
-	bnxt_req_hold(bp, req);
-	rc = hwrm_req_send(bp, req);
-	if (!rc)
-		bnxt_record_ring_resc(bp, vf, req);
-	bnxt_req_drop(bp, req);
-	bnxt_vf_ndo_end(bp);
-	return rc;
 }
 #endif
 
@@ -421,12 +258,6 @@ int bnxt_get_vf_config(struct net_device *dev, int vf_id,
 		ivi->linkstate = IFLA_VF_LINK_STATE_ENABLE;
 	else
 		ivi->linkstate = IFLA_VF_LINK_STATE_DISABLE;
-#endif
-#ifdef HAVE_NDO_SET_VF_QUEUES
-	ivi->min_tx_queues = vf->min_tx_rings;
-	ivi->max_tx_queues = vf->max_tx_rings;
-	ivi->min_rx_queues = vf->min_rx_rings;
-	ivi->max_rx_queues = vf->max_rx_rings;
 #endif
 
 	bnxt_vf_ndo_end(bp);
@@ -702,18 +533,27 @@ void bnxt_free_vf_stats_mem(struct bnxt *bp)
 	struct bnxt_vf_info *vf;
 	int i;
 
+	if (BNXT_VF_STAT_EJECTION_CAP(bp))
+		bnxt_del_vf_stat_ctxs(bp);
+
 	mutex_lock(&bp->sriov_lock);
 	vf = rcu_dereference_protected(bp->pf.vf,
 				       lockdep_is_held(&bp->sriov_lock));
-	if (!vf) {
-		mutex_unlock(&bp->sriov_lock);
-		return;
+	if (!vf)
+		goto done;
+
+	if (BNXT_VF_STAT_EJECTION_CAP(bp)) {
+		/* See comments in bnxt_alloc_vf_stats_mem() */
+		if (vf[0].stats.hw_stats)
+			bnxt_free_stats_mem(bp, &vf[0].stats);
+		goto done;
 	}
 
 	for (i = 0; i < num_vfs; i++) {
 		if (vf[i].stats.hw_stats)
 			bnxt_free_stats_mem(bp, &vf[i].stats);
 	}
+done:
 	mutex_unlock(&bp->sriov_lock);
 }
 
@@ -745,6 +585,13 @@ static void bnxt_free_vf_resources(struct bnxt *bp)
 	mutex_unlock(&bp->sriov_lock);
 }
 
+/* Allocate memory so that the PF can read VF stats using HWRM_FUNC_QSTATS.
+ * This is required to support get_ethtool_stats() for VF-Reps. This
+ * mechanism is used for chips other than Thor. On Thor, if VF stats
+ * ejection capability is supported in the firmware, the PF dynamically
+ * allocates VF stat contexts. And the firmware ejects stats to this stat
+ * context memory.
+ */
 int bnxt_alloc_vf_stats_mem(struct bnxt *bp)
 {
 	int num_vfs = pci_num_vf(bp->pdev);
@@ -761,13 +608,32 @@ int bnxt_alloc_vf_stats_mem(struct bnxt *bp)
 	}
 
 	for (i = 0; i < num_vfs; i++) {
-		bp->pf.vf[i].stats.len = sizeof(struct ctx_hw_stats);
-		if (bp->pf.vf[i].stats.hw_stats)
-			continue;
+		if (BNXT_VF_STAT_EJECTION_CAP(bp)) {
+			INIT_LIST_HEAD(&bp->pf.vf[i].stat_ctx_list);
 
-		rc = bnxt_alloc_stats_mem(bp, &bp->pf.vf[i].stats, !i);
-		if (rc)
-			break;
+			/* In VF stat ejection mode, we still need to setup
+			 * the stats mask, though we are not going to use
+			 * HWRM_FUNC_QSTATS. The mask is needed to accumulate
+			 * the hw stats into sw stats. So, allocate a dummy
+			 * func_qstat mem for VF0, but it is only used to
+			 * get hw mask (bnxt_get_func_stats_ext_mask below).
+			 */
+			if (!i) {
+				bp->pf.vf[0].stats.len = sizeof(struct ctx_hw_stats);
+				rc = bnxt_alloc_stats_mem(bp, &bp->pf.vf[0].stats,
+							  true);
+				if (rc)
+					break;
+			}
+		} else {
+			bp->pf.vf[i].stats.len = sizeof(struct ctx_hw_stats);
+			if (bp->pf.vf[i].stats.hw_stats)
+				continue;
+
+			rc = bnxt_alloc_stats_mem(bp, &bp->pf.vf[i].stats, !i);
+			if (rc)
+				break;
+		}
 	}
 
 	/* Query function stat mask to the vf[0]
@@ -913,29 +779,32 @@ static void bnxt_hwrm_roce_sriov_cfg(struct bnxt *bp, int num_vfs)
 		goto err;
 
 	cfg_req->fid = cpu_to_le16(0xffff);
-	cfg_req->enables2 = cpu_to_le32(FUNC_CFG_REQ_ENABLES2_ROCE_MAX_AV_PER_VF |
-				    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_CQ_PER_VF |
-				    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_MRW_PER_VF |
-				    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_QP_PER_VF |
-				    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_SRQ_PER_VF |
-				    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_GID_PER_VF);
-	cfg_req->roce_max_av_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_av) / num_vfs);
-	cfg_req->roce_max_cq_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_cq) / num_vfs);
-	cfg_req->roce_max_mrw_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_mrw) / num_vfs);
-	cfg_req->roce_max_qp_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_qp) / num_vfs);
-	cfg_req->roce_max_srq_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_srq) / num_vfs);
-	cfg_req->roce_max_gid_per_vf = cpu_to_le32(le32_to_cpu(resp->roce_vf_max_gid) / num_vfs);
+	cfg_req->enables2 =
+		cpu_to_le32(FUNC_CFG_REQ_ENABLES2_ROCE_MAX_AV_PER_VF |
+			    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_CQ_PER_VF |
+			    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_MRW_PER_VF |
+			    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_QP_PER_VF |
+			    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_SRQ_PER_VF |
+			    FUNC_CFG_REQ_ENABLES2_ROCE_MAX_GID_PER_VF);
+	cfg_req->roce_max_av_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_av) / num_vfs);
+	cfg_req->roce_max_cq_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_cq) / num_vfs);
+	cfg_req->roce_max_mrw_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_mrw) / num_vfs);
+	cfg_req->roce_max_qp_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_qp) / num_vfs);
+	cfg_req->roce_max_srq_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_srq) / num_vfs);
+	cfg_req->roce_max_gid_per_vf =
+		cpu_to_le32(le32_to_cpu(resp->roce_vf_max_gid) / num_vfs);
 
 	rc = hwrm_req_send(bp, cfg_req);
-	if (rc)
-		goto err;
-
-	hwrm_req_drop(bp, req);
-	return;
 
 err:
 	hwrm_req_drop(bp, req);
-	netdev_err(bp->dev, "RoCE sriov configuration failed\n");
+	if (rc)
+		netdev_err(bp->dev, "RoCE sriov configuration failed\n");
 }
 
 /* Only called by PF to reserve resources for VFs, returns actual number of
@@ -1093,7 +962,7 @@ static int bnxt_hwrm_func_cfg(struct bnxt *bp, int num_vfs)
 	if (rc)
 		return rc;
 
-	/* Remaining rings are distributed equally amongs VF's for now */
+	/* Remaining rings are distributed equally among VF's for now */
 	vf_cp_rings = bnxt_get_avail_cp_rings_for_en(bp) / num_vfs;
 	vf_stat_ctx = bnxt_get_avail_stat_ctxs_for_en(bp) / num_vfs;
 	if (bp->flags & BNXT_FLAG_AGG_RINGS)
@@ -1202,8 +1071,7 @@ int bnxt_cfg_hw_sriov(struct bnxt *bp, int *num_vfs, bool reset)
 		*num_vfs = rc;
 	}
 
-	if (BNXT_RDMA_SRIOV_EN(bp) && BNXT_ROCE_VF_RESC_CAP(bp) &&
-	    bnxt_ulp_registered(bp->edev))
+	if (BNXT_RDMA_SRIOV_EN(bp) && BNXT_ROCE_VF_RESC_CAP(bp))
 		bnxt_hwrm_roce_sriov_cfg(bp, *num_vfs);
 
 	return 0;
@@ -1249,7 +1117,7 @@ static int bnxt_sriov_enable(struct bnxt *bp, int *num_vfs)
 	u32 nvm_cfg_msix_per_vf = 1;
 	int avail_cp, avail_stat;
 
-	/* Check if we can enable requested num of vf's. At a mininum
+	/* Check if we can enable requested num of vf's. At a minimum
 	 * we require 1 RX 1 TX rings for each VF. In this minimum conf
 	 * features like TPA will not be available.
 	 */
@@ -1371,6 +1239,10 @@ static int bnxt_sriov_enable(struct bnxt *bp, int *num_vfs)
 	if (rc)
 		netdev_err(bp->dev, "Could not create SRIOV sysfs entries %d\n", rc);
 
+	rc = bnxt_create_vf_stat_worker(bp);
+	if (rc)
+		netdev_dbg(bp->dev, "Failed to create VF stat worker\n");
+
 	rc = bnxt_alloc_vf_stats_mem(bp);
 	if (rc)
 		netdev_dbg(bp->dev, "Failed to allocate VF stats memory\n");
@@ -1410,7 +1282,7 @@ err_out1:
 	return rc;
 }
 
-void bnxt_sriov_disable(struct bnxt *bp)
+void __bnxt_sriov_disable(struct bnxt *bp)
 {
 	u16 num_vfs = pci_num_vf(bp->pdev);
 
@@ -1425,6 +1297,8 @@ void bnxt_sriov_disable(struct bnxt *bp)
 	mutex_lock(&bp->vf_rep_lock);
 	bnxt_vf_reps_destroy(bp);
 	mutex_unlock(&bp->vf_rep_lock);
+
+	bnxt_destroy_vf_stat_worker(bp);
 
 	/* Free VF stats mem after destroying VF-reps */
 	bnxt_free_vf_stats_mem(bp);
@@ -1444,6 +1318,14 @@ void bnxt_sriov_disable(struct bnxt *bp)
 	}
 
 	bnxt_free_vf_resources(bp);
+}
+
+static void bnxt_sriov_disable(struct bnxt *bp)
+{
+	if (!pci_num_vf(bp->pdev))
+		return;
+
+	__bnxt_sriov_disable(bp);
 
 	/* Reclaim all resources for the PF. */
 	rtnl_lock();
@@ -1705,6 +1587,9 @@ static int bnxt_vf_set_link(struct bnxt *bp, struct bnxt_vf_info *vf)
 		mutex_unlock(&bp->link_lock);
 		phy_qcfg_resp.resp_len = cpu_to_le16(sizeof(phy_qcfg_resp));
 		phy_qcfg_resp.seq_id = phy_qcfg_req->seq_id;
+		/* New SPEEDS2 fields are beyond the legacy structure, so
+		 * clear the SPEEDS2_SUPPORTED flag.
+		 */
 		phy_qcfg_resp.option_flags &=
 			~PORT_PHY_QCAPS_RESP_FLAGS2_SPEEDS2_SUPPORTED;
 		phy_qcfg_resp.valid = 1;
@@ -2037,6 +1922,7 @@ vf_cfg_done:
 
 void bnxt_reset_vf_stats(struct bnxt *bp)
 {
+	struct bnxt_vf_stat_ctx *ctx;
 	struct bnxt_vf_info *vfp;
 	struct bnxt_vf_info *vf;
 	int num_vfs;
@@ -2061,13 +1947,310 @@ void bnxt_reset_vf_stats(struct bnxt *bp)
 		if (vfp->vnic_state)	/* !free */
 			continue;
 
-		sw = vfp->stats.sw_stats;
-		if (!sw)
-			continue;
-
-		memset(sw, 0, len);
+		if (BNXT_VF_STAT_EJECTION_CAP(bp)) {
+			/* While bnxt_sriov_enable() is still in progress on
+			 * another cpu, we can end up here while processing
+			 * bnxt_vf_vnic_change(). We can't traverse the
+			 * stat_ctx_list since it wouldn't be initialized yet,
+			 * which happens in bnxt_alloc_vf_stats_mem().
+			 */
+			if (!vf[0].stats.hw_masks)
+				break;
+			list_for_each_entry_rcu(ctx, &vfp->stat_ctx_list,
+						node) {
+				sw = ctx->stats.sw_stats;
+				if (!sw)
+					continue;
+				memset(sw, 0, len);
+			}
+		} else {
+			sw = vfp->stats.sw_stats;
+			if (!sw)
+				continue;
+			memset(sw, 0, len);
+		}
 	}
 	mutex_unlock(&bp->sriov_lock);
+}
+
+static struct bnxt_vf_stat_ctx *bnxt_stat_ctx_find(struct bnxt *bp,
+						   u16 vf_id, u32 ctx_id)
+{
+	struct bnxt_vf_stat_ctx *ctx;
+	struct bnxt_vf_info *vf;
+
+	rcu_read_lock();
+	vf = &bp->pf.vf[vf_id];
+	if (!vf)
+		goto done;
+	list_for_each_entry_rcu(ctx, &vf->stat_ctx_list, node) {
+		if (ctx->ctx_id == ctx_id) {
+			rcu_read_unlock();
+			return ctx;
+		}
+	}
+done:
+	rcu_read_unlock();
+	return NULL;
+}
+
+static int bnxt_hwrm_vf_stat_ctx_alloc(struct bnxt *bp,
+				       struct bnxt_vf_stat_ctx *stat_ctx)
+{
+	struct hwrm_stat_ctx_alloc_input *req;
+	int rc = 0;
+
+	if (BNXT_CHIP_TYPE_NITRO_A0(bp))
+		return rc;
+
+	rc = hwrm_req_init(bp, req, HWRM_STAT_CTX_ALLOC);
+	if (rc)
+		return rc;
+
+	req->stats_dma_length = cpu_to_le16(bp->hw_ring_stats_size);
+	req->update_period_ms = cpu_to_le32(bp->stats_coal_ticks / 1000);
+	req->stat_ctx_flags = STAT_CTX_ALLOC_REQ_STAT_CTX_FLAGS_DUP_HOST_BUF;
+	req->stat_ctx_id = cpu_to_le32(stat_ctx->ctx_id);
+	req->alloc_seq_id = cpu_to_le16(stat_ctx->seq_id);
+	req->stats_dma_addr = cpu_to_le64(stat_ctx->stats.hw_stats_map);
+	return hwrm_req_send(bp, req);
+}
+
+static int bnxt_vf_stat_ctx_add(struct bnxt *bp,
+				struct bnxt_vf_stat_work *vf_stat_work)
+{
+	struct bnxt_vf_stat_ctx *stat_ctx = NULL, *dup_ctx = NULL;
+	u16 vf_id = vf_stat_work->vf_id;
+	struct bnxt_vf_info *vf;
+	int rc;
+
+	dup_ctx = bnxt_stat_ctx_find(bp, vf_stat_work->vf_id,
+				     vf_stat_work->ctx_id);
+	if (dup_ctx) {
+		/* Check if the same ctx_id exists; this shouldn't happen
+		 * unless we missed a prior delete event (because the PF
+		 * was down?). In that case, re-register the existing stat
+		 * ctx with the firmware again; there's no need to
+		 * allocate a new ctx.
+		 */
+		netdev_dbg(bp->dev, "%s: Duplicate stat ctx: vf:%d ctx:0x%x\n",
+			   __func__, vf_id, dup_ctx->ctx_id);
+
+		dup_ctx->seq_id = vf_stat_work->seq_id;
+		stat_ctx = dup_ctx;
+	} else {
+		/* Allocate a new ctx */
+		stat_ctx = kzalloc(sizeof(*stat_ctx), GFP_KERNEL);
+		if (!stat_ctx)
+			return -ENOMEM;
+		stat_ctx->ctx_id = vf_stat_work->ctx_id;
+		stat_ctx->seq_id = vf_stat_work->seq_id;
+		stat_ctx->stats.len = bp->hw_ring_stats_size;
+
+		rc = bnxt_alloc_stats_mem(bp, &stat_ctx->stats, false);
+		if (rc) {
+			netdev_dbg(bp->dev,
+				   "Alloc mem failed: vf:%d ctx:0x%x seq:%u\n",
+				   vf_id, stat_ctx->ctx_id, stat_ctx->seq_id);
+			goto err_dma_mem;
+		}
+	}
+
+	/* Insert new ctx into the list; protect from sriov_enable/disable. */
+	mutex_lock(&bp->sriov_lock);
+	vf = rcu_dereference_protected(bp->pf.vf,
+				       lockdep_is_held(&bp->sriov_lock));
+	if (!vf ||  vf_id >= bp->pf.active_vfs) {
+		netdev_dbg(bp->dev, "%s: SRIOV not configured\n", __func__);
+		rc = -EINVAL;
+		goto err_ctx_alloc;
+	}
+
+	rc = bnxt_hwrm_vf_stat_ctx_alloc(bp, stat_ctx);
+	if (rc) {
+		netdev_dbg(bp->dev,
+			   "Stat ctx hwrm failed: vf:%d ctx:0x%x seq:%u\n",
+			   vf_id, stat_ctx->ctx_id, stat_ctx->seq_id);
+		if (dup_ctx) {
+			list_del_rcu(&stat_ctx->node);
+			synchronize_rcu();
+		}
+		goto err_ctx_alloc;
+	}
+
+	/* To avoid freeing this memory after registering it with the
+	 * firmware, insert it into the ctx_list only after ctx_alloc
+	 * hwrm is successful.
+	 */
+	if (!dup_ctx)
+		list_add_rcu(&stat_ctx->node, &vf[vf_id].stat_ctx_list);
+	mutex_unlock(&bp->sriov_lock);
+
+	netdev_dbg(bp->dev, "Added stat ctx: vf:%d ctx:0x%x seq:%u\n",
+		   vf_id, stat_ctx->ctx_id, stat_ctx->seq_id);
+	return 0;
+
+err_ctx_alloc:
+	mutex_unlock(&bp->sriov_lock);
+	bnxt_free_stats_mem(bp, &stat_ctx->stats);
+err_dma_mem:
+	kfree(stat_ctx);
+	return rc;
+}
+
+static void bnxt_vf_stat_ctx_del(struct bnxt *bp,
+				 struct bnxt_vf_stat_work *vf_stat_work)
+{
+	struct bnxt_vf_stat_ctx *stat_ctx;
+	u32 ctx_id = vf_stat_work->ctx_id;
+	u16 vf_id = vf_stat_work->vf_id;
+	struct bnxt_vf_info *vf;
+
+	mutex_lock(&bp->sriov_lock);
+	vf = rcu_dereference_protected(bp->pf.vf,
+				       lockdep_is_held(&bp->sriov_lock));
+	if (!vf ||  vf_id >= bp->pf.active_vfs) {
+		mutex_unlock(&bp->sriov_lock);
+		netdev_dbg(bp->dev, "%s: SRIOV not configured\n", __func__);
+		return;
+	}
+
+	stat_ctx = bnxt_stat_ctx_find(bp, vf_id, ctx_id);
+	if (!stat_ctx) {
+		mutex_unlock(&bp->sriov_lock);
+		netdev_dbg(bp->dev,
+			   "%s: Failed to find stat ctx: vf:%d ctx:0x%x\n",
+			   __func__, vf_id, ctx_id);
+		return;
+	}
+
+	list_del_rcu(&stat_ctx->node);
+	synchronize_rcu();
+	bnxt_free_stats_mem(bp, &stat_ctx->stats);
+	kfree(stat_ctx);
+	mutex_unlock(&bp->sriov_lock);
+	netdev_dbg(bp->dev, "Deleted stat ctx: vf:%d ctx:0x%x\n",
+		   vf_id, ctx_id);
+}
+
+/* Called during FW_RESET processing to free stat contexts of all VFs */
+void bnxt_del_vf_stat_ctxs(struct bnxt *bp)
+{
+	struct bnxt_vf_stat_ctx *stat_ctx;
+	struct bnxt_vf_info *vf, *vfp;
+	LIST_HEAD(tmp_list);
+	int i;
+
+	if (!BNXT_VF_STAT_EJECTION_CAP(bp))
+		return;
+
+	mutex_lock(&bp->sriov_lock);
+	vf = rcu_dereference_protected(bp->pf.vf,
+				       lockdep_is_held(&bp->sriov_lock));
+	if (!vf) {
+		mutex_unlock(&bp->sriov_lock);
+		return;
+	}
+
+	for (i = 0; i < bp->pf.active_vfs; i++) {
+		vfp = &vf[i];
+		if (list_empty(&vfp->stat_ctx_list))
+			continue;
+		list_for_each_entry_rcu(stat_ctx, &vfp->stat_ctx_list, node) {
+			list_del_rcu(&stat_ctx->node);
+			list_add_tail(&stat_ctx->tmp_list, &tmp_list);
+		}
+	}
+	mutex_unlock(&bp->sriov_lock);
+
+	synchronize_rcu();
+
+	while (!list_empty(&tmp_list)) {
+		stat_ctx = list_first_entry(&tmp_list, struct bnxt_vf_stat_ctx,
+					    tmp_list);
+		bnxt_free_stats_mem(bp, &stat_ctx->stats);
+		list_del_init(&stat_ctx->tmp_list);
+		netdev_dbg(bp->dev, "Deleted stat ctx: 0x%x\n", stat_ctx->ctx_id);
+		kfree(stat_ctx);
+	}
+}
+
+void bnxt_vf_stat_task(struct work_struct *work)
+{
+	struct bnxt_vf_stat_work *vf_stat_work =
+			container_of(work, struct bnxt_vf_stat_work, work);
+	struct bnxt *bp = vf_stat_work->bp;
+
+	set_bit(BNXT_STATE_IN_VF_STAT_TASK, &bp->state);
+	/* Make sure bnxt_close_nic() sees that we are IN_VF_STAT_TASK
+	 * before we check the BNXT_STATE_OPEN flag.
+	 */
+	smp_mb__after_atomic();
+	if (!test_bit(BNXT_STATE_OPEN, &bp->state)) {
+		clear_bit(BNXT_STATE_IN_VF_STAT_TASK, &bp->state);
+		return;
+	}
+
+	if (vf_stat_work->seq_id)
+		bnxt_vf_stat_ctx_add(bp, vf_stat_work);
+	else
+		bnxt_vf_stat_ctx_del(bp, vf_stat_work);
+
+	/* Clear task bit after completing add/del */
+	smp_mb__before_atomic();
+	clear_bit(BNXT_STATE_IN_VF_STAT_TASK, &bp->state);
+	kfree(vf_stat_work);
+}
+
+static int bnxt_create_vf_stat_worker(struct bnxt *bp)
+{
+	struct bnxt_pf_info *pf = &bp->pf;
+	char *name;
+	int rc = 0;
+
+	if (BNXT_VF(bp) || !BNXT_VF_STAT_EJECTION_CAP(bp))
+		return 0;
+
+	if (!pf)
+		return 0;
+
+	name = kasprintf(GFP_KERNEL, "%s-vf-stat-wq", dev_name(bp->dev->dev.parent));
+	if (!name)
+		return -ENOMEM;
+
+	pf->vf_stat_wq = create_singlethread_workqueue(name);
+	if (!pf->vf_stat_wq) {
+		netdev_dbg(bp->dev, "Unable to create VF stat workqueue.\n");
+		rc = -ENOMEM;
+	}
+
+	kfree(name);
+	return rc;
+}
+
+static void bnxt_destroy_vf_stat_worker(struct bnxt *bp)
+{
+	struct bnxt_pf_info *pf = &bp->pf;
+	struct workqueue_struct *wq;
+
+	if (BNXT_VF(bp) || !BNXT_VF_STAT_EJECTION_CAP(bp))
+		return;
+
+	if (!pf)
+		return;
+
+	wq = pf->vf_stat_wq;
+	if (!wq)
+		return;
+
+	pf->vf_stat_wq = NULL;
+	/* Invalidate vf_stat_wq before we read async bit */
+	smp_mb__before_atomic();
+	while (test_bit(BNXT_STATE_IN_VF_STAT_ASYNC, &bp->state))
+		msleep(20);
+
+	flush_workqueue(wq);
+	destroy_workqueue(wq);
 }
 
 #else
@@ -2079,7 +2262,7 @@ int bnxt_cfg_hw_sriov(struct bnxt *bp, int *num_vfs, bool reset)
 	return 0;
 }
 
-void bnxt_sriov_disable(struct bnxt *bp)
+void __bnxt_sriov_disable(struct bnxt *bp)
 {
 }
 

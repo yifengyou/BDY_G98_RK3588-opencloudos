@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2014-2016 Broadcom Corporation
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2021 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,10 +53,6 @@ int bnxt_set_vf_spoofchk(struct net_device *, int, bool);
 #ifdef HAVE_NDO_SET_VF_TRUST
 int bnxt_set_vf_trust(struct net_device *dev, int vf_id, bool trust);
 #endif
-#ifdef HAVE_NDO_SET_VF_QUEUES
-int bnxt_set_vf_queues(struct net_device *dev, int vf_id, int min_txq,
-		       int max_txq, int min_rxq, int max_rxq);
-#endif
 #endif
 int bnxt_sriov_configure(struct pci_dev *pdev, int num_vfs);
 #ifndef PCIE_SRIOV_CONFIGURE
@@ -65,7 +61,7 @@ void bnxt_sriov_init(unsigned int);
 void bnxt_sriov_exit(void);
 #endif
 int bnxt_cfg_hw_sriov(struct bnxt *bp, int *num_vfs, bool reset);
-void bnxt_sriov_disable(struct bnxt *bp);
+void __bnxt_sriov_disable(struct bnxt *bp);
 void bnxt_hwrm_exec_fwd_req(struct bnxt *bp);
 void bnxt_update_vf_mac(struct bnxt *bp);
 int bnxt_approve_mac(struct bnxt *bp, const u8 *mac, bool strict);
@@ -78,5 +74,7 @@ bool bnxt_is_trusted_vf(struct bnxt *bp, struct bnxt_vf_info *vf);
 int bnxt_alloc_vf_stats_mem(struct bnxt *bp);
 void bnxt_free_vf_stats_mem(struct bnxt *bp);
 void bnxt_reset_vf_stats(struct bnxt *bp);
+void bnxt_vf_stat_task(struct work_struct *work);
+void bnxt_del_vf_stat_ctxs(struct bnxt *bp);
 int bnxt_hwrm_tf_oem_cmd(struct bnxt *bp, u32 *in, u16 in_len, u32 *out, u16 out_len);
 #endif

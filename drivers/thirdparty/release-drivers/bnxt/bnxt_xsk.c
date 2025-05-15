@@ -113,7 +113,7 @@ static int bnxt_xsk_enable_rx_ring(struct bnxt *bp,  u16 queue_id)
 	}
 #endif
 	rxr->rx_next_cons = 0;
-	bnxt_hwrm_rx_ring_alloc(bp, rxr, queue_id);
+	bnxt_hwrm_rx_ring_alloc(bp, rxr);
 
 	rxr->rx_prod = 0;
 	prod = rxr->rx_prod;
@@ -126,6 +126,8 @@ static int bnxt_xsk_enable_rx_ring(struct bnxt *bp,  u16 queue_id)
 		prod = NEXT_RX(prod);
 	}
 	rxr->rx_prod = prod;
+	netdev_dbg(bp->dev, "%s: XDP db_key 0x%llX, rx_prod 0x%x, queue_id %d\n",
+		   __func__, rxr->rx_db.db_key64, rxr->rx_prod, queue_id);
 	bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
 	napi_enable(&bnapi->napi);
 	vnic->mru = bp->dev->mtu + ETH_HLEN + VLAN_HLEN;
@@ -153,12 +155,13 @@ static bool bnxt_check_xsk_q_in_dflt_vnic(struct bnxt *bp, u16 queue_id)
 
 static int bnxt_validate_xsk(struct bnxt *bp, u16 queue_id)
 {
+#ifndef CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD
 	if (!(bp->flags & BNXT_FLAG_RFS)) {
 		netdev_err(bp->dev,
 			   "nTUPLE feature needs to be on for AF_XDP support\n");
 		return -EOPNOTSUPP;
 	}
-
+#endif
 	if (bp->num_rss_ctx) {
 		netdev_err(bp->dev,
 			   "AF_XDP not supported with additional RSS contexts\n");
@@ -304,7 +307,7 @@ bool bnxt_rx_xsk(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 
 	orig_data = xdp->data;
 
-	xsk_buff_dma_sync_for_cpu(xdp, rxr->xsk_pool);
+	xsk_buff_dma_sync_for_cpu(xdp);
 
 	act = bpf_prog_run_xdp(xdp_prog, xdp);
 
@@ -458,6 +461,8 @@ bool bnxt_xsk_xmit(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 		/* write the doorbell */
 		wmb();
 		xsk_tx_release(txr->xsk_pool);
+		netdev_dbg(bp->dev, "%s: db_key 0x%llX, txr-prod 0x%x txq_index %d\n",
+			   __func__, txr->tx_db.db_key64, prod, txr->txq_index);
 		bnxt_db_write(bp, &txr->tx_db, prod);
 		cpr->sw_stats->xsk_stats.xsk_tx_sent_pkts += xsk_tx;
 	}

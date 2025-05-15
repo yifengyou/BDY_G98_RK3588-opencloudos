@@ -4,6 +4,8 @@
  */
 
 #include "bnxt_compat.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "ulp_tc_parser.h"
 #include "ulp_linux.h"
 #include "bnxt_ulp.h"
@@ -22,6 +24,11 @@
 #define ULP_VLAN_PRIORITY_MASK		0x700
 #define ULP_VLAN_TAG_MASK		0xFFF /* Last 12 bits*/
 #define ULP_UDP_PORT_VXLAN		4789
+#define ULP_UDP_PORT_VXLAN_MASK		0XFFFF
+
+static int bnxt_tc_set_dscp(struct bnxt *bp,
+			    struct ulp_tc_parser_params *params,
+			    bool ipv6, u32 val, u32 mask);
 
 struct ulp_parser_vxlan {
 	u8 flags;
@@ -318,7 +325,6 @@ static int ulp_post_process_normal_flow(struct ulp_tc_parser_params *params)
 	    match_port_type == BNXT_ULP_INTF_TYPE_VF_REP)
 		ULP_BITMAP_SET(params->act_bitmap.bits,
 			       BNXT_ULP_ACT_BIT_VF_TO_VF);
-
 	/* Update the decrement ttl computational fields */
 	if (ULP_BITMAP_ISSET(params->act_bitmap.bits,
 			     BNXT_ULP_ACT_BIT_DEC_TTL)) {
@@ -425,6 +431,17 @@ static int ulp_tc_parser_svif_set(struct ulp_tc_parser_params *params,
 	dir = ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_DIRECTION);
 	if (dir == BNXT_ULP_DIR_INGRESS) {
 		svif_type = BNXT_ULP_PHY_PORT_SVIF;
+		if (port_type == BNXT_ULP_INTF_TYPE_VF_REP) {
+			/* Save the VF func svif in the computed fields */
+			ulp_port_db_svif_get(params->ulp_ctx, ifindex, BNXT_ULP_VF_FUNC_SVIF,
+					     &svif);
+			ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_VF_FUNC_SVIF, svif);
+		} else {
+			/* Save the driver func svif in the computed fields */
+			ulp_port_db_svif_get(params->ulp_ctx, ifindex, BNXT_ULP_DRV_FUNC_SVIF,
+					     &svif);
+			ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_DRV_FUNC_SVIF, svif);
+		}
 	} else {
 		if (port_type == BNXT_ULP_INTF_TYPE_VF_REP)
 			svif_type = BNXT_ULP_VF_FUNC_SVIF;
@@ -858,7 +875,7 @@ static int bnxt_ulp_tc_resolve_tnl_ipv4(struct bnxt *bp,
 
 	/* If we are not matching on tnl_sip, use PF's mac as tnl_dmac */
 	if (!match.mask->src) {
-		ether_addr_copy(params->tnl_dmac, bp->pf.mac_addr);
+		ether_addr_copy(params->tnl_dmac, bp->dev->dev_addr);
 		eth_zero_addr(params->tnl_smac);
 		return BNXT_TF_RC_SUCCESS;
 	}
@@ -892,7 +909,7 @@ static int bnxt_ulp_tc_resolve_tnl_ipv6(struct bnxt *bp,
 	/* If we are not matching on tnl_sip, use PF's mac as tnl_dmac */
 	if (!match.mask->src.s6_addr32[0] && !match.mask->src.s6_addr32[1] &&
 	    !match.mask->src.s6_addr32[2] && !match.mask->src.s6_addr32[3]) {
-		ether_addr_copy(params->tnl_dmac, bp->pf.mac_addr);
+		ether_addr_copy(params->tnl_dmac, bp->dev->dev_addr);
 		eth_zero_addr(params->tnl_smac);
 		return BNXT_TF_RC_SUCCESS;
 	}
@@ -1205,6 +1222,10 @@ static int ulp_tc_parser_process_classid(struct bnxt *bp,
 	return BNXT_TF_RC_SUCCESS;
 }
 
+static int ulp_tc_parer_implicit_dscp_process(struct bnxt *bp,
+					      struct ulp_tc_parser_params
+						*params);
+
 /* Function to handle the parsing of TC Flows and placing
  * the TC flow actions into the ulp structures.
  */
@@ -1239,7 +1260,6 @@ int bnxt_ulp_tc_parser_act_parse(struct bnxt *bp,
 	/* Parse all the actions in the rule */
 	flow_action_for_each(i, act, flow_action) {
 		act_info = &ulp_act_info[act->id];
-
 		if (act_info->act_type == BNXT_ULP_ACT_TYPE_NOT_SUPPORTED) {
 			netdev_dbg(bp->dev,
 				   "Truflow parser does not support act %d\n",
@@ -1258,6 +1278,8 @@ int bnxt_ulp_tc_parser_act_parse(struct bnxt *bp,
 done:
 	/* Set count action in the action bitmap */
 	ULP_BITMAP_SET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_COUNT);
+
+	ulp_tc_parer_implicit_dscp_process(bp, params);
 
 	/* update the implied port details */
 	if (!ULP_BITMAP_ISSET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_QUEUE))
@@ -1975,6 +1997,8 @@ static void ulp_tc_l4_proto_type_update(struct ulp_tc_parser_params *params,
 					u16 dst_port, u16 dst_mask,
 					enum bnxt_ulp_hdr_bit hdr_bit)
 {
+	u16 static_port = 0;
+
 	switch (hdr_bit) {
 	case BNXT_ULP_HDR_BIT_I_UDP:
 	case BNXT_ULP_HDR_BIT_I_TCP:
@@ -2024,12 +2048,40 @@ static void ulp_tc_l4_proto_type_update(struct ulp_tc_parser_params *params,
 		break;
 	}
 
-	if (hdr_bit == BNXT_ULP_HDR_BIT_O_UDP && dst_port ==
-	    cpu_to_be16(ULP_UDP_PORT_VXLAN)) {
-		ULP_BITMAP_SET(params->hdr_fp_bit.bits,
-			       BNXT_ULP_HDR_BIT_T_VXLAN);
-		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_L3_TUN, 1);
-		ULP_BITMAP_SET(params->cf_bitmap, BNXT_ULP_CF_BIT_IS_TUNNEL);
+	/* If it is not udp port then there is no need to set tunnel bits */
+	if (hdr_bit != BNXT_ULP_HDR_BIT_O_UDP)
+		return;
+
+	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_TUNNEL_PORT,
+			    cpu_to_be16(dst_port));
+
+	/* vxlan static customized port */
+	if (ULP_APP_STATIC_VXLAN_PORT_EN(params->ulp_ctx)) {
+		static_port = bnxt_ulp_cntxt_vxlan_ip_port_get(params->ulp_ctx);
+		if (!static_port)
+			static_port = bnxt_ulp_cntxt_vxlan_port_get(params->ulp_ctx);
+
+		/* if udp and equal to static vxlan port then set tunnel bits */
+		if (static_port && dst_port == cpu_to_be16(static_port)) {
+			ULP_COMP_FLD_IDX_WR(params,
+					    BNXT_ULP_CF_IDX_L3_TUN, 1);
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_IS_TUNNEL);
+		}
+	} else {
+		/* if dynamic Vxlan is enabled then skip dport checks */
+		if (ULP_APP_DYNAMIC_VXLAN_PORT_EN(params->ulp_ctx))
+			return;
+
+		/* Vxlan and GPE port check */
+		if (dst_port == cpu_to_be16(ULP_UDP_PORT_VXLAN)) {
+			ULP_BITMAP_SET(params->hdr_fp_bit.bits,
+				       BNXT_ULP_HDR_BIT_T_VXLAN);
+			ULP_COMP_FLD_IDX_WR(params,
+					    BNXT_ULP_CF_IDX_L3_TUN, 1);
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_IS_TUNNEL);
+		}
 	}
 }
 
@@ -2237,15 +2289,18 @@ int ulp_tc_tnl_ip_ctrl_handler(struct bnxt *bp,
 			       struct ulp_tc_parser_params *params,
 			       void *match_arg)
 {
-	struct flow_dissector_key_eth_addrs key;
-	struct flow_dissector_key_eth_addrs mask;
 	struct tc_match match;
 
+	struct flow_dissector_key_eth_addrs key = {{0}};
+	struct flow_dissector_key_eth_addrs mask = {{0}};
+
 	ether_addr_copy(key.dst, params->tnl_dmac);
-	eth_broadcast_addr(mask.dst);
+	if (!is_zero_ether_addr(key.dst))
+		eth_broadcast_addr(mask.dst);
 
 	ether_addr_copy(key.src, params->tnl_smac);
-	eth_broadcast_addr(mask.src);
+	if (!is_zero_ether_addr(key.src))
+		eth_broadcast_addr(mask.src);
 
 	match.key = &key;
 	match.mask = &mask;
@@ -2309,6 +2364,8 @@ static int ulp_tc_vxlan_handler(struct bnxt *bp,
 	struct ulp_tc_hdr_bitmap *hdr_bitmap = &params->hdr_bitmap;
 	struct flow_match_enc_keyid *match = match_arg;
 	struct ulp_parser_vxlan vxlan_key = { 0 };
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	u16 dport, static_port;
 	u32 vni_mask;
 	u32 idx = 0;
 	u32 size;
@@ -2319,6 +2376,10 @@ static int ulp_tc_vxlan_handler(struct bnxt *bp,
 		netdev_dbg(bp->dev, "Error parsing protocol header\n");
 		return BNXT_TF_RC_ERROR;
 	}
+
+	/* Update if the outer headers have any partial masks */
+	if (!ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_WC_MATCH))
+		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_OUTER_EM_ONLY, 1);
 
 	vni = match->key->keyid;
 	vni = be32_to_cpu(vni);
@@ -2350,6 +2411,56 @@ static int ulp_tc_vxlan_handler(struct bnxt *bp,
 
 	/* Update the hdr_bitmap with vxlan */
 	ULP_BITMAP_SET(hdr_bitmap->bits, BNXT_ULP_HDR_BIT_T_VXLAN);
+
+	/* Set bits here due to DYNAMIC VXLAN feature */
+	ULP_BITMAP_SET(params->hdr_fp_bit.bits, BNXT_ULP_HDR_BIT_T_VXLAN);
+	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_L3_TUN, 1);
+	ULP_BITMAP_SET(params->cf_bitmap, BNXT_ULP_CF_BIT_IS_TUNNEL);
+
+	dport = ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_O_L4_DST_PORT);
+	if (!dport) {
+		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_O_L4_DST_PORT,
+				    ULP_UDP_PORT_VXLAN);
+		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_O_L4_DST_PORT_MASK,
+				    ULP_UDP_PORT_VXLAN_MASK);
+	}
+
+	/* vxlan static customized port */
+	if (ULP_APP_STATIC_VXLAN_PORT_EN(ulp_ctx)) {
+		static_port = bnxt_ulp_cntxt_vxlan_ip_port_get(ulp_ctx);
+		if (!static_port)
+			static_port = bnxt_ulp_cntxt_vxlan_port_get(ulp_ctx);
+
+		/* validate that static ports match if not reject */
+		if (dport != 0 && dport != cpu_to_be16(static_port)) {
+			netdev_dbg(bp->dev, "ParseErr:vxlan port is not valid\n");
+			return BNXT_TF_RC_PARSE_ERR;
+		} else if (dport == 0) {
+			ULP_COMP_FLD_IDX_WR(params,
+					    BNXT_ULP_CF_IDX_TUNNEL_PORT,
+					    cpu_to_be16(static_port));
+		}
+	} else {
+		/* dynamic vxlan support */
+		if (ULP_APP_DYNAMIC_VXLAN_PORT_EN(params->ulp_ctx)) {
+			if (dport == 0) {
+				netdev_dbg(bp->dev,
+					   "ParseErr:vxlan port is null\n");
+				return BNXT_TF_RC_PARSE_ERR;
+			}
+			/* set the dynamic vxlan port check */
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_DYNAMIC_VXLAN_PORT);
+			ULP_COMP_FLD_IDX_WR(params,
+					    BNXT_ULP_CF_IDX_TUNNEL_PORT, dport);
+		} else if (dport != 0 && dport != ULP_UDP_PORT_VXLAN) {
+			/* set the dynamic vxlan port check */
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_DYNAMIC_VXLAN_PORT);
+			ULP_COMP_FLD_IDX_WR(params,
+					    BNXT_ULP_CF_IDX_TUNNEL_PORT, dport);
+		}
+	}
 	return BNXT_TF_RC_SUCCESS;
 }
 
@@ -2357,20 +2468,13 @@ int ulp_tc_tnl_key_handler(struct bnxt *bp,
 			   struct ulp_tc_parser_params *params,
 			   void *match_arg)
 {
-	/* Check the tunnel type as seen in UDP dport.
-	 * We only support VXLAN tunnel for now.
-	 */
-	if (!ULP_BITMAP_ISSET(params->hdr_fp_bit.bits,
-			      BNXT_ULP_HDR_BIT_T_VXLAN))
-		return BNXT_TF_RC_ERROR;
-
 	return ulp_tc_vxlan_handler(bp, params, match_arg);
 }
 #endif
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) || defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
 /* Function to handle the parsing of action ports. */
-int ulp_tc_parser_act_port_set(struct ulp_tc_parser_params *param, u32 ifindex)
+int ulp_tc_parser_act_port_set(struct ulp_tc_parser_params *param, u32 ifindex, bool lag)
 {
 	struct ulp_tc_act_prop *act = &param->act_prop;
 	enum bnxt_ulp_intf_type port_type;
@@ -2383,10 +2487,15 @@ int ulp_tc_parser_act_port_set(struct ulp_tc_parser_params *param, u32 ifindex)
 	dir = ULP_COMP_FLD_IDX_RD(param, BNXT_ULP_CF_IDX_DIRECTION);
 	port_type = ULP_COMP_FLD_IDX_RD(param, BNXT_ULP_CF_IDX_ACT_PORT_TYPE);
 	if (dir == BNXT_ULP_DIR_EGRESS) {
-		/* For egress direction, fill vport */
-		if (ulp_port_db_vport_get(param->ulp_ctx, ifindex, &pid_s))
-			return BNXT_TF_RC_ERROR;
-
+		if (lag) {
+			/* For egress direction, fill lag vport */
+			if (ulp_port_db_lag_vport_get(param->ulp_ctx, ifindex, &pid_s))
+				return BNXT_TF_RC_ERROR;
+		} else {
+			/* For egress direction, fill vport */
+			if (ulp_port_db_vport_get(param->ulp_ctx, ifindex, &pid_s))
+				return BNXT_TF_RC_ERROR;
+		}
 		pid = pid_s;
 		pid = cpu_to_be32(pid);
 		memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_VPORT],
@@ -2431,43 +2540,41 @@ static int ulp_tc_parser_mirr_act_port_set(struct ulp_tc_parser_params *param,
 {
 	struct ulp_tc_act_prop *act = &param->act_prop;
 	enum bnxt_ulp_intf_type port_type;
-	enum bnxt_ulp_direction_type dir;
 	u32 vnic_type;
 	u16 pid_s;
 	u32 pid;
 
-	/* Get the direction */
-	dir = ULP_COMP_FLD_IDX_RD(param, BNXT_ULP_CF_IDX_DIRECTION);
-	if (dir == BNXT_ULP_DIR_EGRESS) {
-		/* For egress direction, fill vport */
-		if (ulp_port_db_vport_get(param->ulp_ctx, ifindex, &pid_s))
-			return BNXT_TF_RC_ERROR;
+	/* Fill in vport */
+	if (ulp_port_db_vport_get(param->ulp_ctx, ifindex, &pid_s))
+		return BNXT_TF_RC_ERROR;
 
-		pid = pid_s;
-		pid = cpu_to_be32(pid);
-		memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_MIRR_VPORT],
-		       &pid, BNXT_ULP_ACT_PROP_SZ_MIRR_VPORT);
-	} else {
-		/* For ingress direction, fill vnic */
-		port_type = ULP_COMP_FLD_IDX_RD(param,
-						BNXT_ULP_CF_IDX_ACT_MIRR_PORT_TYPE);
-		if (port_type == BNXT_ULP_INTF_TYPE_VF_REP)
-			vnic_type = BNXT_ULP_VF_FUNC_VNIC;
-		else
-			vnic_type = BNXT_ULP_DRV_FUNC_VNIC;
+	pid = pid_s;
+	pid = cpu_to_be32(pid);
+	memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_MIRR_VPORT],
+	       &pid, BNXT_ULP_ACT_PROP_SZ_MIRR_VPORT);
+	ULP_COMP_FLD_IDX_WR(param, BNXT_ULP_CF_IDX_MIRR_VPORT, pid_s);
 
-		if (ulp_port_db_default_vnic_get(param->ulp_ctx, ifindex,
-						 vnic_type, &pid_s))
-			return BNXT_TF_RC_ERROR;
+	/* ... and vnic */
+	port_type = ULP_COMP_FLD_IDX_RD(param,
+					BNXT_ULP_CF_IDX_ACT_MIRR_PORT_TYPE);
+	if (port_type == BNXT_ULP_INTF_TYPE_VF_REP)
+		vnic_type = BNXT_ULP_VF_FUNC_VNIC;
+	else
+		vnic_type = BNXT_ULP_DRV_FUNC_VNIC;
 
-		pid = pid_s;
-		pid = cpu_to_be32(pid);
-		memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_MIRR_VNIC],
-		       &pid, BNXT_ULP_ACT_PROP_SZ_MIRR_VNIC);
-	}
+	if (ulp_port_db_default_vnic_get(param->ulp_ctx, ifindex,
+					 vnic_type, &pid_s))
+		return BNXT_TF_RC_ERROR;
+
+	pid = pid_s;
+	pid = cpu_to_be32(pid);
+	memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_MIRR_VNIC],
+	       &pid, BNXT_ULP_ACT_PROP_SZ_MIRR_VNIC);
+	ULP_COMP_FLD_IDX_WR(param, BNXT_ULP_CF_IDX_MIRR_VNIC, pid_s);
 
 	/* Update the action port set bit */
 	ULP_COMP_FLD_IDX_WR(param, BNXT_ULP_CF_IDX_ACT_MIRR_PORT_IS_SET, 1);
+
 	return BNXT_TF_RC_SUCCESS;
 }
 
@@ -2540,7 +2647,7 @@ int ulp_tc_redirect_act_handler(struct bnxt *bp,
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_ACT_PORT_TYPE, intf_type);
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_DEV_ACT_PORT_ID, dst_fid);
 
-	return ulp_tc_parser_act_port_set(params, ifindex);
+	return ulp_tc_parser_act_port_set(params, ifindex, false /* lag */);
 }
 
 #ifndef HAVE_FLOW_OFFLOAD_H
@@ -2630,7 +2737,7 @@ static int ulp_tc_mirror_act_handler(struct bnxt *bp,
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_ACT_PORT_TYPE, intf_type);
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_DEV_ACT_PORT_ID, dst_fid);
 
-	return ulp_tc_parser_act_port_set(params, ifindex);
+	return ulp_tc_parser_act_port_set(params, ifindex, false /* lag */);
 }
 
 int ulp_tc_ingress_mirror_act_handler(struct bnxt *bp,
@@ -3076,8 +3183,10 @@ int ulp_tc_goto_act_handler(struct bnxt *bp,
 }
 
 static int bnxt_tc_set_l3_v4_action_params(struct bnxt *bp, struct ulp_tc_parser_params *params,
-					   u32 offset, u32 val)
+					   u32 offset, u32 val, u32 mask)
 {
+	int rc = 0;
+
 	if (offset ==  offsetof(struct iphdr, saddr)) {
 		memcpy(&params->act_prop.act_details[BNXT_ULP_ACT_PROP_IDX_SET_IPV4_SRC],
 		       &val, BNXT_ULP_ACT_PROP_SZ_SET_IPV4_SRC);
@@ -3088,6 +3197,8 @@ static int bnxt_tc_set_l3_v4_action_params(struct bnxt *bp, struct ulp_tc_parser
 		       &val, BNXT_ULP_ACT_PROP_SZ_SET_IPV4_DST);
 		/* Update the hdr_bitmap with set ipv4 dst */
 		ULP_BITMAP_SET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_SET_IPV4_DST);
+	} else if (!offset) {
+		rc = bnxt_tc_set_dscp(bp, params, false, val, mask);
 	} else {
 		netdev_dbg(bp->dev,
 			   "%s: IPv4_hdr: Invalid pedit field\n",
@@ -3099,7 +3210,7 @@ static int bnxt_tc_set_l3_v4_action_params(struct bnxt *bp, struct ulp_tc_parser
 		   &params->act_prop.act_details[BNXT_ULP_ACT_PROP_IDX_SET_IPV4_SRC],
 		   &params->act_prop.act_details[BNXT_ULP_ACT_PROP_IDX_SET_IPV4_DST]);
 
-	return 0;
+	return rc;
 }
 
 #define	BNXT_TC_FIRST_WORD_SRC_IPV6		0x8
@@ -3112,128 +3223,21 @@ static int bnxt_tc_set_l3_v4_action_params(struct bnxt *bp, struct ulp_tc_parser
 #define	BNXT_TC_FOURTH_WORD_DST_IPV6		0x24
 #define	BNXT_TC_IPV6_SIZE_IN_EACH_ITERATION	4
 #define	BNXT_TC_WORD_DSCP_IPV6			0x0
-#define	BNXT_TC_MASK_DSCP_IPV6			0x0FC00000
+#define	BNXT_TC_MASK_DSCP_IPV6			0xFC00000
+#define	BNXT_TC_SHIFT_DSCP_IPV6			22
+#define	BNXT_TC_MASK_DSCP_IPV4			0xFC0000
+#define	BNXT_TC_SHIFT_DSCP_V4_TO_V6		4
 
-#define BNXT_TC_DEFAULT_METER_PROFILE_ID	10
-#define BNXT_TC_DEFAULT_METER_ID		20
+static u16 bnxt_tc_dscp_resv_rows[] = {
+	26,		/* BNXT_TC_DSCP_REMAP_ROW_ROCE_DEFAULT */
+	48,		/* BNXT_TC_DSCP_REMAP_ROW_CNP */
+	59		/* BNXT_TC_DSCP_REMAP_ROW_ROCE_CUSTOM */
+};
 
-/* Destroy the implicit meter and meter-profile */
-static void bnxt_tc_destroy_implicit_meter(struct bnxt *bp, u32 dir)
-{
-	bnxt_flow_meter_destroy(bp, BNXT_TC_DEFAULT_METER_ID, dir);
-	bnxt_flow_meter_profile_delete(bp, BNXT_TC_DEFAULT_METER_PROFILE_ID,
-				       dir);
-}
 
-/* First time init; create an implicit meter profile and meter */
-static int bnxt_tc_create_implicit_meter(struct bnxt *bp, u32 dir)
-{
-	u32 meter_profile_id = BNXT_TC_DEFAULT_METER_PROFILE_ID;
-	u32 meter_id = BNXT_TC_DEFAULT_METER_ID;
-	int rc;
-
-	rc = bnxt_flow_meter_profile_add(bp, meter_profile_id,
-					 dir);
-	if (rc) {
-		netdev_dbg(bp->dev,
-			   "%s: Failed to create meter profile, id: 0x%x\n",
-			   __func__, meter_profile_id);
-		return rc;
-	}
-
-	rc = bnxt_flow_meter_create(bp, meter_profile_id, meter_id, dir);
-	if (rc) {
-		netdev_dbg(bp->dev,
-			   "%s: Failed to create meter id: 0x%x\n",
-			   __func__, meter_id);
-		bnxt_flow_meter_profile_delete(bp, meter_profile_id, dir);
-		return rc;
-	}
-
-	return 0;
-}
-
-#define CFA_ACT_DSCP_RMP_NUM_WORDS 64
-static int bnxt_tc_dscp_global_cfg_update(struct bnxt *bp, enum tf_dir dir,
-					  enum tf_global_config_type type,
-					  u32 offset, u32 value, u32 set_flag)
-{
-	struct tf_global_cfg_parms parms = { 0 };
-	u32 dscp_val = 0;
-	u32 dscp_rmp_val;
-	u32 *global_cfg;
-	u32 size;
-	int rc;
-	int i;
-
-	size = sizeof(u32) * 64;
-	global_cfg = vzalloc(size);
-	if (!global_cfg)
-		return -ENOMEM;
-
-	parms.dir = dir,
-	parms.type = type,
-	parms.offset = offset,
-	parms.config = (u8 *)global_cfg,
-	parms.config_sz_in_bytes = size;
-
-	if (set_flag) {
-		dscp_val = cpu_to_be32(value);
-		dscp_val >>= 20;
-	}
-
-	/* Setup each row to be written; it consists of 3 fields,
-	 * each 8-bits. The upper 6-bits of each field contains
-	 * the DSCP value for each color.
-	 *
-	 * 31:24 - Unused
-	 * 24:16 - Red DSCP
-	 * 15:8 - Yellow DSCP
-	 * 7:0 - Green DSCP
-	 *
-	 * The current implementation sets the same value for all
-	 * 3 colors and across all 64 rows. But the API supports
-	 * setting unique value for each row and color.
-	 */
-	dscp_rmp_val = ((dscp_val << 16) | (dscp_val << 8) | dscp_val);
-	for (i = 0; i < CFA_ACT_DSCP_RMP_NUM_WORDS; i++)
-		global_cfg[i] = dscp_rmp_val;
-
-	netdev_dbg(bp->dev, "%s: Setting dscp: 0x%x dscp_rmp: 0x%x\n",
-		   __func__, dscp_val, dscp_rmp_val);
-
-	rc = tf_set_global_cfg(bp->tfp, &parms);
-	if (rc)
-		netdev_dbg(bp->dev, "Failed to set global cfg 0x%x rc:%d\n",
-			   type, rc);
-
-	vfree(global_cfg);
-	return rc;
-}
-
-int bnxt_tc_clear_dscp_ipv6(struct bnxt *bp, struct bnxt_ulp_context *ulp_ctx)
-{
-	struct bnxt_ulp_data *ulp_data = ulp_ctx->cfg_data;
-	int rc;
-
-	if (!ulp_data->dscp_remap_initialized)
-		return -EINVAL;
-
-	/* Clear dscp in meter table using global config */
-	rc = bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, TF_DSCP_RMP_CFG, 0, 0, 1);
-	if (rc)
-		return -EIO;
-
-	bnxt_tc_destroy_implicit_meter(bp, BNXT_ULP_FLOW_ATTR_EGRESS);
-	ulp_data->dscp_remap_val = 0;
-	ulp_data->dscp_remap_initialized = false;
-
-	netdev_dbg(bp->dev, "%s: dscp_remap_initialized: %d\n",
-		   __func__, ulp_data->dscp_remap_initialized);
-	return 0;
-}
-
-static void bnxt_tc_param_set_act_meter(struct ulp_tc_parser_params *params, u32 meter_id)
+static void bnxt_tc_param_set_act_meter(struct ulp_tc_parser_params *params,
+					struct bnxt_ulp_dscp_remap *dscp_remap,
+					u32 meter_id)
 {
 	u32 tmp_meter_id;
 
@@ -3242,20 +3246,536 @@ static void bnxt_tc_param_set_act_meter(struct ulp_tc_parser_params *params, u32
 	       &tmp_meter_id, BNXT_ULP_ACT_PROP_SZ_METER);
 	ULP_BITMAP_SET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_METER);
 
+	/* When sriov_dscp_insert is enabled and if the meter is RED,
+	 * i.e, default meter for flows without modify-dscp action,
+	 * we must not set the DSCP_REMAP CF. This avoids creating
+	 * separate WC tcam entries (L2 & RoCE) while setting up the
+	 * CFA pipeline.
+	 */
+	if (BNXT_ULP_DSCP_INSERT_CAP(dscp_remap) && meter_id ==
+	    MTR_PROF_CLR_RED + 1)
+		return;
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_DSCP_REMAP, 1);
 }
 
-static int bnxt_tc_set_dscp_ipv6(struct bnxt *bp, struct ulp_tc_parser_params *params,
-				 u32 offset, u32 val, u32 mask)
+static int bnxt_tc_dscp_global_cfg_update(struct bnxt *bp, enum tf_dir dir,
+					  u32 *global_cfg, int row, int color,
+					  u32 value, u32 set_flag, bool hw_wr)
 {
-	struct bnxt_ulp_data *ulp_data = params->ulp_ctx->cfg_data;
-	u32 meter_id = BNXT_TC_DEFAULT_METER_ID;
+	struct tf_global_cfg_parms parms = { 0 };
+	u32 dscp_val = 0;
+	u32 dscp_rmp_val;
+	u32 size;
+	int rc;
+
+	if (set_flag)
+		dscp_val = value >> 20;
+
+	/* Setup the specified row to be written; it consists of
+	 * 3 fields, each 8-bits. The upper 6-bits of each field
+	 * contains the DSCP value for the specific color.
+	 *
+	 * 31:24 - Unused
+	 * 24:16 - Red DSCP
+	 * 15:8 - Yellow DSCP
+	 * 7:0 - Green DSCP
+	 */
+	switch (color) {
+	case MTR_PROF_CLR_GREEN:
+		dscp_rmp_val = set_flag ? dscp_val : 0xffffff00;
+		break;
+	case MTR_PROF_CLR_YELLOW:
+		dscp_rmp_val = set_flag ? (dscp_val << 8) : 0xffff00ff;
+		break;
+	case MTR_PROF_CLR_RED:
+		dscp_rmp_val = set_flag ? (dscp_val << 16) : 0xff00ffff;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (set_flag)
+		global_cfg[row] |= dscp_rmp_val;
+	else
+		global_cfg[row] &= dscp_rmp_val;
+
+	netdev_dbg(bp->dev, "%s: Setting dscp: 0x%x dscp_rmp: 0x%x\n",
+		   __func__, dscp_val, dscp_rmp_val);
+
+	if (!hw_wr)
+		return 0;
+
+	netdev_dbg(bp->dev, "%s: Writing to the global cfg table\n",
+		   __func__);
+
+	size = sizeof(u32) * BNXT_DSCP_REMAP_ROWS;
+	parms.dir = dir,
+	parms.type = TF_DSCP_RMP_CFG,
+	parms.offset = 0,
+	parms.config = (u8 *)global_cfg,
+	parms.config_sz_in_bytes = size;
+
+	rc = tf_set_global_cfg(bp->tfp, &parms);
+	if (rc)
+		netdev_dbg(bp->dev, "%s: Failed to set global cfg rc:%d\n",
+			   __func__, rc);
+
+	return rc;
+}
+
+static bool bnxt_tc_is_row_reserved(struct bnxt_ulp_dscp_remap *dscp_remap,
+				    u16 row)
+{
+	int i;
+
+	if (!BNXT_ULP_DSCP_INSERT_CAP(dscp_remap))
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(bnxt_tc_dscp_resv_rows); i++) {
+		if (row == bnxt_tc_dscp_resv_rows[i])
+			return true;
+	}
+	return false;
+}
+
+/* If sriov_dscp_insert is enabled, remap rows for CNP and ROCE
+ * are reserved and they are not available for allocation.
+ * RED slot in all other rows is reserved to reset (zero) dscp
+ * for flows without modify-dscp action. This routine initializes
+ * the VF remap software table (cache) using these conditions.
+ */
+static void bnxt_tc_init_dscp_remap_tbl(struct bnxt *bp,
+					struct bnxt_ulp_dscp_remap *dscp_remap)
+{
+	struct bnxt_dscp_remap_vf *dscp_remap_vf;
+	enum bnxt_ulp_meter_color color;
+	u32 vf_id;
+	u32 val;
+
+	for (vf_id = 0; vf_id < BNXT_DSCP_REMAP_ROWS; vf_id++) {
+		dscp_remap_vf = dscp_remap->dscp_remap_vf[vf_id];
+
+		for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED;
+		     color++) {
+			if (BNXT_ULP_DSCP_INSERT_CAP(dscp_remap)) {
+				if (bnxt_tc_is_row_reserved(dscp_remap, vf_id)) {
+					val = vf_id << BNXT_TC_SHIFT_DSCP_IPV6;
+					dscp_remap_vf[color].dscp_remap_val =
+						val;
+				} else if (color == MTR_PROF_CLR_RED) {
+					dscp_remap_vf[color].dscp_remap_val =
+						0;
+				} else {
+					dscp_remap_vf[color].dscp_remap_val =
+						BNXT_ULP_DSCP_INVALID;
+				}
+			} else {
+				dscp_remap_vf[color].dscp_remap_val =
+					BNXT_ULP_DSCP_INVALID;
+			}
+		}
+	}
+}
+
+static void bnxt_tc_delete_meter_profiles(struct bnxt *bp, u32 dir,
+					  struct bnxt_ulp_dscp_remap
+					  *dscp_remap)
+{
+	enum bnxt_ulp_meter_color color;
+	u32 meter_prof_id;
+
+	for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED; color++) {
+		meter_prof_id = dscp_remap->meter_prof_id[color];
+		if (!meter_prof_id)
+			continue;
+		bnxt_flow_meter_profile_delete(bp, meter_prof_id, dir);
+		dscp_remap->meter_prof_id[color] = 0;
+	}
+}
+
+static int bnxt_tc_setup_meter_profiles(struct bnxt *bp, u32 dir,
+					struct bnxt_ulp_dscp_remap *dscp_remap)
+{
+	enum bnxt_ulp_meter_color color;
+	u32 meter_profile_id;
+	int rc;
+
+	for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED; color++) {
+		meter_profile_id = color + 1;	/* non-zero id */
+		rc = bnxt_flow_meter_profile_add(bp, meter_profile_id,
+						 dir, color);
+		if (rc) {
+			netdev_dbg(bp->dev,
+				   "%s: Failed to create meter profile id: 0x%x\n",
+				   __func__, meter_profile_id);
+			goto error;
+		}
+		dscp_remap->meter_prof_id[color] = meter_profile_id;
+	}
+
+	return rc;
+
+error:
+	bnxt_tc_delete_meter_profiles(bp, dir, dscp_remap);
+	return rc;
+}
+
+static void bnxt_tc_delete_meters(struct bnxt *bp, u32 dir,
+				  struct bnxt_ulp_dscp_remap *dscp_remap)
+{
+	enum bnxt_ulp_meter_color color;
+	u32 meter_id;
+
+	for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED; color++) {
+		meter_id = dscp_remap->meter_id[color];
+		if (!meter_id)
+			continue;
+		bnxt_flow_meter_destroy(bp, meter_id, dir);
+		dscp_remap->meter_id[color] = 0;
+	}
+}
+
+static int bnxt_tc_setup_meters(struct bnxt *bp, u32 dir,
+				struct bnxt_ulp_dscp_remap *dscp_remap)
+{
+	enum bnxt_ulp_meter_color color;
+	int meter_profile_id;
+	int meter_id;
+	int rc;
+
+	for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED; color++) {
+		meter_profile_id = dscp_remap->meter_prof_id[color];
+		meter_id = color + 1;	/* non-zero id */
+		rc = bnxt_flow_meter_create(bp, meter_profile_id,
+					    meter_id, dir);
+		if (rc) {
+			netdev_dbg(bp->dev,
+				   "%s: Failed to create meter id: 0x%x\n",
+				   __func__, meter_id);
+			goto error;
+		}
+		dscp_remap->meter_id[color] = meter_id;
+	}
+	return rc;
+
+error:
+	bnxt_tc_delete_meters(bp, dir, dscp_remap);
+	return rc;
+}
+
+static int bnxt_tc_vf_id_get(struct bnxt *bp,
+			     struct ulp_tc_parser_params *params,
+			     u16 *vf_id)
+{
+	u16 port_id;
+	u32 mtype;
+	int rc;
+
+	mtype = ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_MATCH_PORT_TYPE);
+	if (mtype != BNXT_ULP_INTF_TYPE_VF_REP) {
+		netdev_dbg(bp->dev, "Meter action on invalid port type: %d\n",
+			   mtype);
+		return BNXT_TF_RC_PARSE_ERR_NOTSUPP;
+	}
+
+	port_id = ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_INCOMING_IF);
+	rc = ulp_port_db_vf_id_get(params->ulp_ctx, port_id, vf_id);
+	if (rc)
+		return rc;
+
+	netdev_dbg(bp->dev, "%s: port_id: 0x%x vf_id: %d\n", __func__,
+		   port_id, *vf_id);
+	return 0;
+}
+
+static int bnxt_tc_flow_meter_id_get(struct bnxt *bp,
+				     struct bnxt_ulp_dscp_remap *dscp_remap,
+				     u16 vf_id, u32 dscp_val, u32 *meter_id,
+				     enum bnxt_ulp_meter_color *clr,
+				     int *row_idx, bool *update_glb_cfg)
+{
+	struct bnxt_dscp_remap_vf *dscp_remap_vf;
+	enum bnxt_ulp_meter_color color;
+	enum bnxt_ulp_meter_color end;
+	int row;
+
+	if (bnxt_tc_is_row_reserved(dscp_remap, vf_id))
+		return -EINVAL;
+
+	row = BNXT_ULP_DSCP_INSERT_CAP(dscp_remap) ? vf_id : 0;
+	end = BNXT_ULP_DSCP_INSERT_CAP(dscp_remap) ? MTR_PROF_CLR_YELLOW :
+			MTR_PROF_CLR_RED;
+
+	dscp_remap_vf = dscp_remap->dscp_remap_vf[row];
+	for (color = MTR_PROF_CLR_GREEN; color <= end; color++) {
+		if (dscp_remap_vf[color].dscp_remap_val == dscp_val) {
+			*update_glb_cfg = false;
+			goto done;
+		}
+	}
+
+	for (color = MTR_PROF_CLR_GREEN; color <= end; color++) {
+		if (dscp_remap_vf[color].dscp_remap_val ==
+		    BNXT_ULP_DSCP_INVALID)
+			break;
+	}
+	if (color > end)
+		return -ENOSPC;
+
+	dscp_remap_vf[color].dscp_remap_val = dscp_val;
+	*update_glb_cfg = true;
+
+done:
+	dscp_remap_vf[color].dscp_remap_ref++;
+	*meter_id = dscp_remap->meter_id[color];
+	*clr = color;
+	*row_idx = row;
+	netdev_dbg(bp->dev, "%s: vf_id: %d row: %d color: %d meter: %d\n",
+		   __func__, vf_id, row, color, *meter_id);
+	return 0;
+}
+
+int bnxt_tc_clear_dscp(struct bnxt *bp, struct bnxt_ulp_context *ulp_ctx,
+		       u16 vf_id, u32 dscp_remap_val)
+{
+	struct bnxt_ulp_dscp_remap *dscp_remap = &ulp_ctx->cfg_data->dscp_remap;
+	struct bnxt_dscp_remap_vf *dscp_remap_vf;
+	enum bnxt_ulp_meter_color color;
+	u32 *global_cfg;
+	int row;
+	int rc;
+
+	if (!dscp_remap->dscp_remap_initialized)
+		return -EINVAL;
+
+	row = BNXT_ULP_DSCP_INSERT_CAP(dscp_remap) ? vf_id : 0;
+
+	dscp_remap_vf = dscp_remap->dscp_remap_vf[row];
+	for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED; color++) {
+		if (dscp_remap_vf[color].dscp_remap_val == dscp_remap_val) {
+			dscp_remap_vf[color].dscp_remap_ref--;
+			break;
+		}
+	}
+
+	/* Failed to find the entry */
+	if (color > MTR_PROF_CLR_RED)
+		return -EINVAL;
+
+	netdev_dbg(bp->dev, "%s: DSCP: 0x%x vf_id: %d row: %d color: %d\n",
+		   __func__, dscp_remap_val, vf_id, row, color);
+
+	/* Still being referenced by other flows */
+	if (dscp_remap_vf[color].dscp_remap_ref)
+		return 0;
+
+	/* No need to update global cfg for RED, since
+	 * it is zero when sriov_dscp_insert is enabled.
+	 */
+	if (BNXT_ULP_DSCP_INSERT_CAP(dscp_remap) && color == MTR_PROF_CLR_RED)
+		return 0;
+
+	/* Mark the entry free */
+	dscp_remap_vf[color].dscp_remap_val = BNXT_ULP_DSCP_INVALID;
+
+	/* No more references; clear global cfg */
+	global_cfg = dscp_remap->dscp_global_cfg;
+	rc = bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, global_cfg,
+					    row, color, dscp_remap_val,
+					    0, true);
+	if (rc)
+		netdev_dbg(bp->dev,
+			   "%s: Failed to update global cfg: %d:%d\n",
+			   __func__, vf_id, color);
+	netdev_dbg(bp->dev,
+		   "%s: Updated global cfg: vf_id: %d row: %d color: %d\n",
+		   __func__, vf_id, row, color);
+	return 0;
+}
+
+static void bnxt_tc_uninit_dscp_global_cfg(struct bnxt *bp,
+					   struct bnxt_ulp_dscp_remap
+						*dscp_remap)
+{
+	u32 *global_cfg = dscp_remap->dscp_global_cfg;
+	enum bnxt_ulp_meter_color color;
+	u32 dscp_remap_val;
+	u16 vf_id;
+
+	if (!BNXT_ULP_DSCP_INSERT_CAP(dscp_remap))
+		return;
+
+	for (vf_id = 0; vf_id < BNXT_DSCP_REMAP_ROWS; vf_id++) {
+		dscp_remap_val = 0;
+		for (color = MTR_PROF_CLR_GREEN; color <= MTR_PROF_CLR_RED;
+		     color++) {
+			bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX,
+						       global_cfg, vf_id,
+						       color, dscp_remap_val,
+						       0, false);
+		}
+	}
+
+	/* Update the last entry again, but with wr_hw set to true.
+	 * This will flush the entries to hardware.
+	 */
+	bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, global_cfg,
+				       BNXT_DSCP_REMAP_ROWS - 1,
+				       MTR_PROF_CLR_RED,
+				       dscp_remap_val, 0, true);
+}
+
+/* If sriov_dscp_insert is disabled:
+ *	Set the three colors in all rows to the respective row number.
+ *	Only row zero would be used to offload flows with dscp-remap action.
+ *	Input dscp value in packets that match the offloaded flow, needs to
+ *	be zero to remap to the offloaded dscp value. A packet with a non-zero
+ *	input dscp value that matches the offloaded flow, would	be sent	out
+ *	with the same non-zero value since all 3 colors in the row would have
+ *	been set to the row number.
+ * If sriov_dscp_insert is enabled:
+ *	Remap rows for CNP and ROCE are reserved and they are not available
+ *	for allocation. RED slot in all other rows is reserved to reset (zero)
+ *	dscp for flows without modify-dscp action.
+ *
+ * This routine initializes the hardware dscp-remap global cfg table using
+ * these conditions.
+ */
+static int bnxt_tc_init_dscp_global_cfg(struct bnxt *bp,
+					struct bnxt_ulp_dscp_remap
+						*dscp_remap)
+{
+	u32 *global_cfg = dscp_remap->dscp_global_cfg;
+	enum bnxt_ulp_meter_color color;
+	u32 dscp_remap_val;
+	u16 vf_id;
+	u16 i;
+
+	if (!BNXT_ULP_DSCP_INSERT_CAP(dscp_remap)) {
+		for (vf_id = 0; vf_id < BNXT_DSCP_REMAP_ROWS; vf_id++) {
+			dscp_remap_val = vf_id << BNXT_TC_SHIFT_DSCP_IPV6;
+			for (color = MTR_PROF_CLR_GREEN;
+			     color <= MTR_PROF_CLR_RED; color++) {
+				netdev_dbg(bp->dev,
+					   "%s: dscp_remap_val: 0x%x\n",
+					   __func__, dscp_remap_val);
+				bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX,
+							       global_cfg,
+							       vf_id,
+							       color,
+							       dscp_remap_val,
+							       1, false);
+			}
+		}
+		vf_id = BNXT_DSCP_REMAP_ROWS - 1; /* for hw_wr below */
+	} else {
+		for (i = 0; i < ARRAY_SIZE(bnxt_tc_dscp_resv_rows); i++) {
+			vf_id = bnxt_tc_dscp_resv_rows[i];
+			dscp_remap_val = vf_id << BNXT_TC_SHIFT_DSCP_IPV6;
+			for (color = MTR_PROF_CLR_GREEN;
+			     color <= MTR_PROF_CLR_RED; color++) {
+				netdev_dbg(bp->dev,
+					   "%s: dscp_remap_val: 0x%x\n",
+					   __func__, dscp_remap_val);
+				bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX,
+							       global_cfg,
+							       vf_id,
+							       color,
+							       dscp_remap_val,
+							       1, false);
+			}
+		}
+	}
+
+	/* Update the last entry again, but with hw_wr set to true.
+	 * This will flush the entries to hardware.
+	 */
+	return bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, global_cfg, vf_id,
+					      MTR_PROF_CLR_RED, dscp_remap_val,
+					      1, true);
+}
+
+void bnxt_tc_uninit_dscp_remap(struct bnxt *bp,
+			       struct bnxt_ulp_dscp_remap *dscp_remap,
+			       u32 dir)
+{
+	if (!dscp_remap->dscp_remap_initialized)
+		return;
+
+	bnxt_tc_uninit_dscp_global_cfg(bp, dscp_remap);
+	vfree(dscp_remap->dscp_global_cfg);
+	dscp_remap->dscp_global_cfg = NULL;
+	bnxt_tc_delete_meters(bp, dir, dscp_remap);
+	bnxt_tc_delete_meter_profiles(bp, dir, dscp_remap);
+	dscp_remap->dscp_remap_initialized = false;
+}
+
+/* Initialize dscp-remap framework; it includes the following:
+ *	Default meter profiles of three colors: Green, Yellow, Red.
+ *	Default meters for these respective colors.
+ *	Allocate memory to read/write dscp global config table.
+ *	Initialize the VF remap software table (cache).
+ *	Write the initial values to the hardware global cfg table.
+ */
+int bnxt_tc_init_dscp_remap(struct bnxt *bp,
+			    struct bnxt_ulp_dscp_remap *dscp_remap,
+			    u32 dir)
+{
+	int rc = 0;
+
+	if (dscp_remap->dscp_remap_initialized)
+		return rc;
+
+	rc = bnxt_tc_setup_meter_profiles(bp, dir, dscp_remap);
+	if (rc)
+		return rc;
+
+	rc = bnxt_tc_setup_meters(bp, dir, dscp_remap);
+	if (rc)
+		goto error_meter;
+
+	dscp_remap->dscp_global_cfg = vzalloc(sizeof(u32) *
+					      BNXT_DSCP_REMAP_ROWS);
+	if (!dscp_remap->dscp_global_cfg) {
+		rc = -ENOMEM;
+		goto error_glb_cfg;
+	}
+
+	bnxt_tc_init_dscp_remap_tbl(bp, dscp_remap);
+	bnxt_tc_init_dscp_global_cfg(bp, dscp_remap);
+	dscp_remap->dscp_remap_initialized = true;
+	return rc;
+
+error_glb_cfg:
+	bnxt_tc_delete_meters(bp, dir, dscp_remap);
+error_meter:
+	bnxt_tc_delete_meter_profiles(bp, dir, dscp_remap);
+	return rc;
+}
+
+static int bnxt_tc_set_dscp(struct bnxt *bp,
+			    struct ulp_tc_parser_params *params,
+			    bool ipv6, u32 val, u32 mask)
+{
+	struct bnxt_ulp_dscp_remap *dscp_remap =
+		&params->ulp_ctx->cfg_data->dscp_remap;
+	enum bnxt_ulp_meter_color color;
+	bool update_glb_cfg = false;
+	u32 meter_id = 0;
+	u32 *global_cfg;
 	u32 dir = 0;
+	u16 vf_id;
+	int row;
 	int rc;
 
 	/* Only DSCP (6-bit) supported; ECN (2-bit) must be masked */
-	if (cpu_to_be32(mask) != BNXT_TC_MASK_DSCP_IPV6) {
-		netdev_dbg(bp->dev, "%s: Invalid mask: 0x%x\n", __func__, mask);
+	if (ipv6 && cpu_to_be32(mask) != BNXT_TC_MASK_DSCP_IPV6) {
+		netdev_dbg(bp->dev, "%s: Invalid IPv6 mask: 0x%x\n",
+			   __func__, cpu_to_be32(mask));
+		return -EINVAL;
+	} else if (!ipv6 && cpu_to_be32(mask) != BNXT_TC_MASK_DSCP_IPV4) {
+		netdev_dbg(bp->dev, "%s: Invalid IPv4 mask: 0x%x\n",
+			   __func__, cpu_to_be32(mask));
 		return -EINVAL;
 	}
 
@@ -3267,41 +3787,111 @@ static int bnxt_tc_set_dscp_ipv6(struct bnxt *bp, struct ulp_tc_parser_params *p
 		return -EINVAL;
 	}
 
-	netdev_dbg(bp->dev, "%s: Set DSCP: val: 0x%x mask: 0x%x\n",
-		   __func__, cpu_to_be32(val), cpu_to_be32(mask));
+	/* Normalize v4 val/mask to v6 format, since we can only
+	 * save it in one format (v6) in the dscp_remap sw table.
+	 */
+	if (!ipv6) {
+		val = cpu_to_be32(val);
+		val <<= BNXT_TC_SHIFT_DSCP_V4_TO_V6;
 
-	if (ulp_data->dscp_remap_initialized) {
-		bnxt_tc_param_set_act_meter(params, meter_id);
-
-		/* Setting a new dscp val; reconfig global dscp */
-		if (cpu_to_be32(val) != ulp_data->dscp_remap_val)
-			goto dscp_glb_cfg;
-
-		/* Setting same dscp val; just return success */
-		return 0;
+		mask = cpu_to_be32(mask);
+		mask <<= BNXT_TC_SHIFT_DSCP_V4_TO_V6;
+	} else {
+		val = cpu_to_be32(val);
+		mask = cpu_to_be32(mask);
 	}
 
-	rc = bnxt_tc_create_implicit_meter(bp, dir);
+	netdev_dbg(bp->dev, "%s: Set DSCP: 0x%x mask: 0x%x\n",
+		   __func__, val, mask);
+
+	rc = bnxt_tc_vf_id_get(bp, params, &vf_id);
 	if (rc)
 		return rc;
 
-	bnxt_tc_param_set_act_meter(params, meter_id);
-
-dscp_glb_cfg:
-	/* Set dscp in meter table using global config */
-	rc = bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, TF_DSCP_RMP_CFG, 0, val, 1);
+	rc = bnxt_tc_flow_meter_id_get(bp, dscp_remap, vf_id, val,
+				       &meter_id, &color, &row,
+				       &update_glb_cfg);
 	if (rc) {
-		bnxt_tc_destroy_implicit_meter(bp, dir);
+		netdev_dbg(bp->dev, "Failed to allocate a meter-id: %d\n", rc);
 		return rc;
 	}
 
-	ulp_data->dscp_remap_val = cpu_to_be32(val);
-	ulp_data->dscp_remap_initialized = true;
+	if (update_glb_cfg) {
+		global_cfg = dscp_remap->dscp_global_cfg;
+		rc = bnxt_tc_dscp_global_cfg_update(bp, TF_DIR_TX, global_cfg,
+						    row, color, val, 1,
+						    true);
+		if (rc)
+			return rc;
+	}
+	bnxt_tc_param_set_act_meter(params, dscp_remap, meter_id);
+	params->dscp_remap_val = val;
+	netdev_dbg(bp->dev, "%s: DSCP: 0x%x meter: %d\n",
+		   __func__, val, meter_id);
+	return rc;
+}
 
-	netdev_dbg(bp->dev, "%s: dscp_remap_initialized: %d\n",
-		   __func__, ulp_data->dscp_remap_initialized);
+#ifdef HAVE_FLOW_OFFLOAD_H
+/* When dscp_remap is enabled and sriov_dscp_insert option is
+ * enabled (input dscp insertion in VF driver), we need to
+ * reset the dscp field in the packet to zero before it is
+ * sent out the wire. To achieve this, assign the RED color
+ * dscp which is already reserved and initialized to zero.
+ * The corresponding meter is attached to the flow.
+ * Note: This implicit action is needed only for flows
+ * wthout the modify-dscp action; otherwise packets would
+ * be sent out with the input dscp value as-is. The input
+ * dscp value in the skb would have been set to the VF-id.
+ */
+static int ulp_tc_parer_implicit_dscp_process(struct bnxt *bp,
+					      struct ulp_tc_parser_params
+						*params)
+{
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	struct bnxt_dscp_remap_vf *dscp_remap_vf;
+	struct bnxt_ulp_dscp_remap *dscp_remap;
+	u32 meter_id;
+	u16 vf_id;
+	u32 dir;
+	int rc;
+
+	dscp_remap = &ulp_ctx->cfg_data->dscp_remap;
+	if (!dscp_remap->dscp_remap_initialized ||
+	    !BNXT_ULP_DSCP_INSERT_CAP(dscp_remap))
+		return 0;
+
+	/* METER action is already set; implies flow with modify-dscp
+	 * action. No need to implicitly add modify-dscp (meter) action.
+	 */
+	if (ULP_BITMAP_ISSET(params->act_bitmap.bits,
+			     BNXT_ULP_ACT_BIT_METER))
+		return 0;
+
+	/* modify-dscp supported only for TX flows */
+	dir = (params->dir_attr & BNXT_ULP_FLOW_ATTR_INGRESS) ?
+		BNXT_ULP_FLOW_ATTR_INGRESS : BNXT_ULP_FLOW_ATTR_EGRESS;
+	if (dir != BNXT_ULP_FLOW_ATTR_EGRESS)
+		return 0;
+
+	rc = bnxt_tc_vf_id_get(bp, params, &vf_id);
+	if (rc)
+		return rc;
+
+	dscp_remap_vf = dscp_remap->dscp_remap_vf[vf_id];
+	/* RED must be initialized to zero */
+	if (dscp_remap_vf[MTR_PROF_CLR_RED].dscp_remap_val != 0)
+		return -EINVAL;
+
+	dscp_remap_vf[MTR_PROF_CLR_RED].dscp_remap_ref++;
+	meter_id = dscp_remap->meter_id[MTR_PROF_CLR_RED];
+
+	bnxt_tc_param_set_act_meter(params, dscp_remap, meter_id);
+	params->dscp_remap_val = 0;
+	netdev_dbg(bp->dev, "%s: Implicit meter action: VF: %d meter: %d\n",
+		   __func__, vf_id, meter_id);
 	return 0;
 }
+#endif   /* HAVE_FLOW_OFFLOAD_H */
 
 static int bnxt_tc_set_l3_v6_action_params(struct bnxt *bp, struct ulp_tc_parser_params *params,
 					   u32 offset, u32 val, u32 mask)
@@ -3353,7 +3943,7 @@ static int bnxt_tc_set_l3_v6_action_params(struct bnxt *bp, struct ulp_tc_parser
 			   &params->act_prop.act_details[BNXT_ULP_ACT_PROP_IDX_SET_IPV6_DST]);
 		break;
 	case BNXT_TC_WORD_DSCP_IPV6:
-		rc = bnxt_tc_set_dscp_ipv6(bp, params, offset, val, mask);
+		rc = bnxt_tc_set_dscp(bp, params, true, val, mask);
 		break;
 	default:
 		return -EINVAL;
@@ -3468,6 +4058,22 @@ static int bnxt_tc_parse_pedit(struct bnxt *bp, struct ulp_tc_parser_params *par
 	mask = ~act->mangle.mask;
 	val = act->mangle.val;
 
+	if (act->id == FLOW_ACTION_ADD) {
+		/* Currently, only dec_ttl is supported with action add.
+		 * Offset should be ttl, and value AND mask should be 0xff.
+		 * Any other value is not supported.
+		 */
+		if ((offset != offsetof(struct iphdr, ttl)) || ((val & mask) != 0xff)) {
+			netdev_dbg(bp->dev,
+				   "%s: Unsupported offset %d, mask 0x%x, or value 0x%x for action add ttl.\n",
+				   __func__, offset, mask, val);
+			return -EINVAL;
+		}
+
+		ULP_BITMAP_SET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_DEC_TTL);
+		return 0;
+	}
+
 	switch (htype) {
 	case FLOW_ACT_MANGLE_HDR_TYPE_ETH:
 		rc = bnxt_tc_set_l2_action_params(bp, params, mask, val,
@@ -3476,7 +4082,7 @@ static int bnxt_tc_parse_pedit(struct bnxt *bp, struct ulp_tc_parser_params *par
 			return rc;
 		break;
 	case FLOW_ACT_MANGLE_HDR_TYPE_IP4:
-		rc = bnxt_tc_set_l3_v4_action_params(bp, params, offset, val);
+		rc = bnxt_tc_set_l3_v4_action_params(bp, params, offset, val, mask);
 		if (rc)
 			return rc;
 		break;
@@ -3548,7 +4154,7 @@ static int bnxt_tc_parse_pedit(struct bnxt *bp, struct ulp_tc_parser_params *par
 			break;
 
 		case TCA_PEDIT_KEY_EX_HDR_TYPE_IP4:
-			rc = bnxt_tc_set_l3_v4_action_params(bp, params, offset, val);
+			rc = bnxt_tc_set_l3_v4_action_params(bp, params, offset, val, mask);
 			if (rc)
 				return rc;
 			break;

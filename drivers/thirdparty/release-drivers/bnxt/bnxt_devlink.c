@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -369,12 +369,6 @@ bnxt_dl_flash_update(struct devlink *dl, const char *filename,
 	if (region)
 		return -EOPNOTSUPP;
 #endif
-
-	if (!BNXT_PF(bp)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "flash update not supported from a VF");
-		return -EPERM;
-	}
 
 	devlink_flash_update_begin_notify(dl);
 	devlink_flash_update_status_notify(dl, "Preparing to flash", NULL, 0, 0);
@@ -809,22 +803,28 @@ static int bnxt_dl_reload_down(struct devlink *dl, bool netns_change,
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 	int rc = 0;
 
+	rtnl_lock();
+	if (BNXT_TF_FLAG_IN_USE(bp)) {
+		NL_SET_ERR_MSG_MOD(extack, "reload is unsupported while truflow is enabled");
+		rtnl_unlock();
+		return -EOPNOTSUPP;
+	}
+	rtnl_unlock();
+
 	switch (action) {
 	case DEVLINK_RELOAD_ACTION_DRIVER_REINIT: {
+		bnxt_ulp_stop(bp);
 		rtnl_lock();
 		if (BNXT_PF(bp) && (bp->pf.active_vfs || bp->sriov_cfg)) {
 			NL_SET_ERR_MSG_MOD(extack, "reload is unsupported while VFs are allocated or being configured");
 			rtnl_unlock();
+			bnxt_ulp_start(bp, 0);
 			return -EOPNOTSUPP;
 		}
 		if (bp->dev->reg_state == NETREG_UNREGISTERED) {
 			rtnl_unlock();
+			bnxt_ulp_start(bp, 0);
 			return -ENODEV;
-		}
-		if (bnxt_ulp_registered(bp->edev)) {
-			NL_SET_ERR_MSG_MOD(extack, "reload is unsupported while RoCE driver is loaded");
-			rtnl_unlock();
-			return -EOPNOTSUPP;
 		}
 		if (netif_running(bp->dev))
 			bnxt_close_nic(bp, true, true);
@@ -838,7 +838,7 @@ static int bnxt_dl_reload_down(struct devlink *dl, bool netns_change,
 			break;
 		}
 		bnxt_cancel_reservations(bp, false);
-		bnxt_free_ctx_mem(bp);
+		bnxt_free_ctx_mem(bp, false);
 		break;
 	}
 	case DEVLINK_RELOAD_ACTION_FW_ACTIVATE: {
@@ -891,8 +891,11 @@ static int bnxt_dl_reload_up(struct devlink *dl, enum devlink_reload_action acti
 	case DEVLINK_RELOAD_ACTION_DRIVER_REINIT: {
 		bnxt_fw_init_one(bp);
 		bnxt_vf_reps_alloc(bp);
-		if (netif_running(bp->dev))
-			rc = bnxt_open_nic(bp, true, true);
+		if (netif_running(bp->dev)) {
+			rc = bnxt_hwrm_if_change(bp, true);
+			if (!rc)
+				rc = bnxt_open_nic(bp, true, true);
+		}
 		if (!rc) {
 			bnxt_reenable_sriov(bp);
 			bnxt_ptp_reapply_pps(bp);
@@ -950,6 +953,8 @@ static int bnxt_dl_reload_up(struct devlink *dl, enum devlink_reload_action acti
 		dev_close(bp->dev);
 	}
 	rtnl_unlock();
+	if (action == DEVLINK_RELOAD_ACTION_DRIVER_REINIT)
+		bnxt_ulp_start(bp, rc);
 	return rc;
 }
 #endif /* HAVE_DEVLINK_RELOAD_ACTION */
@@ -1051,6 +1056,9 @@ enum bnxt_dl_param_id {
 	BNXT_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
 	BNXT_DEVLINK_PARAM_ID_GRE_VER_CHECK,
 	BNXT_DEVLINK_PARAM_ID_TRUFLOW,
+	BNXT_DEVLINK_PARAM_ID_AN_PROTOCOL,
+	BNXT_DEVLINK_PARAM_ID_MEDIA_AUTO_DETECT,
+	BNXT_DEVLINK_PARAM_ID_DEVICE_ROCE,
 };
 
 static const struct bnxt_dl_nvm_param nvm_params[] = {
@@ -1066,6 +1074,16 @@ static const struct bnxt_dl_nvm_param nvm_params[] = {
 #endif
 	{BNXT_DEVLINK_PARAM_ID_GRE_VER_CHECK, NVM_OFF_DIS_GRE_VER_CHECK,
 	 BNXT_NVM_SHARED_CFG, 1, 1},
+	{BNXT_DEVLINK_PARAM_ID_AN_PROTOCOL, NVM_OFF_AN_PROTOCOL,
+	 BNXT_NVM_PORT_CFG, 8, 1},
+	{BNXT_DEVLINK_PARAM_ID_MEDIA_AUTO_DETECT, NVM_OFF_MEDIA_AUTO_DETECT,
+	 BNXT_NVM_PORT_CFG, 1, 1},
+#ifdef HAVE_DEVLINK_PARAM_ENABLE_ROCE
+	{DEVLINK_PARAM_GENERIC_ID_ENABLE_ROCE, NVM_OFF_SUPPORT_RDMA,
+	 BNXT_NVM_FUNC_CFG, 1, 1},
+	{BNXT_DEVLINK_PARAM_ID_DEVICE_ROCE, NVM_OFF_DEVICE_ROCE_CFG,
+	 BNXT_NVM_SHARED_CFG, 1, 1},
+#endif
 };
 
 static void bnxt_copy_to_nvm_data(union bnxt_nvm_data *dst,
@@ -1115,12 +1133,6 @@ static int bnxt_hwrm_nvm_req(struct bnxt *bp, u32 param_id, void *msg,
 	union bnxt_nvm_data *data;
 	dma_addr_t data_dma_addr;
 	int idx = 0, rc, i;
-
-	/* Get/Set NVM CFG parameter is supported only on PFs */
-	if (BNXT_VF(bp)) {
-		hwrm_req_drop(bp, req);
-		return -EPERM;
-	}
 
 	for (i = 0; i < ARRAY_SIZE(nvm_params); i++) {
 		if (nvm_params[i].id == param_id) {
@@ -1194,7 +1206,8 @@ static int bnxt_dl_nvm_param_get(struct devlink *dl, u32 id,
 }
 
 static int bnxt_dl_nvm_param_set(struct devlink *dl, u32 id,
-				 struct devlink_param_gset_ctx *ctx)
+				 struct devlink_param_gset_ctx *ctx,
+				 struct netlink_ext_ack *extack)
 {
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 	struct hwrm_nvm_set_variable_input *req;
@@ -1208,6 +1221,47 @@ static int bnxt_dl_nvm_param_set(struct devlink *dl, u32 id,
 		return rc;
 
 	return bnxt_hwrm_nvm_req(bp, id, req, &ctx->val);
+}
+
+static int bnxt_dl_nvm_validate(struct devlink *dl, u32 id,
+				union devlink_param_value val,
+				struct netlink_ext_ack *extack)
+{
+	switch (id) {
+	case BNXT_DEVLINK_PARAM_ID_AN_PROTOCOL:
+		if (val.vu8 > BNXT_AN_PROTOCOL_MAX) {
+			NL_SET_ERR_MSG_MOD(extack, "an_protocol value is not valid");
+			return -EINVAL;
+		}
+		break;
+
+#ifdef HAVE_DEVLINK_PARAM_ENABLE_ROCE
+	case BNXT_DEVLINK_PARAM_ID_DEVICE_ROCE:
+		NL_SET_ERR_MSG_MOD(extack, "device_rdma is a read-only configuration");
+		return -EOPNOTSUPP;
+
+	case DEVLINK_PARAM_GENERIC_ID_ENABLE_ROCE: {
+		struct bnxt *bp = bnxt_get_bp_from_dl(dl);
+		struct hwrm_nvm_get_variable_input *req;
+		union devlink_param_value val;
+		int rc;
+
+		rc = hwrm_req_init(bp, req, HWRM_NVM_GET_VARIABLE);
+		if (rc)
+			return rc;
+
+		val.vbool = true;
+		if (bnxt_hwrm_nvm_req(bp, BNXT_DEVLINK_PARAM_ID_DEVICE_ROCE, req, &val))
+			NL_SET_ERR_MSG_MOD(extack, "Unable to verify if device is RDMA Capable. Changing enable_roce on the interface anyway");
+		if (!val.vbool) {
+			NL_SET_ERR_MSG_MOD(extack, "Device does not support RDMA");
+			return -EINVAL;
+		}
+		break;
+	}
+#endif
+	}
+	return 0;
 }
 
 #ifdef HAVE_IGNORE_ARI
@@ -1246,7 +1300,8 @@ static int bnxt_remote_dev_reset_get(struct devlink *dl, u32 id,
 }
 
 static int bnxt_remote_dev_reset_set(struct devlink *dl, u32 id,
-				     struct devlink_param_gset_ctx *ctx)
+				     struct devlink_param_gset_ctx *ctx,
+				     struct netlink_ext_ack *extack)
 {
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 	int rc;
@@ -1270,7 +1325,8 @@ static int bnxt_dl_truflow_param_get(struct devlink *dl, u32 id,
 }
 
 static int bnxt_dl_truflow_param_set(struct devlink *dl, u32 id,
-				     struct devlink_param_gset_ctx *ctx)
+				     struct devlink_param_gset_ctx *ctx,
+				     struct netlink_ext_ack *extack)
 {
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 	int rc = 0;
@@ -1307,6 +1363,29 @@ static const struct devlink_param bnxt_dl_params[] = {
 #endif
 	DEVLINK_PARAM_DRIVER(BNXT_DEVLINK_PARAM_ID_GRE_VER_CHECK,
 			     "gre_ver_check", DEVLINK_PARAM_TYPE_BOOL,
+			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			     bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
+			     NULL),
+#ifdef HAVE_DEVLINK_PARAM_ENABLE_ROCE
+	DEVLINK_PARAM_GENERIC(ENABLE_ROCE,
+			      BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			      bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
+			      bnxt_dl_nvm_validate),
+
+	DEVLINK_PARAM_DRIVER(BNXT_DEVLINK_PARAM_ID_DEVICE_ROCE,
+			     "device_rdma", DEVLINK_PARAM_TYPE_BOOL,
+			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			     bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
+			     bnxt_dl_nvm_validate),
+#endif
+	DEVLINK_PARAM_DRIVER(BNXT_DEVLINK_PARAM_ID_AN_PROTOCOL,
+			     "an_protocol", DEVLINK_PARAM_TYPE_U8,
+			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			     bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
+			     bnxt_dl_nvm_validate),
+
+	DEVLINK_PARAM_DRIVER(BNXT_DEVLINK_PARAM_ID_MEDIA_AUTO_DETECT,
+			     "media_auto_detect", DEVLINK_PARAM_TYPE_BOOL,
 			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
 			     bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
 			     NULL),

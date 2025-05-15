@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -672,6 +672,11 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 			      struct bnxt_tc_flow *flow)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(tc_flow_cmd);
+#ifdef HAVE_TC_CAN_OFFLOAD_EXTACK
+	struct netlink_ext_ack *extack = tc_flow_cmd->common.extack;
+#else
+	struct netlink_ext_ack *extack = NULL;
+#endif
 	struct flow_dissector *dissector = rule->match.dissector;
 
 	/* KEY_CONTROL and KEY_BASIC are needed for forming a meaningful key */
@@ -681,6 +686,9 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 			    (u64)dissector->used_keys);
 		return -EOPNOTSUPP;
 	}
+
+	if (flow_rule_match_has_control_flags(rule, extack))
+		return -EOPNOTSUPP;
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
@@ -1180,7 +1188,7 @@ static int hwrm_cfa_decap_filter_alloc(struct bnxt *bp,
 		req->dst_port = tun_key->tp_dst;
 	}
 
-	/* Eventhough the decap_handle returned by hwrm_cfa_decap_filter_alloc
+	/* Even though the decap_handle returned by hwrm_cfa_decap_filter_alloc
 	 * is defined as __le32, l2_ctxt_ref_id is defined in HSI as __le16.
 	 */
 	req->l2_ctxt_ref_id = (__force __le16)ref_decap_handle;
@@ -1934,7 +1942,7 @@ static int bnxt_tc_get_decap_handle(struct bnxt *bp, struct bnxt_tc_flow *flow,
 
 	/* Check if there's another flow using the same tunnel decap.
 	 * If not, add this tunnel to the table and resolve the other
-	 * tunnel header fileds. Ignore src_port in the tunnel_key,
+	 * tunnel header fields. Ignore src_port in the tunnel_key,
 	 * since it is not required for decap filters.
 	 */
 	decap_key->tp_src = 0;
@@ -2047,7 +2055,7 @@ static int bnxt_tc_get_encap_handle(struct bnxt *bp, struct bnxt_tc_flow *flow,
 
 	/* Check if there's another flow using the same tunnel encap.
 	 * If not, add this tunnel to the table and resolve the other
-	 * tunnel header fileds
+	 * tunnel header fields
 	 */
 	encap_node = bnxt_tc_get_tunnel_node(bp, &tc_info->encap_table,
 					     &tc_info->encap_ht_params,
@@ -3127,7 +3135,7 @@ exit:
 
 /*
  * Add val to accum while handling a possible wraparound
- * of val. Eventhough val is of type u64, its actual width
+ * of val. Even though val is of type u64, its actual width
  * is denoted by mask and will wrap-around beyond that width.
  */
 static void accumulate_val(u64 *accum, u64 val, u64 mask)

@@ -9,6 +9,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_vfr.h"
 #include "bnxt_tf_ulp.h"
 #include "bnxt_tf_ulp_p7.h"
@@ -23,6 +24,7 @@
 #include "ulp_template_struct.h"
 #include "ulp_mark_mgr.h"
 #include "ulp_fc_mgr.h"
+#include "ulp_sc_mgr.h"
 #include "ulp_flow_db.h"
 #include "ulp_mapper.h"
 #include "ulp_matcher.h"
@@ -302,6 +304,14 @@ ulp_tfc_tbl_scope_deinit(struct bnxt *bp)
 	if (rc)
 		return;
 
+	bnxt_ulp_cntxt_tsid_reset(bp->ulp_ctx);
+	/* Stop further offload requests to this tsid */
+	smp_mb__after_atomic();
+
+	/* Wait for ongoing udcc flow offload to complete */
+	while (test_bit(BNXT_STATE_IN_UDCC_TASK, &bp->state))
+		msleep(20);
+
 	rc = bnxt_ulp_cntxt_fid_get(bp->ulp_ctx, &fid);
 	if (rc)
 		return;
@@ -557,6 +567,9 @@ ulp_tfc_cntxt_app_caps_init(struct bnxt *bp, u8 app_id, u32 dev_id)
 					   "Socket Direct feature is enabled\n");
 			}
 		}
+		if (info[i].flags & BNXT_ULP_APP_CAP_NIC_FLOWS)
+			ulp_ctx->cfg_data->ulp_flags |=
+				BNXT_ULP_APP_NIC_FLOWS_SUPPORT;
 		bnxt_ulp_default_app_priority_set(ulp_ctx,
 						  info[i].default_priority);
 		bnxt_ulp_max_def_priority_set(ulp_ctx,
@@ -566,6 +579,11 @@ ulp_tfc_cntxt_app_caps_init(struct bnxt *bp, u8 app_id, u32 dev_id)
 		bnxt_ulp_max_flow_priority_set(ulp_ctx,
 					       info[i].max_flow_priority);
 		ulp_ctx->cfg_data->feature_bits = info[i].feature_bits;
+		/* Update the capability feature bits*/
+		if (bnxt_ulp_cap_feat_process(info[i].feature_bits,
+					      &ulp_ctx->cfg_data->feature_bits))
+			return -EINVAL;
+
 		bnxt_ulp_cntxt_ptr2_default_class_bits_set(ulp_ctx,
 							   info[i].default_class_bits);
 		bnxt_ulp_cntxt_ptr2_default_act_bits_set(ulp_ctx,
@@ -636,6 +654,7 @@ ulp_tfc_ctx_deinit(struct bnxt *bp,
 		   struct bnxt_ulp_session_state *session)
 {
 	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+
 	/* Free the contents */
 	vfree(session->cfg_data);
 	ulp_ctx->cfg_data = NULL;
@@ -819,7 +838,8 @@ bnxt_ulp_tfo_init(struct bnxt *bp)
 void
 bnxt_ulp_tfo_deinit(struct bnxt *bp)
 {
-	/* Free TFC here until Nic Flow support enabled in ULP */
+	if (!bp->tfp)
+		return;
 	tfc_close(bp->tfp);
 	vfree(bp->tfp);
 	bp->tfp = NULL;
@@ -853,15 +873,13 @@ ulp_tfc_ctx_attach(struct bnxt *bp,
 	ulp_ctx->cfg_data = session->cfg_data;
 	ulp_ctx->cfg_data->ref_cnt++;
 
-	if (app_type != CFA_APP_TYPE_AFM) {
-		rc = tfc_session_fid_add(tfcp, bp->pf.fw_fid, session->session_id, &fid_cnt);
-		if (rc) {
-			netdev_dbg(bp->dev, "Failed to add RFID:%d to SID:%d.\n",
-				   bp->pf.fw_fid, session->session_id);
+	rc = tfc_session_fid_add(tfcp, bp->pf.fw_fid, session->session_id, &fid_cnt);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to add RFID:%d to SID:%d.\n",
+			   bp->pf.fw_fid, session->session_id);
 		return rc;
-		}
-		netdev_dbg(bp->dev, "SID:%d added RFID:%d\n", session->session_id, bp->pf.fw_fid);
 	}
+	netdev_dbg(bp->dev, "SID:%d added RFID:%d\n", session->session_id, bp->pf.fw_fid);
 
 	rc = bnxt_ulp_cntxt_sid_set(bp->ulp_ctx, session->session_id);
 	if (rc) {
@@ -956,6 +974,9 @@ ulp_tfc_deinit(struct bnxt *bp,
 	    !tfcp)
 		return;
 
+	/* Delete the Stats Counter Manager */
+	ulp_sc_mgr_deinit(bp->ulp_ctx);
+
 	/* cleanup the flow database */
 	ulp_flow_db_deinit(ulp_ctx);
 
@@ -976,6 +997,9 @@ ulp_tfc_deinit(struct bnxt *bp,
 
 	/* free the flow db lock */
 	mutex_destroy(&ulp_ctx->cfg_data->flow_db_lock);
+
+	/* free the stats cache lock */
+	mutex_destroy(&ulp_ctx->cfg_data->sc_lock);
 
 	/* remove debugfs entries */
 	bnxt_debug_tf_delete(bp);
@@ -1036,15 +1060,13 @@ ulp_tfc_init(struct bnxt *bp,
 		return -EINVAL;
 	}
 
-	if (app_type != CFA_APP_TYPE_AFM) {
-		/* First time, so allocate a session and save it. */
-		rc = tfc_session_id_alloc(tfcp, bp->pf.fw_fid, &sid);
-		if (rc) {
-			netdev_dbg(bp->dev, "Failed to allocate a session id\n");
-			return -EINVAL;
-		}
-		netdev_dbg(bp->dev, "SID:%d allocated with RFID:%d\n", sid, bp->pf.fw_fid);
+	/* First time, so allocate a session and save it. */
+	rc = tfc_session_id_alloc(tfcp, bp->pf.fw_fid, &sid);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to allocate a session id\n");
+		return -EINVAL;
 	}
+	netdev_dbg(bp->dev, "SID:%d allocated with RFID:%d\n", sid, bp->pf.fw_fid);
 
 	session->session_id = sid;
 	rc = bnxt_ulp_cntxt_sid_set(ulp_ctx, sid);
@@ -1074,6 +1096,8 @@ ulp_tfc_init(struct bnxt *bp,
 	}
 
 	mutex_init(&ulp_ctx->cfg_data->flow_db_lock);
+	mutex_init(&ulp_ctx->cfg_data->sc_lock);
+
 
 	rc = ulp_tfc_dparms_init(bp, ulp_ctx, ulp_dev_id);
 	if (rc) {
@@ -1117,6 +1141,12 @@ ulp_tfc_init(struct bnxt *bp,
 	rc = ulp_fc_mgr_init(ulp_ctx);
 	if (rc) {
 		netdev_dbg(bp->dev, "Failed to initialize ulp flow counter mgr\n");
+		goto jump_to_error;
+	}
+
+	rc = ulp_sc_mgr_init(ulp_ctx);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to initialize ulp stats cache mgr\n");
 		goto jump_to_error;
 	}
 

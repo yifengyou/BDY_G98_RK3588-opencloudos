@@ -349,6 +349,6 @@ static inline void dim_calc_stats(struct dim_sample *start,
 					delta_us);
 }
 
-void net_dim(struct dim *dim, struct dim_sample end_sample);
+void net_dim(struct dim *dim, struct dim_sample *end_sample);
 
 #endif /* NET_DIM_H */

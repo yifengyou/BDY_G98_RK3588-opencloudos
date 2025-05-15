@@ -87,6 +87,7 @@ struct bnxt_ulp_gen_tcp_hdr {
 struct bnxt_ulp_gen_bth_hdr {
 	u16 *op_code;		/* RoCE: L4 dstport == BTH.OpCode */
 	u32 *dst_qpn;		/* RoCE: L4 ack_num == BTH.dstQP */
+	u16 *bth_flags;		/* RoCE: L4 flags == BTH.flags */
 };
 
 enum bnxt_ulp_gen_l4_hdr_type {
@@ -116,19 +117,25 @@ struct bnxt_ulp_gen_l4_hdr_parms {
 struct bnxt_ulp_gen_action_parms {
 #define BNXT_ULP_GEN_ACTION_ENABLES_KID			0x1UL
 #define BNXT_ULP_GEN_ACTION_ENABLES_DROP		0x2UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_QUEUE		0x4UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_REDIRECT		0x8UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_NUMA_DIRECT		0x10UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_COUNT		0x20UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_SET_SMAC		0x40UL
-#define BNXT_ULP_GEN_ACTION_ENABLES_SET_DMAC		0x80UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_REDIRECT		0x4UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_COUNT		0x8UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_SET_SMAC		0x10UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_SET_DMAC		0x20UL
+/* Allows the driver to provide the vnic directly instead of the default
+ * vnic for the dst_fid (used for RSS or QUEUE)
+ */
+#define BNXT_ULP_GEN_ACTION_ENABLES_VNIC		 0x40UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_QUEUE		 0x80UL
+#define BNXT_ULP_GEN_ACTION_ENABLES_REDIRECT_LOOPBACK	0x100UL
 	uint64_t enables;
 	uint64_t kid;
 	u8 smac[ETH_ALEN];
 	u8 dmac[ETH_ALEN];
-	u32 queue;
 	u16 dst_fid;
 	bool drop;
+	u16 vnic;
+	u16 queue;
+	bool ignore_lag; /* true means do not use LAG vport */
 };
 
 enum bnxt_ulp_gen_direction {
@@ -143,7 +150,8 @@ struct bnxt_ulp_gen_flow_parms {
 	struct bnxt_ulp_gen_action_parms *actions;
 	enum bnxt_ulp_gen_direction dir;
 	u8 app_id;
-	u16 priority;
+	u16 priority;		/* flow priority */
+	u8 lkup_strength;	/* em vs wc tie breaker */
 
 	/* Return to caller */
 	u32 *flow_id;

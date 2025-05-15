@@ -440,7 +440,6 @@ struct tf_session_resources {
  */
 struct tf_open_session_parms {
 	char				ctrl_chan_name[TF_SESSION_NAME_MAX];
-	bool				shadow_copy;
 	union tf_session_id		session_id;
 	union tf_session_client_id	session_client_id;
 	enum tf_device_type		device_type;
@@ -1365,6 +1364,8 @@ enum tf_global_config_type {
 	TF_METER_CFG,		/* Meter Config(ACTP4_FMTCR) */
 	TF_METER_INTERVAL_CFG,	/* METER Interval Config(FMTCR_INTERVAL) */
 	TF_DSCP_RMP_CFG,	/* Remap IPv6 DSCP */
+	TF_MIRROR_CFG,		/* Mirror config */
+	TF_ACT_MTR_CFG,	  /* Drop on Red, Packet mode length Config(ACT_MTR_CFG) */
 	TF_GLOBAL_CFG_TYPE_MAX
 };
 

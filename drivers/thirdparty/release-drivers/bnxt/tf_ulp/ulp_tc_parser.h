@@ -175,7 +175,6 @@ int ulp_tc_vlan_push_act_handler(struct bnxt *bp,
 int ulp_tc_vlan_pop_act_handler(struct bnxt *bp,
 				struct ulp_tc_parser_params *params,
 				void *action_arg);
-
 int
 ulp_tc_set_mac_src_act_handler(struct bnxt *bp,
 			       struct ulp_tc_parser_params *params);
@@ -191,13 +190,19 @@ ulp_tc_meter_act_handler(struct bnxt *bp,
 int ulp_tc_parser_implicit_match_port_process(struct ulp_tc_parser_params *params);
 int ulp_tc_parser_implicit_act_port_process(struct bnxt *bp,
 					    struct ulp_tc_parser_params *params);
-int ulp_tc_parser_act_port_set(struct ulp_tc_parser_params *param, u32 ifindex);
+int ulp_tc_parser_act_port_set(struct ulp_tc_parser_params *param, u32 ifindex, bool lag);
 #ifdef CONFIG_BNXT_FLOWER_OFFLOAD
-int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir);
+int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir,
+				enum bnxt_ulp_meter_color color);
 int bnxt_flow_meter_profile_delete(struct bnxt *bp, u32 meter_profile_id, u32 dir);
 int bnxt_flow_meter_create(struct bnxt *bp, u32 meter_profile_id, u32 meter_id, u32 dir);
 int bnxt_flow_meter_destroy(struct bnxt *bp, u32 meter_id, u32 dir);
-int bnxt_tc_clear_dscp_ipv6(struct bnxt *bp, struct bnxt_ulp_context *ulp_ctx);
+int bnxt_tc_clear_dscp(struct bnxt *bp, struct bnxt_ulp_context *ulp_ctx,
+		       u16 vf_id, u32 dscp_remap_val);
+void bnxt_tc_uninit_dscp_remap(struct bnxt *bp, struct bnxt_ulp_dscp_remap
+				      *dscp_remap, u32 dir);
+int bnxt_tc_init_dscp_remap(struct bnxt *bp, struct bnxt_ulp_dscp_remap
+			    *dscp_remap, u32 dir);
 #endif
 
 #endif	/* CONFIG_BNXT_FLOWER_OFFLOAD || CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD */

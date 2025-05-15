@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,10 +19,11 @@
 #define BNXT_MIN_ROCE_STAT_CTXS	1
 
 #define BNXT_MAX_ROCE_MSIX_VF		2
-#define BNXT_MAX_ROCE_MSIX_PF		9
 #define BNXT_MAX_ROCE_MSIX_NPAR_PF	5
 #define BNXT_MAX_ROCE_MSIX		64
-#define BNXT_MAX_ROCE_MSIX_GEN_P5_PF	BNXT_MAX_ROCE_MSIX
+#ifdef BNXT_FPGA
+#define BNXT_MAX_ROCE_MSIX_PF		9
+#endif
 
 #define BNXT_ULP_MAX_LOG_BUFFERS	1024
 #define BNXT_ULP_MAX_LIVE_LOG_SIZE	(32 << 20)
@@ -36,12 +37,31 @@ struct bnxt_msix_entry {
 	u32	db_offset;
 };
 
+#define BNXT_ULP_MAX_DUMP_SEGS	8
+
+/**
+ * struct bnxt_ulp_dump - bnxt ULP aux device coredump info
+ * @segs:	number of coredump segments with info in the seg_tbl
+ * @seg_tbl:	coredump segment table
+ * @seg_tbl.seg_id:	coredump segment ID
+ * @seg_tbl.seg_len:	coredump segment len
+ */
+struct bnxt_ulp_dump {
+	u32	segs;
+	struct bnxt_ulp_dump_tbl {
+		u32	seg_id;
+		u32	seg_len;
+	} seg_tbl[BNXT_ULP_MAX_DUMP_SEGS];
+};
+
 struct bnxt_ulp_ops {
 	/* async_notifier() cannot sleep (in BH context) */
 	void (*ulp_async_notifier)(void *, struct hwrm_async_event_cmpl *);
 	void (*ulp_irq_stop)(void *, bool);
 	void (*ulp_irq_restart)(void *, struct bnxt_msix_entry *);
-	void (*ulp_log_live)(void *handle, u32 seg_id);
+	void (*ulp_get_dump_info)(void *handle, u32 dump_flags,
+				  struct bnxt_ulp_dump *dump);
+	void (*ulp_get_dump_data)(void *handle, u32 seg_id, void *buf, u32 len);
 };
 
 struct bnxt_fw_msg {
@@ -58,6 +78,14 @@ struct bnxt_ulp {
 	unsigned long	*async_events_bmap;
 	u16		max_async_event_id;
 	u16		msix_requested;
+	struct bnxt_ulp_dump	ulp_dump;
+};
+
+#define BNXT_MAX_BAR_ADDR			8
+struct bnxt_peer_bar_addr {
+	__le64			hv_bar_addr;
+	__le64			vm_bar_addr;
+	__le64			bar_size;
 };
 
 struct bnxt_en_dev {
@@ -98,7 +126,7 @@ struct bnxt_en_dev {
 							 * to ensure compatibility
 							 * with bnxt_en.
 							 */
-	#define BNXT_ULP_VERSION	0x695a000f	/* Change this when any interface
+	#define BNXT_ULP_VERSION	0x695a0011	/* Change this when any interface
 							 * structure or API changes
 							 * between bnxt_en and bnxt_re.
 							 */
@@ -120,6 +148,8 @@ struct bnxt_en_dev {
 	u16				ulp_num_msix_vec;
 	u16				ulp_num_ctxs;
 	struct mutex			en_dev_lock;	/* serialize ulp operations */
+	struct bnxt_peer_bar_addr	bar_addr[BNXT_MAX_BAR_ADDR];
+	u16				bar_cnt;
 };
 
 static inline bool bnxt_ulp_registered(struct bnxt_en_dev *edev)
@@ -144,6 +174,7 @@ void bnxt_ulp_shutdown(struct bnxt *bp);
 #endif
 void bnxt_ulp_irq_stop(struct bnxt *bp);
 void bnxt_ulp_irq_restart(struct bnxt *bp, int err);
+u32 bnxt_get_ulp_dump(struct bnxt *bp, u32 dump_flag, void *buf, u32 *segs);
 void bnxt_ulp_async_events(struct bnxt *bp, struct hwrm_async_event_cmpl *cmpl);
 void bnxt_rdma_aux_device_uninit(struct bnxt *bp);
 void bnxt_rdma_aux_device_init(struct bnxt *bp);
@@ -151,12 +182,11 @@ void bnxt_rdma_aux_device_add(struct bnxt *bp);
 void bnxt_rdma_aux_device_del(struct bnxt *bp);
 int bnxt_register_dev(struct bnxt_en_dev *edev,
 		      struct bnxt_ulp_ops *ulp_ops, void *handle);
-int bnxt_unregister_dev(struct bnxt_en_dev *edev);
+void bnxt_unregister_dev(struct bnxt_en_dev *edev);
 int bnxt_send_msg(struct bnxt_en_dev *edev, struct bnxt_fw_msg *fw_msg);
 int bnxt_register_async_events(struct bnxt_en_dev *edev,
 			       unsigned long *events_bmap, u16 max_id);
-int bnxt_dbr_complete(struct bnxt_en_dev *edev, u32 epoch);
-void bnxt_ulp_log_live(struct bnxt_en_dev *edev, u16 logger_id,
-		       const char *format, ...);
-void bnxt_ulp_log_raw(struct bnxt_en_dev *edev, u16 logger_id, void *data, int len);
+void bnxt_dbr_complete(struct bnxt_en_dev *edev, u32 epoch);
+int bnxt_udcc_subnet_check(struct bnxt_en_dev *edev, void *dest_ip, u8 *dmac, u8 *smac);
+int bnxt_hwrm_set_peer_bar_maps(struct bnxt *bp);
 #endif

@@ -6,27 +6,55 @@
 #ifndef _ULP_NIC_FLOW_H_
 #define _ULP_NIC_FLOW_H_
 
+enum ulp_nic_flow_type {
+	NIC_FLOW_TYPE_ROCE_V4 = 0,
+	NIC_FLOW_TYPE_ROCE_V6,
+	NIC_FLOW_TYPE_ROCE_V4_CNP,
+	NIC_FLOW_TYPE_ROCE_V6_CNP,
+	NIC_FLOW_TYPE_ROCE_V4_PROBE, /* rx only */
+	NIC_FLOW_TYPE_ROCE_V6_PROBE, /* rx only */
+	NIC_FLOW_TYPE_ROCE_V4_ACK, /* tx only */
+	NIC_FLOW_TYPE_ROCE_V6_ACK, /* tx only */
+	NIC_FLOW_TYPE_ROCE_V4_LPBK, /* tx only */
+	NIC_FLOW_TYPE_ROCE_V6_LPBK, /* tx only */
+	NIC_FLOW_TYPE_MAX
+};
+
+struct ulp_nic_flows {
+	u32	id[NIC_FLOW_TYPE_MAX];
+	u64	cnt_hndl[NIC_FLOW_TYPE_MAX];
+};
+
+/* ROCE lowest priority */
+#define ULP_NIC_FLOW_ROCE_PRI     1
+/* ROCE CNP priority */
+#define ULP_NIC_FLOW_ROCE_CNP_PRI 2
+/* ROCE PROBE priority */
+#define ULP_NIC_FLOW_ROCE_PROBE_PRI 3
+/* ROCE LBPK priority */
+#define ULP_NIC_FLOW_ROCE_LPBK_PRI 4
+
+enum flow_lkup_strength {
+	FLOW_LKUP_STRENGTH_LO = 0,
+	FLOW_LKUP_STRENGTH_M1,
+	FLOW_LKUP_STRENGTH_M2,
+	FLOW_LKUP_STRENGTH_HI
+};
+
 /* Add per DMAC RoCE and RoCE CNP flows
- * @l2_ctxt_id[out]: pointer to where to store the allocated l2 context ident
- * @prof_func[out]: pointer to where to store the allocated profile func ident
- * @roce_flow_id[out]: pointer to where to store  per DMAC RoCE flow id
- * @roce_cnp_flow_id[out]: pointer to where to store per DMAC RoCE CNP flow id
+ * @flows[out]: pointer to the handles for the rx or tx nic flows
+ * @flow_info[in]: the direction to configure
  * return 0 on success and - on failure
  */
-int bnxt_ulp_nic_flows_roce_add(struct bnxt *bp, __u64 l2_filter_id,
-				u32 *l2_ctxt_id, u32 *prof_func,
-				u32 *flow_id, u64 *flow_cnt_hndl,
-				u32 *cnp_flow_id, u64 *cnp_flow_cnt_hndl);
+int bnxt_ulp_nic_flows_roce_add(struct bnxt *bp,
+				struct ulp_nic_flows *flows, enum cfa_dir dir);
 
 /* Delete per DMAC RoCE and RoCE CNP flows
- * @l2_ctxt_id[in]: The l2 context identifier to free
- * @prof_func[in]: The profile func identifier to free
- * @roce_flow_id[in]: The per DMAC RoCE flow id to free
- * @roce_cnp_flow_id[in]: The per DMAC RoCE CNP flow id to free
+ * @flows[out]: flows to delete
+ * @flow_info[in]: the direction these flows are associated with
  * return 0 on success and - on failure
  */
-int bnxt_ulp_nic_flows_roce_del(struct bnxt *bp, __u64 l2_filter_id,
-				u32 l2_ctxt_id, u32 prof_func,
-				u32 flow_id, u32 cnp_flow_id);
+int bnxt_ulp_nic_flows_roce_del(struct bnxt *bp,
+				struct ulp_nic_flows *flows, enum cfa_dir dir);
 
 #endif /* #ifndef _ULP_NIC_FLOW_H_ */

@@ -443,7 +443,7 @@ static void cfa_tcam_mgr_data_free(struct tf_session *tfs)
 
 	vfree(tcam_mgr_data->table_rows);
 	vfree(tcam_mgr_data->entry_data);
-	vfree(tcam_mgr_data->session_bmp);
+	vfree(tcam_mgr_data->logical_id_bmp);
 	cfa_tcam_mgr_row_data_free(tcam_mgr_data);
 
 	vfree(tcam_mgr_data);

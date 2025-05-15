@@ -1,7 +1,7 @@
 /*
  * netmap support for Broadcom bnxt Ethernet driver on Linux
  *
- * Copyright (C) 2015-2018 British Broadcasting Corporation. All rights reserved.
+ * Copyright (C) 2015-2024 British Broadcasting Corporation. All rights reserved.
  *
  * Author: Stuart Grace, BBC Research & Development
  *
@@ -502,6 +502,8 @@ int __bnxt_netmap_rxsync(struct netmap_kring *kring, int flags)
 			nm_i = nm_next(nm_i, lim);
 		}
 		rxr->rx_prod = prod;
+		netdev_dbg(bp->dev, "%s: db_key 0x%llX, rxr->rx_prod 0x%x\n",
+			   __func__, rxr->rx_db.db_key64, rxr->rx_prod);
 		bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
 		kring->nr_hwcur = nm_i;
 	}
@@ -763,6 +765,9 @@ int bnxt_netmap_rxsync_jumbo(struct netmap_kring *kring, int flags)
 		bnxt_writeq(bp, db->db_key64 | DBR_TYPE_CQ_ARMALL | DB_TOGGLE(tgl) |
 			    DB_RING_IDX(db, cpr->cp_raw_cons), db->doorbell);
 		kring->nr_kflags &= ~NKR_PENDINTR;
+		netdev_dbg(bp->dev, "%s: db_key 0x%llX, rx_prod 0x%x, agg db_key 0x%llX, "
+			   "rx_agg_prod 0x%x\n", __func__, rxr->rx_db.db_key64, rxr->rx_prod,
+			   rxr->rx_agg_db.db_key64, rxr->rx_agg_prod);
 		bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
 		bnxt_db_write(bp, &rxr->rx_agg_db, rxr->rx_agg_prod);
 		nm_prdis("END cp_raw_cons: %d kring->nr_hwtail : %d rx_prod: %d rx_agg_prod: %d\n",
@@ -921,8 +926,13 @@ int bnxt_netmap_configure_rx_ring(struct NM_BNXT_ADAPTER *adapter, struct bnxt_r
 
 	/* ensure wqes are visible to device before updating doorbell record */
 	wmb();
-	if (bp->flags & BNXT_FLAG_JUMBO)
+	if (bp->flags & BNXT_FLAG_JUMBO) {
+		netdev_dbg(bp->dev, "%s: BNXT_FLAG_JUMBO db_key 0x%llX, rx_agg_prod 0x%x\n",
+			   __func__, rxr->rx_agg_prod.db_key64, rxr->rx_agg_prod);
 		bnxt_db_write(bp, &rxr->rx_agg_db, rxr->rx_agg_prod);
+	}
+	netdev_dbg(bp->dev, "%s: db_key 0x%llX, rx_prod 0x%x\n",
+		   __func__, rxr->rx_db.db_key64, rxr->rx_prod);
 	bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
 
 	return 1;

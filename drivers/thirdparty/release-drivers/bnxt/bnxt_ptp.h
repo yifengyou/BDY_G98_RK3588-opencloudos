@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@
 
 #define BNXT_PTP_DFLT_TX_TMO	1000 /* ms */
 #define BNXT_PTP_QTS_TIMEOUT(bp)	(((bp)->flags & BNXT_FLAG_CHIP_P5_PLUS) ? 1000 : 62000)
-#define BNXT_PTP_QTS_MAX_TMO_US	65535
+#define BNXT_PTP_QTS_MAX_TMO_US	65535U
 #define BNXT_PTP_QTS_TX_ENABLES	(PORT_TS_QUERY_REQ_ENABLES_PTP_SEQ_ID |	\
 				 PORT_TS_QUERY_REQ_ENABLES_TS_REQ_TIMEOUT | \
 				 PORT_TS_QUERY_REQ_ENABLES_PTP_HDR_OFFSET)
@@ -97,6 +97,12 @@ struct bnxt_ptp_tx_req {
 	unsigned long		abs_txts_tmo;
 };
 
+struct bnxt_ptp_stats {
+	u64		ts_pkts;
+	u64		ts_lost;
+	atomic64_t	ts_err;
+};
+
 struct bnxt_ptp_cfg {
 #ifdef HAVE_IEEE1588_SUPPORT
 	struct ptp_clock_info	ptp_info;
@@ -146,6 +152,8 @@ struct bnxt_ptp_cfg {
 					 BNXT_PTP_MSG_PDELAY_REQ |	\
 					 BNXT_PTP_MSG_PDELAY_RESP)
 	u8			tx_tstamp_en:1;
+	u8			rtc_configured:1;
+	u8			shutdown:1;
 	int			rx_filter;
 	u32			tstamp_filters;
 
@@ -154,6 +162,7 @@ struct bnxt_ptp_cfg {
 	u32			txts_tmo;
 	u16			txts_prod;
 	u16			txts_cons;
+	struct bnxt_ptp_stats	stats;
 };
 
 #if BITS_PER_LONG == 32
@@ -189,7 +198,7 @@ int bnxt_get_rx_ts(struct bnxt *bp, struct bnxt_napi *bnapi, u32 vlan, struct sk
 int bnxt_get_tx_ts(struct bnxt *bp, struct sk_buff *skb, u16 prod);
 void bnxt_tx_ts_cmp(struct bnxt *bp, struct bnxt_napi *bnapi,
 		    struct tx_ts_cmp *tscmp);
-int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg);
+int bnxt_ptp_init(struct bnxt *bp);
 void bnxt_ptp_clear(struct bnxt *bp);
 void bnxt_ptp_rtc_timecounter_init(struct bnxt_ptp_cfg *ptp, u64 ns);
 int bnxt_ptp_init_rtc(struct bnxt *bp, bool phc_cfg);

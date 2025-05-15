@@ -161,7 +161,9 @@ struct tfc_global_id_req {
 	enum cfa_resource_type rtype;	/* Resource type */
 	u8 rsubtype;			/* Resource subtype */
 	enum cfa_dir dir;		/* Direction */
-	u16 cnt;			/* Number of resources to allocate of this type */
+	uint8_t *context_id;
+	uint16_t context_len;
+	uint16_t resource_id;
 };
 
 /* Global id resource definition
@@ -179,25 +181,37 @@ struct tfc_global_id {
  * Some resources are not owned by a single session.  They are "global" in that
  * they will be in use as long as any associated session exists.  Once all
  * sessions/functions hve been removed, all associated global ids are freed.
- * There are currently up to 4 global id domain sets.
  *
  * @tfcp: Pointer to TFC handle
  * @fid: Function ID to be used
- * @domain_id: The domain id to associate.
- * @req_cnt: The number of total resource requests
- * @glb_id_req: The list of global id requests
- * @rsp_cnt: The number of items in the response buffer
- * @glb_id_rsp: The number of items in the response buffer
+ * @glb_id_req: The global id request
+ * @glb_id_rsp: The response buffer
  * @first: This is the first domain request for the indicated domain id.
  *
  * Returns
  *   0 for SUCCESS, negative error value for FAILURE (errno.h)
  */
-int tfc_global_id_alloc(struct tfc *tfcp, u16 fid, enum tfc_domain_id domain_id,
-			u16 req_cnt,
+int tfc_global_id_alloc(struct tfc *tfcp, u16 fid,
 			const struct tfc_global_id_req *glb_id_req,
-			struct tfc_global_id *glb_id_rsp, u16 *rsp_cnt,
-			bool *first);
+			struct tfc_global_id *glb_id_rsp, bool *first);
+
+/**
+ * Free global TFC resources
+ *
+ * Some resources are not owned by a single session.  They are "global" in that
+ * they will be in use as long as any associated session exists.  Once all
+ * sessions/functions hve been removed, all associated global ids are freed.
+ *
+ * @tfcp: Pointer to TFC handle
+ * @fid: Function ID to be used
+ * @glb_id_req: The global id req
+ *
+ * Returns
+ *   0 for SUCCESS, negative error value for FAILURE (errno.h)
+ */
+int tfc_global_id_free(struct tfc *tfcp, uint16_t fid,
+		       const struct tfc_global_id_req *req);
+
 /* Identifier resource structure
  */
 struct tfc_identifier_info {
@@ -360,7 +374,7 @@ struct tfc_tcam_data {
  *   0 for SUCCESS, negative error value for FAILURE (errno.h)
  */
 int tfc_tcam_alloc(struct tfc *tfcp, u16 fid, enum cfa_track_type tt,
-		   u8 priority, u8 key_sz_in_bytes,
+		   u16 priority, u8 key_sz_in_bytes,
 		   struct tfc_tcam_info *tcam_info);
 
 /**
@@ -380,7 +394,7 @@ int tfc_tcam_alloc(struct tfc *tfcp, u16 fid, enum cfa_track_type tt,
  *   0 for SUCCESS, negative error value for FAILURE (errno.h)
  */
 int tfc_tcam_alloc_set(struct tfc *tfcp, u16 fid, enum cfa_track_type tt,
-		       u8 priority, struct tfc_tcam_info *tcam_info,
+		       u16 priority, struct tfc_tcam_info *tcam_info,
 		       const struct tfc_tcam_data *tcam_data);
 
 /**
@@ -446,7 +460,9 @@ enum tfc_tbl_scope_bucket_factor {
 	TFC_TBL_SCOPE_BUCKET_FACTOR_4 = 4,
 	TFC_TBL_SCOPE_BUCKET_FACTOR_8 = 8,
 	TFC_TBL_SCOPE_BUCKET_FACTOR_16 = 16,
-	TFC_TBL_SCOPE_BUCKET_FACTOR_MAX = TFC_TBL_SCOPE_BUCKET_FACTOR_16
+	TFC_TBL_SCOPE_BUCKET_FACTOR_32 = 32,
+	TFC_TBL_SCOPE_BUCKET_FACTOR_64 = 64,
+	TFC_TBL_SCOPE_BUCKET_FACTOR_MAX = TFC_TBL_SCOPE_BUCKET_FACTOR_64
 };
 
 /* tfc_tbl_scope_size_query_parms contains the parameters for the
@@ -797,6 +813,44 @@ int tfc_tbl_scope_config_state_get(struct tfc *tfcp, u8 tsid, bool *configured);
  */
 int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid);
 
+/* Forward ref: defined in bnxt_tfc.h */
+struct tfc_mpc_batch_info_t;
+
+/**
+ * Start MPC batching
+ *
+ * @param[in/out] batch_info
+ *   Contains batch processing info
+ *
+ * @returns
+ *   0 for SUCCESS, negative error value for FAILURE (errno.h)
+ */
+int tfc_mpc_batch_start(struct tfc_mpc_batch_info_t *batch_info);
+
+/**
+ * Ends MPC batching and returns the accumulated results
+ *
+ * @param[in/out] batch_info
+ *   Contains batch processing info
+ *
+ * @returns
+ *   0 for SUCCESS, negative error value for FAILURE (errno.h)
+ */
+int tfc_mpc_batch_end(void *p,
+		      struct tfc *tfcp,
+		      struct tfc_mpc_batch_info_t *batch_info);
+
+/**
+ * Checks to see if batching is active and other MPCs have been sent
+ *
+ * @param[in/out] batch_info
+ *   Contains batch processing info
+ *
+ * @returns
+ *   True is started and MPCs have been sent else False.
+ */
+bool tfc_mpc_batch_started(struct tfc_mpc_batch_info_t *batch_info);
+
 /* tfc_em_insert_parms contains the parameters for an EM insert. */
 struct tfc_em_insert_parms {
 	enum cfa_dir dir;	/* Entry direction. */
@@ -805,6 +859,7 @@ struct tfc_em_insert_parms {
 	const u8 *key_data;	/* Thor only - The key data to be used to calculate the hash. */
 	u16 key_sz_bits;	/* Thor only - Size of key in bits. */
 	u64 *flow_handle;	/* Will contain the entry flow handle a unique identifier. */
+	struct tfc_mpc_batch_info_t *batch_info; /* batch control data */
 };
 
 /**
@@ -836,6 +891,8 @@ struct tfc_em_delete_parms {
 	enum cfa_dir dir;
 	/* Flow handle of flow to delete */
 	u64 flow_handle;
+	/* batch control data */
+	struct tfc_mpc_batch_info_t *batch_info;
 };
 
 /**
@@ -900,15 +957,17 @@ int tfc_act_alloc(struct tfc *tfcp, u8 tsid, struct tfc_cmm_info *cmm_info,
  *   it indicates a CFA_BLD_MPC_EM_DUPLICATE error occurred.
  */
 int tfc_act_set(struct tfc *tfcp, const struct tfc_cmm_info *cmm_info,
-		const u8 *data, u16 data_sz_words);
+		const u8 *data, u16 data_sz_words,
+		struct tfc_mpc_batch_info_t *batch_info);
 
 /**
  * Get an action CMM resource
  *
  * @tfcp: Pointer to TFC handle
+ * @batch_info: Pointer to batch info
  * @cmm_info: Pointer to cmm info
  * @cmm_clr: Pointer to cmm clr
- * @data: Data read. Must be word aligned, i.e. [1:0] must be 0.
+ * @data_pa: Data physical address. Must be word aligned, i.e. [1:0] must be 0.
  * @data_sz_words: Data buffer size in words. Size could be 8/16/24/32/64B
  *
  * Returns
@@ -918,9 +977,10 @@ int tfc_act_set(struct tfc *tfcp, const struct tfc_cmm_info *cmm_info,
  *   MPC error code. For example, if the value -8 is Returned
  *   it indicates a CFA_BLD_MPC_EM_DUPLICATE error occurred.
  */
-int tfc_act_get(struct tfc *tfcp, const struct tfc_cmm_info *cmm_info,
+int tfc_act_get(struct tfc *tfcp, struct tfc_mpc_batch_info_t *batch_info,
+		const struct tfc_cmm_info *cmm_info,
 		struct tfc_cmm_clr *clr,
-		u8 *data, u16 *data_sz_words);
+		u64 data_pa, u16 *data_sz_words);
 /**
  * Free a CMM Resource
  *

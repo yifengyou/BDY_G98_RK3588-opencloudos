@@ -580,18 +580,21 @@ bool tf_session_is_fid_supported(struct tf_session *tfs, u16 fid)
 
 int tf_session_get_session_internal(struct tf *tfp, struct tf_session **tfs)
 {
-	int rc = 0;
+	/* Skip if device is unsupported */
+	if (!BNXT_CHIP_P4(tfp->bp) && !BNXT_CHIP_P5(tfp->bp)) {
+		netdev_dbg(tfp->bp->dev, "Unsupported device type\n");
+		return -EOPNOTSUPP;
+	}
 
 	/* Skip using the check macro as we want to control the error msg */
 	if (!tfp->session || !tfp->session->core_data) {
-		rc = -EINVAL;
-		netdev_dbg(tfp->bp->dev, "Session not created, rc:%d\n", rc);
-		return rc;
+		netdev_dbg(tfp->bp->dev, "Session not created\n");
+		return -EINVAL;
 	}
 
 	*tfs = (struct tf_session *)(tfp->session->core_data);
 
-	return rc;
+	return 0;
 }
 
 int tf_session_get_session(struct tf *tfp, struct tf_session **tfs)

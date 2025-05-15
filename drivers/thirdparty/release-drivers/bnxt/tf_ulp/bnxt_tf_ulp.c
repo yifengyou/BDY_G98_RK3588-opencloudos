@@ -11,6 +11,7 @@
 #include "bnxt_tf_ulp.h"
 #include "bnxt_ulp_flow.h"
 #include "bnxt_tf_common.h"
+#include "bnxt_tfc.h"
 #include "tf_core.h"
 #include "tfc.h"
 #include "tf_ext_flow_handle.h"
@@ -24,6 +25,7 @@
 #include "ulp_matcher.h"
 #include "ulp_port_db.h"
 #include "bnxt_tfc.h"
+#include "bnxt_nic_flow.h"
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) || defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
 /* Linked list of all TF sessions. */
@@ -137,6 +139,8 @@ bnxt_ulp_cntxt_vxlan_ip_port_set(struct bnxt_ulp_context *ulp_ctx,
 		return -EINVAL;
 
 	ulp_ctx->cfg_data->vxlan_ip_port = vxlan_ip_port;
+	if (vxlan_ip_port)
+		ulp_ctx->cfg_data->ulp_flags |= BNXT_ULP_STATIC_VXLAN_SUPPORT;
 
 	return 0;
 }
@@ -183,6 +187,8 @@ bnxt_ulp_cntxt_vxlan_port_set(struct bnxt_ulp_context *ulp_ctx,
 		return -EINVAL;
 
 	ulp_ctx->cfg_data->vxlan_port = vxlan_port;
+	if (vxlan_port)
+		ulp_ctx->cfg_data->ulp_flags |= BNXT_ULP_STATIC_VXLAN_SUPPORT;
 
 	return 0;
 }
@@ -216,6 +222,56 @@ bnxt_ulp_default_app_priority_get(struct bnxt_ulp_context *ulp_ctx)
 		return 0;
 
 	return (unsigned int)ulp_ctx->cfg_data->default_priority;
+}
+
+/* Function to set enable bit of mirror */
+static int
+bnxt_tc_tf_set_mirror(struct bnxt *bp, enum tf_dir dir, bool stat)
+{
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	struct tf_global_cfg_parms parms = { 0 };
+	struct tf *tfp = NULL;
+	u32 global_cfg = 0;
+	int rc = -EINVAL;
+	u8 *mirror_id;
+	u32 port_id;
+
+	port_id = bp->pf.fw_fid;
+	if (!bp->tfp)
+		return rc;
+
+	ulp_port_db_port_table_mirror_get(ulp_ctx, dir, port_id, &mirror_id);
+	if (!mirror_id) {
+		netdev_dbg(bp->dev, "Mirror id is not initialized.\n");
+		return rc;
+	}
+
+	tfp = bnxt_ulp_bp_tfp_get(bp, BNXT_ULP_SESSION_TYPE_DEFAULT);
+	parms.dir = dir,
+	parms.type = TF_MIRROR_CFG,
+	parms.config = (u8 *)&global_cfg,
+	parms.config_sz_in_bytes = sizeof(global_cfg);
+	parms.offset = *mirror_id;
+
+	rc = tf_get_global_cfg(tfp, &parms);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to get global cfg 0x%x rc:%d\n",
+			   parms.type, rc);
+		return rc;
+	}
+
+	/* Set/Reset MSB Bit of Mirror Register */
+	if (stat)
+		global_cfg |= MIRROR_REG_BIT;
+	else
+		global_cfg &= ~MIRROR_REG_BIT;
+	rc = tf_set_global_cfg(tfp, &parms);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to set global cfg 0x%x rc:%d\n",
+			   parms.type, rc);
+		return rc;
+	}
+	return rc;
 }
 
 int
@@ -320,8 +376,14 @@ ulp_get_session(struct bnxt *bp)
 	struct hlist_node *node;
 
 	hlist_for_each_entry_safe(session, node, &bnxt_ulp_session_list, next) {
-		if (!memcmp(session->dsn, bp->dsn, sizeof(bp->dsn)))
-			return session;
+		if (bp->flags & BNXT_FLAG_DSN_VALID) {
+			if (!memcmp(session->dsn, bp->dsn, sizeof(bp->dsn)))
+				return session;
+		} else {
+			if (!memcmp(session->bsn, bp->board_serialno,
+				    sizeof(bp->board_serialno)))
+				return session;
+		}
 	}
 	return NULL;
 }
@@ -346,7 +408,11 @@ ulp_session_init(struct bnxt *bp,
 
 		} else {
 			/* Add it to the queue */
-			memcpy(session->dsn, bp->dsn, sizeof(bp->dsn));
+			if (bp->flags & BNXT_FLAG_DSN_VALID)
+				memcpy(session->dsn, bp->dsn, sizeof(bp->dsn));
+			else
+				memcpy(session->bsn, bp->board_serialno,
+				       sizeof(bp->board_serialno));
 			mutex_init(&session->bnxt_ulp_mutex);
 			hlist_add_head(&session->next, &bnxt_ulp_session_list);
 		}
@@ -435,11 +501,6 @@ bnxt_ulp_port_init(struct bnxt *bp)
 		return -EINVAL;
 	}
 
-	if (!(bp->flags & BNXT_FLAG_DSN_VALID)) {
-		netdev_dbg(bp->dev, "Invalid DSN, don't create ULP session\n");
-		return -EINVAL;
-	}
-
 	rc = bnxt_ulp_devid_get(bp, &dev_id);
 	if (rc) {
 		netdev_dbg(bp->dev, "Unsupported device %x\n", rc);
@@ -454,9 +515,6 @@ bnxt_ulp_port_init(struct bnxt *bp)
 	rc = bnxt_hwrm_port_mac_qcfg(bp);
 	if (rc)
 		return rc;
-
-	if (BNXT_TF_RX_NIC_FLOW_CAP(bp))
-		app_type = CFA_APP_TYPE_AFM;
 
 	bp->ulp_ctx = vzalloc(sizeof(struct bnxt_ulp_context));
 	if (!bp->ulp_ctx)
@@ -546,9 +604,16 @@ bnxt_ulp_port_init(struct bnxt *bp)
 		netdev_dbg(bp->dev, "Error in getting ULP context flags\n");
 		goto jump_to_error;
 	}
-	/* NIC flow doesn't need VNIC Metadata update */
-	if (app_type == CFA_APP_TYPE_AFM)
-		return rc;
+
+	/* NIC flow support */
+	if (ULP_APP_NIC_FLOWS_SUPPORTED((struct bnxt_ulp_context *)bp->ulp_ctx)) {
+		rc = bnxt_nic_flows_init(bp);
+		if (rc) {
+			netdev_dbg(bp->dev, "Failed to open nic flows:%d\n", rc);
+			bnxt_nic_flows_deinit(bp);
+			goto jump_to_error;
+		}
+	}
 
 	if (BNXT_CHIP_P7(bp)) {
 		struct bnxt_vnic_info *vnic = bp->vnic_info;
@@ -600,6 +665,8 @@ bnxt_ulp_port_deinit(struct bnxt *bp)
 
 	netdev_dbg(bp->dev, "BNXT Port:%d ULP port deinit\n",
 		   bp->pf.fw_fid);
+
+	bnxt_nic_flows_deinit(bp);
 
 	/* Get the session details  */
 	mutex_lock(&bnxt_ulp_global_mutex);
@@ -1079,6 +1146,29 @@ bnxt_ulp_cntxt_ptr2_fc_info_get(struct bnxt_ulp_context *ulp_ctx)
 	return ulp_ctx->cfg_data->fc_info;
 }
 
+/* Function to set the flow counter info into the context */
+int
+bnxt_ulp_cntxt_ptr2_sc_info_set(struct bnxt_ulp_context *ulp_ctx,
+				struct bnxt_ulp_sc_info *ulp_sc_info)
+{
+	if (!ulp_ctx || !ulp_ctx->cfg_data)
+		return -EINVAL;
+
+	ulp_ctx->cfg_data->sc_info = ulp_sc_info;
+
+	return 0;
+}
+
+/* Function to retrieve the flow counter info from the context. */
+struct bnxt_ulp_sc_info *
+bnxt_ulp_cntxt_ptr2_sc_info_get(struct bnxt_ulp_context *ulp_ctx)
+{
+	if (!ulp_ctx || !ulp_ctx->cfg_data)
+		return NULL;
+
+	return ulp_ctx->cfg_data->sc_info;
+}
+
 /* Function to get the ulp flags from the ulp context. */
 int
 bnxt_ulp_cntxt_ptr2_ulp_flags_get(struct bnxt_ulp_context *ulp_ctx,
@@ -1285,6 +1375,107 @@ skip_mark:
 	return -EINVAL;
 }
 
+bool bnxt_ulp_can_enable_vf_trust(struct bnxt *bp)
+{
+	struct bnxt_ulp_context *ulp_ctx = bnxt_ulp_bp_ptr2_cntxt_get(bp);
+	u8 app_id;
+	int rc;
+
+	/* Return if tf is not enabled */
+	if (!(bp->tf_flags & BNXT_TF_FLAG_INITIALIZED))
+		return true;
+
+	if (!ulp_ctx) {
+		netdev_dbg(bp->dev, "%s: ULP context is not initialized\n",
+			   __func__);
+		return true;
+	}
+	rc = bnxt_ulp_cntxt_app_id_get(ulp_ctx, &app_id);
+	if (rc) {
+		netdev_dbg(ulp_ctx->bp->dev, "%s: Unable to get the app id from ulp\n",
+			   __func__);
+		return true;
+	}
+	/* For app1 restrict trust functionality if switchdev is on
+	 * otherwise it may cause issues in FW recovery.
+	 */
+	if (app_id == 1 && bnxt_tc_is_switchdev_mode(bp)) {
+		netdev_dbg(bp->dev, "Disable switchdev mode before enabling trusted mode on VFs\n");
+		return false;
+	}
+	return true;
+}
+
+/* Specified value in bool variable(stat) will clear/set the mirror */
+int bnxt_ulp_set_mirror(struct bnxt *bp, bool stat)
+{
+	struct bnxt_ulp_context *ulp_ctx = bnxt_ulp_bp_ptr2_cntxt_get(bp);
+	enum tf_dir i;
+	u8 app_id;
+	int rc;
+
+	/* Return if tf is not enabled or function is VF*/
+	if (!(bp->tf_flags & BNXT_TF_FLAG_INITIALIZED) || BNXT_VF(bp))
+		return 0;
+
+	if (!ulp_ctx) {
+		netdev_dbg(bp->dev, "%s: ULP context is not initialized\n",
+			   __func__);
+		return -EINVAL;
+	}
+	rc = bnxt_ulp_cntxt_app_id_get(ulp_ctx, &app_id);
+	if (rc) {
+		netdev_dbg(ulp_ctx->bp->dev, "Unable to get the app id from ulp.\n");
+		return rc;
+	}
+	if (app_id == 1) {
+		for (i = TF_DIR_RX; i <= TF_DIR_TX; i++) {
+			rc = bnxt_tc_tf_set_mirror(bp, i, stat);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return 0;
+}
+
+/* THOR2 - Specified value in bool variable(stat) will clear/set the mirror */
+int bnxt_ulp_set_mirror_p7(struct bnxt *bp, bool stat)
+{
+	struct bnxt_ulp_context *ulp_ctx = bnxt_ulp_bp_ptr2_cntxt_get(bp);
+	enum tf_dir i;
+	u8 app_id;
+	int rc;
+
+	/* Return if tf is not enabled or function is VF*/
+	if (!(bp->tf_flags & BNXT_TF_FLAG_INITIALIZED) || BNXT_VF(bp))
+		return 0;
+
+	if (!ulp_ctx) {
+		netdev_dbg(bp->dev, "%s: ULP context is not initialized\n",
+			   __func__);
+		return -EINVAL;
+	}
+	rc = bnxt_ulp_cntxt_app_id_get(ulp_ctx, &app_id);
+	if (rc) {
+		netdev_dbg(bp->dev, "Unable to get the app id from ulp.\n");
+		return rc;
+	}
+	if (app_id == 1) {
+		for (i = TF_DIR_RX; i <= TF_DIR_TX; i++) {
+			/* Call appropriate direction mirror template
+			 * 1. port id will be passed in
+			 * 2. stat will be passed in to enable/disable
+			 */
+			rc = bnxt_ulp_mirror_op(bp, i, stat);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return 0;
+}
+
 int
 bnxt_ulp_get_mark_from_cfacode(struct bnxt *bp, struct rx_cmp_ext *rxcmp1,
 			       struct bnxt_tpa_info *tpa_info, u32 *mark_id)
@@ -1486,6 +1677,11 @@ void bnxt_ulp_free_vf_rep_p7(struct bnxt *bp, void *vfr)
 	if (rc)
 		netdev_dbg(bp->dev,
 			   "Failed to remove  VFR EFID %d from session\n", vfr_fid);
+
+	rc = ulp_flow_db_function_flow_flush(bp->ulp_ctx, vfr_fid);
+	if (rc)
+		netdev_dbg(bp->dev,
+			   "Failed to flush flows for %d\n", vfr_fid);
 }
 
 /* Function to check if allowing multicast and broadcast flow offload. */
@@ -1572,5 +1768,32 @@ bnxt_ulp_vfr_session_fid_rem(struct bnxt_ulp_context *ulp_ctx,
 	if (ulp_ctx->ops->ulp_vfr_session_fid_rem)
 		rc = ulp_ctx->ops->ulp_vfr_session_fid_rem(ulp_ctx, vfr_fid);
 	return rc;
+}
+
+int
+bnxt_ulp_cap_feat_process(u64 feat_bits, u64 *out_bits)
+{
+	u64 bit = TC_BNXT_TF_FEAT_BITS;
+
+	*out_bits = 0;
+	if ((feat_bits | bit) != feat_bits) {
+		netdev_dbg(NULL, "Invalid TF feature bit is set %llu\n", bit);
+		return -EINVAL;
+	}
+	if ((!!(bit & BNXT_ULP_FEATURE_BIT_PARENT_DMAC) +
+	     !!(bit & BNXT_ULP_FEATURE_BIT_PORT_DMAC)) == 2) {
+		netdev_dbg(NULL, "Invalid both Port and Parent Mac set\n");
+		return -EINVAL;
+	}
+
+	if (bit & BNXT_ULP_FEATURE_BIT_PARENT_DMAC)
+		netdev_dbg(NULL, "Parent Mac Address Feature is enabled\n");
+	if (bit & BNXT_ULP_FEATURE_BIT_PORT_DMAC)
+		netdev_dbg(NULL, "Port Mac Address Feature is enabled\n");
+	if (bit & BNXT_ULP_FEATURE_BIT_MULTI_TUNNEL_FLOW)
+		netdev_dbg(NULL, "Multi Tunnel Flow Feature is enabled\n");
+
+	*out_bits =  bit;
+	return 0;
 }
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

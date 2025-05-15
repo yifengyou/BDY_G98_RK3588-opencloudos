@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,14 +28,6 @@
 #define BNXT_DFLT_MPC_TE_CFA	BNXT_MAX_MPC
 #define BNXT_DFLT_MPC_RE_CFA	BNXT_MAX_MPC
 
-/* Defines the number of msgs there are in an MPC msg completion event.
- * Used to pass an opaque value into the MPC msg xmit function. The
- * completion processing uses this value to ring the doorbell correctly to
- * signal "completion event processing complete" to the hardware.
- */
-
-#define BNXT_MPC_COMP_MSG_COUNT 1
-
 #define BNXT_MPC_TMO_MSECS	1000
 
 struct bnxt_mpc_info {
@@ -46,14 +38,7 @@ struct bnxt_mpc_info {
 	struct bnxt_tx_ring_info *mpc_rings[BNXT_MPC_TYPE_MAX];
 };
 
-enum bnxt_mpc_chnl {
-	BNXT_MPC_CHNL_TCE = 0,
-	BNXT_MPC_CHNL_RCE = 1,
-	BNXT_MPC_CHNL_TE_CFA = 2,
-	BNXT_MPC_CHNL_RE_CFA = 3,
-	BNXT_MPC_CHNL_PRIMATE = 4,
-	BNXT_MPC_CHNL_MAX = 5,
-};
+#define BNXT_INV_MPC_HDL	(-1UL)
 
 struct bnxt_sw_mpc_tx_bd {
 	u8 inline_bds;
@@ -129,6 +114,7 @@ void bnxt_set_mpc_cp_ring(struct bnxt *bp, int bnapi_idx,
 void bnxt_trim_mpc_rings(struct bnxt *bp);
 void bnxt_set_dflt_mpc_rings(struct bnxt *bp);
 void bnxt_init_mpc_ring_struct(struct bnxt *bp);
+struct bnxt_tx_ring_info *bnxt_select_mpc_ring(struct bnxt *bp, int ring_type);
 int bnxt_alloc_mpcs(struct bnxt *bp);
 void bnxt_free_mpcs(struct bnxt *bp);
 int bnxt_alloc_mpc_rings(struct bnxt *bp);

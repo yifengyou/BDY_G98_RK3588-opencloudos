@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2018 Broadcom Limited
- * Copyright (c) 2018-2022 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -79,18 +79,48 @@ struct bnxt_driver_segment_record {
 
 #define DRV_COREDUMP_COMP_ID 0xD
 
-#define DRV_SEG_SRT_TRACE            1
-#define DRV_SEG_SRT2_TRACE           2
-#define DRV_SEG_CRT_TRACE            3
-#define DRV_SEG_CRT2_TRACE           4
-#define DRV_SEG_RIGP0_TRACE          5
-#define DRV_SEG_LOG_HWRM_L2_TRACE    6
-#define DRV_SEG_LOG_HWRM_ROCE_TRACE  7
+#define BNXT_SEGMENT_L2	0
+
+#define DRV_SEG_SRT_TRACE		0x1
+#define DRV_SEG_SRT2_TRACE		0x2
+#define DRV_SEG_CRT_TRACE		0x3
+#define DRV_SEG_CRT2_TRACE		0x4
+#define DRV_SEG_RIGP0_TRACE		0x5
+#define DRV_SEG_L2_HWRM_LOG_TRACE	0x6
+#define DRV_SEG_ROCE_HWRM_LOG_TRACE	0x7
+#define DRV_SEG_CA0_TRACE		0x8
+#define DRV_SEG_CA1_TRACE		0x9
+#define DRV_SEG_CA2_TRACE		0xA
+#define DRV_SEG_RIGP1_TRACE		0xB
+
+#define BNXT_CTX_MEM_SEG_ID_START  0x200
+
+#define BNXT_CTX_MEM_SEG_QP	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_QP)
+#define BNXT_CTX_MEM_SEG_SRQ	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_SRQ)
+#define BNXT_CTX_MEM_SEG_CQ	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_CQ)
+#define BNXT_CTX_MEM_SEG_VNIC	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_VNIC)
+#define BNXT_CTX_MEM_SEG_STAT	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_STAT)
+#define BNXT_CTX_MEM_SEG_STQM	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_STQM)
+#define BNXT_CTX_MEM_SEG_FTQM	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_FTQM)
+#define BNXT_CTX_MEM_SEG_MRAV	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_MRAV)
+#define BNXT_CTX_MEM_SEG_TIM	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_TIM)
+#define BNXT_CTX_MEM_SEG_TCK	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_TCK)
+#define BNXT_CTX_MEM_SEG_RCK	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_RCK)
+#define BNXT_CTX_MEM_SEG_MTQM	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_MTQM)
+#define BNXT_CTX_MEM_SEG_SQDBS	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_SQDBS)
+#define BNXT_CTX_MEM_SEG_RQDBS	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_RQDBS)
+#define BNXT_CTX_MEM_SEG_SRQDBS	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_SRQDBS)
+#define BNXT_CTX_MEM_SEG_CQDBS	(BNXT_CTX_MEM_SEG_ID_START + BNXT_CTX_CQDBS)
 
 #define BNXT_CRASH_DUMP_LEN	(8 << 20)
 
 #define COREDUMP_LIST_BUF_LEN		2048
 #define COREDUMP_RETRIEVE_BUF_LEN	4096
+
+#define BNXT_SEG_HDR_LEN	sizeof(struct bnxt_coredump_segment_hdr)
+
+#define BNXT_L2_COREDUMP_BUF_LEN	0x400000
+#define BNXT_L2_COREDUMP_LEN	(BNXT_SEG_HDR_LEN + BNXT_L2_COREDUMP_BUF_LEN)
 
 struct bnxt_coredump {
 	void		*data;
@@ -145,6 +175,7 @@ struct hwrm_dbg_cmn_output {
 u32 bnxt_get_coredump_length(struct bnxt *bp, u16 dump_type);
 int bnxt_hwrm_get_dump_len(struct bnxt *bp, u16 dump_type, u32 *dump_len);
 int bnxt_get_coredump(struct bnxt *bp, u16 dump_type, void *buf, u32 *dump_len);
+int bnxt_hwrm_dbg_coredump_capture(struct bnxt *bp);
 void bnxt_fill_coredump_seg_hdr(struct bnxt *bp,
 				struct bnxt_coredump_segment_hdr *seg_hdr,
 				struct coredump_segment_record *seg_rec,
@@ -156,4 +187,9 @@ void
 bnxt_fill_coredump_record(struct bnxt *bp, struct bnxt_coredump_record *record,
 			  struct bnxt_time start, s16 start_utc, u16 total_segs,
 			  int status);
+bool bnxt_bs_trace_dbgfs_available(struct bnxt *bp);
+void bnxt_bs_trace_dbgfs_copy(struct bnxt_bs_trace_info *bs_trace);
+void bnxt_bs_trace_dbgfs_clean(struct bnxt *bp);
+int bnxt_collect_driver_coredump(struct bnxt *bp, void *buf, u32 *offset, u32 *dump_len,
+				 int rc, struct coredump_segment_record *seg_record);
 #endif

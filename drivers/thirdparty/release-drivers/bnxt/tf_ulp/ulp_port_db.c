@@ -18,7 +18,7 @@
 void
 bnxt_get_parent_mac_addr(struct bnxt *bp, u8 *mac)
 {
-	memcpy(mac, bp->pf.mac_addr, ETH_ALEN);
+	ether_addr_copy(mac, bp->dev->dev_addr);
 }
 
 u16
@@ -33,10 +33,10 @@ bnxt_get_iface_mac(struct bnxt *bp, enum bnxt_ulp_intf_type type,
 		   u8 *mac, u8 *parent_mac)
 {
 	if (type == BNXT_ULP_INTF_TYPE_PF) {
-		memcpy(mac, bp->pf.mac_addr, ETH_ALEN);
+		ether_addr_copy(mac, bp->dev->dev_addr);
 	} else if (type == BNXT_ULP_INTF_TYPE_TRUSTED_VF) {
-		memcpy(mac, bp->vf.mac_addr, ETH_ALEN);
-		memcpy(parent_mac, bp->pf.mac_addr, ETH_ALEN);
+		ether_addr_copy(mac, bp->vf.mac_addr);
+		ether_addr_copy(parent_mac, bp->dev->dev_addr);
 	}
 	return;
 }
@@ -122,6 +122,21 @@ bnxt_get_parif(struct bnxt *bp)
 #endif
 
 	return BNXT_PF(bp) ? bp->pf.fw_fid - 1 : bp->vf.fw_fid - 1;
+}
+
+#define BNXT_LAG_VPORT(val)    ((1 << 8) | (val) << 5)
+u16
+bnxt_get_lag_vport(struct bnxt *bp)
+{
+	struct bnxt_bond_info *binfo = bp->bond_info;
+
+	if (binfo && binfo->bond_active &&
+	    (binfo->fw_lag_id != BNXT_INVALID_LAG_ID) &&
+	    (bp->flags & BNXT_FLAG_CHIP_P7)) {
+		netdev_info(bp->dev, "Enabled Truflow hardware LAG\n");
+		return BNXT_LAG_VPORT(binfo->fw_lag_id);
+	}
+	return (1 << bnxt_get_phy_port_id(bp));
 }
 
 u16
@@ -273,10 +288,12 @@ int ulp_port_db_dev_port_intf_update(struct bnxt_ulp_context *ulp_ctxt,
 	/* update the interface details */
 	intf = &port_db->ulp_intf_list[ifindex];
 
-	if (!vfr)
+	if (!vfr) {
 		intf->type = bnxt_get_interface_type(bp);
-	else
+	} else {
 		intf->type = BNXT_ULP_INTF_TYPE_VF_REP;
+		intf->vf_id = port_id - BNXT_FIRST_VF_FID;
+	}
 	intf->drv_func_id = bnxt_get_fw_func_id(bp,
 						BNXT_ULP_INTF_TYPE_INVALID);
 	intf->rdma_sriov_en = BNXT_RDMA_SRIOV_EN(bp) ? 1 : 0;
@@ -339,15 +356,13 @@ int ulp_port_db_dev_port_intf_update(struct bnxt_ulp_context *ulp_ctxt,
 	bnxt_get_iface_mac(bp, intf->type, func->func_mac,
 			   func->func_parent_mac);
 	port_data = &port_db->phy_port_list[func->phy_port_id];
-	if (!port_data->port_valid) {
-		port_data->port_svif =
-			bnxt_get_svif(bp, false,
-				      BNXT_ULP_INTF_TYPE_INVALID);
-		port_data->port_spif = bnxt_get_phy_port_id(bp);
-		port_data->port_parif = bnxt_get_parif(bp);
-		port_data->port_vport = bnxt_get_vport(bp);
-		port_data->port_valid = true;
-	}
+	port_data->port_svif = bnxt_get_svif(bp, false,
+					     BNXT_ULP_INTF_TYPE_INVALID);
+	port_data->port_spif = bnxt_get_phy_port_id(bp);
+	port_data->port_parif = bnxt_get_parif(bp);
+	port_data->port_vport = bnxt_get_vport(bp);
+	port_data->port_lag_vport = bnxt_get_lag_vport(bp);
+	port_data->port_valid = true;
 	ulp_port_db_dump(ulp_ctxt, port_db, intf, port_id);
 	return 0;
 }
@@ -668,6 +683,34 @@ ulp_port_db_vport_get(struct bnxt_ulp_context *ulp_ctxt,
 	func_id = port_db->ulp_intf_list[ifindex].drv_func_id;
 	phy_port_id = port_db->ulp_func_id_tbl[func_id].phy_port_id;
 	*vport = port_db->phy_port_list[phy_port_id].port_vport;
+	return 0;
+}
+
+/**
+ * Api to get the lag vport id for a given ulp ifindex.
+ *
+ * @ulp_ctxt: Ptr to ulp context
+ * @ifindex: ulp ifindex
+ * @vport: the lag port of the given ifindex.
+ *
+ * Returns 0 on success or negative number on failure.
+ */
+int
+ulp_port_db_lag_vport_get(struct bnxt_ulp_context *ulp_ctxt,
+			  u32 ifindex, u16 *vport)
+{
+	struct bnxt_ulp_port_db *port_db;
+	u16 phy_port_id, func_id;
+
+	port_db = bnxt_ulp_cntxt_ptr2_port_db_get(ulp_ctxt);
+	if (!port_db || ifindex >= port_db->ulp_intf_list_size || !ifindex) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+
+	func_id = port_db->ulp_intf_list[ifindex].drv_func_id;
+	phy_port_id = port_db->ulp_func_id_tbl[func_id].phy_port_id;
+	*vport = port_db->phy_port_list[phy_port_id].port_lag_vport;
 	return 0;
 }
 
@@ -1021,6 +1064,100 @@ ulp_port_db_port_table_scope_get(struct bnxt_ulp_context *ulp_ctxt,
 	return -EINVAL;
 }
 
+/* Api to set the PF Mirror Id for a given port id
+ *
+ * ulp_ctxt [in] Ptr to ulp context
+ * port_id [in] port id
+ * mirror id [in] mirror id
+ *
+ * Returns 0 on success or negative number on failure.
+ */
+int
+ulp_port_db_port_table_mirror_set(struct bnxt_ulp_context *ulp_ctxt, enum tf_dir dir,
+				  u16 port_id, u32 mirror_id)
+{
+	struct ulp_phy_port_info *port_data;
+	struct bnxt_ulp_port_db *port_db;
+	struct ulp_interface_info *intf;
+	struct ulp_func_if_info *func;
+	u32 ifindex;
+
+	port_db = bnxt_ulp_cntxt_ptr2_port_db_get(ulp_ctxt);
+	if (!port_db) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+
+	if (ulp_port_db_dev_port_to_ulp_index(ulp_ctxt, port_id, &ifindex)) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid port id %u\n", port_id);
+		return -EINVAL;
+	}
+
+	intf = &port_db->ulp_intf_list[ifindex];
+	func = &port_db->ulp_func_id_tbl[intf->drv_func_id];
+	if (!func->func_valid) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid func for port id %u\n", port_id);
+		return -EINVAL;
+	}
+
+	port_data = &port_db->phy_port_list[func->phy_port_id];
+	if (!port_data->port_valid) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid phy port\n");
+		return -EINVAL;
+	}
+
+	if (dir == TF_DIR_RX)
+		port_data->port_mirror_id_ingress = mirror_id;
+	else
+		port_data->port_mirror_id_egress = mirror_id;
+	return 0;
+}
+
+/* Api to get the PF Mirror Id for a given port id
+ *
+ * ulp_ctxt [in] Ptr to ulp context
+ * port_id [in] port id
+ * mirror id [in] mirror id
+ *
+ * Returns 0 on success or negative number on failure.
+ */
+int
+ulp_port_db_port_table_mirror_get(struct bnxt_ulp_context *ulp_ctxt, enum tf_dir dir,
+				  u16 port_id, u8 **mirror_id)
+{
+	struct ulp_phy_port_info *port_data;
+	struct bnxt_ulp_port_db *port_db;
+	struct ulp_interface_info *intf;
+	struct ulp_func_if_info *func;
+	u32 ifindex;
+
+	port_db = bnxt_ulp_cntxt_ptr2_port_db_get(ulp_ctxt);
+	if (!port_db) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+	if (ulp_port_db_dev_port_to_ulp_index(ulp_ctxt, port_id, &ifindex)) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid port id %u\n", port_id);
+		return -EINVAL;
+	}
+	intf = &port_db->ulp_intf_list[ifindex];
+	func = &port_db->ulp_func_id_tbl[intf->drv_func_id];
+	if (!func->func_valid) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid func for port id %u\n", port_id);
+		return -EINVAL;
+	}
+	port_data = &port_db->phy_port_list[func->phy_port_id];
+	if (!port_data->port_valid) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid phy port\n");
+		return -EINVAL;
+	}
+	if (dir == TF_DIR_RX)
+		*mirror_id = (u8 *)&port_data->port_mirror_id_ingress;
+	else
+		*mirror_id = (u8 *)&port_data->port_mirror_id_egress;
+	return 0;
+}
+
 /**
  * Api to get the RoCE vnic for a given port id.
  *
@@ -1044,4 +1181,75 @@ ulp_port_db_drv_roce_vnic_get(struct bnxt_ulp_context *ulp_ctxt,
 	return -EINVAL;
 }
 
+/**
+ * Api to get the socket direct svif for a given device port.
+ *
+ * ulp_ctxt [in] Ptr to ulp context
+ * port_id [in] device port id
+ * svif [out] the socket direct svif of the given device index
+ *
+ * Returns 0 on success or negative number on failure.
+ */
+int
+ulp_port_db_port_socket_direct_svif_get(struct bnxt_ulp_context *ulp_ctxt,
+					uint32_t port_id,
+					uint16_t *svif)
+{
+	struct bnxt_ulp_port_db *port_db;
+	uint16_t phy_port_id;
+	uint16_t func_id;
+	uint32_t ifindex;
+
+	port_db = bnxt_ulp_cntxt_ptr2_port_db_get(ulp_ctxt);
+
+	if (!port_db || port_id >= TC_MAX_ETHPORTS) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+	if (!port_db->dev_port_list[port_id])
+		return -ENOENT;
+
+	/* Get physical port id */
+	ifindex = port_db->dev_port_list[port_id];
+	func_id = port_db->ulp_intf_list[ifindex].drv_func_id;
+	phy_port_id = port_db->ulp_func_id_tbl[func_id].phy_port_id;
+
+	/* Calculate physical port id for socket direct port */
+	phy_port_id = phy_port_id ? 0 : 1;
+	if (phy_port_id >= port_db->phy_port_cnt ||
+	    !port_db->phy_port_list[phy_port_id].port_valid) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+	*svif = port_db->phy_port_list[phy_port_id].port_svif;
+	return 0;
+}
+
+/* API to get the VF ID for a given port_id.
+ *
+ * @ulp_ctxt: Ptr to ulp context
+ * @port_id: device port id
+ * @vf_id: Zero based global (per-card) VF-id and not per-PF
+ * Returns 0 on success or negative errno on failure.
+ */
+int
+ulp_port_db_vf_id_get(struct bnxt_ulp_context *ulp_ctxt,
+		      u32 port_id, u16 *vf_id)
+{
+	struct bnxt_ulp_port_db *port_db;
+	u32 ifindex;
+
+	port_db = bnxt_ulp_cntxt_ptr2_port_db_get(ulp_ctxt);
+	if (!port_db || port_id >= TC_MAX_ETHPORTS) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid Arguments\n");
+		return -EINVAL;
+	}
+	ifindex = port_db->dev_port_list[port_id];
+	if (!ifindex)
+		return -ENOENT;
+
+	*vf_id =  port_db->ulp_intf_list[ifindex].vf_id;
+
+	return 0;
+}
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

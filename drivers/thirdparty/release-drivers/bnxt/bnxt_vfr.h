@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,8 @@ void bnxt_vf_reps_free(struct bnxt *bp);
 int bnxt_hwrm_cfa_pair_alloc(struct bnxt *bp, void *vfr);
 int bnxt_hwrm_cfa_pair_free(struct bnxt *bp, void *vfr);
 int bnxt_hwrm_cfa_pair_exists(struct bnxt *bp, void *vfr);
+int bnxt_tf_config_promisc_mirror(struct bnxt *bp, struct bnxt_vnic_info *vnic);
+bool bnxt_tf_can_enable_vf_trust(struct bnxt *bp);
 
 static inline u16 bnxt_vf_rep_get_fid(struct net_device *dev)
 {
@@ -66,6 +68,7 @@ void bnxt_custom_tf_port_init(struct bnxt *bp);
 void bnxt_custom_tf_port_deinit(struct bnxt *bp);
 int bnxt_devlink_tf_port_init(struct bnxt *bp);
 void bnxt_devlink_tf_port_deinit(struct bnxt *bp);
+void bnxt_tf_devlink_toggle(struct bnxt *bp);
 #ifdef CONFIG_DEBUG_FS
 void bnxt_tf_debugfs_create_files(struct bnxt *bp, u8 tsid, struct dentry *port_dir);
 #endif /* CONFIG_DEBUG_FS */
@@ -147,11 +150,18 @@ void bnxt_tfo_deinit(struct bnxt *bp);
 void bnxt_custom_tf_port_init(struct bnxt *bp);
 void bnxt_custom_tf_port_deinit(struct bnxt *bp);
 int bnxt_hwrm_get_dflt_vnic_svif(struct bnxt *bp, u16 fid, u16 *vnic_id, u16 *svif);
+int bnxt_tf_config_promisc_mirror(struct bnxt *bp, struct bnxt_vnic_info *vnic);
+bool bnxt_tf_can_enable_vf_trust(struct bnxt *bp);
 #ifdef CONFIG_DEBUG_FS
 void bnxt_tf_debugfs_create_files(struct bnxt *bp, u8 tsid, struct dentry *port_dir);
 #endif /* CONFIG_DEBUG_FS */
 
 #else
+bool bnxt_tf_can_enable_vf_trust(struct bnxt *bp)
+{
+	return 0;
+}
+
 static inline int bnxt_vf_reps_create(struct bnxt *bp)
 {
 	return 0;
@@ -254,6 +264,16 @@ static inline void bnxt_custom_tf_port_init(struct bnxt *bp)
 
 static inline void bnxt_custom_tf_port_deinit(struct bnxt *bp)
 {
+}
+
+static inline int bnxt_tf_config_promisc_mirror(struct bnxt *bp, struct bnxt_vnic_info *vnic);
+{
+	return 0;
+}
+
+static inline int bnxt_tf_config_promisc_mirror(struct bnxt *bp, struct bnxt_vnic_info *vnic);
+{
+	return 0;
 }
 
 #ifdef CONFIG_DEBUG_FS

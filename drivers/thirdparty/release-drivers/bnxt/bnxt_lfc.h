@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2020 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,6 +54,18 @@ struct bnxt_lfc_dev_array {
 	struct bnxt_lfc_dev *bnxt_lfc_dev;
 };
 
+struct alloc_phys_mem_data {
+	uint32_t size;
+	uint64_t *phys_addr_ptr;
+	uint64_t *bus_addr_ptr;
+};
+
+struct free_phys_mem_data {
+	uint32_t size;
+	uint64_t phys_addr;
+	uint64_t bus_addr;
+};
+
 struct bnxt_lfc_dev {
 	struct pci_dev *pdev;
 	struct net_device *ndev;
@@ -80,6 +92,7 @@ struct bnxt_gloabl_dev {
 	struct file_operations fops;
 
 	struct mutex bnxt_lfc_lock;
+	u32 cdiag_index;
 };
 
 int32_t bnxt_lfc_init(void);

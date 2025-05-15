@@ -4,6 +4,8 @@
  */
 
 #include "bnxt_compat.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "ulp_template_db_enum.h"
 #include "ulp_template_struct.h"
 #include "ulp_tc_parser.h"
@@ -132,6 +134,10 @@ struct bnxt_ulp_tc_act_info ulp_act_info[] = {
 	[FLOW_ACTION_VLAN_POP] = {
 	.act_type                = BNXT_ULP_ACT_TYPE_SUPPORTED,
 	.proto_act_func          = ulp_tc_vlan_pop_act_handler
+	},
+	[FLOW_ACTION_ADD] = {
+	.act_type                = BNXT_ULP_ACT_TYPE_SUPPORTED,
+	.proto_act_func          = ulp_tc_mangle_act_handler
 	},
 	[NUM_FLOW_ACTIONS] = {
 	.act_type                = BNXT_ULP_ACT_TYPE_NOT_SUPPORTED,

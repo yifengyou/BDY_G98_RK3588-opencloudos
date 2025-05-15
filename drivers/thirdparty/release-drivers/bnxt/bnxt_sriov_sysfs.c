@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2014, Mellanox Technologies inc. All rights reserved.
- * Copyright (c) 2023 Broadcom Inc.
+ * Copyright (c) 2023-2024 Broadcom Inc.
  *
  *  This software is available to you under a choice of one of two
  *  licenses. You may choose to be licensed under the terms of the GNU
@@ -232,11 +232,12 @@ err_vf_obj:
 		if (stats->hw_stats)
 			dma_free_coherent(&bp->pdev->dev, stats->len, stats->hw_stats,
 					  stats->hw_stats_map);
-
+		stats->hw_stats = NULL;
 		if (vf_obj->kobj.state_initialized)
 			kobject_put(&vf_obj->kobj);
 	}
 	kfree(bp->vf_sysfs_objs);
+	bp->vf_sysfs_objs = NULL;
 	mutex_unlock(&bp->sriov_lock);
 
 	return -ENOMEM;
@@ -250,6 +251,9 @@ void bnxt_destroy_vfs_sysfs(struct bnxt *bp)
 
 	mutex_lock(&bp->sriov_lock);
 
+	if (!bp->vf_sysfs_objs)
+		goto destroy_exit;
+
 	for (vf = 0; vf < bp->pf.active_vfs; vf++) {
 		vf_obj = &bp->vf_sysfs_objs[vf];
 		stats = &vf_obj->stats;
@@ -257,10 +261,13 @@ void bnxt_destroy_vfs_sysfs(struct bnxt *bp)
 		if (stats->hw_stats)
 			dma_free_coherent(&bp->pdev->dev, stats->len, stats->hw_stats,
 					  stats->hw_stats_map);
+		stats->hw_stats = NULL;
 		kobject_put(&vf_obj->kobj);
 	}
 
 	kfree(bp->vf_sysfs_objs);
+	bp->vf_sysfs_objs = NULL;
 
+destroy_exit:
 	mutex_unlock(&bp->sriov_lock);
 }

@@ -5,6 +5,10 @@
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 
+#include "bnxt_compat.h"
+#include "bnxt.h"
+#include <bnxt_tfc.h>
+
 #include "tfc.h"
 #include "tfo.h"
 #include "tfc_em.h"

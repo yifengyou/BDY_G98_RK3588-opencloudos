@@ -6,6 +6,11 @@
 #include <linux/types.h>
 #include <linux/vmalloc.h>
 #include <linux/pci.h>
+
+#include "bnxt_compat.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
+
 #include "tfc.h"
 
 #include "tfc_priv.h"
@@ -136,6 +141,7 @@ static int calc_lkup_rec_cnt(struct bnxt *bp, u32 flow_cnt, u16 key_sz_in_bytes,
 	unsigned int flow_adj;	  /* flow_cnt adjusted for factor */
 	unsigned int key_rec_cnt;
 
+	flow_cnt = 1 << next_pow2(flow_cnt);
 	switch (factor) {
 	case TFC_TBL_SCOPE_BUCKET_FACTOR_1:
 		flow_adj = flow_cnt;
@@ -151,6 +157,12 @@ static int calc_lkup_rec_cnt(struct bnxt *bp, u32 flow_cnt, u16 key_sz_in_bytes,
 		break;
 	case TFC_TBL_SCOPE_BUCKET_FACTOR_16:
 		flow_adj = flow_cnt * 16;
+		break;
+	case TFC_TBL_SCOPE_BUCKET_FACTOR_32:
+		flow_adj = flow_cnt * 32;
+		break;
+	case TFC_TBL_SCOPE_BUCKET_FACTOR_64:
+		flow_adj = flow_cnt * 64;
 		break;
 	default:
 		netdev_dbg(bp->dev, "%s: Invalid factor (%u)\n", __func__, factor);
@@ -196,6 +208,7 @@ static int calc_lkup_rec_cnt(struct bnxt *bp, u32 flow_cnt, u16 key_sz_in_bytes,
 static int calc_act_rec_cnt(struct bnxt *bp, u32 *act_rec_cnt, u32 flow_cnt,
 			    u16 act_rec_sz_in_bytes)
 {
+	flow_cnt = 1 << next_pow2(flow_cnt);
 	if (act_rec_sz_in_bytes % RECORD_SIZE) {
 		netdev_dbg(bp->dev, "%s: Action record size (%u) must be a multiple of %u\n",
 			   __func__, act_rec_sz_in_bytes, RECORD_SIZE);
@@ -315,7 +328,6 @@ static int alloc_page_table(struct bnxt *bp, struct tfc_ts_mem_cfg *mem_cfg, u32
 {
 	struct tfc_ts_page_tbl *tp;
 	int i, rc;
-	u32 j;
 
 	for (i = 0; i < mem_cfg->num_lvl; i++) {
 		tp = &mem_cfg->pg_tbl[i];
@@ -325,14 +337,6 @@ static int alloc_page_table(struct bnxt *bp, struct tfc_ts_mem_cfg *mem_cfg, u32
 			netdev_dbg(bp->dev, "Failed to allocate page table: lvl: %d, rc:%d\n", i,
 				   rc);
 			goto cleanup;
-		}
-
-		for (j = 0; j < tp->pg_count; j++) {
-			netdev_dbg(bp->dev, "EEM: Allocated page table: size %u lvl %d cnt %u",
-				   page_size, i, tp->pg_count);
-			netdev_dbg(bp->dev, "VA:%p PA:%p\n",
-				   (void *)(uintptr_t)tp->pg_va_tbl[j],
-				   (void *)(uintptr_t)tp->pg_pa_tbl[j]);
 		}
 	}
 	return 0;
@@ -819,6 +823,12 @@ int tfc_tbl_scope_size_query(struct tfc *tfcp,
 		return -EINVAL;
 	}
 
+	if (!is_power_of_2(parms->max_pools)) {
+		netdev_dbg(bp->dev, "%s: Invalid max_pools %u not pow2\n",
+			   __func__, parms->max_pools);
+		return -EINVAL;
+	}
+
 	for (dir = CFA_DIR_RX; dir < CFA_DIR_MAX; dir++) {
 		rc = calc_lkup_rec_cnt(bp, parms->flow_cnt[dir],
 				       parms->key_sz_in_bytes[dir],
@@ -836,7 +846,7 @@ int tfc_tbl_scope_size_query(struct tfc *tfcp,
 			break;
 
 		rc = calc_pool_sz_exp(bp, &parms->lkup_pool_sz_exp[dir],
-				      parms->lkup_rec_cnt[dir] -
+				      parms->lkup_rec_cnt[dir]  -
 				      (1 << parms->static_bucket_cnt_exp[dir]),
 				      parms->max_pools);
 		if (rc)
@@ -915,6 +925,12 @@ int tfc_tbl_scope_mem_alloc(struct tfc *tfcp, u16 fid, u8 tsid,
 
 	if (parms->local && !valid) {
 		netdev_dbg(bp->dev, "%s: tsid(%d) not allocated\n", __func__, tsid);
+		return -EINVAL;
+	}
+
+	if (!is_power_of_2(parms->max_pools)) {
+		netdev_dbg(bp->dev, "%s: Invalid max_pools %u not pow2\n",
+			   __func__, parms->max_pools);
 		return -EINVAL;
 	}
 
@@ -1749,8 +1765,10 @@ int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid)
 	u16 pool_id, found_cnt = 0;
 	bool shared, valid, is_pf;
 	enum cfa_app_type app;
+	dma_addr_t data_pa;
 	enum cfa_dir dir;
-	u8 tsid, *data;
+	void *data_va;
+	u8 tsid;
 	int rc;
 
 	rc = tfc_bp_is_pf(tfcp, &is_pf);
@@ -1768,7 +1786,13 @@ int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid)
 		return -EINVAL;
 	}
 
-	data = kzalloc(32 * TFC_MPC_BYTES_PER_WORD, GFP_KERNEL);
+	data_va = dma_zalloc_coherent(&bp->pdev->dev, TFC_MPC_MAX_TABLE_READ_BYTES,
+				      &data_pa, GFP_KERNEL);
+
+	if (!data_va) {
+		netdev_dbg(bp->dev, "%s: Failed to allocate data buffer\n", __func__);
+		return -EINVAL;
+	}
 
 	for (tsid = 1; tsid < TFC_TBL_SCOPE_MAX; tsid++) {
 		rc = tfo_ts_get(tfcp->tfo, tsid, &shared, &app, &valid, NULL);
@@ -1788,8 +1812,9 @@ int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid)
 					netdev_dbg(bp->dev,
 						   "%s: Failed to get TPM for tsid:%d dir:%d\n",
 						   __func__, tsid, dir);
-					kfree(data);
-					return -EINVAL;
+
+					if (data_va)
+						goto cleanup;
 				}
 
 				rc = cfa_tpm_srchm_by_fid(tpm, CFA_SRCH_MODE_FIRST, fid, &pool_id);
@@ -1806,7 +1831,8 @@ int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid)
 										      dir,
 										      pool_id,
 										      0,
-										      data);
+										      data_va,
+										      data_pa);
 					if (region == CFA_REGION_TYPE_LKUP && rc)
 						netdev_dbg(bp->dev,
 							   "%s: failed for TS:%d Dir:%d pool:%d\n",
@@ -1828,11 +1854,14 @@ int tfc_tbl_scope_func_reset(struct tfc *tfcp, u16 fid)
 			}
 		}
 	}
-	kfree(data);
+cleanup:
+	dma_free_coherent(&bp->pdev->dev, TFC_MPC_MAX_TABLE_READ_BYTES,
+			  data_va, data_pa);
+
 
 	if (found_cnt == 0) {
 		netdev_dbg(bp->dev, "%s: FID:%d is not associated with any pool\n", __func__, fid);
 		return -EINVAL;
 	}
-	return 0;
+	return rc;
 }

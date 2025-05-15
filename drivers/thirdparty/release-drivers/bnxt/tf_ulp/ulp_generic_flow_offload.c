@@ -9,6 +9,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_common.h"
 #include "bnxt_nic_flow.h"
 #include "bnxt_ulp_flow.h"
@@ -20,10 +21,10 @@
 #include "ulp_port_db.h"
 #include "ulp_template_debug_proto.h"
 #include "ulp_generic_flow_offload.h"
+#include "cfa_types.h"
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD)
 
-#define BNXT_ULP_GEN_UDP_PORT_VXLAN		4789
 #define BNXT_ULP_GEN_UDP_PORT_VXLAN_MASK	0XFFFF
 
 /* Utility function to validate field size*/
@@ -316,11 +317,11 @@ static int bnxt_ulp_gen_l2_l2_handler(struct bnxt *bp,
 	u32 size;
 	u16 eth_type = 0;
 
-	if (eth_spec) {
+	if (eth_spec && eth_spec->type) {
 		/* TODO: Perform validations BC, MC etc. */
 		eth_type = *eth_spec->type;
 	}
-	if (eth_spec) {
+	if (eth_mask && eth_mask->type) {
 		/* TODO: Perform validations BC, MC etc. */
 		eth_type &= *eth_mask->type;
 	}
@@ -374,55 +375,6 @@ static int bnxt_ulp_gen_l2_l2_handler(struct bnxt *bp,
 	return BNXT_TF_RC_SUCCESS;
 }
 
-static int bnxt_ulp_gen_l2_filter_id_handler(struct bnxt *bp,
-					     struct ulp_tc_parser_params
-					     *params,
-					     uint64_t *l2_filter_id)
-{
-	u32 l2_ctxt_id = 0, prof_func = 0;
-	int rc = BNXT_TF_RC_ERROR;
-	u64 l2_filter_id_mask = ~0;
-	u32 idx = 0;
-	u32 size;
-
-	if (!l2_filter_id) {
-		netdev_dbg(bp->dev, "ERR: invalid l2_filter_id\n");
-		return rc;
-	}
-
-	if (bnxt_ulp_gen_prsr_fld_size_validate(params, &idx,
-						BNXT_ULP_PROTO_HDR_L2_FILTER_NUM)) {
-		netdev_dbg(bp->dev, "Error parsing protocol header\n");
-		return rc;
-	}
-
-	/* Copy the l2_filter_id into hdr_field, there is no mask */
-	size = sizeof(*l2_filter_id);
-	bnxt_ulp_gen_prsr_fld_mask(params, &idx, size, l2_filter_id,
-				   &l2_filter_id_mask, ULP_PRSR_ACT_DEFAULT);
-
-	/* Update the protocol hdr bitmap */
-	if (ULP_BITMAP_ISSET(params->hdr_bitmap.bits,
-			     BNXT_ULP_HDR_BIT_O_L2_FILTER)) {
-		netdev_dbg(bp->dev, "ERR: not supporting inner and outer L2 filters\n");
-		return rc;
-	}
-	ULP_BITMAP_SET(params->hdr_bitmap.bits,
-		       BNXT_ULP_HDR_BIT_O_L2_FILTER);
-	/* Get the l2 context and prof_func from the driver and push
-	 * it into the comp fields
-	 */
-	if (bnxt_nic_flows_filter_info_get(bp, *l2_filter_id,
-					   &l2_ctxt_id, &prof_func)) {
-		netdev_dbg(bp->dev, "Error getting l2 filter info\n");
-		return rc;
-	}
-	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_PROF_FUNC_ID, prof_func);
-	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_L2_CNTXT_ID, l2_ctxt_id);
-
-	return BNXT_TF_RC_SUCCESS;
-}
-
 static int bnxt_ulp_gen_l2_handler(struct bnxt *bp,
 				   struct ulp_tc_parser_params *params,
 				   struct bnxt_ulp_gen_l2_hdr_parms *parms)
@@ -439,9 +391,7 @@ static int bnxt_ulp_gen_l2_handler(struct bnxt *bp,
 						  parms->eth_mask);
 
 	if (parms->type == BNXT_ULP_GEN_L2_L2_FILTER_ID)
-		return bnxt_ulp_gen_l2_filter_id_handler(bp,
-							 params,
-							 parms->l2_filter_id);
+		netdev_dbg(bp->dev, "ERR: L2_FILTER_ID unsupported\n");
 
 	return BNXT_TF_RC_PARSE_ERR;
 }
@@ -714,6 +664,8 @@ static void bnxt_ulp_gen_l4_proto_type_update(struct ulp_tc_parser_params
 					      u16 dst_mask,
 					      enum bnxt_ulp_hdr_bit hdr_bit)
 {
+	int static_port = 0;
+
 	switch (hdr_bit) {
 	case BNXT_ULP_HDR_BIT_I_UDP:
 	case BNXT_ULP_HDR_BIT_I_TCP:
@@ -763,11 +715,40 @@ static void bnxt_ulp_gen_l4_proto_type_update(struct ulp_tc_parser_params
 		break;
 	}
 
-	if (hdr_bit == BNXT_ULP_HDR_BIT_O_UDP && dst_port ==
-	    cpu_to_be16(BNXT_ULP_GEN_UDP_PORT_VXLAN)) {
-		ULP_BITMAP_SET(params->hdr_fp_bit.bits,
-			       BNXT_ULP_HDR_BIT_T_VXLAN);
-		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_L3_TUN, 1);
+	/* If it is not udp port then there is no need to set tunnel bits */
+	if (hdr_bit != BNXT_ULP_HDR_BIT_O_UDP)
+		return;
+
+	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_TUNNEL_PORT,
+			    be16_to_cpu(dst_port));
+
+	/* vxlan static customized port */
+	if (ULP_APP_STATIC_VXLAN_PORT_EN(params->ulp_ctx)) {
+		static_port = bnxt_ulp_cntxt_vxlan_ip_port_get(params->ulp_ctx);
+		if (!static_port)
+			static_port =
+			bnxt_ulp_cntxt_vxlan_port_get(params->ulp_ctx);
+
+		/* if udp and equal to static vxlan port then set tunnel bits*/
+		if (static_port && dst_port == cpu_to_be16(static_port)) {
+			ULP_BITMAP_SET(params->hdr_fp_bit.bits,
+				       BNXT_ULP_HDR_BIT_T_VXLAN);
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_IS_TUNNEL);
+		}
+	} else {
+		/* if dynamic Vxlan is enabled then skip dport checks */
+		if (ULP_APP_DYNAMIC_VXLAN_PORT_EN(params->ulp_ctx))
+			return;
+
+		/* Vxlan port check */
+		if (dst_port == cpu_to_be16(BNXT_ULP_GEN_UDP_PORT_VXLAN)) {
+			ULP_BITMAP_SET(params->hdr_fp_bit.bits,
+				       BNXT_ULP_HDR_BIT_T_VXLAN);
+			ULP_BITMAP_SET(params->cf_bitmap,
+				       BNXT_ULP_CF_BIT_IS_TUNNEL);
+			/*ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_L3_TUN, 1);*/
+		}
 	}
 }
 
@@ -965,6 +946,13 @@ static int bnxt_ulp_gen_l4_roce_handler(struct bnxt *bp,
 	bnxt_ulp_gen_prsr_fld_mask(params, &idx, size, spec->dst_qpn,
 				   mask->dst_qpn, ULP_PRSR_ACT_DEFAULT);
 
+	if (spec->bth_flags)
+		netdev_dbg(bp->dev,
+			   "L4 header idx %d bth_flags 0x%x\n", idx, *spec->bth_flags);
+	size = sizeof(*spec->bth_flags);
+	bnxt_ulp_gen_prsr_fld_mask(params, &idx, size, spec->bth_flags,
+				   mask->bth_flags, ULP_PRSR_ACT_DEFAULT);
+
 	if (ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_L3_TUN))
 		out_l4 = BNXT_ULP_HDR_BIT_I_BTH;
 
@@ -1070,20 +1058,6 @@ static int bnxt_ulp_gen_act_drop_handler(struct bnxt *bp,
 	return BNXT_TF_RC_SUCCESS;
 }
 
-static int bnxt_ulp_gen_act_queue_handler(struct bnxt *bp,
-					  struct ulp_tc_parser_params *params,
-					  struct bnxt_ulp_gen_action_parms
-					  *parms)
-{
-	if (!parms) {
-		netdev_dbg(bp->dev, "ERR:  NULL parms for QUEUE action\n");
-		return BNXT_TF_RC_ERROR;
-	}
-
-	netdev_dbg(bp->dev, "ERR: Not implemented\n");
-	return BNXT_TF_RC_ERROR;
-}
-
 static int bnxt_ulp_gen_act_redirect_handler(struct bnxt *bp, struct ulp_tc_parser_params
 					     *params, struct bnxt_ulp_gen_action_parms
 					     *parms)
@@ -1117,21 +1091,7 @@ static int bnxt_ulp_gen_act_redirect_handler(struct bnxt *bp, struct ulp_tc_pars
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_ACT_PORT_TYPE, intf_type);
 	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_DEV_ACT_PORT_ID, dst_fid);
 
-	return ulp_tc_parser_act_port_set(params, ifindex);
-}
-
-static int bnxt_ulp_gen_act_numa_direct_handler(struct bnxt *bp, struct ulp_tc_parser_params
-						*params, struct bnxt_ulp_gen_action_parms
-						*parms)
-{
-	if (!parms) {
-		netdev_dbg(bp->dev,
-			   "ERR:  NULL parms for NUMA-DIRECT action\n");
-		return BNXT_TF_RC_ERROR;
-	}
-
-	netdev_dbg(bp->dev, "ERR: Not implemented\n");
-	return BNXT_TF_RC_ERROR;
+	return ulp_tc_parser_act_port_set(params, ifindex, !parms->ignore_lag);
 }
 
 static int bnxt_ulp_gen_act_count_handler(struct bnxt *bp,
@@ -1189,6 +1149,85 @@ static int bnxt_ulp_gen_act_modify_dmac_handler(struct bnxt *bp, struct ulp_tc_p
 	return BNXT_TF_RC_SUCCESS;
 }
 
+static int bnxt_ulp_gen_act_vnic_handler(struct bnxt *bp,
+					 struct ulp_tc_parser_params *params,
+					 struct bnxt_ulp_gen_action_parms *parms)
+{
+	struct ulp_tc_act_prop *act = &params->act_prop;
+	enum bnxt_ulp_direction_type dir;
+	u32 pid;
+
+	if (!parms) {
+		netdev_dbg(bp->dev, "ERR:  NULL parms for vnic action\n");
+		return BNXT_TF_RC_ERROR;
+	}
+
+	/* Not supporting VF to VF for now */
+	dir = ULP_COMP_FLD_IDX_RD(params, BNXT_ULP_CF_IDX_DIRECTION);
+	if (dir != BNXT_ULP_DIR_INGRESS) {
+		netdev_dbg(bp->dev, "ERR:  not supporting vf to vf\n");
+		return BNXT_TF_RC_ERROR;
+	}
+
+	pid = parms->vnic;
+	/* Allows use of func_opcode with VNIC */
+	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_VNIC, pid);
+
+	pid = cpu_to_be32(pid);
+	memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_VNIC],
+	       &pid, BNXT_ULP_ACT_PROP_SZ_VNIC);
+
+	/* treat the vnic as if the port was explicitly set */
+	ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_ACT_PORT_IS_SET, 1);
+
+	return BNXT_TF_RC_SUCCESS;
+}
+
+static int bnxt_ulp_gen_act_queue_handler(struct bnxt *bp,
+					  struct ulp_tc_parser_params *params,
+					  struct bnxt_ulp_gen_action_parms *parms)
+{
+	struct ulp_tc_act_prop *act = &params->act_prop;
+	enum bnxt_ulp_direction_type dir;
+	u16 queue = 0;
+
+	if (params->dir_attr == BNXT_ULP_FLOW_ATTR_INGRESS)
+		dir = BNXT_ULP_DIR_INGRESS;
+	else
+		dir = BNXT_ULP_DIR_EGRESS;
+
+	if (dir != BNXT_ULP_DIR_INGRESS) {
+		netdev_dbg(bp->dev, "ERR: queue action is ingress only\n");
+		return BNXT_TF_RC_ERROR;
+	}
+	queue = cpu_to_be16(parms->queue);
+	/* Copy the queue into the specific action properties */
+	memcpy(&act->act_details[BNXT_ULP_ACT_PROP_IDX_QUEUE_INDEX],
+	       &queue, BNXT_ULP_ACT_PROP_SZ_QUEUE_INDEX);
+
+	/* set the queue action header bit */
+	ULP_BITMAP_SET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_QUEUE);
+
+	return BNXT_TF_RC_SUCCESS;
+}
+
+static int bnxt_ulp_gen_act_loopback_handler(struct bnxt *bp,
+					     struct ulp_tc_parser_params *params,
+					     struct bnxt_ulp_gen_action_parms
+					     *parms)
+{
+	if (!parms) {
+		netdev_dbg(bp->dev, "ERR:  NULL parms for COUNT action\n");
+		return BNXT_TF_RC_ERROR;
+	}
+
+	/* set the comp field */
+	ULP_COMP_FLD_IDX_WR(params,
+			    BNXT_ULP_CF_IDX_LOOPBACK_VPORT,
+			    1);
+	return BNXT_TF_RC_SUCCESS;
+}
+
 static int bnxt_ulp_gen_act_parser(struct bnxt *bp,
 				   struct ulp_tc_parser_params *params,
 				   struct bnxt_ulp_gen_flow_parms *parms)
@@ -1221,14 +1260,6 @@ static int bnxt_ulp_gen_act_parser(struct bnxt *bp,
 		return rc;
 	}
 
-	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_QUEUE)
-		rc = bnxt_ulp_gen_act_queue_handler(bp, params, parms->actions);
-	if (rc) {
-		netdev_dbg(bp->dev, "ERR: QUEUE Action Handler error = %d\n",
-			   rc);
-		return rc;
-	}
-
 	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_REDIRECT)
 		rc = bnxt_ulp_gen_act_redirect_handler(bp, params,
 						       parms->actions);
@@ -1238,12 +1269,11 @@ static int bnxt_ulp_gen_act_parser(struct bnxt *bp,
 		return rc;
 	}
 
-	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_NUMA_DIRECT)
-		rc = bnxt_ulp_gen_act_numa_direct_handler(bp, params,
-							  parms->actions);
+	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_VNIC)
+		rc = bnxt_ulp_gen_act_vnic_handler(bp, params, parms->actions);
 	if (rc) {
-		netdev_dbg(bp->dev,
-			   "ERR: NUMA_DIRECT Action Handler error = %d\n", rc);
+		netdev_dbg(bp->dev, "ERR: VNIC Action Handler error = %d\n",
+			   rc);
 		return rc;
 	}
 
@@ -1270,6 +1300,22 @@ static int bnxt_ulp_gen_act_parser(struct bnxt *bp,
 	if (rc) {
 		netdev_dbg(bp->dev,
 			   "ERR: Modify DMAC Action Handler error = %d\n", rc);
+		return rc;
+	}
+
+	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_QUEUE)
+		rc = bnxt_ulp_gen_act_queue_handler(bp, params, parms->actions);
+	if (rc) {
+		netdev_dbg(bp->dev, "ERR: QUEUE Action Handler error = %d\n",
+			   rc);
+		return rc;
+	}
+
+	if (actions & BNXT_ULP_GEN_ACTION_ENABLES_REDIRECT_LOOPBACK)
+		rc = bnxt_ulp_gen_act_loopback_handler(bp, params, parms->actions);
+	if (rc) {
+		netdev_dbg(bp->dev, "ERR: LOOPBACK Action Handler error = %d\n",
+			   rc);
 		return rc;
 	}
 
@@ -1311,6 +1357,10 @@ int bnxt_ulp_gen_flow_create(struct bnxt *bp,
 
 	/* Set the flow attributes */
 	bnxt_ulp_gen_set_dir_attributes(bp, parser_params, flow_parms->dir);
+
+	/* Set NPAR Enabled in the computed fields */
+	if (BNXT_NPAR(ulp_ctx->bp))
+		ULP_COMP_FLD_IDX_WR(parser_params, BNXT_ULP_CF_IDX_NPAR_ENABLED, 1);
 
 	/* Copy the device port id and direction for further processing */
 	ULP_COMP_FLD_IDX_WR(parser_params, BNXT_ULP_CF_IDX_INCOMING_IF,
@@ -1359,9 +1409,14 @@ int bnxt_ulp_gen_flow_create(struct bnxt *bp,
 	parser_params->func_id = func_id;
 	parser_params->port_id = src_fid;
 	parser_params->priority = flow_parms->priority;
+	if (flow_parms->lkup_strength)
+		ULP_COMP_FLD_IDX_WR(parser_params,
+				    BNXT_ULP_CF_IDX_LOOKUP_STRENGTH,
+				    flow_parms->lkup_strength);
 
-	netdev_dbg(bp->dev, "Flow prio: %u func_id: %u APP ID %u\n",
-		   parser_params->priority, func_id, parser_params->app_id);
+	netdev_dbg(bp->dev, "Flow prio: %u strength: %u func_id: %u APP ID %u\n",
+		   parser_params->priority, flow_parms->lkup_strength, func_id,
+		   parser_params->app_id);
 
 	/* Perform the flow post process */
 	tf_rc = bnxt_ulp_tc_parser_post_process(parser_params);

@@ -12,10 +12,6 @@
 
 /* The TCAM module provides processing of Internal TCAM types. */
 
-#ifndef TF_TCAM_MAX_SESSIONS
-#define TF_TCAM_MAX_SESSIONS 16
-#endif
-
 #define ENTRY_ID_INVALID 65535
 
 #define TF_TCAM_PRIORITY_MIN 0
@@ -112,15 +108,12 @@ struct cfa_tcam_mgr_alloc_parms {
  *		type to CFA_TCAM_MGR_TBL_TYPE_MAX.
  * @hcapi_type:	Type of HCAPI
  * @id:		Entry ID to free
- * @ref_cnt:	Reference count after free, only valid if session has been
- *		created with shadow_copy.
  */
 struct cfa_tcam_mgr_free_parms {
 	enum tf_dir dir;
 	enum cfa_tcam_mgr_tbl_type type;
 	u16 hcapi_type;
 	u16 id;
-	u16 ref_cnt;
 };
 
 /**

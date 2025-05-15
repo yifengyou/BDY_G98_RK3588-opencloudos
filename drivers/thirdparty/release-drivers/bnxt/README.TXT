@@ -8,7 +8,7 @@
 
                  Copyright (c) 2015 - 2016 Broadcom Corporation
                    Copyright (c) 2016 - 2018 Broadcom Limited
-                     Copyright (c) 2018 - 2024 Broadcom Inc.
+                     Copyright (c) 2018 - 2025 Broadcom Inc.
                            All rights reserved
 
 
@@ -42,6 +42,7 @@ Table of Contents
   Multi-root NUMA Direct
   Dynamic Interrupt Moderation
   HWMON support
+  USHI based NICCLI
 
 Introduction
 ============
@@ -56,11 +57,8 @@ Limitations
 ===========
 
 1. The current version of the driver should compile on any contemporary
-Linux distribution and is specifically known to work for the following:
-  - Red Hat: RHEL9.x, RHEL8.x, RHEL7.9;
-  - Oracle Linux: OEL6.x UEK;
-  - SUSE: SLES15, SLES12, SLES11SP1 and newer;
-  - Kernels: 5.x, most 3.x/4.x, and some 2.6 kernels starting from 2.6.32.
+Linux distributions. For a complete list of the Operating Systems supported
+with this release consult the Broadcom Ethernet Network Adapter User Guide.
 
 2. The driver build depends on installed kernel headers and associated build
 infrastructure. Present kernels depend on GCC version 4.9, or later, and
@@ -107,9 +105,7 @@ SIOCSMIIREG, are valid only when used for an external PHY connected to the
 adapter. Users should not rely on the information returned by these when used
 for embedded PHY.
 
-8. Devlink reload action "driver-reinit" is not supported with RoCE driver loaded.
-
-9. Ethtool offline selftest is not supported with RoCE driver loaded.
+8. Ethtool offline selftest is not supported with RoCE driver loaded.
 
 Port Speeds
 ===========
@@ -508,6 +504,8 @@ the channels to 65 or above in this example:
           a) PFs on platforms that have kernel config. option CONFIG_TEE_BNXT_FW enabled.
              This option is only enabled on some ARM SoCs.
           b) PFs which are configured to support crash dump using host memory.
+       2  Collection for driver dump plus host context memory dump
+       3  Collection for live dump plus CFCx L1 cached context dump
 
 18. Reset the device:
 
@@ -1995,3 +1993,15 @@ For example, for dualport BCM957508-P2100G will have 2 hwmon directories
 /sys/class/hwmon/hwmon2/temp1_max_alarm:0
 /sys/class/hwmon/hwmon2/temp1_shutdown:105000
 /sys/class/hwmon/hwmon2/temp1_shutdown_alarm:0
+
+USHI based NICCLI
+=================
+
+USHI stands for the User Space HWRM Interface. It is an interface which allows
+NICCLI to send HWRM commands to the firmware without depending on a driver.
+
+But USHI cannot work if secure kernel mode is enabled.
+The setting is typically selected during the kernel compilation by specifying
+CONFIG_IO_STRICT_DEVMEM=y. In such a case, iomem must be set to 'relaxed'
+mode to allow USHI based NICCLI to work. This can be done by specifying
+iomem=relaxed in the kernel command line in the grub config.

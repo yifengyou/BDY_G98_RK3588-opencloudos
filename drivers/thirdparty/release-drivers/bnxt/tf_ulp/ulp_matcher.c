@@ -71,6 +71,11 @@ static int ulp_matcher_class_hdr_field_validate(struct ulp_tc_parser_params
 	if ((bitmap && (bitmap & info->field_opt_bitmap) != bitmap)) {
 		netdev_dbg(params->ulp_ctx->bp->dev,
 			   "mismatch in optional hdr fields\n");
+		netdev_dbg(params->ulp_ctx->bp->dev,
+			   "bitmap:%llx opt_bitmap:%llx man_bitmap:%llx\n",
+			   bitmap,
+			   info->field_opt_bitmap,
+			   info->field_man_bitmap);
 		return -EINVAL;
 	}
 

@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 #undef HAVE_AUXILIARY_DRIVER
 #endif
 
-#ifndef HAVE_AUXILIARY_DRIVER
+#if !defined(HAVE_AUXILIARY_DRIVER) && !defined(HAVE_EXTERNAL_OFED)
 
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
