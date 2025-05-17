@@ -1328,4 +1328,18 @@ hugetlb_walk(struct vm_area_struct *vma, unsigned long addr, unsigned long sz)
 	return huge_pte_offset(vma->vm_mm, addr, sz);
 }
 
+#ifdef CONFIG_PFN_RANGE_ALLOC
+struct folio *hugetlb_pool_alloc(int nid);
+int hugetlb_pool_free(struct folio *folio);
+#else
+static inline struct folio *hugetlb_pool_alloc(int nid)
+{
+	return ERR_PTR(-EINVAL);
+}
+static inline int hugetlb_pool_free(struct folio *folio)
+{
+	return -EINVAL;
+}
+#endif
+
 #endif /* _LINUX_HUGETLB_H */

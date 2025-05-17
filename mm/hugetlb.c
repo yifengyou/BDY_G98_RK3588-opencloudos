@@ -7687,3 +7687,59 @@ static void __init hugetlb_cma_check(void)
 }
 
 #endif /* CONFIG_CMA */
+
+struct folio *alloc_hugetlb_folio_size(int nid, unsigned long size)
+{
+	gfp_t gfp_mask;
+	struct hstate *h;
+	nodemask_t nodemask;
+	unsigned long flags;
+	struct folio *folio = NULL;
+
+	h = size_to_hstate(size);
+	if (!h)
+		return NULL;
+
+	nodes_clear(nodemask);
+	node_set(nid, nodemask);
+	gfp_mask = htlb_alloc_mask(h);
+	spin_lock_irqsave(&hugetlb_lock, flags);
+	if (h->free_huge_pages - h->resv_huge_pages > 0)
+		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, &nodemask);
+	spin_unlock_irqrestore(&hugetlb_lock, flags);
+
+	return folio;
+}
+EXPORT_SYMBOL(alloc_hugetlb_folio_size);
+
+#ifdef CONFIG_PFN_RANGE_ALLOC
+struct folio *hugetlb_pool_alloc(int nid)
+{
+	struct folio *folio = ERR_PTR(-EINVAL);
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		goto out;
+
+	folio = alloc_hugetlb_folio_size(nid, PFN_RANGE_ALLOC_SIZE);
+	if (!folio)
+		folio = ERR_PTR(-ENOMEM);
+
+out:
+	return folio;
+}
+EXPORT_SYMBOL_GPL(hugetlb_pool_alloc);
+
+int hugetlb_pool_free(struct folio *folio)
+{
+	int ret = -EINVAL;
+
+	if (!folio_test_hugetlb(folio))
+		goto out;
+
+	ret = 0;
+	folio_put(folio);
+out:
+	return ret;
+}
+EXPORT_SYMBOL_GPL(hugetlb_pool_free);
+#endif
