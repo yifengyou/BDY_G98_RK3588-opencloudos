@@ -1513,17 +1513,14 @@ if (( $rm_public_ko == 1 )); then
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/drivers/gpu/drm/nouveau/*
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/net/wireless/*
 fi
-if ! [ -f "/etc/modules-load.d/disk.conf" ]; then
 cat > /etc/modules-load.d/disk.conf << EOF
 # Load disk ko at boot
-libata
-libahci
-ahci
+# Due to the disordered disk names, sd_mod must be loaded before the ahci module
 sd_mod
+ahci
 nvme-core
 nvme
 EOF
-fi
 
 %posttrans modules
 if [ -f %{_localstatedir}/lib/rpm-state/%{name}-%{version}-%{version}%{?dist}.need_to_run_dracut ]; then\
