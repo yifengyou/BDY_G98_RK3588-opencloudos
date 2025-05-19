@@ -1,3 +1,7 @@
+* Mon May 19 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-31.1
+- scsi/sd: probe devices in sync mode default
+- dist: spec: sd_mod loaded before the ahci module
+
 * Mon Apr 28 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-31
 - dist: fixed mlnx_ofed modules x509 signing and install.sh error
 
