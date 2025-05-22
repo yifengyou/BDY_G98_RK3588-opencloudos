@@ -4517,13 +4517,10 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 		return ret;
 	}
 
-	kernfs_show(kn, !(cft->flags & CFTYPE_HIDDEN));
-
 	if (cft->file_offset) {
 		struct cgroup_file *cfile = (void *)css + cft->file_offset;
 
 		timer_setup(&cfile->notify_timer, cgroup_file_notify_timer, 0);
-		cfile->cft = cft;
 
 		spin_lock_irq(&cgroup_file_kn_lock);
 		cfile->kn = kn;
@@ -4802,24 +4799,6 @@ void cgroup_file_notify(struct cgroup_file *cfile)
 	spin_unlock_irqrestore(&cgroup_file_kn_lock, flags);
 }
 
-static struct kernfs_node *cfile_kn_get(struct cgroup_file *cfile)
-{
-	struct kernfs_node *kn;
-
-	spin_lock_irq(&cgroup_file_kn_lock);
-	kn = cfile->kn;
-	kernfs_get(kn);
-	spin_unlock_irq(&cgroup_file_kn_lock);
-
-	return kn;
-}
-
-static bool cfile_visible(struct cgroup_file *cfile)
-{
-	return !(cfile->cft->flags & CFTYPE_HIDDEN) &&
-		!(cfile->flags & CFILE_HIDDEN);
-}
-
 /**
  * cgroup_file_show - show or hide a hidden cgroup file
  * @cfile: target cgroup_file obtained by setting cftype->file_offset
@@ -4829,20 +4808,15 @@ void cgroup_file_show(struct cgroup_file *cfile, bool show)
 {
 	struct kernfs_node *kn;
 
-	mutex_lock(&cgroup_mutex);
+	spin_lock_irq(&cgroup_file_kn_lock);
+	kn = cfile->kn;
+	kernfs_get(kn);
+	spin_unlock_irq(&cgroup_file_kn_lock);
 
-	if (show)
-		cfile->flags &= ~CFILE_HIDDEN;
-	else
-		cfile->flags |= CFILE_HIDDEN;
+	if (kn)
+		kernfs_show(kn, show);
 
-	kn = cfile_kn_get(cfile);
-	if (kn) {
-		kernfs_show(kn, cfile_visible(cfile));
-		kernfs_put(kn);
-	}
-
-	mutex_unlock(&cgroup_mutex);
+	kernfs_put(kn);
 }
 
 /**
@@ -5259,9 +5233,11 @@ repeat:
 void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 			 struct css_task_iter *it)
 {
+	unsigned long irqflags;
+
 	memset(it, 0, sizeof(*it));
 
-	spin_lock_irq(&css_set_lock);
+	spin_lock_irqsave(&css_set_lock, irqflags);
 
 	it->ss = css->ss;
 	it->flags = flags;
@@ -5275,7 +5251,7 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 
 	css_task_iter_advance(it);
 
-	spin_unlock_irq(&css_set_lock);
+	spin_unlock_irqrestore(&css_set_lock, irqflags);
 }
 
 /**
@@ -5288,12 +5264,14 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
+	unsigned long irqflags;
+
 	if (it->cur_task) {
 		put_task_struct(it->cur_task);
 		it->cur_task = NULL;
 	}
 
-	spin_lock_irq(&css_set_lock);
+	spin_lock_irqsave(&css_set_lock, irqflags);
 
 	/* @it may be half-advanced by skips, finish advancing */
 	if (it->flags & CSS_TASK_ITER_SKIPPED)
@@ -5306,7 +5284,7 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
 		css_task_iter_advance(it);
 	}
 
-	spin_unlock_irq(&css_set_lock);
+	spin_unlock_irqrestore(&css_set_lock, irqflags);
 
 	return it->cur_task;
 }
@@ -5319,11 +5297,13 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
  */
 void css_task_iter_end(struct css_task_iter *it)
 {
+	unsigned long irqflags;
+
 	if (it->cur_cset) {
-		spin_lock_irq(&css_set_lock);
+		spin_lock_irqsave(&css_set_lock, irqflags);
 		list_del(&it->iters_node);
 		put_css_set_locked(it->cur_cset);
-		spin_unlock_irq(&css_set_lock);
+		spin_unlock_irqrestore(&css_set_lock, irqflags);
 	}
 
 	if (it->cur_dcset)
@@ -6129,63 +6109,6 @@ static void offline_css(struct cgroup_subsys_state *css)
 }
 
 /**
- * cgroup_show_cftype - show or hide a cgroup file type
- * @cft: cftype to show or hide
- * @show: whether to show or hide
- *
- * Sets %CFTYPE_HIDDEN and shows/hides the matching files according to @show.
- * @cft may or may not be added at the time of this call. After hiding, it's
- * guaranteed that there are no in-flight operations on the hidden files.
- */
-void cgroup_show_cftype(struct cftype *cft, bool show)
-{
-	struct cgroup_subsys *ss = cft->ss;
-	struct cgroup *root = ss ? &ss->root->cgrp : &cgrp_dfl_root.cgrp;
-	struct cgroup_subsys_state *css;
-
-	mutex_lock(&cgroup_mutex);
-
-	if (show)
-		cft->flags &= ~CFTYPE_HIDDEN;
-	else
-		cft->flags |= CFTYPE_HIDDEN;
-
-	if (!(cft->flags & __CFTYPE_ADDED))
-		goto out_unlock;
-
-	css_for_each_descendant_pre(css, cgroup_css(root, ss)) {
-		struct cgroup *cgrp = css->cgroup;
-		struct kernfs_node *kn;
-
-		if (!(css->flags & CSS_VISIBLE))
-			continue;
-
-		if (cft->file_offset) {
-			struct cgroup_file *cfile =
-				(void *)css + cft->file_offset;
-
-			kn = cfile_kn_get(cfile);
-			if (kn) {
-				kernfs_show(kn, cfile_visible(cfile));
-				kernfs_put(kn);
-			}
-		} else {
-			char buf[CGROUP_FILE_NAME_MAX];
-
-			kn = kernfs_find_and_get(cgrp->kn,
-					cgroup_file_name(cgrp, cft, buf));
-			if (kn) {
-				kernfs_show(kn, show);
-				kernfs_put(kn);
-			}
-		}
-	}
-
-out_unlock:
-	mutex_unlock(&cgroup_mutex);
-}
-
-/**
  * css_create - create a cgroup_subsys_state
  * @cgrp: the cgroup new css will be associated with
  * @ss: the subsys of new css
@@ -6916,6 +6839,79 @@ void cgroup_path_from_kernfs_id(u64 id, char *buf, size_t buflen)
 	kernfs_path(kn, buf, buflen);
 	kernfs_put(kn);
 }
+
+/*
+ * cgroup1_get_from_id : get the cgroup associated with cgroup id
+ * within a specific cgroup1 hierarchy.
+ * @id: cgroup id
+ * @hierarchy_id: cgroup1 hierarchy id
+ * On success return the cgrp or ERR_PTR on failure
+ * Only cgroups within current task's cgroup NS are valid.
+ */
+struct cgroup *cgroup1_get_from_id(u64 id, int hierarchy_id)
+{
+	struct kernfs_node *kn;
+	struct cgroup *cgrp, *root_cgrp;
+	struct cgroup_root *root;
+	struct css_set *cset;
+
+	rcu_read_lock();
+	for_each_root(root) {
+		/* cgroup1 only*/
+		if (root == &cgrp_dfl_root)
+			continue;
+		if (root->hierarchy_id != hierarchy_id)
+			continue;
+		break;
+	}
+
+	kn = kernfs_find_and_get_node_by_id(root->kf_root, id);
+	if (!kn) {
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	if (kernfs_type(kn) != KERNFS_DIR) {
+		kernfs_put(kn);
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
+	if (cgrp && !cgroup_tryget(cgrp))
+		cgrp = NULL;
+
+	kernfs_put(kn);
+
+	if (!cgrp) {
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+	if (current->nsproxy) {
+		cset = current->nsproxy->cgroup_ns->root_cset;
+		root_cgrp = __cset_cgroup_from_root(cset, root);
+	} else {
+		/*
+		 * NOTE: This function may be called from bpf_cgroup1_from_id()
+		 * on a task which has already passed exit_task_namespaces() and
+		 * nsproxy == NULL. Fall back to cgrp_dfl_root which will make all
+		 * cgroups visible for lookups.
+		 */
+		root_cgrp = &root->cgrp;
+	}
+
+	if (!cgroup_is_descendant(cgrp, root_cgrp)) {
+		cgroup_put(cgrp);
+		cgrp = ERR_PTR(-ENOENT);
+		goto out;
+	}
+
+out:
+	rcu_read_unlock();
+	return cgrp;
+}
+EXPORT_SYMBOL_GPL(cgroup1_get_from_id);
 
 /*
  * cgroup_get_from_id : get the cgroup associated with cgroup id

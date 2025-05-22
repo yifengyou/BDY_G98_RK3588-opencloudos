@@ -44,7 +44,7 @@ enum bpf_enum_value_kind {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define __CORE_BITFIELD_PROBE_READ(dst, src, fld)			      \
 	bpf_probe_read_kernel(						      \
-			(void *)dst,				      \
+			(void *)dst,					      \
 			__CORE_RELO(src, fld, BYTE_SIZE),		      \
 			(const void *)src + __CORE_RELO(src, fld, BYTE_OFFSET))
 #else
@@ -112,8 +112,61 @@ enum bpf_enum_value_kind {
 	val;								      \
 })
 
+/*
+ * Write to a bitfield, identified by s->field.
+ * This is the inverse of BPF_CORE_WRITE_BITFIELD().
+ */
+#define BPF_CORE_WRITE_BITFIELD(s, field, new_val) ({			\
+	void *p = (void *)s + __CORE_RELO(s, field, BYTE_OFFSET);	\
+	unsigned int byte_size = __CORE_RELO(s, field, BYTE_SIZE);	\
+	unsigned int lshift = __CORE_RELO(s, field, LSHIFT_U64);	\
+	unsigned int rshift = __CORE_RELO(s, field, RSHIFT_U64);	\
+	unsigned long long mask, val, nval = new_val;			\
+	unsigned int rpad = rshift - lshift;				\
+									\
+	asm volatile("" : "+r"(p));					\
+									\
+	switch (byte_size) {						\
+	case 1: val = *(unsigned char *)p; break;			\
+	case 2: val = *(unsigned short *)p; break;			\
+	case 4: val = *(unsigned int *)p; break;			\
+	case 8: val = *(unsigned long long *)p; break;			\
+	}								\
+									\
+	mask = (~0ULL << rshift) >> lshift;				\
+	val = (val & ~mask) | ((nval << rpad) & mask);			\
+									\
+	switch (byte_size) {						\
+	case 1: *(unsigned char *)p      = val; break;			\
+	case 2: *(unsigned short *)p     = val; break;			\
+	case 4: *(unsigned int *)p       = val; break;			\
+	case 8: *(unsigned long long *)p = val; break;			\
+	}								\
+})
+
+/* Differentiator between compilers builtin implementations. This is a
+ * requirement due to the compiler parsing differences where GCC optimizes
+ * early in parsing those constructs of type pointers to the builtin specific
+ * type, resulting in not being possible to collect the required type
+ * information in the builtin expansion.
+ */
+#ifdef __clang__
+#define ___bpf_typeof(type) ((typeof(type) *) 0)
+#else
+#define ___bpf_typeof1(type, NR) ({					    \
+	extern typeof(type) *___concat(bpf_type_tmp_, NR);		    \
+	___concat(bpf_type_tmp_, NR);					    \
+})
+#define ___bpf_typeof(type) ___bpf_typeof1(type, __COUNTER__)
+#endif
+
+#ifdef __clang__
 #define ___bpf_field_ref1(field)	(field)
-#define ___bpf_field_ref2(type, field)	(((typeof(type) *)0)->field)
+#define ___bpf_field_ref2(type, field)	(___bpf_typeof(type)->field)
+#else
+#define ___bpf_field_ref1(field)	(&(field))
+#define ___bpf_field_ref2(type, field)	(&(___bpf_typeof(type)->field))
+#endif
 #define ___bpf_field_ref(args...)					    \
 	___bpf_apply(___bpf_field_ref, ___bpf_narg(args))(args)
 
@@ -163,7 +216,7 @@ enum bpf_enum_value_kind {
  * BTF. Always succeeds.
  */
 #define bpf_core_type_id_local(type)					    \
-	__builtin_btf_type_id(*(typeof(type) *)0, BPF_TYPE_ID_LOCAL)
+	__builtin_btf_type_id(*___bpf_typeof(type), BPF_TYPE_ID_LOCAL)
 
 /*
  * Convenience macro to get BTF type ID of a target kernel's type that matches
@@ -173,7 +226,7 @@ enum bpf_enum_value_kind {
  *    - 0, if no matching type was found in a target kernel BTF.
  */
 #define bpf_core_type_id_kernel(type)					    \
-	__builtin_btf_type_id(*(typeof(type) *)0, BPF_TYPE_ID_TARGET)
+	__builtin_btf_type_id(*___bpf_typeof(type), BPF_TYPE_ID_TARGET)
 
 /*
  * Convenience macro to check that provided named type
@@ -183,7 +236,7 @@ enum bpf_enum_value_kind {
  *    0, if no matching type is found.
  */
 #define bpf_core_type_exists(type)					    \
-	__builtin_preserve_type_info(*(typeof(type) *)0, BPF_TYPE_EXISTS)
+	__builtin_preserve_type_info(*___bpf_typeof(type), BPF_TYPE_EXISTS)
 
 /*
  * Convenience macro to check that provided named type
@@ -193,7 +246,7 @@ enum bpf_enum_value_kind {
  *    0, if the type does not match any in the target kernel
  */
 #define bpf_core_type_matches(type)					    \
-	__builtin_preserve_type_info(*(typeof(type) *)0, BPF_TYPE_MATCHES)
+	__builtin_preserve_type_info(*___bpf_typeof(type), BPF_TYPE_MATCHES)
 
 /*
  * Convenience macro to get the byte size of a provided named type
@@ -203,7 +256,7 @@ enum bpf_enum_value_kind {
  *    0, if no matching type is found.
  */
 #define bpf_core_type_size(type)					    \
-	__builtin_preserve_type_info(*(typeof(type) *)0, BPF_TYPE_SIZE)
+	__builtin_preserve_type_info(*___bpf_typeof(type), BPF_TYPE_SIZE)
 
 /*
  * Convenience macro to check that provided enumerator value is defined in
@@ -213,8 +266,13 @@ enum bpf_enum_value_kind {
  *    kernel's BTF;
  *    0, if no matching enum and/or enum value within that enum is found.
  */
+#ifdef __clang__
 #define bpf_core_enum_value_exists(enum_type, enum_value)		    \
 	__builtin_preserve_enum_value(*(typeof(enum_type) *)enum_value, BPF_ENUMVAL_EXISTS)
+#else
+#define bpf_core_enum_value_exists(enum_type, enum_value)		    \
+	__builtin_preserve_enum_value(___bpf_typeof(enum_type), enum_value, BPF_ENUMVAL_EXISTS)
+#endif
 
 /*
  * Convenience macro to get the integer value of an enumerator value in
@@ -224,8 +282,13 @@ enum bpf_enum_value_kind {
  *    present in target kernel's BTF;
  *    0, if no matching enum and/or enum value within that enum is found.
  */
+#ifdef __clang__
 #define bpf_core_enum_value(enum_type, enum_value)			    \
 	__builtin_preserve_enum_value(*(typeof(enum_type) *)enum_value, BPF_ENUMVAL_VALUE)
+#else
+#define bpf_core_enum_value(enum_type, enum_value)			    \
+	__builtin_preserve_enum_value(___bpf_typeof(enum_type), enum_value, BPF_ENUMVAL_VALUE)
+#endif
 
 /*
  * bpf_core_read() abstracts away bpf_probe_read_kernel() call and captures

@@ -46,22 +46,6 @@ enum bpf_reg_liveness {
 	REG_LIVE_DONE = 0x8, /* liveness won't be updating this register anymore */
 };
 
-/* For every reg representing a map value or allocated object pointer,
- * we consider the tuple of (ptr, id) for them to be unique in verifier
- * context and conside them to not alias each other for the purposes of
- * tracking lock state.
- */
-struct bpf_active_lock {
-	/* This can either be reg->map_ptr or reg->btf. If ptr is NULL,
-	 * there's no active lock held, and other fields have no
-	 * meaning. If non-NULL, it indicates that a lock is held and
-	 * id member has the reg->id of the register which can be >= 0.
-	 */
-	void *ptr;
-	/* This will be reg->id */
-	u32 id;
-};
-
 #define ITER_PREFIX "bpf_iter_"
 
 enum bpf_iter_state {
@@ -237,6 +221,7 @@ enum bpf_stack_slot_type {
 	 */
 	STACK_DYNPTR,
 	STACK_ITER,
+	STACK_IRQ_FLAG,
 };
 
 #define BPF_REG_SIZE 8	/* size of eBPF register in bytes */
@@ -254,6 +239,14 @@ struct bpf_stack_state {
 };
 
 struct bpf_reference_state {
+	/* Each reference object has a type. Ensure REF_TYPE_PTR is zero to
+	 * default to pointer reference on zero initialization of a state.
+	 */
+	enum ref_state_type {
+		REF_TYPE_PTR	= 1,
+		REF_TYPE_IRQ	= 2,
+		REF_TYPE_LOCK	= 3,
+	} type;
 	/* Track each reference created with a unique id, even if the same
 	 * instruction creates the reference multiple times (eg, via CALL).
 	 */
@@ -262,17 +255,23 @@ struct bpf_reference_state {
 	 * is used purely to inform the user of a reference leak.
 	 */
 	int insn_idx;
-	/* There can be a case like:
-	 * main (frame 0)
-	 *  cb (frame 1)
-	 *   func (frame 3)
-	 *    cb (frame 4)
-	 * Hence for frame 4, if callback_ref just stored boolean, it would be
-	 * impossible to distinguish nested callback refs. Hence store the
-	 * frameno and compare that to callback_ref in check_reference_leak when
-	 * exiting a callback function.
-	 */
-	int callback_ref;
+	union {
+		/* There can be a case like:
+		 * main (frame 0)
+		 *  cb (frame 1)
+		 *   func (frame 3)
+		 *    cb (frame 4)
+		 * Hence for frame 4, if callback_ref just stored boolean, it would be
+		 * impossible to distinguish nested callback refs. Hence store the
+		 * frameno and compare that to callback_ref in check_reference_leak when
+		 * exiting a callback function.
+		 */
+		int callback_ref;
+		/* Use to keep track of the source object of a lock, to ensure
+		 * it matches on unlock.
+		 */
+		void *ptr;
+	};
 };
 
 /* state of the program:
@@ -313,8 +312,6 @@ struct bpf_func_state {
 	u32 callback_depth;
 
 	/* The following fields should be last. See copy_func_state() */
-	int acquired_refs;
-	struct bpf_reference_state *refs;
 	int allocated_stack;
 	struct bpf_stack_state *stack;
 };
@@ -331,6 +328,8 @@ struct bpf_verifier_state {
 	/* call stack tracking */
 	struct bpf_func_state *frame[MAX_CALL_FRAMES];
 	struct bpf_verifier_state *parent;
+	/* Acquired reference states */
+	struct bpf_reference_state *refs;
 	/*
 	 * 'branches' field is the number of branches left to explore:
 	 * 0 - all possible paths from this state reached bpf_exit or
@@ -380,9 +379,12 @@ struct bpf_verifier_state {
 	u32 insn_idx;
 	u32 curframe;
 
-	struct bpf_active_lock active_lock;
-	bool speculative;
+	u32 acquired_refs;
+	u32 active_locks;
+	u32 active_irq_id;
 	bool active_rcu_lock;
+
+	bool speculative;
 	/* If this state was ever pointed-to by other state's loop_entry field
 	 * this flag would be set to true. Used to avoid freeing such states
 	 * while they are still in use.
@@ -413,19 +415,18 @@ struct bpf_verifier_state {
 	u32 callback_unroll_depth;
 };
 
-#define bpf_get_spilled_reg(slot, frame)				\
+#define bpf_get_spilled_reg(slot, frame, mask)				\
 	(((slot < frame->allocated_stack / BPF_REG_SIZE) &&		\
-	  (frame->stack[slot].slot_type[0] == STACK_SPILL))		\
+	  ((1 << frame->stack[slot].slot_type[0]) & (mask))) \
 	 ? &frame->stack[slot].spilled_ptr : NULL)
 
 /* Iterate over 'frame', setting 'reg' to either NULL or a spilled register. */
-#define bpf_for_each_spilled_reg(iter, frame, reg)			\
-	for (iter = 0, reg = bpf_get_spilled_reg(iter, frame);		\
+#define bpf_for_each_spilled_reg(iter, frame, reg, mask)			\
+	for (iter = 0, reg = bpf_get_spilled_reg(iter, frame, mask);		\
 	     iter < frame->allocated_stack / BPF_REG_SIZE;		\
-	     iter++, reg = bpf_get_spilled_reg(iter, frame))
+	     iter++, reg = bpf_get_spilled_reg(iter, frame, mask))
 
-/* Invoke __expr over regsiters in __vst, setting __state and __reg */
-#define bpf_for_each_reg_in_vstate(__vst, __state, __reg, __expr)   \
+#define bpf_for_each_reg_in_vstate_mask(__vst, __state, __reg, __mask, __expr)   \
 	({                                                               \
 		struct bpf_verifier_state *___vstate = __vst;            \
 		int ___i, ___j;                                          \
@@ -437,13 +438,17 @@ struct bpf_verifier_state {
 				__reg = &___regs[___j];                  \
 				(void)(__expr);                          \
 			}                                                \
-			bpf_for_each_spilled_reg(___j, __state, __reg) { \
+			bpf_for_each_spilled_reg(___j, __state, __reg, __mask) { \
 				if (!__reg)                              \
 					continue;                        \
 				(void)(__expr);                          \
 			}                                                \
 		}                                                        \
 	})
+
+/* Invoke __expr over regsiters in __vst, setting __state and __reg */
+#define bpf_for_each_reg_in_vstate(__vst, __state, __reg, __expr) \
+	bpf_for_each_reg_in_vstate_mask(__vst, __state, __reg, 1 << STACK_SPILL, __expr)
 
 /* linked list of verifier states used to prune search */
 struct bpf_verifier_state_list {
@@ -782,6 +787,11 @@ static inline bool bpf_prog_check_recur(const struct bpf_prog *prog)
 static inline bool bpf_type_has_unsafe_modifiers(u32 type)
 {
 	return type_flag(type) & ~BPF_REG_TRUSTED_MODIFIERS;
+}
+
+static inline bool type_may_be_null(u32 type)
+{
+	return type & PTR_MAYBE_NULL;
 }
 
 #endif /* _LINUX_BPF_VERIFIER_H */

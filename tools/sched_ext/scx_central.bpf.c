@@ -45,7 +45,7 @@
  * Copyright (c) 2022 Tejun Heo <tj@kernel.org>
  * Copyright (c) 2022 David Vernet <dvernet@meta.com>
  */
-#include "scx_common.bpf.h"
+#include <scx/common.bpf.h>
 
 char _license[] SEC("license") = "GPL";
 
@@ -55,16 +55,16 @@ enum {
 	TIMER_INTERVAL_NS	= 1 * MS_TO_NS,
 };
 
-const volatile bool switch_partial;
 const volatile s32 central_cpu;
 const volatile u32 nr_cpu_ids = 1;	/* !0 for veristat, set during init */
-const volatile u64 slice_ns = SCX_SLICE_DFL;
+const volatile u64 slice_ns;
 
+bool timer_pinned = true;
 u64 nr_total, nr_locals, nr_queued, nr_lost_pids;
 u64 nr_timers, nr_dispatches, nr_mismatches, nr_retries;
 u64 nr_overflows;
 
-struct user_exit_info uei;
+UEI_DEFINE(uei);
 
 struct {
 	__uint(type, BPF_MAP_TYPE_QUEUE);
@@ -86,11 +86,6 @@ struct {
 	__type(key, u32);
 	__type(value, struct central_timer);
 } central_timer SEC(".maps");
-
-static bool vtime_before(u64 a, u64 b)
-{
-	return (s64)(a - b) < 0;
-}
 
 s32 BPF_STRUCT_OPS(central_select_cpu, struct task_struct *p,
 		   s32 prev_cpu, u64 wake_flags)
@@ -118,14 +113,14 @@ void BPF_STRUCT_OPS(central_enqueue, struct task_struct *p, u64 enq_flags)
 	 */
 	if ((p->flags & PF_KTHREAD) && p->nr_cpus_allowed == 1) {
 		__sync_fetch_and_add(&nr_locals, 1);
-		scx_bpf_dispatch(p, SCX_DSQ_LOCAL, SCX_SLICE_INF,
-				 enq_flags | SCX_ENQ_PREEMPT);
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, SCX_SLICE_INF,
+				   enq_flags | SCX_ENQ_PREEMPT);
 		return;
 	}
 
 	if (bpf_map_push_elem(&central_q, &pid, 0)) {
 		__sync_fetch_and_add(&nr_overflows, 1);
-		scx_bpf_dispatch(p, FALLBACK_DSQ_ID, SCX_SLICE_INF, enq_flags);
+		scx_bpf_dsq_insert(p, FALLBACK_DSQ_ID, SCX_SLICE_INF, enq_flags);
 		return;
 	}
 
@@ -158,16 +153,24 @@ static bool dispatch_to_cpu(s32 cpu)
 		 */
 		if (!bpf_cpumask_test_cpu(cpu, p->cpus_ptr)) {
 			__sync_fetch_and_add(&nr_mismatches, 1);
-			scx_bpf_dispatch(p, FALLBACK_DSQ_ID, SCX_SLICE_INF, 0);
+			scx_bpf_dsq_insert(p, FALLBACK_DSQ_ID, SCX_SLICE_INF, 0);
 			bpf_task_release(p);
+			/*
+			 * We might run out of dispatch buffer slots if we continue dispatching
+			 * to the fallback DSQ, without dispatching to the local DSQ of the
+			 * target CPU. In such a case, break the loop now as will fail the
+			 * next dispatch operation.
+			 */
+			if (!scx_bpf_dispatch_nr_slots())
+				break;
 			continue;
 		}
 
 		/* dispatch to local and mark that @cpu doesn't need more */
-		scx_bpf_dispatch(p, SCX_DSQ_LOCAL_ON | cpu, SCX_SLICE_INF, 0);
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | cpu, SCX_SLICE_INF, 0);
 
 		if (cpu != central_cpu)
-			scx_bpf_kick_cpu(cpu, 0);
+			scx_bpf_kick_cpu(cpu, SCX_KICK_IDLE);
 
 		bpf_task_release(p);
 		return true;
@@ -190,7 +193,7 @@ void BPF_STRUCT_OPS(central_dispatch, s32 cpu, struct task_struct *prev)
 
 			/* central's gimme is never set */
 			gimme = ARRAY_ELEM_PTR(cpu_gimme_task, cpu, nr_cpu_ids);
-			if (gimme && !*gimme)
+			if (!gimme || !*gimme)
 				continue;
 
 			if (dispatch_to_cpu(cpu))
@@ -211,13 +214,13 @@ void BPF_STRUCT_OPS(central_dispatch, s32 cpu, struct task_struct *prev)
 		}
 
 		/* look for a task to run on the central CPU */
-		if (scx_bpf_consume(FALLBACK_DSQ_ID))
+		if (scx_bpf_dsq_move_to_local(FALLBACK_DSQ_ID))
 			return;
 		dispatch_to_cpu(central_cpu);
 	} else {
 		bool *gimme;
 
-		if (scx_bpf_consume(FALLBACK_DSQ_ID))
+		if (scx_bpf_dsq_move_to_local(FALLBACK_DSQ_ID))
 			return;
 
 		gimme = ARRAY_ELEM_PTR(cpu_gimme_task, cpu, nr_cpu_ids);
@@ -237,7 +240,7 @@ void BPF_STRUCT_OPS(central_running, struct task_struct *p)
 	s32 cpu = scx_bpf_task_cpu(p);
 	u64 *started_at = ARRAY_ELEM_PTR(cpu_started_at, cpu, nr_cpu_ids);
 	if (started_at)
-		*started_at = bpf_ktime_get_ns() ?: 1;	/* 0 indicates idle */
+		*started_at = scx_bpf_now() ?: 1;	/* 0 indicates idle */
 }
 
 void BPF_STRUCT_OPS(central_stopping, struct task_struct *p, bool runnable)
@@ -250,12 +253,12 @@ void BPF_STRUCT_OPS(central_stopping, struct task_struct *p, bool runnable)
 
 static int central_timerfn(void *map, int *key, struct bpf_timer *timer)
 {
-	u64 now = bpf_ktime_get_ns();
+	u64 now = scx_bpf_now();
 	u64 nr_to_kick = nr_queued;
 	s32 i, curr_cpu;
 
 	curr_cpu = bpf_get_smp_processor_id();
-	if (curr_cpu != central_cpu) {
+	if (timer_pinned && (curr_cpu != central_cpu)) {
 		scx_bpf_error("Central timer ran on CPU %d, not central CPU %d",
 			      curr_cpu, central_cpu);
 		return 0;
@@ -271,7 +274,7 @@ static int central_timerfn(void *map, int *key, struct bpf_timer *timer)
 		/* kick iff the current one exhausted its slice */
 		started_at = ARRAY_ELEM_PTR(cpu_started_at, cpu, nr_cpu_ids);
 		if (started_at && *started_at &&
-		    vtime_before(now, *started_at + slice_ns))
+		    time_before(now, *started_at + slice_ns))
 			continue;
 
 		/* and there's something pending */
@@ -297,9 +300,6 @@ int BPF_STRUCT_OPS_SLEEPABLE(central_init)
 	struct bpf_timer *timer;
 	int ret;
 
-	if (!switch_partial)
-		scx_bpf_switch_all();
-
 	ret = scx_bpf_create_dsq(FALLBACK_DSQ_ID, -1);
 	if (ret)
 		return ret;
@@ -308,35 +308,49 @@ int BPF_STRUCT_OPS_SLEEPABLE(central_init)
 	if (!timer)
 		return -ESRCH;
 
-	if (bpf_get_smp_processor_id() != central_cpu)
+	if (bpf_get_smp_processor_id() != central_cpu) {
+		scx_bpf_error("init from non-central CPU");
 		return -EINVAL;
+	}
 
 	bpf_timer_init(timer, &central_timer, CLOCK_MONOTONIC);
 	bpf_timer_set_callback(timer, central_timerfn);
+
 	ret = bpf_timer_start(timer, TIMER_INTERVAL_NS, BPF_F_TIMER_CPU_PIN);
+	/*
+	 * BPF_F_TIMER_CPU_PIN is pretty new (>=6.7). If we're running in a
+	 * kernel which doesn't have it, bpf_timer_start() will return -EINVAL.
+	 * Retry without the PIN. This would be the perfect use case for
+	 * bpf_core_enum_value_exists() but the enum type doesn't have a name
+	 * and can't be used with bpf_core_enum_value_exists(). Oh well...
+	 */
+	if (ret == -EINVAL) {
+		timer_pinned = false;
+		ret = bpf_timer_start(timer, TIMER_INTERVAL_NS, 0);
+	}
+	if (ret)
+		scx_bpf_error("bpf_timer_start failed (%d)", ret);
 	return ret;
 }
 
 void BPF_STRUCT_OPS(central_exit, struct scx_exit_info *ei)
 {
-	uei_record(&uei, ei);
+	UEI_RECORD(uei, ei);
 }
 
-SEC(".struct_ops.link")
-struct sched_ext_ops central_ops = {
-	/*
-	 * We are offloading all scheduling decisions to the central CPU and
-	 * thus being the last task on a given CPU doesn't mean anything
-	 * special. Enqueue the last tasks like any other tasks.
-	 */
-	.flags			= SCX_OPS_ENQ_LAST,
+SCX_OPS_DEFINE(central_ops,
+	       /*
+		* We are offloading all scheduling decisions to the central CPU
+		* and thus being the last task on a given CPU doesn't mean
+		* anything special. Enqueue the last tasks like any other tasks.
+		*/
+	       .flags			= SCX_OPS_ENQ_LAST,
 
-	.select_cpu		= (void *)central_select_cpu,
-	.enqueue		= (void *)central_enqueue,
-	.dispatch		= (void *)central_dispatch,
-	.running		= (void *)central_running,
-	.stopping		= (void *)central_stopping,
-	.init			= (void *)central_init,
-	.exit			= (void *)central_exit,
-	.name			= "central",
-};
+	       .select_cpu		= (void *)central_select_cpu,
+	       .enqueue			= (void *)central_enqueue,
+	       .dispatch		= (void *)central_dispatch,
+	       .running			= (void *)central_running,
+	       .stopping		= (void *)central_stopping,
+	       .init			= (void *)central_init,
+	       .exit			= (void *)central_exit,
+	       .name			= "central");

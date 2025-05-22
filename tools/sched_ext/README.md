@@ -154,39 +154,24 @@ a full vmlinux.h file, you can compile the schedulers using `make`:
 $ make -j($nproc)
 ```
 
-# Schedulers
+# Example schedulers
 
-This section lists, in alphabetical order, all of the current example
-schedulers.
+This directory contains the following example schedulers. These schedulers are
+for testing and demonstrating different aspects of sched_ext. While some may be
+useful in limited scenarios, they are not intended to be practical.
 
---------------------------------------------------------------------------------
+For more scheduler implementations, tools and documentation, visit
+https://github.com/sched-ext/scx.
 
 ## scx_simple
 
-### Overview
+A simple scheduler that provides an example of a minimal sched_ext scheduler.
+scx_simple can be run in either global weighted vtime mode, or FIFO mode.
 
-A simple scheduler that provides an example of a minimal sched_ext
-scheduler. scx_simple can be run in either global weighted vtime mode, or
-FIFO mode.
-
-### Typical Use Case
-
-Though very simple, this scheduler should perform reasonably well on
-single-socket CPUs with a uniform L3 cache topology. Note that while running in
-global FIFO mode may work well for some workloads, saturating threads can
-easily drown out inactive ones.
-
-### Production Ready?
-
-This scheduler could be used in a production environment, assuming the hardware
-constraints enumerated above, and assuming the workload can accommodate a
-simple scheduling policy.
-
---------------------------------------------------------------------------------
+Though very simple, in limited scenarios, this scheduler can perform reasonably
+well on single-socket systems with a unified L3 cache.
 
 ## scx_qmap
-
-### Overview
 
 Another simple, yet slightly more complex scheduler that provides an example of
 a basic weighted FIFO queuing policy. It also provides examples of some common
@@ -194,149 +179,31 @@ useful BPF features, such as sleepable per-task storage allocation in the
 `ops.prep_enable()` callback, and using the `BPF_MAP_TYPE_QUEUE` map type to
 enqueue tasks. It also illustrates how core-sched support could be implemented.
 
-### Typical Use Case
-
-Purely used to illustrate sched_ext features.
-
-### Production Ready?
-
-No
-
---------------------------------------------------------------------------------
-
 ## scx_central
-
-### Overview
 
 A "central" scheduler where scheduling decisions are made from a single CPU.
 This scheduler illustrates how scheduling decisions can be dispatched from a
 single CPU, allowing other cores to run with infinite slices, without timer
 ticks, and without having to incur the overhead of making scheduling decisions.
 
-### Typical Use Case
-
-This scheduler could theoretically be useful for any workload that benefits
-from minimizing scheduling overhead and timer ticks. An example of where this
-could be particularly useful is running VMs, where running with infinite slices
-and no timer ticks allows the VM to avoid unnecessary expensive vmexits.
-
-### Production Ready?
-
-Not yet. While tasks are run with an infinite slice (SCX_SLICE_INF), they're
-preempted every 20ms in a timer callback. The scheduler also puts the core
-schedling logic inside of the central / scheduling CPU's ops.dispatch() path,
-and does not yet have any kind of priority mechanism.
-
---------------------------------------------------------------------------------
-
-## scx_pair
-
-### Overview
-
-A sibling scheduler which ensures that tasks will only ever be co-located on a
-physical core if they're in the same cgroup. It illustrates how a scheduling
-policy could be implemented to mitigate CPU bugs, such as L1TF, and also shows
-how some useful kfuncs such as `scx_bpf_kick_cpu()` can be utilized.
-
-### Typical Use Case
-
-While this scheduler is only meant to be used to illustrate certain sched_ext
-features, with a bit more work (e.g. by adding some form of priority handling
-inside and across cgroups), it could have been used as a way to quickly
-mitigate L1TF before core scheduling was implemented and rolled out.
-
-### Production Ready?
-
-No
-
---------------------------------------------------------------------------------
+The approach demonstrated by this scheduler may be useful for any workload that
+benefits from minimizing scheduling overhead and timer ticks. An example of
+where this could be particularly useful is running VMs, where running with
+infinite slices and no timer ticks allows the VM to avoid unnecessary expensive
+vmexits.
 
 ## scx_flatcg
 
-### Overview
-
 A flattened cgroup hierarchy scheduler. This scheduler implements hierarchical
-weight-based cgroup CPU control by flattening the cgroup hierarchy into a
-single layer, by compounding the active weight share at each level. The effect
-of this is a much more performant CPU controller, which does not need to
-descend down cgroup trees in order to properly compute a cgroup's share.
+weight-based cgroup CPU control by flattening the cgroup hierarchy into a single
+layer, by compounding the active weight share at each level. The effect of this
+is a much more performant CPU controller, which does not need to descend down
+cgroup trees in order to properly compute a cgroup's share.
 
-### Typical Use Case
+Similar to scx_simple, in limited scenarios, this scheduler can perform
+reasonably well on single socket-socket systems with a unified L3 cache and show
+significantly lowered hierarchical scheduling overhead.
 
-This scheduler could be useful for any typical workload requiring a CPU
-controller, but which cannot tolerate the higher overheads of the fair CPU
-controller.
-
-### Production Ready?
-
-Yes, though the scheduler (currently) does not adequately accommodate
-thundering herds of cgroups. If, for example, many cgroups which are nested
-behind a low-priority cgroup were to wake up around the same time, they may be
-able to consume more CPU cycles than they are entitled to.
-
---------------------------------------------------------------------------------
-
-## scx_userland
-
-### Overview
-
-A simple weighted vtime scheduler where all scheduling decisions take place in
-user space. This is in contrast to Rusty, where load balancing lives in user
-space, but scheduling decisions are still made in the kernel.
-
-### Typical Use Case
-
-There are many advantages to writing schedulers in user space. For example, you
-can use a debugger, you can write the scheduler in Rust, and you can use data
-structures bundled with your favorite library.
-
-On the other hand, user space scheduling can be hard to get right. You can
-potentially deadlock due to not scheduling a task that's required for the
-scheduler itself to make forward progress (though the sched_ext watchdog will
-protect the system by unloading your scheduler after a timeout if that
-happens). You also have to bootstrap some communication protocol between the
-kernel and user space.
-
-A more robust solution to this would be building a user space scheduling
-framework that abstracts much of this complexity away from you.
-
-### Production Ready?
-
-No. This scheduler uses an ordered list for vtime scheduling, and is stricly
-less performant than just using something like `scx_simple`. It is purely
-meant to illustrate that it's possible to build a user space scheduler on
-top of sched_ext.
-
---------------------------------------------------------------------------------
-
-## scx_rusty
-
-### Overview
-
-A multi-domain, BPF / user space hybrid scheduler. The BPF portion of the
-scheduler does a simple round robin in each domain, and the user space portion
-(written in Rust) calculates the load factor of each domain, and informs BPF of
-how tasks should be load balanced accordingly.
-
-### Typical Use Case
-
-Rusty is designed to be flexible, and accommodate different architectures and
-workloads. Various load balancing thresholds (e.g. greediness, frequenty, etc),
-as well as how Rusty should partition the system into scheduling domains, can
-be tuned to achieve the optimal configuration for any given system or workload.
-
-### Production Ready?
-
-Yes. If tuned correctly, rusty should be performant across various CPU
-architectures and workloads. Rusty by default creates a separate scheduling
-domain per-LLC, so its default configuration may be performant as well.
-
-That said, you may run into an issue with infeasible weights, where a task with
-a very high weight may cause the scheduler to incorrectly leave cores idle
-because it thinks they're necessary to accommodate the compute for a single
-task. This can also happen in CFS, and should soon be addressed for rusty.
-
---------------------------------------------------------------------------------
 
 # Troubleshooting
 

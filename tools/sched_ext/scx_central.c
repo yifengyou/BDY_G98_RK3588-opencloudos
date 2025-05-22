@@ -8,25 +8,34 @@
 #include <sched.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <libgen.h>
 #include <bpf/bpf.h>
-#include "scx_common.h"
-#include "scx_central.skel.h"
+#include <scx/common.h>
+#include "scx_central.bpf.skel.h"
 
 const char help_fmt[] =
 "A central FIFO sched_ext scheduler.\n"
 "\n"
 "See the top-level comment in .bpf.c for more details.\n"
 "\n"
-"Usage: %s [-s SLICE_US] [-c CPU] [-p]\n"
+"Usage: %s [-s SLICE_US] [-c CPU]\n"
 "\n"
 "  -s SLICE_US   Override slice duration\n"
 "  -c CPU        Override the central CPU (default: 0)\n"
-"  -p            Switch only tasks on SCHED_EXT policy intead of all\n"
+"  -v            Print libbpf debug messages\n"
 "  -h            Display this help and exit\n";
 
+static bool verbose;
 static volatile int exit_req;
+
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+	if (level == LIBBPF_DEBUG && !verbose)
+		return 0;
+	return vfprintf(stderr, format, args);
+}
 
 static void sigint_handler(int dummy)
 {
@@ -37,22 +46,21 @@ int main(int argc, char **argv)
 {
 	struct scx_central *skel;
 	struct bpf_link *link;
-	__u64 seq = 0;
+	__u64 seq = 0, ecode;
 	__s32 opt;
 	cpu_set_t *cpuset;
 
+	libbpf_set_print(libbpf_print_fn);
 	signal(SIGINT, sigint_handler);
 	signal(SIGTERM, sigint_handler);
-
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
-
-	skel = scx_central__open();
-	SCX_BUG_ON(!skel, "Failed to open skel");
+restart:
+	skel = SCX_OPS_OPEN(central_ops, scx_central);
 
 	skel->rodata->central_cpu = 0;
 	skel->rodata->nr_cpu_ids = libbpf_num_possible_cpus();
+	skel->rodata->slice_ns = __COMPAT_ENUM_OR_ZERO("scx_public_consts", "SCX_SLICE_DFL");
 
-	while ((opt = getopt(argc, argv, "s:c:ph")) != -1) {
+	while ((opt = getopt(argc, argv, "s:c:pvh")) != -1) {
 		switch (opt) {
 		case 's':
 			skel->rodata->slice_ns = strtoull(optarg, NULL, 0) * 1000;
@@ -60,8 +68,8 @@ int main(int argc, char **argv)
 		case 'c':
 			skel->rodata->central_cpu = strtoul(optarg, NULL, 0);
 			break;
-		case 'p':
-			skel->rodata->switch_partial = true;
+		case 'v':
+			verbose = true;
 			break;
 		default:
 			fprintf(stderr, help_fmt, basename(argv[0]));
@@ -70,10 +78,10 @@ int main(int argc, char **argv)
 	}
 
 	/* Resize arrays so their element count is equal to cpu count. */
-	RESIZE_ARRAY(data, cpu_gimme_task, skel->rodata->nr_cpu_ids);
-	RESIZE_ARRAY(data, cpu_started_at, skel->rodata->nr_cpu_ids);
+	RESIZE_ARRAY(skel, data, cpu_gimme_task, skel->rodata->nr_cpu_ids);
+	RESIZE_ARRAY(skel, data, cpu_started_at, skel->rodata->nr_cpu_ids);
 
-	SCX_BUG_ON(scx_central__load(skel), "Failed to load skel");
+	SCX_OPS_LOAD(skel, central_ops, scx_central, uei);
 
 	/*
 	 * Affinitize the loading thread to the central CPU, as:
@@ -90,34 +98,39 @@ int main(int argc, char **argv)
 	SCX_BUG_ON(!cpuset, "Failed to allocate cpuset");
 	CPU_ZERO(cpuset);
 	CPU_SET(skel->rodata->central_cpu, cpuset);
-	SCX_BUG_ON(sched_setaffinity(0, sizeof(cpuset), cpuset),
+	SCX_BUG_ON(sched_setaffinity(0, sizeof(*cpuset), cpuset),
 		   "Failed to affinitize to central CPU %d (max %d)",
 		   skel->rodata->central_cpu, skel->rodata->nr_cpu_ids - 1);
 	CPU_FREE(cpuset);
 
-	link = bpf_map__attach_struct_ops(skel->maps.central_ops);
-	SCX_BUG_ON(!link, "Failed to attach struct_ops");
+	link = SCX_OPS_ATTACH(skel, central_ops, scx_central);
 
-	while (!exit_req && !uei_exited(&skel->bss->uei)) {
+	if (!skel->data->timer_pinned)
+		printf("WARNING : BPF_F_TIMER_CPU_PIN not available, timer not pinned to central\n");
+
+	while (!exit_req && !UEI_EXITED(skel, uei)) {
 		printf("[SEQ %llu]\n", seq++);
-		printf("total   :%10lu    local:%10lu   queued:%10lu  lost:%10lu\n",
+		printf("total   :%10" PRIu64 "    local:%10" PRIu64 "   queued:%10" PRIu64 "  lost:%10" PRIu64 "\n",
 		       skel->bss->nr_total,
 		       skel->bss->nr_locals,
 		       skel->bss->nr_queued,
 		       skel->bss->nr_lost_pids);
-		printf("timer   :%10lu dispatch:%10lu mismatch:%10lu retry:%10lu\n",
+		printf("timer   :%10" PRIu64 " dispatch:%10" PRIu64 " mismatch:%10" PRIu64 " retry:%10" PRIu64 "\n",
 		       skel->bss->nr_timers,
 		       skel->bss->nr_dispatches,
 		       skel->bss->nr_mismatches,
 		       skel->bss->nr_retries);
-		printf("overflow:%10lu\n",
+		printf("overflow:%10" PRIu64 "\n",
 		       skel->bss->nr_overflows);
 		fflush(stdout);
 		sleep(1);
 	}
 
 	bpf_link__destroy(link);
-	uei_print(&skel->bss->uei);
+	ecode = UEI_REPORT(skel, uei);
 	scx_central__destroy(skel);
+
+	if (UEI_ECODE_RESTART(ecode))
+		goto restart;
 	return 0;
 }

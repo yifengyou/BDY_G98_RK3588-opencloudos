@@ -9,12 +9,14 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <limits.h>
+#include <inttypes.h>
 #include <fcntl.h>
 #include <time.h>
 #include <bpf/bpf.h>
-#include "scx_common.h"
+#include <scx/common.h>
 #include "scx_flatcg.h"
-#include "scx_flatcg.skel.h"
+#include "scx_flatcg.bpf.skel.h"
+#include "scx_helpers.h"
 
 #ifndef FILEID_KERNFS
 #define FILEID_KERNFS		0xfe
@@ -25,15 +27,23 @@ const char help_fmt[] =
 "\n"
 "See the top-level comment in .bpf.c for more details.\n"
 "\n"
-"Usage: %s [-s SLICE_US] [-i INTERVAL] [-f] [-p]\n"
+"Usage: %s [-s SLICE_US] [-i INTERVAL] [-f] [-v]\n"
 "\n"
 "  -s SLICE_US   Override slice duration\n"
 "  -i INTERVAL   Report interval\n"
 "  -f            Use FIFO scheduling instead of weighted vtime scheduling\n"
-"  -p            Switch only tasks on SCHED_EXT policy intead of all\n"
+"  -v            Print libbpf debug messages\n"
 "  -h            Display this help and exit\n";
 
+static bool verbose;
 static volatile int exit_req;
+
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+	if (level == LIBBPF_DEBUG && !verbose)
+		return 0;
+	return vfprintf(stderr, format, args);
+}
 
 static void sigint_handler(int dummy)
 {
@@ -119,18 +129,27 @@ int main(int argc, char **argv)
 	__u64 last_stats[FCG_NR_STATS] = {};
 	unsigned long seq = 0;
 	__s32 opt;
+	__u64 ecode;
+	int hid;
 
+	libbpf_set_print(libbpf_print_fn);
 	signal(SIGINT, sigint_handler);
 	signal(SIGTERM, sigint_handler);
+restart:
+	skel = SCX_OPS_OPEN(flatcg_ops, scx_flatcg);
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
+	hid = is_cgroup2() ? 0 : get_cgroup1_hierarchy_id("cpu");
+	if (hid < 0) {
+		fprintf(stderr, "unexpected hierarchy id for cpu controller: %d\n", hid);
+		return 0;
+	}
 
-	skel = scx_flatcg__open();
-	SCX_BUG_ON(!skel, "Failed to open skel");
-
+	skel->rodata->is_cgroup2 = is_cgroup2();
+	skel->rodata->hierarchy_id = hid;
 	skel->rodata->nr_cpus = libbpf_num_possible_cpus();
+	skel->rodata->cgrp_slice_ns = __COMPAT_ENUM_OR_ZERO("scx_public_consts", "SCX_SLICE_DFL");
 
-	while ((opt = getopt(argc, argv, "s:i:dfph")) != -1) {
+	while ((opt = getopt(argc, argv, "s:i:dfvh")) != -1) {
 		double v;
 
 		switch (opt) {
@@ -149,8 +168,8 @@ int main(int argc, char **argv)
 		case 'f':
 			skel->rodata->fifo_sched = true;
 			break;
-		case 'p':
-			skel->rodata->switch_partial = true;
+		case 'v':
+			verbose = true;
 			break;
 		case 'h':
 		default:
@@ -164,12 +183,10 @@ int main(int argc, char **argv)
 	       (double)intv_ts.tv_sec + (double)intv_ts.tv_nsec / 1000000000.0,
 	       dump_cgrps);
 
-	SCX_BUG_ON(scx_flatcg__load(skel), "Failed to load skel");
+	SCX_OPS_LOAD(skel, flatcg_ops, scx_flatcg, uei);
+	link = SCX_OPS_ATTACH(skel, flatcg_ops, scx_flatcg);
 
-	link = bpf_map__attach_struct_ops(skel->maps.flatcg_ops);
-	SCX_BUG_ON(!link, "Failed to attach struct_ops");
-
-	while (!exit_req && !uei_exited(&skel->bss->uei)) {
+	while (!exit_req && !UEI_EXITED(skel, uei)) {
 		__u64 acc_stats[FCG_NR_STATS];
 		__u64 stats[FCG_NR_STATS];
 		float cpu_util;
@@ -183,39 +200,44 @@ int main(int argc, char **argv)
 
 		memcpy(last_stats, acc_stats, sizeof(acc_stats));
 
-		printf("\n[SEQ %6lu cpu=%5.1lf hweight_gen=%lu]\n",
+		printf("\n[SEQ %6lu cpu=%5.1lf hweight_gen=%" PRIu64 "]\n",
 		       seq++, cpu_util * 100.0, skel->data->hweight_gen);
-		printf("       act:%6llu  deact:%6llu local:%6llu global:%6llu\n",
+		printf("       act:%6llu  deact:%6llu global:%6llu local:%6llu\n",
 		       stats[FCG_STAT_ACT],
 		       stats[FCG_STAT_DEACT],
-		       stats[FCG_STAT_LOCAL],
-		       stats[FCG_STAT_GLOBAL]);
-		printf("HWT   skip:%6llu   race:%6llu cache:%6llu update:%6llu\n",
-		       stats[FCG_STAT_HWT_SKIP],
-		       stats[FCG_STAT_HWT_RACE],
+		       stats[FCG_STAT_GLOBAL],
+		       stats[FCG_STAT_LOCAL]);
+		printf("HWT  cache:%6llu update:%6llu   skip:%6llu  race:%6llu\n",
 		       stats[FCG_STAT_HWT_CACHE],
-		       stats[FCG_STAT_HWT_UPDATES]);
+		       stats[FCG_STAT_HWT_UPDATES],
+		       stats[FCG_STAT_HWT_SKIP],
+		       stats[FCG_STAT_HWT_RACE]);
 		printf("ENQ   skip:%6llu   race:%6llu\n",
 		       stats[FCG_STAT_ENQ_SKIP],
 		       stats[FCG_STAT_ENQ_RACE]);
-		printf("CNS   keep:%6llu expire:%6llu empty:%6llu   gone:%6llu\n",
+		printf("CNS   keep:%6llu expire:%6llu  empty:%6llu  gone:%6llu\n",
 		       stats[FCG_STAT_CNS_KEEP],
 		       stats[FCG_STAT_CNS_EXPIRE],
 		       stats[FCG_STAT_CNS_EMPTY],
 		       stats[FCG_STAT_CNS_GONE]);
-		printf("PNC nocgrp:%6llu   next:%6llu empty:%6llu   gone:%6llu\n",
-		       stats[FCG_STAT_PNC_NO_CGRP],
+		printf("PNC   next:%6llu  empty:%6llu nocgrp:%6llu  gone:%6llu fail:%6llu\n",
 		       stats[FCG_STAT_PNC_NEXT],
 		       stats[FCG_STAT_PNC_EMPTY],
-		       stats[FCG_STAT_PNC_GONE]);
+		       stats[FCG_STAT_PNC_NO_CGRP],
+		       stats[FCG_STAT_PNC_GONE],
+		       stats[FCG_STAT_PNC_FAIL]);
 		printf("BAD remove:%6llu\n",
 		       acc_stats[FCG_STAT_BAD_REMOVAL]);
+		fflush(stdout);
 
 		nanosleep(&intv_ts, NULL);
 	}
 
 	bpf_link__destroy(link);
-	uei_print(&skel->bss->uei);
+	ecode = UEI_REPORT(skel, uei);
 	scx_flatcg__destroy(skel);
+
+	if (UEI_ECODE_RESTART(ecode))
+		goto restart;
 	return 0;
 }

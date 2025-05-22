@@ -1770,7 +1770,7 @@ static void __dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 		dequeue_pushable_dl_task(rq, p);
 }
 
-static void dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
+static bool dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 {
 	update_curr_dl(rq);
 
@@ -1778,6 +1778,8 @@ static void dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 		flags |= DEQUEUE_MIGRATING;
 
 	__dequeue_task_dl(rq, p, flags);
+
+	return true;
 }
 
 /*
@@ -1992,13 +1994,13 @@ static void set_next_task_dl(struct rq *rq, struct task_struct *p, bool first)
 	if (!first)
 		return;
 
-	if (hrtick_enabled_dl(rq))
-		start_hrtick_dl(rq, p);
-
 	if (rq->curr->sched_class != &dl_sched_class)
 		update_dl_rq_load_avg(rq_clock_pelt(rq), rq, 0);
 
 	deadline_queue_push_tasks(rq);
+
+	if (hrtick_enabled(rq))
+		start_hrtick_dl(rq, p);
 }
 
 static struct sched_dl_entity *pick_next_dl_entity(struct dl_rq *dl_rq)
@@ -2027,18 +2029,7 @@ static struct task_struct *pick_task_dl(struct rq *rq)
 	return p;
 }
 
-static struct task_struct *pick_next_task_dl(struct rq *rq)
-{
-	struct task_struct *p;
-
-	p = pick_task_dl(rq);
-	if (p)
-		set_next_task_dl(rq, p, true);
-
-	return p;
-}
-
-static void put_prev_task_dl(struct rq *rq, struct task_struct *p)
+static void put_prev_task_dl(struct rq *rq, struct task_struct *p, struct task_struct *next)
 {
 	struct sched_dl_entity *dl_se = &p->dl;
 	struct dl_rq *dl_rq = &rq->dl;
@@ -2520,7 +2511,7 @@ static void set_cpus_allowed_dl(struct task_struct *p,
 }
 
 /* Assumes rq->lock is held */
-static void rq_online_dl(struct rq *rq, enum rq_onoff_reason reason)
+static void rq_online_dl(struct rq *rq)
 {
 	if (rq->dl.overloaded)
 		dl_set_overload(rq);
@@ -2531,7 +2522,7 @@ static void rq_online_dl(struct rq *rq, enum rq_onoff_reason reason)
 }
 
 /* Assumes rq->lock is held */
-static void rq_offline_dl(struct rq *rq, enum rq_onoff_reason reason)
+static void rq_offline_dl(struct rq *rq)
 {
 	if (rq->dl.overloaded)
 		dl_clear_overload(rq);
@@ -2733,13 +2724,12 @@ DEFINE_SCHED_CLASS(dl) = {
 
 	.wakeup_preempt		= wakeup_preempt_dl,
 
-	.pick_next_task		= pick_next_task_dl,
+	.pick_task		= pick_task_dl,
 	.put_prev_task		= put_prev_task_dl,
 	.set_next_task		= set_next_task_dl,
 
 #ifdef CONFIG_SMP
 	.balance		= balance_dl,
-	.pick_task		= pick_task_dl,
 	.select_task_rq		= select_task_rq_dl,
 	.migrate_task_rq	= migrate_task_rq_dl,
 	.set_cpus_allowed       = set_cpus_allowed_dl,

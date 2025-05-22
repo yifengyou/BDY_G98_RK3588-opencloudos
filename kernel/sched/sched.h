@@ -72,6 +72,7 @@
 #include <trace/events/power.h>
 #include <trace/events/sched.h>
 #include <linux/sched/cputime.h>
+#include <linux/mmu_context.h>
 
 #include "../workqueue_internal.h"
 
@@ -432,6 +433,8 @@ struct task_group {
 	u32			scx_flags;	/* SCX_TG_* */
 	u32			scx_weight;
 	u32			scx;
+	ktime_t                 scx_bw_period;
+	u64                     scx_bw_quota;
 #endif
 
 	struct rcu_head		rcu;
@@ -462,7 +465,7 @@ struct task_group {
 	KABI_RESERVE(2);
 };
 
-#ifdef CONFIG_FAIR_GROUP_SCHED
+#ifdef CONFIG_GROUP_SCHED_WEIGHT
 #define ROOT_TASK_GROUP_LOAD	NICE_0_LOAD
 
 /*
@@ -529,7 +532,7 @@ extern void sched_online_group(struct task_group *tg,
 extern void sched_destroy_group(struct task_group *tg);
 extern void sched_release_group(struct task_group *tg);
 
-extern void sched_move_task(struct task_struct *tsk);
+extern void sched_move_task(struct task_struct *tsk, bool for_autogroup);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 extern int sched_group_set_shares(struct task_group *tg, unsigned long shares);
@@ -543,11 +546,9 @@ extern void set_task_rq_fair(struct sched_entity *se,
 static inline void set_task_rq_fair(struct sched_entity *se,
 			     struct cfs_rq *prev, struct cfs_rq *next) { }
 #endif /* CONFIG_SMP */
-#else /* CONFIG_FAIR_GROUP_SCHED */
-static inline int sched_group_set_shares(struct task_group *tg, unsigned long shares)
-{
-	return 0;
-}
+#else /* !CONFIG_FAIR_GROUP_SCHED */
+static inline int sched_group_set_shares(struct task_group *tg, unsigned long shares) { return 0; }
+static inline int sched_group_set_idle(struct task_group *tg, long idle) { return 0; }
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
 #else /* CONFIG_CGROUP_SCHED */
@@ -599,6 +600,11 @@ do {									\
 #endif
 # define u64_u32_load(var)      u64_u32_load_copy(var, var##_copy)
 # define u64_u32_store(var, val) u64_u32_store_copy(var, var##_copy, val)
+
+struct balance_callback {
+	struct balance_callback *next;
+	void (*func)(struct rq *rq);
+};
 
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
@@ -715,21 +721,40 @@ struct cfs_rq {
 #ifdef CONFIG_SCHED_CLASS_EXT
 /* scx_rq->flags, protected by the rq lock */
 enum scx_rq_flags {
-	SCX_RQ_CAN_STOP_TICK	= 1 << 0,
+	/*
+	 * A hotplugged CPU starts scheduling before rq_online_scx(). Track
+	 * ops.cpu_on/offline() state so that ops.enqueue/dispatch() are called
+	 * only while the BPF scheduler considers the CPU to be online.
+	 */
+	SCX_RQ_ONLINE		= 1 << 0,
+	SCX_RQ_CAN_STOP_TICK	= 1 << 1,
+	SCX_RQ_BAL_PENDING	= 1 << 2, /* balance hasn't run yet */
+	SCX_RQ_BAL_KEEP		= 1 << 3, /* balance decided to keep current */
+	SCX_RQ_BYPASSING	= 1 << 4,
+	SCX_RQ_CLK_VALID	= 1 << 5, /* RQ clock is fresh and valid */
+
+	SCX_RQ_IN_WAKEUP	= 1 << 16,
+	SCX_RQ_IN_BALANCE	= 1 << 17,
 };
 
 struct scx_rq {
 	struct scx_dispatch_q	local_dsq;
-	struct list_head	watchdog_list;
+	struct list_head	runnable_list;		/* runnable tasks on this rq */
+	struct list_head	ddsp_deferred_locals;	/* deferred ddsps from enq */
 	unsigned long		ops_qseq;
 	u64			extra_enq_flags;	/* see move_task_to_local_dsq() */
 	u32			nr_running;
-	u32			flags;
+	u32			cpuperf_target;		/* [0, SCHED_CAPACITY_SCALE] */
 	bool			cpu_released;
+	u32			flags;
+	u64			clock;			/* current per-rq clock -- see scx_bpf_now() */
 	cpumask_var_t		cpus_to_kick;
+	cpumask_var_t		cpus_to_kick_if_idle;
 	cpumask_var_t		cpus_to_preempt;
 	cpumask_var_t		cpus_to_wait;
 	unsigned long		pnt_seq;
+	struct balance_callback	deferred_bal_cb;
+	struct irq_work		deferred_irq_work;
 	struct irq_work		kick_cpus_irq_work;
 };
 #endif /* CONFIG_SCHED_CLASS_EXT */
@@ -1039,12 +1064,6 @@ struct uclamp_rq {
 
 DECLARE_STATIC_KEY_FALSE(sched_uclamp_used);
 #endif /* CONFIG_UCLAMP_TASK */
-
-struct rq;
-struct balance_callback {
-	struct balance_callback *next;
-	void (*func)(struct rq *rq);
-};
 
 /*
  * This is the main, per-CPU runqueue data structure.
@@ -1692,6 +1711,38 @@ struct rq_flags {
 
 extern struct balance_callback balance_push_callback;
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+extern const struct sched_class ext_sched_class;
+
+DECLARE_STATIC_KEY_FALSE(__scx_ops_enabled);	/* SCX BPF scheduler loaded */
+DECLARE_STATIC_KEY_FALSE(__scx_switched_all);	/* all fair class tasks on SCX */
+
+#define scx_enabled()		static_branch_unlikely(&__scx_ops_enabled)
+#define scx_switched_all()	static_branch_unlikely(&__scx_switched_all)
+
+static inline void scx_rq_clock_update(struct rq *rq, u64 clock)
+{
+	if (!scx_enabled())
+		return;
+	WRITE_ONCE(rq->scx.clock, clock);
+	smp_store_release(&rq->scx.flags, rq->scx.flags | SCX_RQ_CLK_VALID);
+}
+
+static inline void scx_rq_clock_invalidate(struct rq *rq)
+{
+	if (!scx_enabled())
+		return;
+	WRITE_ONCE(rq->scx.flags, rq->scx.flags & ~SCX_RQ_CLK_VALID);
+}
+
+#else /* !CONFIG_SCHED_CLASS_EXT */
+#define scx_enabled()		false
+#define scx_switched_all()	false
+
+static inline void scx_rq_clock_update(struct rq *rq, u64 clock) {}
+static inline void scx_rq_clock_invalidate(struct rq *rq) {}
+#endif /* !CONFIG_SCHED_CLASS_EXT */
+
 /*
  * Lockdep annotation that avoids accidental unlocks; it's like a
  * sticky/continuous lockdep_assert_held().
@@ -1721,7 +1772,7 @@ static inline void rq_unpin_lock(struct rq *rq, struct rq_flags *rf)
 	if (rq->clock_update_flags > RQCF_ACT_SKIP)
 		rf->clock_update_flags = RQCF_UPDATED;
 #endif
-
+	scx_rq_clock_invalidate(rq);
 	lockdep_unpin_lock(__rq_lockp(rq), rf->cookie);
 }
 
@@ -2268,6 +2319,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_SYNC         0x10 /* Waker goes to sleep after wakeup */
 #define WF_MIGRATED     0x20 /* Internal use, task got migrated */
 #define WF_CURRENT_CPU  0x40 /* Prefer to move the wakee to the current CPU. */
+#define WF_RQ_SELECTED	0x80 /* ->select_task_rq() was called */
 
 #ifdef CONFIG_SMP
 static_assert(WF_EXEC == SD_BALANCE_EXEC);
@@ -2310,6 +2362,7 @@ extern const u32		sched_prio_to_wmult[40];
  * ENQUEUE_HEAD      - place at front of runqueue (tail if not specified)
  * ENQUEUE_REPLENISH - CBS (replenish runtime and postpone deadline)
  * ENQUEUE_MIGRATED  - the task was migrated during wakeup
+ * ENQUEUE_RQ_SELECTED - ->select_task_rq() was called
  *
  */
 
@@ -2333,13 +2386,9 @@ extern const u32		sched_prio_to_wmult[40];
 #endif
 #define ENQUEUE_INITIAL		0x80
 #define ENQUEUE_MIGRATING	0x100
+#define ENQUEUE_RQ_SELECTED	0x400
 
 #define RETRY_TASK		((void *)-1UL)
-
-enum rq_onoff_reason {
-	RQ_ONOFF_HOTPLUG,		/* CPU is going on/offline */
-	RQ_ONOFF_TOPOLOGY,		/* sched domain topology update */
-};
 
 struct affinity_context {
 	const struct cpumask *new_mask;
@@ -2356,22 +2405,30 @@ struct sched_class {
 #endif
 
 	void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
-	void (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
+	bool (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
 	void (*yield_task)   (struct rq *rq);
 	bool (*yield_to_task)(struct rq *rq, struct task_struct *p);
 
 	void (*wakeup_preempt)(struct rq *rq, struct task_struct *p, int flags);
 
-	struct task_struct *(*pick_next_task)(struct rq *rq);
+	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
+	struct task_struct *(*pick_task)(struct rq *rq);
+	/*
+	 * Optional! When implemented pick_next_task() should be equivalent to:
+	 *
+	 *   next = pick_task();
+	 *   if (next) {
+	 *       put_prev_task(prev);
+	 *       set_next_task_first(next);
+	 *   }
+	 */
+	struct task_struct *(*pick_next_task)(struct rq *rq, struct task_struct *prev);
 
-	void (*put_prev_task)(struct rq *rq, struct task_struct *p);
+	void (*put_prev_task)(struct rq *rq, struct task_struct *p, struct task_struct *next);
 	void (*set_next_task)(struct rq *rq, struct task_struct *p, bool first);
 
 #ifdef CONFIG_SMP
-	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int flags);
-
-	struct task_struct * (*pick_task)(struct rq *rq);
 
 	void (*migrate_task_rq)(struct task_struct *p, int new_cpu);
 
@@ -2379,8 +2436,8 @@ struct sched_class {
 
 	void (*set_cpus_allowed)(struct task_struct *p, struct affinity_context *ctx);
 
-	void (*rq_online)(struct rq *rq, enum rq_onoff_reason reason);
-	void (*rq_offline)(struct rq *rq, enum rq_onoff_reason reason);
+	void (*rq_online)(struct rq *rq);
+	void (*rq_offline)(struct rq *rq);
 
 	struct rq *(*find_lock_rq)(struct task_struct *p, struct rq *rq);
 #endif
@@ -2422,7 +2479,7 @@ struct sched_class {
 static inline void put_prev_task(struct rq *rq, struct task_struct *prev)
 {
 	WARN_ON_ONCE(rq->curr != prev);
-	prev->sched_class->put_prev_task(rq, prev);
+	prev->sched_class->put_prev_task(rq, prev, NULL);
 }
 
 static inline void set_next_task(struct rq *rq, struct task_struct *next)
@@ -2430,6 +2487,18 @@ static inline void set_next_task(struct rq *rq, struct task_struct *next)
 	next->sched_class->set_next_task(rq, next, false);
 }
 
+static inline void put_prev_set_next_task(struct rq *rq,
+					  struct task_struct *prev,
+					  struct task_struct *next)
+{
+	WARN_ON_ONCE(rq->curr != prev);
+
+	if (next == prev)
+		return;
+
+	prev->sched_class->put_prev_task(rq, prev, next);
+	next->sched_class->set_next_task(rq, next, true);
+}
 
 /*
  * Helper to define a sched_class instance; each one is placed in a separate
@@ -2450,19 +2519,41 @@ const struct sched_class name##_sched_class \
 extern struct sched_class __sched_class_highest[];
 extern struct sched_class __sched_class_lowest[];
 
+extern const struct sched_class stop_sched_class;
+extern const struct sched_class dl_sched_class;
+extern const struct sched_class rt_sched_class;
+extern const struct sched_class fair_sched_class;
+extern const struct sched_class idle_sched_class;
+
+/*
+ * Iterate only active classes. SCX can take over all fair tasks or be
+ * completely disabled. If the former, skip fair. If the latter, skip SCX.
+ */
+static inline const struct sched_class *next_active_class(const struct sched_class *class)
+{
+	class++;
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (scx_switched_all() && class == &fair_sched_class)
+		class++;
+	if (!scx_enabled() && class == &ext_sched_class)
+		class++;
+#endif
+	return class;
+}
+
 #define for_class_range(class, _from, _to) \
 	for (class = (_from); class < (_to); class++)
 
 #define for_each_class(class) \
 	for_class_range(class, __sched_class_highest, __sched_class_lowest)
 
-#define sched_class_above(_a, _b)	((_a) < (_b))
+#define for_active_class_range(class, _from, _to)				\
+	for (class = (_from); class != (_to); class = next_active_class(class))
 
-extern const struct sched_class stop_sched_class;
-extern const struct sched_class dl_sched_class;
-extern const struct sched_class rt_sched_class;
-extern const struct sched_class fair_sched_class;
-extern const struct sched_class idle_sched_class;
+#define for_each_active_class(class)						\
+	for_active_class_range(class, __sched_class_highest, __sched_class_lowest)
+
+#define sched_class_above(_a, _b)	((_a) < (_b))
 
 static inline bool sched_stop_runnable(struct rq *rq)
 {
@@ -2485,7 +2576,7 @@ static inline bool sched_fair_runnable(struct rq *rq)
 }
 
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
-extern struct task_struct *pick_next_task_idle(struct rq *rq);
+extern struct task_struct *pick_task_idle(struct rq *rq);
 
 #define SCA_CHECK		0x01
 #define SCA_MIGRATE_DISABLE	0x02
@@ -2499,6 +2590,29 @@ extern void update_group_capacity(struct sched_domain *sd, int cpu);
 extern void trigger_load_balance(struct rq *rq);
 
 extern void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx);
+
+static inline bool task_allowed_on_cpu(struct task_struct *p, int cpu)
+{
+	/* When not in the task's cpumask, no point in looking further. */
+	if (!cpumask_test_cpu(cpu, p->cpus_ptr))
+		return false;
+
+	/* Can @cpu run a user thread? */
+	if (!(p->flags & PF_KTHREAD) && !task_cpu_possible(cpu, p))
+		return false;
+
+	return true;
+}
+
+static inline cpumask_t *alloc_user_cpus_ptr(int node)
+{
+	/*
+	 * See do_set_cpus_allowed() above for the rcu_head usage.
+	 */
+	int size = max_t(int, cpumask_size(), sizeof(struct rcu_head));
+
+	return kmalloc_node(size, GFP_KERNEL, node);
+}
 
 static inline struct task_struct *get_push_task(struct rq *rq)
 {
@@ -2521,7 +2635,25 @@ static inline struct task_struct *get_push_task(struct rq *rq)
 
 extern int push_cpu_stop(void *arg);
 
-#endif
+#else /* !CONFIG_SMP: */
+
+static inline bool task_allowed_on_cpu(struct task_struct *p, int cpu)
+{
+	return true;
+}
+
+static inline int __set_cpus_allowed_ptr(struct task_struct *p,
+					 struct affinity_context *ctx)
+{
+	return set_cpus_allowed_ptr(p, ctx->new_mask);
+}
+
+static inline cpumask_t *alloc_user_cpus_ptr(int node)
+{
+	return NULL;
+}
+
+#endif /* !CONFIG_SMP */
 
 #ifdef CONFIG_CPU_IDLE
 static inline void idle_set_state(struct rq *rq,
@@ -2558,8 +2690,6 @@ extern void update_max_interval(void);
 extern void init_sched_dl_class(void);
 extern void init_sched_rt_class(void);
 extern void init_sched_fair_class(void);
-
-extern void __setscheduler_prio(struct task_struct *p, int prio);
 
 extern void resched_curr(struct rq *rq);
 extern void resched_cpu(int cpu);
@@ -2638,12 +2768,6 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
 
 extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
 extern void deactivate_task(struct rq *rq, struct task_struct *p, int flags);
-
-extern void check_class_changing(struct rq *rq, struct task_struct *p,
-				 const struct sched_class *prev_class);
-extern void check_class_changed(struct rq *rq, struct task_struct *p,
-				const struct sched_class *prev_class,
-				int oldprio);
 
 extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 
@@ -2926,8 +3050,8 @@ static inline void double_rq_unlock(struct rq *rq1, struct rq *rq2)
 	raw_spin_rq_unlock(rq1);
 }
 
-extern void set_rq_online (struct rq *rq, enum rq_onoff_reason reason);
-extern void set_rq_offline(struct rq *rq, enum rq_onoff_reason reason);
+extern void set_rq_online (struct rq *rq);
+extern void set_rq_offline(struct rq *rq);
 extern bool sched_smp_initialized;
 
 #else /* CONFIG_SMP */
@@ -3130,6 +3254,8 @@ enum cpu_util_type {
 	ENERGY_UTIL,
 };
 
+bool update_other_load_avgs(struct rq *rq);
+
 unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 				 enum cpu_util_type type,
 				 struct task_struct *p);
@@ -3167,7 +3293,10 @@ static inline unsigned long cpu_util_rt(struct rq *rq)
 {
 	return READ_ONCE(rq->avg_rt.util_avg);
 }
-#endif
+
+#else /* !CONFIG_SMP */
+static inline bool update_other_load_avgs(struct rq *rq) { return false; }
+#endif /* CONFIG_SMP */
 
 #ifdef CONFIG_UCLAMP_TASK
 unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
@@ -3657,30 +3786,31 @@ static inline void init_sched_mm_cid(struct task_struct *t) { }
 extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
-#ifdef CONFIG_CGROUP_SCHED
-enum cpu_cftype_id {
-#if defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_EXT_GROUP_SCHED)
-	CPU_CFTYPE_WEIGHT,
-	CPU_CFTYPE_WEIGHT_NICE,
-	CPU_CFTYPE_IDLE,
-#endif
-#ifdef CONFIG_EXT_GROUP_SCHED
-	CPU_CFTYPE_SCX_SWITCH,
-	CPU_CFTYPE_OFFLINE_SWITCH,
-#endif
-#ifdef CONFIG_CFS_BANDWIDTH
-	CPU_CFTYPE_MAX,
-	CPU_CFTYPE_MAX_BURST,
-#endif
-#ifdef CONFIG_UCLAMP_TASK_GROUP
-	CPU_CFTYPE_UCLAMP_MIN,
-	CPU_CFTYPE_UCLAMP_MAX,
-#endif
-	CPU_CFTYPE_CNT,
+extern void __setscheduler_prio(struct task_struct *p, int prio);
+extern bool dequeue_task(struct rq *rq, struct task_struct *p, int flags);
+extern void check_class_changing(struct rq *rq, struct task_struct *p,
+				 const struct sched_class *prev_class);
+extern void check_class_changed(struct rq *rq, struct task_struct *p,
+				const struct sched_class *prev_class,
+				int oldprio);
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+/*
+ * Used by SCX in the enable/disable paths to move tasks between sched_classes
+ * and establish invariants.
+ */
+struct sched_enq_and_set_ctx {
+	struct task_struct	*p;
+	int			queue_flags;
+	bool			queued;
+	bool			running;
 };
 
-extern struct cftype cpu_cftypes[CPU_CFTYPE_CNT + 1];
-#endif /* CONFIG_CGROUP_SCHED */
+void sched_deq_and_put_task(struct task_struct *p, int queue_flags,
+			    struct sched_enq_and_set_ctx *ctx);
+void sched_enq_and_set_task(struct sched_enq_and_set_ctx *ctx);
+
+#endif /* CONFIG_SCHED_CLASS_EXT */
 
 #include "ext.h"
 

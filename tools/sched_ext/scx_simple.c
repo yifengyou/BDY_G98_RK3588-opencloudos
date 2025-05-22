@@ -9,21 +9,29 @@
 #include <signal.h>
 #include <libgen.h>
 #include <bpf/bpf.h>
-#include "scx_common.h"
-#include "scx_simple.skel.h"
+#include <scx/common.h>
+#include "scx_simple.bpf.skel.h"
 
 const char help_fmt[] =
 "A simple sched_ext scheduler.\n"
 "\n"
 "See the top-level comment in .bpf.c for more details.\n"
 "\n"
-"Usage: %s [-f] [-p]\n"
+"Usage: %s [-f] [-v]\n"
 "\n"
 "  -f            Use FIFO scheduling instead of weighted vtime scheduling\n"
-"  -p            Switch only tasks on SCHED_EXT policy intead of all\n"
+"  -v            Print libbpf debug messages\n"
 "  -h            Display this help and exit\n";
 
+static bool verbose;
 static volatile int exit_req;
+
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+	if (level == LIBBPF_DEBUG && !verbose)
+		return 0;
+	return vfprintf(stderr, format, args);
+}
 
 static void sigint_handler(int simple)
 {
@@ -55,22 +63,21 @@ int main(int argc, char **argv)
 	struct scx_simple *skel;
 	struct bpf_link *link;
 	__u32 opt;
+	__u64 ecode;
 
+	libbpf_set_print(libbpf_print_fn);
 	signal(SIGINT, sigint_handler);
 	signal(SIGTERM, sigint_handler);
+restart:
+	skel = SCX_OPS_OPEN(simple_ops, scx_simple);
 
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
-
-	skel = scx_simple__open();
-	SCX_BUG_ON(!skel, "Failed to open skel");
-
-	while ((opt = getopt(argc, argv, "fph")) != -1) {
+	while ((opt = getopt(argc, argv, "fvh")) != -1) {
 		switch (opt) {
 		case 'f':
 			skel->rodata->fifo_sched = true;
 			break;
-		case 'p':
-			skel->rodata->switch_partial = true;
+		case 'v':
+			verbose = true;
 			break;
 		default:
 			fprintf(stderr, help_fmt, basename(argv[0]));
@@ -78,12 +85,10 @@ int main(int argc, char **argv)
 		}
 	}
 
-	SCX_BUG_ON(scx_simple__load(skel), "Failed to load skel");
+	SCX_OPS_LOAD(skel, simple_ops, scx_simple, uei);
+	link = SCX_OPS_ATTACH(skel, simple_ops, scx_simple);
 
-	link = bpf_map__attach_struct_ops(skel->maps.simple_ops);
-	SCX_BUG_ON(!link, "Failed to attach struct_ops");
-
-	while (!exit_req && !uei_exited(&skel->bss->uei)) {
+	while (!exit_req && !UEI_EXITED(skel, uei)) {
 		__u64 stats[2];
 
 		read_stats(skel, stats);
@@ -93,7 +98,10 @@ int main(int argc, char **argv)
 	}
 
 	bpf_link__destroy(link);
-	uei_print(&skel->bss->uei);
+	ecode = UEI_REPORT(skel, uei);
 	scx_simple__destroy(skel);
+
+	if (UEI_ECODE_RESTART(ecode))
+		goto restart;
 	return 0;
 }

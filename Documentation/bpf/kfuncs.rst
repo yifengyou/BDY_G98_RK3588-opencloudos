@@ -611,12 +611,15 @@ bpf_task_release() respectively, so we won't provide examples for them.
 ----
 
 Other kfuncs available for interacting with ``struct cgroup *`` objects are
-bpf_cgroup_ancestor() and bpf_cgroup_from_id(), allowing callers to access
-the ancestor of a cgroup and find a cgroup by its ID, respectively. Both
-return a cgroup kptr.
+bpf_cgroup_ancestor(), bpf_cgroup1_from_id() and bpf_cgroup_from_id(),
+allowing callers to access the ancestor of a cgroup and find a cgroup by its ID,
+respectively. All return a cgroup kptr.
 
 .. kernel-doc:: kernel/bpf/helpers.c
    :identifiers: bpf_cgroup_ancestor
+
+.. kernel-doc:: kernel/bpf/helpers.c
+   :identifiers: bpf_cgroup1_from_id
 
 .. kernel-doc:: kernel/bpf/helpers.c
    :identifiers: bpf_cgroup_from_id

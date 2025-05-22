@@ -135,7 +135,8 @@ config SCHED_CORE
 
 config SCHED_CLASS_EXT
 	bool "Extensible Scheduling Class"
-	depends on BPF_SYSCALL && BPF_JIT
+	depends on BPF_SYSCALL && BPF_JIT && DEBUG_INFO_BTF
+	select STACKTRACE if STACKTRACE_SUPPORT
 	help
 	  This option enables a new scheduler class sched_ext (SCX), which
 	  allows scheduling policies to be implemented as BPF programs to
@@ -149,10 +150,20 @@ config SCHED_CLASS_EXT
 	  - Rapid scheduler deployments: Non-disruptive swap outs of
 	    scheduling policies in production environments.
 
-	  sched_ext leverages BPF’s struct_ops feature to define a structure
+	  sched_ext leverages BPF struct_ops feature to define a structure
 	  which exports function callbacks and flags to BPF programs that
 	  wish to implement scheduling policies. The struct_ops structure
 	  exported by sched_ext is struct sched_ext_ops, and is conceptually
 	  similar to struct sched_class.
 
-	  See Documentation/scheduler/sched-ext.rst for more details.
+	  For more information:
+	    Documentation/scheduler/sched-ext.rst
+	    https://github.com/sched-ext/scx
+
+config SCHED_QOS_RUE
+	bool "Tencent RUE"
+	select SCHED_CLASS_EXT
+	select EXT_GROUP_SCHED
+	select SCHED_DEBUG
+	help
+          This option enables to use Tencent RUE.

@@ -2629,6 +2629,17 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif
+#ifdef CONFIG_SCHED_CLASS_EXT
+	{
+		.procname	= "panic_on_scx_stall",
+		.data		= &sysctl_panic_on_scx_stall,
+		.maxlen		= sizeof(sysctl_panic_on_scx_stall),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 #ifdef CONFIG_CGROUPFS
 	{
 		.procname       = "container_cpuquota_aware",
