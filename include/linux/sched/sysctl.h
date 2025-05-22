@@ -74,4 +74,8 @@ int sched_cluster_handler(struct ctl_table *table, int write,
 			  void *buffer, size_t *lenp, loff_t *ppos);
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+extern int sysctl_debug_scx_stall;
+#endif
+
 #endif /* _LINUX_SCHED_SYSCTL_H */

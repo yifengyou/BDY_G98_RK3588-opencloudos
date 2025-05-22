@@ -262,6 +262,7 @@ static unsigned long scx_watchdog_timestamp = INITIAL_JIFFIES;
 static struct delayed_work scx_watchdog_work;
 
 int sysctl_panic_on_scx_stall __read_mostly;
+int sysctl_debug_scx_stall __read_mostly;
 
 /* idle tracking */
 #ifdef CONFIG_SMP
@@ -3167,24 +3168,29 @@ static bool check_rq_for_timeouts(struct rq *rq)
 	rq_lock_irqsave(rq, &rf);
 	list_for_each_entry(p, &rq->scx.runnable_list, scx.runnable_node) {
 		unsigned long last_runnable = p->scx.runnable_at;
-
 		if (unlikely(time_after(jiffies,
 					last_runnable + scx_watchdog_timeout))) {
 			dur_ms = jiffies_to_msecs(jiffies - last_runnable);
 
-			scx_ops_error_kind(SCX_EXIT_ERROR_STALL,
-					   "%s[%d] failed to run for %u.%03us",
-					   p->comm, p->pid,
-					   dur_ms / 1000, dur_ms % 1000);
+			if (unlikely(sysctl_debug_scx_stall))
+				scx_ops_error_kind(SCX_EXIT_ERROR_STALL,
+						"%s[%d] failed to run for %u.%03us",
+						p->comm, p->pid,
+						dur_ms / 1000, dur_ms % 1000);
 			timed_out = true;
 			break;
 		}
 	}
 	rq_unlock_irqrestore(rq, &rf);
 
-	if (sysctl_panic_on_scx_stall && timed_out)
-		panic("SCX Stall: task %s[%d] on cpu %d stalled for %u ms\n",
-		      p->comm, p->pid, cpu_of(rq), dur_ms);
+	if (timed_out) {
+		pr_warn("sched_ext: task %s[%d] on CPU %03d stalled for %u.%03us\n",
+				p->comm, p->pid, cpu_of(rq),
+				dur_ms / 1000, dur_ms % 1000);
+		if (sysctl_panic_on_scx_stall)
+			panic("sched_ext: task %s[%d] on CPU %03d stalled for %u(ms)\n",
+					p->comm, p->pid, cpu_of(rq), dur_ms);
+	}
 
 	return timed_out;
 }
