@@ -28,8 +28,8 @@ struct its_vm {
 	u32			vlpi_count[GICv4_ITS_LIST_MAX];
 #ifdef CONFIG_ARM64_HISI_IPIV
 	KABI_EXTEND(struct page         *vpeid_page)
-	KABI_EXTEND(bool                        nassgireq)
 	bool			enable_ipiv_from_vmm;
+	bool                    enable_ipiv_from_guest;
 #endif
 };
 
