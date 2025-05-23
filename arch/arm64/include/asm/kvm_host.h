@@ -1258,8 +1258,5 @@ bool kvm_arm_vcpu_stopped(struct kvm_vcpu *vcpu);
 
 extern bool kvm_ncsnp_support;
 extern bool kvm_dvmbm_support;
-#ifdef CONFIG_ARM64_HISI_IPIV
-extern bool kvm_ipiv_support;
-#endif
 
 #endif /* __ARM64_KVM_HOST_H__ */
