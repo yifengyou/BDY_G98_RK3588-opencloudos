@@ -112,8 +112,10 @@ static DEFINE_STATIC_KEY_FALSE(supports_pseudo_nmis);
 DEFINE_STATIC_KEY_FALSE(gic_nonsecure_priorities);
 EXPORT_SYMBOL(gic_nonsecure_priorities);
 
+#ifdef CONFIG_ARM64_HISI_IPIV
 DEFINE_STATIC_KEY_FALSE(ipiv_enable);
 EXPORT_SYMBOL(ipiv_enable);
+#endif
 
 /*
  * When the Non-secure world has access to group 0 interrupts (as a
@@ -1406,6 +1408,7 @@ static int gic_dist_supports_lpis(void)
 		!gicv3_nolpi);
 }
 
+#ifdef CONFIG_ARM64_HISI_IPIV
 bool is_gicv4p1(void)
 {
 	if (!gic_data.rdists.has_rvpeid)
@@ -1435,6 +1438,7 @@ void gic_dist_enable_ipiv(void)
 	writel_relaxed(0x4880, gic_data.dist_base + GICD_IPIV_ITS_TA_BASE);
 }
 EXPORT_SYMBOL(gic_dist_enable_ipiv);
+#endif /* CONFIG_ARM64_HISI_IPIV */
 
 static void gic_cpu_init(void)
 {

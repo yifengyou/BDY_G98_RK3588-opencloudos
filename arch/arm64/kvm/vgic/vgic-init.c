@@ -507,31 +507,39 @@ out_slots:
 	return ret;
 }
 
+#ifdef CONFIG_ARM64_HISI_IPIV
 extern struct static_key_false ipiv_enable;
 static int ipiv_irq;
+#endif
 
 /* GENERIC PROBE */
 
 void kvm_vgic_cpu_up(void)
 {
 	enable_percpu_irq(kvm_vgic_global_state.maint_irq, 0);
+#ifdef CONFIG_ARM64_HISI_IPIV
 	if (static_branch_unlikely(&ipiv_enable))
 		enable_percpu_irq(ipiv_irq, 0);
+#endif
 }
 
 
 void kvm_vgic_cpu_down(void)
 {
 	disable_percpu_irq(kvm_vgic_global_state.maint_irq);
+#ifdef CONFIG_ARM64_HISI_IPIV
 	if (static_branch_unlikely(&ipiv_enable))
 		disable_percpu_irq(ipiv_irq);
+#endif
 }
 
+#ifdef CONFIG_ARM64_HISI_IPIV
 static irqreturn_t vgic_ipiv_irq_handler(int irq, void *data)
 {
 	kvm_info("IPIV irq handler!\n");
 	return IRQ_HANDLED;
 }
+#endif
 
 static irqreturn_t vgic_maintenance_handler(int irq, void *data)
 {
@@ -641,6 +649,7 @@ int kvm_vgic_hyp_init(void)
 
 	kvm_info("vgic interrupt IRQ%d\n", kvm_vgic_global_state.maint_irq);
 
+#ifdef CONFIG_ARM64_HISI_IPIV
 	if (static_branch_unlikely(&ipiv_enable)) {
 		ipiv_irq = acpi_register_gsi(NULL, 18, ACPI_EDGE_SENSITIVE,
 			ACPI_ACTIVE_HIGH);
@@ -661,6 +670,7 @@ int kvm_vgic_hyp_init(void)
 			return ret;
 		}
 	}
+#endif
 
 	return 0;
 }
