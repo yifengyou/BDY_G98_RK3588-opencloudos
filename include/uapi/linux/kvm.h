@@ -1256,7 +1256,7 @@ struct kvm_ppc_resize_hpt {
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
-#define KVM_CAP_ARM_IPIV_MODE 503
+#define KVM_CAP_ARM_HISI_IPIV 798
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
