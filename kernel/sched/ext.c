@@ -3875,8 +3875,8 @@ int scx_cpu_cgroup_switch(struct task_group *tg, int val)
 	}
 	css_task_iter_end(&it);
 out:
-	percpu_up_write(&scx_fork_rwsem);
 	scx_cgroup_unlock();
+	percpu_up_write(&scx_fork_rwsem);
 	return ret;
 }
 #else	/* CONFIG_EXT_GROUP_SCHED */
