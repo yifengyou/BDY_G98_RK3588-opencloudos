@@ -88,7 +88,9 @@ static int show_stat(struct seq_file *p, void *v)
 	u64 sum_softirq = 0;
 	unsigned int per_softirq_sums[NR_SOFTIRQS] = {0};
 	struct timespec64 boottime;
+#ifdef CONFIG_SCHED_CLASS_EXT
 	bool show_scx = *((bool *)(p->private));
+#endif
 
 	user = nice = system = idle = iowait =
 		irq = softirq = steal = scx = 0;
