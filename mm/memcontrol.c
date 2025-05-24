@@ -6182,13 +6182,35 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 	unsigned long *v1, *v;
 	int i, stat_items_size;
 	u64 mem_limit, mem_usage;
+	u64 mem_zram_saved = 0, mem_zram_raw_pages = 0, mem_free = 0;
+	u64 pg_in, pg_out;
+#ifdef CONFIG_MEMCG_ZRAM
+	int mem_oversell = 0;
+	u64 mem_zram_raw = 0, mem_zram_usage = 0;
 
+	if (mem_sell_check_memcg(memcg))
+		mem_oversell = 1;
+#endif
 	mem_limit = memcg->memory.max;
 	if (mem_limit == PAGE_COUNTER_MAX)
 		mem_limit = totalram_pages() * PAGE_SIZE;
 	else
 		mem_limit = mem_limit * PAGE_SIZE;
 	mem_usage = (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
+
+	pg_in = memcg_events_local(memcg, memcg1_events[0]) * (PAGE_SIZE / 1024);
+	pg_out = memcg_events_local(memcg, memcg1_events[1]) * (PAGE_SIZE / 1024);
+#ifdef CONFIG_MEMCG_ZRAM
+	if (mem_oversell) {
+		mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED) * PAGE_SIZE;
+		mem_zram_usage = memcg_page_state(memcg, MEMCG_ZRAM_B);
+		mem_zram_saved = mem_zram_raw - mem_zram_usage;
+		mem_zram_raw_pages = memcg_page_state(memcg, MEMCG_ZRAMED);
+		pg_in = 0;
+		pg_out = 0;
+	}
+#endif
+	mem_free = mem_limit - min(mem_limit, (mem_usage + mem_zram_saved));
 
 	stat_items_size = vmstat_text_size * sizeof(unsigned long);
 
@@ -6200,11 +6222,11 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 	if (!v)
 		return -ENOMEM;
 
-	v[NR_FREE_PAGES] = (mem_limit - mem_usage) >> PAGE_SHIFT;
+	v[NR_FREE_PAGES] = mem_free >> PAGE_SHIFT;
 	v[NR_ZONE_INACTIVE_ANON] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_INACTIVE_ANON),
 								memcg->meminfo_recursive);
 	v[NR_ZONE_ACTIVE_ANON] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_ACTIVE_ANON),
-								memcg->meminfo_recursive);
+								memcg->meminfo_recursive) + mem_zram_raw_pages;
 	v[NR_ZONE_INACTIVE_FILE] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_INACTIVE_FILE),
 								memcg->meminfo_recursive);
 	v[NR_ZONE_ACTIVE_FILE] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_ACTIVE_FILE),
@@ -6235,8 +6257,8 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 
 #ifdef CONFIG_VM_EVENT_COUNTERS
 	//all_vm_events(v);
-	v[PGPGIN] = memcg_events_local(memcg, memcg1_events[0]) * (PAGE_SIZE / 1024);		/* sectors -> kbytes */
-	v[PGPGOUT] = memcg_events_local(memcg, memcg1_events[1]) * (PAGE_SIZE / 1024);
+	v[PGPGIN] = pg_in;		/* sectors -> kbytes */
+	v[PGPGOUT] = pg_out;
 #endif
 	for (i = 0; i < vmstat_text_size; i++) {
 		seq_printf(m, "%s %lu\n", vmstat_text[i], v1[i]);
