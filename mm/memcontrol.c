@@ -85,7 +85,7 @@
 #include <linux/rue.h>
 
 #ifdef CONFIG_MEMCG_ZRAM
-bool zram_memcg_nocharge;
+bool zram_memcg_nocharge = true;
 EXPORT_SYMBOL(zram_memcg_nocharge);
 #endif
 
