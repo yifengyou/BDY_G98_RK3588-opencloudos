@@ -7177,6 +7177,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #endif
 #ifdef CONFIG_MEMCG_ZRAM
 	memcg->zram_max = PAGE_COUNTER_MAX;
+	memcg->emm_manager = 1;
+	memcg->emm_oversell = 0;
 #endif
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 #ifdef CONFIG_TEXT_UNEVICTABLE
@@ -7197,6 +7199,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 						: ASYNC_DISTANCE_DEF;
 #ifdef CONFIG_MEMCG_ZRAM
 		memcg->zram_prio = parent->zram_prio;
+		memcg->emm_manager = parent->emm_manager;
+		memcg->emm_oversell = parent->emm_oversell;
 #endif
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);

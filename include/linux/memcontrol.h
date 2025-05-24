@@ -272,6 +272,8 @@ struct mem_cgroup {
 #ifdef CONFIG_MEMCG_ZRAM
 	unsigned long zram_max;
 	unsigned short zram_prio;
+	u32 emm_manager;
+	u32 emm_oversell;
 #endif
 
 	unsigned long soft_limit;
