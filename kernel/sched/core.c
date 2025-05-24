@@ -11715,6 +11715,7 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 		ret = tg_set_cfs_bandwidth(tg, period, quota, burst);
 	return ret ?: nbytes;
 }
+#endif
 
 #if defined(CONFIG_CGROUPFS) || defined(CONFIG_CGROUPFS_MODULE)
 int cpu_get_max_cpus(struct task_struct *p)
@@ -11762,8 +11763,6 @@ int cpu_get_max_cpus(struct task_struct *p)
 EXPORT_SYMBOL_GPL(cpu_get_max_cpus);
 
 #endif /* CONFIG_CGROUPFS */
-
-#endif
 
 #ifdef CONFIG_EXT_GROUP_SCHED
 
