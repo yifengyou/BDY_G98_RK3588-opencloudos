@@ -5938,7 +5938,6 @@ static int memcg_meminfo_recursive_write(struct cgroup_subsys_state *css,
 static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_cgroup *memcg)
 {
 	unsigned long mem_limit, mem_usage;
-	unsigned long mem_swap_limit, mem_swap_usage;
 	unsigned long mem_cache, mem_swap_cache;
 	unsigned long mem_active, mem_inactive;
 	unsigned long mem_active_anon, mem_inactive_anon;
@@ -5949,6 +5948,14 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 	unsigned long mem_rss_huge;
 #endif
 	unsigned long mem_file_map, mem_shmem;
+	unsigned long mem_zram_saved = 0, mem_free = 0;
+	unsigned long mem_swap, mem_swap_free;
+	int mem_oversell = 0;
+#ifdef CONFIG_MEMCG_ZRAM
+	unsigned long mem_zram_raw = 0, mem_zram_usage = 0;
+	if (mem_sell_check_memcg(memcg))
+		mem_oversell = 1;
+#endif
 
 	/*
 	 * We only need mem_cgroup_css_rstat_flush, but the only
@@ -5963,10 +5970,25 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_limit = totalram_pages();
 
 	mem_usage = mem_cgroup_usage(memcg, false);
-	mem_swap_limit = memcg->memsw.max;
-	if (mem_swap_limit == PAGE_COUNTER_MAX)
-		mem_swap_limit = total_swap_pages;
-	mem_swap_usage = mem_cgroup_usage(memcg, true) - mem_usage;
+
+#ifdef CONFIG_MEMCG_ZRAM
+	if (mem_oversell) {
+		mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED);
+		mem_zram_usage = memcg_page_state(memcg, MEMCG_ZRAM_B) / PAGE_SIZE;
+		mem_zram_saved = mem_zram_raw - mem_zram_usage;
+	}
+#endif
+	mem_free = mem_limit - min(mem_limit, (mem_usage + mem_zram_saved));
+
+	if (mem_oversell)
+		mem_swap = 0;
+	else
+		mem_swap = total_swap_pages;
+
+	if (mem_oversell)
+		mem_swap_free = 0;
+	else
+		mem_swap_free = mem_swap - min(mem_swap, memcg_page_state(memcg, MEMCG_SWAP));
 
 	if (!memcg->meminfo_recursive) {
 		mem_cache = memcg_page_state_local(memcg, NR_FILE_PAGES);
@@ -6001,6 +6023,11 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_file_map = memcg_page_state(memcg, NR_FILE_MAPPED);
 		mem_shmem = memcg_page_state(memcg, NR_SHMEM);
 	}
+
+	if ((memcg == root_mem_cgroup) && !mem_oversell)
+		mem_swap_cache = total_swapcache_pages();
+	else
+		mem_swap_cache = 0;
 
 	/*
 	 * Tagged format, for easy grepping and expansion.
@@ -6058,13 +6085,13 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		"AnonHugePages:  %8lu kB\n"
 #endif
 		, K(mem_limit)
-		, K(mem_limit - mem_usage)
+		, K(mem_limit - mem_usage - mem_zram_saved)
 		, 0UL
 		, K(mem_cache)
 		, K(mem_swap_cache)
-		, K(mem_active) // K(pages[LRU_ACTIVE_ANON]   + pages[LRU_ACTIVE_FILE]),
+		, K(mem_active + mem_zram_raw) // K(pages[LRU_ACTIVE_ANON]   + pages[LRU_ACTIVE_FILE]),
 		, K(mem_inactive) // K(pages[LRU_INACTIVE_ANON] + pages[LRU_INACTIVE_FILE]),
-		, K(mem_active_anon) // K(pages[LRU_ACTIVE_ANON]),
+		, K(mem_active_anon + mem_zram_raw) // K(pages[LRU_ACTIVE_ANON]),
 		, K(mem_inactive_anon) // K(pages[LRU_INACTIVE_ANON]),
 		, K(mem_active_file) // K(pages[LRU_ACTIVE_FILE]),
 		, K(mem_inactive_file) // K(pages[LRU_INACTIVE_FILE]),
@@ -6079,15 +6106,15 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 #ifndef CONFIG_MMU
 		, 0UL // K((unsigned long) atomic_long_read(&mmap_pages_allocated)),
 #endif
-		, K(mem_swap_limit)
-		, K(mem_swap_limit - mem_swap_usage)
+		, K(mem_swap)
+		, K(mem_swap_free)
 		, 0UL // K(global_page_state(NR_FILE_DIRTY)),
 		, 0UL // K(global_page_state(NR_WRITEBACK)),
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		, K(mem_rss + mem_rss_huge) // K(global_page_state(NR_ANON_PAGES) +
+		, K(mem_rss + mem_rss_huge + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES) +
 					    // global_page_state(NR_ANON_TRANSPARENT_HUGEPAGES) * HPAGE_PMD_NR),
 #else
-		, K(mem_rss) // K(global_page_state(NR_ANON_PAGES)),
+		, K(mem_rss + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES)),
 #endif
 		, K(mem_file_map)// K(global_page_state(NR_FILE_MAPPED)),
 		, K(mem_shmem) // K(global_page_state(NR_SHMEM)),
