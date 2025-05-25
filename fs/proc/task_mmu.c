@@ -28,11 +28,16 @@
 
 #define SEQ_PUT_DEC(str, val) \
 		seq_put_decimal_ull_width(m, str, (val) << (PAGE_SHIFT-10), 8)
-void task_mem(struct seq_file *m, struct mm_struct *mm)
+void task_mem(struct seq_file *m, struct mm_struct *mm, struct task_struct *task)
 {
 	unsigned long text, lib, swap, anon, file, shmem;
 	unsigned long hiwater_vm, total_vm, hiwater_rss, total_rss;
+	int mem_sell = 0;
 
+#ifdef CONFIG_MEMCG_ZRAM
+	if (mem_sell_check_task(task))
+		mem_sell = 1;
+#endif
 	anon = get_mm_counter(mm, MM_ANONPAGES);
 	file = get_mm_counter(mm, MM_FILEPAGES);
 	shmem = get_mm_counter(mm, MM_SHMEMPAGES);
@@ -62,8 +67,8 @@ void task_mem(struct seq_file *m, struct mm_struct *mm)
 	SEQ_PUT_DEC(" kB\nVmLck:\t", mm->locked_vm);
 	SEQ_PUT_DEC(" kB\nVmPin:\t", atomic64_read(&mm->pinned_vm));
 	SEQ_PUT_DEC(" kB\nVmHWM:\t", hiwater_rss);
-	SEQ_PUT_DEC(" kB\nVmRSS:\t", total_rss);
-	SEQ_PUT_DEC(" kB\nRssAnon:\t", anon);
+	SEQ_PUT_DEC(" kB\nVmRSS:\t", mem_sell ? total_rss + swap : total_rss);
+	SEQ_PUT_DEC(" kB\nRssAnon:\t", mem_sell ? anon + swap : anon);
 	SEQ_PUT_DEC(" kB\nRssFile:\t", file);
 	SEQ_PUT_DEC(" kB\nRssShmem:\t", shmem);
 	SEQ_PUT_DEC(" kB\nVmData:\t", mm->data_vm);
@@ -74,7 +79,7 @@ void task_mem(struct seq_file *m, struct mm_struct *mm)
 		    " kB\nVmLib:\t", lib >> 10, 8);
 	seq_put_decimal_ull_width(m,
 		    " kB\nVmPTE:\t", mm_pgtables_bytes(mm) >> 10, 8);
-	SEQ_PUT_DEC(" kB\nVmSwap:\t", swap);
+	SEQ_PUT_DEC(" kB\nVmSwap:\t", mem_sell ? 0 : swap);
 	seq_puts(m, " kB\n");
 	hugetlb_report_usage(m, mm);
 }
@@ -809,16 +814,27 @@ static void smap_gather_stats(struct vm_area_struct *vma,
 static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 	bool rollup_mode)
 {
-	SEQ_PUT_DEC("Rss:            ", mss->resident);
-	SEQ_PUT_DEC(" kB\nPss:            ", mss->pss >> PSS_SHIFT);
-	SEQ_PUT_DEC(" kB\nPss_Dirty:      ", mss->pss_dirty >> PSS_SHIFT);
+	int mem_sell = 0;
+#ifdef CONFIG_MEMCG_ZRAM
+	struct proc_maps_private *priv = m->private;
+	struct task_struct *task = get_proc_task(priv->inode);
+
+	if (mem_sell_check_task(task))
+		mem_sell = 1;
+
+	if (task)
+		put_task_struct(task);
+#endif
+	SEQ_PUT_DEC("Rss:            ", mem_sell ? mss->resident + mss->swap : mss->resident);
+	SEQ_PUT_DEC(" kB\nPss:            ", mem_sell ? (mss->pss >> PSS_SHIFT) + (mss->swap_pss >> PSS_SHIFT) : mss->pss >> PSS_SHIFT);
+	SEQ_PUT_DEC(" kB\nPss_Dirty:      ", mem_sell ? (mss->pss_dirty >> PSS_SHIFT) + (mss->swap_pss >> PSS_SHIFT) : mss->pss_dirty >> PSS_SHIFT);
 	if (rollup_mode) {
 		/*
 		 * These are meaningful only for smaps_rollup, otherwise two of
 		 * them are zero, and the other one is the same as Pss.
 		 */
 		SEQ_PUT_DEC(" kB\nPss_Anon:       ",
-			mss->pss_anon >> PSS_SHIFT);
+			mem_sell ? (mss->pss_anon >> PSS_SHIFT) + (mss->swap_pss >> PSS_SHIFT) : mss->pss_anon >> PSS_SHIFT);
 		SEQ_PUT_DEC(" kB\nPss_File:       ",
 			mss->pss_file >> PSS_SHIFT);
 		SEQ_PUT_DEC(" kB\nPss_Shmem:      ",
@@ -827,9 +843,9 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 	SEQ_PUT_DEC(" kB\nShared_Clean:   ", mss->shared_clean);
 	SEQ_PUT_DEC(" kB\nShared_Dirty:   ", mss->shared_dirty);
 	SEQ_PUT_DEC(" kB\nPrivate_Clean:  ", mss->private_clean);
-	SEQ_PUT_DEC(" kB\nPrivate_Dirty:  ", mss->private_dirty);
-	SEQ_PUT_DEC(" kB\nReferenced:     ", mss->referenced);
-	SEQ_PUT_DEC(" kB\nAnonymous:      ", mss->anonymous);
+	SEQ_PUT_DEC(" kB\nPrivate_Dirty:  ", mem_sell ? mss->private_dirty + mss->swap : mss->private_dirty);
+	SEQ_PUT_DEC(" kB\nReferenced:     ", mem_sell ? mss->referenced + mss->swap : mss->referenced);
+	SEQ_PUT_DEC(" kB\nAnonymous:      ", mem_sell ? mss->anonymous + mss->swap : mss->anonymous);
 	SEQ_PUT_DEC(" kB\nKSM:            ", mss->ksm);
 	SEQ_PUT_DEC(" kB\nLazyFree:       ", mss->lazyfree);
 	SEQ_PUT_DEC(" kB\nAnonHugePages:  ", mss->anonymous_thp);
@@ -838,9 +854,9 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 	SEQ_PUT_DEC(" kB\nShared_Hugetlb: ", mss->shared_hugetlb);
 	seq_put_decimal_ull_width(m, " kB\nPrivate_Hugetlb: ",
 				  mss->private_hugetlb >> 10, 7);
-	SEQ_PUT_DEC(" kB\nSwap:           ", mss->swap);
+	SEQ_PUT_DEC(" kB\nSwap:           ", mem_sell ? 0 : mss->swap);
 	SEQ_PUT_DEC(" kB\nSwapPss:        ",
-					mss->swap_pss >> PSS_SHIFT);
+					mem_sell ? 0 : mss->swap_pss >> PSS_SHIFT);
 	SEQ_PUT_DEC(" kB\nLocked:         ",
 					mss->pss_locked >> PSS_SHIFT);
 	seq_puts(m, " kB\n");
