@@ -153,8 +153,6 @@ static int kvm_vm_has_attr(struct kvm *kvm, struct kvm_device_attr *attr)
 	switch (attr->group) {
 	case KVM_LOONGARCH_VM_FEAT_CTRL:
 		return kvm_vm_feature_has_attr(kvm, attr);
-	case KVM_LOONGARCH_VM_HAVE_IRQCHIP:
-		return 0;
 	default:
 		return -ENXIO;
 	}
