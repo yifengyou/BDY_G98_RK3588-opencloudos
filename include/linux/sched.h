@@ -314,6 +314,10 @@ asmlinkage void preempt_schedule_irq(void);
 
 extern int __must_check io_schedule_prepare(void);
 extern void io_schedule_finish(int token);
+#ifdef CONFIG_BT_SCHED
+extern void task_set_io_pending_bt(void);
+extern void task_clear_io_pending_bt(void);
+#endif
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
 
@@ -377,6 +381,21 @@ extern struct mutex sched_domains_mutex;
 struct sched_param {
 	int sched_priority;
 };
+
+extern int __sched_setscheduler(struct task_struct *p,
+				const struct sched_attr *attr,
+				bool user, bool pi);
+#ifdef CONFIG_BT_SCHED
+#define TASK_SUM_EXEC_RUNTIME(tsk)  \
+	((unsigned long long)((tsk)->se.sum_exec_runtime + (tsk)->bt.sum_exec_runtime))
+struct cgroup;
+#else
+#define TASK_SUM_EXEC_RUNTIME(tsk)   \
+	((unsigned long long)((tsk)->se.sum_exec_runtime))
+#endif
+
+#define SCHED_LOAD_SHIFT        10
+#define SCHED_LOAD_SCALE        (1L << SCHED_LOAD_SHIFT)
 
 struct sched_info {
 #ifdef CONFIG_SCHED_INFO
@@ -522,25 +541,41 @@ struct sched_avg {
 	struct util_est			util_est;
 } ____cacheline_aligned;
 
+struct sched_avg_bt {
+	u64                     last_update_time;
+	u64                     load_sum;
+	u32                     util_sum;
+	u32                     period_contrib;
+	unsigned long           load_avg;
+	unsigned long           util_avg;
+};
+
 struct sched_statistics {
 #ifdef CONFIG_SCHEDSTATS
 	u64				wait_start;
 	u64				wait_max;
 	u64				wait_count;
 	u64				wait_sum;
+	u64				wait_avg;
 	u64				iowait_count;
 	u64				iowait_sum;
 
 	u64				sleep_start;
 	u64				sleep_max;
 	s64				sum_sleep_runtime;
+	u64				sleep_avg;
 
 	u64				block_start;
 	u64				block_max;
+	u64				block_avg;
 	s64				sum_block_runtime;
 
 	s64				exec_max;
 	u64				slice_max;
+	u64				slice_avg;
+
+	u64				wakeup_start;
+	u64				running_avg;
 
 	u64				nr_migrations_cold;
 	u64				nr_failed_migrations_affine;
@@ -609,6 +644,31 @@ struct sched_entity {
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 };
+
+#ifdef CONFIG_BT_SCHED
+struct sched_bt_entity {
+	struct load_weight	load;
+	struct rb_node          run_node;
+	struct list_head	group_node;
+	unsigned int            on_rq;
+
+	u64                     exec_start;
+	u64                     sum_exec_runtime;
+	u64                     vruntime;
+	u64                     prev_sum_exec_runtime;
+
+#ifdef CONFIG_BT_GROUP_SCHED
+	int			depth;
+	struct sched_bt_entity	*parent;
+	struct bt_rq		*bt_rq;
+	struct bt_rq		*bt_my_q;
+#endif
+
+#ifdef CONFIG_SMP
+	struct sched_avg_bt	bt_avg;
+#endif
+};
+#endif
 
 struct sched_rt_entity {
 	struct list_head		run_list;
@@ -805,6 +865,9 @@ struct task_struct {
 	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+#ifdef CONFIG_BT_SCHED
+	unsigned int			nflags;
+#endif
 	unsigned int			ptrace;
 
 #ifdef CONFIG_SMP
@@ -823,6 +886,9 @@ struct task_struct {
 	 */
 	int				recent_used_cpu;
 	int				wake_cpu;
+#ifdef CONFIG_HT_ISOLATE
+	int				ht_sensi_type;
+#endif
 #endif
 #ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	struct security_moni_info	*par_moni_info;
@@ -836,6 +902,9 @@ struct task_struct {
 	unsigned int			rt_priority;
 
 	struct sched_entity		se;
+#ifdef CONFIG_BT_SCHED
+	struct sched_bt_entity		bt;
+#endif
 	struct sched_rt_entity		rt;
 	struct sched_dl_entity		dl;
 #ifdef CONFIG_SCHED_CLASS_EXT
@@ -965,6 +1034,10 @@ struct task_struct {
 	/* Bit to tell LSMs we're in execve(): */
 	unsigned			in_execve:1;
 	unsigned			in_iowait:1;
+#ifdef CONFIG_BT_SCHED
+	unsigned			io_pending_bt:1;
+	unsigned			in_iowait_bt:1;
+#endif
 #ifndef TIF_RESTORE_SIGMASK
 	unsigned			restore_sigmask:1;
 #endif
@@ -1811,7 +1884,7 @@ extern struct pid *cad_pid;
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_MEMALLOC_PIN		0x10000000	/* Allocation context constrained to zones which allow long term pinning. */
-#define PF__HOLE__20000000	0x20000000
+#define TNF_SCHED_BT		0x20000000/* BT TASK*/
 #define PF__HOLE__40000000	0x40000000
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
 
@@ -1964,20 +2037,11 @@ extern int yield_to(struct task_struct *p, bool preempt);
 extern void set_user_nice(struct task_struct *p, long nice);
 extern int task_prio(const struct task_struct *p);
 
-/**
- * task_nice - return the nice value of a given task.
- * @p: the task in question.
- *
- * Return: The nice value [ -20 ... 0 ... 19 ].
- */
-static inline int task_nice(const struct task_struct *p)
-{
-	return PRIO_TO_NICE((p)->static_prio);
-}
-
+extern int task_nice(const struct task_struct *p);
 extern int can_nice(const struct task_struct *p, const int nice);
 extern int task_curr(const struct task_struct *p);
 extern int idle_cpu(int cpu);
+extern int idle_bt_cpu(int cpu);
 extern int available_idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);

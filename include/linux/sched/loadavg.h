@@ -12,6 +12,10 @@
  *    the EXP_n values would be 1981, 2034 and 2043 if still using only
  *    11 bit fractions.
  */
+#ifdef CONFIG_BT_SCHED
+extern unsigned long bt_avenrun[];	/* BT Load averages */
+extern void get_bt_avenrun(unsigned long *loads, unsigned long offset, int shift);
+#endif
 extern unsigned long avenrun[];		/* Load averages */
 extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
 

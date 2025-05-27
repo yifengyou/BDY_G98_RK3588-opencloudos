@@ -55,6 +55,12 @@
  */
 
 /* Variables and functions for calc_load */
+#ifdef CONFIG_BT_SCHED
+int sysctl_remove_bt_load;
+atomic_long_t calc_bt_load_tasks;
+unsigned long bt_avenrun[3];
+EXPORT_SYMBOL(bt_avenrun); /* should be removed */
+#endif
 atomic_long_t calc_load_tasks;
 unsigned long calc_load_update;
 unsigned long avenrun[3];
@@ -70,9 +76,23 @@ EXPORT_SYMBOL(avenrun); /* should be removed */
  */
 void get_avenrun(unsigned long *loads, unsigned long offset, int shift)
 {
-	loads[0] = (avenrun[0] + offset) << shift;
-	loads[1] = (avenrun[1] + offset) << shift;
-	loads[2] = (avenrun[2] + offset) << shift;
+	unsigned long avnrun[3];
+
+	avnrun[0] = avenrun[0];
+	avnrun[1] = avenrun[1];
+	avnrun[2] = avenrun[2];
+
+#ifdef CONFIG_BT_SCHED
+	if (sysctl_remove_bt_load) {
+		avnrun[0] = avnrun[0] - bt_avenrun[0];
+		avnrun[1] = avnrun[1] - bt_avenrun[1];
+		avnrun[2] = avnrun[2] - bt_avenrun[2];
+	}
+#endif
+
+	loads[0] = (avnrun[0] + offset) << shift;
+	loads[1] = (avnrun[1] + offset) << shift;
+	loads[2] = (avnrun[2] + offset) << shift;
 }
 
 long calc_load_fold_active(struct rq *this_rq, long adjust)
@@ -89,6 +109,30 @@ long calc_load_fold_active(struct rq *this_rq, long adjust)
 
 	return delta;
 }
+
+#ifdef CONFIG_BT_SCHED
+void get_bt_avenrun(unsigned long *loads, unsigned long offset, int shift)
+{
+	loads[0] = (bt_avenrun[0] + offset) << shift;
+	loads[1] = (bt_avenrun[1] + offset) << shift;
+	loads[2] = (bt_avenrun[2] + offset) << shift;
+}
+
+long calc_bt_load_fold_active(struct rq *this_rq, long adjust)
+{
+	long nr_active, delta = 0;
+
+	nr_active = this_rq->bt_nr_running - adjust;
+	nr_active += (long)this_rq->bt.nr_uninterruptible;
+
+	if (nr_active != this_rq->calc_bt_load_active) {
+		delta = nr_active - this_rq->calc_bt_load_active;
+		this_rq->calc_bt_load_active = nr_active;
+	}
+
+	return delta;
+}
+#endif
 
 /**
  * fixed_power_int - compute: x^n, in O(log n) time
@@ -202,6 +246,9 @@ calc_load_n(unsigned long load, unsigned long exp,
  *
  * When making the ILB scale, we should try to pull this in as well.
  */
+#ifdef CONFIG_BT_SCHED
+static atomic_long_t calc_bt_load_nohz[2];
+#endif
 static atomic_long_t calc_load_nohz[2];
 static int calc_load_idx;
 
@@ -237,9 +284,16 @@ static void calc_load_nohz_fold(struct rq *rq)
 	delta = calc_load_fold_active(rq, 0);
 	if (delta) {
 		int idx = calc_load_write_idx();
-
 		atomic_long_add(delta, &calc_load_nohz[idx]);
 	}
+
+#ifdef CONFIG_BT_SCHED
+	delta = calc_bt_load_fold_active(rq, 0);
+	if (delta) {
+		int idx = calc_load_write_idx();
+		atomic_long_add(delta, &calc_bt_load_nohz[idx]);
+	}
+#endif
 }
 
 void calc_load_nohz_start(void)
@@ -291,6 +345,19 @@ static long calc_load_nohz_read(void)
 	return delta;
 }
 
+#ifdef CONFIG_BT_SCHED
+static long calc_bt_load_nohz_read(void)
+{
+	int idx = calc_load_read_idx();
+	long delta = 0;
+
+	if (atomic_long_read(&calc_bt_load_nohz[idx]))
+		delta = atomic_long_xchg(&calc_bt_load_nohz[idx], 0);
+
+	return delta;
+}
+#endif
+
 /*
  * NO_HZ can leave us missing all per-CPU ticks calling
  * calc_load_fold_active(), but since a NO_HZ CPU folds its delta into
@@ -320,6 +387,15 @@ static void calc_global_nohz(void)
 		avenrun[1] = calc_load_n(avenrun[1], EXP_5, active, n);
 		avenrun[2] = calc_load_n(avenrun[2], EXP_15, active, n);
 
+#ifdef CONFIG_BT_SCHED
+		active = atomic_long_read(&calc_bt_load_tasks);
+		active = active > 0 ? active * FIXED_1 : 0;
+
+		bt_avenrun[0] = calc_load_n(bt_avenrun[0], EXP_1, active, n);
+		bt_avenrun[1] = calc_load_n(bt_avenrun[1], EXP_5, active, n);
+		bt_avenrun[2] = calc_load_n(bt_avenrun[2], EXP_15, active, n);
+#endif
+
 		WRITE_ONCE(calc_load_update, sample_window + n * LOAD_FREQ);
 	}
 
@@ -335,6 +411,9 @@ static void calc_global_nohz(void)
 }
 #else /* !CONFIG_NO_HZ_COMMON */
 
+#ifdef CONFIG_BT_SCHED
+static inline long calc_bt_load_nohz_read(void) { return 0; }
+#endif
 static inline long calc_load_nohz_read(void) { return 0; }
 static inline void calc_global_nohz(void) { }
 
@@ -369,6 +448,19 @@ void calc_global_load(void)
 	avenrun[1] = calc_load(avenrun[1], EXP_5, active);
 	avenrun[2] = calc_load(avenrun[2], EXP_15, active);
 
+#ifdef CONFIG_BT_SCHED
+	delta = calc_bt_load_nohz_read();
+	if (delta)
+		atomic_long_add(delta, &calc_bt_load_tasks);
+
+	active = atomic_long_read(&calc_bt_load_tasks);
+	active = active > 0 ? active * FIXED_1 : 0;
+
+	bt_avenrun[0] = calc_load(bt_avenrun[0], EXP_1, active);
+	bt_avenrun[1] = calc_load(bt_avenrun[1], EXP_5, active);
+	bt_avenrun[2] = calc_load(bt_avenrun[2], EXP_15, active);
+#endif
+
 	WRITE_ONCE(calc_load_update, sample_window + LOAD_FREQ);
 
 	/*
@@ -393,5 +485,10 @@ void calc_global_load_tick(struct rq *this_rq)
 	if (delta)
 		atomic_long_add(delta, &calc_load_tasks);
 
+#ifdef CONFIG_BT_SCHED
+	delta  = calc_bt_load_fold_active(this_rq, 0);
+	if (delta)
+		atomic_long_add(delta, &calc_bt_load_tasks);
+#endif
 	this_rq->calc_load_update += LOAD_FREQ;
 }

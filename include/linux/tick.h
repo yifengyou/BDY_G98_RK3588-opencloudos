@@ -140,6 +140,9 @@ extern unsigned long tick_nohz_get_idle_calls(void);
 extern unsigned long tick_nohz_get_idle_calls_cpu(int cpu);
 extern u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time);
 extern u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time);
+#ifdef CONFIG_BT_SCHED
+extern u64 get_cpu_iowait_bt_time_us(int cpu, u64 *last_update_time);
+#endif
 
 static inline void tick_nohz_idle_stop_tick_protected(void)
 {

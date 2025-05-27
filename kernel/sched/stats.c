@@ -44,6 +44,7 @@ void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 			max(schedstat_val(stats->wait_max), delta));
 	__schedstat_inc(stats->wait_count);
 	__schedstat_add(stats->wait_sum, delta);
+	update_avg(&stats->wait_avg, delta);
 	__schedstat_set(stats->wait_start, 0);
 }
 
@@ -54,6 +55,9 @@ void __update_stats_enqueue_sleeper(struct rq *rq, struct task_struct *p,
 
 	sleep_start = schedstat_val(stats->sleep_start);
 	block_start = schedstat_val(stats->block_start);
+
+	if (p)
+		__schedstat_set(stats->wakeup_start, rq_clock(rq));
 
 	if (sleep_start) {
 		u64 delta = rq_clock(rq) - sleep_start;
@@ -66,6 +70,7 @@ void __update_stats_enqueue_sleeper(struct rq *rq, struct task_struct *p,
 
 		__schedstat_set(stats->sleep_start, 0);
 		__schedstat_add(stats->sum_sleep_runtime, delta);
+		update_avg(&stats->sleep_avg, delta);
 
 		if (p) {
 #ifdef CONFIG_CGROUP_SLI
@@ -88,6 +93,7 @@ void __update_stats_enqueue_sleeper(struct rq *rq, struct task_struct *p,
 		__schedstat_set(stats->block_start, 0);
 		__schedstat_add(stats->sum_sleep_runtime, delta);
 		__schedstat_add(stats->sum_block_runtime, delta);
+		update_avg(&stats->block_avg, delta);
 
 		if (p) {
 			if (p->in_iowait) {

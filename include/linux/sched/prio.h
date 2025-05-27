@@ -15,8 +15,22 @@
 
 #define MAX_RT_PRIO		100
 
+#ifdef CONFIG_BT_SCHED
+#define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH + 40)
+#else
 #define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH)
+#endif
 #define DEFAULT_PRIO		(MAX_RT_PRIO + NICE_WIDTH / 2)
+
+#ifdef CONFIG_BT_SCHED
+#define		INIT_PRIO		(MAX_PRIO - 20 - 40)
+#define		INIT_STATIC_PRIO	(MAX_PRIO - 20 - 40)
+#define		INIT_NORMAL_PRIO	(MAX_PRIO - 20 - 40)
+#else
+#define		INIT_PRIO		(MAX_PRIO - 20)
+#define		INIT_STATIC_PRIO	(MAX_PRIO - 20)
+#define		INIT_NORMAL_PRIO	(MAX_PRIO - 20)
+#endif
 
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]

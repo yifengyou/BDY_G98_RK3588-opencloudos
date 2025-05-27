@@ -591,7 +591,7 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 
 	SEQ_printf(m, "%9lld.%06ld %9lld.%06ld %9lld.%06ld %9lld.%06ld",
 		SPLIT_NS(schedstat_val_or_zero(p->stats.wait_sum)),
-		SPLIT_NS(p->se.sum_exec_runtime),
+		SPLIT_NS(TASK_SUM_EXEC_RUNTIME(p)),
 		SPLIT_NS(schedstat_val_or_zero(p->stats.sum_sleep_runtime)),
 		SPLIT_NS(schedstat_val_or_zero(p->stats.sum_block_runtime)));
 
@@ -711,6 +711,22 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 #endif
 }
 
+#ifdef CONFIG_BT_SCHED
+void print_bt_rq(struct seq_file *m, int cpu, struct bt_rq *bt_rq)
+{
+
+#ifdef CONFIG_BT_GROUP_SCHED
+	SEQ_printf(m, "\n");
+	SEQ_printf_task_group_path(m, bt_rq->tg, "bt_rq[%d]:%s\n", cpu);
+#else
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "bt_rq[%d]:\n", cpu);
+#endif
+	SEQ_printf(m, "  .%-30s: %d\n", "bt_nr_running", bt_rq->nr_running);
+	SEQ_printf(m, "  .%-30s: %ld\n", "load", bt_rq->load.weight);
+}
+#endif
+
 void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 {
 #ifdef CONFIG_RT_GROUP_SCHED
@@ -817,7 +833,14 @@ do {									\
 	}
 #undef P
 
+#ifdef CONFIG_BT_BANDWIDTH
+	SEQ_printf(m, "  .%-30s: %d\n", "bt_throttled",
+			bt_rq_throttled(rq));
+#endif
 	print_cfs_stats(m, cpu);
+#ifdef CONFIG_BT_SCHED
+	print_bt_stats(m, cpu);
+#endif
 	print_rt_stats(m, cpu);
 	print_dl_stats(m, cpu);
 
@@ -1004,11 +1027,24 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 
 #define P_SCHEDSTAT(F)  __PS(#F, schedstat_val(p->stats.F))
 #define PN_SCHEDSTAT(F) __PSN(#F, schedstat_val(p->stats.F))
+#ifdef CONFIG_BT_SCHED
+	if (!task_has_bt_policy(p)) {
+		PN(se.exec_start);
+		PN(se.vruntime);
+	} else {
+		SEQ_printf(m, "%-45s:%14Ld.%06ld\n", "se.exec_start",
+			   SPLIT_NS((long long)p->bt.exec_start));
+		SEQ_printf(m, "%-45s:%14Ld.%06ld\n", "se.vruntime",
+			   SPLIT_NS((long long)p->bt.vruntime));
+	}
+	SEQ_printf(m, "%-45s:%14Ld.%06ld\n", "se.sum_exec_runtime",
+		   SPLIT_NS((long long)(p->se.sum_exec_runtime + p->bt.sum_exec_runtime)));
+#else
 
 	PN(se.exec_start);
 	PN(se.vruntime);
 	PN(se.sum_exec_runtime);
-
+#endif
 	nr_switches = p->nvcsw + p->nivcsw;
 
 	P(se.nr_migrations);
@@ -1044,6 +1080,12 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 		P_SCHEDSTAT(nr_wakeups_affine_attempts);
 		P_SCHEDSTAT(nr_wakeups_passive);
 		P_SCHEDSTAT(nr_wakeups_idle);
+
+		P_SCHEDSTAT(sleep_avg);
+		P_SCHEDSTAT(block_avg);
+		P_SCHEDSTAT(wait_avg);
+		P_SCHEDSTAT(slice_avg);
+		P_SCHEDSTAT(running_avg);
 
 		avg_atom = p->se.sum_exec_runtime;
 		if (nr_switches)

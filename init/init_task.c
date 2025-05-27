@@ -76,9 +76,12 @@ struct task_struct init_task
 	.stack		= init_stack,
 	.usage		= REFCOUNT_INIT(2),
 	.flags		= PF_KTHREAD,
-	.prio		= MAX_PRIO - 20,
-	.static_prio	= MAX_PRIO - 20,
-	.normal_prio	= MAX_PRIO - 20,
+#ifdef CONFIG_BT_SCHED
+	.nflags		= 0,
+#endif
+	.prio		= INIT_PRIO,
+	.static_prio	= INIT_STATIC_PRIO,
+	.normal_prio	= INIT_NORMAL_PRIO,
 	.policy		= SCHED_NORMAL,
 	.cpus_ptr	= &init_task.cpus_mask,
 	.user_cpus_ptr	= NULL,

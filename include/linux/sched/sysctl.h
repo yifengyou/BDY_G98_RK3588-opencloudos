@@ -27,6 +27,37 @@ enum sched_tunable_scaling {
 #define NUMA_BALANCING_NORMAL		0x1
 #define NUMA_BALANCING_MEMORY_TIERING	0x2
 
+#ifdef CONFIG_BT_SCHED
+extern unsigned int sysctl_sched_bt_nr_migrate;
+extern unsigned int sysctl_idle_balance_bt_cost;
+extern unsigned int sysctl_sched_bt_load_balance_interval_min_ms;
+extern unsigned int sysctl_sched_bt_load_balance_interval_max_ms;
+extern int sched_bt_disable_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos);
+extern unsigned int sysctl_cpu_qos;
+extern unsigned int sysctl_sched_bt_ignore_cpubind;
+extern unsigned int sysctl_rue_reserved0;
+extern unsigned int sysctl_rue_reserved1;
+extern unsigned int sysctl_rue_reserved2;
+extern unsigned int sysctl_rue_reserved3;
+extern unsigned int sysctl_rue_reserved4;
+extern unsigned int sysctl_rue_reserved5;
+#ifdef CONFIG_BT_BANDWIDTH
+extern unsigned int sysctl_sched_bt_percpu_suppress_percent;
+extern unsigned int sysctl_sched_bt_percpu_max_throttle_time_sec;
+#endif
+#endif
+
+#ifdef CONFIG_BT_BANDWIDTH
+extern unsigned int sysctl_sched_bt_period;
+extern int sched_bt_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos);
+extern int sched_bt_percpu_suppress_percent_handler(struct ctl_table *table,
+		int write, void __user *buffer, size_t *lenp,
+		loff_t *ppos);
+#endif
+
 #ifdef CONFIG_NUMA_BALANCING
 extern int sysctl_numa_balancing_mode;
 #else
