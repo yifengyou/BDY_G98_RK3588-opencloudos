@@ -1,0 +1,7 @@
+config THIRDPARTY_TCNIC_NET
+	tristate "Tencent CNIC network driver"
+	default n
+	depends on PCI
+	select NET_FAILOVER
+	help
+	  This is the virtual network driver for Tencent CNIC network card.  Say Y or M.
