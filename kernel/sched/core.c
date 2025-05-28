@@ -12269,6 +12269,57 @@ static int cpu_offline_write_u64(struct cgroup_subsys_state *css,
 
 #endif
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+
+static int cpu_soft_domain_write_s64(struct cgroup_subsys_state *css,
+				     struct cftype *cftype,
+				     s64 val)
+{
+	return sched_group_set_soft_domain(css_tg(css), val);
+}
+
+static s64 cpu_soft_domain_read_s64(struct cgroup_subsys_state *css,
+				     struct cftype *cftype)
+{
+	struct task_group *tg = css_tg(css);
+
+	return (s64)tg->sf_ctx->policy;
+}
+
+static int cpu_soft_domain_quota_write_u64(struct cgroup_subsys_state *css,
+					struct cftype *cftype, u64 val)
+{
+	struct task_group *tg = css_tg(css);
+
+	if (tg->sf_ctx->policy != 0)
+		return -EINVAL;
+
+	if (val > cpumask_weight(cpumask_of_node(0)))
+		return -EINVAL;
+
+	tg->sf_ctx->nr_cpus = (int)val;
+
+	return 0;
+}
+
+static u64 cpu_soft_domain_quota_read_u64(struct cgroup_subsys_state *css,
+					  struct cftype *cftype)
+{
+	struct task_group *tg = css_tg(css);
+
+	return (u64)tg->sf_ctx->nr_cpus;
+}
+
+static int soft_domain_cpu_list_seq_show(struct seq_file *sf, void *v)
+{
+	struct task_group *tg = css_tg(seq_css(sf));
+
+	seq_printf(sf, "%*pbl\n", cpumask_pr_args(to_cpumask(tg->sf_ctx->span)));
+
+	return 0;
+}
+
+#endif
 
 static struct cftype cpu_legacy_files[] = {
 #ifdef CONFIG_CGROUPFS
@@ -12311,6 +12362,25 @@ static struct cftype cpu_legacy_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_core_tag_read_u64,
 		.write_u64 = cpu_core_tag_write_u64,
+	},
+#endif
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	{
+		.name = "soft_domain",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_s64 = cpu_soft_domain_read_s64,
+		.write_s64 = cpu_soft_domain_write_s64,
+	},
+	{
+		.name = "soft_domain_nr_cpu",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_soft_domain_quota_read_u64,
+		.write_u64 = cpu_soft_domain_quota_write_u64,
+	},
+	{
+		.name = "soft_domain_cpu_list",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = soft_domain_cpu_list_seq_show,
 	},
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
