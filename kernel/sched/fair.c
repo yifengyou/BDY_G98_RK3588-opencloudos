@@ -9320,6 +9320,15 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	if (throttled_lb_pair(task_group(p), env->src_cpu, env->dst_cpu))
 		return 0;
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	/* Do not migrate soft domain tasks between numa. */
+	if (sched_feat(SOFT_DOMAIN)) {
+		if (task_group(p)->sf_ctx && task_group(p)->sf_ctx->policy &&
+		(env->sd->flags & SD_NUMA) != 0)
+			return 0;
+	}
+#endif
+
 	/* Disregard pcpu kthreads; they are where they need to be. */
 	if (kthread_is_per_cpu(p))
 		return 0;
