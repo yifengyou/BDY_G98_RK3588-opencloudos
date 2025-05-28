@@ -7572,6 +7572,40 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 		}
 	}
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	if (sched_feat(SOFT_DOMAIN)) {
+		struct task_group *tg = task_group(p);
+
+		if (tg->sf_ctx && tg->sf_ctx->policy != 0) {
+			struct cpumask *tmpmask = to_cpumask(tg->sf_ctx->span);
+
+			for_each_cpu_wrap(cpu, tmpmask, target + 1) {
+				if (!cpumask_test_cpu(cpu, tmpmask))
+					continue;
+
+				if (has_idle_core) {
+					i = select_idle_core(p, cpu, cpus, &idle_cpu);
+					if ((unsigned int)i < nr_cpumask_bits)
+						return i;
+
+				} else {
+					if (--nr <= 0)
+						return -1;
+					idle_cpu = __select_idle_cpu(cpu, p);
+					if ((unsigned int)idle_cpu < nr_cpumask_bits)
+						return idle_cpu;
+				}
+			}
+
+			if (idle_cpu != -1)
+				return idle_cpu;
+
+			cpumask_andnot(cpus, cpus, tmpmask);
+		}
+
+	}
+#endif
+
 	if (static_branch_unlikely(&sched_cluster_active)) {
 		struct sched_group *sg = sd->groups;
 
@@ -8505,6 +8539,30 @@ static void set_task_select_cpus(struct task_struct *p, int *idlest_cpu,
 }
 #endif
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+static int wake_soft_domain(struct task_struct *p, int target)
+{
+	struct cpumask *mask = NULL;
+	struct soft_domain_ctx *ctx = NULL;
+
+	rcu_read_lock();
+	ctx = task_group(p)->sf_ctx;
+	if (!ctx || ctx->policy == 0)
+		goto unlock;
+
+	mask = to_cpumask(ctx->span);
+	if (cpumask_test_cpu(target, mask))
+		goto unlock;
+	else
+		target = cpumask_any_distribute(mask);
+
+unlock:
+	rcu_read_unlock();
+
+	return target;
+}
+#endif
+
 /*
  * select_task_rq_fair: Select target runqueue for the waking task in domains
  * that have the relevant SD flag set. In practice, this is SD_BALANCE_WAKE,
@@ -8551,6 +8609,11 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 				return new_cpu;
 			new_cpu = prev_cpu;
 		}
+
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+		if (sched_feat(SOFT_DOMAIN))
+			new_cpu = prev_cpu = wake_soft_domain(p, prev_cpu);
+#endif
 
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
 		want_affine = !wake_wide(p) && cpumask_test_cpu(cpu, p->select_cpus);
