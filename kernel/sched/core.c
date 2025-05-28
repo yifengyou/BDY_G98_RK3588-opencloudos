@@ -10395,6 +10395,8 @@ void __init sched_init_smp(void)
 	init_sched_dl_class();
 
 	sched_smp_initialized = true;
+
+	build_soft_domain();
 }
 
 static int __init migration_init(void)

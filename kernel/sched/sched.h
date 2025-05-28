@@ -4192,4 +4192,16 @@ void sched_enq_and_set_task(struct sched_enq_and_set_ctx *ctx);
 
 #include "ext.h"
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+void build_soft_domain(void);
+static inline struct cpumask *soft_domain_span(unsigned long span[])
+{
+	return to_cpumask(span);
+}
+#else
+
+static inline void build_soft_domain(void) { }
+
+#endif
+
 #endif /* _KERNEL_SCHED_SCHED_H */

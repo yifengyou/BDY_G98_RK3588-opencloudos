@@ -1124,6 +1124,18 @@ config QOS_SCHED_DYNAMIC_AFFINITY
 	 of taskgroup is below threshold setted, otherwise make taskgroup to use
 	 cpus allowed.
 
+config SCHED_SOFT_DOMAIN
+	bool "Soft domain scheduler"
+	depends on FAIR_GROUP_SCHED
+	depends on SCHED_CLUSTER
+	default n
+	help
+	  This feature builds a CPU soft domain for each task group. Tasks are
+	  prioritized and aggregated to execute within soft domains, which optimizes
+	  resource allocation and enhances cache locality.
+
+	  If in doubt, say N.
+
 config SCHED_MM_CID
 	def_bool y
 	depends on SMP && RSEQ
