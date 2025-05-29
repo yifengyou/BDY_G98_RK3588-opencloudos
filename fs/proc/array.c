@@ -490,7 +490,11 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 	task_state(m, ns, pid, task);
 
 	if (mm) {
+#ifdef CONFIG_MMU
+		task_mem(m, mm, task);
+#else
 		task_mem(m, mm);
+#endif
 		task_core_dumping(m, task);
 		task_thp_status(m, mm);
 		task_untag_mask(m, mm);
@@ -526,6 +530,11 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	int exit_code = task->exit_code;
 	struct signal_struct *sig = task->signal;
 	unsigned int seq = 1;
+	int mem_sell = 0;
+#ifdef CONFIG_MEMCG_ZRAM
+	if (mem_sell_check_task(task))
+		mem_sell = 1;
+#endif
 
 	state = *get_task_state(task);
 	vsize = eip = esp = 0;
@@ -653,7 +662,7 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	seq_put_decimal_ull(m, " ", 0);
 	seq_put_decimal_ull(m, " ", start_time);
 	seq_put_decimal_ull(m, " ", vsize);
-	seq_put_decimal_ull(m, " ", mm ? get_mm_rss(mm) : 0);
+	seq_put_decimal_ull(m, " ", mm ? mem_sell ? get_mm_rss(mm) + get_mm_counter(mm, MM_SWAPENTS) : get_mm_rss(mm) : 0);
 	seq_put_decimal_ull(m, " ", rsslim);
 	seq_put_decimal_ull(m, " ", mm ? (permitted ? mm->start_code : 1) : 0);
 	seq_put_decimal_ull(m, " ", mm ? (permitted ? mm->end_code : 1) : 0);
@@ -726,6 +735,11 @@ int proc_pid_statm(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task)
 {
 	struct mm_struct *mm = get_task_mm(task);
+	int mem_sell = 0;
+#ifdef CONFIG_EMM_MEMORY_OVERSELL
+	if (mem_sell_check_task(task))
+		mem_sell = 1;
+#endif
 
 	if (mm) {
 		unsigned long size;
@@ -735,6 +749,8 @@ int proc_pid_statm(struct seq_file *m, struct pid_namespace *ns,
 		unsigned long data = 0;
 
 		size = task_statm(mm, &shared, &text, &data, &resident);
+		if (mem_sell)
+			resident += get_mm_counter(mm, MM_SWAPENTS);
 		mmput(mm);
 
 		/*

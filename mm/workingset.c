@@ -470,7 +470,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 	refault_distance = lru_distance(lruvec, type, token,
 				LRU_GEN_EVICTION_BITS, lru_gen_bucket_order);
-	workingset_refault_track(lruvec, distance);
+	workingset_refault_track(lruvec, refault_distance);
 	/* Check if the gen the page was evicted from still exist */
 	recent = lru_gen_test_recent(lruvec, type, refault_distance);
 	/* Check if the distance indicates a refault */

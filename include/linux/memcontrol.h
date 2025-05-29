@@ -282,6 +282,8 @@ struct mem_cgroup {
 #ifdef CONFIG_MEMCG_ZRAM
 	unsigned long zram_max;
 	unsigned short zram_prio;
+	u32 emm_manager;
+	u32 emm_oversell;
 #endif
 
 	unsigned long soft_limit;
@@ -898,6 +900,49 @@ static inline struct lruvec *folio_lruvec(struct folio *folio)
 struct mem_cgroup *mem_cgroup_from_task(struct task_struct *p);
 
 struct mem_cgroup *get_mem_cgroup_from_mm(struct mm_struct *mm);
+
+#ifdef CONFIG_MEMCG_ZRAM
+static inline bool mem_sell_check_task(struct task_struct *task)
+{
+	bool ret = false;
+	struct mem_cgroup *cur_cg, *memcg;
+
+	rcu_read_lock();
+
+	memcg = mem_cgroup_from_task(task);
+	cur_cg = mem_cgroup_from_task(current);
+	if (memcg && cur_cg) {
+		if (cur_cg->emm_manager == 2)
+			ret = true;
+		else if (cur_cg->emm_manager == 0 && memcg->emm_oversell == 1)
+			ret = true;
+	}
+
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static inline bool mem_sell_check_memcg(struct mem_cgroup *memcg)
+{
+	bool ret = false;
+	struct mem_cgroup *cur_cg;
+
+	rcu_read_lock();
+
+	cur_cg = mem_cgroup_from_task(current);
+	if (memcg && cur_cg) {
+		if (cur_cg->emm_manager == 2)
+			ret = true;
+		if (cur_cg->emm_manager == 0 && memcg->emm_oversell == 1)
+			ret = true;
+	}
+
+	rcu_read_unlock();
+
+	return ret;
+}
+#endif
 
 struct lruvec *folio_lruvec_lock(struct folio *folio);
 struct lruvec *folio_lruvec_lock_irq(struct folio *folio);

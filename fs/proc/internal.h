@@ -324,7 +324,11 @@ extern unsigned long task_vsize(struct mm_struct *);
 extern unsigned long task_statm(struct mm_struct *,
 				unsigned long *, unsigned long *,
 				unsigned long *, unsigned long *);
+#ifdef CONFIG_MMU
+extern void task_mem(struct seq_file *m, struct mm_struct *mm, struct task_struct *task);
+#else
 extern void task_mem(struct seq_file *, struct mm_struct *);
+#endif
 
 extern const struct dentry_operations proc_net_dentry_ops;
 static inline void pde_force_lookup(struct proc_dir_entry *pde)
