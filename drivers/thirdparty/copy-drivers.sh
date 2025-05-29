@@ -87,6 +87,28 @@ thirdparty_ixgbevf(){
 	fi
 }
 
+thirdparty_megaraid_sas(){
+	if [ -e release-drivers/megaraid_sas ]; then
+		rm -rf ../../drivers/scsi/megaraid_sas
+		cp -a release-drivers/megaraid_sas ../../drivers/scsi/
+		sed -i 's/megaraid\//megaraid_sas\//g' ../../drivers/scsi/Makefile
+	fi
+}
+
+thirdparty_mpi3mr(){
+	if [ -e release-drivers/mpi3mr ]; then
+		rm -rf ../../drivers/scsi/mpi3mr
+		cp -a release-drivers/mpi3mr ../../drivers/scsi/
+	fi
+}
+
+thirdparty_smartpqi(){
+	if [ -e release-drivers/smartpqi* ]; then
+		rm -rf ../../drivers/scsi/smartpqi
+		cp -a release-drivers/smartpqi* ../../drivers/scsi/smartpqi
+		sed -i 's/source \"drivers\/scsi\/smartpqi\/Kconfig\"/ /g' ../../drivers/scsi/Kconfig
+	fi
+}
 ##
 ## main , script start run at here.
 ##
@@ -107,3 +129,8 @@ thirdparty_iavf
 thirdparty_ixgbe
 
 thirdparty_ixgbevf
+thirdparty_megaraid_sas
+
+thirdparty_mpi3mr
+
+thirdparty_smartpqi
