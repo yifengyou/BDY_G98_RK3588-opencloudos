@@ -1,3 +1,7 @@
+* Thu May 29 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-33.1
+- config: Add bt sched configuration items support
+- rue/cpu/bt: Add basic framework of offline scheduler class
+
 * Thu May 29 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-33
 - net driver: add Tencent cnic net driver support
 - mm/huge_memory: fix dereferencing invalid pmd migration entry
