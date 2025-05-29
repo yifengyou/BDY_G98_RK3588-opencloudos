@@ -169,6 +169,10 @@ int cgroupfs_mounted;
 extern int sysctl_vm_force_swappiness;
 #endif
 
+#ifdef CONFIG_HT_ISOLATE
+extern int sysctl_ht_isolate;
+#endif
+
 #ifdef CONFIG_EMM_RAMDISK_SWAP
 extern int sysctl_vm_ramdisk_swaptune;
 extern int sysctl_vm_swapcache_fastfree;
@@ -191,6 +195,21 @@ unsigned long exit_info_flag;
 
 static unsigned int min_max_arg_strlen = ORIG_MAX_ARG_STRLEN;
 static unsigned int max_max_arg_strlen = ORIG_MAX_ARG_STRLEN * 8;
+
+#ifdef CONFIG_BT_SCHED
+extern unsigned int bt_sysctl_sched_latency;
+extern unsigned int bt_sysctl_sched_wakeup_granularity;
+extern unsigned int bt_sysctl_sched_min_granularity;
+extern unsigned int sysctl_cpu_qos_disable_kill;
+
+static int min_wakeup_granularity_ns;           /* 0 usecs */
+static int max_wakeup_granularity_ns = NSEC_PER_SEC;    /* 1 second */
+#ifdef CONFIG_SCHED_DEBUG
+static int min_sched_granularity_ns = 100000;       /* 100 usecs */
+static int max_sched_granularity_ns = NSEC_PER_SEC; /* 1 second */
+#endif
+
+#endif
 
 #endif /* CONFIG_SYSCTL */
 
@@ -2092,6 +2111,12 @@ static int clean_dying_memcg_threshold_handler(struct ctl_table *table,
 DECLARE_STATIC_KEY_TRUE(rps_using_pvipi);
 #endif
 
+#ifdef CONFIG_BT_SCHED
+static unsigned int min_sched_bt_lb_ms = 64;
+static unsigned int max_sched_bt_lb_ms = 1024;
+extern int sysctl_remove_bt_load;
+#endif
+
 static struct ctl_table kern_table[] = {
 #ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	{
@@ -2741,6 +2766,143 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &min_max_arg_strlen,
 		.extra2		= &max_max_arg_strlen,
 	},
+#ifdef CONFIG_BT_SCHED
+	{
+		.procname       = "cpu_qos",
+		.data           = &sysctl_cpu_qos,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = sched_bt_disable_handler,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
+	{
+		.procname	= "sched_bt_nr_migrate",
+		.data		= &sysctl_sched_bt_nr_migrate,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_bt_load_balance_interval_min_ms",
+		.data		= &sysctl_sched_bt_load_balance_interval_min_ms,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &min_sched_bt_lb_ms,
+		.extra2		= &max_sched_bt_lb_ms,
+	},
+	{
+		.procname	= "sched_bt_load_balance_interval_max_ms",
+		.data		= &sysctl_sched_bt_load_balance_interval_max_ms,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &min_sched_bt_lb_ms,
+		.extra2		= &max_sched_bt_lb_ms,
+	},
+	{
+		.procname	= "sched_bt_migration_cost_ns",
+		.data		= &sysctl_idle_balance_bt_cost,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "cpu_qos_remove_bt_load",
+		.data		= &sysctl_remove_bt_load,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2 	= SYSCTL_ONE,
+	},
+	{
+		.procname	= "sched_bt_ignore_cpubind",
+		.data		= &sysctl_sched_bt_ignore_cpubind,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "rue_reserved0",
+		.data		= &sysctl_rue_reserved0,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rue_reserved1",
+		.data		= &sysctl_rue_reserved1,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rue_reserved2",
+		.data		= &sysctl_rue_reserved2,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rue_reserved3",
+		.data		= &sysctl_rue_reserved3,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rue_reserved4",
+		.data		= &sysctl_rue_reserved4,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rue_reserved5",
+		.data		= &sysctl_rue_reserved5,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#ifdef CONFIG_HT_ISOLATE
+	{
+		.procname	= "cpu_qos_ht_isolate",
+		.data		= &sysctl_ht_isolate,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2 	= SYSCTL_ONE,
+	},
+#endif
+#endif
+#ifdef CONFIG_BT_BANDWIDTH
+	{
+		.procname	= "sched_bt_period_us",
+		.data		= &sysctl_sched_bt_period,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_bt_handler,
+	},
+	{
+		.procname	= "sched_bt_percpu_suppress_percent",
+		.data		= &sysctl_sched_bt_percpu_suppress_percent,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_bt_percpu_suppress_percent_handler,
+	},
+	{
+		.procname	= "sched_bt_percpu_max_throttle_time_sec",
+		.data		= &sysctl_sched_bt_percpu_max_throttle_time_sec,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 	{ }
 };
 
@@ -3126,6 +3288,46 @@ static struct ctl_table vm_table[] = {
 		.mode			= 0644,
 		.proc_handler	= clean_dying_memcg_threshold_handler,
 	},
+#endif
+#ifdef CONFIG_SCHED_DEBUG
+#ifdef CONFIG_BT_SCHED
+	{
+		.procname   = "sched_min_granularity_ns",
+		.data       = &bt_sysctl_sched_min_granularity,
+		.maxlen     = sizeof(unsigned int),
+		.mode       = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1     = &min_sched_granularity_ns,
+		.extra2     = &max_sched_granularity_ns,
+	},
+	{
+		.procname   = "sched_latency_ns",
+		.data       = &bt_sysctl_sched_latency,
+		.maxlen     = sizeof(unsigned int),
+		.mode       = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1     = &min_sched_granularity_ns,
+		.extra2     = &max_sched_granularity_ns,
+	},
+	{
+		.procname   = "sched_wakeup_granularity_ns",
+		.data       = &bt_sysctl_sched_wakeup_granularity,
+		.maxlen     = sizeof(unsigned int),
+		.mode       = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1     = &min_wakeup_granularity_ns,
+		.extra2     = &max_wakeup_granularity_ns,
+	},
+	{
+		.procname   = "cpu_qos_disable_kill",
+		.data       = &sysctl_cpu_qos_disable_kill,
+		.maxlen     = sizeof(unsigned int),
+		.mode       = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1			= SYSCTL_ZERO,
+		.extra2			= SYSCTL_ONE,
+	},
+#endif
 #endif
 	{ }
 };

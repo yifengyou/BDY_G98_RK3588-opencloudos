@@ -1069,6 +1069,11 @@ config EXT_GROUP_SCHED
 	select GROUP_SCHED_WEIGHT
 	default y
 
+config BT_GROUP_SCHED
+	bool "Group scheduling for SCHED_BT"
+	depends on CGROUP_SCHED && BT_SCHED
+	default CGROUP_SCHED
+
 endif #CGROUP_SCHED
 
 config SCHED_MM_CID
@@ -1324,6 +1329,32 @@ config CHECKPOINT_RESTORE
 	  entries.
 
 	  If unsure, say N here.
+
+config BT_SCHED
+	bool "offline sched class"
+	default n
+	help
+		Allow user to create offline task
+
+config BT_BANDWIDTH
+	bool "Implement percpu bandwidth control for SCHED_BT"
+	depends on BT_GROUP_SCHED
+	help
+	  BT per-cpu bandwidth control strategy
+
+config BT_SHARE_CFS_BANDWIDTH
+	bool "Implement bandwidth control of BT based on cfs_bandwidth"
+	depends on (BT_GROUP_SCHED && CFS_BANDWIDTH)
+	help
+	  BT per-cgroup bandwidth control strategy
+
+config HT_ISOLATE
+	bool "Hyper-Threading isolate"
+	depends on (SCHED_SMT && BT_GROUP_SCHED)
+	default n
+	help
+	  Eliminate the performance degradation of the process on the cpu
+	  due to the impact of the process on hyperthreading
 
 config SCHED_AUTOGROUP
 	bool "Automatic process group scheduling"

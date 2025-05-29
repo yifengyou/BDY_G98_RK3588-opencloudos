@@ -202,6 +202,14 @@ struct cpuset {
 	unsigned long calc_load_tasks;
 	unsigned long avenrun[3];
 
+	/* for cpu R load calc */
+	unsigned long calc_load_tasks_r;
+	unsigned long avenrun_r[3];
+
+	/* for cpu D load calc */
+	unsigned long calc_load_tasks_d;
+	unsigned long avenrun_d[3];
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
@@ -3866,6 +3874,10 @@ static struct cftype dfl_files[] = {
 		.private = FILE_SUBPARTS_CPULIST,
 		.flags = CFTYPE_DEBUG,
 	},
+	{
+		.name = "loadavg",
+		.seq_show = cpuset_cgroup_loadavg_show,
+	},
 
 	{ }	/* terminate */
 };
@@ -4980,11 +4992,23 @@ void cpuset_task_status_allowed(struct seq_file *m, struct task_struct *task)
 static void __cpuset_calc_load(struct cpuset *cs)
 {
 	long active = cs->calc_load_tasks;
+	long active_r = cs->calc_load_tasks_r;
+	long active_d = cs->calc_load_tasks_d;
+
 	active = active > 0 ? active * FIXED_1 : 0;
 	cs->avenrun[0] = calc_load(cs->avenrun[0], EXP_1, active);
 	cs->avenrun[1] = calc_load(cs->avenrun[1], EXP_5, active);
 	cs->avenrun[2] = calc_load(cs->avenrun[2], EXP_15, active);
 
+	active_r = active_r > 0 ? active_r * FIXED_1 : 0;
+	cs->avenrun_r[0] = calc_load(cs->avenrun_r[0], EXP_1, active_r);
+	cs->avenrun_r[1] = calc_load(cs->avenrun_r[1], EXP_5, active_r);
+	cs->avenrun_r[2] = calc_load(cs->avenrun_r[2], EXP_15, active_r);
+
+	active_d = active_d > 0 ? active_d * FIXED_1 : 0;
+	cs->avenrun_d[0] = calc_load(cs->avenrun_d[0], EXP_1, active_d);
+	cs->avenrun_d[1] = calc_load(cs->avenrun_d[1], EXP_5, active_d);
+	cs->avenrun_d[2] = calc_load(cs->avenrun_d[2], EXP_15, active_d);
 }
 /*calc cpu load for this cpuset*/
 void cgroup_cpuset_calc_load(void)
@@ -5006,8 +5030,15 @@ void cgroup_cpuset_calc_load(void)
 		css_task_iter_start(&cs->css, 0, &it);
 		while ((task = css_task_iter_next(&it))) {
 			state = READ_ONCE(task->__state);
-			if (state == TASK_RUNNING || state == TASK_UNINTERRUPTIBLE)
+			if (state == TASK_RUNNING || state == TASK_UNINTERRUPTIBLE) {
 				cs->calc_load_tasks++;
+
+				/* calc R/D state process separately */
+				if (task->__state == TASK_RUNNING)
+					cs->calc_load_tasks_r++;
+				if (task->__state & TASK_UNINTERRUPTIBLE)
+					cs->calc_load_tasks_d++;
+			}
 		}
 		css_task_iter_end(&it);
 
@@ -5041,6 +5072,8 @@ static unsigned long cpuset_nr_running(struct cpuset *cs)
 static int cpuset_cgroup_loadavg_show_comm(struct seq_file *sf, void *v, struct cpuset *cs)
 {
 	unsigned long loads[3] = {0};
+	unsigned long loads_r[3] = {0};
+	unsigned long loads_d[3] = {0};
 	unsigned long offset = FIXED_1/200;
 	int shift = 0;
 	unsigned long n_running = cpuset_nr_running(cs);
@@ -5048,6 +5081,15 @@ static int cpuset_cgroup_loadavg_show_comm(struct seq_file *sf, void *v, struct 
 	loads[0] = (cs->avenrun[0] + offset) << shift;
 	loads[1] = (cs->avenrun[1] + offset) << shift;
 	loads[2] = (cs->avenrun[2] + offset) << shift;
+
+	loads_r[0] = (cs->avenrun_r[0] + offset) << shift;
+	loads_r[1] = (cs->avenrun_r[1] + offset) << shift;
+	loads_r[2] = (cs->avenrun_r[2] + offset) << shift;
+
+	loads_d[0] = (cs->avenrun_d[0] + offset) << shift;
+	loads_d[1] = (cs->avenrun_d[1] + offset) << shift;
+	loads_d[2] = (cs->avenrun_d[2] + offset) << shift;
+
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 
@@ -5057,6 +5099,17 @@ static int cpuset_cgroup_loadavg_show_comm(struct seq_file *sf, void *v, struct 
 			LOAD_INT(loads[2]), LOAD_FRAC(loads[2]),
 			n_running, nr_threads,
 			idr_get_cursor(&task_active_pid_ns(current)->idr) - 1);
+
+	seq_printf(sf, "%lu.%02lu %lu.%02lu %lu.%02lu\n",
+			LOAD_INT(loads_r[0]), LOAD_FRAC(loads_r[0]),
+			LOAD_INT(loads_r[1]), LOAD_FRAC(loads_r[1]),
+			LOAD_INT(loads_r[2]), LOAD_FRAC(loads_r[2]));
+
+	seq_printf(sf, "%lu.%02lu %lu.%02lu %lu.%02lu\n",
+			LOAD_INT(loads_d[0]), LOAD_FRAC(loads_d[0]),
+			LOAD_INT(loads_d[1]), LOAD_FRAC(loads_d[1]),
+			LOAD_INT(loads_d[2]), LOAD_FRAC(loads_d[2]));
+
 	return 0;
 }
 

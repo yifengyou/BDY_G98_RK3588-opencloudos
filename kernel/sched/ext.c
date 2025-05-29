@@ -5006,6 +5006,9 @@ static int __attribute__((unused)) scx_ops_enable(struct sched_ext_ops *ops)
 	unsigned long timeout;
 	int i, cpu, node, ret;
 
+	if (sched_bt_enabled())
+		sched_bt_killall();
+
 	if (!cpumask_equal(housekeeping_cpumask(HK_TYPE_DOMAIN),
 			   cpu_possible_mask)) {
 		pr_err("sched_ext: Not compatible with \"isolcpus=\" domain isolation\n");

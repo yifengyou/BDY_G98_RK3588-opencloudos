@@ -557,6 +557,9 @@ enum
 	SCHED_SOFTIRQ,
 	HRTIMER_SOFTIRQ,
 	RCU_SOFTIRQ,    /* Preferable RCU should always be the last softirq */
+#ifdef CONFIG_BT_SCHED
+	SCHED_SOFTIRQ_BT,
+#endif
 
 	NR_SOFTIRQS
 };

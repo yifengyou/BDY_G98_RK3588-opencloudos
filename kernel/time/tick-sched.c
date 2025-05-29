@@ -673,6 +673,12 @@ static void tick_nohz_stop_idle(struct tick_sched *ts, ktime_t now)
 	else
 		ts->idle_sleeptime = ktime_add(ts->idle_sleeptime, delta);
 
+#ifdef CONFIG_BT_SCHED
+	if (should_account_iowait_bt(smp_processor_id()))
+		ts->iowait_sleeptime_bt = ktime_add(ts->iowait_sleeptime_bt,
+				iowait_bt_cputime(smp_processor_id(), delta));
+#endif
+
 	ts->idle_entrytime = now;
 	ts->idle_active = 0;
 	write_seqcount_end(&ts->idle_sleeptime_seq);
@@ -770,6 +776,41 @@ u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time)
 				     nr_iowait_cpu(cpu), last_update_time);
 }
 EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us);
+
+#ifdef CONFIG_BT_SCHED
+u64 get_cpu_iowait_bt_time_us(int cpu, u64 *last_update_time)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+	ktime_t now, iowait_bt;
+	unsigned int seq;
+
+	if (!tick_nohz_active)
+		return -1;
+
+	now = ktime_get();
+	if (last_update_time) {
+
+		//last_update_time is always empty, here mask it
+		//update_ts_time_stats(cpu, ts, now, last_update_time);
+
+		iowait_bt = ts->iowait_sleeptime_bt;
+	} else {
+		do {
+			seq = read_seqcount_begin(&ts->idle_sleeptime_seq);
+			if (ts->idle_active && should_account_iowait_bt(cpu)) {
+				ktime_t delta = ktime_sub(now, ts->idle_entrytime);
+
+				iowait_bt = ktime_add(ts->iowait_sleeptime_bt,
+						iowait_bt_cputime(cpu, delta));
+			} else {
+				iowait_bt = ts->iowait_sleeptime_bt;
+			}
+		} while (read_seqcount_retry(&ts->idle_sleeptime_seq, seq));
+	}
+
+	return ktime_to_us(iowait_bt);
+}
+#endif
 
 static void tick_nohz_restart(struct tick_sched *ts, ktime_t now)
 {

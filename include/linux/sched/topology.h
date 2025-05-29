@@ -104,6 +104,9 @@ struct sched_domain {
 	unsigned long last_balance;	/* init to jiffies. units in jiffies */
 	unsigned int balance_interval;	/* initialise to 1. units in ms. */
 	unsigned int nr_balance_failed; /* initialise to 0 */
+#ifdef CONFIG_BT_SCHED
+	unsigned long last_balance_bt;
+#endif
 
 	/* idle_balance() stats */
 	u64 max_newidle_lb_cost;

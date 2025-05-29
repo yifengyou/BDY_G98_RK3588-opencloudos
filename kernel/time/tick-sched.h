@@ -92,6 +92,9 @@ struct tick_sched {
 	ktime_t				idle_exittime;
 	ktime_t				idle_sleeptime;
 	ktime_t				iowait_sleeptime;
+#ifdef CONFIG_BT_SCHED
+	ktime_t				iowait_sleeptime_bt;
+#endif
 
 	/* Full dynticks handling */
 	atomic_t			tick_dep_mask;

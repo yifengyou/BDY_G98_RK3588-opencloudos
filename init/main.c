@@ -1433,6 +1433,10 @@ static inline void mark_readonly(void)
 }
 #endif
 
+#ifdef CONFIG_BT_BANDWIDTH
+extern void init_offline_cpu_control(void);
+#endif
+
 void __weak free_initmem(void)
 {
 	free_initmem_default(POISON_FREE_INITMEM);
@@ -1442,12 +1446,16 @@ static int __ref kernel_init(void *unused)
 {
 	int ret;
 
+
 	/*
 	 * Wait until kthreadd is all set-up.
 	 */
 	wait_for_completion(&kthreadd_done);
 
 	kernel_init_freeable();
+#ifdef CONFIG_BT_BANDWIDTH
+	init_offline_cpu_control();
+#endif
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
 

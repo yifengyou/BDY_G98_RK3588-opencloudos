@@ -67,7 +67,7 @@ static void show_irq_gap(struct seq_file *p, unsigned int gap)
 	}
 }
 
-static void show_all_irqs(struct seq_file *p)
+void show_all_irqs(struct seq_file *p)
 {
 	unsigned int i, next = 0;
 
@@ -245,13 +245,54 @@ static const struct proc_ops scx_stat_proc_ops = {
 };
 #endif
 
+#if defined(CONFIG_BT_SCHED) || defined(CONFIG_EXT_GROUP_SCHED)
+
+static int interval_show_stat(struct seq_file *p, void *v)
+{
+#if defined(CONFIG_BT_SCHED)
+	if (sched_bt_enabled())
+		return bt_show_stat(p, v);
+	else
+#endif
+
+#if defined(CONFIG_EXT_GROUP_SCHED)
+	return show_stat(p, v);
+#else
+	return 0;
+#endif
+}
+
+static int bt_interval_stat_open(struct inode *inode, struct file *file)
+{
+	unsigned int size = 1024 + 128 * num_online_cpus();
+	static bool show_scx = true;
+
+	/* minimum size to display an interrupt count : 2 bytes */
+	size += 2 * nr_irqs;
+	return single_open_size(file, interval_show_stat, &show_scx, size);
+}
+
+static const struct proc_ops bt_stat_proc_ops = {
+	.proc_flags	= PROC_ENTRY_PERMANENT,
+	.proc_open	= bt_interval_stat_open,
+	.proc_read_iter	= seq_read_iter,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
+};
+#endif
+
 static int __init proc_stat_init(void)
 {
 	proc_create("stat", 0, NULL, &stat_proc_ops);
-#ifdef CONFIG_SCHED_CLASS_EXT
+
+#if defined(CONFIG_EXT_GROUP_SCHED)
 	proc_create("scx_stat", 0, NULL, &scx_stat_proc_ops);
-	proc_create("bt_stat", 0, NULL, &scx_stat_proc_ops);
 #endif
+
+#if defined(CONFIG_BT_SCHED) || defined(CONFIG_EXT_GROUP_SCHED)
+	proc_create("bt_stat", 0, NULL, &bt_stat_proc_ops);
+#endif
+
 	return 0;
 }
 fs_initcall(proc_stat_init);

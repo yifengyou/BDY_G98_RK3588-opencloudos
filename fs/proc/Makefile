@@ -20,6 +20,7 @@ proc-y	+= interrupts.o
 proc-y	+= loadavg.o
 proc-y	+= meminfo.o
 proc-y	+= stat.o
+proc-$(CONFIG_BT_SCHED) += bt_stat.o
 proc-y	+= uptime.o
 proc-y	+= util.o
 proc-y	+= version.o

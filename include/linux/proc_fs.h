@@ -255,4 +255,8 @@ static inline struct pid_namespace *proc_pid_ns(struct super_block *sb)
 
 bool proc_ns_file(const struct file *file);
 
+#ifdef CONFIG_BT_SCHED
+extern int bt_show_stat(struct seq_file *p, void *v);
+#endif
+
 #endif /* _LINUX_PROC_FS_H */

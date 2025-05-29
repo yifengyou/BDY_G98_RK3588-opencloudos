@@ -1614,6 +1614,9 @@ sd_init(struct sched_domain_topology_level *tl,
 					,
 
 		.last_balance		= jiffies,
+#ifdef CONFIG_BT_SCHED
+		.last_balance_bt        = jiffies,
+#endif
 		.balance_interval	= sd_weight,
 		.max_newidle_lb_cost	= 0,
 		.last_decay_max_lb_cost	= jiffies,
