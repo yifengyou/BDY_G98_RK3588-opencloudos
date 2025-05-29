@@ -3278,14 +3278,16 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		}
 	}
 
-	if (cgroupfs_stat_show_cpuacct_info == 2 && max_cpu < k) {
-		cpu_idle = max_cpu * (total_sys + total_usr + total_idle) / k
+	if (cgroupfs_stat_show_cpuacct_info == 2) {
+		int show_cpus = min(max_cpu, k);
+
+		cpu_idle = show_cpus * (total_sys + total_usr + total_idle) / k
 				- total_sys - total_usr;
 		total_idle = cpu_idle;
-		for (i = 1; i <= max_cpu && i < num_cpu; i++) {
-			res[i].sys = total_sys / max_cpu;
-			res[i].usr = total_usr / max_cpu;
-			res[i].idle = total_idle / max_cpu;
+		for (i = 1; i <= show_cpus && i < num_cpu; i++) {
+			res[i].sys = total_sys / show_cpus;
+			res[i].usr = total_usr / show_cpus;
+			res[i].idle = total_idle / show_cpus;
 		}
 	}
 	css_put(css);
