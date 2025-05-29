@@ -1,3 +1,46 @@
+* Thu May 29 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-33
+- net driver: add Tencent cnic net driver support
+- mm/huge_memory: fix dereferencing invalid pmd migration entry
+- Merge release-cve branch into release branch
+- iio: imu: st_lsm6dsx: fix possible lockup in st_lsm6dsx_read_tagged_fifo
+- perf/x86/intel: KVM: Mask PEBS_ENABLE loaded for guest with vCPU's value.
+- KVM: SVM: Forcibly leave SMM mode on SHUTDOWN interception
+- KVM: SVM: Update SEV-ES shutdown intercepts with more metadata
+- arm64: errata: Add missing sentinels to Spectre-BHB MIDR arrays
+- x86/mm: Eliminate window where TLB flushes may be inadvertently skipped
+- USB: wdm: close race between wdm_open and wdm_wwan_port_stop
+- xenbus: Use kref to track req lifetime
+- ALSA: ump: Fix buffer overflow at UMP SysEx message conversion
+- Merge release-cve branch into release branch
+- smb: client: Avoid race in open_cached_dir with lease breaks
+- fs/9p: fix NULL pointer dereference on mkdir
+- ext4: fix off-by-one error in do_split
+- jfs: add sanity check for agwidth in dbMount
+- jfs: Fix uninit-value access of imap allocated in the diMount() function
+- ksmbd: fix use-after-free in __smb2_lease_break_noti()
+- ext4: fix out-of-bound read in ext4_xattr_inode_dec_ref_all()
+- ext4: introduce ITAIL helper
+- Revert "Merge branch 'TK5-6.6-release_fix_CVE-2022-49087' into 'release-cve' (merge request !415)"
+- Bluetooth: btusb: avoid NULL pointer dereference in skb_dequeue()
+- eth: bnxt: fix truesize for mb-xdp-pass case
+- PCI: Fix reference leak in pci_register_host_bridge()
+- udmabuf: fix a buf size overflow issue during udmabuf creation
+- scsi: ufs: mcq: Add NULL check in ufshcd_mcq_abort()
+- usb: cdns3: Fix deadlock when using NCM gadget
+- irqchip/gic-v2m: Prevent use after free of gicv2m_get_fwnode()
+- Merge branch 'honglin/release-cve' into 'release-cve' (merge request !446)
+- net_sched: qfq: Fix double list add in class with netem as child qdisc
+- net_sched: drr: Fix double list add in class with netem as child qdisc
+- 9p/net: fix improper handling of bogus negative read/write replies
+- Merge branch 'honglin/release' into 'release' fix compile error in allyesconfig (merge request !469)
+- sched_ext: Enable the ops breather and eject BPF scheduler on softlockup
+- sched_ext: Fix unlock order of scx_cgroup_unlock and scx_fork_rwsem
+- Revert "watchdog/softlockup: Report the most frequent interrupts"
+- Revert "sched_ext: Enable the ops breather and eject BPF scheduler on softlockup"
+- cgroupfs: fix compile errs/warns for defconfig
+- sched_ext: fix compile errs/warns for defconfig
+- Merge branch 'feat/scx' into 'release' (merge request !426)
+
 * Wed May 21 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-32
 - net_sched: hfsc: Fix a UAF vulnerability in class with netem as child qdisc
 - crypto: starfive - Do not free stack buffer
