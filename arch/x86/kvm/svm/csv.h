@@ -32,6 +32,8 @@ struct csv_ringbuf_infos {
 	int num;
 };
 
+extern u32 hygon_csv_build;
+
 #ifdef CONFIG_KVM_SUPPORTS_CSV_REUSE_ASID
 
 #define ASID_USERID_LENGTH 20
@@ -61,7 +63,7 @@ extern struct hygon_kvm_hooks_table {
 					      unsigned long npages);
 	struct page **(*sev_pin_memory)(struct kvm *kvm, unsigned long uaddr,
 					unsigned long ulen, unsigned long *n,
-					int write);
+					unsigned int flags);
 	void (*sev_unpin_memory)(struct kvm *kvm, struct page **pages,
 				 unsigned long npages);
 	void (*sev_clflush_pages)(struct page *pages[], unsigned long npages);

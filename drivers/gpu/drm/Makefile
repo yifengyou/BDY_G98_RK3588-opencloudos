@@ -199,4 +199,3 @@ obj-y			+= solomon/
 obj-$(CONFIG_DRM_SPRD) += sprd/
 obj-y			+= loongson/
 obj-$(CONFIG_DRM_PHYTIUM) += phytium/
-obj-$(CONFIG_HYDCU_FIXUP_HEADER) += hygon/hydcu-fixup-header/

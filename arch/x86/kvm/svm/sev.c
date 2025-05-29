@@ -164,10 +164,10 @@ static int sev_asid_new(struct kvm_sev_info *sev)
 	int ret;
 
 	/*
-	 * No matter what the min_sev_asid is, all asids in range
+	 * When the firmware is with build ID >= 1810, all asids in range
 	 * [1, max_sev_asid] can be used for CSV2 guest on Hygon CPUs.
 	 */
-	if (is_x86_vendor_hygon())
+	if (is_x86_vendor_hygon() && hygon_csv_build >= 1810)
 		max_asid = max_sev_asid;
 
 	if (min_asid > max_asid)
@@ -508,7 +508,7 @@ e_free_dh:
 
 static struct page **sev_pin_memory(struct kvm *kvm, unsigned long uaddr,
 				    unsigned long ulen, unsigned long *n,
-				    int write)
+				    unsigned int flags)
 {
 	struct kvm_sev_info *sev = &to_kvm_svm(kvm)->sev_info;
 	unsigned long npages, size;
@@ -516,7 +516,6 @@ static struct page **sev_pin_memory(struct kvm *kvm, unsigned long uaddr,
 	unsigned long locked, lock_limit;
 	struct page **pages;
 	unsigned long first, last;
-	unsigned int flags = 0;
 	int ret;
 
 	lockdep_assert_held(&kvm->lock);
@@ -549,10 +548,8 @@ static struct page **sev_pin_memory(struct kvm *kvm, unsigned long uaddr,
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
-	flags = write ? FOLL_WRITE : 0;
-
 	/* Pin the user virtual address. */
-	npinned = pin_user_pages_fast(uaddr, npages, flags | FOLL_LONGTERM, pages);
+	npinned = pin_user_pages_fast(uaddr, npages, flags, pages);
 	if (npinned != npages) {
 		pr_err("SEV: Failure locking %lu pages.\n", npages);
 		ret = -ENOMEM;
@@ -640,7 +637,7 @@ static int sev_launch_update_data(struct kvm *kvm, struct kvm_sev_cmd *argp)
 	vaddr_end = vaddr + size;
 
 	/* Lock the user memory. */
-	inpages = sev_pin_memory(kvm, vaddr, size, &npages, 1);
+	inpages = sev_pin_memory(kvm, vaddr, size, &npages, FOLL_WRITE);
 	if (IS_ERR(inpages))
 		return PTR_ERR(inpages);
 
@@ -1103,7 +1100,7 @@ static int sev_dbg_crypt(struct kvm *kvm, struct kvm_sev_cmd *argp, bool dec)
 		if (IS_ERR(src_p))
 			return PTR_ERR(src_p);
 
-		dst_p = sev_pin_memory(kvm, dst_vaddr & PAGE_MASK, PAGE_SIZE, &n, 1);
+		dst_p = sev_pin_memory(kvm, dst_vaddr & PAGE_MASK, PAGE_SIZE, &n, FOLL_WRITE);
 		if (IS_ERR(dst_p)) {
 			sev_unpin_memory(kvm, src_p, n);
 			return PTR_ERR(dst_p);
@@ -1169,7 +1166,7 @@ static int sev_launch_secret(struct kvm *kvm, struct kvm_sev_cmd *argp)
 	if (copy_from_user(&params, (void __user *)(uintptr_t)argp->data, sizeof(params)))
 		return -EFAULT;
 
-	pages = sev_pin_memory(kvm, params.guest_uaddr, params.guest_len, &n, 1);
+	pages = sev_pin_memory(kvm, params.guest_uaddr, params.guest_len, &n, FOLL_WRITE);
 	if (IS_ERR(pages))
 		return PTR_ERR(pages);
 
@@ -1651,7 +1648,7 @@ static int sev_receive_update_data(struct kvm *kvm, struct kvm_sev_cmd *argp)
 
 	/* Pin guest memory */
 	guest_page = sev_pin_memory(kvm, params.guest_uaddr & PAGE_MASK,
-				    PAGE_SIZE, &n, 1);
+				    PAGE_SIZE, &n, FOLL_WRITE);
 	if (IS_ERR(guest_page)) {
 		ret = PTR_ERR(guest_page);
 		goto e_free_trans;
@@ -2109,7 +2106,8 @@ int sev_mem_enc_register_region(struct kvm *kvm,
 		return -ENOMEM;
 
 	mutex_lock(&kvm->lock);
-	region->pages = sev_pin_memory(kvm, range->addr, range->size, &region->npages, 1);
+	region->pages = sev_pin_memory(kvm, range->addr, range->size, &region->npages,
+					   FOLL_WRITE | FOLL_LONGTERM);
 	if (IS_ERR(region->pages)) {
 		ret = PTR_ERR(region->pages);
 		mutex_unlock(&kvm->lock);
@@ -2344,6 +2342,9 @@ void __init sev_hardware_setup(void)
 	bool sev_es_supported = false;
 	bool sev_supported = false;
 
+	if (is_x86_vendor_hygon() && hygon_csv_build < 1878 && !sme_me_mask)
+		goto out;
+
 	if (!sev_enabled || !npt_enabled || !nrips)
 		goto out;
 
@@ -2417,7 +2418,7 @@ void __init sev_hardware_setup(void)
 		goto out;
 	}
 
-	if (is_x86_vendor_hygon()) {
+	if (is_x86_vendor_hygon() && hygon_csv_build >= 1810) {
 		/*
 		 * Ths ASIDs from 1 to max_sev_asid are available for hygon
 		 * CSV2 guest.
@@ -2445,8 +2446,10 @@ out:
 		pr_info("%s %s (ASIDs %u - %u)\n",
 			is_x86_vendor_hygon() ? "CSV2" : "SEV-ES",
 			sev_es_supported ? "enabled" : "disabled",
-			is_x86_vendor_hygon() ? 1 : (min_sev_asid > 1 ? 1 : 0),
-			is_x86_vendor_hygon() ? max_sev_asid : min_sev_asid - 1);
+			(is_x86_vendor_hygon() && hygon_csv_build >= 1810) ?
+			1 : (min_sev_asid > 1 ? 1 : 0),
+			(is_x86_vendor_hygon() && hygon_csv_build >= 1810) ?
+			max_sev_asid : min_sev_asid - 1);
 
 	sev_enabled = sev_supported;
 	sev_es_enabled = sev_es_supported;

@@ -64,13 +64,15 @@
 					 DMA_STATUS_TPS | DMA_STATUS_TI  | \
 					 DMA_STATUS_MSK_COMMON_LOONGSON)
 
-#define PCI_DEVICE_ID_LOONGSON_GMAC	0x7a03
+#define PCI_DEVICE_ID_LOONGSON_GMAC1	0x7a03
+#define PCI_DEVICE_ID_LOONGSON_GMAC2	0x7a23
 #define PCI_DEVICE_ID_LOONGSON_GNET	0x7a13
-#define LOONGSON_DWMAC_CORE_1_00	0x10	/* Loongson custom IP */
-#define CHANNEL_NUM			8
+#define DWMAC_CORE_MULTICHAN_V1	0x10	/* Loongson custom ID 0x10 */
+#define DWMAC_CORE_MULTICHAN_V2	0x12	/* Loongson custom ID 0x12 */
 
 struct loongson_data {
-	u32 gmac_verion;
+	u32 multichan;
+	u32 loongson_id;
 	struct device *dev;
 };
 
@@ -83,6 +85,8 @@ struct stmmac_pci_info {
 static void loongson_default_data(struct pci_dev *pdev,
 				  struct plat_stmmacenet_data *plat)
 {
+	struct loongson_data *ld = plat->bsp_priv;
+
 	/* Get bus_id, this can be overloaded later */
 	plat->bus_id = (pci_domain_nr(pdev->bus) << 16) |
 			PCI_DEVID(pdev->bus->number, pdev->devfn);
@@ -116,6 +120,31 @@ static void loongson_default_data(struct pci_dev *pdev,
 	plat->dma_cfg->pblx8 = true;
 
 	plat->multicast_filter_bins = 256;
+
+	switch (ld->loongson_id) {
+	case DWMAC_CORE_MULTICHAN_V1:
+		ld->multichan = 1;
+		plat->rx_queues_to_use = 8;
+		plat->tx_queues_to_use = 8;
+
+		/* Only channel 0 supports checksum,
+		 * so turn off checksum to enable multiple channels.
+		 */
+		for (int i = 1; i < 8; i++)
+			plat->tx_queues_cfg[i].coe_unsupported = 1;
+
+		break;
+	case DWMAC_CORE_MULTICHAN_V2:
+		ld->multichan = 1;
+		plat->rx_queues_to_use = 4;
+		plat->tx_queues_to_use = 4;
+		break;
+	default:
+		ld->multichan = 0;
+		plat->tx_queues_to_use = 1;
+		plat->rx_queues_to_use = 1;
+		break;
+	}
 }
 
 static int loongson_gmac_data(struct pci_dev *pdev,
@@ -338,9 +367,11 @@ static int loongson_dwmac_config_msi(struct pci_dev *pdev,
 				     struct stmmac_resources *res,
 				     struct device_node *np)
 {
-	int i, ret, vecs;
+	int i, ch_num, ret, vecs;
 
-	vecs = roundup_pow_of_two(CHANNEL_NUM * 2 + 1);
+	ch_num = min(plat->tx_queues_to_use, plat->rx_queues_to_use);
+
+	vecs = roundup_pow_of_two(ch_num * 2 + 1);
 	ret = pci_alloc_irq_vectors(pdev, vecs, vecs, PCI_IRQ_MSI);
 	if (ret < 0) {
 		dev_info(&pdev->dev,
@@ -355,10 +386,10 @@ static int loongson_dwmac_config_msi(struct pci_dev *pdev,
 	 * --------- ----- -------- --------  ...  -------- --------
 	 * IRQ NUM  |  0  |   1    |   2    | ... |   15   |   16   |
 	 */
-	for (i = 0; i < CHANNEL_NUM; i++) {
-		res->rx_irq[CHANNEL_NUM - 1 - i] =
+	for (i = 0; i < ch_num; i++) {
+		res->rx_irq[ch_num - 1 - i] =
 			pci_irq_vector(pdev, 1 + i * 2);
-		res->tx_irq[CHANNEL_NUM - 1 - i] =
+		res->tx_irq[ch_num - 1 - i] =
 			pci_irq_vector(pdev, 2 + i * 2);
 	}
 
@@ -393,7 +424,7 @@ static struct mac_device_info *loongson_dwmac_setup(void *apriv)
 	 * AV feature and GMAC_INT_STATUS CSR flags layout. Get back the
 	 * original value so the correct HW-interface would be selected.
 	 */
-	if (ld->gmac_verion == LOONGSON_DWMAC_CORE_1_00) {
+	if (ld->multichan) {
 		priv->synopsys_id = DWMAC_CORE_3_70;
 		*dma = dwmac1000_dma_ops;
 		dma->init_chan = loongson_gnet_dma_init_channel;
@@ -417,10 +448,10 @@ static struct mac_device_info *loongson_dwmac_setup(void *apriv)
 	/* The GMAC devices with PCI ID 0x7a03 does not support any pause mode.
 	 * The GNET devices without CORE ID 0x10 does not support half-duplex.
 	 */
-	if (pdev->device == PCI_DEVICE_ID_LOONGSON_GMAC) {
+	if (pdev->device != PCI_DEVICE_ID_LOONGSON_GNET) {
 		mac->link.caps = MAC_10 | MAC_100 | MAC_1000;
 	} else {
-		if (ld->gmac_verion == LOONGSON_DWMAC_CORE_1_00)
+		if (ld->multichan)
 			mac->link.caps = MAC_ASYM_PAUSE | MAC_SYM_PAUSE |
 					 MAC_10 | MAC_100 | MAC_1000;
 		else
@@ -506,6 +537,15 @@ static int loongson_dwmac_probe(struct pci_dev *pdev, const struct pci_device_id
 
 	pci_set_master(pdev);
 
+	plat->bsp_priv = ld;
+	plat->setup = loongson_dwmac_setup;
+	plat->fix_soc_reset = loongson_fix_soc_reset;
+	ld->dev = &pdev->dev;
+
+	memset(&res, 0, sizeof(res));
+	res.addr = pcim_iomap_table(pdev)[0];
+	ld->loongson_id = readl(res.addr + GMAC_VERSION) & 0xff;
+
 	info = (struct stmmac_pci_info *)id->driver_data;
 	ret = info->setup(pdev, plat);
 	if (ret)
@@ -531,35 +571,12 @@ static int loongson_dwmac_probe(struct pci_dev *pdev, const struct pci_device_id
 		plat->phy_interface = phy_mode;
 	}
 
-	plat->bsp_priv = ld;
-	plat->setup = loongson_dwmac_setup;
-	plat->fix_soc_reset = loongson_fix_soc_reset;
-	ld->dev = &pdev->dev;
-
-	memset(&res, 0, sizeof(res));
-	res.addr = pcim_iomap_table(pdev)[0];
-	ld->gmac_verion = readl(res.addr + GMAC_VERSION) & 0xff;
-
-	switch (ld->gmac_verion) {
-	case LOONGSON_DWMAC_CORE_1_00:
-		plat->rx_queues_to_use = CHANNEL_NUM;
-		plat->tx_queues_to_use = CHANNEL_NUM;
-
-		/* Only channel 0 supports checksum,
-		 * so turn off checksum to enable multiple channels.
-		 */
-		for (i = 1; i < CHANNEL_NUM; i++)
-			plat->tx_queues_cfg[i].coe_unsupported = 1;
-
+	if (ld->multichan)
 		ret = loongson_dwmac_config_msi(pdev, plat, &res, np);
-		break;
-	default:	/* 0x35 device and 0x37 device. */
-		plat->tx_queues_to_use = 1;
-		plat->rx_queues_to_use = 1;
-
+	else
 		ret = loongson_dwmac_config_legacy(pdev, plat, &res, np);
-		break;
-	}
+	if (ret)
+		goto err_disable_device;
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat, &res);
 	if (ret)
@@ -633,7 +650,8 @@ static SIMPLE_DEV_PM_OPS(loongson_dwmac_pm_ops, loongson_dwmac_suspend,
 			 loongson_dwmac_resume);
 
 static const struct pci_device_id loongson_dwmac_id_table[] = {
-	{ PCI_DEVICE_DATA(LOONGSON, GMAC, &loongson_gmac_pci_info) },
+	{ PCI_DEVICE_DATA(LOONGSON, GMAC1, &loongson_gmac_pci_info) },
+	{ PCI_DEVICE_DATA(LOONGSON, GMAC2, &loongson_gmac_pci_info) },
 	{ PCI_DEVICE_DATA(LOONGSON, GNET, &loongson_gnet_pci_info) },
 	{}
 };

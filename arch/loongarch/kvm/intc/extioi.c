@@ -931,7 +931,7 @@ static struct kvm_device_ops kvm_loongarch_extioi_dev_ops = {
 int kvm_loongarch_register_extioi_device(void)
 {
 	return kvm_register_device_ops(&kvm_loongarch_extioi_dev_ops,
-					KVM_DEV_TYPE_LA_EXTIOI);
+					KVM_DEV_TYPE_LOONGARCH_EIOINTC);
 }
 
 int kvm_loongarch_reset_extioi(struct kvm *kvm)
