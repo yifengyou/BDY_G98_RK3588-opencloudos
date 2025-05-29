@@ -470,6 +470,9 @@ void folio_mark_accessed(struct folio *folio)
 	rcu_read_unlock();
 #endif
 
+	if (folio_test_dropbehind(folio))
+		return;
+
 	if (lru_gen_enabled()) {
 		folio_inc_refs(folio);
 		return;
