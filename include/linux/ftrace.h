@@ -19,6 +19,7 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/fs.h>
+#include <linux/kabi.h>
 
 #include <asm/ftrace.h>
 
@@ -340,6 +341,9 @@ struct ftrace_ops {
 	unsigned long			direct_call;
 #endif
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 extern struct ftrace_ops __rcu *ftrace_ops_list;

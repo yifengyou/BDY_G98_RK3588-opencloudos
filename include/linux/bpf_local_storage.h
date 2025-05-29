@@ -14,6 +14,7 @@
 #include <linux/hash.h>
 #include <linux/types.h>
 #include <linux/bpf_mem_alloc.h>
+#include <linux/kabi.h>
 #include <uapi/linux/btf.h>
 
 #define BPF_LOCAL_STORAGE_CACHE_SIZE	16
@@ -94,6 +95,9 @@ struct bpf_local_storage {
 				 */
 	struct rcu_head rcu;
 	raw_spinlock_t lock;	/* Protect adding/removing from the "list" */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /* U16_MAX is much more than enough for sk local storage

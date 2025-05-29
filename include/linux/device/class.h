@@ -74,6 +74,8 @@ struct class {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct class_dev_iter {

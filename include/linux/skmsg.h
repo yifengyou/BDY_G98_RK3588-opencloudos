@@ -8,6 +8,7 @@
 #include <linux/filter.h>
 #include <linux/scatterlist.h>
 #include <linux/skbuff.h>
+#include <linux/kabi.h>
 
 #include <net/sock.h>
 #include <net/tcp.h>
@@ -110,6 +111,11 @@ struct sk_psock {
 	struct delayed_work		work;
 	struct sock			*sk_pair;
 	struct rcu_work			rwork;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 int sk_msg_alloc(struct sock *sk, struct sk_msg *msg, int len,

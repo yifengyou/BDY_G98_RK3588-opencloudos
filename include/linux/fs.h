@@ -43,6 +43,7 @@
 #include <linux/cred.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/slab.h>
+#include <linux/kabi.h>
 
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
@@ -446,6 +447,8 @@ struct address_space_operations {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 extern const struct address_space_operations empty_aops;
@@ -1041,6 +1044,9 @@ struct file {
 	errseq_t		f_wb_err;
 	errseq_t		f_sb_err; /* for syncfs */
 	unsigned long		hook_flags;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 } __randomize_layout
   __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
 
@@ -1331,6 +1337,9 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 } __randomize_layout;
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)
@@ -2110,6 +2119,10 @@ struct super_operations {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
 };
 
 /*
@@ -2417,6 +2430,8 @@ struct file_system_type {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 #define MODULE_ALIAS_FS(NAME) MODULE_ALIAS("fs-" NAME)

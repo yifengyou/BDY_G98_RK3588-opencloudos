@@ -30,6 +30,7 @@
 #include <linux/mutex.h>
 #include <linux/iosys-map.h>
 #include <linux/dma-fence.h>
+#include <linux/kabi.h>
 
 #include <drm/drm_print.h>
 #include <drm/ttm/ttm_caching.h>
@@ -174,6 +175,9 @@ struct ttm_resource_manager {
 	 * bdev->lru_lock.
 	 */
 	uint64_t usage;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**

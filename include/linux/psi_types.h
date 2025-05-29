@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/kref.h>
 #include <linux/wait.h>
+#include <linux/kabi.h>
 
 #ifdef CONFIG_PSI
 
@@ -205,6 +206,11 @@ struct psi_group {
 	u64 rtpoll_total[NR_PSI_STATES - 1];
 	u64 rtpoll_next_update;
 	u64 rtpoll_until;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 #else /* CONFIG_PSI */

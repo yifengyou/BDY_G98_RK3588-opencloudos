@@ -8,6 +8,7 @@
 #include <linux/scatterlist.h>
 #include <linux/prefetch.h>
 #include <linux/srcu.h>
+#include <linux/kabi.h>
 
 struct blk_mq_tags;
 struct blk_flush_queue;
@@ -188,6 +189,15 @@ struct request {
 	 */
 	rq_end_io_fn *end_io;
 	void *end_io_data;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
 };
 
 static inline enum req_op req_op(const struct request *req)
@@ -775,6 +785,16 @@ struct blk_mq_tags {
 	 * request pool
 	 */
 	spinlock_t lock;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
+	KABI_RESERVE(7);
+	KABI_RESERVE(8);
+	KABI_RESERVE(9);
 };
 
 static inline struct request *blk_mq_tag_to_rq(struct blk_mq_tags *tags,

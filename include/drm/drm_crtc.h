@@ -27,6 +27,7 @@
 
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/kabi.h>
 #include <drm/drm_modeset_lock.h>
 #include <drm/drm_mode_object.h>
 #include <drm/drm_modes.h>
@@ -385,6 +386,9 @@ struct drm_crtc_state {
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**
@@ -1175,6 +1179,9 @@ struct drm_crtc {
 	 * Initialized via drm_self_refresh_helper_init().
 	 */
 	struct drm_self_refresh_data *self_refresh_data;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /**

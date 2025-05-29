@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/audit.h>
 #include <linux/skbuff.h>
+#include <linux/kabi.h>
 #include <uapi/linux/mqueue.h>
 #include <linux/tty.h>
 #include <uapi/linux/openat2.h> // struct open_how
@@ -208,6 +209,9 @@ struct audit_context {
 	};
 	int fds[2];
 	struct audit_proctitle proctitle;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 extern bool audit_ever_enabled;

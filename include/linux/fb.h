@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/backlight.h>
 #include <linux/slab.h>
+#include <linux/kabi.h>
 
 #include <asm/fb.h>
 
@@ -218,6 +219,9 @@ struct fb_deferred_io {
 	struct list_head pagereflist; /* list of pagerefs for touched pages */
 	/* callback */
 	void (*deferred_io)(struct fb_info *info, struct list_head *pagelist);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 #endif
 

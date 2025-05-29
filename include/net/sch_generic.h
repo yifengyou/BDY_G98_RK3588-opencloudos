@@ -16,6 +16,7 @@
 #include <linux/rwsem.h>
 #include <linux/atomic.h>
 #include <linux/hashtable.h>
+#include <linux/kabi.h>
 #include <net/gen_stats.h>
 #include <net/rtnetlink.h>
 #include <net/flow_offload.h>
@@ -127,6 +128,9 @@ struct Qdisc {
 	struct rcu_head		rcu;
 	netdevice_tracker	dev_tracker;
 	struct lock_class_key	root_lock_key;
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+
 	/* private data */
 	long privdata[] ____cacheline_aligned;
 };
@@ -278,6 +282,9 @@ struct Qdisc_class_ops {
 					struct sk_buff *skb, struct tcmsg*);
 	int			(*dump_stats)(struct Qdisc *, unsigned long,
 					struct gnet_dump *);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /* Qdisc_class_ops flag values */
@@ -323,6 +330,9 @@ struct Qdisc_ops {
 	u32			(*egress_block_get)(struct Qdisc *sch);
 
 	struct module		*owner;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 

@@ -22,6 +22,7 @@
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
 #include <linux/local_lock.h>
+#include <linux/kabi.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -658,6 +659,11 @@ struct lruvec {
 #ifdef CONFIG_EMM_MEMCG
 	void *emm_lruvec_data;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 /* Isolate unmapped pages */
@@ -1455,6 +1461,8 @@ typedef struct pglist_data {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)

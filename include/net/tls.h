@@ -195,6 +195,8 @@ struct cipher_context {
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 union tls_crypto_context {
@@ -265,6 +267,10 @@ struct tls_context {
 	struct list_head list;
 	refcount_t refcount;
 	struct rcu_head rcu;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 };
 
 enum tls_offload_ctx_dir {

@@ -29,6 +29,7 @@
 #include <linux/rcupdate_trace.h>
 #include <linux/static_call.h>
 #include <linux/memcontrol.h>
+#include <linux/kabi.h>
 
 struct bpf_verifier_env;
 struct bpf_verifier_log;
@@ -172,6 +173,11 @@ struct bpf_map_ops {
 
 	/* bpf_iter info used to open a seq_file */
 	const struct bpf_iter_seq_info *iter_seq_info;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 enum {
@@ -300,6 +306,11 @@ struct bpf_map {
 	bool free_after_rcu_gp;
 	atomic64_t sleepable_refcnt;
 	s64 __percpu *elem_count;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 static inline const char *btf_field_type_name(enum btf_field_type type)
@@ -1024,6 +1035,9 @@ struct btf_func_model {
 	u8 nr_args;
 	u8 arg_size[MAX_BPF_FUNC_ARGS];
 	u8 arg_flags[MAX_BPF_FUNC_ARGS];
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 /* Restore arguments before returning from trampoline to let original function
@@ -1144,6 +1158,9 @@ struct bpf_tramp_image {
 		struct rcu_head rcu;
 		struct work_struct work;
 	};
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct bpf_trampoline {
@@ -1172,6 +1189,11 @@ struct bpf_trampoline {
 	/* Executable image of trampoline */
 	struct bpf_tramp_image *cur_image;
 	struct module *mod;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct bpf_attach_target_info {
@@ -1489,6 +1511,9 @@ struct bpf_prog_aux {
 		struct work_struct work;
 		struct rcu_head	rcu;
 	};
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 struct bpf_prog {
@@ -1523,6 +1548,11 @@ struct bpf_prog {
 		DECLARE_FLEX_ARRAY(struct sock_filter, insns);
 		DECLARE_FLEX_ARRAY(struct bpf_insn, insnsi);
 	};
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct bpf_array_aux {
@@ -1567,6 +1597,11 @@ struct bpf_link_ops {
 			      struct bpf_link_info *info);
 	int (*update_map)(struct bpf_link *link, struct bpf_map *new_map,
 			  struct bpf_map *old_map);
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
+	KABI_RESERVE(4);
 };
 
 struct bpf_tramp_link {

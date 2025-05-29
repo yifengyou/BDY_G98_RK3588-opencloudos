@@ -5,6 +5,7 @@
 #include <linux/kobject.h>
 #include <linux/netdevice.h>
 #include <linux/sysfs.h>
+#include <linux/kabi.h>
 #include <net/xdp.h>
 
 /* This structure contains an instance of an RX queue. */
@@ -21,6 +22,9 @@ struct netdev_rx_queue {
 #ifdef CONFIG_XDP_SOCKETS
 	struct xsk_buff_pool            *pool;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 } ____cacheline_aligned_in_smp;
 
 /*

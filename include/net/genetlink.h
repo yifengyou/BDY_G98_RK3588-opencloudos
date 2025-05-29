@@ -118,6 +118,9 @@ struct genl_info {
 	possible_net_t		_net;
 	void *			user_ptr[2];
 	struct netlink_ext_ack *extack;
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 static inline struct net *genl_info_net(const struct genl_info *info)

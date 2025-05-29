@@ -3,6 +3,7 @@
 #define __NETNS_SCTP_H__
 
 #include <linux/timer.h>
+#include <linux/kabi.h>
 #include <net/snmp.h>
 
 struct sock;
@@ -179,6 +180,9 @@ struct netns_sctp {
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	int l3mdev_accept;
 #endif
+
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 };
 
 #endif /* __NETNS_SCTP_H__ */

@@ -566,6 +566,8 @@ struct sock {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
 };
 
 enum sk_pacing {
@@ -1395,6 +1397,8 @@ struct proto {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+	KABI_RESERVE(5);
+	KABI_RESERVE(6);
 } __randomize_layout;
 
 int proto_register(struct proto *prot, int alloc_slab);
