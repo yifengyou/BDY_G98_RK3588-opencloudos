@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2022 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -281,7 +281,7 @@ struct bnxt_tf_flow_node {
 	int					tc_dev_dir;
 #endif
 	u16					ulp_src_fid;
-	bool					dscp_remap;
+	u32					dscp_remap;
 
 	/* The below fields are used if the there is a tunnel encap
 	 * action associated with the flow. These members are used to

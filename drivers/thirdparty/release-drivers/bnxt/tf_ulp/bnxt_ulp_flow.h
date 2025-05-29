@@ -6,6 +6,8 @@
 #ifndef _BNXT_ULP_FLOW_H_
 #define _BNXT_ULP_FLOW_H_
 
+#define BNXT_ULP_GEN_UDP_PORT_VXLAN		4789
+
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) || defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
 
 struct bnxt_ulp_flow_info {
@@ -16,7 +18,7 @@ struct bnxt_ulp_flow_info {
 	u8					tnl_dmac[ETH_ALEN];
 	u16					tnl_ether_type;
 	void					*mparms;
-	bool					dscp_remap;
+	u32					dscp_remap;
 };
 #endif
 
@@ -24,8 +26,8 @@ struct bnxt_ulp_flow_info {
 int bnxt_ulp_flow_create(struct bnxt *bp, u16 src_fid,
 			 struct flow_cls_offload *tc_flow_cmd,
 			 struct bnxt_ulp_flow_info *flow_info);
-int bnxt_ulp_flow_destroy(struct bnxt *bp, u32 flow_id, u16 src_fid, bool
-			  dscp_remap);
+int bnxt_ulp_flow_destroy(struct bnxt *bp, u32 flow_id, u16 src_fid,
+			  u32 dscp_remap);
 void bnxt_ulp_flow_query_count(struct bnxt *bp, u32 flow_id, u64 *packets,
 			       u64 *bytes, unsigned long *lastused);
 int
@@ -50,6 +52,9 @@ int bnxt_ulp_get_mark_from_cfacode(struct bnxt *bp, struct rx_cmp_ext *rxcmp1,
 int bnxt_ulp_get_mark_from_cfacode_p7(struct bnxt *bp, struct rx_cmp_ext *rxcmp1,
 				      struct bnxt_tpa_info *tpa_info,
 				      u32 *mark_id);
+int bnxt_ulp_set_mirror(struct bnxt *bp, bool stat);
+int bnxt_ulp_set_mirror_p7(struct bnxt *bp, bool stat);
+bool bnxt_ulp_can_enable_vf_trust(struct bnxt *bp);
 #endif /* CONFIG_VF_REPS */
 #elif defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
 int bnxt_ulp_port_init(struct bnxt *bp);
@@ -110,6 +115,24 @@ bnxt_ulp_get_mark_from_cfacode_p7(struct bnxt *bp, struct rx_cmp_ext *rxcmp1,
 				  struct bnxt_tpa_info *tpa_info, u32 *mark_id)
 {
 	return -EINVAL;
+}
+
+static inline int
+bnxt_ulp_set_mirror(struct bnxt *bp, bool stat)
+{
+	return 0;
+}
+
+static inline int
+bnxt_ulp_set_mirror_p7(struct bnxt *bp, bool stat)
+{
+	return 0;
+}
+
+static inline bool
+bnxt_ulp_can_enable_vf_trust(struct bnxt *bp)
+{
+	return true;
 }
 #endif /* CONFIG_VF_REPS */
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

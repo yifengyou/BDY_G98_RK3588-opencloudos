@@ -7,12 +7,14 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_common.h"
 #include "ulp_utils.h"
 #include "ulp_template_struct.h"
 #include "ulp_mapper.h"
 #include "ulp_flow_db.h"
 #include "ulp_fc_mgr.h"
+#include "ulp_sc_mgr.h"
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) || defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
 #define ULP_FLOW_DB_RES_DIR_BIT		31
@@ -561,7 +563,13 @@ ulp_flow_db_resource_add(struct bnxt_ulp_context *ulp_ctxt,
 	struct bnxt_ulp_fc_info *ulp_fc_info;
 	struct bnxt_ulp_flow_tbl *flow_tbl;
 	struct bnxt_ulp_flow_db *flow_db;
+	u32 dev_id;
 	u32 idx;
+
+	if (bnxt_ulp_cntxt_dev_id_get(ulp_ctxt, &dev_id)) {
+		netdev_dbg(ulp_ctxt->bp->dev, "Invalid device id\n");
+		return -EINVAL;
+	}
 
 	flow_db = bnxt_ulp_cntxt_ptr2_flow_db_get(ulp_ctxt);
 	if (!flow_db) {
@@ -621,22 +629,30 @@ ulp_flow_db_resource_add(struct bnxt_ulp_context *ulp_ctxt,
 		ulp_flow_db_res_params_to_info(fid_resource, params);
 	}
 
-	ulp_fc_info = bnxt_ulp_cntxt_ptr2_fc_info_get(ulp_ctxt);
-	if (params->resource_type == TF_TBL_TYPE_ACT_STATS_64 &&
+	if (params->resource_type == CFA_RSUBTYPE_CMM_ACT &&
 	    params->resource_sub_type ==
-	    BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_INT_COUNT &&
-	    ulp_fc_info && ulp_fc_info->num_counters) {
-		/* Store the first HW counter ID for this table */
-		if (!ulp_fc_mgr_start_idx_isset(ulp_ctxt, params->direction))
-			ulp_fc_mgr_start_idx_set(ulp_ctxt, params->direction,
-						 params->resource_hndl);
+	    BNXT_ULP_RESOURCE_SUB_TYPE_CMM_TABLE_ACT &&
+	    params->resource_func == BNXT_ULP_RESOURCE_FUNC_CMM_STAT) {
+		if (!ulp_sc_mgr_thread_isstarted(ulp_ctxt))
+			ulp_sc_mgr_thread_start(ulp_ctxt);
+	} else if (params->resource_type == TF_TBL_TYPE_ACT_STATS_64 &&
+		   params->resource_sub_type ==
+		   BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_INT_COUNT) {
+		ulp_fc_info = bnxt_ulp_cntxt_ptr2_fc_info_get(ulp_ctxt);
 
-		ulp_fc_mgr_cntr_set(ulp_ctxt, params->direction,
-				    params->resource_hndl,
-				    ulp_flow_db_shared_session_get(params));
+		if (ulp_fc_info && ulp_fc_info->num_counters) {
+			/* Store the first HW counter ID for this table */
+			if (!ulp_fc_mgr_start_idx_isset(ulp_ctxt, params->direction))
+				ulp_fc_mgr_start_idx_set(ulp_ctxt, params->direction,
+							 params->resource_hndl);
 
-		if (!ulp_fc_mgr_thread_isstarted(ulp_ctxt))
-			ulp_fc_mgr_thread_start(ulp_ctxt);
+			ulp_fc_mgr_cntr_set(ulp_ctxt, params->direction,
+					    params->resource_hndl,
+					    ulp_flow_db_shared_session_get(params));
+
+			if (!ulp_fc_mgr_thread_isstarted(ulp_ctxt))
+				ulp_fc_mgr_thread_start(ulp_ctxt);
+		}
 	}
 
 	/* all good, return success */

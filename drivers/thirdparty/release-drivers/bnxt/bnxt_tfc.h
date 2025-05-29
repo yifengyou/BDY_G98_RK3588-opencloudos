@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -75,6 +75,14 @@ struct tfc_cmpl {
 	__le32	l_cmpl[4];
 };
 
+/* Defines the number of msgs there are in an MPC msg completion event.
+ * Used to pass an opaque value into the MPC msg xmit function. The
+ * completion processing uses this value to ring the doorbell correctly to
+ * signal "completion event processing complete" to the hardware.
+ */
+
+#define BNXT_MPC_COMP_MSG_COUNT 1
+
 /*
  * Use a combination of opcode, table_type, table_scope and table_index to
  * generate a unique opaque field, which can be used to verify the completion
@@ -121,11 +129,43 @@ struct bnxt_tfc_cmd_ctx {
 };
 
 struct bnxt_mpc_mbuf {
-	uint32_t chnl_id;
-	uint8_t	cmp_type;
-	uint8_t	*msg_data;
+	u32 chnl_id;
+	u8  cmp_type;
+	u8 *msg_data;
 	/* MPC msg size in bytes, must be multiple of 16Bytes */
-	uint16_t msg_size;
+	u16 msg_size;
+};
+
+/* Defines the maximum number of outstanding completions supported. */
+#define BNXT_MPC_COMP_MAX_COUNT         64
+
+struct tfc_mpc_comp_info_t {
+	struct bnxt *bp;
+	struct bnxt_tfc_cmd_ctx *ctx;
+	struct bnxt_mpc_mbuf out_msg;
+	int type;
+	u16 read_words;
+};
+
+struct tfc_mpc_batch_info_t {
+	bool	enabled;
+	int	error;
+	int	em_error;
+	int	count;
+	u32     result[BNXT_MPC_COMP_MAX_COUNT];
+	/* List of resources IDs that are to be processed during batch end */
+	u64	res_idx[BNXT_MPC_COMP_MAX_COUNT];
+	u64     em_hdl[BNXT_MPC_COMP_MAX_COUNT];
+	struct tfc_mpc_comp_info_t comp_info[BNXT_MPC_COMP_MAX_COUNT];
+};
+
+enum tfc_mpc_cmd_type {
+	TFC_MPC_EM_INSERT,
+	TFC_MPC_EM_DELETE,
+	TFC_MPC_TABLE_WRITE,
+	TFC_MPC_TABLE_READ,
+	TFC_MPC_TABLE_READ_CLEAR,
+	TFC_MPC_INVALIDATE
 };
 
 static inline bool bnxt_tfc_busy(struct bnxt *bp)
@@ -141,10 +181,17 @@ void bnxt_tfc_buf_dump(struct bnxt *bp, char *hdr,
 void bnxt_free_tfc_mpc_info(struct bnxt *bp);
 int bnxt_alloc_tfc_mpc_info(struct bnxt *bp);
 
+int bnxt_mpc_cmd_cmpl(struct bnxt *bp,
+		      struct bnxt_mpc_mbuf *out_msg,
+		      struct bnxt_tfc_cmd_ctx *ctx);
+
 int bnxt_mpc_send(struct bnxt *bp,
 		  struct bnxt_mpc_mbuf *in_msg,
 		  struct bnxt_mpc_mbuf *out_msg,
-		  uint32_t *opaque);
+		  uint32_t *opaque,
+		  int type,
+		  struct tfc_mpc_batch_info_t *batch_info);
+
 void bnxt_tfc_mpc_cmp(struct bnxt *bp, u32 client, unsigned long handle,
 		      struct bnxt_cmpl_entry cmpl[], u32 entries);
 #endif

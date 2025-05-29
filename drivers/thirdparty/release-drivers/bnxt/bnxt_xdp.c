@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -231,14 +231,18 @@ void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 		xsk_tx_completed(txr->xsk_pool, xsk_tx);
 		cpr->sw_stats->xsk_stats.xsk_tx_completed += xsk_tx;
 	}
-	if (xsk_uses_need_wakeup(txr->xsk_pool))
+	if (txr->xsk_pool && xsk_uses_need_wakeup(txr->xsk_pool))
 		xsk_set_tx_need_wakeup(txr->xsk_pool);
 #endif
 	if (rx_doorbell_needed) {
 		if (!txr->xdp_tx_pending) {
+			netdev_dbg(bp->dev, "%s: XDP db_key 0x%llX, rx_prod 0x%x\n",
+				   __func__, rxr->rx_db.db_key64, rxr->rx_prod);
 			bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
 		} else {
 			tx_buf = &txr->tx_buf_ring[RING_TX(bp, last_tx_cons)];
+			netdev_dbg(bp->dev, "%s: XDP tx_buf db_key 0x%llX, rx_prod 0x%x\n",
+				   __func__, rxr->rx_db.db_key64, tx_buf->rx_prod);
 			bnxt_db_write(bp, &rxr->rx_db, tx_buf->rx_prod);
 		}
 	}
@@ -351,12 +355,13 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 		 * redirect is coming from a frame received by the
 		 * bnxt_en driver.
 		 */
+#ifndef HAVE_PAGE_POOL_GET_DMA_ADDR
 		rx_buf = &rxr->rx_buf_ring[cons];
 		mapping = rx_buf->mapping - bp->rx_dma_offset;
 		dma_unmap_page_attrs(&pdev->dev, mapping,
 				     BNXT_RX_PAGE_SIZE, bp->rx_dir,
 				     DMA_ATTR_WEAK_ORDERING);
-
+#endif
 		/* if we are unable to allocate a new buffer, abort and reuse */
 		if (bnxt_alloc_rx_data(bp, rxr, rxr->rx_prod, GFP_ATOMIC)) {
 			trace_xdp_exception(bp->dev, xdp_prog, act);
@@ -438,6 +443,8 @@ int bnxt_xdp_xmit(struct net_device *dev, int num_frames,
 	if (flags & XDP_XMIT_FLUSH) {
 		/* Sync BD data before updating doorbell */
 		wmb();
+		netdev_dbg(bp->dev, "%s: XDP_XMIT_FLUSH db_key 0x%llX, tx_prod 0x%x\n",
+			   __func__, txr->tx_db.db_key64, txr->tx_prod);
 		bnxt_db_write(bp, &txr->tx_db, txr->tx_prod);
 	}
 
@@ -496,6 +503,8 @@ int bnxt_xdp_xmit(struct net_device *dev, int num_frames,
 	if (flags & XDP_XMIT_FLUSH) {
 		/* Sync BD data before updating doorbell */
 		wmb();
+		netdev_dbg(bp->dev, "%s: XDPXMIT_FLUSH db_key 0x%llX, tx_prod 0x%x\n",
+			   __func__, txr->tx_db.db_key64, txr->tx_prod);
 		bnxt_db_write(bp, &txr->tx_db, txr->tx_prod);
 	}
 

@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +17,16 @@
 
 #define BNXT_TX_CRYPTO_KEY_TYPE	FUNC_KEY_CTX_ALLOC_REQ_KEY_CTX_TYPE_TX
 #define BNXT_RX_CRYPTO_KEY_TYPE	FUNC_KEY_CTX_ALLOC_REQ_KEY_CTX_TYPE_RX
+
+#define BNXT_PARTITION_CAP_BITS						\
+	  (FUNC_QCAPS_RESP_XID_PARTITION_CAP_TX_CK |			\
+	   FUNC_QCAPS_RESP_XID_PARTITION_CAP_RX_CK)
+
+#define BNXT_PARTITION_CAP(resp)					\
+	((le32_to_cpu((resp)->flags_ext2) &				\
+	  FUNC_QCAPS_RESP_FLAGS_EXT2_KEY_XID_PARTITION_SUPPORTED) &&	\
+	 ((le16_to_cpu((resp)->xid_partition_cap) &			\
+	   BNXT_PARTITION_CAP_BITS) == BNXT_PARTITION_CAP_BITS))
 
 #define BNXT_KID_BATCH_SIZE	128
 
@@ -53,7 +63,26 @@ struct bnxt_kfltr_info {
 
 #define BNXT_MAX_CRYPTO_KEY_TYPE	(BNXT_RX_CRYPTO_KEY_TYPE + 1)
 
-struct bnxt_ktls_info {
+enum bnxt_ktls_counters {
+	BNXT_KTLS_TX_ADD = 0,
+	BNXT_KTLS_TX_DEL,
+	BNXT_KTLS_TX_HW_PKT,
+	BNXT_KTLS_TX_SW_PKT,
+	BNXT_KTLS_TX_OOO,
+	BNXT_KTLS_TX_RETRANS,
+	BNXT_KTLS_TX_REPLAY,
+	BNXT_KTLS_RX_ADD,
+	BNXT_KTLS_RX_DEL,
+	BNXT_KTLS_RX_HW_PKT,
+	BNXT_KTLS_RX_SW_PKT,
+	BNXT_KTLS_RX_RESYNC_REQ,
+	BNXT_KTLS_RX_RESYNC_ACK,
+	BNXT_KTLS_RX_RESYNC_DISCARD,
+	BNXT_KTLS_RX_RESYNC_NAK,
+	BNXT_KTLS_MAX_COUNTERS,
+};
+
+struct bnxt_tls_info {
 	u16			max_key_ctxs_alloc;
 	u16			ctxs_per_partition;
 	u8			partition_mode:1;
@@ -67,28 +96,10 @@ struct bnxt_ktls_info {
 	/* to serialize adding to and deleting from the filter_tbl */
 	spinlock_t		filter_lock;
 	u32			filter_count;
-#define BNXT_MAX_KTLS_FILTER	460
+	atomic_t		filter_pending;
+#define BNXT_MAX_TLS_FILTER	460
 
-#define BNXT_KTLS_TX_ADD	0
-#define BNXT_KTLS_TX_DEL	1
-#define BNXT_KTLS_TX_HW_PKT	2
-#define BNXT_KTLS_TX_SW_PKT	3
-#define BNXT_KTLS_TX_OOO	4
-#define BNXT_KTLS_TX_RETRANS	5
-#define BNXT_KTLS_TX_REPLAY	6
-
-#define BNXT_KTLS_RX_ADD	7
-#define BNXT_KTLS_RX_DEL	8
-#define BNXT_KTLS_RX_HW_PKT	9
-#define BNXT_KTLS_RX_SW_PKT	10
-#define BNXT_KTLS_RX_RESYNC_REQ	11
-#define BNXT_KTLS_RX_RESYNC_ACK	12
-#define BNXT_KTLS_RX_RESYNC_DISCARD	13
-#define BNXT_KTLS_RX_RESYNC_NAK	14
-
-#define BNXT_KTLS_MAX_COUNTERS	15
-
-	atomic64_t		counters[BNXT_KTLS_MAX_COUNTERS];
+	atomic64_t		*counters;
 };
 
 #define tck	kctx[BNXT_TX_CRYPTO_KEY_TYPE]
@@ -111,6 +122,8 @@ struct bnxt_ktls_offload_ctx_rx {
 
 #define BNXT_KTLS_RESYNC_TMO		msecs_to_jiffies(2500)
 #define BNXT_KTLS_MAX_RESYNC_BYTES	32768
+
+#define BNXT_KTLS_MAX_REPLAY_MSS	9000
 
 struct ce_add_cmd {
 	__le32	ver_algo_kid_opcode;
@@ -173,8 +186,12 @@ struct ce_resync_resp_ack_cmd {
 
 #define resync_record_seq_num_end	resync_record_seq_num[7]
 
-#define CE_CMD_KID_MASK			0xfffff0UL
+#define CE_CMD_OP_MASK			0x00000fU
+#define CE_CMD_KID_MASK			0xfffff0U
 #define CE_CMD_KID_SFT			4
+
+#define CE_CMD_OP(cmd_p)					\
+	(*(u32 *)(cmd_p) & CE_CMD_OP_MASK)
 
 #define CE_CMD_KID(cmd_p)					\
 	((*(u32 *)(cmd_p) & CE_CMD_KID_MASK) >> CE_CMD_KID_SFT)
@@ -241,6 +258,8 @@ struct crypto_prefix_cmd {
 		     (CRYPTO_PRESYNC_BDS << TX_BD_FLAGS_BD_CNT_SHIFT) |	\
 		     TX_BD_TYPE_PRESYNC_TX_BD))
 
+#define BNXT_METADATA_OFF(len)	ALIGN(len, 32)
+
 struct bnxt_crypto_cmd_ctx {
 	struct completion cmp;
 	struct ce_cmpl ce_cmp;
@@ -255,7 +274,7 @@ void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp);
 void bnxt_clear_cfa_tls_filters_tbl(struct bnxt *bp);
 void bnxt_free_ktls_info(struct bnxt *bp);
 void bnxt_hwrm_reserve_pf_key_ctxs(struct bnxt *bp,
-				   struct hwrm_func_cfg_input *req);
+				   struct hwrm_func_cfg_input *req, u8 type);
 int bnxt_ktls_init(struct bnxt *bp);
 void bnxt_ktls_mpc_cmp(struct bnxt *bp, u32 client, unsigned long handle,
 		       struct bnxt_cmpl_entry cmpl[], u32 entries);
@@ -264,4 +283,15 @@ struct sk_buff *bnxt_ktls_xmit(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 void bnxt_ktls_rx(struct bnxt *bp, struct sk_buff *skb, u8 *data_ptr,
 		  unsigned int len, struct rx_cmp *rxcmp,
 		  struct rx_cmp_ext *rxcmp1);
+int bnxt_xmit_crypto_cmd(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
+			 void *cmd, uint len, uint tmo, struct bnxt_tls_info *tls);
+int bnxt_hwrm_cfa_tls_filter_alloc(struct bnxt *bp, struct sock *sk, u32 kid,
+				   u8 type);
+int bnxt_hwrm_cfa_tls_filter_free(struct bnxt *bp, u32 kid, u8 type);
+int bnxt_key_ctx_alloc_one(struct bnxt *bp, struct bnxt_kctx *kctx, u32 *id, u8 type);
+void bnxt_free_one_kctx(struct bnxt_kctx *kctx, u32 id);
+void bnxt_ktls_del_all(struct bnxt *bp);
+int bnxt_set_partition_mode(struct bnxt *bp);
+int bnxt_hwrm_key_ctx_alloc(struct bnxt *bp, struct bnxt_kctx *kctx, u32 num,
+			    u32 *id, u8 type);
 #endif

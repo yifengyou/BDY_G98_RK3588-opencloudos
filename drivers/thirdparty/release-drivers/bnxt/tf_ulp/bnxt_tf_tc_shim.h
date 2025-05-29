@@ -14,16 +14,6 @@
 #include "bnxt_tf_common.h"
 #include "ulp_mapper.h"
 
-/* Internal Tunnel type, */
-enum bnxt_global_register_tunnel_type {
-	BNXT_GLOBAL_REGISTER_TUNNEL_UNUSED = 0,
-	BNXT_GLOBAL_REGISTER_TUNNEL_VXLAN,
-	BNXT_GLOBAL_REGISTER_TUNNEL_ECPRI,
-	BNXT_GLOBAL_REGISTER_TUNNEL_VXLAN_GPE,
-	BNXT_GLOBAL_REGISTER_TUNNEL_VXLAN_GPE_V6,
-	BNXT_GLOBAL_REGISTER_TUNNEL_MAX
-};
-
 #define BNXT_VNIC_MAX_QUEUE_SIZE        256
 #define BNXT_VNIC_MAX_QUEUE_SZ_IN_8BITS (BNXT_VNIC_MAX_QUEUE_SIZE / 8)
 #define BNXT_VNIC_MAX_QUEUE_SZ_IN_64BITS (BNXT_VNIC_MAX_QUEUE_SIZE / 64)
@@ -32,6 +22,11 @@ int bnxt_queue_action_create(struct bnxt_ulp_mapper_parms *parms,
 			     u16 *vnic_idx, u16 *vnic_id);
 int bnxt_queue_action_delete(struct tf *tfp, u16 vnic_idx);
 int bnxt_bd_act_set(struct bnxt *bp, u16 port_id, u32 act);
+int
+bnxt_tc_global_tunnel_set(struct bnxt_ulp_context *ulp_ctx,
+			  u16 port_id, u8 type,
+			  u16 udp_port, u64 *handle);
+
 #endif
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD)

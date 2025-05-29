@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright (c) 2022-2023 Broadcom Inc.
+/* Copyright (c) 2022-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "bnxt_hwrm.h"
 #include "bnxt_mpc.h"
 #include "bnxt_tfc.h"
+#include "cfa_bld_p70_mpc.h"
 
 #define BNXT_MPC_RX_US_SLEEP 10000
 #define BNXT_MPC_RX_RETRY    10
@@ -141,10 +142,57 @@ int bnxt_alloc_tfc_mpc_info(struct bnxt *bp)
 	return 0;
 }
 
+int bnxt_mpc_cmd_cmpl(struct bnxt *bp,
+		      struct bnxt_mpc_mbuf *out_msg,
+		      struct bnxt_tfc_cmd_ctx *ctx)
+{
+	struct bnxt_tfc_mpc_info *tfc = (struct bnxt_tfc_mpc_info *)bp->tfc_info;
+	uint tmo = BNXT_MPC_TIMEOUT;
+	unsigned long tmo_left;
+	int rc;
+
+	/* If firmware is in reset, then just return error */
+	if (test_bit(BNXT_STATE_IN_FW_RESET, &bp->state))
+		return -1;
+
+	tmo_left = wait_for_completion_timeout(&ctx->cmp, msecs_to_jiffies(tmo));
+	if (!tmo_left) {
+		ctx->tfc_cmp.opaque = BNXT_INV_TMPC_OPAQUE;
+		netdev_warn(bp->dev, "TFC MPC timed out\n");
+		rc = -ETIMEDOUT;
+		goto xmit_done;
+	}
+	if (TFC_CMPL_STATUS(&ctx->tfc_cmp) == TFC_CMPL_STATUS_OK) {
+		/* Copy response/completion back into out_msg */
+		memcpy(out_msg->msg_data, &ctx->tfc_cmp, sizeof(ctx->tfc_cmp));
+		rc = 0;
+	} else {
+		if ((TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT) ==
+		    CFA_MPC_EM_ABORT)
+			netdev_err(bp->dev,
+				   "MPC failed, no static bucket available\n");
+		else if ((TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT) ==
+			 CFA_MPC_EM_DUPLICATE)
+			netdev_err(bp->dev,
+				   "MPC failed, duplicate entry\n");
+		else
+			netdev_err(bp->dev, "MPC status code [%lu]\n",
+				   TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT);
+		rc = -EIO;
+	}
+
+xmit_done:
+	kmem_cache_free(tfc->mpc_cache, ctx);
+	atomic_dec(&tfc->pending);
+	return rc;
+}
+
 int bnxt_mpc_send(struct bnxt *bp,
 		  struct bnxt_mpc_mbuf *in_msg,
 		  struct bnxt_mpc_mbuf *out_msg,
-		  uint32_t *opaque)
+		  uint32_t *opaque,
+		  int type,
+		  struct tfc_mpc_batch_info_t *batch_info)
 {
 	struct bnxt_tfc_mpc_info *tfc = (struct bnxt_tfc_mpc_info *)bp->tfc_info;
 	struct bnxt_mpc_info *mpc = bp->mpc_info;
@@ -154,6 +202,12 @@ int bnxt_mpc_send(struct bnxt *bp,
 	uint tmo = BNXT_MPC_TIMEOUT;
 	int retry = 0;
 	int rc = 0;
+
+	/* If firmware is in reset, then just return error */
+	if (test_bit(BNXT_STATE_IN_FW_RESET, &bp->state) ||
+	    !netif_running(bp->dev)) {
+		return -ENETDOWN;
+	}
 
 	if (!mpc || !tfc) {
 		netdev_dbg(bp->dev, "%s: mpc[%p], tfc[%p]\n", __func__, mpc, tfc);
@@ -180,7 +234,7 @@ int bnxt_mpc_send(struct bnxt *bp,
 	} while (retry < BNXT_TFC_MPC_TX_RETRIES);
 
 	if (retry >= BNXT_TFC_MPC_TX_RETRIES) {
-		netdev_err(bp->dev, "%s: TF MPC send failed after max retries\n",
+		netdev_err(bp->dev, "%s: TF MPC send timed out waiting for open\n",
 			   __func__);
 		return -EAGAIN;
 	}
@@ -215,6 +269,17 @@ int bnxt_mpc_send(struct bnxt *bp,
 	if (rc || !tmo)
 		goto xmit_done;
 
+	if (batch_info && batch_info->enabled) {
+		batch_info->comp_info[batch_info->count].bp = bp;
+		memcpy(&batch_info->comp_info[batch_info->count].out_msg,
+		       out_msg,
+		       sizeof(*out_msg));
+		batch_info->comp_info[batch_info->count].ctx = ctx;
+		batch_info->comp_info[batch_info->count].type = type;
+		batch_info->count++;
+		return rc;
+	}
+
 	tmo_left = wait_for_completion_timeout(&ctx->cmp, msecs_to_jiffies(tmo));
 	if (!tmo_left) {
 		ctx->tfc_cmp.opaque = BNXT_INV_TMPC_OPAQUE;
@@ -228,8 +293,18 @@ int bnxt_mpc_send(struct bnxt *bp,
 		memcpy(out_msg->msg_data, &ctx->tfc_cmp, sizeof(ctx->tfc_cmp));
 		rc = 0;
 	} else {
-		netdev_err(bp->dev, "MPC status code [%lu]\n",
-			   TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT);
+		if ((TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT) ==
+		    CFA_MPC_EM_ABORT)
+			netdev_err(bp->dev,
+				   "MPC failed, no static bucket available\n");
+		else if ((TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT) ==
+			 CFA_MPC_EM_DUPLICATE)
+			netdev_err(bp->dev,
+				   "MPC failed, duplicate entry\n");
+		else
+			netdev_err(bp->dev, "MPC status code [%lu]\n",
+				   TFC_CMPL_STATUS(&ctx->tfc_cmp) >> TFC_CMPL_STATUS_SFT);
+
 		rc = -EIO;
 	}
 

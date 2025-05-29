@@ -12,7 +12,7 @@
 #include "tfc_msg.h"
 #include "tfc_util.h"
 
-int tfc_tcam_alloc(struct tfc *tfcp, u16 fid, enum cfa_track_type tt, u8 priority,
+int tfc_tcam_alloc(struct tfc *tfcp, u16 fid, enum cfa_track_type tt, u16 priority,
 		   u8 key_sz_in_bytes, struct tfc_tcam_info *tcam_info)
 {
 	struct bnxt *bp = tfcp->bp;
@@ -53,7 +53,7 @@ int tfc_tcam_alloc(struct tfc *tfcp, u16 fid, enum cfa_track_type tt, u8 priorit
 }
 
 int tfc_tcam_alloc_set(struct tfc *tfcp, u16 fid, enum cfa_track_type tt,
-		       u8 priority, struct tfc_tcam_info *tcam_info,
+		       u16 priority, struct tfc_tcam_info *tcam_info,
 		       const struct tfc_tcam_data *tcam_data)
 {
 	struct bnxt *bp = tfcp->bp;

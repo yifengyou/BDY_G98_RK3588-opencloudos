@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2022 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,12 +51,17 @@ union bnxt_nvm_data {
 #define NVM_OFF_ENABLE_SRIOV		401
 #define NVM_OFF_MSIX_VEC_PER_VF		406
 #define NVM_OFF_NVM_CFG_VER		602
+#define NVM_OFF_DEVICE_ROCE_CFG		161
+#define NVM_OFF_SUPPORT_RDMA		506
+#define NVM_OFF_AN_PROTOCOL		312
+#define NVM_OFF_MEDIA_AUTO_DETECT	213
 
 #define BNXT_NVM_CFG_VER_BITS		8
 #define BNXT_NVM_CFG_VER_BYTES		1
 
 #define BNXT_MSIX_VEC_MAX	512
 #define BNXT_MSIX_VEC_MIN_MAX	128
+#define BNXT_AN_PROTOCOL_MAX	4
 
 #if defined(CONFIG_VF_REPS) || defined(HAVE_DEVLINK_PARAM)
 #ifdef HAVE_DEVLINK_PARAM

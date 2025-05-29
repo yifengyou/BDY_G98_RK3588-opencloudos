@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include "bnxt_tc.h"
 #include "bnxt_ulp_flow.h"
 #include "bnxt_tf_common.h"
+#include "bnxt_nic_flow.h"
 #include "tfc.h"
 #include "tfc_debug.h"
 
@@ -56,6 +57,27 @@ int bnxt_hwrm_release_afm_func(struct bnxt *bp, u16 fid, u16 rfid,
 	return rc;
 }
 
+static int bnxt_tf_release_afm_func(struct bnxt *bp)
+{
+	int rc;
+
+	if (BNXT_CHIP_P7(bp)) {
+		/* Need to release the fid from AFM control
+		 */
+		rc = bnxt_hwrm_release_afm_func(bp, bp->pf.fw_fid,
+						bp->pf.fw_fid,
+						CFA_RELEASE_AFM_FUNC_REQ_TYPE_RFID,
+						0);
+		if (rc) {
+			netdev_dbg(bp->dev, "Failed in hwrm release afm func:%u rc=%d\n",
+				   bp->pf.fw_fid, rc);
+			return rc;
+		}
+		netdev_dbg(bp->dev, "Released RFID:%d\n", bp->pf.fw_fid);
+	}
+	return 0;
+}
+
 /* This function initializes Truflow feature which enables host based
  * flow offloads. The flag argument provides information about the TF
  * consumer and a reference to the consumer is set in bp->tf_flags.
@@ -65,7 +87,6 @@ int bnxt_hwrm_release_afm_func(struct bnxt *bp, u16 fid, u16 rfid,
 int bnxt_tf_port_init(struct bnxt *bp, u16 flag)
 {
 	int rc;
-
 	mutex_lock(&tf_port_lock);
 	if (bp->tf_flags & BNXT_TF_FLAG_INITIALIZED) {
 		/* TF already initialized; just set the in-use flag
@@ -75,19 +96,10 @@ int bnxt_tf_port_init(struct bnxt *bp, u16 flag)
 		goto exit;
 	}
 
-	if (!BNXT_TF_RX_NIC_FLOW_CAP(bp) && !BNXT_UDCC_CAP(bp) && BNXT_CHIP_P7(bp)) {
-		/* Need to release the Fid from AFM control if TF application */
-		rc = bnxt_hwrm_release_afm_func(bp, bp->pf.fw_fid,
-						bp->pf.fw_fid,
-						CFA_RELEASE_AFM_FUNC_REQ_TYPE_RFID,
-						0);
-		if (rc) {
-			netdev_dbg(bp->dev, "Failed in hwrm release afm func:%u rc=%d\n",
-				   bp->pf.fw_fid, rc);
-			goto exit;
-		}
-		netdev_dbg(bp->dev, "Released RFID:%d\n", bp->pf.fw_fid);
-	}
+	rc = bnxt_tf_release_afm_func(bp);
+	if (rc)
+		goto exit;
+
 	rc = bnxt_ulp_port_init(bp);
 exit:
 	if (!rc) {
@@ -96,7 +108,7 @@ exit:
 			bp->tf_flags |= BNXT_TF_FLAG_INITIALIZED;
 
 	} else {
-		netdev_err(bp->dev, "Failed to initialize Truflow feature\n");
+		netdev_err(bp->dev, "Failed to initialize Truflow feature rc=%d\n", rc);
 	}
 	mutex_unlock(&tf_port_lock);
 	return rc;
@@ -125,8 +137,7 @@ void bnxt_tfo_deinit(struct bnxt *bp)
 static bool bnxt_is_tf_busy(struct bnxt *bp)
 {
 	return (bp->tf_flags &
-		(BNXT_TF_FLAG_NICFLOW |
-		 BNXT_TF_FLAG_SWITCHDEV |
+		(BNXT_TF_FLAG_SWITCHDEV |
 		 BNXT_TF_FLAG_DEVLINK));
 }
 
@@ -141,7 +152,7 @@ void bnxt_tf_port_deinit(struct bnxt *bp, u16 flag)
 	mutex_lock(&tf_port_lock);
 
 	/* Not initialized; nothing to do */
-	if (!(bp->flags & BNXT_TF_FLAG_INITIALIZED))
+	if (!(bp->tf_flags & BNXT_TF_FLAG_INITIALIZED))
 		goto done;
 
 	/* Clear in-use flag for the specific consumer */
@@ -158,6 +169,17 @@ void bnxt_tf_port_deinit(struct bnxt *bp, u16 flag)
 
 done:
 	mutex_unlock(&tf_port_lock);
+}
+
+void bnxt_tf_devlink_toggle(struct bnxt *bp)
+{
+	if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp) &&
+	    (bp->tf_flags & BNXT_TF_FLAG_DEVLINK)) {
+		/* LAG transitions require TF toggle */
+		bnxt_tf_port_deinit(bp, BNXT_TF_FLAG_DEVLINK);
+		bnxt_tf_port_init(bp, BNXT_TF_FLAG_DEVLINK);
+		netdev_dbg(bp->dev, "devlink truflow toggled\n");
+	}
 }
 
 void bnxt_custom_tf_port_init(struct bnxt *bp)
@@ -195,11 +217,33 @@ int bnxt_devlink_tf_port_init(struct bnxt *bp)
 
 void bnxt_devlink_tf_port_deinit(struct bnxt *bp)
 {
+	int rc;
+
 	if (!bp->dl_param_truflow)
 		return;
 
-	if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp))
+	if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp)) {
 		bnxt_tf_port_deinit(bp, BNXT_TF_FLAG_DEVLINK);
+
+		/* For Thor2 only, close and re-open NIC to recreate L2
+		 * filters.  These were freed by AFM on devlink enable
+		 * when TF tookover the function.  On Thor, resources
+		 * are hard carved and L2 filters are not removed when
+		 * TF is running.
+		 */
+		if (!BNXT_CHIP_P7(bp))
+			return;
+
+		rtnl_lock();
+		/* Close and re-open so that L2 filters are restored */
+		if (netif_running(bp->dev)) {
+			bnxt_close_nic(bp, false, false);
+			rc = bnxt_open_nic(bp, false, false);
+			if (rc)
+				netdev_dbg(bp->dev, "re-open for filters failed(%d)\n", rc);
+		}
+		rtnl_unlock();
+	}
 }
 
 #endif
@@ -634,11 +678,27 @@ static void bnxt_get_vf_rep_strings(struct net_device *dev, u32 stringset, u8 *b
 	}
 }
 
+static void __bnxt_get_vf_rep_ethtool_stats(u64 *buf, u64 *sw)
+{
+	buf[0] += bnxt_add_ring_rx_pkts(sw);
+	buf[1] += bnxt_add_ring_rx_bytes(sw);
+	buf[2] += bnxt_add_ring_tx_pkts(sw);
+	buf[3] += bnxt_add_ring_tx_bytes(sw);
+	buf[4] += BNXT_GET_RING_STATS64(sw, rx_error_pkts);
+	buf[5] += BNXT_GET_RING_STATS64(sw, rx_discard_pkts);
+	buf[6] += BNXT_GET_RING_STATS64(sw, tx_error_pkts) +
+			BNXT_GET_RING_STATS64(sw, tx_discard_pkts);
+	buf[7] += BNXT_GET_RING_STATS64(sw, tpa_pkts);
+	buf[8] += BNXT_GET_RING_STATS64(sw, tpa_bytes);
+	buf[9] += BNXT_GET_RING_STATS64(sw, tpa_aborts);
+}
+
 static void bnxt_get_vf_rep_ethtool_stats(struct net_device *dev,
 					  struct ethtool_stats *stats, u64 *buf)
 {
 	int buf_size = BNXT_VF_REP_NUM_COUNTERS * sizeof(u64);
 	struct bnxt_vf_rep *vf_rep = netdev_priv(dev);
+	struct bnxt_vf_stat_ctx *ctx;
 	struct bnxt_vf_info *vf;
 	u64 *sw;
 
@@ -653,19 +713,18 @@ static void bnxt_get_vf_rep_ethtool_stats(struct net_device *dev,
 		rcu_read_unlock();
 		return;
 	}
-	sw = vf[vf_rep->vf_idx].stats.sw_stats;
 
-	buf[0] = bnxt_add_ring_rx_pkts(sw);
-	buf[1] = bnxt_add_ring_rx_bytes(sw);
-	buf[2] = bnxt_add_ring_tx_pkts(sw);
-	buf[3] = bnxt_add_ring_tx_bytes(sw);
-	buf[4] = BNXT_GET_RING_STATS64(sw, rx_error_pkts);
-	buf[5] = BNXT_GET_RING_STATS64(sw, rx_discard_pkts);
-	buf[6] = BNXT_GET_RING_STATS64(sw, tx_error_pkts) +
-			BNXT_GET_RING_STATS64(sw, tx_discard_pkts);
-	buf[7] = BNXT_GET_RING_STATS64(sw, tpa_pkts);
-	buf[8] = BNXT_GET_RING_STATS64(sw, tpa_bytes);
-	buf[9] = BNXT_GET_RING_STATS64(sw, tpa_aborts);
+	if (BNXT_VF_STAT_EJECTION_CAP(vf_rep->bp)) {
+		list_for_each_entry_rcu(ctx,
+					&vf[vf_rep->vf_idx].stat_ctx_list,
+					node) {
+			sw = ctx->stats.sw_stats;
+			__bnxt_get_vf_rep_ethtool_stats(buf, sw);
+		}
+	} else {
+		sw = vf[vf_rep->vf_idx].stats.sw_stats;
+		__bnxt_get_vf_rep_ethtool_stats(buf, sw);
+	}
 	rcu_read_unlock();
 }
 
@@ -704,6 +763,28 @@ static const struct net_device_ops bnxt_vf_rep_netdev_ops = {
 bool bnxt_dev_is_vf_rep(struct net_device *dev)
 {
 	return dev->netdev_ops == &bnxt_vf_rep_netdev_ops;
+}
+
+bool bnxt_tf_can_enable_vf_trust(struct bnxt *bp)
+{
+	return bnxt_ulp_can_enable_vf_trust(bp);
+}
+
+int bnxt_tf_config_promisc_mirror(struct bnxt *bp, struct bnxt_vnic_info *vnic)
+{
+	bool stat = false;
+
+	/* Conditional check for promiscuous mode on/off */
+	if ((vnic->rx_mask & CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS))
+		stat = true;
+	else
+		stat = false;
+
+	if (BNXT_CHIP_P7(bp))
+		/* RoCE mirror enable/disable processing on Thor2 */
+		return bnxt_ulp_set_mirror_p7(bp, stat);
+	else
+		return bnxt_ulp_set_mirror(bp, stat);
 }
 
 int bnxt_hwrm_cfa_pair_exists(struct bnxt *bp, void *vfr)
@@ -801,6 +882,8 @@ void bnxt_vf_reps_close(struct bnxt *bp)
 
 	num_vfs = pci_num_vf(bp->pdev);
 	for (i = 0; i < num_vfs; i++) {
+		if (bnxt_is_trusted_vf(bp, &bp->pf.vf[i]))
+			continue;
 		vf_rep = bp->vf_reps[i];
 		if (netif_running(vf_rep->dev))
 			bnxt_vf_rep_close(vf_rep->dev);
@@ -819,6 +902,9 @@ void bnxt_vf_reps_open(struct bnxt *bp)
 		return;
 
 	for (i = 0; i < pci_num_vf(bp->pdev); i++) {
+		/* Skip the iteration if vf is trusted */
+		if (bnxt_is_trusted_vf(bp, &bp->pf.vf[i]))
+			continue;
 		/* Open the VF-Rep only if it is allocated in the FW */
 		if (bp->vf_reps[i]->tx_cfa_action != CFA_HANDLE_INVALID)
 			bnxt_vf_rep_open(bp->vf_reps[i]->dev);
@@ -1052,6 +1138,8 @@ int bnxt_vf_reps_alloc(struct bnxt *bp)
 		cfa_code_map[i] = VF_IDX_INVALID;
 
 	for (i = 0; i < num_vfs; i++) {
+		if (bnxt_is_trusted_vf(bp, &bp->pf.vf[i]))
+			continue;
 		vf_rep = bp->vf_reps[i];
 		vf_rep->vf_idx = i;
 
@@ -1071,7 +1159,7 @@ err:
 /* Use the OUI of the PF's perm addr and report the same mac addr
  * for the same VF-rep each time
  */
-static void bnxt_vf_rep_eth_addr_gen(u8 *src_mac, u16 vf_idx, u8 *mac)
+static void bnxt_vf_rep_eth_addr_gen(const u8 *src_mac, u16 vf_idx, u8 *mac)
 {
 	u32 addr;
 
@@ -1094,7 +1182,7 @@ static void bnxt_vf_rep_netdev_init(struct bnxt *bp, struct bnxt_vf_rep *vf_rep,
 #ifndef HAVE_NDO_GET_PORT_PARENT_ID
 	SWITCHDEV_SET_OPS(dev, &bnxt_vf_rep_switchdev_ops);
 #endif
-	/* Just inherit all the featues of the parent PF as the VF-R
+	/* Just inherit all the features of the parent PF as the VF-R
 	 * uses the RX/TX rings of the parent PF
 	 */
 	dev->hw_features = pf_dev->hw_features;
@@ -1102,7 +1190,7 @@ static void bnxt_vf_rep_netdev_init(struct bnxt *bp, struct bnxt_vf_rep *vf_rep,
 	dev->vlan_features = pf_dev->vlan_features;
 	dev->hw_enc_features = pf_dev->hw_enc_features;
 	dev->features |= pf_dev->features;
-	bnxt_vf_rep_eth_addr_gen(bp->pf.mac_addr, vf_rep->vf_idx,
+	bnxt_vf_rep_eth_addr_gen(bp->dev->dev_addr, vf_rep->vf_idx,
 				 dev->perm_addr);
 	eth_hw_addr_set(dev, dev->perm_addr);
 	/* Set VF-Rep's max-mtu to the corresponding VF's max-mtu */
@@ -1149,6 +1237,9 @@ int bnxt_vf_reps_create(struct bnxt *bp)
 	}
 
 	for (i = 0; i < num_vfs; i++) {
+		if (bnxt_is_trusted_vf(bp, &bp->pf.vf[i]))
+			continue;
+
 		dev = alloc_etherdev(sizeof(*vf_rep));
 		if (!dev) {
 			rc = -ENOMEM;
@@ -1218,7 +1309,7 @@ int bnxt_dl_eswitch_mode_set(struct devlink *devlink, u16 mode)
 	struct bnxt *bp = bnxt_get_bp_from_dl(devlink);
 	int rc = 0;
 
-	if (BNXT_TF_RX_NIC_FLOW_CAP(bp) && (mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)) {
+	if (NIC_FLOW_SUPPORTED(bp) && (mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)) {
 		/*
 		 * Switchdev mode unsupported if NIC flow capable.  Currently NIC flow
 		 * is only available on Thor2 with special UDCC build
@@ -1272,13 +1363,11 @@ int bnxt_dl_eswitch_mode_set(struct devlink *devlink, u16 mode)
 			rc = -EOPNOTSUPP;
 			goto done;
 		}
-
 		if (BNXT_TRUFLOW_EN(bp)) {
 			rc = bnxt_tf_port_init(bp, BNXT_TF_FLAG_SWITCHDEV);
 			if (rc)
 				goto done;
 		}
-
 		/* Create representors for existing VFs */
 		if (pci_num_vf(bp->pdev) > 0)
 			rc = bnxt_vf_reps_create(bp);

@@ -101,6 +101,12 @@ struct tf_global_cfg_cfg tf_global_cfg_p58[TF_GLOBAL_CFG_TYPE_MAX] = {
 	[TF_DSCP_RMP_CFG] = {
 		TF_GLOBAL_CFG_CFG_HCAPI, TF_DSCP_RMP_CFG
 	},
+	[TF_MIRROR_CFG] = {
+		TF_GLOBAL_CFG_CFG_HCAPI, TF_MIRROR_CFG
+	},
+	[TF_ACT_MTR_CFG] = {
+		TF_GLOBAL_CFG_CFG_HCAPI, TF_ACT_MTR_CFG
+	},
 };
 
 const struct tf_hcapi_resource_map tf_hcapi_res_map_p58[CFA_RESOURCE_TYPE_P58_LAST + 1] = {

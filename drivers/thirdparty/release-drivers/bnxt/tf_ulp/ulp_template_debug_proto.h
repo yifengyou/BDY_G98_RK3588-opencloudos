@@ -88,4 +88,8 @@ ulp_mapper_gen_tbl_dump(struct bnxt_ulp_context *ulp_ctx,
 
 const char *
 ulp_mapper_key_recipe_type_to_str(u32 sub_type);
+
+void
+ulp_mapper_global_register_tbl_dump(struct bnxt_ulp_context *ulp_ctx,
+				    u32 sub_type, u16 port);
 #endif

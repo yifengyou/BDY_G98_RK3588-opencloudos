@@ -7,11 +7,13 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_ethtool.h"
 #include "bnxt_tf_common.h"
 #include "bnxt_tf_tc_shim.h"
 #include "ulp_mapper.h"
+#include "ulp_template_debug_proto.h"
 #include "ulp_udcc.h"
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD)
@@ -43,6 +45,90 @@ int bnxt_ulp_tf_v6_subnet_del(struct bnxt *bp, u16 subnet_hndl)
 #endif /* #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) */
 
 #if defined(CONFIG_BNXT_FLOWER_OFFLOAD) || defined(CONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD)
+
+#define ULP_GLOBAL_TUNNEL_UDP_PORT_SHIFT 32
+#define ULP_GLOBAL_TUNNEL_UDP_PORT_MASK  ((uint16_t)0xffff)
+#define ULP_GLOBAL_TUNNEL_PORT_ID_SHIFT  16
+#define ULP_GLOBAL_TUNNEL_PORT_ID_MASK   ((uint16_t)0xffff)
+#define ULP_GLOBAL_TUNNEL_UPARID_SHIFT   8
+#define ULP_GLOBAL_TUNNEL_UPARID_MASK    ((uint16_t)0xff)
+#define ULP_GLOBAL_TUNNEL_TYPE_SHIFT     0
+#define ULP_GLOBAL_TUNNEL_TYPE_MASK      ((uint16_t)0xff)
+
+/* Extracts the dpdk port id and tunnel type from the handle */
+static void
+bnxt_tc_global_reg_hndl_to_data(uint64_t handle, uint16_t *port_id,
+				uint8_t *upar_id, uint8_t *type,
+				uint16_t *udp_port)
+{
+	*type    = (handle >> ULP_GLOBAL_TUNNEL_TYPE_SHIFT) &
+		   ULP_GLOBAL_TUNNEL_TYPE_MASK;
+	*upar_id = (handle >> ULP_GLOBAL_TUNNEL_UPARID_SHIFT) &
+		   ULP_GLOBAL_TUNNEL_UPARID_MASK;
+	*port_id    = (handle >> ULP_GLOBAL_TUNNEL_PORT_ID_SHIFT) &
+		   ULP_GLOBAL_TUNNEL_PORT_ID_MASK;
+	*udp_port = (handle >> ULP_GLOBAL_TUNNEL_UDP_PORT_SHIFT) &
+		   ULP_GLOBAL_TUNNEL_UDP_PORT_MASK;
+}
+
+/* Packs the dpdk port id and tunnel type in the handle */
+static void
+bnxt_tc_global_reg_data_to_hndl(uint16_t port_id, uint8_t upar_id,
+				uint8_t type, uint16_t udp_port,
+				uint64_t *handle)
+{
+	*handle = 0;
+	*handle	|=  (udp_port & ULP_GLOBAL_TUNNEL_UDP_PORT_MASK);
+	*handle	<<= ULP_GLOBAL_TUNNEL_UDP_PORT_SHIFT;
+	*handle	|=  (port_id & ULP_GLOBAL_TUNNEL_PORT_ID_MASK) <<
+		ULP_GLOBAL_TUNNEL_PORT_ID_SHIFT;
+	*handle	|= (upar_id & ULP_GLOBAL_TUNNEL_UPARID_MASK) <<
+		ULP_GLOBAL_TUNNEL_UPARID_SHIFT;
+	*handle |= (type & ULP_GLOBAL_TUNNEL_TYPE_MASK);
+}
+
+/* Sets or resets the tunnel ports.
+ * If dport == 0, then the port_id and type are retrieved from the handle.
+ * otherwise, the incoming port_id, type, and dport are used.
+ * The type is enum ulp_mapper_ulp_global_tunnel_type
+ */
+int
+bnxt_tc_global_tunnel_set(struct bnxt_ulp_context *ulp_ctx,
+			  u16 port_id, u8 type,
+			  u16 udp_port, u64 *handle)
+{
+	struct bnxt *bp = ulp_ctx->bp;
+	u16 ludp_port = udp_port;
+	u8 ltype, lupar_id = 0;
+	u32 *ulp_flags;
+	int rc = 0;
+
+	if (!udp_port) {
+		/* Free based on the handle */
+		if (!handle) {
+			netdev_dbg(bp->dev, "Free with invalid handle\n");
+			return -EINVAL;
+		}
+		bnxt_tc_global_reg_hndl_to_data(*handle, &port_id,
+						&lupar_id, &ltype, &ludp_port);
+	}
+
+	ulp_mapper_global_register_tbl_dump(ulp_ctx, type, udp_port);
+
+	if (udp_port)
+		bnxt_tc_global_reg_data_to_hndl(port_id, lupar_id,
+						type, udp_port, handle);
+
+	ulp_flags = &ulp_ctx->cfg_data->ulp_flags;
+	if (type == BNXT_ULP_RESOURCE_SUB_TYPE_GLOBAL_REGISTER_CUST_VXLAN) {
+		if (udp_port)
+			*ulp_flags |= BNXT_ULP_DYNAMIC_VXLAN_SUPPORT;
+		else
+			*ulp_flags &= ~BNXT_ULP_DYNAMIC_VXLAN_SUPPORT;
+	}
+
+	return rc;
+}
 static int bnxt_get_vnic_info_idx(struct bnxt *bp)
 {
 	int idx;

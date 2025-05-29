@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,10 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
+#include <linux/skbuff.h>
+#ifdef HAVE_SKBUFF_REF
+#include <linux/skbuff_ref.h>
+#endif
 #include <net/inet_hashtables.h>
 #include <net/inet6_hashtables.h>
 #ifdef HAVE_KTLS
@@ -30,23 +34,15 @@
 #include "bnxt_hwrm.h"
 #include "bnxt_mpc.h"
 #include "bnxt_ktls.h"
+#include "bnxt_quic.h"
 
-#if defined(HAVE_KTLS) && IS_ENABLED(CONFIG_TLS_DEVICE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0))
-
-#define BNXT_PARTITION_CAP_BITS						\
-	  (FUNC_QCAPS_RESP_XID_PARTITION_CAP_TX_CK |			\
-	   FUNC_QCAPS_RESP_XID_PARTITION_CAP_RX_CK)
-
-#define BNXT_PARTITION_CAP(resp)					\
-	((le32_to_cpu((resp)->flags_ext2) &				\
-	  FUNC_QCAPS_RESP_FLAGS_EXT2_KEY_XID_PARTITION_SUPPORTED) &&	\
-	 ((le16_to_cpu(resp->xid_partition_cap) &			\
-	   BNXT_PARTITION_CAP_BITS) == BNXT_PARTITION_CAP_BITS))
+#if ((defined(HAVE_KTLS) || defined(HAVE_BNXT_QUIC)) && \
+     IS_ENABLED(CONFIG_TLS_DEVICE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)))
 
 void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp)
 {
 	u16 max_keys = le16_to_cpu(resp->max_key_ctxs_alloc);
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 
 	if (BNXT_VF(bp))
 		return;
@@ -59,6 +55,13 @@ void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp)
 		ktls = kzalloc(sizeof(*ktls), GFP_KERNEL);
 		if (!ktls)
 			return;
+
+		ktls->counters = kzalloc(sizeof(atomic64_t) * BNXT_KTLS_MAX_COUNTERS,
+					 GFP_KERNEL);
+		if (!ktls->counters) {
+			kfree(ktls);
+			return;
+		}
 
 		if (BNXT_PARTITION_CAP(resp)) {
 			batch_sz = le16_to_cpu(resp->ctxs_per_partition);
@@ -91,6 +94,7 @@ void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp)
 
 		hash_init(ktls->filter_tbl);
 		spin_lock_init(&ktls->filter_lock);
+		atomic_set(&ktls->filter_pending, 0);
 
 		atomic_set(&ktls->pending, 0);
 
@@ -101,7 +105,7 @@ void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp)
 
 void bnxt_clear_cfa_tls_filters_tbl(struct bnxt *bp)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct bnxt_kfltr_info *kfltr;
 	struct hlist_node *tmp_node;
 	int bkt;
@@ -120,7 +124,7 @@ void bnxt_clear_cfa_tls_filters_tbl(struct bnxt *bp)
 
 void bnxt_free_ktls_info(struct bnxt *bp)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct bnxt_kid_info *kid, *tmp;
 	struct bnxt_kctx *kctx;
 	int i;
@@ -139,26 +143,38 @@ void bnxt_free_ktls_info(struct bnxt *bp)
 	}
 	bnxt_clear_cfa_tls_filters_tbl(bp);
 	kmem_cache_destroy(ktls->mpc_cache);
+	kfree(ktls->counters);
 	kfree(ktls);
 	bp->ktls_info = NULL;
 }
 
 void bnxt_hwrm_reserve_pf_key_ctxs(struct bnxt *bp,
-				   struct hwrm_func_cfg_input *req)
+				   struct hwrm_func_cfg_input *req,
+				   u8 type)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *tls = (type == BNXT_CRYPTO_TYPE_KTLS ?
+				     bp->ktls_info : bp->quic_info);
 	struct bnxt_hw_resc *hw_resc = &bp->hw_resc;
+	struct bnxt_hw_tls_resc *tls_resc;
 	u32 tx, rx;
 
-	if (!ktls)
+	if (!tls)
 		return;
 
-	tx = min(ktls->tck.max_ctx, hw_resc->max_tx_key_ctxs);
-	req->num_ktls_tx_key_ctxs = cpu_to_le32(tx);
-	rx = min(ktls->rck.max_ctx, hw_resc->max_rx_key_ctxs);
-	req->num_ktls_rx_key_ctxs = cpu_to_le32(rx);
-	req->enables |= cpu_to_le32(FUNC_CFG_REQ_ENABLES_KTLS_TX_KEY_CTXS |
-				    FUNC_CFG_REQ_ENABLES_KTLS_RX_KEY_CTXS);
+	tls_resc = &hw_resc->tls_resc[type];
+	tx = min(tls->tck.max_ctx, tls_resc->max_tx_key_ctxs);
+	rx = min(tls->rck.max_ctx, tls_resc->max_rx_key_ctxs);
+	if (type == BNXT_CRYPTO_TYPE_KTLS) {
+		req->num_ktls_tx_key_ctxs = cpu_to_le32(tx);
+		req->num_ktls_rx_key_ctxs = cpu_to_le32(rx);
+		req->enables |= cpu_to_le32(FUNC_CFG_REQ_ENABLES_KTLS_TX_KEY_CTXS |
+					    FUNC_CFG_REQ_ENABLES_KTLS_RX_KEY_CTXS);
+	} else {
+		req->num_quic_tx_key_ctxs = cpu_to_le32(tx);
+		req->num_quic_rx_key_ctxs = cpu_to_le32(rx);
+		req->enables2 |= cpu_to_le32(FUNC_CFG_REQ_ENABLES2_QUIC_TX_KEY_CTXS |
+					     FUNC_CFG_REQ_ENABLES2_QUIC_RX_KEY_CTXS);
+	}
 }
 
 static int __bnxt_partition_alloc(struct bnxt_kctx *kctx, u32 *id)
@@ -216,10 +232,11 @@ static int bnxt_key_ctx_store(struct bnxt *bp, __le32 *key_buf, u32 num,
 	return 0;
 }
 
-static int bnxt_hwrm_key_ctx_alloc(struct bnxt *bp, struct bnxt_kctx *kctx,
-				   u32 num, u32 *id)
+int bnxt_hwrm_key_ctx_alloc(struct bnxt *bp, struct bnxt_kctx *kctx, u32 num,
+			    u32 *id, u8 type)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *tls = (type == BNXT_CRYPTO_TYPE_KTLS ?
+				     bp->ktls_info : bp->quic_info);
 	struct hwrm_func_key_ctx_alloc_output *resp;
 	struct hwrm_func_key_ctx_alloc_input *req;
 	dma_addr_t mapping;
@@ -228,15 +245,15 @@ static int bnxt_hwrm_key_ctx_alloc(struct bnxt *bp, struct bnxt_kctx *kctx,
 	bool contig;
 	int rc;
 
-	num = min_t(u32, num, ktls->max_key_ctxs_alloc);
+	num = min_t(u32, num, tls->max_key_ctxs_alloc);
 	rc = hwrm_req_init(bp, req, HWRM_FUNC_KEY_CTX_ALLOC);
 	if (rc)
 		return rc;
 
-	if (ktls->partition_mode) {
+	if (tls->partition_mode) {
 		u32 partition_id;
 
-		num = ktls->ctxs_per_partition;
+		num = tls->ctxs_per_partition;
 		rc = bnxt_partition_alloc(kctx, &partition_id);
 		if (rc)
 			goto key_alloc_exit;
@@ -264,7 +281,7 @@ static int bnxt_hwrm_key_ctx_alloc(struct bnxt *bp, struct bnxt_kctx *kctx,
 	num = le16_to_cpu(resp->num_key_ctxs_allocated);
 	contig =
 		resp->flags & FUNC_KEY_CTX_ALLOC_RESP_FLAGS_KEY_CTXS_CONTIGUOUS;
-	if (ktls->partition_mode)
+	if (tls->partition_mode)
 		key_buf = &resp->partition_start_xid;
 	rc = bnxt_key_ctx_store(bp, key_buf, num, contig, kctx, id);
 
@@ -302,7 +319,7 @@ alloc_done:
 	return rc;
 }
 
-static void bnxt_free_one_kctx(struct bnxt_kctx *kctx, u32 id)
+void bnxt_free_one_kctx(struct bnxt_kctx *kctx, u32 id)
 {
 	struct bnxt_kid_info *kid;
 
@@ -318,8 +335,7 @@ static void bnxt_free_one_kctx(struct bnxt_kctx *kctx, u32 id)
 
 #define BNXT_KCTX_ALLOC_RETRY_MAX	3
 
-static int bnxt_key_ctx_alloc_one(struct bnxt *bp, struct bnxt_kctx *kctx,
-				  u32 *id)
+int bnxt_key_ctx_alloc_one(struct bnxt *bp, struct bnxt_kctx *kctx, u32 *id, u8 type)
 {
 	int rc, retry = 0;
 
@@ -336,7 +352,7 @@ static int bnxt_key_ctx_alloc_one(struct bnxt *bp, struct bnxt_kctx *kctx,
 				   BNXT_KCTX_ALLOC_OK(kctx));
 			continue;
 		}
-		rc = bnxt_hwrm_key_ctx_alloc(bp, kctx, BNXT_KID_BATCH_SIZE, id);
+		rc = bnxt_hwrm_key_ctx_alloc(bp, kctx, BNXT_KID_BATCH_SIZE, id, type);
 		if (!rc)
 			return 0;
 	}
@@ -355,12 +371,13 @@ static int bnxt_key_ctx_alloc_one(struct bnxt *bp, struct bnxt_kctx *kctx,
 	 CFA_TLS_FILTER_ALLOC_REQ_ENABLES_KID |			\
 	 CFA_TLS_FILTER_ALLOC_REQ_ENABLES_DST_ID)
 
-static int bnxt_hwrm_cfa_tls_filter_alloc(struct bnxt *bp, struct sock *sk,
-					  u32 kid)
+int bnxt_hwrm_cfa_tls_filter_alloc(struct bnxt *bp, struct sock *sk,
+				   u32 kid, u8 type)
 {
 	struct hwrm_cfa_tls_filter_alloc_output *resp;
 	struct hwrm_cfa_tls_filter_alloc_input *req;
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *tls = (type == BNXT_CRYPTO_TYPE_KTLS ?
+				     bp->ktls_info : bp->quic_info);
 	struct inet_sock *inet = inet_sk(sk);
 	struct bnxt_l2_filter *l2_fltr;
 	struct bnxt_kfltr_info *kfltr;
@@ -379,11 +396,18 @@ static int bnxt_hwrm_cfa_tls_filter_alloc(struct bnxt *bp, struct sock *sk,
 	req->enables = cpu_to_le32(BNXT_TLS_FLTR_FLAGS);
 
 	l2_fltr = bp->vnic_info[BNXT_VNIC_DEFAULT].l2_filters[0];
-	req->l2_filter_id = l2_fltr->base.filter_id;
+	req->l2_filter_id = l2_fltr->base.l2_filter_id;
 	req->dst_id = cpu_to_le16(bp->vnic_info[BNXT_VNIC_DEFAULT].fw_vnic_id);
 	req->kid = cpu_to_le32(kid);
 
-	req->ip_protocol = CFA_TLS_FILTER_ALLOC_REQ_IP_PROTOCOL_TCP;
+	if (type == BNXT_CRYPTO_TYPE_QUIC) {
+		bnxt_get_quic_dst_conect_id(bp, req);
+		req->enables |= cpu_to_le32(CFA_TLS_FILTER_ALLOC_REQ_ENABLES_QUIC_DST_CONNECT_ID);
+	}
+	if (sk->sk_protocol == IPPROTO_TCP)
+		req->ip_protocol = CFA_TLS_FILTER_ALLOC_REQ_IP_PROTOCOL_TCP;
+	else
+		req->ip_protocol = CFA_TLS_FILTER_ALLOC_REQ_IP_PROTOCOL_UDP;
 	req->src_port = inet->inet_dport;
 	req->dst_port = inet->inet_sport;
 
@@ -412,25 +436,26 @@ static int bnxt_hwrm_cfa_tls_filter_alloc(struct bnxt *bp, struct sock *sk,
 	} else {
 		kfltr->kid = kid;
 		kfltr->filter_id = resp->tls_filter_id;
-		spin_lock(&ktls->filter_lock);
-		ktls->filter_count++;
-		hash_add_rcu(ktls->filter_tbl, &kfltr->hash, kid);
-		spin_unlock(&ktls->filter_lock);
+		spin_lock(&tls->filter_lock);
+		tls->filter_count++;
+		hash_add_rcu(tls->filter_tbl, &kfltr->hash, kid);
+		spin_unlock(&tls->filter_lock);
 	}
 	hwrm_req_drop(bp, req);
 	return rc;
 }
 
-static int bnxt_hwrm_cfa_tls_filter_free(struct bnxt *bp, u32 kid)
+int bnxt_hwrm_cfa_tls_filter_free(struct bnxt *bp, u32 kid, u8 type)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *tls = (type == BNXT_CRYPTO_TYPE_KTLS ?
+				     bp->ktls_info : bp->quic_info);
 	struct hwrm_cfa_tls_filter_free_input *req;
 	struct bnxt_kfltr_info *kfltr;
 	bool found = false;
 	int rc;
 
 	rcu_read_lock();
-	hash_for_each_possible_rcu(ktls->filter_tbl, kfltr, hash, kid) {
+	hash_for_each_possible_rcu(tls->filter_tbl, kfltr, hash, kid) {
 		if (kfltr->kid == kid) {
 			found = true;
 			break;
@@ -447,26 +472,29 @@ static int bnxt_hwrm_cfa_tls_filter_free(struct bnxt *bp, u32 kid)
 	req->tls_filter_id = kfltr->filter_id;
 	rc = hwrm_req_send(bp, req);
 
-	spin_lock(&ktls->filter_lock);
-	ktls->filter_count--;
+	spin_lock(&tls->filter_lock);
+	tls->filter_count--;
 	hash_del_rcu(&kfltr->hash);
-	spin_unlock(&ktls->filter_lock);
+	spin_unlock(&tls->filter_lock);
 	kfree_rcu(kfltr, rcu);
 	return rc;
 }
 
-static int bnxt_xmit_crypto_cmd(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
-				void *cmd, uint len, uint tmo)
+#define BNXT_XMIT_CRYPTO_RETRY_MAX	5
+#define BNXT_XMIT_CRYPTO_MIN_TMO	100
+#define BNXT_XMIT_CRYPTO_MAX_TMO	150
+
+int bnxt_xmit_crypto_cmd(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
+			 void *cmd, uint len, uint tmo, struct bnxt_tls_info *tls)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
 	struct bnxt_crypto_cmd_ctx *ctx = NULL;
 	unsigned long tmo_left, handle = 0;
-	int rc;
+	int rc, retry = 0;
 
 	if (tmo) {
 		u32 kid = CE_CMD_KID(cmd);
 
-		ctx = kmem_cache_alloc(ktls->mpc_cache, GFP_KERNEL);
+		ctx = kmem_cache_alloc(tls->mpc_cache, GFP_KERNEL);
 		if (!ctx)
 			return -ENOMEM;
 		init_completion(&ctx->cmp);
@@ -474,11 +502,19 @@ static int bnxt_xmit_crypto_cmd(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 		ctx->ce_cmp.opaque =
 			BNXT_KMPC_OPAQUE(txr->tx_ring_struct.mpc_chnl_type,
 					 kid);
+		retry = BNXT_XMIT_CRYPTO_RETRY_MAX;
 		might_sleep();
 	}
-	spin_lock(&txr->tx_lock);
-	rc = bnxt_start_xmit_mpc(bp, txr, cmd, len, handle);
-	spin_unlock(&txr->tx_lock);
+	do {
+		spin_lock(&txr->tx_lock);
+		rc = bnxt_start_xmit_mpc(bp, txr, cmd, len, handle);
+		spin_unlock(&txr->tx_lock);
+		if (rc == -EBUSY && tmo && retry)
+			usleep_range(BNXT_XMIT_CRYPTO_MIN_TMO,
+				     BNXT_XMIT_CRYPTO_MAX_TMO);
+		else
+			break;
+	} while (retry--);
 	if (rc || !tmo)
 		goto xmit_done;
 
@@ -495,8 +531,13 @@ static int bnxt_xmit_crypto_cmd(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 	else
 		rc = -EIO;
 xmit_done:
+	if (rc)
+		netdev_warn(bp->dev,
+			    "MPC transmit failed, ring idx %d, op 0x%x, kid 0x%x, rc %d\n",
+			    txr->bnapi->index, CE_CMD_OP(cmd), CE_CMD_KID(cmd),
+			    rc);
 	if (ctx)
-		kmem_cache_free(ktls->mpc_cache, ctx);
+		kmem_cache_free(tls->mpc_cache, ctx);
 	return rc;
 }
 
@@ -511,18 +552,17 @@ static void bnxt_copy_tls_mp_data(u8 *dst, u8 *src, int bytes)
 static int bnxt_crypto_add(struct bnxt *bp,
 			   enum tls_offload_ctx_dir direction,
 			   struct tls_crypto_info *crypto_info, u32 tcp_seq_no,
-			   u32 kid)
+			   u32 kid, u8 type)
 {
-	struct bnxt_mpc_info *mpc = bp->mpc_info;
 	struct bnxt_tx_ring_info *txr;
 	struct ce_add_cmd cmd = {0};
 	u32 data;
 
 	if (direction == TLS_OFFLOAD_CTX_DIR_TX) {
-		txr = &mpc->mpc_rings[BNXT_MPC_TCE_TYPE][0];
+		txr = bnxt_select_mpc_ring(bp, BNXT_MPC_TCE_TYPE);
 		cmd.ctx_kind = CE_ADD_CMD_CTX_KIND_CK_TX;
 	} else {
-		txr = &mpc->mpc_rings[BNXT_MPC_RCE_TYPE][0];
+		txr = bnxt_select_mpc_ring(bp, BNXT_MPC_RCE_TYPE);
 		cmd.ctx_kind = CE_ADD_CMD_CTX_KIND_CK_RX;
 	}
 
@@ -561,22 +601,21 @@ static int bnxt_crypto_add(struct bnxt *bp,
 	cmd.pkt_tcp_seq_num = cpu_to_le32(tcp_seq_no);
 	cmd.tls_header_tcp_seq_num = cmd.pkt_tcp_seq_num;
 	return bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd),
-				    BNXT_MPC_TMO_MSECS);
+				    BNXT_MPC_TMO_MSECS, bp->ktls_info);
 }
 
 static int bnxt_crypto_del(struct bnxt *bp,
-			   enum tls_offload_ctx_dir direction, u32 kid)
+			   enum tls_offload_ctx_dir direction, u32 kid, u8 type)
 {
-	struct bnxt_mpc_info *mpc = bp->mpc_info;
 	struct bnxt_tx_ring_info *txr;
 	struct ce_delete_cmd cmd = {0};
 	u32 data;
 
 	if (direction == TLS_OFFLOAD_CTX_DIR_TX) {
-		txr = &mpc->mpc_rings[BNXT_MPC_TCE_TYPE][0];
+		txr = bnxt_select_mpc_ring(bp, BNXT_MPC_TCE_TYPE);
 		data = CE_DELETE_CMD_CTX_KIND_CK_TX;
 	} else {
-		txr = &mpc->mpc_rings[BNXT_MPC_RCE_TYPE][0];
+		txr = bnxt_select_mpc_ring(bp, BNXT_MPC_RCE_TYPE);
 		data = CE_DELETE_CMD_CTX_KIND_CK_RX;
 	}
 
@@ -584,7 +623,47 @@ static int bnxt_crypto_del(struct bnxt *bp,
 
 	cmd.ctx_kind_kid_opcode = cpu_to_le32(data);
 	return bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd),
-				    BNXT_MPC_TMO_MSECS);
+				    BNXT_MPC_TMO_MSECS, bp->ktls_info);
+}
+
+static void bnxt_ktls_del_all_kids(struct bnxt *bp, struct bnxt_kid_info *kid,
+				   int key_type)
+{
+	enum tls_offload_ctx_dir dir;
+	int i, rc;
+
+	if (key_type == BNXT_TX_CRYPTO_KEY_TYPE)
+		dir = TLS_OFFLOAD_CTX_DIR_TX;
+	else if (key_type == BNXT_RX_CRYPTO_KEY_TYPE)
+		dir = TLS_OFFLOAD_CTX_DIR_RX;
+	else
+		return;
+	for (i = 0; i < kid->count; i++) {
+		if (!test_bit(i, kid->ids)) {
+			rc = bnxt_crypto_del(bp, dir, kid->start_id + i,
+					     BNXT_CRYPTO_TYPE_KTLS);
+			if (!rc)
+				set_bit(i, kid->ids);
+		}
+	}
+}
+
+void bnxt_ktls_del_all(struct bnxt *bp)
+{
+	struct bnxt_tls_info *ktls = bp->ktls_info;
+	struct bnxt_kid_info *kid;
+	struct bnxt_kctx *kctx;
+	int i;
+
+	if (!ktls)
+		return;
+
+	/* Shutting down, no need to protect the lists. */
+	for (i = 0; i < BNXT_MAX_CRYPTO_KEY_TYPE; i++) {
+		kctx = &ktls->kctx[i];
+		list_for_each_entry(kid, &kctx->list, list)
+			bnxt_ktls_del_all_kids(bp, kid, i);
+	}
 }
 
 static bool bnxt_ktls_cipher_supported(struct bnxt *bp,
@@ -628,7 +707,7 @@ static int bnxt_ktls_dev_add(struct net_device *dev, struct sock *sk,
 	struct bnxt_ktls_offload_ctx_tx *kctx_tx;
 	struct bnxt *bp = netdev_priv(dev);
 	struct tls_context *tls_ctx;
-	struct bnxt_ktls_info *ktls;
+	struct bnxt_tls_info *ktls;
 	struct bnxt_kctx *kctx;
 	u32 kid;
 	int rc;
@@ -657,12 +736,16 @@ static int bnxt_ktls_dev_add(struct net_device *dev, struct sock *sk,
 		kctx_tx = __tls_driver_ctx(tls_ctx, TLS_OFFLOAD_CTX_DIR_TX);
 		kctx = &ktls->tck;
 	} else {
-		if (ktls->filter_count > BNXT_MAX_KTLS_FILTER) {
+		atomic_inc(&ktls->filter_pending);
+		if (ktls->filter_count + atomic_read(&ktls->filter_pending) >
+		    BNXT_MAX_TLS_FILTER) {
+			atomic_dec(&ktls->filter_pending);
 			rc = -ENOSPC;
 			goto exit;
 		}
 		kctx_rx = kzalloc(sizeof(*kctx_rx), GFP_KERNEL);
 		if (!kctx_rx) {
+			atomic_dec(&ktls->filter_pending);
 			rc = -ENOMEM;
 			goto exit;
 		}
@@ -671,11 +754,11 @@ static int bnxt_ktls_dev_add(struct net_device *dev, struct sock *sk,
 		bnxt_set_ktls_ctx_rx(tls_ctx, kctx_rx);
 		kctx = &ktls->rck;
 	}
-	rc = bnxt_key_ctx_alloc_one(bp, kctx, &kid);
+	rc = bnxt_key_ctx_alloc_one(bp, kctx, &kid, BNXT_CRYPTO_TYPE_KTLS);
 	if (rc)
 		goto free_ctx_rx;
 	rc = bnxt_crypto_add(bp, direction, crypto_info, start_offload_tcp_sn,
-			     kid);
+			     kid, BNXT_CRYPTO_TYPE_KTLS);
 	if (rc)
 		goto free_kctx;
 	if (direction == TLS_OFFLOAD_CTX_DIR_TX) {
@@ -684,9 +767,10 @@ static int bnxt_ktls_dev_add(struct net_device *dev, struct sock *sk,
 		atomic64_inc(&ktls->counters[BNXT_KTLS_TX_ADD]);
 	} else {
 		kctx_rx->kid = kid;
-		rc = bnxt_hwrm_cfa_tls_filter_alloc(bp, sk, kid);
+		rc = bnxt_hwrm_cfa_tls_filter_alloc(bp, sk, kid,
+						    BNXT_CRYPTO_TYPE_KTLS);
 		if (rc) {
-			int err = bnxt_crypto_del(bp, direction, kid);
+			int err = bnxt_crypto_del(bp, direction, kid, BNXT_CRYPTO_TYPE_KTLS);
 
 			/* If unable to free, keep the KID */
 			if (err)
@@ -701,16 +785,12 @@ free_kctx:
 free_ctx_rx:
 	if (rc)
 		kfree(kctx_rx);
+	if (direction == TLS_OFFLOAD_CTX_DIR_RX)
+		atomic_dec(&ktls->filter_pending);
 exit:
 	atomic_dec(&ktls->pending);
 	return rc;
 }
-
-#if defined(BNXT_FPGA)
-#define BNXT_RETRY_MAX	200
-#else
-#define BNXT_RETRY_MAX	20
-#endif
 
 static void bnxt_ktls_dev_del(struct net_device *dev,
 			      struct tls_context *tls_ctx,
@@ -719,30 +799,25 @@ static void bnxt_ktls_dev_del(struct net_device *dev,
 	struct bnxt_ktls_offload_ctx_tx *kctx_tx;
 	struct bnxt_ktls_offload_ctx_rx *kctx_rx;
 	struct bnxt *bp = netdev_priv(dev);
-	struct bnxt_ktls_info *ktls;
+	struct bnxt_tls_info *ktls;
 	struct bnxt_kctx *kctx;
-	int retry_cnt = 0;
 	u32 kid;
 	int rc;
 
 	ktls = bp->ktls_info;
 retry:
+	while (!test_bit(BNXT_STATE_OPEN, &bp->state)) {
+		if (!netif_running(dev))
+			return;
+		msleep(100);
+	}
 	atomic_inc(&ktls->pending);
 	/* Make sure bnxt_close_nic() sees pending before we check the
 	 * BNXT_STATE_OPEN flag.
 	 */
 	smp_mb__after_atomic();
-	while (!test_bit(BNXT_STATE_OPEN, &bp->state)) {
+	if (!test_bit(BNXT_STATE_OPEN, &bp->state)) {
 		atomic_dec(&ktls->pending);
-		if (!netif_running(dev))
-			return;
-		if (retry_cnt > BNXT_RETRY_MAX) {
-			netdev_warn(bp->dev, "%s retry max %d exceeded, state %lx\n",
-				    __func__, retry_cnt, bp->state);
-			return;
-		}
-		retry_cnt++;
-		msleep(100);
 		goto retry;
 	}
 
@@ -752,12 +827,15 @@ retry:
 		kctx = &ktls->tck;
 	} else {
 		kctx_rx = bnxt_get_ktls_ctx_rx(tls_ctx);
+		bnxt_set_ktls_ctx_rx(tls_ctx, NULL);
 		kid = kctx_rx->kid;
 		kctx = &ktls->rck;
-		bnxt_hwrm_cfa_tls_filter_free(bp, kid);
+		bnxt_hwrm_cfa_tls_filter_free(bp, kid, BNXT_CRYPTO_TYPE_KTLS);
+		/* synchronize with NAPI */
+		synchronize_net();
 		kfree(kctx_rx);
 	}
-	rc = bnxt_crypto_del(bp, direction, kid);
+	rc = bnxt_crypto_del(bp, direction, kid, BNXT_CRYPTO_TYPE_KTLS);
 	if (!rc) {
 		bnxt_free_one_kctx(kctx, kid);
 		if (direction == TLS_OFFLOAD_CTX_DIR_TX)
@@ -776,9 +854,8 @@ bnxt_ktls_dev_resync(struct net_device *dev, struct sock *sk, u32 seq,
 	struct ce_resync_resp_ack_cmd cmd = {0};
 	struct bnxt *bp = netdev_priv(dev);
 	struct bnxt_tx_ring_info *txr;
-	struct bnxt_ktls_info *ktls;
+	struct bnxt_tls_info *ktls;
 	struct tls_context *tls_ctx;
-	struct bnxt_mpc_info *mpc;
 	u32 data;
 	int rc;
 
@@ -795,10 +872,11 @@ bnxt_ktls_dev_resync(struct net_device *dev, struct sock *sk, u32 seq,
 		atomic_dec(&ktls->pending);
 		return -ENODEV;
 	}
-	mpc = bp->mpc_info;
-	txr = &mpc->mpc_rings[BNXT_MPC_RCE_TYPE][0];
+	txr = bnxt_select_mpc_ring(bp, BNXT_MPC_RCE_TYPE);
 	tls_ctx = tls_get_ctx(sk);
 	kctx_rx = bnxt_get_ktls_ctx_rx(tls_ctx);
+	if (!kctx_rx)
+		return -ENODEV;
 	spin_lock_bh(&kctx_rx->resync_lock);
 	if (!kctx_rx->resync_pending || seq != kctx_rx->resync_tcp_seq_no) {
 		spin_unlock_bh(&kctx_rx->resync_lock);
@@ -814,7 +892,7 @@ bnxt_ktls_dev_resync(struct net_device *dev, struct sock *sk, u32 seq,
 	cmd.resync_record_tcp_seq_num = cpu_to_le32(seq - TLS_HEADER_SIZE + 1);
 	bnxt_copy_tls_mp_data(&cmd.resync_record_seq_num_end, rcd_sn,
 			      sizeof(cmd.resync_record_seq_num));
-	rc = bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd), 0);
+	rc = bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd), 0, ktls);
 	atomic64_inc(&ktls->counters[BNXT_KTLS_RX_RESYNC_ACK]);
 	atomic_dec(&ktls->pending);
 	return rc;
@@ -826,7 +904,7 @@ static const struct tlsdev_ops bnxt_ktls_ops = {
 	.tls_dev_resync = bnxt_ktls_dev_resync,
 };
 
-static int bnxt_set_partition_mode(struct bnxt *bp)
+int bnxt_set_partition_mode(struct bnxt *bp)
 {
 	struct hwrm_func_cfg_input *req;
 	int rc;
@@ -844,16 +922,18 @@ static int bnxt_set_partition_mode(struct bnxt *bp)
 
 int bnxt_ktls_init(struct bnxt *bp)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct bnxt_hw_resc *hw_resc = &bp->hw_resc;
 	struct net_device *dev = bp->dev;
+	struct bnxt_hw_tls_resc *tls_resc;
 	int rc;
 
 	if (!ktls)
 		return 0;
 
-	ktls->tck.max_ctx = hw_resc->resv_tx_key_ctxs;
-	ktls->rck.max_ctx = hw_resc->resv_rx_key_ctxs;
+	tls_resc = &hw_resc->tls_resc[BNXT_CRYPTO_TYPE_KTLS];
+	ktls->tck.max_ctx = tls_resc->resv_tx_key_ctxs;
+	ktls->rck.max_ctx = tls_resc->resv_rx_key_ctxs;
 
 	if (!ktls->tck.max_ctx || !ktls->rck.max_ctx)
 		return 0;
@@ -864,11 +944,13 @@ int bnxt_ktls_init(struct bnxt *bp)
 			ktls->partition_mode = false;
 	}
 
-	rc = bnxt_hwrm_key_ctx_alloc(bp, &ktls->tck, BNXT_KID_BATCH_SIZE, NULL);
+	rc = bnxt_hwrm_key_ctx_alloc(bp, &ktls->tck, BNXT_KID_BATCH_SIZE, NULL,
+				     BNXT_CRYPTO_TYPE_KTLS);
 	if (rc)
 		return rc;
 
-	rc = bnxt_hwrm_key_ctx_alloc(bp, &ktls->rck, BNXT_KID_BATCH_SIZE, NULL);
+	rc = bnxt_hwrm_key_ctx_alloc(bp, &ktls->rck, BNXT_KID_BATCH_SIZE, NULL,
+				     BNXT_CRYPTO_TYPE_KTLS);
 	if (rc)
 		return rc;
 
@@ -971,17 +1053,27 @@ bnxt_ktls_tx_replay(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 	skb_put(nskb, headlen);
 	memcpy(nskb->data, skb->data, headlen);
 	skb_copy_header(nskb, skb);
-	skb_gso_reset(nskb);
 	th = tcp_hdr(nskb);
 	th->seq = htonl(tls_record_start_seq(record));
 	if (skb->protocol == htons(ETH_P_IPV6)) {
 		ip6h = ipv6_hdr(nskb);
 		ip6h->payload_len = htons(replay_len + __tcp_hdrlen(th));
+		skb_shinfo(nskb)->gso_type = SKB_GSO_TCPV6;
 	} else {
 		iph = ip_hdr(nskb);
 		iph->tot_len = htons(replay_len + __tcp_hdrlen(th) +
 				     ip_hdrlen(nskb));
+		skb_shinfo(nskb)->gso_type = SKB_GSO_TCPV4;
 	}
+	/* The exact MSS does not matter because the replay packet never
+	 * gets on the wire.  It just needs to be smaller than the max
+	 * jumbo frame.
+	 */
+	if (replay_len > BNXT_KTLS_MAX_REPLAY_MSS)
+		skb_shinfo(nskb)->gso_size = BNXT_KTLS_MAX_REPLAY_MSS;
+	else
+		skb_gso_reset(nskb);
+
 	remaining = replay_len;
 	for (i = 0; remaining > 0 && i < record->num_frags; i++) {
 		skb_frag_t *frag = &skb_shinfo(nskb)->frags[i];
@@ -1011,7 +1103,7 @@ static int bnxt_ktls_tx_ooo(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 			    struct sk_buff *skb, u32 payload_len, u32 seq,
 			    struct tls_context *tls_ctx)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct tls_offload_context_tx *tx_tls_ctx;
 	struct bnxt_ktls_offload_ctx_tx *kctx_tx;
 	struct crypto_prefix_cmd *pcmd;
@@ -1052,9 +1144,14 @@ static int bnxt_ktls_tx_ooo(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 		pcmd->header_tcp_seq_num = cpu_to_le32(hdr_tcp_seq);
 		pcmd->start_tcp_seq_num = cpu_to_le32(seq);
 		pcmd->end_tcp_seq_num = cpu_to_le32(seq + payload_len - 1);
-		if (tls_ctx->prot_info.version == TLS_1_2_VERSION)
-			memcpy(pcmd->explicit_nonce, hdr + 5,
-			       tls_ctx->prot_info.iv_size);
+		if (tls_ctx->prot_info.version == TLS_1_2_VERSION) {
+			u32 nonce_bytes = tls_ctx->prot_info.iv_size;
+			u32 retrans_off = seq - hdr_tcp_seq;
+
+			if (retrans_off > 5 && retrans_off < 5 + nonce_bytes)
+				nonce_bytes = retrans_off - 5;
+			memcpy(pcmd->explicit_nonce, hdr + 5, nonce_bytes);
+		}
 		memcpy(&pcmd->record_seq_num[0], &rec_sn, sizeof(rec_sn));
 
 		/* retransmission includes tag bytes */
@@ -1105,7 +1202,7 @@ unlock_exit:
 struct sk_buff *bnxt_ktls_xmit(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 			       struct sk_buff *skb, __le32 *lflags, u32 *kid)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct bnxt_ktls_offload_ctx_tx *kctx_tx;
 	struct tls_context *tls_ctx;
 	u32 seq;
@@ -1148,19 +1245,18 @@ struct sk_buff *bnxt_ktls_xmit(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 
 static void bnxt_ktls_resync_nak(struct bnxt *bp, u32 kid, u32 seq)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
-	struct bnxt_mpc_info *mpc = bp->mpc_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	struct ce_resync_resp_ack_cmd cmd = {0};
 	struct bnxt_tx_ring_info *txr;
 	u32 data;
 
-	txr = &mpc->mpc_rings[BNXT_MPC_RCE_TYPE][0];
+	txr = bnxt_select_mpc_ring(bp, BNXT_MPC_RCE_TYPE);
 	data = CE_RESYNC_RESP_ACK_CMD_OPCODE_RESYNC |
 	       (kid << CE_RESYNC_RESP_ACK_CMD_KID_SFT) |
 	       CE_RESYNC_RESP_ACK_CMD_RESYNC_STATUS_NAK;
 	cmd.resync_status_kid_opcode = cpu_to_le32(data);
 	cmd.resync_record_tcp_seq_num = cpu_to_le32(seq - TLS_HEADER_SIZE + 1);
-	bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd), 0);
+	bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd), 0, ktls);
 	atomic64_inc(&ktls->counters[BNXT_KTLS_RX_RESYNC_NAK]);
 }
 
@@ -1187,13 +1283,11 @@ unlock:
 	spin_unlock_bh(&kctx_rx->resync_lock);
 }
 
-#define BNXT_METADATA_OFF(len)	ALIGN(len, 32)
-
 void bnxt_ktls_rx(struct bnxt *bp, struct sk_buff *skb, u8 *data_ptr,
 		  unsigned int len, struct rx_cmp *rxcmp,
 		  struct rx_cmp_ext *rxcmp1)
 {
-	struct bnxt_ktls_info *ktls = bp->ktls_info;
+	struct bnxt_tls_info *ktls = bp->ktls_info;
 	unsigned int off = BNXT_METADATA_OFF(len);
 	struct bnxt_ktls_offload_ctx_rx *kctx_rx;
 	struct tls_metadata_base_msg *md;
@@ -1259,6 +1353,8 @@ void bnxt_ktls_rx(struct bnxt *bp, struct sk_buff *skb, u8 *data_ptr,
 
 		tls_ctx = tls_get_ctx(sk);
 		kctx_rx = bnxt_get_ktls_ctx_rx(tls_ctx);
+		if (!kctx_rx)
+			goto rx_done;
 
 		md_type = md_data & TLS_METADATA_BASE_MSG_MD_TYPE_MASK;
 		if (md_type != TLS_METADATA_BASE_MSG_MD_TYPE_TLS_RESYNC) {
@@ -1285,7 +1381,6 @@ rx_done_no_sk:
 		atomic64_inc(&ktls->counters[BNXT_KTLS_RX_SW_PKT]);
 	}
 }
-
 #else	/* HAVE_KTLS */
 
 void bnxt_alloc_ktls_info(struct bnxt *bp, struct hwrm_func_qcaps_output *resp)
@@ -1301,7 +1396,8 @@ void bnxt_free_ktls_info(struct bnxt *bp)
 }
 
 void bnxt_hwrm_reserve_pf_key_ctxs(struct bnxt *bp,
-				   struct hwrm_func_cfg_input *req)
+				   struct hwrm_func_cfg_input *req,
+				   u8 type)
 {
 }
 
@@ -1324,6 +1420,10 @@ struct sk_buff *bnxt_ktls_xmit(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 void bnxt_ktls_rx(struct bnxt *bp, struct sk_buff *skb, u8 *data_ptr,
 		  unsigned int len, struct rx_cmp *rxcmp,
 		  struct rx_cmp_ext *rxcmp1)
+{
+}
+
+void bnxt_ktls_del_all(struct bnxt *bp)
 {
 }
 #endif	/* HAVE_KTLS */

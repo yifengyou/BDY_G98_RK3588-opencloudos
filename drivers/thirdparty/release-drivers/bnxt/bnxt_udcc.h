@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2023 Broadcom Inc.
+ * Copyright (c) 2023-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,15 +10,18 @@
 #ifndef BNXT_UDCC_H
 #define BNXT_UDCC_H
 
-#define BNXT_UDCC_MAX_SESSIONS		2048
+#define BNXT_UDCC_MAX_SESSIONS		4096
 
 #define BNXT_UDCC_HASH_SIZE		64
 
 #define BNXT_UDCC_SESSION_CREATE	0
 #define BNXT_UDCC_SESSION_DELETE	1
 #define BNXT_UDCC_SESSION_UPDATE	2
-#define BNXT_UDCC_SESSION_PER_QP(bp)  ((bp)->udcc_info->session_type & \
+#define BNXT_UDCC_SESSION_PER_QP(bp)	((bp)->udcc_info && (bp)->udcc_info->session_type & \
 				       UDCC_QCAPS_RESP_SESSION_TYPE_PER_QP)
+#define BNXT_UDCC_DCQCN_EN(bp)		((bp)->udcc_info && (bp)->udcc_info->flags & \
+				       UDCC_QCAPS_RESP_FLAGS_DCQCN_EN)
+#define BNXT_UDCC_HYBRID_MODE(bp)	((bp)->udcc_info && (bp)->udcc_info->hybrid_mode)
 
 struct bnxt_udcc_session_entry {
 	u32			session_id;
@@ -55,7 +58,7 @@ struct bnxt_udcc_info {
 	struct mutex			session_db_lock; /* protect session_db */
 	u32				session_count;
 	u8				session_type;
-	struct dentry			*udcc_debugfs_dir;
+	u16				flags;
 	u16				max_comp_cfg_xfer;
 	u16				max_comp_data_xfer;
 	unsigned long			tf_events;
@@ -63,6 +66,11 @@ struct bnxt_udcc_info {
 #define BNXT_UDCC_INFO_TF_EVENT_UNSUSPEND BIT(1)
 	/* mode is 0 if udcc is disabled */
 	u8				mode;
+	/* 0 udcc only, 1 udcc with dcqcn*/
+	u8				hybrid_mode;
+	/* probe packet pad count=1-3, disabled=0 */
+	u8				pad_cnt;
+	struct workqueue_struct		*bnxt_udcc_wq;
 };
 
 static inline u8 bnxt_udcc_get_mode(struct bnxt *bp)
@@ -81,4 +89,8 @@ int bnxt_queue_udcc_work(struct bnxt *bp, u32 session_id, u32 session_opcode,
 void bnxt_udcc_update_session(struct bnxt *bp, bool suspend);
 void bnxt_udcc_session_debugfs_add(struct bnxt *bp);
 void bnxt_udcc_session_debugfs_cleanup(struct bnxt *bp);
+int bnxt_start_udcc_worker(struct bnxt *bp);
+void bnxt_stop_udcc_worker(struct bnxt *bp);
+int bnxt_hwrm_udcc_cfg(struct bnxt *bp, u32 enables, u8 mode, u8 padcnt);
+int bnxt_hwrm_udcc_qcfg(struct bnxt *bp);
 #endif

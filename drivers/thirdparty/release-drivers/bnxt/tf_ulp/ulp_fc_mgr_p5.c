@@ -6,6 +6,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_ulp.h"
 #include "bnxt_tf_ulp_p5.h"
 #include "bnxt_tf_common.h"

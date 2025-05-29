@@ -7,6 +7,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_vfr.h"
 #include "bnxt_tf_common.h"
 #include "ulp_template_struct.h"
@@ -143,6 +144,22 @@ ulp_set_vport_in_comp_fld(struct bnxt_ulp_context *ulp_ctx, u32 ifindex,
 		return rc;
 
 	ULP_COMP_FLD_IDX_WR(mapper_params, BNXT_ULP_CF_IDX_PHY_PORT_VPORT,
+			    vport);
+	return 0;
+}
+
+static int
+ulp_set_lag_vport_in_comp_fld(struct bnxt_ulp_context *ulp_ctx, u32 ifindex,
+			      struct bnxt_ulp_mapper_parms *mapper_params)
+{
+	u16 vport;
+	int rc;
+
+	rc = ulp_port_db_lag_vport_get(ulp_ctx, ifindex, &vport);
+	if (rc)
+		return rc;
+
+	ULP_COMP_FLD_IDX_WR(mapper_params, BNXT_ULP_CF_IDX_PHY_PORT_LAG_VPORT,
 			    vport);
 	return 0;
 }
@@ -298,6 +315,11 @@ ulp_df_dev_port_handler(struct bnxt_ulp_context *ulp_ctx,
 	if (rc)
 		return rc;
 
+	/* Set LAG VPORT */
+	rc = ulp_set_lag_vport_in_comp_fld(ulp_ctx, ifindex, mapper_params);
+	if (rc)
+		return rc;
+
 	/* Set VLAN */
 	rc = ulp_set_vlan_in_act_prop(ulp_ctx, port_id, mapper_params);
 	if (rc)
@@ -315,6 +337,35 @@ struct bnxt_ulp_def_param_handler ulp_def_handler_tbl[] = {
 	[BNXT_ULP_DF_PARAM_TYPE_DEV_PORT_ID] = {
 			.vfr_func = ulp_df_dev_port_handler }
 };
+
+static void
+ulp_setup_default_meter_action(struct bnxt *bp,
+			       struct ulp_tc_act_prop *act_prop,
+			       struct ulp_tc_hdr_bitmap *act_bitmap)
+{
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	struct bnxt_ulp_dscp_remap *dscp_remap = &ulp_ctx->cfg_data->dscp_remap;
+	u32 tmp_meter_id;
+
+	if (!dscp_remap->dscp_remap_initialized ||
+	    !BNXT_ULP_DSCP_INSERT_CAP(dscp_remap))
+		return;
+
+	tmp_meter_id = cpu_to_be32(dscp_remap->meter_id[MTR_PROF_CLR_RED]);
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER],
+	       &tmp_meter_id, BNXT_ULP_ACT_PROP_SZ_METER);
+	ULP_BITMAP_SET(act_bitmap->bits, BNXT_ULP_ACT_BIT_METER);
+}
+
+static void
+ulp_set_npar_enabled_in_comp_fld(struct bnxt_ulp_context *ulp_ctx,
+				 struct bnxt_ulp_mapper_parms *mapper_params)
+{
+	if (!BNXT_NPAR(ulp_ctx->bp))
+		return;
+
+	ULP_COMP_FLD_IDX_WR(mapper_params, BNXT_ULP_CF_IDX_NPAR_ENABLED, 1);
+}
 
 /* Function to create default rules for the following paths
  * 1) Device PORT to App
@@ -337,11 +388,12 @@ ulp_default_flow_create(struct bnxt *bp,
 			u32 *flow_id)
 {
 	struct bnxt_ulp_mapper_parms mapper_params = { 0 };
+	struct ulp_tc_act_prop act_prop = {{ 0 }};
 	struct ulp_tc_hdr_bitmap act = { 0 };
 	struct ulp_tc_hdr_field *hdr_field;
-	struct ulp_tc_act_prop act_prop = {{ 0 }};
 	struct bnxt_ulp_context *ulp_ctx;
 	u32 type, ulp_flags = 0, fid;
+	u16 static_port = 0;
 	u64 *comp_fld;
 	int rc = 0;
 
@@ -354,6 +406,9 @@ ulp_default_flow_create(struct bnxt *bp,
 		rc = -ENOMEM;
 		goto err1;
 	}
+
+	if (ulp_class_tid == BNXT_ULP_DF_TPL_DEFAULT_VFR)
+		ulp_setup_default_meter_action(bp, &act_prop, &act);
 
 	mapper_params.hdr_field = hdr_field;
 	mapper_params.act_bitmap = &act;
@@ -410,6 +465,25 @@ ulp_default_flow_create(struct bnxt *bp,
 	ULP_COMP_FLD_IDX_WR(&mapper_params, BNXT_ULP_CF_IDX_VF_META_FID,
 			    BNXT_ULP_META_VF_FLAG | mapper_params.func_id);
 
+	/* update the vxlan port */
+	if (ULP_APP_STATIC_VXLAN_PORT_EN(ulp_ctx)) {
+		static_port = bnxt_ulp_cntxt_vxlan_port_get(ulp_ctx);
+		if (static_port) {
+			ULP_COMP_FLD_IDX_WR(&mapper_params,
+					    BNXT_ULP_CF_IDX_TUNNEL_PORT,
+					    static_port);
+			ULP_BITMAP_SET(mapper_params.cf_bitmap,
+				       BNXT_ULP_CF_BIT_STATIC_VXLAN_PORT);
+		} else {
+			static_port = bnxt_ulp_cntxt_vxlan_ip_port_get(ulp_ctx);
+			ULP_COMP_FLD_IDX_WR(&mapper_params,
+					    BNXT_ULP_CF_IDX_TUNNEL_PORT,
+					    static_port);
+			ULP_BITMAP_SET(mapper_params.cf_bitmap,
+				       BNXT_ULP_CF_BIT_STATIC_VXLAN_IP_PORT);
+		}
+	}
+
 	/* Set VF_ROCE */
 	rc = ulp_set_vf_roce_en_in_comp_fld(ulp_ctx, port_id, &mapper_params);
 	if (rc)
@@ -422,6 +496,9 @@ ulp_default_flow_create(struct bnxt *bp,
 
 	netdev_dbg(bp->dev, "Creating default flow with template id: %u\n",
 		   ulp_class_tid);
+
+	/* Set NPAR Enabled in the computed fields */
+	ulp_set_npar_enabled_in_comp_fld(ulp_ctx, &mapper_params);
 
 	/* Protect flow creation */
 	mutex_lock(&ulp_ctx->cfg_data->flow_db_lock);
@@ -725,6 +802,136 @@ bnxt_ulp_delete_vfr_default_rules(void *vf_rep)
 	memset(info, 0, sizeof(struct bnxt_ulp_vfr_rule_info));
 
 	return 0;
+}
+
+/*
+ * Function to execute a specific template, this does not create flow id
+ *
+ * bp [in] Ptr to bnxt
+ * param_list [in] Ptr to a list of parameters (Currently, only DPDK port_id).
+ * ulp_class_tid [in] Class template ID number.
+ *
+ * Returns 0 on success or negative number on failure.
+ */
+static int32_t
+ulp_flow_template_process(struct bnxt *bp,
+			  struct ulp_tlv_param *param_list,
+			  u64 *comp_fld,
+			  u32 ulp_class_tid,
+			  u16 port_id,
+			  u32 flow_id)
+{
+	struct bnxt_ulp_mapper_parms mapper_params = { 0 };
+	struct ulp_tc_act_prop act_prop = {{ 0 }};
+	struct ulp_tc_hdr_bitmap act = { 0 };
+	struct ulp_tc_hdr_field *hdr_field;
+	struct bnxt_ulp_context	*ulp_ctx;
+	u32 type;
+	int rc = 0;
+
+	if (!comp_fld)
+		return -EINVAL;
+
+	hdr_field = vzalloc(sizeof(*hdr_field) * BNXT_ULP_PROTO_HDR_MAX);
+	if (!hdr_field)
+		return -ENOMEM;
+
+	memset(&mapper_params, 0, sizeof(mapper_params));
+	memset(&act_prop, 0, sizeof(act_prop));
+
+	mapper_params.hdr_field = hdr_field;
+	mapper_params.act_bitmap = &act;
+	mapper_params.act_prop = &act_prop;
+	mapper_params.comp_fld = comp_fld;
+	mapper_params.class_tid = ulp_class_tid;
+	mapper_params.port_id = port_id;
+
+	ulp_ctx = bp->ulp_ctx;
+	if (!ulp_ctx) {
+		netdev_dbg(bp->dev,
+			   "ULP is not init'ed. Fail to create custom flow.\n");
+		rc = -EINVAL;
+		goto err1;
+	}
+
+	type = param_list->type;
+	while (type != BNXT_ULP_DF_PARAM_TYPE_LAST) {
+		if (ulp_def_handler_tbl[type].vfr_func) {
+			rc = ulp_def_handler_tbl[type].vfr_func(ulp_ctx,
+								param_list,
+								&mapper_params);
+			if (rc) {
+				netdev_dbg(bp->dev,
+					   "Failed to create custom flow\n");
+				goto err1;
+			}
+		}
+
+		param_list++;
+		type = param_list->type;
+	}
+
+	/* Protect flow creation */
+	mutex_lock(&ulp_ctx->cfg_data->flow_db_lock);
+
+	mapper_params.flow_id = flow_id;
+	rc = ulp_mapper_flow_create(ulp_ctx, &mapper_params,
+				    NULL);
+
+	mutex_unlock(&ulp_ctx->cfg_data->flow_db_lock);
+err1:
+	vfree(hdr_field);
+	return rc;
+}
+
+int
+bnxt_ulp_mirror_op(struct bnxt *bp, enum tf_dir dir, u8 enable)
+{
+	u16 port_id = bp->pf.fw_fid;
+	struct ulp_tlv_param param_list[] = {
+		{
+			.type = BNXT_ULP_DF_PARAM_TYPE_DEV_PORT_ID,
+			.length = 2,
+			.value = {(port_id >> 8) & 0xff, port_id & 0xff}
+		},
+		{
+			.type = BNXT_ULP_DF_PARAM_TYPE_LAST,
+			.length = 0,
+			.value = {0}
+		}
+	};
+	u64 *comp_fld;
+	u32 flow_type;
+	int rc = 0;
+
+	if (!BNXT_TRUFLOW_EN(bp) || bnxt_dev_is_vf_rep(bp->dev) ||
+	    !bp->ulp_ctx)
+		return rc;
+
+	if (!BNXT_CHIP_P7(bp))
+		return rc;
+
+	comp_fld = vzalloc(sizeof(u64) * BNXT_ULP_CF_IDX_LAST);
+	if (!comp_fld) {
+		rc = -ENOMEM;
+		goto err1;
+	}
+
+	netdev_dbg(bp->dev,
+		   "BNXT mirror op\n");
+
+	comp_fld[BNXT_ULP_CF_IDX_MIRROR_OP] = (u64)enable;
+
+	flow_type = (dir == TF_DIR_RX) ? BNXT_ULP_TEMPLATE_ROCE_MIRROR_OP_ING :
+					 BNXT_ULP_TEMPLATE_ROCE_MIRROR_OP_EGR;
+
+	if (ulp_flow_template_process(bp, param_list, comp_fld,
+				      flow_type, port_id, 0))
+		rc = -EIO;
+
+err1:
+	vfree(comp_fld);
+	return rc;
 }
 
 #else

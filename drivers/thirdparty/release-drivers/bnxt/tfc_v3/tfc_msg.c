@@ -672,21 +672,14 @@ tfc_msg_idx_tbl_free(struct tfc *tfcp, u16 fid, u16 sid, enum cfa_dir dir,
 }
 
 int tfc_msg_global_id_alloc(struct tfc *tfcp, u16 fid, u16 sid,
-			    enum tfc_domain_id domain_id, u16 req_cnt,
 			    const struct tfc_global_id_req *glb_id_req,
-			    struct tfc_global_id *rsp, u16 *rsp_cnt,
+			    struct tfc_global_id *rsp,
 			    bool *first)
 {
 	struct hwrm_tfc_global_id_alloc_output *resp;
 	struct hwrm_tfc_global_id_alloc_input *req;
-	struct tfc_global_id_hwrm_req *req_data;
-	struct tfc_global_id_hwrm_rsp *rsp_data;
-	struct tfc_msg_dma_buf req_buf = { 0 };
-	struct tfc_msg_dma_buf rsp_buf = { 0 };
-	int i = 0, rc, resp_cnt = 0;
 	struct bnxt *bp = tfcp->bp;
-	int dma_size_req = 0;
-	int dma_size_rsp = 0;
+	int rc;
 
 	rc = hwrm_req_init(bp, req, HWRM_TFC_GLOBAL_ID_ALLOC);
 	if (rc)
@@ -694,46 +687,27 @@ int tfc_msg_global_id_alloc(struct tfc *tfcp, u16 fid, u16 sid,
 
 	resp = hwrm_req_hold(bp, req);
 
-	/* Prepare DMA buffers */
-	dma_size_req = req_cnt * sizeof(struct tfc_global_id_req);
-	hwrm_req_alloc_flags(bp, req, GFP_KERNEL | __GFP_ZERO);
-	req_buf.va_addr = dma_alloc_coherent(&bp->pdev->dev, dma_size_req,
-					     &req_buf.pa_addr, GFP_KERNEL);
-
-	if (!req_buf.va_addr) {
-		rc = -ENOMEM;
-		goto cleanup;
-	}
-
-	for (i = 0; i < req_cnt; i++)
-		resp_cnt += glb_id_req->cnt;
-
-	dma_size_rsp = resp_cnt * sizeof(struct tfc_global_id);
-	rsp_buf.va_addr = dma_alloc_coherent(&bp->pdev->dev, dma_size_rsp,
-					     &rsp_buf.pa_addr, GFP_KERNEL);
-
-	if (!rsp_buf.va_addr) {
-		rc = -ENOMEM;
-		goto cleanup;
-	}
-
 	/* Populate the request */
 	rc = tfc_msg_set_fid(bp, fid, &req->fid);
 	if (rc)
 		goto cleanup;
 
 	req->sid = cpu_to_le16(sid);
-	req->global_id = cpu_to_le16(domain_id);
-	req->req_cnt = req_cnt;
-	req->req_addr = cpu_to_le64(req_buf.pa_addr);
-	req->resc_addr = cpu_to_le64(rsp_buf.pa_addr);
-	req_data = (struct tfc_global_id_hwrm_req *)req_buf.va_addr;
-	for (i = 0; i < req_cnt; i++) {
-		req_data[i].rtype = cpu_to_le16(glb_id_req[i].rtype);
-		req_data[i].dir = cpu_to_le16(glb_id_req[i].dir);
-		req_data[i].subtype = cpu_to_le16(glb_id_req[i].rsubtype);
-		req_data[i].cnt = cpu_to_le16(glb_id_req[i].cnt);
-	}
+	req->rtype = cpu_to_le16(glb_id_req->rtype);
+	req->subtype = glb_id_req->rsubtype;
+
+	if (glb_id_req->dir == CFA_DIR_RX)
+		req->flags = TFC_GLOBAL_ID_ALLOC_REQ_FLAGS_DIR_RX;
+	else
+		req->flags = TFC_GLOBAL_ID_ALLOC_REQ_FLAGS_DIR_TX;
+
+	/* check the destination length before copy */
+	if (glb_id_req->context_len > sizeof(req->context_id))
+		goto cleanup;
+
+	memcpy(req->context_id, glb_id_req->context_id,
+	       glb_id_req->context_len);
+
 
 	rc = hwrm_req_send(bp, req);
 	if (rc)
@@ -745,33 +719,9 @@ int tfc_msg_global_id_alloc(struct tfc *tfcp, u16 fid, u16 sid,
 		else
 			*first = false;
 	}
-
-	/* Process the response
-	 * Should always get expected number of entries
-	 */
-	if (le32_to_cpu(resp->rsp_cnt) != *rsp_cnt) {
-		rc = -EINVAL;
-		netdev_dbg(bp->dev, "Alloc message size error, rc:%d\n", rc);
-		goto cleanup;
-	}
-
-	rsp_data = (struct tfc_global_id_hwrm_rsp *)rsp_buf.va_addr;
-	for (i = 0; i < resp->rsp_cnt; i++) {
-		rsp[i].rtype = le32_to_cpu(rsp_data[i].rtype);
-		rsp[i].dir = le32_to_cpu(rsp_data[i].dir);
-		rsp[i].rsubtype = le32_to_cpu(rsp_data[i].subtype);
-		rsp[i].id = le32_to_cpu(rsp_data[i].id);
-	}
+	rsp->id = le32_to_cpu(resp->global_id);
 
 cleanup:
-	if (req_buf.va_addr)
-		dma_free_coherent(&bp->pdev->dev, dma_size_req,
-				  req_buf.va_addr, req_buf.pa_addr);
-
-	if (rsp_buf.va_addr)
-		dma_free_coherent(&bp->pdev->dev, dma_size_rsp,
-				  rsp_buf.va_addr, rsp_buf.pa_addr);
-
 	hwrm_req_drop(bp, req);
 
 	if (!rc)
@@ -780,6 +730,30 @@ cleanup:
 		netdev_dbg(bp->dev, "%s: Failed: %d\n", __func__, rc);
 
 	return rc;
+}
+
+int tfc_msg_global_id_free(struct tfc *tfcp, uint16_t fid, uint16_t sid,
+			   const struct tfc_global_id_req *glb_id_req)
+{
+	struct hwrm_tfc_global_id_free_input *req;
+	struct bnxt *bp = tfcp->bp;
+	int rc;
+
+	rc = hwrm_req_init(bp, req, HWRM_TFC_GLOBAL_ID_FREE);
+	if (rc)
+		return rc;
+
+	rc = tfc_msg_set_fid(bp, fid, &req->fid);
+	if (rc)
+		return rc;
+
+	req->sid = cpu_to_le16(sid);
+	req->rtype = cpu_to_le16(glb_id_req->rtype);
+	req->subtype = glb_id_req->rsubtype;
+	req->dir = glb_id_req->dir;
+	req->global_id = cpu_to_le16(glb_id_req->resource_id);
+
+	return hwrm_req_send(bp, req);
 }
 
 int

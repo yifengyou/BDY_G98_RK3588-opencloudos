@@ -140,12 +140,38 @@ int tfc_em_delete_raw(struct tfc *tfcp,
 		      u8 tsid,
 		      enum cfa_dir dir,
 		      u32 offset,
-		      u32 static_bucket);
+		      u32 static_bucket,
+		      struct tfc_mpc_batch_info_t *batch_info);
 
 int tfc_em_delete_entries_by_pool_id(struct tfc *tfcp,
 				     u8 tsid,
 				     enum cfa_dir dir,
 				     u16 pool_id,
 				     u8 debug,
-				     u8 *data);
+				     void *data_va,
+				     dma_addr_t data_pa);
+
+int tfc_act_set_response(struct bnxt *bp,
+			 struct cfa_bld_mpcinfo *mpc_info,
+			 struct bnxt_mpc_mbuf *mpc_msg_out,
+			 u8 *rx_msg);
+
+int tfc_act_get_only_response(struct bnxt *bp,
+			      struct cfa_bld_mpcinfo *mpc_info,
+			      struct bnxt_mpc_mbuf *mpc_msg_out,
+			      uint8_t *rx_msg,
+			      uint16_t *data_sz_words);
+
+int tfc_act_get_clear_response(struct bnxt *bp,
+			       struct cfa_bld_mpcinfo *mpc_info,
+			       struct bnxt_mpc_mbuf *mpc_msg_out,
+			       uint8_t *rx_msg,
+			       uint16_t *data_sz_words);
+
+int tfc_mpc_send(struct bnxt *bp,
+		 struct bnxt_mpc_mbuf *in_msg,
+		 struct bnxt_mpc_mbuf *out_msg,
+		 u32 *opaque,
+		 int type);
+
 #endif /* _TFC_EM_H_ */

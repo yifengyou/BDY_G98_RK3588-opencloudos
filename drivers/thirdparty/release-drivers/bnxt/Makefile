@@ -79,10 +79,34 @@ ifeq ($(BCMMODDIR),)
   endif
 endif
 
-ifneq ($(shell grep -o "pci_enable_msix_range" $(LINUXSRC)/include/linux/pci.h),)
-  DISTRO_CFLAG = -DHAVE_MSIX_RANGE
+ifeq ($(shell type ofed_info >/dev/null 2>&1 && echo 1),1)
+ifneq ($(shell ls /usr/src/ofa_kernel/$(__ARCH) | grep -s $(KVER)),)
+OFED_VERSION=$(shell ofed_info | grep -oP '(?<=OFED-|OFED-internal-)[0-9]+\.[0-9]+' | sort | uniq)
+ifneq ($(OFED_VERSION), )
+    $(warning Using OFED version $(OFED_VERSION))
+    DISTRO_CFLAG = -DHAVE_EXTERNAL_OFED
+    OFA_KERNEL = /usr/src/ofa_kernel/$(__ARCH)/$(KVER)/
+    OFA_INC += -I$(OFA_KERNEL)/ \
+               -I$(OFA_KERNEL)/include/ \
+               -I$(OFA_KERNEL)/include/linux \
+               -I$(OFA_KERNEL)/include/uapi
+    OFA_INC += -D__OFED_BUILD__
+    KBUILD_EXTRA_SYMBOLS += $(OFA_KERNEL)/Module.symvers
+    export OFA_KERNEL
+endif
+endif
 else
-  DISTRO_CFLAG =
+    DISTRO_CFLAG =
+endif
+
+ifneq ($(shell grep -o "pci_enable_msix_range" $(LINUXSRC)/include/linux/pci.h),)
+  DISTRO_CFLAG += -DHAVE_MSIX_RANGE
+else
+  DISTRO_CFLAG +=
+endif
+
+ifneq ($(shell grep -o "pci_msix_can_alloc_dyn" $(LINUXSRC)/include/linux/pci.h),)
+  DISTRO_CFLAG += -DHAVE_MSIX_DYN
 endif
 
 ifneq ($(shell grep -so "GENL_ID_GENERATE" $(LINUXSRC)/include/uapi/linux/genetlink.h),)
@@ -160,6 +184,14 @@ ifneq ($(shell grep -so "define _LINUX_NET_QUEUES_H" $(LINUXSRC)/include/net/net
   DISTRO_CFLAG += -DHAVE_NETDEV_QUEUES_H
 endif
 
+ifneq ($(shell grep -so "struct netdev_queue_mgmt_ops" $(LINUXSRC)/include/net/netdev_queues.h),)
+  DISTRO_CFLAG += -DHAVE_NETDEV_QMGMT_OPS
+endif
+
+ifneq ($(shell grep -so "netdev_rx_queue_restart" $(LINUXSRC)/include/net/netdev_rx_queue.h),)
+  DISTRO_CFLAG += -DHAVE_NETDEV_RX_Q_RESTART
+endif
+
 ifneq ($(shell grep -o "skb_frag_page" $(LINUXSRC)/include/linux/skbuff.h),)
   DISTRO_CFLAG += -DHAVE_SKB_FRAG_PAGE
 endif
@@ -170,9 +202,10 @@ endif
 
 ifneq ($(shell grep -o "typedef struct bio_vec skb_frag_t" $(LINUXSRC)/include/linux/skbuff.h),)
   DISTRO_CFLAG += -DSKB_FRAG_USES_BIO
-  ifneq ($(shell grep -o "skb_frag_fill_page_desc" $(LINUXSRC)/include/linux/skbuff.h),)
-    DISTRO_CFLAG += -DHAVE_SKB_FRAG_FILL_PAGE_DESC
-  endif
+endif
+
+ifneq ($(shell grep -o "skb_frag_fill_page_desc" $(LINUXSRC)/include/linux/skbuff.h),)
+  DISTRO_CFLAG += -DHAVE_SKB_FRAG_FILL_PAGE_DESC
 endif
 
 ifneq ($(shell grep "skb_checksum_none_assert" $(LINUXSRC)/include/linux/skbuff.h > /dev/null 2>&1 && echo skb_cs_none_assert),)
@@ -228,6 +261,10 @@ endif
 
 ifneq ($(shell grep -o "dma_zalloc_coherent" $(LINUXSRC)/include/linux/dma-mapping.h),)
   DISTRO_CFLAG += -DHAVE_DMA_ZALLOC_COHERENT
+endif
+
+ifneq ($(shell grep -o "dma_pool_zalloc" $(LINUXSRC)/include/linux/dmapool.h),)
+  DISTRO_CFLAG += -DHAVE_DMA_POOL_ZALLOC
 endif
 
 ifneq ($(shell grep -o "ndo_udp_tunnel_add" $(LINUXSRC)/include/linux/netdevice.h),)
@@ -323,6 +360,9 @@ ifneq ($(shell ls $(LINUXSRC)/include/net/flow_offload.h > /dev/null 2>&1 && ech
   ifneq ($(shell grep -o "flow_stats_update" $(LINUXSRC)/include/net/flow_offload.h),)
     DISTRO_CFLAG += -DHAVE_FLOW_STATS_UPDATE
   endif
+  ifneq ($(shell grep -o "flow_rule_match_has_control_flags" $(LINUXSRC)/include/net/flow_offload.h),)
+    DISTRO_CFLAG += -DHAVE_FLOW_RULE_MATCH_CONTROL_FLAGS
+  endif
 endif
 
 ifneq ($(shell grep -o "bitmap_zalloc" $(LINUXSRC)/include/linux/bitmap.h),)
@@ -398,12 +438,19 @@ ifneq ($(shell grep -A 2 "get_coalesce" $(LINUXSRC)/include/linux/ethtool.h | \
   DISTRO_CFLAG += -DHAVE_CQE_ETHTOOL_COALESCE
 endif
 
+ifneq ($(shell grep -o "kernel_ethtool_ts_info" $(LINUXSRC)/include/linux/ethtool.h),)
+  DISTRO_CFLAG += -DHAVE_KERNEL_ETHTOOL_TS_INFO
+endif
+
 ifneq ($(shell grep -so "ethtool_tcpip6_spec" $(LINUXSRC)/include/$(UAPI)/linux/ethtool.h),)
   DISTRO_CFLAG += -DHAVE_ETHTOOL_IP6_SPEC
 endif
 
 ifneq ($(shell grep -so "linkmode_set_bit" $(LINUXSRC)/include/linux/linkmode.h),)
   DISTRO_CFLAG += -DHAVE_LINKMODE
+  ifneq ($(shell grep -so "linkmode_resolve_pause" $(LINUXSRC)/include/linux/linkmode.h),)
+    DISTRO_CFLAG += -DHAVE_NEW_LINKMODE
+  endif
 endif
 
 ifeq ($(shell grep -o "rx_cpu_rmap" $(LINUXSRC)/include/linux/netdevice.h),)
@@ -517,7 +564,7 @@ ifneq ($(shell grep -o "ndo_set_vf_spoofchk" $(LINUXSRC)/include/linux/netdevice
   endif
 endif
 
-ifneq ($(shell grep -A 1 "ndo_set_vf_vlan" $(LINUXSRC)/include/linux/netdevice.h | grep -o "proto"),)
+ifneq ($(shell grep -A 2 "ndo_set_vf_vlan" $(LINUXSRC)/include/linux/netdevice.h | grep -o "proto"),)
   ifeq ($(shell grep -o "RH_KABI_EXTEND(struct net_device_ops_extended extended)" $(LINUXSRC)/include/linux/netdevice.h),)
     DISTRO_CFLAG += -DNEW_NDO_SET_VF_VLAN
   endif
@@ -531,12 +578,6 @@ ifneq ($(shell grep -o "ndo_set_vf_trust" $(LINUXSRC)/include/linux/netdevice.h)
   DISTRO_CFLAG += -DHAVE_NDO_SET_VF_TRUST
   ifneq ($(shell grep -A 3 "net_device_ops_extended" $(LINUXSRC)/include/linux/netdevice.h | grep -o "ndo_set_vf_trust"),)
     DISTRO_CFLAG += -DHAVE_NDO_SET_VF_TRUST_RH
-  endif
-endif
-
-ifneq ($(shell grep -o "ndo_set_vf_queues" $(LINUXSRC)/include/linux/netdevice.h),)
-  ifeq ($(shell grep -o "net_device_ops_ext" $(LINUXSRC)/include/linux/netdevice.h),)
-    DISTRO_CFLAG += -DHAVE_NDO_SET_VF_QUEUES
   endif
 endif
 
@@ -609,6 +650,9 @@ ifneq ($(shell grep -o "ndo_setup_tc" $(LINUXSRC)/include/linux/netdevice.h),)
   ifneq ($(shell grep -s -A 3 "struct tc_cls_matchall_offload" $(LINUXSRC)/include/net/pkt_cls.h | grep -o "flow_rule"),)
     DISTRO_CFLAG += -DHAVE_TC_MATCHALL_FLOW_RULE
   endif
+  ifneq ($(shell grep -so "tc_can_offload_extack" $(LINUXSRC)/include/net/pkt_cls.h),)
+    DISTRO_CFLAG += -DHAVE_TC_CAN_OFFLOAD_EXTACK
+  endif
 endif
 
 ifneq ($(shell grep -so "FLOW_DISSECTOR_KEY_ICMP" $(LINUXSRC)/include/net/flow_dissector.h),)
@@ -647,10 +691,6 @@ ifneq ($(shell grep -o "netdev_get_num_tc" $(LINUXSRC)/include/linux/netdevice.h
   DISTRO_CFLAG += -DHAVE_GET_NUM_TC
 endif
 
-ifneq ($(shell grep -so "__netif_txq_completed_wake" $(LINUXSRC)/include/net/netdev_queues.h),)
-  DISTRO_CFLAG += -DHAVE_NEW_QUEUE_STOPWAKE
-endif
-
 ifneq ($(shell grep -so "__netif_txq_maybe_wake" $(LINUXSRC)/include/net/netdev_queues.h),)
   DISTRO_CFLAG += -DHAVE_TXQ_MAYBE_WAKE
 endif
@@ -666,6 +706,10 @@ endif
 
 ifneq ($(shell grep -o "netif_set_real_num_rx" $(LINUXSRC)/include/linux/netdevice.h),)
   DISTRO_CFLAG += -DHAVE_NETIF_SET_REAL_NUM_RX
+endif
+
+ifneq ($(shell grep -o "netif_queue_set_napi" $(LINUXSRC)/include/linux/netdevice.h),)
+  DISTRO_CFLAG += -DHAVE_NETIF_QUEUE_SET_NAPI
 endif
 
 ifneq ($(shell grep -o "netif_get_num_default_rss_queues" $(LINUXSRC)/include/linux/netdevice.h),)
@@ -705,6 +749,10 @@ endif
 
 ifneq ($(shell grep -so "xdp_frags_size" $(LINUXSRC)/include/linux/skbuff.h),)
   DISTRO_CFLAG += -DHAVE_XDP_MULTI_BUFF
+endif
+
+ifneq ($(shell grep -so " __skb_frag_ref" $(LINUXSRC)/include/linux/skbuff_ref.h),)
+  DISTRO_CFLAG += -DHAVE_SKBUFF_REF
 endif
 
 ifneq ($(shell grep -so "enum xdp_action" $(LINUXSRC)/include/uapi/linux/bpf.h),)
@@ -838,6 +886,10 @@ endif
 
 ifneq ($(shell grep -o "ndo_eth_ioctl" $(LINUXSRC)/include/linux/netdevice.h),)
   DISTRO_CFLAG += -DHAVE_NDO_ETH_IOCTL
+endif
+
+ifneq ($(shell grep -o "netif_is_rxfh_configured" $(LINUXSRC)/include/linux/netdevice.h),)
+  DISTRO_CFLAG += -DHAVE_NETIF_IS_RXFH_CONFIGURED
 endif
 
 ifneq ($(shell grep -o "netpoll_poll_dev" $(LINUXSRC)/include/linux/netpoll.h),)
@@ -1001,6 +1053,9 @@ ifneq ($(shell grep -s "devlink_param" $(LINUXSRC)/include/net/devlink.h),)
   ifneq ($(shell grep -s -A 2 "int (\*validate)" $(LINUXSRC)/include/net/devlink.h | grep "struct netlink_ext_ack \*extack"),)
     DISTRO_CFLAG += -DHAVE_DEVLINK_VALIDATE_NEW
   endif
+  ifneq ($(shell grep -A 1 "struct devlink_param_gset_ctx \*ctx," $(LINUXSRC)/include/net/devlink.h | grep -o "struct netlink_ext_ack \*extack"),)
+    DISTRO_CFLAG += -DHAVE_DEVLINK_PARAM_SET_EXTACK
+  endif
 endif
 
 ifneq ($(shell grep -s -A 7 "devlink_port_attrs" $(LINUXSRC)/include/net/devlink.h | grep -o "netdev_phys_item_id"),)
@@ -1017,6 +1072,10 @@ endif
 
 ifneq ($(shell grep -s "devlink_params_publish" $(LINUXSRC)/include/net/devlink.h),)
   DISTRO_CFLAG += -DHAVE_DEVLINK_PARAM_PUBLISH
+endif
+
+ifneq ($(shell grep -s "enable_roce" $(LINUXSRC)/include/net/devlink.h),)
+  DISTRO_CFLAG += -DHAVE_DEVLINK_PARAM_ENABLE_ROCE
 endif
 
 ifneq ($(shell grep -s -A 1 "eswitch_mode_set" $(LINUXSRC)/include/net/devlink.h | grep -o "netlink_ext_ack"),)
@@ -1140,6 +1199,9 @@ endif
 
 ifneq ($(shell ls $(LINUXSRC)/include/linux/dim.h > /dev/null 2>&1 && echo dim),)
   DISTRO_CFLAG += -DHAVE_DIM
+  ifneq ($(shell grep -A 1 "net_dim" $(LINUXSRC)/include/linux/dim.h | grep "const struct dim_sample *"),)
+    DISTRO_CFLAG += -DHAVE_DIM_SAMPLE_PTR
+  endif
 endif
 
 ifneq ($(shell grep -o simple_open $(LINUXSRC)/include/linux/fs.h),)
@@ -1158,6 +1220,10 @@ ifneq ($(shell grep -o "struct ethtool_link_ksettings" $(LINUXSRC)/include/linux
   DISTRO_CFLAG += -DHAVE_ETHTOOL_LINK_KSETTINGS
 endif
 
+ifneq ($(shell grep -o "struct ethtool_ts_stats" $(LINUXSRC)/include/linux/ethtool.h),)
+  DISTRO_CFLAG += -DHAVE_ETHTOOL_PTP_STATS
+endif
+
 ifneq ($(shell grep -o "get_module_eeprom_by_page" $(LINUXSRC)/include/linux/ethtool.h),)
   DISTRO_CFLAG += -DHAVE_MODULE_EEPROM_BY_PAGE
 endif
@@ -1166,10 +1232,17 @@ ifneq ($(shell grep -o "struct ethtool_rxfh_param" $(LINUXSRC)/include/linux/eth
   DISTRO_CFLAG += -DHAVE_ETHTOOL_RXFH_PARAM
 endif
 
+ifneq ($(shell grep -o "FLOW_RSS" $(LINUXSRC)/include/uapi/linux/ethtool.h),)
+  DISTRO_CFLAG += -DHAVE_ETH_RXNFC_RSSCTX
+endif
+
 ifneq ($(shell grep -o "\*get_rxfh_context" $(LINUXSRC)/include/linux/ethtool.h),)
   DISTRO_CFLAG += -DHAVE_ETH_RXFH_CONTEXT_ALLOC
 endif
 
+ifneq ($(shell grep -o "create_rxfh_context" $(LINUXSRC)/include/linux/ethtool.h),)
+  DISTRO_CFLAG += -DHAVE_NEW_RSSCTX_INTERFACE
+endif
 
 ifneq ($(shell grep -o "strscpy" $(LINUXSRC)/include/linux/string.h),)
   DISTRO_CFLAG += -DHAVE_STRSCPY
@@ -1294,6 +1367,15 @@ endif
 ifdef CONFIG_XDP_SOCKETS
 ifneq ($(shell grep -so "xsk_pool_dma_map" $(LINUXSRC)/include/net/xdp_sock_drv.h),)
   DISTRO_CFLAG += -DHAVE_XSK_SUPPORT
+ifneq ($(shell grep "xsk_buff_dma_sync_for_cpu" $(LINUXSRC)/include/net/xdp_sock_drv.h | grep "struct xsk_buff_pool"),)
+  DISTRO_CFLAG += -DHAVE_OLD_XSK_BUFF_DMA_SYNC
+endif
+endif
+endif
+
+ifdef CONFIG_PCIE_TPH
+ifneq ($(shell grep -so "pcie_tph_set_st_entry" $(LINUXSRC)/include/linux/pci-tph.h),)
+  DISTRO_CFLAG += -DHAVE_PCIE_TPH_SET_ST
 endif
 endif
 
@@ -1370,7 +1452,42 @@ ifeq ($(custom_flow_offload),1)
   DISTRO_CFLAG += -DCONFIG_BNXT_CUSTOM_FLOWER_OFFLOAD
 endif
 
-override EXTRA_CFLAGS += ${DISTRO_CFLAG} -g -Werror -Wno-error=unused-variable -Wno-error=unused-function -DCHIMP_FW -D__LINUX -DCONFIG_BNXT_SRIOV -DCONFIG_BNXT_DCB -DHSI_DBG_DISABLE -DCONFIG_BNXT_LFC -DSUPPORT_CFA_HW_ALL=1 -DSUPPORT_CFA_EM_FOR_TC=0 -I$(TFCORE_INC)  -I$(TFC_V3_INC) -I$(BNXT_INC) -I$(CFA_V3_INC) -I$(CFA_V3_MPC_INC) -I$(CFA_V3_MM_INC) -I$(CFA_V3_TPM_INC) -I$(CFA_V3_TIM_INC) -I$(HCAPI_INC) -I$(HCAPI_CFA_INC) -I$(GENERIC_TEMPLATES_INC) -I$(TFULP_INC)
+enable_truflow ?= 1
+ifeq ($(enable_truflow),1)
+  DISTRO_CFLAG += -DBNXT_ENABLE_TRUFLOW
+endif
+
+# Set feature bits to enable
+# BNXT_ULP_FEATURE_BIT_PARENT_DMAC = 1
+# BNXT_ULP_FEATURE_BIT_PORT_DMAC = 2
+# BNXT_ULP_FEATURE_BIT_MULTI_TUNNEL_FLOW = 4
+# BNXT_ULP_FEATURE_BIT_SOCKET_DIRECT = 8
+# For example, to enable Multi_tunnel_flow and port dmac,
+# set feature_bits=6
+# Use make -j feature_bits=val to compile with these options
+
+ifeq ($(feature_bits),)
+  DISTRO_CFLAG += -DTC_BNXT_TF_FEAT_BITS=0
+else
+  DISTRO_CFLAG += -DTC_BNXT_TF_FEAT_BITS=$(feature_bits)
+endif
+
+ifeq ($(bnxt_quic),"TRUE")
+  DISTRO_CFLAG += -DHAVE_BNXT_QUIC
+  QUIC_FILES_INC = json
+  QUIC_FILES_OBJ = json/kjson_main.o json/kjson_parser.o
+  QUIC_ARTIFACTS = json/kjson_main.o json/kjson_parser.o json/.kjson_*
+else
+  QUIC_FILES_INC = json
+  QUIC_FILES_OBJ =
+  QUIC_ARTIFACTS =
+endif
+
+override EXTRA_CFLAGS += ${DISTRO_CFLAG} -g -Werror -Wno-error=unused-variable -Wno-error=unused-function -DCHIMP_FW -D__LINUX -DCONFIG_BNXT_SRIOV -DCONFIG_BNXT_DCB -DHSI_DBG_DISABLE -DCONFIG_BNXT_LFC -DSUPPORT_CFA_HW_ALL=1 -DSUPPORT_CFA_EM_FOR_TC=0 -I$(TFCORE_INC)  -I$(TFC_V3_INC) -I$(BNXT_INC) -I$(CFA_V3_INC) -I$(CFA_V3_MPC_INC) -I$(CFA_V3_MM_INC) -I$(CFA_V3_TPM_INC) -I$(CFA_V3_TIM_INC) -I$(HCAPI_INC) -I$(HCAPI_CFA_INC) -I$(GENERIC_TEMPLATES_INC) -I$(TFULP_INC) -I$(QUIC_FILES_INC)
+
+ifneq ($(OFED_VERSION), )
+override EXTRA_CFLAGS += -I$(OFA_INC)
+endif
 
 define cols
 	$$(awk '{ if (m < NF) m=NF; } END { print m; }' $1 2>/dev/null || echo 0)
@@ -1417,7 +1534,6 @@ define bnxt_ver
 endef
 
 cflags-y += $(EXTRA_CFLAGS)
-KBUILD_CFLAGS += -Wframe-larger-than=2144
 src=$(BNXT_SRC)
 ccflags-y := -I$(src)/
 ccflags-y += -I$(src)/tf_core/
@@ -1458,16 +1574,16 @@ TFC_V3_OBJ = tfc_v3/tfc_act.o tfc_v3/tfc_cpm.o tfc_v3/tfc_em.o tfc_v3/tfc_global
 CFA_V3_OBJ = hcapi/cfa_v3/mm/cfa_mm.o hcapi/cfa_v3/mpc/cfa_bld_p70_mpc.o hcapi/cfa_v3/mpc/cfa_bld_mpc.o hcapi/cfa_v3/mpc/cfa_bld_p70_mpcops.o hcapi/cfa_v3/mpc/cfa_bld_p70_host_mpc_wrapper.o hcapi/cfa_v3/tpm/cfa_tpm.o hcapi/cfa_v3/tim/cfa_tim.o
 ifeq ($(custom_flow_offload),1)
   TF_ULP_OBJ = tf_ulp/ulp_utils.o tf_ulp/ulp_template_debug.o tf_ulp/ulp_tf_debug.o tf_ulp/bnxt_tf_ulp.o tf_ulp/bnxt_tf_ulp_p5.o tf_ulp/bnxt_tf_ulp_p7.o tf_ulp/ulp_fc_mgr.o tf_ulp/ulp_fc_mgr_p5.o tf_ulp/ulp_fc_mgr_p7.o tf_ulp/ulp_flow_db.o tf_ulp/ulp_gen_tbl.o tf_ulp/ulp_mapper.o tf_ulp/ulp_mapper_p5.o tf_ulp/ulp_mapper_p7.o tf_ulp/ulp_mark_mgr.o tf_ulp/ulp_port_db.o tf_ulp/ulp_matcher.o tf_ulp/ulp_def_rules.o tf_ulp/bnxt_ulp_linux_flow.o tf_ulp/ulp_tc_parser.o tf_ulp/ulp_tc_handler_tbl.o tf_ulp/ulp_tc_custom_offload.o tf_ulp/bnxt_tf_tc_shim.o tf_ulp/ulp_tc_rte_flow_gen.o tf_ulp/ulp_alloc_tbl.o
-  TF_ULP_OBJ += tf_ulp/ulp_udcc.o tf_ulp/ulp_nic_flow.o tf_ulp/ulp_generic_flow_offload.o tf_ulp/bnxt_tf_tc_shim.o tf_ulp/bnxt_ulp_meter.o
+  TF_ULP_OBJ += tf_ulp/ulp_udcc.o tf_ulp/ulp_nic_flow.o tf_ulp/ulp_generic_flow_offload.o tf_ulp/bnxt_tf_tc_shim.o tf_ulp/bnxt_ulp_meter.o tf_ulp/ulp_sc_mgr.o tf_ulp/ulp_sc_mgr_tfc.o
 else
   TF_ULP_OBJ = tf_ulp/ulp_utils.o tf_ulp/ulp_template_debug.o tf_ulp/ulp_tf_debug.o tf_ulp/bnxt_tf_ulp.o tf_ulp/bnxt_tf_ulp_p5.o tf_ulp/bnxt_tf_ulp_p7.o tf_ulp/ulp_fc_mgr.o tf_ulp/ulp_fc_mgr_p5.o tf_ulp/ulp_fc_mgr_p7.o tf_ulp/ulp_flow_db.o tf_ulp/ulp_gen_tbl.o tf_ulp/ulp_mapper.o tf_ulp/ulp_mapper_p5.o tf_ulp/ulp_mapper_p7.o tf_ulp/ulp_mark_mgr.o tf_ulp/ulp_port_db.o tf_ulp/ulp_matcher.o tf_ulp/ulp_def_rules.o tf_ulp/bnxt_ulp_linux_flow.o tf_ulp/ulp_tc_parser.o tf_ulp/ulp_tc_handler_tbl.o tf_ulp/ulp_alloc_tbl.o
-  TF_ULP_OBJ += tf_ulp/ulp_udcc.o tf_ulp/ulp_nic_flow.o tf_ulp/ulp_generic_flow_offload.o tf_ulp/bnxt_tf_tc_shim.o tf_ulp/bnxt_ulp_meter.o
+  TF_ULP_OBJ += tf_ulp/ulp_udcc.o tf_ulp/ulp_nic_flow.o tf_ulp/ulp_generic_flow_offload.o tf_ulp/bnxt_tf_tc_shim.o tf_ulp/bnxt_ulp_meter.o tf_ulp/ulp_sc_mgr.o tf_ulp/ulp_sc_mgr_tfc.o
 endif
 
 GENERIC_TEMPLATES_OBJ = tf_ulp/generic_templates/ulp_template_db_wh_plus_class.o tf_ulp/generic_templates/ulp_template_db_wh_plus_act.o tf_ulp/generic_templates/ulp_template_db_thor_class.o tf_ulp/generic_templates/ulp_template_db_thor_act.o tf_ulp/generic_templates/ulp_template_db_thor2_class.o tf_ulp/generic_templates/ulp_template_db_thor2_act.o tf_ulp/generic_templates/ulp_template_db_tbl.o tf_ulp/generic_templates/ulp_template_db_class.o tf_ulp/generic_templates/ulp_template_db_act.o
 obj-m += bnxt_en.o
 
-bnxt_en-y := bnxt.o bnxt_hwrm.o bnxt_ethtool_compat.o bnxt_sriov.o bnxt_dcb.o bnxt_ulp.o bnxt_xdp.o bnxt_ptp.o bnxt_vfr.o bnxt_nic_flow.o bnxt_tc.o bnxt_devlink.o bnxt_lfc.o bnxt_dim.o bnxt_coredump.o bnxt_auxbus_compat.o bnxt_mpc.o bnxt_ktls.o bnxt_hdbr.o bnxt_hwmon.o bnxt_sriov_sysfs.o bnxt_tfc.o bnxt_udcc.o bnxt_log.o bnxt_log_data.o bnxt_xsk.o $(BNXT_DBGFS_OBJ) $(TF_CORE_OBJ) $(TFC_V3_OBJ) $(CFA_V3_OBJ) $(TF_ULP_OBJ) $(HCAPI_OBJ) $(GENERIC_TEMPLATES_OBJ)#decode_hsi.o
+bnxt_en-y := bnxt.o bnxt_hwrm.o bnxt_ethtool_compat.o bnxt_sriov.o bnxt_dcb.o bnxt_ulp.o bnxt_xdp.o bnxt_ptp.o bnxt_vfr.o bnxt_nic_flow.o bnxt_tc.o bnxt_devlink.o bnxt_lfc.o bnxt_dim.o bnxt_coredump.o bnxt_auxbus_compat.o bnxt_mpc.o bnxt_ktls.o bnxt_quic.o bnxt_hdbr.o bnxt_hwmon.o bnxt_sriov_sysfs.o bnxt_tfc.o bnxt_udcc.o bnxt_xsk.o $(QUIC_FILES_OBJ) $(BNXT_DBGFS_OBJ) $(TF_CORE_OBJ) $(TFC_V3_OBJ) $(CFA_V3_OBJ) $(TF_ULP_OBJ) $(HCAPI_OBJ) $(GENERIC_TEMPLATES_OBJ)#decode_hsi.o
 
 else
 
@@ -1539,9 +1655,9 @@ clean:
 	-rm -f bnxt_en-*.tar.gz bnxt.o bnxt.mod.c bnxt.mod.o .bnxt*.cmd *.cmd *.markers *.order *.symvers decode_hsi.o .decode_*
 	-rm -rf .tmp_versions
 	-rm -rf bnxt_en.o bnxt_en.ko bnxt_en.mod.o bnxt_en.mod.c .bnxt_en.* bnxt_sriov.o .bnxt_sriov.* bnxt_ethtool_compat.o .bnxt_ethtool_compat.* bnxt_dcb.o .bnxt_dcb.* bnxt_ulp.o .bnxt_ulp.* bnxt_ptp.o .bnxt_ptp.* bnxt_xdp.o .bnxt_xdp.* bnxt_lfc.o .bnxt_lfc.* bnxt_hwrm.o .bnxt_hwrm.* bnxt_sriov_sysfs.o .bnxt_sriov_sysfs.* bnxt_udcc.o .bnxt_udcc.*
-	-rm -rf bnxt_vfr.o .bnxt_vfr.* bnxt_nic_flow.o .bnxt_nic_flow.* bnxt_tc.o .bnxt_tc.* bnxt_devlink.o .bnxt_devlink.*
+	-rm -rf bnxt_vfr.o .bnxt_vfr.* bnxt_nic_flow.o .bnxt_nic_flow.* bnxt_tc.o .bnxt_tc.* bnxt_devlink.o .bnxt_devlink.* $(QUIC_ARTIFACTS)
 
-	-rm -rf bnxt_dim.o .bnxt_dim.* bnxt_debugfs*.o .bnxt_debugfs* bnxt_coredump.o .bnxt_coredump.* bnxt_auxbus_compat.o .bnxt_auxbus_compat.* bnxt_mpc.o .bnxt_mpc.* bnxt_ktls.o .bnxt_ktls.* bnxt_hdbr.o .bnxt_hdbr.* bnxt_tfc.o .bnxt_tfc.* bnxt_hwmon.o .bnxt_hwmon.*  bnxt_log.o .bnxt_log.* bnxt_log_data.o .bnxt_log_data.* bnxt_xsk.o .bnxt_xsk.*
+	-rm -rf bnxt_dim.o .bnxt_dim.* bnxt_debugfs*.o .bnxt_debugfs* bnxt_coredump.o .bnxt_coredump.* bnxt_auxbus_compat.o .bnxt_auxbus_compat.* bnxt_mpc.o .bnxt_mpc.* bnxt_ktls.o .bnxt_ktls.* bnxt_quic.o .bnxt_quic.* bnxt_hdbr.o .bnxt_hdbr.* bnxt_tfc.o .bnxt_tfc.* bnxt_hwmon.o .bnxt_hwmon.* bnxt_xsk.o .bnxt_xsk.* $(QUIC_ARTIFACTS)
 	-rm -f Module.markers Module.symvers modules.order .Module.symvers.cmd .modules.order.cmd
 
 	-rm -f tf_core/tf_msg.o tf_core/tf_util.o tf_core/tf_session.o tf_core/tf_rm.o tf_core/tf_tcam.o tf_core/tf_tbl.o tf_core/tf_identifier.o tf_core/dpool.o tf_core/tf_em_internal.o tf_core/tf_em_hash_internal.o tf_core/tf_if_tbl.o tf_core/tf_global_cfg.o tf_core/tf_sram_mgr.o tf_core/tf_tbl_sram.o tf_core/rand.o hcapi/cfa/hcapi_cfa_p4.o hcapi/cfa/hcapi_cfa_p58.o tf_core/tf_device_p4.o tf_core/tf_device_p58.o tf_core/tf_device.o tf_core/tf_core.o tf_core/tf_tcam_mgr_msg.o tf_core/cfa_tcam_mgr_hwop_msg.o tf_core/cfa_tcam_mgr.o tf_core/cfa_tcam_mgr_p4.o tf_core/cfa_tcam_mgr_p58.o
@@ -1555,4 +1671,3 @@ clean:
 	-rm -f tf_ulp/ulp_utils.o tf_ulp/.ulp_utils.o.cmd tf_ulp/ulp_template_debug.o tf_ulp/ulp_tf_debug.o tf_ulp/.ulp_template_debug.o.cmd tf_ulp/.ulp_tf_debug.o.cmd tf_ulp/bnxt_tf_ulp.o tf_ulp/ulp_fc_mgr.o tf_ulp/ulp_flow_db.o tf_ulp/ulp_gen_tbl.o tf_ulp/ulp_mapper.o tf_ulp/ulp_mark_mgr.o tf_ulp/ulp_port_db.o tf_ulp/ulp_matcher.o tf_ulp/ulp_def_rules.o tf_ulp/bnxt_ulp_linux_flow.o tf_ulp/ulp_tc_parser.o tf_ulp/ulp_tc_handler_tbl.o tf_ulp/.bnxt_tf_ulp.o.cmd tf_ulp/.ulp_fc_mgr.o.cmd tf_ulp/.ulp_flow_db.o.cmd tf_ulp/.ulp_gen_tbl.o.cmd tf_ulp/.ulp_mapper.o.cmd tf_ulp/.ulp_mark_mgr.o.cmd tf_ulp/.ulp_port_db.o.cmd tf_ulp/.ulp_matcher.o.cmd tf_ulp/.ulp_def_rules.o.cmd tf_ulp/.bnxt_ulp_linux_flow.o.cmd tf_ulp/.ulp_tc_parser.o.cmd tf_ulp/.ulp_tc_handler_tbl.o.cmd tf_ulp/ulp_tc_custom_offload.o tf_ulp/.ulp_tc_custom_offload.o.cmd tf_ulp/ulp_udcc.o tf_ulp/ulp_udcc.o.cmd tf_ulp/ulp_nic_flow.o tf_ulp/.ulp_nic_flow.o.cmd tf_ulp/ulp_generic_flow_offload.o tf_ulp/.ulp_generic_flow_offload.o.cmd tf_ulp/bnxt_tf_tc_shim.o tf_ulp/.bnxt_tf_tc_shim.o.cmd tf_ulp/ulp_tc_rte_flow_gen.o tf_ulp/.ulp_tc_rte_flow_gen.o.cmd tf_ulp/ulp_alloc_tbl.o tf_ulp/.ulp_alloc_tbl.o.cmd
 	-rm -f tf_ulp/*.o tf_ulp/.*.o.cmd
 	-rm -f tf_ulp/generic_templates/ulp_template_db_wh_plus_class.o tf_ulp/generic_templates/ulp_template_db_wh_plus_act.o tf_ulp/generic_templates/ulp_template_db_thor_class.o tf_ulp/generic_templates/ulp_template_db_thor_act.o tf_ulp/generic_templates/ulp_template_db_tbl.o tf_ulp/generic_templates/ulp_template_db_thor2_class.o  tf_ulp/generic_templates/ulp_template_db_thor2_act.o tf_ulp/generic_templates/ulp_template_db_class.o  tf_ulp/generic_templates/ulp_template_db_act.o tf_ulp/generic_templates/.*.cmd
-

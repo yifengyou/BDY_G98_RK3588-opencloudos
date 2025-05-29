@@ -86,6 +86,7 @@ struct bnxt_ulp_mapper_parms {
 	u64				cf_bitmap;
 	u64				wc_field_bitmap;
 	u64				exclude_field_bitmap;
+	struct tfc_mpc_batch_info_t     *batch_info;
 };
 
 /* Function to initialize any dynamic mapper data. */
@@ -155,6 +156,16 @@ struct ulp_mapper_core_ops {
 					    u64 handle,
 					    u32 offset,
 					    u64 *result);
+	int
+	(*ulp_mapper_mpc_batch_start)(struct tfc_mpc_batch_info_t *batch_info);
+
+	bool
+	(*ulp_mapper_mpc_batch_started)(struct tfc_mpc_batch_info_t *batch_info);
+
+	int
+	(*ulp_mapper_mpc_batch_end)(struct bnxt *bp,
+				    void *tfcp,
+				    struct tfc_mpc_batch_info_t *batch_info);
 };
 
 extern const struct ulp_mapper_core_ops ulp_mapper_tf_core_ops;

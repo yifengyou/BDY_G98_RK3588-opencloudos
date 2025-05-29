@@ -2,7 +2,11 @@
 /* Copyright(c) 2014-2023 Broadcom
  * All rights reserved.
  */
-
+#include <linux/types.h>
+#include "bnxt_compat.h"
+#include "bnxt_hsi.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "tf_core.h"
 #include "ulp_mapper.h"
 #include "ulp_alloc_tbl.h"
@@ -165,6 +169,8 @@ ulp_allocator_tbl_list_alloc(struct bnxt_ulp_mapper_data *mapper_data,
 		netdev_dbg(NULL, "unable to alloc index %x\n", idx);
 		return -ENOMEM;
 	}
+	/* Not using zero index */
+	*alloc_id += 1;
 	return 0;
 }
 
@@ -195,6 +201,8 @@ ulp_allocator_tbl_list_free(struct bnxt *bp,
 		netdev_dbg(bp->dev, "invalid table index %x\n", idx);
 		return -EINVAL;
 	}
+	/* not using zero index */
+	index -= 1;
 	if (index < 0 || index > entry->num_entries) {
 		netdev_dbg(bp->dev, "invalid alloc index %x\n", index);
 		return -EINVAL;

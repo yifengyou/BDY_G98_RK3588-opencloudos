@@ -122,7 +122,7 @@ int bnxt_hdbr_ktbl_init(struct bnxt *bp, int group, void *pg_ptr, dma_addr_t da)
 
 	memset(pg_ptr, 0, PAGE_SIZE_4K);
 	ktbl->pdev = bp->pdev;
-	spin_lock_init(&ktbl->hdbr_kmem_lock);
+	mutex_init(&ktbl->hdbr_kmem_lock);
 	ktbl->group_type = group;
 	ktbl->first_avail = 0;
 	ktbl->first_empty = 0;
@@ -213,14 +213,15 @@ static int bnxt_hdbr_alloc_ktbl_pg(struct bnxt_hdbr_ktbl *ktbl)
  * Each application memory page is linked in kernel memory table with a
  * 16 bytes memory slot.
  */
-int bnxt_hdbr_reg_apg(struct bnxt_hdbr_ktbl *ktbl, dma_addr_t ap_da, int *idx, u16 pi)
+int bnxt_hdbr_reg_apg(struct bnxt_hdbr_ktbl *ktbl, dma_addr_t ap_da, int *idx,
+		      u16 pi, u64 stride_n_size)
 {
 	struct dbc_drk64 *slot;
 	int rc = 0;
 
-	spin_lock(&ktbl->hdbr_kmem_lock);
+	mutex_lock(&ktbl->hdbr_kmem_lock);
 
-	/* Add into kernel talbe */
+	/* Add into kernel table */
 	if (ktbl->slot_avail == 0) {
 		rc = bnxt_hdbr_alloc_ktbl_pg(ktbl);
 		if (rc)
@@ -229,7 +230,8 @@ int bnxt_hdbr_reg_apg(struct bnxt_hdbr_ktbl *ktbl, dma_addr_t ap_da, int *idx, u
 
 	/* Fill up the new entry */
 	slot = get_slot(ktbl, ktbl->first_avail);
-	bnxt_hdbr_set_slot(slot, ap_da, pi, ktbl->first_avail == ktbl->first_empty);
+	bnxt_hdbr_set_slot(slot, ap_da, pi, stride_n_size,
+			   ktbl->first_avail == ktbl->first_empty);
 	*idx = ktbl->first_avail;
 	ktbl->slot_avail--;
 
@@ -252,7 +254,7 @@ int bnxt_hdbr_reg_apg(struct bnxt_hdbr_ktbl *ktbl, dma_addr_t ap_da, int *idx, u
 	}
 
 exit:
-	spin_unlock(&ktbl->hdbr_kmem_lock);
+	mutex_unlock(&ktbl->hdbr_kmem_lock);
 	return rc;
 }
 EXPORT_SYMBOL(bnxt_hdbr_reg_apg);
@@ -267,7 +269,7 @@ void bnxt_hdbr_unreg_apg(struct bnxt_hdbr_ktbl *ktbl, int idx)
 {
 	struct dbc_drk64 *slot;
 
-	spin_lock(&ktbl->hdbr_kmem_lock);
+	mutex_lock(&ktbl->hdbr_kmem_lock);
 	if (idx == ktbl->last_entry) {
 		/* Find the new last_entry index, and mark last */
 		while (--ktbl->last_entry >= 0) {
@@ -289,7 +291,7 @@ void bnxt_hdbr_unreg_apg(struct bnxt_hdbr_ktbl *ktbl, int idx)
 	if (idx < ktbl->first_avail)
 		ktbl->first_avail = idx;
 	ktbl->slot_avail++;
-	spin_unlock(&ktbl->hdbr_kmem_lock);
+	mutex_unlock(&ktbl->hdbr_kmem_lock);
 }
 EXPORT_SYMBOL(bnxt_hdbr_unreg_apg);
 
@@ -339,7 +341,8 @@ static int bnxt_hdbr_l2_alloc_page(struct bnxt *bp, int group)
 	ptr[0] = cpu_to_le64(DBC_VALUE_LAST);
 	wmb();	/* Make sure HW see this slot when page linked in */
 	/* Register to kernel table */
-	rc = bnxt_hdbr_reg_apg(bp->hdbr_info.ktbl[group], da, &ktbl_idx, 0);
+	rc = bnxt_hdbr_reg_apg(bp->hdbr_info.ktbl[group], da, &ktbl_idx, 0,
+			       app_pgs->stride_n_size);
 	if (rc) {
 		dma_free_coherent(&bp->pdev->dev, PAGE_SIZE_4K, ptr, da);
 		return rc;
@@ -370,36 +373,38 @@ static int bnxt_hdbr_l2_alloc_page(struct bnxt *bp, int group)
 static int bnxt_hdbr_l2_init_group(struct bnxt *bp, int group)
 {
 	struct bnxt_hdbr_l2_pgs *app_pgs = NULL;
-	int grp_size, entries_per_pg, entries, max_pgs;
+	int grp_size, epp, entries, max_pgs;
+	int blk_size;
 
 	switch (group) {
 	case DBC_GROUP_SQ:
 		grp_size = HDBR_L2_SQ_BLK_SIZE;
-		entries_per_pg = HDBR_L2_SQ_ENTRY_PER_PAGE;
 		entries = bp->hw_resc.max_tx_rings;
 		break;
 	case DBC_GROUP_SRQ:
 		grp_size = HDBR_L2_SRQ_BLK_SIZE;
-		entries_per_pg = HDBR_L2_SRQ_ENTRY_PER_PAGE;
 		entries = bp->hw_resc.max_rx_rings;
 		break;
 	case DBC_GROUP_CQ:
 		grp_size = HDBR_L2_CQ_BLK_SIZE;
-		entries_per_pg = HDBR_L2_CQ_ENTRY_PER_PAGE;
 		entries = bp->hw_resc.max_cp_rings;
 		break;
 	default:
 		/* Other group/DB types are not needed */
 		goto exit;
 	}
-	max_pgs = DIV_ROUND_UP(entries, entries_per_pg);
-
+	blk_size = hdbr_get_block_size(grp_size);
+	epp = hdbr_get_entries_per_pg(blk_size);
+	max_pgs = DIV_ROUND_UP(entries, epp);
 	app_pgs = kzalloc(struct_size(app_pgs, pages, max_pgs), GFP_KERNEL);
 	if (!app_pgs)
 		return -ENOMEM;
+
 	app_pgs->max_pages = max_pgs;
 	app_pgs->grp_size = grp_size;
-	app_pgs->entries_per_pg = entries_per_pg;
+	app_pgs->blk_size = blk_size;
+	app_pgs->stride_n_size = hdbr_get_stride_size(grp_size);
+	app_pgs->entries_per_pg = epp;
 
 exit:
 	/* Link to main bnxt structure */
@@ -453,7 +458,7 @@ void bnxt_hdbr_l2_uninit(struct bnxt *bp, int group)
 
 /*
  * This function is called when a new db is created.
- * It finds a memoty slot in the DB copy application page, and return the
+ * It finds a memory slot in the DB copy application page, and return the
  * address.
  * Not all DB type need a copy, for those DB types don't need a copy, we
  * simply return NULL.
@@ -477,10 +482,10 @@ __le64 *bnxt_hdbr_reg_db(struct bnxt *bp, int group)
 			return NULL;
 	}
 
-	n = pgs->grp_size;
+	n = pgs->blk_size;
 	p = &pgs->pages[pgs->next_page];
 	idx = pgs->next_entry * n; /* This is what we'll return */
-	for (i = 0; i < n; i++)
+	for (i = 0; i < pgs->grp_size; i++)
 		p->ptr[idx + i] = cpu_to_le64(DBC_VALUE_INIT);
 	pgs->next_entry++;
 	if (pgs->next_entry == pgs->entries_per_pg) {
@@ -529,6 +534,7 @@ char *bnxt_hdbr_l2pg_dump(struct bnxt_hdbr_l2_pgs *app_pgs)
 {
 	struct hdbr_l2_pg *p;
 	int used_entries = 0;
+	int stride, ss;
 	u64  dbc_val;
 	char *buf;
 	int pi, i;
@@ -540,17 +546,26 @@ char *bnxt_hdbr_l2pg_dump(struct bnxt_hdbr_l2_pgs *app_pgs)
 
 	if (app_pgs->alloced_pages)
 		used_entries = app_pgs->next_page * app_pgs->entries_per_pg + app_pgs->next_entry;
+	stride = (int)((app_pgs->stride_n_size & DBC_DRK64_STRIDE_MASK) >> DBC_DRK64_STRIDE_SFT);
+	ss = (int)((app_pgs->stride_n_size & DBC_DRK64_SIZE_MASK) >> DBC_DRK64_SIZE_SFT);
+	ss = ss ? ss : 4;
 	/* Structure data to debugfs console */
 	buf = kasprintf(GFP_KERNEL,
 			"max_pages      = %d\n"
 			"alloced_pages  = %d\n"
 			"group_size     = %d\n"
+			"block_size     = %d (DBs)\n"
+			"stride         = %d\n"
+			"stride size    = %d\n"
 			"entries_per_pg = %d\n"
 			"used entries   = %d\n"
 			"used db slots  = %d\n",
 			app_pgs->max_pages,
 			app_pgs->alloced_pages,
 			app_pgs->grp_size,
+			app_pgs->blk_size,
+			stride,
+			ss,
 			app_pgs->entries_per_pg,
 			used_entries,
 			used_entries * app_pgs->grp_size);

@@ -59,6 +59,18 @@ static inline u64 tfc_create_flow_handle(u32 tsid, u32 record_size, u32 em_recor
 	return flow_handle;
 }
 
+static inline uint64_t tfc_create_flow_handle2(uint64_t partial_flow_handle,
+					       uint32_t static_bucket_offset)
+{
+	uint64_t flow_handle = partial_flow_handle;
+
+	flow_handle |=
+		(((static_bucket_offset) << TFC_STATIC_BUCKET_OFFSET_FLOW_HANDLE_SFT) &
+		 TFC_STATIC_BUCKET_OFFSET_FLOW_HANDLE_MASK);
+
+	return flow_handle;
+}
+
 #define TFC_FLOW_GET_POOL_ID(em_record_offset, pool_sz_exp) \
 	((em_record_offset) >> (pool_sz_exp))
 

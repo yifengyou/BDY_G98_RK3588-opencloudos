@@ -5,6 +5,9 @@
 
 #include "linux/kernel.h"
 #include "bnxt_compat.h"
+#include "bnxt_hsi.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "ulp_mapper.h"
 #include "ulp_flow_db.h"
 #include "cfa_resources.h"
@@ -415,6 +418,42 @@ err:
 }
 
 static int
+ulp_mapper_tfc_mpc_batch_end(struct bnxt *bp,
+			     void *tfcp,
+			     struct tfc_mpc_batch_info_t *batch_info)
+{
+	int rc;
+	int i;
+
+	rc = tfc_mpc_batch_end((void *)bp, (struct tfc *)tfcp, batch_info);
+	if (unlikely(rc))
+		return rc;
+
+	for (i = 0; i < batch_info->count; i++) {
+		if (!batch_info->result[i])
+			continue;
+
+		switch (batch_info->comp_info[i].type) {
+		case TFC_MPC_EM_INSERT:
+			batch_info->em_error = batch_info->result[i];
+			break;
+		default:
+			if (batch_info->result[i] && !batch_info->error)
+				batch_info->error = batch_info->result[i];
+			break;
+		}
+	}
+
+	return rc;
+}
+
+static bool
+ulp_mapper_tfc_mpc_batch_started(struct tfc_mpc_batch_info_t *batch_info)
+{
+	return tfc_mpc_batch_started(batch_info);
+}
+
+static int
 ulp_mapper_tfc_em_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			      struct bnxt_ulp_mapper_tbl_info *tbl,
 			      void *error)
@@ -519,6 +558,7 @@ ulp_mapper_tfc_em_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 	iparms.key_data		 = NULL;
 	iparms.key_sz_bits	 = 0;
 	iparms.flow_handle	 = &handle;
+	iparms.batch_info	 = parms->batch_info;
 
 	rc = bnxt_ulp_cntxt_tsid_get(parms->ulp_ctx, &tsid);
 	if (rc) {
@@ -526,6 +566,34 @@ ulp_mapper_tfc_em_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		return rc;
 	}
 	rc = tfc_em_insert(tfcp, tsid, &iparms);
+
+	if (tfc_mpc_batch_started(parms->batch_info)) {
+		int em_index = parms->batch_info->count - 1;
+		int trc;
+
+		parms->batch_info->em_hdl[em_index] = *iparms.flow_handle;
+
+		trc = ulp_mapper_tfc_mpc_batch_end(parms->ulp_ctx->bp,
+						   (void *)tfcp, parms->batch_info);
+		if (unlikely(trc))
+			return trc;
+
+		*iparms.flow_handle = parms->batch_info->em_hdl[em_index];
+
+		/* Has there been an error? */
+		if (parms->batch_info->error) {
+			/* If there's not an EM error the entry will need to
+			 * be deleted
+			 */
+			if (!parms->batch_info->em_error) {
+				rc = parms->batch_info->error;
+				goto error;
+			}
+		}
+
+		rc = parms->batch_info->em_error;
+	}
+
 	if (rc) {
 		/* Set the error flag in reg file */
 		if (tbl->tbl_opcode == BNXT_ULP_EM_TBL_OPC_WR_REGFILE) {
@@ -626,6 +694,12 @@ ulp_mapper_tfc_em_entry_free(struct bnxt_ulp_context *ulp,
 	return rc;
 }
 
+static bool ulp_mapper_tfc_use_tbl_result_size(struct bnxt_ulp_mapper_tbl_info *tbl)
+{
+	return (tbl->resource_func == BNXT_ULP_RESOURCE_FUNC_INDEX_TABLE &&
+		tbl->resource_type == CFA_RSUBTYPE_IDX_TBL_MIRROR);
+}
+
 static u16
 ulp_mapper_tfc_dyn_blob_size_get(struct bnxt_ulp_mapper_parms *mparms,
 				 struct bnxt_ulp_mapper_tbl_info *tbl)
@@ -633,7 +707,9 @@ ulp_mapper_tfc_dyn_blob_size_get(struct bnxt_ulp_mapper_parms *mparms,
 	struct bnxt_ulp_device_params *d_params = mparms->device_params;
 	enum bnxt_ulp_resource_type rtype = tbl->resource_type;
 
-	if (d_params->dynamic_sram_en) {
+	if (ulp_mapper_tfc_use_tbl_result_size(tbl)) {
+		return tbl->result_bit_size;
+	} else if (d_params->dynamic_sram_en) {
 		switch (rtype) {
 		/* TBD: add more types here */
 		case BNXT_ULP_RESOURCE_TYPE_STAT:
@@ -951,18 +1027,22 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			       void *error)
 {
 	bool alloc = false, write = false, global = false, regfile = false;
+	u16 bit_size, wordlen = 0, act_wordlen = 0, tmplen = 0;
 	struct bnxt_ulp_glb_resource_info glb_res = { 0 };
-	u16 bit_size, act_wordlen = 0, tmplen = 0;
 	struct ulp_flow_db_res_params fid_parms;
 	struct bnxt *bp = parms->ulp_ctx->bp;
 	struct tfc_cmm_info cmm_info = { 0 };
+	struct tfc_cmm_clr cmm_clr = {0 };
+	bool shared = false, read = false;
 	struct tfc *tfcp = NULL;
+	unsigned char *data_p;
 	struct ulp_blob	data;
 	u64 act_rec_size = 0;
-	bool shared = false;
 	const u8 *act_data;
+	dma_addr_t pa_addr;
 	u64 regval = 0;
 	u64 handle = 0;
+	void *va_addr;
 	u8 tsid = 0;
 	int rc = 0;
 
@@ -1031,11 +1111,6 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		write = true;
 		break;
 	case BNXT_ULP_INDEX_TBL_OPC_RD_REGFILE:
-		/* The read is different from the rest and can be handled here
-		 * instead of trying to use common code.  Simply read the table
-		 * with the index from the regfile, scan and store the
-		 * identifiers, and return.
-		 */
 		if (ulp_regfile_read(parms->regfile,
 				     tbl->tbl_operand, &regval)) {
 			netdev_dbg(bp->dev, "Failed to get tbl idx from regfile[%d]\n",
@@ -1043,7 +1118,8 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			return -EINVAL;
 		}
 		handle = be64_to_cpu(regval);
-		return 0;
+		read = true;
+		break;
 	case BNXT_ULP_INDEX_TBL_OPC_NOP_REGFILE:
 		regfile = true;
 		alloc = false;
@@ -1051,6 +1127,51 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 	default:
 		netdev_dbg(bp->dev, "Invalid cmm table opcode %d\n", tbl->tbl_opcode);
 		return -EINVAL;
+	}
+
+	if (read) {
+		/* Read the table with the index from the regfile, scan and
+		 * store the identifiers, and return.
+		 */
+		va_addr = dma_alloc_coherent(&bp->pdev->dev,
+					     ULP_BITS_2_BYTE(bit_size),
+					     &pa_addr, GFP_KERNEL);
+		if (!va_addr)
+			return -EINVAL;
+
+		cmm_info.dir = tbl->direction;
+		cmm_info.rsubtype = tbl->resource_type;
+		cmm_info.act_handle = handle;
+
+		/* Nothing has been pushed to blob, so push bit_size */
+		ulp_blob_pad_push(&data, bit_size);
+		data_p = ulp_blob_data_get(&data, &tmplen);
+		act_wordlen = ULP_BITS_TO_32_BYTE_WORD(tmplen);
+		wordlen = ULP_BITS_2_BYTE(tmplen);
+
+		rc = tfc_act_get(tfcp,
+				 NULL,
+				 &cmm_info,
+				 &cmm_clr,
+				 pa_addr,
+				 &act_wordlen);
+		if (rc) {
+			netdev_dbg(bp->dev, "CMM table[%d][%s][%llu] read fail %d\n",
+				   cmm_info.rsubtype,
+				   tfc_dir_2_str(cmm_info.dir),
+				   handle, rc);
+		} else {
+			/* Scan the fields in the entry and push them into the regfile*/
+			rc = ulp_mapper_tbl_ident_scan_ext(parms, tbl, (u8 *)va_addr,
+							   wordlen, data.byte_order);
+			if (rc)
+				netdev_dbg(bp->dev, "Failed to get flds on tbl read rc=%d\n", rc);
+		}
+
+		dma_free_coherent(&bp->pdev->dev, ULP_BITS_2_BYTE(bit_size),
+				  va_addr, pa_addr);
+
+		return rc;
 	}
 
 	/* read the CMM handle from the regfile, it is not allocated */
@@ -1101,7 +1222,11 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		 * zero
 		 */
 		if (tbl->resource_func == BNXT_ULP_RESOURCE_FUNC_CMM_STAT) {
-			rc = tfc_act_set(tfcp, &cmm_info, act_data, act_wordlen);
+			rc = tfc_act_set(tfcp,
+					 &cmm_info,
+					 act_data,
+					 act_wordlen,
+					 parms->batch_info);
 			if (rc) {
 				netdev_dbg(bp->dev, "Stat alloc/clear[%d][%s][%llu] failed rc=%d\n",
 					   cmm_info.rsubtype,
@@ -1153,7 +1278,11 @@ ulp_mapper_tfc_cmm_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 		cmm_info.rsubtype = tbl->resource_type;
 		cmm_info.act_handle = handle;
 		act_wordlen = ULP_BITS_TO_32_BYTE_WORD(tmplen);
-		rc = tfc_act_set(tfcp, &cmm_info, act_data, act_wordlen);
+		rc = tfc_act_set(tfcp,
+				 &cmm_info,
+				 act_data,
+				 act_wordlen,
+				 parms->batch_info);
 		if (rc) {
 			netdev_dbg(bp->dev, "CMM table[%d][%s][%llu] write fail %d\n",
 				   cmm_info.rsubtype,
@@ -1570,6 +1699,12 @@ ulp_mapper_tfc_handle_to_offset(struct bnxt_ulp_mapper_parms *parms,
 	return rc;
 }
 
+static int
+ulp_mapper_tfc_mpc_batch_start(struct tfc_mpc_batch_info_t *batch_info)
+{
+	return tfc_mpc_batch_start(batch_info);
+}
+
 const struct ulp_mapper_core_ops ulp_mapper_tfc_core_ops = {
 	.ulp_mapper_core_tcam_tbl_process = ulp_mapper_tfc_tcam_tbl_process,
 	.ulp_mapper_core_tcam_entry_free = ulp_mapper_tfc_tcam_entry_free,
@@ -1585,6 +1720,9 @@ const struct ulp_mapper_core_ops ulp_mapper_tfc_core_ops = {
 	.ulp_mapper_core_dyn_tbl_type_get = ulp_mapper_tfc_dyn_tbl_type_get,
 	.ulp_mapper_core_index_tbl_alloc_process = ulp_mapper_tfc_index_tbl_alloc_process,
 	.ulp_mapper_core_app_glb_res_info_init = ulp_mapper_tfc_app_glb_resource_info_init,
-	.ulp_mapper_core_handle_to_offset = ulp_mapper_tfc_handle_to_offset
+	.ulp_mapper_core_handle_to_offset = ulp_mapper_tfc_handle_to_offset,
+	.ulp_mapper_mpc_batch_start = ulp_mapper_tfc_mpc_batch_start,
+	.ulp_mapper_mpc_batch_started = ulp_mapper_tfc_mpc_batch_started,
+	.ulp_mapper_mpc_batch_end = ulp_mapper_tfc_mpc_batch_end
 };
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */

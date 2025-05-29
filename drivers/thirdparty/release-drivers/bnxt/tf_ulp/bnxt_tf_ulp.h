@@ -38,13 +38,15 @@
 #define BNXT_ULP_APP_SOCKET_DIRECT	0x20
 #define BNXT_ULP_APP_TOS_PROTO_SUPPORT  0x40
 #define BNXT_ULP_APP_BC_MC_SUPPORT      0x80
-#define BNXT_ULP_CUST_VXLAN_SUPPORT	0x100
+#define BNXT_ULP_STATIC_VXLAN_SUPPORT	0x100
 #define BNXT_ULP_MULTI_SHARED_SUPPORT	0x200
 #define BNXT_ULP_APP_HA_DYNAMIC		0x400
 #define BNXT_ULP_APP_SRV6		0x800
 #define BNXT_ULP_APP_L2_ETYPE		0x1000
 #define BNXT_ULP_SHARED_TBL_SCOPE_ENABLED 0x2000
 #define BNXT_ULP_APP_DSCP_REMAP_ENABLED	0x4000
+#define BNXT_ULP_DYNAMIC_VXLAN_SUPPORT	0x8000
+#define BNXT_ULP_APP_NIC_FLOWS_SUPPORT  0x10000
 
 #define ULP_VF_REP_IS_ENABLED(flag)	((flag) & BNXT_ULP_VF_REP_ENABLED)
 #define ULP_SHARED_SESSION_IS_ENABLED(flag) ((flag) &\
@@ -63,14 +65,20 @@
 #define ULP_APP_HA_IS_DYNAMIC(ctx)	((ctx)->cfg_data->ulp_flags &\
 					BNXT_ULP_APP_HA_DYNAMIC)
 
-#define ULP_APP_CUST_VXLAN_SUPPORT(ctx)	   ((ctx)->cfg_data->vxlan_port != 0)
-#define ULP_APP_VXLAN_GPE_SUPPORT(ctx)     ((ctx)->cfg_data->vxlan_gpe_port != 0)
-#define ULP_APP_CUST_VXLAN_IP_SUPPORT(ctx) ((ctx)->cfg_data->vxlan_ip_port != 0)
+#define ULP_APP_STATIC_VXLAN_PORT_EN(ctx)	((ctx)->cfg_data->ulp_flags &\
+					BNXT_ULP_STATIC_VXLAN_SUPPORT)
+#define ULP_APP_DYNAMIC_VXLAN_PORT_EN(ctx)	((ctx)->cfg_data->ulp_flags &\
+					BNXT_ULP_DYNAMIC_VXLAN_SUPPORT)
 
 #define ULP_APP_SRV6_SUPPORT(ctx)	((ctx)->cfg_data->ulp_flags &\
 					BNXT_ULP_APP_SRV6)
 #define ULP_APP_L2_ETYPE_SUPPORT(ctx)	((ctx)->cfg_data->ulp_flags &\
 					BNXT_ULP_APP_L2_ETYPE)
+#define ULP_APP_NIC_FLOWS_SUPPORTED(ctx)	((ctx)->cfg_data->ulp_flags &\
+						 BNXT_ULP_APP_NIC_FLOWS_SUPPORT)
+
+/* defines for mirror enable/disable bit */
+#define MIRROR_REG_BIT BIT(31)
 
 enum bnxt_ulp_flow_mem_type {
 	BNXT_ULP_FLOW_MEM_TYPE_INT = 0,
@@ -107,6 +115,33 @@ struct bnxt_ulp_vfr_rule_info {
 	u32			vfr_flow_id;
 	u16			parent_port_id;
 	u8				valid;
+};
+
+enum bnxt_ulp_meter_color {
+	MTR_PROF_CLR_GREEN = 0,
+	MTR_PROF_CLR_YELLOW,
+	MTR_PROF_CLR_RED,
+	MTR_PROF_CLR_MAX
+};
+
+#define	MTR_PROF_CLR_INVALID	MTR_PROF_CLR_MAX
+#define BNXT_ULP_DSCP_INVALID	-1
+
+struct bnxt_dscp_remap_vf {
+	__be32	dscp_remap_val;
+	u32	dscp_remap_ref;
+};
+
+#define BNXT_ULP_DSCP_INSERT_CAP(dscp_remap)	\
+		((dscp_remap)->sriov_dscp_insert)
+
+struct bnxt_ulp_dscp_remap {
+	bool				sriov_dscp_insert;
+	bool				dscp_remap_initialized;
+	u32				meter_prof_id[MTR_PROF_CLR_MAX];
+	u32				meter_id[MTR_PROF_CLR_MAX];
+	u32				*dscp_global_cfg;
+	struct bnxt_dscp_remap_vf	dscp_remap_vf[BNXT_DSCP_REMAP_ROWS][MTR_PROF_CLR_MAX];
 };
 
 struct bnxt_ulp_data {
@@ -155,14 +190,17 @@ struct bnxt_ulp_data {
 	enum bnxt_ulp_session_type	def_session_type;
 	u16				num_key_recipes_per_dir;
 	struct delayed_work             fc_work;
+	struct delayed_work             sc_work;
+	struct workqueue_struct        *sc_wq;
 	u64				feature_bits;
 	u64				default_class_bits;
 	u64				default_act_bits;
 	bool				meter_initialized;
-	/* Below three members are protected by flow_db_lock */
-	bool				dscp_remap_initialized;
-	__be32				dscp_remap_val;
-	u32				dscp_remap_ref;
+	/* Below structure is protected by flow_db_lock */
+	struct bnxt_ulp_dscp_remap	dscp_remap;
+	struct ulp_fc_tfc_stats_cache_entry *stats_cache;
+	struct bnxt_ulp_sc_info		*sc_info;
+	struct mutex			sc_lock; /* Stats cache lock */
 };
 
 enum bnxt_ulp_tfo_type {
@@ -197,6 +235,7 @@ struct bnxt_ulp_pci_info {
 };
 
 #define BNXT_ULP_DEVICE_SERIAL_NUM_SIZE 8
+#define BNXT_ULP_BOARD_SERIAL_NUM_SIZE 32
 struct bnxt_ulp_session_state {
 	struct hlist_node			next;
 	bool					bnxt_ulp_init;
@@ -204,6 +243,7 @@ struct bnxt_ulp_session_state {
 	struct mutex				bnxt_ulp_mutex; /* ulp lock */
 	struct bnxt_ulp_pci_info		pci_info;
 	u8					dsn[BNXT_ULP_DEVICE_SERIAL_NUM_SIZE];
+	u8					bsn[BNXT_ULP_BOARD_SERIAL_NUM_SIZE];
 	struct bnxt_ulp_data			*cfg_data;
 	struct tf				*g_tfp[BNXT_ULP_SESSION_MAX];
 	u32					session_opened[BNXT_ULP_SESSION_MAX];
@@ -551,6 +591,9 @@ bnxt_ulp_cntxt_ecpri_udp_port_get(struct bnxt_ulp_context *ulp_ctx);
 int
 bnxt_flow_meter_init(struct bnxt *bp);
 
+int
+bnxt_flow_meter_deinit(struct bnxt *bp);
+
 u32
 bnxt_ulp_cntxt_convert_dev_id(struct bnxt *bp, u32 ulp_dev_id);
 
@@ -593,8 +636,6 @@ bnxt_ulp_destroy_df_rules(struct bnxt *bp, bool global);
 bool
 bnxt_ulp_validate_bcast_mcast(struct bnxt *bp);
 
-int bnxt_flow_meter_init(struct bnxt *bp);
-
 u64
 bnxt_ulp_feature_bits_get(struct bnxt_ulp_context *ulp_ctx);
 
@@ -616,4 +657,16 @@ bnxt_ulp_cntxt_ptr2_default_act_bits_set(struct bnxt_ulp_context *ulp_ctx,
 					 u64 bits);
 u64
 bnxt_ulp_cntxt_ptr2_default_act_bits_get(struct bnxt_ulp_context *ulp_ctx);
+
+int
+bnxt_ulp_cap_feat_process(u64 feat_bits, u64 *out_bits);
+
+/* Function to set the flow counter info into the context */
+int
+bnxt_ulp_cntxt_ptr2_sc_info_set(struct bnxt_ulp_context *ulp_ctx,
+				struct bnxt_ulp_sc_info *ulp_sc_info);
+
+/* Function to retrieve the flow counter info from the context. */
+struct bnxt_ulp_sc_info *
+bnxt_ulp_cntxt_ptr2_sc_info_get(struct bnxt_ulp_context *ulp_ctx);
 #endif /* _BNXT_ULP_H_ */

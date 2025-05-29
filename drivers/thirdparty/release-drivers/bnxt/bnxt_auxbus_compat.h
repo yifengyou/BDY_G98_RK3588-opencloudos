@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,27 +10,9 @@
 #ifndef _BNXT_AUXILIARY_COMPAT_H_
 #define _BNXT_AUXILIARY_COMPAT_H_
 
-#if !defined(CONFIG_AUXILIARY_BUS)
+#if !defined(CONFIG_AUXILIARY_BUS) && !defined(HAVE_EXTERNAL_OFED)
 #undef HAVE_AUXILIARY_DRIVER
 #endif
-
-#ifdef HAVE_AUXILIARY_DRIVER
-#include <linux/auxiliary_bus.h>
-#endif
-
-#if defined(HAVE_AUXILIARY_DRIVER) && !defined(HAVE_AUX_GET_DRVDATA)
-static inline void *auxiliary_get_drvdata(struct auxiliary_device *auxdev)
-{
-	return dev_get_drvdata(&auxdev->dev);
-}
-
-static inline void auxiliary_set_drvdata(struct auxiliary_device *auxdev, void *data)
-{
-	dev_set_drvdata(&auxdev->dev, data);
-}
-#endif
-
-#ifndef HAVE_AUXILIARY_DRIVER
 
 #ifndef AUXILIARY_NAME_SIZE
 #define AUXILIARY_NAME_SIZE	32
@@ -44,6 +26,27 @@ struct auxiliary_device_id {
 	kernel_ulong_t driver_data;
 };
 #endif
+
+#ifdef HAVE_AUXILIARY_DRIVER
+#include <linux/auxiliary_bus.h>
+#elif defined(HAVE_EXTERNAL_OFED)
+#include "auxiliary_bus.h"
+#endif
+
+#ifndef HAVE_EXTERNAL_OFED
+#if defined(HAVE_AUXILIARY_DRIVER) && !defined(HAVE_AUX_GET_DRVDATA)
+static inline void *auxiliary_get_drvdata(struct auxiliary_device *auxdev)
+{
+	return dev_get_drvdata(&auxdev->dev);
+}
+
+static inline void auxiliary_set_drvdata(struct auxiliary_device *auxdev, void *data)
+{
+	dev_set_drvdata(&auxdev->dev, data);
+}
+#endif
+
+#ifndef HAVE_AUXILIARY_DRIVER
 
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
@@ -96,6 +99,7 @@ static inline struct auxiliary_driver *to_auxiliary_drv(struct device_driver *dr
 }
 
 #endif /* HAVE_AUXILIARY_DRIVER */
+#endif
 
 #ifndef HAVE_IDA_ALLOC
 static inline int ida_alloc(struct ida *ida, gfp_t gfp)

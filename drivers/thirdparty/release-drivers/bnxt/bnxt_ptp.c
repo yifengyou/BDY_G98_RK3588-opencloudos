@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -125,7 +125,7 @@ static int bnxt_hwrm_port_ts_query(struct bnxt *bp, u32 flags, u64 *ts,
 		req->ptp_hdr_offset = cpu_to_le16(bp->ptp_cfg->txts_req[slot].tx_hdr_off);
 		if (!tmo_us)
 			tmo_us = BNXT_PTP_QTS_TIMEOUT(bp);
-		tmo_us = min_t(u32, tmo_us, BNXT_PTP_QTS_MAX_TMO_US);
+		tmo_us = min(tmo_us, BNXT_PTP_QTS_MAX_TMO_US);
 		req->ts_req_timeout = cpu_to_le16(tmo_us);
 	} else if (flags == PORT_TS_QUERY_REQ_FLAGS_PATH_RX) {
 		req->ptp_seq_id = cpu_to_le32(bp->ptp_cfg->rx_seqid);
@@ -923,18 +923,19 @@ static int bnxt_stamp_tx_skb(struct bnxt *bp, int slot)
 		spin_unlock_bh(&ptp->ptp_lock);
 		timestamp.hwtstamp = ns_to_ktime(ns);
 		skb_tstamp_tx(txts_req->tx_skb, &timestamp);
+		ptp->stats.ts_pkts++;
 	} else {
 retry_ts:
 		if (!time_after_eq(jiffies, txts_req->abs_txts_tmo))
 			return -EAGAIN;
 
+		ptp->stats.ts_lost++;
 		netdev_warn_once(bp->dev, "TS query for TX timer failed rc = %x\n",
 				 rc);
 	}
 
 	dev_kfree_skb_any(txts_req->tx_skb);
 	txts_req->tx_skb = NULL;
-	BNXT_PTP_INC_TX_AVAIL(ptp);
 
 	return 0;
 }
@@ -977,6 +978,7 @@ int bnxt_ptp_get_txts_prod(struct bnxt_ptp_cfg *ptp, u16 *prod)
 		return 0;
 	}
 	spin_unlock_bh(&ptp->ptp_tx_lock);
+	atomic64_inc(&ptp->stats.ts_err);
 	return -ENOSPC;
 }
 
@@ -988,14 +990,24 @@ static long bnxt_ptp_ts_aux_work(struct ptp_clock_info *ptp_info)
 	unsigned long now = jiffies;
 	struct bnxt *bp = ptp->bp;
 	u16 cons = ptp->txts_cons;
+	u8 num_requests;
 	int rc = 0;
 
-	while (READ_ONCE(ptp->tx_avail) != BNXT_MAX_TX_TS) {
+	if (ptp->shutdown)
+		return -1;
+	num_requests = BNXT_MAX_TX_TS - READ_ONCE(ptp->tx_avail);
+	while (num_requests--) {
+		if (IS_ERR(ptp->txts_req[cons].tx_skb)) {
+			atomic64_inc(&ptp->stats.ts_err);
+			goto next_slot;
+		}
 		if (!ptp->txts_req[cons].tx_skb)
 			break;
 		rc = bnxt_stamp_tx_skb(bp, cons);
 		if (rc == -EAGAIN)
 			break;
+next_slot:
+		BNXT_PTP_INC_TX_AVAIL(ptp);
 		cons = NEXT_TXTS(cons);
 	}
 	ptp->txts_cons = cons;
@@ -1044,14 +1056,22 @@ static void bnxt_ptp_ts_task(struct work_struct *work)
 						ptp_ts_task);
 	struct bnxt *bp = ptp->bp;
 	u16 cons = ptp->txts_cons;
+	u8 num_requests;
 	int rc = 0;
 
-	while (READ_ONCE(ptp->tx_avail) != BNXT_MAX_TX_TS) {
+	num_requests = BNXT_MAX_TX_TS - READ_ONCE(ptp->tx_avail);
+	while (num_requests--) {
+		if (IS_ERR(ptp->txts_req[cons].tx_skb)) {
+			atomic64_inc(&ptp->stats.ts_err);
+			goto next_slot;
+		}
 		if (!ptp->txts_req[cons].tx_skb)
 			break;
 		rc = bnxt_stamp_tx_skb(bp, cons);
 		if (rc == -EAGAIN)
 			break;
+next_slot:
+		BNXT_PTP_INC_TX_AVAIL(ptp);
 		cons = NEXT_TXTS(cons);
 	}
 	ptp->txts_cons = cons;
@@ -1349,14 +1369,15 @@ static void bnxt_ptp_free(struct bnxt *bp)
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 
 	if (ptp->ptp_clock) {
+		ptp->shutdown = 1;
 		ptp_clock_unregister(ptp->ptp_clock);
 		ptp->ptp_clock = NULL;
-		kfree(ptp->ptp_info.pin_config);
-		ptp->ptp_info.pin_config = NULL;
 	}
+	kfree(ptp->ptp_info.pin_config);
+	ptp->ptp_info.pin_config = NULL;
 }
 
-int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
+int bnxt_ptp_init(struct bnxt *bp)
 {
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 	int rc;
@@ -1385,7 +1406,7 @@ int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
 
 	if (BNXT_PTP_USE_RTC(bp)) {
 		bnxt_ptp_timecounter_init(bp, false);
-		rc = bnxt_ptp_init_rtc(bp, phc_cfg);
+		rc = bnxt_ptp_init_rtc(bp, ptp->rtc_configured);
 		if (rc)
 			goto out;
 	} else {
@@ -1410,6 +1431,10 @@ int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
 #if !defined HAVE_PTP_DO_AUX_WORK
 	INIT_WORK(&ptp->ptp_ts_task, bnxt_ptp_ts_task);
 #endif
+	ptp->stats.ts_pkts = 0;
+	ptp->stats.ts_lost = 0;
+	atomic64_set(&ptp->stats.ts_err, 0);
+
 	spin_lock_bh(&ptp->ptp_lock);
 	bnxt_refclk_read(bp, NULL, &ptp->current_time);
 	WRITE_ONCE(ptp->old_time, ptp->current_time);
@@ -1434,15 +1459,11 @@ void bnxt_ptp_clear(struct bnxt *bp)
 	if (!ptp)
 		return;
 
-	if (ptp->ptp_clock)
-		ptp_clock_unregister(ptp->ptp_clock);
-
-	ptp->ptp_clock = NULL;
 #if !defined HAVE_PTP_DO_AUX_WORK
 	cancel_work_sync(&ptp->ptp_ts_task);
 #endif
-	kfree(ptp->ptp_info.pin_config);
-	ptp->ptp_info.pin_config = NULL;
+
+	bnxt_ptp_free(bp);
 
 	for (i = 0; i < BNXT_MAX_TX_TS; i++) {
 		if (ptp->txts_req[i].tx_skb) {
@@ -1483,7 +1504,7 @@ int bnxt_hwtstamp_get(struct net_device *dev, struct ifreq *ifr)
 	return -EOPNOTSUPP;
 }
 
-int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
+int bnxt_ptp_init(struct bnxt *bp)
 {
 	return 0;
 }

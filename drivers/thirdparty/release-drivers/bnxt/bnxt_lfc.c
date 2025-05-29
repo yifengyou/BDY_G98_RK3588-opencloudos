@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@
 #ifdef CONFIG_BNXT_LFC
 
 #ifdef HAVE_MODULE_IMPORT_NS_DMA_BUF
-MODULE_IMPORT_NS(DMA_BUF);
+MODULE_IMPORT_NS("DMA_BUF");
 #endif
 
 #define MAX_LFC_CACHED_NET_DEVICES 32
@@ -97,7 +97,7 @@ static int bnxt_lfc_send_hwrm(struct bnxt *bp, struct bnxt_fw_msg *fw_msg)
 
 	rc = hwrm_req_replace(bp, req, fw_msg->msg, fw_msg->msg_len);
 	if (rc)
-		return rc;
+		goto drop_req;
 
 	hwrm_req_timeout(bp, req, fw_msg->timeout);
 	resp = hwrm_req_hold(bp, req);
@@ -109,6 +109,7 @@ static int bnxt_lfc_send_hwrm(struct bnxt *bp, struct bnxt_fw_msg *fw_msg)
 
 		memcpy(fw_msg->resp, resp, resp_len);
 	}
+drop_req:
 	hwrm_req_drop(bp, req);
 	return rc;
 }
@@ -469,7 +470,7 @@ static int32_t bnxt_lfc_process_hwrm(struct bnxt_lfc_dev *blfc_dev,
 			BNXT_LFC_ERR(&pdev->dev,
 				     "Failed to allocate memory\n");
 			rc = -ENOMEM;
-			goto err;
+			goto err1;
 		}
 		if (copy_from_user((void *)msg2,
 				    (void __user *)((unsigned long)lfc_req->req.hreq),
@@ -479,13 +480,13 @@ static int32_t bnxt_lfc_process_hwrm(struct bnxt_lfc_dev *blfc_dev,
 			BNXT_LFC_ERR(&pdev->dev,
 				     "Failed to copy data from user\n");
 			rc = -EFAULT;
-			goto err;
+			goto err1;
 		}
 		rc = bnxt_lfc_prepare_dma_operations(blfc_dev, msg2, &fw_msg);
 		if (rc) {
 			BNXT_LFC_ERR(&pdev->dev,
-				     "Failed to perform DMA operaions\n");
-			goto err;
+				     "Failed to perform DMA operations\n");
+			goto err1;
 		}
 	}
 
@@ -536,6 +537,94 @@ err1:
 	if (hwrm_err)
 		return hwrm_err;
 	return rc;
+}
+
+static int32_t bnxt_lfc_process_physmem_req(struct bnxt_lfc_dev *blfc_dev, unsigned long arg)
+{
+	struct pci_dev *pdev = blfc_dev->pdev;
+	struct alloc_phys_mem_data data;
+	struct bnxt_lfc_req lfc;
+	uint64_t addr, bus_addr;
+	unsigned long i, size;
+
+	/* Get user data */
+	if (copy_from_user(&lfc, (void __user *)arg, sizeof(struct bnxt_lfc_req))) {
+		BNXT_LFC_ERR(&blfc_dev->pdev->dev, "lfc_req copy_from_user failed\n");
+		return -EFAULT;
+	}
+
+	data = lfc.req.pdata;
+	/* Allocate phys contigious memory */
+	addr = (uint64_t)dma_alloc_coherent(&pdev->dev, data.size, &bus_addr, GFP_KERNEL);
+	if (unlikely(!addr))
+		return -ENOMEM;
+
+	BNXT_LFC_DEBUG(&blfc_dev->pdev->dev, "virt addr is %p, bus addr is %p\n",
+		       (void *)addr, (void *)bus_addr);
+
+	/* Translate kernel logical address to physical address */
+	addr = virt_to_phys((void *)addr);
+	BNXT_LFC_DEBUG(&blfc_dev->pdev->dev, "phys addr is %p\n", (void *)addr);
+
+	/* Reserve calculated pages as similar to cdrv */
+	i = addr;
+	size = data.size;
+	while (i < addr + size) {
+		SetPageReserved(virt_to_page(phys_to_virt(i)));
+		i += PAGE_SIZE;
+	}
+
+	/* Copy physical address to user */
+	if (copy_to_user((void __user *)((ulong)(data.phys_addr_ptr)),
+			 &addr, sizeof(uint64_t))) {
+		BNXT_LFC_ERR(&blfc_dev->pdev->dev, "phys_addr_ptr copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	/* Copy PCI bus address to user */
+	if (copy_to_user((void __user *)((unsigned long)(data.bus_addr_ptr)),
+			 &bus_addr, sizeof(uint64_t))) {
+		BNXT_LFC_ERR(&blfc_dev->pdev->dev, "bus_addr_ptr copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int32_t bnxt_lfc_process_physmem_free_req(struct bnxt_lfc_dev *blfc_dev, unsigned long arg)
+{
+	struct pci_dev *pdev = blfc_dev->pdev;
+	struct free_phys_mem_data data;
+	unsigned long i, offset, size;
+	struct bnxt_lfc_req lfc;
+
+	/* Get user data */
+	if (copy_from_user(&lfc, (void __user *)arg, sizeof(struct bnxt_lfc_req))) {
+		BNXT_LFC_ERR(&blfc_dev->pdev->dev, "lfc copy_from_user failed\n");
+		return -EFAULT;
+	}
+
+	data = lfc.req.pdata_free;
+
+	/* Return the rsvd pages before calling to dma_free_consistent */
+	offset = data.phys_addr;
+	i = offset;
+	size = data.size;
+
+	while (i < offset + size) {
+		ClearPageReserved(virt_to_page(phys_to_virt(i)));
+		i += PAGE_SIZE;
+	}
+
+	/* Free physical memory */
+	BNXT_LFC_DEBUG(&blfc_dev->pdev->dev, "phys addr is %p virt addr is %p\n",
+		       (void *)offset, phys_to_virt((ulong)(offset)));
+
+	dma_free_coherent(&pdev->dev, size,
+			  (void *)phys_to_virt((ulong)(offset)),
+			  (dma_addr_t)(data.bus_addr));
+
+	return 0;
 }
 
 static int32_t bnxt_lfc_process_req(struct bnxt_lfc_dev *blfc_dev,
@@ -627,99 +716,123 @@ static long bnxt_lfc_ioctl(struct file *flip, unsigned int cmd,
 
 	switch (cmd) {
 	case BNXT_LFC_REQ:
-		BNXT_LFC_DEBUG(NULL, "BNXT_LFC_REQ called");
-		mutex_lock(&blfc_global_dev.bnxt_lfc_lock);
-		index = bnxt_lfc_get_hash_key(lfc_req.hdr.bus, lfc_req.hdr.devfn);
-		if (blfc_array[index].taken) {
-			if (lfc_req.hdr.devfn != blfc_array[index].bnxt_lfc_dev->devfn ||
-			    lfc_req.hdr.bus != blfc_array[index].bnxt_lfc_dev->bus ||
-			    domain_no != blfc_array[index].bnxt_lfc_dev->domain) {
-				/* we have a false hit. Free the older blfc device
-				   store the new one */
-				rtnl_lock();
-				dev_put(blfc_array[index].bnxt_lfc_dev->ndev);
-				kfree(blfc_array[index].bnxt_lfc_dev);
-				blfc_array[index].bnxt_lfc_dev = NULL;
-				blfc_array[index].taken = 0;
-				rtnl_unlock();
-				goto not_taken;
-			}
-			blfc_dev = blfc_array[index].bnxt_lfc_dev;
-		}
-		else {
-not_taken:
-			blfc_dev = kzalloc(sizeof(struct bnxt_lfc_dev), GFP_KERNEL);
-			if (!blfc_dev) {
-				mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
-				return -EINVAL;
-			}
-			blfc_dev->pdev =
-				pci_get_domain_bus_and_slot(
-						((is_domain_available == true) ?
-						domain_no : 0), lfc_req.hdr.bus,
-						lfc_req.hdr.devfn);
-
-			if (bnxt_lfc_is_valid_pdev(blfc_dev->pdev) != true) {
-				mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
-				kfree(blfc_dev);
-				return -EINVAL;
-			}
-
-			rtnl_lock();
-			blfc_dev->ndev = pci_get_drvdata(blfc_dev->pdev);
-			if (!blfc_dev->ndev) {
-				printk("Driver with provided BDF doesn't exist\n");
-				pci_dev_put(blfc_dev->pdev);
-				rtnl_unlock();
-				mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
-				kfree(blfc_dev);
-				return -EINVAL;
-			}
-
-			dev_hold(blfc_dev->ndev);
-			rtnl_unlock();
-			if (try_module_get(blfc_dev->pdev->driver->driver.owner)) {
-				blfc_dev->bp = netdev_priv(blfc_dev->ndev);
-				if (!blfc_dev->bp)
-					rc = -EINVAL;
-				module_put(blfc_dev->pdev->driver->driver.owner);
-			} else {
-				rc = -EINVAL;
-			}
-			pci_dev_put(blfc_dev->pdev);
-
-			if (rc) {
-				dev_put(blfc_dev->ndev);
-				kfree(blfc_dev);
-				is_domain_available = false;
-				mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
-				return -EINVAL;
-			}
-
-			blfc_dev->bus = lfc_req.hdr.bus;
-			blfc_dev->devfn = lfc_req.hdr.devfn;
-			blfc_dev->domain = domain_no;
-			rtnl_lock();
-			blfc_array[index].bnxt_lfc_dev = blfc_dev;
-			blfc_array[index].taken = 1;
-			rtnl_unlock();
-		}
-
-		rc = bnxt_lfc_process_req(blfc_dev, &lfc_req);
-		mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
+	case BNXT_LFC_IOCALLOC_PHYS_MEM:
+	case BNXT_LFC_IOCFREE_PHYS_MEM:
 		break;
-
 	default:
 		BNXT_LFC_ERR(NULL, "No Valid IOCTL found\n");
 		return -EINVAL;
+	}
 
-}
+	/* derive or create blfc_dev */
+	mutex_lock(&blfc_global_dev.bnxt_lfc_lock);
+	index = bnxt_lfc_get_hash_key(lfc_req.hdr.bus, lfc_req.hdr.devfn);
+	if (blfc_array[index].taken) {
+		if (lfc_req.hdr.devfn != blfc_array[index].bnxt_lfc_dev->devfn ||
+		    lfc_req.hdr.bus != blfc_array[index].bnxt_lfc_dev->bus ||
+		    domain_no != blfc_array[index].bnxt_lfc_dev->domain) {
+			/* we have a false hit. Free the older blfc device
+			 * store the new one
+			 */
+			rtnl_lock();
+			dev_put(blfc_array[index].bnxt_lfc_dev->ndev);
+			kfree(blfc_array[index].bnxt_lfc_dev);
+			blfc_array[index].bnxt_lfc_dev = NULL;
+			blfc_array[index].taken = 0;
+			rtnl_unlock();
+			goto not_taken;
+		}
+		blfc_dev = blfc_array[index].bnxt_lfc_dev;
+		pci_dev_get(blfc_dev->pdev);
+	} else {
+not_taken:
+		blfc_dev = kzalloc(sizeof(*blfc_dev), GFP_KERNEL);
+		if (!blfc_dev) {
+			mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
+			return -EINVAL;
+		}
+		blfc_dev->pdev = pci_get_domain_bus_and_slot(((is_domain_available) ?
+							      domain_no : 0),
+							     lfc_req.hdr.bus,
+							     lfc_req.hdr.devfn);
+
+		if (bnxt_lfc_is_valid_pdev(blfc_dev->pdev) != true) {
+			mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
+			kfree(blfc_dev);
+			return -EINVAL;
+		}
+
+		rtnl_lock();
+		blfc_dev->ndev = pci_get_drvdata(blfc_dev->pdev);
+		if (!blfc_dev->ndev) {
+			BNXT_LFC_ERR(NULL, "Driver with provided BDF doesn't exist\n");
+			pci_dev_put(blfc_dev->pdev);
+			rtnl_unlock();
+			mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
+			kfree(blfc_dev);
+			return -EINVAL;
+		}
+
+		dev_hold(blfc_dev->ndev);
+		rtnl_unlock();
+		if (try_module_get(blfc_dev->pdev->driver->driver.owner)) {
+			blfc_dev->bp = netdev_priv(blfc_dev->ndev);
+			if (!blfc_dev->bp)
+				rc = -EINVAL;
+			module_put(blfc_dev->pdev->driver->driver.owner);
+		} else {
+			rc = -EINVAL;
+		}
+
+		if (rc) {
+			pci_dev_put(blfc_dev->pdev);
+			dev_put(blfc_dev->ndev);
+			kfree(blfc_dev);
+			is_domain_available = false;
+			mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
+			return -EINVAL;
+		}
+
+		blfc_dev->bus = lfc_req.hdr.bus;
+		blfc_dev->devfn = lfc_req.hdr.devfn;
+		blfc_dev->domain = domain_no;
+		rtnl_lock();
+		blfc_array[index].bnxt_lfc_dev = blfc_dev;
+		blfc_array[index].taken = 1;
+		blfc_global_dev.cdiag_index = index;
+		rtnl_unlock();
+	}
+
+	switch (cmd) {
+	case BNXT_LFC_REQ:
+		rc = bnxt_lfc_process_req(blfc_dev, &lfc_req);
+		break;
+	case BNXT_LFC_IOCALLOC_PHYS_MEM:
+		rc = bnxt_lfc_process_physmem_req(blfc_dev, args);
+		break;
+	case BNXT_LFC_IOCFREE_PHYS_MEM:
+		rc = bnxt_lfc_process_physmem_free_req(blfc_dev, args);
+		break;
+	}
+
+	pci_dev_put(blfc_dev->pdev);
+	mutex_unlock(&blfc_global_dev.bnxt_lfc_lock);
 	return rc;
 }
 
 static int32_t bnxt_lfc_release(struct inode *inode, struct file *filp)
 {
 	BNXT_LFC_DEBUG(NULL, "release is called");
+	return 0;
+}
+
+static int bnxt_lfc_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	unsigned long size = vma->vm_end - vma->vm_start;
+
+	if (remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff, size,
+			    vma->vm_page_prot))
+		return -EAGAIN;
 	return 0;
 }
 
@@ -755,6 +868,7 @@ int32_t __init bnxt_lfc_init(void)
 	blfc_global_dev.fops.llseek         = bnxt_lfc_seek;
 	blfc_global_dev.fops.unlocked_ioctl = bnxt_lfc_ioctl;
 	blfc_global_dev.fops.release        = bnxt_lfc_release;
+	blfc_global_dev.fops.mmap           = bnxt_lfc_mmap;
 
 	cdev_init(&blfc_global_dev.c_dev, &blfc_global_dev.fops);
 	if (cdev_add(&blfc_global_dev.c_dev, blfc_global_dev.d_dev, 1) == -1) {

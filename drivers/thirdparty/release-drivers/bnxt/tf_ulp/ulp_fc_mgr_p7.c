@@ -9,6 +9,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_ulp.h"
 #include "bnxt_tf_ulp_p7.h"
 #include "bnxt_tf_common.h"
@@ -39,7 +40,6 @@ ulp_tf_fc_tfc_update_accum_stats(struct bnxt_ulp_context *ctxt,
 	return 0;
 }
 
-static void *data;
 
 static int
 ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
@@ -49,8 +49,9 @@ ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
 	u16 data_size = ULP_TFC_CNTR_READ_BYTES;
 	struct tfc_cmm_clr cmm_clr = { 0 };
 	struct tfc_cmm_info cmm_info;
-	dma_addr_t pa_addr;
+	dma_addr_t data_pa;
 	struct tfc *tfcp;
+	void *data_va;
 	u16 word_size;
 	u64 *data64;
 	int rc = 0;
@@ -61,13 +62,6 @@ ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
 		return -EINVAL;
 	}
 
-	if (!data) {
-		data = dma_alloc_coherent(&ctxt->bp->pdev->dev, ULP_TFC_CNTR_READ_BYTES,
-					  &pa_addr, GFP_KERNEL);
-		if (!data)
-			return -EINVAL;
-	}
-
 	/* Ensure that data is large enough to read words */
 	word_size = (data_size + ULP_TFC_ACT_WORD_SZ - 1) / ULP_TFC_ACT_WORD_SZ;
 	if (word_size * ULP_TFC_ACT_WORD_SZ > data_size) {
@@ -76,7 +70,12 @@ ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
 		return -EINVAL;
 	}
 
-	data64 = (u64 *)data;
+	data_va = dma_zalloc_coherent(&ctxt->bp->pdev->dev, ULP_TFC_CNTR_READ_BYTES,
+				      &data_pa, GFP_KERNEL);
+	if (!data_va)
+		return -ENOMEM;
+
+	data64 = data_va;
 	cmm_info.rsubtype = CFA_RSUBTYPE_CMM_ACT;
 	cmm_info.act_handle = res->resource_hndl;
 	cmm_info.dir = (enum cfa_dir)res->direction;
@@ -85,12 +84,12 @@ ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
 	cmm_clr.offset_in_byte = 0;
 	cmm_clr.sz_in_byte = sizeof(data64[ULP_FC_TFC_PKT_CNT_OFFS]) +
 		sizeof(data64[ULP_FC_TFC_BYTE_CNT_OFFS]);
-	rc = tfc_act_get(tfcp, &cmm_info, &cmm_clr, data, &word_size);
+	rc = tfc_act_get(tfcp, NULL, &cmm_info, &cmm_clr, data_pa, &word_size);
 	if (rc) {
 		netdev_dbg(ctxt->bp->dev,
 			   "Failed to read stat memory hndl=%llu\n",
 			   res->resource_hndl);
-		return rc;
+		goto cleanup;
 	}
 	if (data64[ULP_FC_TFC_PKT_CNT_OFFS])
 		*packets = data64[ULP_FC_TFC_PKT_CNT_OFFS];
@@ -98,6 +97,9 @@ ulp_tf_fc_tfc_flow_stat_get(struct bnxt_ulp_context *ctxt,
 	if (data64[ULP_FC_TFC_BYTE_CNT_OFFS])
 		*bytes = data64[ULP_FC_TFC_BYTE_CNT_OFFS];
 
+cleanup:
+	dma_free_coherent(&ctxt->bp->pdev->dev, ULP_TFC_CNTR_READ_BYTES,
+			  data_va, data_pa);
 	return rc;
 }
 

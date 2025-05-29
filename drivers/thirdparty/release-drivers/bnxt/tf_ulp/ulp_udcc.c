@@ -236,9 +236,15 @@ int bnxt_ulp_udcc_v6_subnet_check(struct bnxt *bp,
 	struct rhashtable_iter iter;
 	int rc = -ENOENT;
 
+	/* Truflow is not initialized; we should not create session */
+	if (!(bp->tf_flags & BNXT_TF_FLAG_INITIALIZED)) {
+		netdev_dbg(bp->dev, "Truflow is not initialized\n");
+		return -EPERM;
+	}
+
 	/* subnets cannot be added in non-switchdev mode so return -ENOENT */
 	if (!bnxt_tc_is_switchdev_mode(bp))
-		return rc;
+		return -ENOENT;
 
 	if (!dst || !dmac || !smac)
 		return -EINVAL;

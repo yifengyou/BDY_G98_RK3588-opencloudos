@@ -1799,7 +1799,7 @@ struct bnxt_ulp_mapper_tbl_info ulp_thor_act_tbl_list[] = {
 	.key_bit_size = 85,
 	.key_num_fields = 3,
 	.result_start_idx = 280,
-	.result_bit_size = 48,
+	.result_bit_size = 64,
 	.result_num_fields = 2
 	},
 	{ /* act_tid: 7, , table: source_property_ipv6_cache.rd */
@@ -1982,7 +1982,7 @@ struct bnxt_ulp_mapper_tbl_info ulp_thor_act_tbl_list[] = {
 	.key_bit_size = 141,
 	.key_num_fields = 6,
 	.result_start_idx = 312,
-	.result_bit_size = 48,
+	.result_bit_size = 64,
 	.result_num_fields = 2
 	},
 	{ /* act_tid: 7, , table: vxlan_encap_ipv6_rec_cache.rd */
@@ -2066,7 +2066,7 @@ struct bnxt_ulp_mapper_tbl_info ulp_thor_act_tbl_list[] = {
 	.key_bit_size = 237,
 	.key_num_fields = 6,
 	.result_start_idx = 337,
-	.result_bit_size = 48,
+	.result_bit_size = 64,
 	.result_num_fields = 2
 	},
 	{ /* act_tid: 7, , table: geneve_encap_rec_cache.rd */
@@ -8121,7 +8121,7 @@ struct bnxt_ulp_mapper_field_info ulp_thor_act_result_field_list[] = {
 	},
 	{
 	.description = "sp_rec_ptr",
-	.field_bit_size = 16,
+	.field_bit_size = 32,
 	.field_opc = BNXT_ULP_FIELD_OPC_SRC1,
 	.field_src1 = BNXT_ULP_FIELD_SRC_RF,
 	.field_opr1 = {
@@ -8447,7 +8447,7 @@ struct bnxt_ulp_mapper_field_info ulp_thor_act_result_field_list[] = {
 	},
 	{
 	.description = "enc_rec_ptr",
-	.field_bit_size = 16,
+	.field_bit_size = 32,
 	.field_opc = BNXT_ULP_FIELD_OPC_SRC1,
 	.field_src1 = BNXT_ULP_FIELD_SRC_RF,
 	.field_opr1 = {
@@ -8708,7 +8708,7 @@ struct bnxt_ulp_mapper_field_info ulp_thor_act_result_field_list[] = {
 	},
 	{
 	.description = "enc_rec_ptr",
-	.field_bit_size = 16,
+	.field_bit_size = 32,
 	.field_opc = BNXT_ULP_FIELD_OPC_SRC1,
 	.field_src1 = BNXT_ULP_FIELD_SRC_RF,
 	.field_opr1 = {
@@ -10117,7 +10117,7 @@ struct bnxt_ulp_mapper_ident_info ulp_thor_act_ident_list[] = {
 	/* act_tid: 7, , table: shared_mirror_record.rd */
 	{
 	.description = "mirror_id",
-	.regfile_idx = BNXT_ULP_RF_IDX_MIRROR_ID_0,
+	.regfile_idx = BNXT_ULP_RF_IDX_MIRROR_PTR_0,
 	.ident_bit_size = 4,
 	.ident_bit_pos = 32
 	},
@@ -10125,7 +10125,7 @@ struct bnxt_ulp_mapper_ident_info ulp_thor_act_ident_list[] = {
 	{
 	.description = "sp_rec_ptr",
 	.regfile_idx = BNXT_ULP_RF_IDX_MAIN_SP_PTR,
-	.ident_bit_size = 16,
+	.ident_bit_size = 32,
 	.ident_bit_pos = 32
 	},
 	/* act_tid: 7, , table: source_property_ipv6_cache.rd */
@@ -10139,14 +10139,14 @@ struct bnxt_ulp_mapper_ident_info ulp_thor_act_ident_list[] = {
 	{
 	.description = "enc_rec_ptr",
 	.regfile_idx = BNXT_ULP_RF_IDX_ENCAP_PTR_0,
-	.ident_bit_size = 16,
+	.ident_bit_size = 32,
 	.ident_bit_pos = 32
 	},
 	/* act_tid: 7, , table: vxlan_encap_ipv6_rec_cache.rd */
 	{
 	.description = "enc_rec_ptr",
 	.regfile_idx = BNXT_ULP_RF_IDX_ENCAP_PTR_0,
-	.ident_bit_size = 16,
+	.ident_bit_size = 32,
 	.ident_bit_pos = 32
 	},
 	/* act_tid: 7, , table: geneve_encap_rec_cache.rd */

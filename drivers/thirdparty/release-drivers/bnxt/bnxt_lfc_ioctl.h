@@ -1,7 +1,7 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
  * Copyright (c) 2017-2018 Broadcom Limited
- * Copyright (c) 2018-2022 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -98,14 +98,22 @@ struct bnxt_lfc_generic_msg {
 	__u32 value;
 };
 
+struct alloc_phys_mem_data;
+struct free_phys_mem_data;
+
 struct bnxt_lfc_req {
 	struct bnxt_lfc_req_hdr hdr;
 	union {
 		struct bnxt_lfc_nvm_get_var_req nvm_get_var_req;
 		struct bnxt_lfc_nvm_set_var_req nvm_set_var_req;
 		__u64 hreq; /* Pointer to "struct blfc_fw_msg" */
+		struct alloc_phys_mem_data pdata;
+		struct free_phys_mem_data pdata_free;
 	} req;
 };
 
-#define	BNXT_LFC_REQ	_IOW(BNXT_LFC_IOCTL_MAGIC, 1, struct bnxt_lfc_req)
+#define BNXT_LFC_REQ			_IOW(BNXT_LFC_IOCTL_MAGIC, 1, struct bnxt_lfc_req)
+#define BNXT_LFC_IOCALLOC_PHYS_MEM	_IOW(BNXT_LFC_IOCTL_MAGIC, 82, struct bnxt_lfc_req)
+#define BNXT_LFC_IOCFREE_PHYS_MEM	_IOW(BNXT_LFC_IOCTL_MAGIC, 83, struct bnxt_lfc_req)
+
 #endif /*BNXT_LFC_IOCTL_H*/

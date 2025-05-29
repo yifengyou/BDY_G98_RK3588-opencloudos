@@ -70,10 +70,12 @@ u16 bnxt_get_svif(struct bnxt *bp_id, bool func_svif,
 		  enum bnxt_ulp_intf_type type);
 u16 bnxt_get_fw_func_id(struct bnxt *bp, enum bnxt_ulp_intf_type type);
 u16 bnxt_get_parif(struct bnxt *bp);
+u16 bnxt_get_lag_vport(struct bnxt *bp);
 u16 bnxt_get_phy_port_id(struct bnxt *bp);
 u16 bnxt_get_vport(struct bnxt *bp);
 enum bnxt_ulp_intf_type bnxt_get_interface_type(struct bnxt *bp);
 int bnxt_ulp_create_vfr_default_rules(void *vf_rep);
 int bnxt_ulp_delete_vfr_default_rules(void *vf_rep);
+int bnxt_ulp_mirror_op(struct bnxt *bp, enum tf_dir dir, u8 enable);
 
 #endif /* _BNXT_TF_COMMON_H_ */

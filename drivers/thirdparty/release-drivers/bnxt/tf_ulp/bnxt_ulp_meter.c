@@ -7,6 +7,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_ulp.h"
 #include "ulp_template_db_enum.h"
 #include "ulp_template_struct.h"
@@ -67,6 +68,8 @@ static int bnxt_meter_global_cfg_update(struct bnxt *bp, enum tf_dir dir,
 #define BNXT_THOR_FMTCR_REMAP (0x1UL << 24)
 #define BNXT_THOR_FMTCR_CNTRS_ENABLE (0x1UL << 25)
 #define BNXT_THOR_FMTCR_INTERVAL_1K (1024)
+#define BNXT_THOR_ACT_MTR_DROP_ON_RED_BIT BIT(14)
+#define BNXT_THOR_FMTCR_INTERVAL_0  (0)
 
 int bnxt_flow_meter_init(struct bnxt *bp)
 {
@@ -112,23 +115,61 @@ int bnxt_flow_meter_init(struct bnxt *bp)
 	 * most bit rates especially for high rates.
 	 */
 	rc = bnxt_meter_global_cfg_update(bp, TF_DIR_RX, TF_METER_INTERVAL_CFG,
-					  0, BNXT_THOR_FMTCR_INTERVAL_1K,
-					  1);
+					  0, BNXT_THOR_FMTCR_INTERVAL_1K, 1);
 	if (rc) {
 		netdev_dbg(bp->dev, "Failed to set rx meter interval\n");
 		return rc;
 	}
 
 	rc = bnxt_meter_global_cfg_update(bp, TF_DIR_TX, TF_METER_INTERVAL_CFG,
-					  0, BNXT_THOR_FMTCR_INTERVAL_1K,
-					  1);
+					  0, BNXT_THOR_FMTCR_INTERVAL_0, 1);
 	if (rc) {
 		netdev_dbg(bp->dev, "Failed to set tx meter interval\n");
 		return rc;
 	}
 
+	/* act meter drop on red bit 1-drop 0-dont drop, set it to not drop */
+	rc = bnxt_meter_global_cfg_update(bp, TF_DIR_TX, TF_ACT_MTR_CFG,
+					  0, BNXT_THOR_ACT_MTR_DROP_ON_RED_BIT,
+					  0);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to disable tx meter drop on red\n");
+		return rc;
+	}
+
 	ulp_ctx->cfg_data->meter_initialized = 1;
 	netdev_dbg(bp->dev, "Flow meter has been initialized\n");
+	return rc;
+}
+
+int bnxt_flow_meter_deinit(struct bnxt *bp)
+{
+	struct bnxt_ulp_context *ulp_ctx;
+	int rc;
+
+	ulp_ctx = bnxt_ulp_bp_ptr2_cntxt_get(bp);
+	if (!ulp_ctx || !ulp_ctx->cfg_data) {
+		netdev_dbg(bp->dev, "ULP Context is not initialized\n");
+		return -EINVAL;
+	}
+
+	/* Meters are supported only for DSCP Remap feature */
+	if (!ULP_DSCP_REMAP_IS_ENABLED(ulp_ctx->cfg_data->ulp_flags)) {
+		netdev_dbg(bp->dev, "DSCP_REMAP Capability is not enabled\n");
+		return -EOPNOTSUPP;
+	}
+
+	/* act meter drop on red bit 1-drop 0-dont drop, reset it drop */
+	rc = bnxt_meter_global_cfg_update(bp, TF_DIR_TX, TF_ACT_MTR_CFG,
+					  0, BNXT_THOR_ACT_MTR_DROP_ON_RED_BIT,
+					  1);
+	if (rc) {
+		netdev_dbg(bp->dev, "Failed to enable tx meter drop on red\n");
+		return rc;
+	}
+
+	ulp_ctx->cfg_data->meter_initialized = 0;
+	netdev_dbg(bp->dev, "Flow meter has been de-initialized\n");
 	return rc;
 }
 
@@ -253,6 +294,104 @@ static int bnxt_ulp_meter_profile_alloc(struct bnxt *bp,
 	return 0;
 }
 
+/* Allocate a meter profile for the specified color.
+ * The byte values of EBS and CBS for each color are
+ * defined such that they result in the following
+ * register values.
+ *
+ * Meter EBS/CBS Bytes to Register value mapping:
+ * 4 Bytes      : 0x3
+ * 8 Bytes      : 0x4
+ * 131072 Bytes : 0x12
+ * 262144 Bytes : 0x13
+ */
+#define GREEN_CBS	262144
+#define GREEN_EBS	131072
+#define YELLOW_CBS	4
+#define YELLOW_EBS	131072
+#define RED_CBS		4
+#define	RED_EBS		8
+
+static int bnxt_ulp_meter_profile_alloc_color(struct bnxt *bp,
+					      struct ulp_tc_act_prop *act_prop,
+					      enum bnxt_ulp_meter_color color,
+					      u64 cir, u64 eir)
+{
+	bool alg_rfc2698 = true;
+	u16 cbs_reg, ebs_reg;
+	u32 cir_reg, eir_reg;
+	bool cbnd = true;
+	bool ebnd = true;
+	bool ebsm = true;
+	bool cbsm = true;
+	bool pm = false;
+	u64 cbs, ebs;
+
+	switch (color) {
+	case MTR_PROF_CLR_GREEN:
+		cbs = GREEN_CBS;
+		ebs = GREEN_EBS;
+		break;
+	case MTR_PROF_CLR_YELLOW:
+		cbs = YELLOW_CBS;
+		ebs = YELLOW_EBS;
+		break;
+	case MTR_PROF_CLR_RED:
+		cbs = RED_CBS;
+		ebs = RED_EBS;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	netdev_info(bp->dev, "%s: color: %d\n", __func__, color);
+	bnxt_ulp_flow_meter_xir_calc(cir, &cir_reg);
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_CIR],
+	       &cir_reg,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_CIR);
+
+	bnxt_ulp_flow_meter_xir_calc(eir, &eir_reg);
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_EIR],
+	       &eir_reg,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_EIR);
+
+	bnxt_ulp_flow_meter_xbs_calc(cbs, &cbs_reg);
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_CBS],
+	       &cbs_reg,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_CBS);
+
+	bnxt_ulp_flow_meter_xbs_calc(ebs, &ebs_reg);
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_EBS],
+	       &ebs_reg,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_EBS);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_RFC2698],
+	       &alg_rfc2698,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_RFC2698);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_PM],
+	       &pm,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_PM);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_CBND],
+	       &cbnd,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_CBND);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_EBND],
+	       &ebnd,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_EBND);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_CBSM],
+	       &cbsm,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_CBSM);
+
+	memcpy(&act_prop->act_details[BNXT_ULP_ACT_PROP_IDX_METER_PROF_EBSM],
+	       &ebsm,
+	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_EBSM);
+
+	return 0;
+}
+
 #define MTR_PROF_DEFAULT_CIR	128000000
 #define MTR_PROF_DEFAULT_EIR	128000000
 #define MTR_PROF_DEFAULT_CBS	131072
@@ -262,7 +401,8 @@ static struct bnxt_ulp_mapper_parms mapper_mparms = { 0 };
 static struct ulp_tc_parser_params pparams = {{ 0 }};
 
 /* Add MTR profile. */
-int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir)
+int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir,
+				enum bnxt_ulp_meter_color color)
 {
 	struct ulp_tc_act_prop *act_prop;
 	struct bnxt_ulp_context *ulp_ctx;
@@ -293,11 +433,16 @@ int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir)
 	       &tmp_profile_id,
 	       BNXT_ULP_ACT_PROP_SZ_METER_PROF_ID);
 
-	rc = bnxt_ulp_meter_profile_alloc(bp, act_prop,
-					  MTR_PROF_DEFAULT_CIR,
-					  MTR_PROF_DEFAULT_EIR,
-					  MTR_PROF_DEFAULT_CBS,
-					  MTR_PROF_DEFAULT_EBS);
+	if (color != MTR_PROF_CLR_INVALID) {
+		rc = bnxt_ulp_meter_profile_alloc_color(bp, act_prop, color,
+							0, 0);
+	} else {
+		rc = bnxt_ulp_meter_profile_alloc(bp, act_prop,
+						  MTR_PROF_DEFAULT_CIR,
+						  MTR_PROF_DEFAULT_EIR,
+						  MTR_PROF_DEFAULT_CBS,
+						  MTR_PROF_DEFAULT_EBS);
+	}
 	if (rc)
 		return rc;
 
@@ -313,6 +458,7 @@ int bnxt_flow_meter_profile_add(struct bnxt *bp, u32 meter_profile_id, u32 dir)
 	rc = ulp_mapper_flow_create(ulp_ctx, &mapper_mparms, NULL);
 	if (rc)
 		return rc;
+
 	netdev_dbg(bp->dev, "Flow meter profile %d is created\n", meter_profile_id);
 	return 0;
 }

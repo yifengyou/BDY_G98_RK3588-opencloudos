@@ -30,7 +30,7 @@
 #define BNXT_ULP_PROTO_HDR_MAX		128
 #define BNXT_ULP_PROTO_HDR_ENCAP_MAX	64
 #define BNXT_ULP_PROTO_HDR_FIELD_SVIF_IDX	1
-#define BNXT_ULP_PROTO_HDR_BTH_NUM	2
+#define BNXT_ULP_PROTO_HDR_BTH_NUM	3
 #define BNXT_ULP_PROTO_HDR_L2_FILTER_NUM 1
 
 /* Direction attributes */
@@ -112,6 +112,7 @@ struct ulp_tc_parser_params {
 	bool				implicit_eth_parsed;
 	bool				implicit_ipv4_parsed;
 	bool				implicit_ipv6_parsed;
+	u32				dscp_remap_val;
 };
 
 /* Flow Parser Header Information Structure */

@@ -475,7 +475,8 @@ int cfa_mm_alloc(void *cmm, struct cfa_mm_alloc_parms *parms)
 	}
 
 	while (blk_info->num_free_records < num_records) {
-		if (blk_info->next_blk_idx == CFA_MM_INVALID32) {
+		if (blk_info->next_blk_idx == CFA_MM_INVALID32 ||
+		    !blk_info->num_free_records) {
 			blk_idx = cfa_mm_blk_alloc(context);
 			if (blk_idx == CFA_MM_INVALID32) {
 				ret = -ENOMEM;

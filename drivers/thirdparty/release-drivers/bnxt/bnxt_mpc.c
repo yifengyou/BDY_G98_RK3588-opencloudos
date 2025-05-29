@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2022-2023 Broadcom Inc.
+ * Copyright (c) 2022-2025 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,16 +62,11 @@ int bnxt_mpc_cp_rings_in_use(struct bnxt *bp)
 bool bnxt_napi_has_mpc(struct bnxt *bp, int i)
 {
 	struct bnxt_mpc_info *mpc = bp->mpc_info;
-	struct bnxt_napi *bnapi = bp->bnapi[i];
-	struct bnxt_tx_ring_info *txr;
 
 	if (!mpc)
 		return false;
 
-	txr = bnapi->tx_ring[0];
-	if (txr && !(bnapi->flags & BNXT_NAPI_FLAG_XDP))
-		return txr->txq_index < mpc->mpc_cp_rings;
-	return false;
+	return i < mpc->mpc_cp_rings;
 }
 
 void bnxt_set_mpc_cp_ring(struct bnxt *bp, int bnapi_idx,
@@ -221,7 +216,7 @@ void bnxt_init_mpc_ring_struct(struct bnxt *bp)
 
 			txr->tx_ring_struct.ring_mem.flags =
 				BNXT_RMEM_RING_PTE_FLAG;
-			txr->bnapi = bp->tx_ring[bp->tx_ring_map[j]].bnapi;
+			txr->bnapi = bp->bnapi[j];
 
 			ring = &txr->tx_ring_struct;
 			rmem = &ring->ring_mem;
@@ -234,6 +229,18 @@ void bnxt_init_mpc_ring_struct(struct bnxt *bp)
 			rmem->vmem = (void **)&txr->tx_buf_ring;
 		}
 	}
+}
+
+struct bnxt_tx_ring_info *bnxt_select_mpc_ring(struct bnxt *bp, int ring_type)
+{
+	struct bnxt_mpc_info *mpc = bp->mpc_info;
+	int n;
+
+	if (ring_type >= BNXT_MPC_TYPE_MAX)
+		return NULL;
+
+	n = smp_processor_id() % mpc->mpc_ring_count[ring_type];
+	return &mpc->mpc_rings[ring_type][n];
 }
 
 int bnxt_alloc_mpcs(struct bnxt *bp)
@@ -462,6 +469,9 @@ int bnxt_start_xmit_mpc(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 
 	/* Sync BD data before updating doorbell */
 	wmb();
+
+	netdev_dbg(bp->dev, "%s: db_key 0x%llX, txr prod 0x%x tx_bd_opaque %d, txq_index %d\n",
+		   __func__, txr->tx_db.db_key64, prod, txbd->tx_bd_opaque, txr->txq_index);
 	bnxt_db_write(bp, &txr->tx_db, prod);
 
 	return 0;
@@ -475,6 +485,22 @@ static bool bnxt_mpc_unsolicit(struct mpc_cmp *mpcmp)
 	    client != MPC_CMP_CLIENT_TE_CFA && client != MPC_CMP_CLIENT_RE_CFA)
 		return false;
 	return MPC_CMP_UNSOLICIT_SUBTYPE(mpcmp);
+}
+
+static void bnxt_adv_mpc_cons(struct bnxt *bp, struct bnxt_tx_ring_info *txr)
+{
+	struct bnxt_sw_mpc_tx_bd *mpc_buf;
+	u16 tx_cons = txr->tx_cons;
+
+	mpc_buf = &txr->tx_mpc_buf_ring[RING_TX(bp, tx_cons)];
+	do {
+		tx_cons += mpc_buf->inline_bds;
+		txr->tx_cons = tx_cons;
+		txr->tx_hw_cons = RING_TX(bp, tx_cons);
+		if (tx_cons == txr->tx_prod)
+			break;
+		mpc_buf = &txr->tx_mpc_buf_ring[RING_TX(bp, tx_cons)];
+	} while (mpc_buf->handle == BNXT_INV_MPC_HDL);
 }
 
 int bnxt_mpc_cmp(struct bnxt *bp, struct bnxt_cp_ring_info *cpr, u32 *raw_cons)
@@ -519,20 +545,21 @@ int bnxt_mpc_cmp(struct bnxt *bp, struct bnxt_cp_ring_info *cpr, u32 *raw_cons)
 	if (!bnxt_mpc_unsolicit(mpcmp)) {
 		struct bnxt_sw_mpc_tx_bd *mpc_buf;
 		struct bnxt_tx_ring_info *txr;
-		u16 tx_cons;
+		u16 tx_cons, idx;
 		u32 opaque;
 
 		opaque = mpcmp->mpc_cmp_opaque;
 		txr = bnapi->tx_mpc_ring[client];
 		tx_cons = txr->tx_cons;
+		idx = TX_OPAQUE_IDX(opaque);
 		if (TX_OPAQUE_RING(opaque) != txr->tx_napi_idx)
 			netdev_warn(bp->dev, "Wrong opaque %x, expected ring %x, idx %x\n",
-				    opaque, txr->tx_napi_idx, txr->tx_cons);
-		mpc_buf = &txr->tx_mpc_buf_ring[RING_TX(bp, tx_cons)];
+				    opaque, txr->tx_napi_idx, tx_cons);
+		mpc_buf = &txr->tx_mpc_buf_ring[idx];
 		handle = mpc_buf->handle;
-		tx_cons += mpc_buf->inline_bds;
-		txr->tx_cons = tx_cons;
-		txr->tx_hw_cons = RING_TX(bp, tx_cons);
+		mpc_buf->handle = BNXT_INV_MPC_HDL;
+		if (RING_TX(bp, tx_cons) == idx)
+			bnxt_adv_mpc_cons(bp, txr);
 	}
 	if (client == BNXT_MPC_TCE_TYPE || client == BNXT_MPC_RCE_TYPE)
 		bnxt_ktls_mpc_cmp(bp, client, handle, cmpl_entry_arr, cmpl_num);

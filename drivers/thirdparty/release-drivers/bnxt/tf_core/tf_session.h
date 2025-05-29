@@ -103,7 +103,6 @@ struct tf_session {
 	union tf_session_id		session_id;
 	bool				shared_session;
 	bool				shared_session_creator;
-	bool				shadow_copy;
 	u8				ref_count;
 	u8				ref_count_attach;
 	struct tf_dev_info		dev;

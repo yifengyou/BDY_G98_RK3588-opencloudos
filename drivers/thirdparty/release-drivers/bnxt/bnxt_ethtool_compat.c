@@ -1,6 +1,6 @@
 /* Broadcom NetXtreme-C/E network driver.
  *
- * Copyright (c) 2021 Broacom Inc.
+ * Copyright (c) 2021-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -133,7 +133,7 @@ int bnxt_set_rxfh_context(struct net_device *dev, const u32 *indir,
 		if (!rss_ctx)
 			return -EINVAL;
 		if (delete) {
-			bnxt_del_one_rss_ctx(bp, rss_ctx, true);
+			bnxt_del_one_rss_ctx(bp, rss_ctx, true, false);
 			return 0;
 		}
 		modify = true;
@@ -157,11 +157,11 @@ int bnxt_set_rxfh_context(struct net_device *dev, const u32 *indir,
 	vnic = &rss_ctx->vnic;
 	vnic->flags |= BNXT_VNIC_RSSCTX_FLAG;
 	vnic->vnic_id = BNXT_VNIC_ID_INVALID;
-	rc = bnxt_alloc_rss_ctx_rss_table(bp, rss_ctx);
+	rc = bnxt_alloc_vnic_rss_table(bp, vnic);
 	if (rc)
 		goto out;
 
-	rc = bnxt_alloc_rss_indir_tbl(bp, rss_ctx);
+	rc = bnxt_alloc_rss_indir_tbl_compat(bp, rss_ctx);
 	if (rc)
 		goto out;
 
@@ -207,7 +207,7 @@ modify_context:
 
 	return 0;
 out:
-	bnxt_del_one_rss_ctx(bp, rss_ctx, true);
+	bnxt_del_one_rss_ctx(bp, rss_ctx, true, false);
 	return rc;
 }
 

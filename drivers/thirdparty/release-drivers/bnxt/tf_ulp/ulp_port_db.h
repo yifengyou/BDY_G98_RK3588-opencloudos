@@ -67,6 +67,7 @@ struct ulp_interface_info {
 	u16		type_is_pf;
 	u16		rdma_sriov_en;
 	u8		udcc_en;
+	u16		vf_id;
 };
 
 struct ulp_phy_port_info {
@@ -75,6 +76,9 @@ struct ulp_phy_port_info {
 	u16	port_spif;
 	u16	port_parif;
 	u16	port_vport;
+	u16	port_lag_vport;
+	u32	port_mirror_id_ingress;
+	u32	port_mirror_id_egress;
 };
 
 /* Structure for the Port database */
@@ -136,6 +140,10 @@ ulp_port_db_vport_get(struct bnxt_ulp_context *ulp_ctxt,
 		      u32 ifindex,	u16 *vport);
 
 int
+ulp_port_db_lag_vport_get(struct bnxt_ulp_context *ulp_ctxt,
+			  u32 ifindex,	u16 *vport);
+
+int
 ulp_port_db_phy_port_vport_get(struct bnxt_ulp_context *ulp_ctxt,
 			       u32 phy_port,
 			       u16 *out_port);
@@ -193,4 +201,21 @@ u16 bnxt_vfr_get_fw_func_id(void *vf_rep);
 int
 ulp_port_db_drv_roce_vnic_get(struct bnxt_ulp_context *ulp_ctxt,
 			      u32 port_id, u8 **roce_vnic);
+
+int
+ulp_port_db_port_table_mirror_get(struct bnxt_ulp_context *ulp_ctxt, enum tf_dir dir,
+				  u16 port_id, u8 **mirror_id);
+
+int
+ulp_port_db_port_table_mirror_set(struct bnxt_ulp_context *ulp_ctxt, enum tf_dir dir,
+				  u16 port_id, u32 mirror_id);
+
+int
+ulp_port_db_port_socket_direct_svif_get(struct bnxt_ulp_context *ulp_ctxt,
+					uint32_t port_id,
+					uint16_t *svif);
+
+int
+ulp_port_db_vf_id_get(struct bnxt_ulp_context *ulp_ctxt,
+		      u32 port_id, u16 *vf_id);
 #endif /* _ULP_PORT_DB_H_ */

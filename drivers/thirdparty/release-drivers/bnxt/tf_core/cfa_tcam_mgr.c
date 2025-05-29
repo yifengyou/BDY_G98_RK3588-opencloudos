@@ -880,8 +880,8 @@ static int cfa_tcam_mgr_table_limits_set(struct cfa_tcam_mgr_data
 
 static int cfa_tcam_mgr_bitmap_alloc(struct tf *tfp, struct cfa_tcam_mgr_data *tcam_mgr_data)
 {
-	unsigned long session_bmp_size;
-	unsigned long *session_bmp;
+	unsigned long logical_id_bmp_size;
+	unsigned long *logical_id_bmp;
 	int max_entries;
 
 	if (!tcam_mgr_data->cfa_tcam_mgr_max_entries)
@@ -889,16 +889,17 @@ static int cfa_tcam_mgr_bitmap_alloc(struct tf *tfp, struct cfa_tcam_mgr_data *t
 
 	max_entries = tcam_mgr_data->cfa_tcam_mgr_max_entries;
 
-	session_bmp_size = (sizeof(unsigned long) *
+	logical_id_bmp_size = (sizeof(unsigned long) *
 				(((max_entries - 1) / sizeof(unsigned long)) + 1));
-	session_bmp = vzalloc(session_bmp_size);
-	if (!session_bmp)
+	logical_id_bmp = vzalloc(logical_id_bmp_size);
+	if (!logical_id_bmp)
 		return -ENOMEM;
 
-	tcam_mgr_data->session_bmp = session_bmp;
-	tcam_mgr_data->session_bmp_size = max_entries;
+	tcam_mgr_data->logical_id_bmp = logical_id_bmp;
+	tcam_mgr_data->logical_id_bmp_size = max_entries;
 
-	netdev_dbg(tfp->bp->dev, "session bitmap size is %lu\n", tcam_mgr_data->session_bmp_size);
+	netdev_dbg(tfp->bp->dev, "session bitmap size is %lu\n",
+		   tcam_mgr_data->logical_id_bmp_size);
 
 	return 0;
 }
@@ -1120,8 +1121,8 @@ static int cfa_tcam_mgr_free_entries(struct tf *tfp)
 	 */
 	for (entry_id = 0; entry_id < tcam_mgr_data->cfa_tcam_mgr_max_entries;
 	     entry_id++) {
-		if (test_bit(entry_id, tcam_mgr_data->session_bmp)) {
-			clear_bit(entry_id, tcam_mgr_data->session_bmp);
+		if (test_bit(entry_id, tcam_mgr_data->logical_id_bmp)) {
+			clear_bit(entry_id, tcam_mgr_data->logical_id_bmp);
 
 			free_parms.id = entry_id;
 			free_parms.type = CFA_TCAM_MGR_TBL_TYPE_MAX;
@@ -1314,15 +1315,15 @@ static int cfa_tcam_mgr_alloc_entry(struct tf *tfp,
 {
 	u32 free_idx;
 
-	free_idx = find_first_zero_bit(tcam_mgr_data->session_bmp,
-				       tcam_mgr_data->session_bmp_size);
-	if (free_idx == tcam_mgr_data->session_bmp_size) {
+	free_idx = find_first_zero_bit(tcam_mgr_data->logical_id_bmp,
+				       tcam_mgr_data->logical_id_bmp_size);
+	if (free_idx == tcam_mgr_data->logical_id_bmp_size) {
 		netdev_dbg(tfp->bp->dev, "Table full (session)\n");
 		return -ENOSPC;
 	}
 
 	/* Set the bit in the bitmap. set_bit */
-	set_bit(free_idx, tcam_mgr_data->session_bmp);
+	set_bit(free_idx, tcam_mgr_data->logical_id_bmp);
 
 	return free_idx;
 }
@@ -1332,11 +1333,11 @@ static int cfa_tcam_mgr_free_entry(struct tf *tfp,
 				   unsigned int entry_id, enum tf_dir dir,
 				   enum cfa_tcam_mgr_tbl_type type)
 {
-	if (entry_id >= tcam_mgr_data->session_bmp_size)
+	if (entry_id >= tcam_mgr_data->logical_id_bmp_size)
 		return -EINVAL;
 
-	clear_bit(entry_id, tcam_mgr_data->session_bmp);
-	netdev_dbg(tfp->bp->dev, "Removed session from entry %d\n", entry_id);
+	clear_bit(entry_id, tcam_mgr_data->logical_id_bmp);
+	netdev_dbg(tfp->bp->dev, "Removed logical id from entry %d\n", entry_id);
 
 	return 0;
 }
@@ -1512,7 +1513,6 @@ int cfa_tcam_mgr_free(struct tf *tfp, struct cfa_tcam_mgr_free_parms *parms)
 				       row_size);
 
 	entry->ref_cnt--;
-	parms->ref_cnt = entry->ref_cnt;
 
 	cfa_tcam_mgr_free_entry(tfp, tcam_mgr_data, id, parms->dir,
 				parms->type);

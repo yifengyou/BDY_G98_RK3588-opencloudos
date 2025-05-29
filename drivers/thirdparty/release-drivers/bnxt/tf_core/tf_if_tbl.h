@@ -62,7 +62,6 @@ struct tf_if_tbl_cfg_parms {
 	u16				num_elements;
 	struct tf_if_tbl_cfg		*cfg;
 	struct tf_shadow_if_tbl_cfg	*shadow_cfg;
-	bool				shadow_copy;
 };
 
 /**

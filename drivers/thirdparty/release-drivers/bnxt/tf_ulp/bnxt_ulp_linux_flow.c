@@ -6,6 +6,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "bnxt_tf_common.h"
 #include "bnxt_ulp_flow.h"
 #include "ulp_tc_parser.h"
@@ -13,6 +14,7 @@
 #include "ulp_flow_db.h"
 #include "ulp_mapper.h"
 #include "ulp_fc_mgr.h"
+#include "ulp_sc_mgr.h"
 #include "ulp_port_db.h"
 #include "ulp_template_debug_proto.h"
 
@@ -60,9 +62,10 @@ bnxt_ulp_set_prio_attribute(struct bnxt *bp,
 	    priority <= bnxt_ulp_max_def_priority_get(params->ulp_ctx)) {
 		ULP_BITMAP_SET(params->cf_bitmap, BNXT_ULP_CF_BIT_DEF_PRIO);
 		/* priority 2 (ipv4) and 3 (ipv6) will be passed by OVS-TC.
-		 * Consider them highest priority for EM and set to 0.
+		 * Consider them highest priority for EM and set to max
+		 * priority.
 		 */
-		params->priority = 0;
+		params->priority = max_p;
 	}
 	return 0;
 }
@@ -200,6 +203,31 @@ void bnxt_ulp_init_mapper_params(struct bnxt_ulp_mapper_parms *mparms,
 		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_SOCKET_DIRECT_VPORT,
 				    (vport == 1) ? 2 : 1);
 	}
+
+	/* Update the socket direct svif when socket_direct feature enabled. */
+	if (ULP_BITMAP_ISSET(bnxt_ulp_feature_bits_get(params->ulp_ctx),
+			     BNXT_ULP_FEATURE_BIT_SOCKET_DIRECT)) {
+		enum bnxt_ulp_intf_type intf_type;
+		uint16_t svif;
+
+		/* For ingress flow on trusted_vf port or PF */
+		intf_type = bnxt_get_interface_type(params->ulp_ctx->bp);
+
+		if (intf_type == BNXT_ULP_INTF_TYPE_TRUSTED_VF ||
+		    intf_type == BNXT_ULP_INTF_TYPE_PF) {
+			/* Get the socket direct svif of the given dev port */
+			if (unlikely(ulp_port_db_port_socket_direct_svif_get(params->ulp_ctx,
+									     params->port_id,
+									     &svif))) {
+				netdev_dbg(params->ulp_ctx->bp->dev, "Invalid port id %u\n",
+					   params->port_id);
+				return;
+			}
+
+			/* Set comp_fld for the socket direct svif */
+			ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_SOCKET_DIRECT_SVIF, svif);
+		}
+	}
 }
 
 static int
@@ -328,6 +356,10 @@ int bnxt_ulp_flow_create(struct bnxt *bp, u16 src_fid,
 	/* Set the flow attributes */
 	bnxt_ulp_set_dir_attributes(bp, params, src_fid);
 
+	/* Set NPAR Enabled in the computed fields */
+	if (BNXT_NPAR(ulp_ctx->bp))
+		ULP_COMP_FLD_IDX_WR(params, BNXT_ULP_CF_IDX_NPAR_ENABLED, 1);
+
 	if (bnxt_ulp_set_prio_attribute(bp, params, tc_flow_cmd->common.prio))
 		goto flow_error;
 
@@ -420,8 +452,9 @@ int bnxt_ulp_flow_create(struct bnxt *bp, u16 src_fid,
 	}
 
 	if (ULP_BITMAP_ISSET(params->act_bitmap.bits, BNXT_ULP_ACT_BIT_METER)) {
-		ulp_ctx->cfg_data->dscp_remap_ref++;
-		flow_info->dscp_remap = true;
+		flow_info->dscp_remap = params->dscp_remap_val;
+	} else {
+		flow_info->dscp_remap = BNXT_ULP_DSCP_INVALID;
 	}
 
 return_fid:
@@ -434,6 +467,7 @@ return_fid:
 		flow_info->encap_key = params->tnl_key;
 		flow_info->neigh_key = params->neigh_key;
 	}
+
 	vfree(params);
 	mutex_unlock(&ulp_ctx->cfg_data->flow_db_lock);
 
@@ -458,10 +492,11 @@ flow_error:
 
 /* Function to destroy the ulp flow. */
 int bnxt_ulp_flow_destroy(struct bnxt *bp, u32 flow_id, u16 src_fid,
-			  bool dscp_remap)
+			  u32 dscp_remap)
 {
 	struct bnxt_ulp_context *ulp_ctx;
 	u16 func_id;
+	u16 vf_id;
 	int ret;
 
 	ulp_ctx = bnxt_ulp_bp_ptr2_cntxt_get(bp);
@@ -482,21 +517,38 @@ int bnxt_ulp_flow_destroy(struct bnxt *bp, u32 flow_id, u16 src_fid,
 	mutex_lock(&ulp_ctx->cfg_data->flow_db_lock);
 	ret = ulp_mapper_flow_destroy(ulp_ctx, BNXT_ULP_FDB_TYPE_REGULAR,
 				      flow_id, NULL);
-	if (dscp_remap) {
-		ulp_ctx->cfg_data->dscp_remap_ref--;
-		if (!ulp_ctx->cfg_data->dscp_remap_ref)
-			bnxt_tc_clear_dscp_ipv6(bp, ulp_ctx);
-	}
-	mutex_unlock(&ulp_ctx->cfg_data->flow_db_lock);
 
+	if (dscp_remap == BNXT_ULP_DSCP_INVALID)
+		goto done;
+	ret = ulp_port_db_vf_id_get(ulp_ctx, src_fid, &vf_id);
+	if (ret)
+		goto done;
+	bnxt_tc_clear_dscp(bp, ulp_ctx, vf_id, dscp_remap);
+
+done:
+	mutex_unlock(&ulp_ctx->cfg_data->flow_db_lock);
 	return ret;
 }
 
 void bnxt_ulp_flow_query_count(struct bnxt *bp, u32 flow_id, u64 *packets,
 			       u64 *bytes, unsigned long *lastused)
 {
-	ulp_tf_fc_mgr_query_count_get(bp->ulp_ctx, flow_id, packets, bytes,
-				      lastused, NULL);
+	struct bnxt_ulp_context *ulp_ctx = bp->ulp_ctx;
+	enum bnxt_ulp_device_id  dev_id;
+	int rc;
+
+	rc = bnxt_ulp_cntxt_dev_id_get(ulp_ctx, &dev_id);
+	if (rc)
+		return;
+
+	if (dev_id == BNXT_ULP_DEVICE_ID_THOR2)
+		ulp_sc_mgr_query_count_get(ulp_ctx, flow_id,
+					   packets, bytes,
+					   lastused);
+	else
+		ulp_tf_fc_mgr_query_count_get(ulp_ctx, flow_id,
+					      packets, bytes,
+					      lastused, NULL);
 }
 
 int

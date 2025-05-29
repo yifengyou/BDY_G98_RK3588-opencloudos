@@ -111,8 +111,10 @@ struct cfa_tcam_mgr_data {
 		cfa_tcam_mgr_tables[TF_DIR_MAX][CFA_TCAM_MGR_TBL_TYPE_MAX];
 	void *table_rows;
 	struct cfa_tcam_mgr_entry_data *entry_data;
-	unsigned long *session_bmp;
-	unsigned long session_bmp_size;
+	/* Logical ids assigned for all TCAM types */
+	unsigned long *logical_id_bmp;
+	/* Sum of all TCAM entries allocated  */
+	unsigned long logical_id_bmp_size;
 	void *row_tables[TF_DIR_MAX][TF_TCAM_TBL_TYPE_MAX];
 	void *rx_row_data;
 	void *tx_row_data;

@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2014-2016 Broadcom Corporation
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,6 +43,12 @@
 #include <linux/filter.h>
 #ifdef HAVE_XDP_RXQ_INFO
 #include <net/xdp.h>
+#endif
+#ifdef HAVE_XSK_SUPPORT
+#include <net/xdp_sock_drv.h>
+#endif
+#ifdef HAVE_NETDEV_QMGMT_OPS
+#include <net/netdev_queues.h>
 #endif
 
 #ifndef IS_ENABLED
@@ -105,7 +111,8 @@
 	defined(HAVE_TC_EXTS_FOR_ACTION)) && \
 	defined(HAVE_RHASHTABLE) && defined(HAVE_FLOW_DISSECTOR_KEY_ICMP) && \
 	defined(HAVE_FLOW_DISSECTOR_KEY_ENC_IP) && \
-	defined(HAVE_TCF_TUNNEL) && defined(CONFIG_NET_SWITCHDEV) && \
+	defined(HAVE_TCF_TUNNEL) && \
+	(defined(CONFIG_NET_SWITCHDEV) || defined(BNXT_ENABLE_TRUFLOW)) && \
 	(LINUX_VERSION_CODE >= 0x030a00)
 #define	CONFIG_BNXT_FLOWER_OFFLOAD	1
 #ifndef HAVE_NDO_GET_PORT_PARENT_ID
@@ -508,6 +515,14 @@ enum compat_ethtool_reset_flags { ETH_RESET_CRASHDUMP = 1 << 9 };
 
 #define bnxt_set_ringparam(dev, ering, kernel_ering, extack)	\
 	bnxt_set_ringparam(dev, ering)
+#endif
+
+#if defined(HAVE_DIM) && !defined(HAVE_DIM_SAMPLE_PTR)
+#define net_dim(dim, end_sample)	net_dim(dim, *(end_sample))
+#endif
+
+#ifndef HAVE_KERNEL_ETHTOOL_TS_INFO
+#define kernel_ethtool_ts_info ethtool_ts_info
 #endif
 
 #ifndef HAVE_SKB_FRAG_PAGE
@@ -1236,7 +1251,7 @@ static inline int netif_get_num_default_rss_queues(void)
 }
 #endif
 
-#ifndef IFF_RXFH_CONFIGURED
+#ifndef HAVE_NETIF_IS_RXFH_CONFIGURED
 #define IFF_RXFH_CONFIGURED	0
 #undef HAVE_SET_RXFH
 static inline bool netif_is_rxfh_configured(const struct net_device *dev)
@@ -1355,6 +1370,7 @@ static inline void *kmalloc_array(unsigned n, size_t s, gfp_t gfp)
 #define ETH_MODULE_SFF_8636_LEN         256
 #endif
 
+#ifndef PCI_IRQ_MSIX
 #ifndef HAVE_MSIX_RANGE
 static inline int
 pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
@@ -1376,6 +1392,34 @@ pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
 	return rc;
 }
 #endif /* HAVE_MSIX_RANGE */
+#endif /* PCI_IRQ_MSIX */
+
+#ifndef HAVE_MSIX_DYN
+
+static inline bool pci_msix_can_alloc_dyn(struct pci_dev *dev)
+{
+	return false;
+}
+
+struct msi_map {
+	int	index;
+	int	virq;
+};
+
+static inline struct msi_map
+pci_msix_alloc_irq_at(struct pci_dev *pdev, unsigned int index,
+		      const void *affdesc)
+{
+	struct msi_map map = { .index = -ENOSYS, };
+
+	return map;
+}
+
+static inline void pci_msix_free_irq(struct pci_dev *pdev, struct msi_map map)
+{
+}
+
+#endif /* HAVE_MSIX_DYN */
 
 #ifndef HAVE_PCI_PHYSFN
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
@@ -2030,6 +2074,19 @@ flow_block_cb_setup_simple(struct tc_block_offload *f,
 
 #endif /* !HAVE_SETUP_TC_BLOCK_HELPER */
 #endif /* HAVE_TC_SETUP_BLOCK */
+
+#ifndef HAVE_FLOW_RULE_MATCH_CONTROL_FLAGS
+
+struct flow_rule;
+struct netlink_ext_ack;
+
+static inline bool flow_rule_match_has_control_flags(struct flow_rule *rule,
+						     struct netlink_ext_ack *extack)
+{
+	return false;
+}
+
+#endif /* HAVE_FLOW_RULE_MATCH_CONTROL_FLAGS */
 #endif /* CONFIG_BNXT_FLOWER_OFFLOAD */
 
 #ifndef BIT_ULL
@@ -2240,6 +2297,7 @@ static inline int pcie_flr(struct pci_dev *dev)
 #define ALIGN_DOWN(x, a)	__ALIGN_KERNEL((x) - ((a) - 1), (a))
 #endif
 
+#ifndef HAVE_DMA_POOL_ZALLOC
 struct bnxt_compat_dma_pool {
 	struct dma_pool *pool;
 	size_t size;
@@ -2292,6 +2350,65 @@ bnxt_compat_dma_pool_free(struct bnxt_compat_dma_pool *wrapper, void *vaddr,
 #define dma_pool_alloc bnxt_compat_dma_pool_alloc
 #define dma_pool_free bnxt_compat_dma_pool_free
 #define dma_pool bnxt_compat_dma_pool
+#endif /* HAVE_DMA_POOL_ZALLOC */
+
+#ifndef __struct_group
+#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+	union { \
+		struct { MEMBERS } ATTRS; \
+		struct TAG { MEMBERS } ATTRS NAME; \
+	}
+#endif /* __struct_group */
+#ifndef struct_group
+#define struct_group(NAME, MEMBERS...)	\
+	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
+#endif /* struct_group */
+#ifndef struct_group_attr
+#define struct_group_attr(NAME, ATTRS, MEMBERS...) \
+	__struct_group(/* no tag */, NAME, ATTRS, MEMBERS)
+#endif /* struct_group_attr */
+
+#include "bnxt.h"
+#ifndef PCI_IRQ_MSIX
+
+static inline int
+pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
+		      unsigned int max_vecs, unsigned int flags)
+{
+	struct net_device *netdev = pci_get_drvdata(dev);
+	struct bnxt *bp = netdev_priv(netdev);
+	int i;
+
+	if (!bp->msix_ent)
+		bp->msix_ent = kcalloc(max_vecs, sizeof(*bp->msix_ent),
+				       GFP_KERNEL);
+	if (!bp->msix_ent)
+		return -ENOMEM;
+
+	for (i = 0; i < max_vecs; i++)
+		bp->msix_ent[i].entry = i;
+
+	return pci_enable_msix_range(dev, bp->msix_ent, min_vecs, max_vecs);
+}
+
+static inline int pci_irq_vector(struct pci_dev *dev, unsigned int nr)
+{
+	struct net_device *netdev = pci_get_drvdata(dev);
+	struct bnxt *bp = netdev_priv(netdev);
+
+	return bp->msix_ent[nr].vector;
+}
+
+static inline void pci_free_irq_vectors(struct pci_dev *dev)
+{
+	struct net_device *netdev = pci_get_drvdata(dev);
+	struct bnxt *bp = netdev_priv(netdev);
+
+	pci_disable_msix(dev);
+	kfree(bp->msix_ent);
+	bp->msix_ent = NULL;
+}
+#endif /* PCI_IRQ_MSIX */
 
 #ifndef HAVE_NETIF_NAPI_DEL_NEW
 static inline void __netif_napi_del(struct napi_struct *napi)
@@ -2362,6 +2479,17 @@ int bnxt_get_eee(struct net_device *dev, struct ethtool_eee *edata);
 #define devlink_set_features(x, y)
 #endif
 
+#if defined(HAVE_DEVLINK) && !defined(HAVE_DEVLINK_PARAM_SET_EXTACK)
+#define bnxt_dl_nvm_param_set(dl, id, ctx, extack)	\
+	bnxt_dl_nvm_param_set(dl, id, ctx)
+
+#define bnxt_dl_truflow_param_set(dl, id, ctx, extack)	\
+	bnxt_dl_truflow_param_set(dl, id, ctx)
+
+#define bnxt_remote_dev_reset_set(dl, id, ctx, extack)	\
+	bnxt_remote_dev_reset_set(dl, id, ctx)
+#endif
+
 #ifndef HAVE_STRSCPY
 static inline ssize_t strscpy(char *dest, const char *src, size_t count)
 {
@@ -2395,8 +2523,16 @@ static inline int bnxt_compat_linkmode_test_bit(int nr, const unsigned long *add
 {
 	return (nr < __ETHTOOL_LINK_MODE_MASK_NBITS) ? test_bit(nr, addr) : 0;
 }
+
+#ifndef HAVE_NEW_LINKMODE
 #define linkmode_set_bit bnxt_compat_linkmode_set_bit
 #define linkmode_test_bit bnxt_compat_linkmode_test_bit
+#endif
+
+#ifndef PFC_STORM_PREVENTION_DISABLE
+#define ETHTOOL_PFC_PREVENTION_TOUT	3
+#define PFC_STORM_PREVENTION_AUTO	0xffff
+#endif
 
 #if !defined(HAVE_FLOW_DISSECTOR) || \
 	!defined(HAVE_SKB_FLOW_DISSECT_WITH_FLAGS) || \
@@ -2612,23 +2748,15 @@ struct netlink_ext_ack {
 };
 #endif
 
-#ifndef __struct_group
-#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
-	union { \
-		struct { MEMBERS } ATTRS; \
-		struct TAG { MEMBERS } ATTRS NAME; \
-	}
-#endif /* __struct_group */
-#ifndef struct_group_attr
-#define struct_group_attr(NAME, ATTRS, MEMBERS...) \
-	__struct_group(/* no tag */, NAME, ATTRS, MEMBERS)
-#endif /* struct_group_attr */
-
 #ifndef HAVE_SKB_MARK_RECYCLE
 #define skb_mark_for_recycle(skb)
 #endif
 #ifdef HAVE_OLD_SKB_MARK_RECYCLE
 #define skb_mark_for_recycle(skb) skb_mark_for_recycle(skb, page, rxr->page_pool)
+#endif
+
+#ifdef HAVE_OLD_XSK_BUFF_DMA_SYNC
+#define xsk_buff_dma_sync_for_cpu(xdp) xsk_buff_dma_sync_for_cpu((xdp), rxr->xsk_pool)
 #endif
 
 #ifdef CONFIG_BNXT_HWMON
@@ -2765,7 +2893,7 @@ xdp_features_clear_redirect_target(struct net_device *dev)
 	})
 #endif /* HAVE_TXQ_MAYBE_WAKE */
 
-#ifndef HAVE_NEW_QUEUE_STOPWAKE
+#ifndef __netif_txq_completed_wake
 static inline void
 netdev_txq_completed_mb(struct netdev_queue *dev_queue,
 		       unsigned int pkts, unsigned int bytes)
@@ -2822,7 +2950,7 @@ netdev_txq_completed_mb(struct netdev_queue *dev_queue,
 		_res;						   \
 	})							      \
 
-#endif /* HAVE_NEW_QUEUE_STOPWAKE */
+#endif
 
 #ifndef __counted_by
 #define __counted_by(member)
@@ -2831,5 +2959,142 @@ netdev_txq_completed_mb(struct netdev_queue *dev_queue,
 #ifndef struct_size
 #define struct_size(p, member, n) (sizeof(*(p)) + sizeof(*(p)->member) * (n))
 #endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0))
+#undef HAVE_NETDEV_RX_Q_RESTART
+#endif
+
+#ifdef HAVE_NETDEV_QMGMT_OPS
+#ifndef HAVE_NETDEV_RX_Q_RESTART
+static inline int netdev_rx_queue_restart(struct net_device *dev, unsigned int rxq_idx)
+{
+	void *new_mem, *old_mem;
+	int err;
+
+	if (!dev->queue_mgmt_ops || !dev->queue_mgmt_ops->ndo_queue_stop ||
+	    !dev->queue_mgmt_ops->ndo_queue_mem_free ||
+	    !dev->queue_mgmt_ops->ndo_queue_mem_alloc ||
+	    !dev->queue_mgmt_ops->ndo_queue_start)
+		return -EOPNOTSUPP;
+
+	DEBUG_NET_WARN_ON_ONCE(!rtnl_is_locked());
+
+	new_mem = kvzalloc(dev->queue_mgmt_ops->ndo_queue_mem_size, GFP_KERNEL);
+	if (!new_mem)
+		return -ENOMEM;
+
+	old_mem = kvzalloc(dev->queue_mgmt_ops->ndo_queue_mem_size, GFP_KERNEL);
+	if (!old_mem) {
+		err = -ENOMEM;
+		goto err_free_new_mem;
+	}
+
+	err = dev->queue_mgmt_ops->ndo_queue_mem_alloc(dev, new_mem, rxq_idx);
+	if (err)
+		goto err_free_old_mem;
+
+	err = dev->queue_mgmt_ops->ndo_queue_stop(dev, old_mem, rxq_idx);
+	if (err)
+		goto err_free_new_queue_mem;
+
+	err = dev->queue_mgmt_ops->ndo_queue_start(dev, new_mem, rxq_idx);
+	if (err)
+		goto err_start_queue;
+
+	dev->queue_mgmt_ops->ndo_queue_mem_free(dev, old_mem);
+
+	kvfree(old_mem);
+	kvfree(new_mem);
+
+	return 0;
+
+err_start_queue:
+	/* Restarting the queue with old_mem should be successful as we haven't
+	 * changed any of the queue configuration, and there is not much we can
+	 * do to recover from a failure here.
+	 *
+	 * WARN if the we fail to recover the old rx queue, and at least free
+	 * old_mem so we don't also leak that.
+	 */
+	if (dev->queue_mgmt_ops->ndo_queue_start(dev, old_mem, rxq_idx)) {
+		WARN(1,
+		     "Failed to restart old queue in error path. RX queue %d may be unhealthy.",
+		     rxq_idx);
+		dev->queue_mgmt_ops->ndo_queue_mem_free(dev, old_mem);
+	}
+
+err_free_new_queue_mem:
+	dev->queue_mgmt_ops->ndo_queue_mem_free(dev, new_mem);
+
+err_free_old_mem:
+	kvfree(old_mem);
+
+err_free_new_mem:
+	kvfree(new_mem);
+
+	return err;
+}
+#endif
+#endif /* HAVE_NETDEV_QMGMT_OPS */
+
+#ifndef HAVE_NEW_RSSCTX_INTERFACE
+#define ethtool_rxfh_context bnxt_rss_ctx
+#define ethtool_rxfh_context_priv(x)	x
+#define ethtool_rxfh_context_indir(x)	((x)->rss_indir_tbl)
+
+static inline void bnxt_clear_rss_ctxs_compat(struct bnxt *bp, bool all)
+{
+	struct bnxt_rss_ctx *rss_ctx, *tmp;
+
+	list_for_each_entry_safe(rss_ctx, tmp, &bp->rss_ctx_list, list) {
+		bnxt_del_one_rss_ctx(bp, rss_ctx, all, true);
+	}
+
+	if (all)
+		bitmap_free(bp->rss_ctx_bmap);
+}
+
+static inline int bnxt_alloc_rss_indir_tbl_compat(struct bnxt *bp, struct bnxt_rss_ctx *rss_ctx)
+{
+	int entries;
+	u32 *tbl;
+
+	if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS)
+		entries = BNXT_MAX_RSS_TABLE_ENTRIES_P5;
+	else
+		entries = HW_HASH_INDEX_SIZE;
+
+	bp->rss_indir_tbl_entries = entries;
+	tbl = kmalloc_array(entries, sizeof(*bp->rss_indir_tbl),
+			    GFP_KERNEL);
+	if (!tbl)
+		return -ENOMEM;
+
+	if (rss_ctx)
+		rss_ctx->rss_indir_tbl = tbl;
+	else
+		bp->rss_indir_tbl = tbl;
+
+	return 0;
+}
+
+#endif /* HAVE_NEW_RSSCTX_INTERFACE */
+
+static inline int bnxt_alloc_rssctx_bmap(struct bnxt *bp)
+{
+#ifdef HAVE_NEW_RSSCTX_INTERFACE
+	return 0;
+#else
+	bp->rss_cap &= ~BNXT_RSS_CAP_MULTI_RSS_CTX;
+	bp->rss_ctx_bmap = bitmap_zalloc(BNXT_RSS_CTX_BMAP_LEN, GFP_KERNEL);
+	if (bp->rss_ctx_bmap) {
+		/* burn index 0 since we cannot have context 0 */
+		__set_bit(0, bp->rss_ctx_bmap);
+		bp->rss_cap |= BNXT_RSS_CAP_MULTI_RSS_CTX;
+		return 0;
+	}
+	return -ENOMEM;
+#endif
+}
 
 #endif /* _BNXT_COMPAT_H_ */

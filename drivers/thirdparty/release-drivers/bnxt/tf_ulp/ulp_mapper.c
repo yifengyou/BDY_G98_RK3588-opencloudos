@@ -7,6 +7,7 @@
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
 #include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "ulp_template_db_enum.h"
 #include "ulp_template_struct.h"
 #include "bnxt_tf_common.h"
@@ -21,6 +22,7 @@
 #include "ulp_port_db.h"
 #include "ulp_template_debug_proto.h"
 #include "ulp_tf_debug.h"
+#include "ulp_sc_mgr.h"
 #include "bnxt_vfr.h"
 #include "bnxt_tf_tc_shim.h"
 #include "bnxt_tf_ulp_p5.h"
@@ -470,7 +472,7 @@ ulp_mapper_tmpl_key_ext_list_get(struct bnxt_ulp_mapper_parms *mparms,
 	const struct bnxt_ulp_template_device_tbls *dev_tbls;
 
 	dev_tbls = &mparms->device_params->dev_tbls[mparms->tmpl_type];
-	if (idx >= dev_tbls->key_ext_list_size)
+	if (idx > dev_tbls->key_ext_list_size)
 		return NULL;
 	return &dev_tbls->key_ext_list[idx];
 }
@@ -748,6 +750,7 @@ error:
 
 static int
 ulp_mapper_field_port_db_process(struct bnxt_ulp_mapper_parms *parms,
+				 enum tf_dir dir,
 				 u32 port_id,
 				 u16 val16,
 				 u8 **val)
@@ -806,6 +809,46 @@ ulp_mapper_field_port_db_process(struct bnxt_ulp_mapper_parms *parms,
 	case BNXT_ULP_PORT_TABLE_DRV_FUNC_ROCE_VNIC:
 		if (ulp_port_db_drv_roce_vnic_get(parms->ulp_ctx, port_id,
 						  val)) {
+			netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid port id %u\n", port_id);
+			return -EINVAL;
+		}
+		break;
+	case BNXT_ULP_PORT_TABLE_PHY_PORT_MIRROR_ID:
+		if (ulp_port_db_port_table_mirror_get(parms->ulp_ctx, dir, port_id,
+						      val)) {
+			netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid port id %u\n", port_id);
+			return -EINVAL;
+		}
+		break;
+	default:
+		netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid port_data %d\n", port_data);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int
+ulp_mapper_field_port_db_write(struct bnxt_ulp_mapper_parms *parms,
+			       enum tf_dir dir,
+			       u32 port_id,
+			       u16 idx,
+			       u8 *val,
+			       u32 length)
+{
+	enum bnxt_ulp_port_table port_data = idx;
+	u32 val32;
+
+	switch (port_data) {
+	case BNXT_ULP_PORT_TABLE_PHY_PORT_MIRROR_ID:
+		if (ULP_BITS_2_BYTE(length) > sizeof(val32)) {
+			netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid data length %u\n", length);
+			return -EINVAL;
+		}
+		memcpy(&val32, val, ULP_BITS_2_BYTE(length));
+		if (unlikely(ulp_port_db_port_table_mirror_set(parms->ulp_ctx,
+							       dir,
+							       port_id,
+							       val32))) {
 			netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid port id %u\n", port_id);
 			return -EINVAL;
 		}
@@ -1081,7 +1124,7 @@ ulp_mapper_field_src_process(struct bnxt_ulp_mapper_parms *parms,
 			return -EINVAL;
 		}
 		idx = be16_to_cpu(idx);
-		if (ulp_mapper_field_port_db_process(parms, port_id, idx,
+		if (ulp_mapper_field_port_db_process(parms, dir, port_id, idx,
 						     val)) {
 			netdev_dbg(parms->ulp_ctx->bp->dev, "field port table failed\n");
 			return -EINVAL;
@@ -1164,6 +1207,20 @@ ulp_mapper_field_src_process(struct bnxt_ulp_mapper_parms *parms,
 		} else {
 			*val = mapper_fld_zeros;
 			*value = 0;
+		}
+		break;
+	case BNXT_ULP_FIELD_SRC_CF_BIT:
+		if (ulp_operand_read(field_opr,
+				     (uint8_t *)&lregval, sizeof(uint64_t))) {
+			netdev_dbg(parms->ulp_ctx->bp->dev, "CF operand read failed\n");
+			return -EINVAL;
+		}
+		lregval = be64_to_cpu(lregval);
+		if (ULP_BITMAP_ISSET(parms->cf_bitmap, lregval)) {
+			*val = mapper_fld_one;
+			*value = 1;
+		} else {
+			*val = mapper_fld_zeros;
 		}
 		break;
 	default:
@@ -1767,7 +1824,9 @@ ulp_mapper_key_recipe_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 	recipe = ulp_mapper_key_recipe_alloc(parms->ulp_ctx, dir, stype,
 					     recipe_id, alloc, &max_rflds);
 	if (!recipe || !max_rflds) {
-		netdev_dbg(parms->ulp_ctx->bp->dev, "Failed to get the recipe slot\n");
+		netdev_dbg(parms->ulp_ctx->bp->dev,
+			   "Failed to get the recipe slot, recipe(%p) max_rflds(%d)\n",
+			   recipe, max_rflds);
 		if (recipe_ba)
 			(void)bnxt_ba_free(recipe_ba, recipe_id);
 		return -EINVAL;
@@ -2830,6 +2889,76 @@ ulp_mapper_ctrl_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 	return rc;
 }
 
+static int32_t
+ulp_mapper_stats_cache_tbl_process(struct bnxt_ulp_mapper_parms *parms,
+				   struct bnxt_ulp_mapper_tbl_info *tbl)
+{
+	struct ulp_flow_db_res_params fid_parms;
+	uint64_t counter_handle;
+	struct ulp_blob	data;
+	uint16_t data_len = 0;
+	uint8_t *tmp_data;
+	int32_t rc;
+
+	/* Initialize the blob data */
+	if (ulp_blob_init(&data, tbl->result_bit_size,
+			  BNXT_ULP_BYTE_ORDER_BE)) {
+		netdev_dbg(parms->ulp_ctx->bp->dev,
+			   "Failed initial ulp_global table blob\n");
+		return -EINVAL;
+	}
+
+	/* read the arguments from the result table */
+	rc = ulp_mapper_tbl_result_build(parms, tbl, &data,
+					 "ULP Global Result");
+	if (rc) {
+		netdev_dbg(parms->ulp_ctx->bp->dev,
+			   "Failed to build the result blob\n");
+		return rc;
+	}
+
+	tmp_data = ulp_blob_data_get(&data, &data_len);
+	counter_handle = *(uint64_t *)tmp_data;
+	counter_handle = be64_to_cpu(counter_handle);
+
+	memset(&fid_parms, 0, sizeof(fid_parms));
+	fid_parms.direction	= tbl->direction;
+	fid_parms.resource_func	= tbl->resource_func;
+	fid_parms.resource_type	= tbl->resource_type;
+	fid_parms.resource_sub_type = tbl->resource_sub_type;
+	fid_parms.resource_hndl	    = counter_handle;
+	fid_parms.critical_resource = tbl->critical_resource;
+	rc = ulp_mapper_fdb_opc_process(parms, tbl, &fid_parms);
+	if (rc) {
+		netdev_dbg(parms->ulp_ctx->bp->dev,
+			   "Failed to link resource to flow rc = %d\n",
+			     rc);
+		return rc;
+	}
+
+	rc = ulp_sc_mgr_entry_alloc(parms, counter_handle, tbl);
+	if (rc) {
+		netdev_dbg(parms->ulp_ctx->bp->dev,
+			   "Failed to link resource to flow rc = %d\n",
+			     rc);
+		return rc;
+	}
+#ifdef RTE_LIBRTE_BNXT_TRUFLOW_DEBUG
+#ifdef RTE_LIBRTE_BNXT_TRUFLOW_DEBUG_MAPPER
+	BNXT_DRV_DBG(DEBUG, "flow id =0x%x\n", parms->flow_id);
+#endif
+#endif
+	return rc;
+}
+
+static int32_t
+ulp_mapper_stats_cache_tbl_res_free(struct bnxt_ulp_context *ulp,
+				    uint32_t fid)
+{
+	ulp_sc_mgr_entry_free(ulp, fid);
+	return 0;
+}
+
 static int
 ulp_mapper_vnic_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 			    struct bnxt_ulp_mapper_tbl_info *tbl)
@@ -2879,13 +3008,101 @@ ulp_mapper_vnic_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 	return rc;
 }
 
+static int
+ulp_mapper_global_res_free(struct bnxt_ulp_context *ulp,
+			   struct bnxt *bp,
+			   struct ulp_flow_db_res_params *res)
+{
+	u64 handle = res->resource_hndl;
+
+	return bnxt_tc_global_tunnel_set(ulp, 0, res->resource_sub_type,
+					  0, &handle);
+}
+
+static int
+ulp_mapper_global_register_tbl_process(struct bnxt_ulp_mapper_parms *parms,
+				       struct bnxt_ulp_mapper_tbl_info *tbl)
+{
+	struct ulp_flow_db_res_params fid_parms	= { 0 };
+	int rc = 0, write_reg = 0;
+	struct ulp_blob	data;
+	u16 data_len = 0;
+	u8 *tmp_data;
+	u16 udp_port;
+	u64 handle;
+
+	/* Initialize the blob data */
+	if (unlikely(ulp_blob_init(&data, tbl->result_bit_size,
+				   BNXT_ULP_BYTE_ORDER_BE))) {
+		netdev_dbg(parms->ulp_ctx->bp->dev, "Failed initial ulp_global table blob\n");
+		return -EINVAL;
+	}
+
+	/* read the arguments from the result table */
+	rc = ulp_mapper_tbl_result_build(parms, tbl, &data,
+					 "ULP Global Result");
+	if (unlikely(rc)) {
+		netdev_dbg(parms->ulp_ctx->bp->dev, "Failed to build the result blob\n");
+		return rc;
+	}
+
+	switch (tbl->tbl_opcode) {
+	case BNXT_ULP_GLOBAL_REGISTER_TBL_OPC_WR_REGFILE:
+		write_reg = 1;
+		break;
+	case BNXT_ULP_GLOBAL_REGISTER_TBL_OPC_NOT_USED:
+		break;
+	default:
+		netdev_dbg(parms->ulp_ctx->bp->dev, "Invalid global table opcode %d\n",
+			   tbl->tbl_opcode);
+		return -EINVAL;
+	}
+
+	tmp_data = ulp_blob_data_get(&data, &data_len);
+	udp_port = *((u16 *)tmp_data);
+	udp_port = be16_to_cpu(udp_port);
+
+	rc = bnxt_tc_global_tunnel_set(parms->ulp_ctx,
+				       parms->port_id, tbl->resource_sub_type,
+				       udp_port, &handle);
+	if (unlikely(rc)) {
+		netdev_dbg(parms->ulp_ctx->bp->dev, "Unable to set Type %d port\n",
+			   tbl->resource_sub_type);
+		return rc;
+	}
+
+	/* Set the common pieces of fid parms */
+	fid_parms.direction = tbl->direction;
+	fid_parms.resource_func	= tbl->resource_func;
+	fid_parms.resource_sub_type = tbl->resource_sub_type;
+	fid_parms.critical_resource = tbl->critical_resource;
+	fid_parms.resource_hndl = handle;
+
+	rc = ulp_mapper_fdb_opc_process(parms, tbl, &fid_parms);
+
+	if (unlikely(rc))
+		return rc;
+
+	/* write to the regfile if opcode is set */
+	if (write_reg) {
+		rc = ulp_regfile_write(parms->regfile,
+				       tbl->tbl_operand,
+				       cpu_to_be64(handle));
+		if (rc)
+			netdev_dbg(parms->ulp_ctx->bp->dev, "Regfile[%d] write failed.\n",
+				   tbl->tbl_operand);
+	}
+
+	return rc;
+}
+
 /* Free the vnic resource */
-static int32_t
-ulp_mapper_vnic_tbl_res_free(__maybe_unused struct bnxt_ulp_context *ulp,
+static int
+ulp_mapper_vnic_tbl_res_free(struct bnxt_ulp_context *ulp,
 			     struct tf *tfp,
 			     struct ulp_flow_db_res_params *res)
 {
-	uint16_t vnic_idx = res->resource_hndl;
+	u16 vnic_idx = res->resource_hndl;
 
 	if (res->resource_sub_type ==
 	    BNXT_ULP_RESOURCE_SUB_TYPE_VNIC_TABLE_QUEUE)
@@ -2894,21 +3111,21 @@ ulp_mapper_vnic_tbl_res_free(__maybe_unused struct bnxt_ulp_context *ulp,
 	return -EINVAL;
 }
 
-static int32_t
+static int
 ulp_mapper_udcc_v6subnet_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 				     struct bnxt_ulp_mapper_tbl_info *tbl)
 {
 	struct ulp_flow_db_res_params fid_parms;
-	struct bnxt *bp = parms->ulp_ctx->bp;
 	struct bnxt_ulp_mapper_key_info *kflds;
+	struct bnxt *bp = parms->ulp_ctx->bp;
 	u16 tmplen = 0, byte_data_size = 0;
 	struct ulp_blob key, mask, data;
-	u16 subnet_hndl = 0;
 	u32 i, num_kflds = 0;
+	u16 subnet_hndl = 0;
 	u8 *byte_data;
 	u8 *byte_key;
 	u8 *byte_mask;
-	int32_t rc = 0;
+	int rc = 0;
 
 	/* Get the key fields list and build the key. */
 	kflds = ulp_mapper_key_fields_get(parms, tbl, &num_kflds);
@@ -3009,7 +3226,7 @@ ulp_mapper_udcc_v6subnet_tbl_process(struct bnxt_ulp_mapper_parms *parms,
 }
 
 /* Free the subnet_hndl resource */
-static int32_t
+static int
 ulp_mapper_udcc_v6subnet_tbl_res_free(__maybe_unused struct bnxt_ulp_context *ulp,
 				      struct tf *tfp,
 				      struct ulp_flow_db_res_params *res)
@@ -3562,7 +3779,12 @@ ulp_mapper_func_info_process(struct bnxt_ulp_mapper_parms *parms,
 		break;
 	case BNXT_ULP_FUNC_OPC_NOT_NOT:
 		process_src1 = 1;
+		fallthrough;
 	case BNXT_ULP_FUNC_OPC_COND_LIST:
+		break;
+	case BNXT_ULP_FUNC_OPC_PORT_TABLE:
+		process_src1 = 1;
+		process_src2 = 1;
 		break;
 	default:
 		break;
@@ -3670,6 +3892,12 @@ ulp_mapper_func_info_process(struct bnxt_ulp_mapper_parms *parms,
 						      &res, sizeof(res)))
 			return -EINVAL;
 		break;
+	case BNXT_ULP_FUNC_OPC_PORT_TABLE:
+		rc = ulp_mapper_field_port_db_write(parms, tbl->direction, res1,
+						    func_info->func_dst_opr,
+						    (uint8_t *)&res2,
+						    func_info->func_oper_size);
+		return rc;
 	default:
 		netdev_dbg(parms->ulp_ctx->bp->dev, "invalid func code %u\n", func_info->func_opc);
 		return -EINVAL;
@@ -3763,11 +3991,6 @@ ulp_mapper_cond_reject_list_process(struct bnxt_ulp_mapper_parms *parms,
 	/* set the rejection result to accept */
 	*res = 0;
 
-	/* If act rej cond is not enabled then skip reject cond processing */
-	if (parms->tmpl_type == BNXT_ULP_TEMPLATE_TYPE_ACTION &&
-	    !ULP_COMP_FLD_IDX_RD(parms, BNXT_ULP_CF_IDX_ACT_REJ_COND_EN))
-		return rc;
-
 	/* get the reject condition list */
 	reject_info = ulp_mapper_tmpl_reject_list_get(parms, tid);
 
@@ -3830,7 +4053,7 @@ ulp_mapper_cond_execute_list_process(struct bnxt_ulp_mapper_parms *parms,
 {
 	struct bnxt_ulp_mapper_cond_list_info *execute_info;
 	struct bnxt_ulp_mapper_cond_list_info *oper;
-	int cond_list_res, cond_res = 0, rc = 0;
+	int cond_list_res = 0, cond_res = 0, rc = 0;
 	struct bnxt *bp = parms->ulp_ctx->bp;
 	u32 idx;
 
@@ -4084,6 +4307,9 @@ ulp_mapper_tbls_process(struct bnxt_ulp_mapper_parms *parms, void *error)
 		case BNXT_ULP_RESOURCE_FUNC_VNIC_TABLE:
 			rc = ulp_mapper_vnic_tbl_process(parms, tbl);
 			break;
+		case BNXT_ULP_RESOURCE_FUNC_GLOBAL_REGISTER_TABLE:
+			rc = ulp_mapper_global_register_tbl_process(parms, tbl);
+			break;
 		case BNXT_ULP_RESOURCE_FUNC_INVALID:
 			rc = 0;
 			break;
@@ -4095,6 +4321,9 @@ ulp_mapper_tbls_process(struct bnxt_ulp_mapper_parms *parms, void *error)
 			break;
 		case BNXT_ULP_RESOURCE_FUNC_ALLOCATOR_TABLE:
 			rc = ulp_mapper_allocator_tbl_process(parms, tbl);
+			break;
+		case BNXT_ULP_RESOURCE_FUNC_STATS_CACHE:
+			rc = ulp_mapper_stats_cache_tbl_process(parms, tbl);
 			break;
 		default:
 			netdev_dbg(bp->dev, "Unexpected mapper resource %d\n", tbl->resource_func);
@@ -4115,7 +4344,14 @@ ulp_mapper_tbls_process(struct bnxt_ulp_mapper_parms *parms, void *error)
 			goto error;
 		}
 next_iteration:
-		if (cond_goto == BNXT_ULP_COND_GOTO_REJECT) {
+		if (cond_goto < 0) {
+			if (((int32_t)tbl_idx + cond_goto) < 0) {
+				netdev_dbg(bp->dev,
+					   "invalid conditional goto %d\n",
+					   cond_goto);
+				goto error;
+			}
+		} else if (cond_goto == BNXT_ULP_COND_GOTO_REJECT) {
 			if (tbl->false_message || tbl->true_message) {
 				const char *msg = (tbl->false_message) ?
 					tbl->false_message :
@@ -4127,11 +4363,11 @@ next_iteration:
 			rc = -EINVAL;
 			goto error;
 		} else if (cond_goto & BNXT_ULP_COND_GOTO_RF) {
-			u32 rf_idx;
+			int rf_idx;
 			u64 regval;
 
 			/* least significant 16 bits from reg_file index */
-			rf_idx = (u32)(cond_goto & 0xFFFF);
+			rf_idx = (int)(cond_goto & 0xFFFF);
 			if (ulp_regfile_read(parms->regfile, rf_idx,
 					     &regval)) {
 				netdev_dbg(bp->dev, "regfile[%d] read oob\n", rf_idx);
@@ -4139,11 +4375,6 @@ next_iteration:
 				goto error;
 			}
 			cond_goto = (int)regval;
-		}
-
-		if (cond_goto < 0 && ((int)tbl_idx + cond_goto) < 0) {
-			netdev_dbg(bp->dev, "invalid conditional goto %d\n", cond_goto);
-			goto error;
 		}
 		tbl_idx += cond_goto;
 	}
@@ -4219,8 +4450,14 @@ ulp_mapper_resource_free(struct bnxt_ulp_context *ulp_ctx,
 	case BNXT_ULP_RESOURCE_FUNC_VNIC_TABLE:
 		rc = ulp_mapper_vnic_tbl_res_free(ulp_ctx, tfp, res);
 		break;
+	case BNXT_ULP_RESOURCE_FUNC_GLOBAL_REGISTER_TABLE:
+		rc = ulp_mapper_global_res_free(ulp_ctx, ulp_ctx->bp, res);
+		break;
 	case BNXT_ULP_RESOURCE_FUNC_UDCC_V6SUBNET_TABLE:
 		rc = ulp_mapper_udcc_v6subnet_tbl_res_free(ulp_ctx, tfp, res);
+		break;
+	case BNXT_ULP_RESOURCE_FUNC_STATS_CACHE:
+		rc = ulp_mapper_stats_cache_tbl_res_free(ulp_ctx, fid);
 		break;
 	default:
 		break;
@@ -4340,6 +4577,7 @@ int
 ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 		       struct bnxt_ulp_mapper_parms *parms, void *error)
 {
+	const struct ulp_mapper_core_ops *oper;
 	struct ulp_regfile *regfile;
 	int	 rc = 0, trc;
 
@@ -4352,6 +4590,8 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 
 	parms->regfile = regfile;
 	parms->ulp_ctx = ulp_ctx;
+
+	oper = ulp_mapper_data_oper_get(ulp_ctx);
 
 	/* Get the device id from the ulp context */
 	if (bnxt_ulp_cntxt_dev_id_get(ulp_ctx, &parms->dev_id)) {
@@ -4392,13 +4632,27 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 		goto err;
 	}
 
+	parms->batch_info = kzalloc(sizeof(*parms->batch_info), GFP_KERNEL);
+	if (!parms->batch_info) {
+		rc = -ENOMEM;
+		goto err;
+	}
+
+	/* Start batching */
+	rc = oper->ulp_mapper_mpc_batch_start(parms->batch_info);
+	if (unlikely(rc)) {
+		netdev_dbg(ulp_ctx->bp->dev, "MPC Batch start failed\n");
+		rc = -EINVAL;
+		goto err;
+	}
+
 	/* Process the action template list from the selected action table*/
 	if (parms->act_tid) {
 		parms->tmpl_type = BNXT_ULP_TEMPLATE_TYPE_ACTION;
 		/* Process the action template tables */
 		rc = ulp_mapper_tbls_process(parms, error);
 		if (rc)
-			goto flow_error;
+			goto batch_error;
 	}
 
 	if (parms->class_tid) {
@@ -4406,12 +4660,32 @@ ulp_mapper_flow_create(struct bnxt_ulp_context *ulp_ctx,
 		/* Process the class template tables.*/
 		rc = ulp_mapper_tbls_process(parms, error);
 		if (rc)
+			goto batch_error;
+	}
+
+	if (oper->ulp_mapper_mpc_batch_started(parms->batch_info)) {
+		/* Should only get here is there were no EM inserts */
+		rc = oper->ulp_mapper_mpc_batch_end(ulp_ctx->bp,
+						    ulp_ctx->bp->tfp,
+						    parms->batch_info);
+		if (unlikely(rc)) {
+			netdev_dbg(ulp_ctx->bp->dev, "MPC Batch end failed\n");
 			goto flow_error;
+		}
 	}
 
 	vfree(parms->regfile);
+	kfree(parms->batch_info);
 	return rc;
 
+batch_error:
+	/* An error occurred after batching had started but before it
+	 * ended. Call batch end and ignore any errors.
+	 */
+	if (oper->ulp_mapper_mpc_batch_started(parms->batch_info))
+		oper->ulp_mapper_mpc_batch_end(ulp_ctx->bp,
+					       ulp_ctx->bp->tfp,
+					       parms->batch_info);
 flow_error:
 	if (parms->rid) {
 		/* An RID was in-flight but not pushed, free the resources */
@@ -4433,6 +4707,7 @@ flow_error:
 	}
 
 err:
+	kfree(parms->batch_info);
 	vfree(parms->regfile);
 	return rc;
 }

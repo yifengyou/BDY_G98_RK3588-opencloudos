@@ -5,6 +5,8 @@
 #include "ulp_linux.h"
 #include "bnxt_compat.h"
 #include "bnxt_hsi.h"
+#include "bnxt.h"
+#include "bnxt_tfc.h"
 #include "tf_core.h"
 #include "ulp_mapper.h"
 #include "ulp_flow_db.h"

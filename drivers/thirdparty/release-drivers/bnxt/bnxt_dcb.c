@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2014-2016 Broadcom Corporation
  * Copyright (c) 2016-2018 Broadcom Limited
- * Copyright (c) 2018-2023 Broadcom Inc.
+ * Copyright (c) 2018-2024 Broadcom Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -142,6 +142,18 @@ static __le32 bnxt_get_max_bw_from_queue(struct bnxt *bp,
 	return 0;
 }
 
+static void bnxt_set_cos2bw_config_to_ets(struct bnxt *bp, struct bnxt_cos2bw_cfg *cos2bw, u8 bw)
+{
+	cos2bw->tsa = QUEUE_COS2BW_QCFG_RESP_QUEUE_ID0_TSA_ASSIGN_ETS;
+	cos2bw->bw_weight = bw;
+
+	/* older firmware requires min_bw to be set to the
+	 * same weight value in percent.
+	 */
+	if (BNXT_FW_MAJ(bp) < 218)
+		cos2bw->min_bw = cpu_to_le32((bw * 100) | BW_VALUE_UNIT_PERCENT1_100);
+}
+
 static int bnxt_hwrm_queue_cos2bw_cfg(struct bnxt *bp, struct ieee_ets *ets,
 				      u8 max_tc)
 {
@@ -171,32 +183,20 @@ static int bnxt_hwrm_queue_cos2bw_cfg(struct bnxt *bp, struct ieee_ets *ets,
 		memset(&cos2bw, 0, sizeof(cos2bw));
 		queue_id = bp->tx_q_info[qidx].queue_id;
 		cos2bw.queue_id = queue_id;
-		if (i >= max_tc)
-			goto skip_ets;
+		if (i >= max_tc) {
+			bnxt_set_cos2bw_config_to_ets(bp, &cos2bw, 0);
+			goto set_max_bw;
+		}
 
 		if (ets->tc_tsa[i] == IEEE_8021QAZ_TSA_STRICT) {
 			cos2bw.tsa =
 				QUEUE_COS2BW_QCFG_RESP_QUEUE_ID0_TSA_ASSIGN_SP;
 			cos2bw.pri_lvl = i;
 		} else {
-			cos2bw.tsa =
-				QUEUE_COS2BW_QCFG_RESP_QUEUE_ID0_TSA_ASSIGN_ETS;
-			cos2bw.bw_weight = ets->tc_tx_bw[i];
-			/* older firmware requires min_bw to be set to the
-			 * same weight value in percent.
-			 */
-#ifdef BNXT_FPGA
-			if (BNXT_FW_MAJ(bp) < 218 &&
-			    !(bp->flags & BNXT_FLAG_CHIP_P7)) {
-#else
-			if (BNXT_FW_MAJ(bp) < 218) {
-#endif
-				cos2bw.min_bw =
-					cpu_to_le32((ets->tc_tx_bw[i] * 100) |
-						    BW_VALUE_UNIT_PERCENT1_100);
-			}
+			bnxt_set_cos2bw_config_to_ets(bp, &cos2bw, ets->tc_tx_bw[i]);
 		}
-skip_ets:
+
+set_max_bw:
 		cos2bw.max_bw = bnxt_get_max_bw_from_queue(bp, cos2bw_qcfg_resp, queue_id);
 		if (qidx == 0) {
 			req->queue_id0 = cos2bw.queue_id;
@@ -334,8 +334,10 @@ static int bnxt_hwrm_queue_pfc_cfg(struct bnxt *bp, struct ieee_pfc *pfc)
 		if (tc_mask & (1 << i))
 			lltc_count++;
 	}
-	if (lltc_count > bp->max_lltc)
+	if (lltc_count > bp->max_lltc) {
+		netdev_err(bp->dev, "pfc configuration exceeds the number of configured lossless queue configuration");
 		return -EINVAL;
+	}
 
 	for (i = 0; i < bp->max_tc; i++) {
 		if (tc_mask & (1 << i)) {
@@ -552,7 +554,9 @@ static int bnxt_ets_validate(struct bnxt *bp, struct ieee_ets *ets, u8 *tc)
 
 		if ((ets->tc_tx_bw[i] || ets->tc_tsa[i]) && i > bp->max_tc)
 			return -EINVAL;
+	}
 
+	for (i = 0; i < max_tc; i++) {
 		switch (ets->tc_tsa[i]) {
 		case IEEE_8021QAZ_TSA_STRICT:
 			break;
@@ -580,6 +584,17 @@ static int bnxt_ets_validate(struct bnxt *bp, struct ieee_ets *ets, u8 *tc)
 	return 0;
 }
 
+static int bnxt_update_ets(struct bnxt *bp, struct ieee_ets *ets)
+{
+	int rc;
+
+	rc = bnxt_getets(bp, ets);
+	if (rc)
+		return rc;
+
+	return bnxt_hwrm_queue_pri2cos_qcfg(bp, ets);
+}
+
 static int bnxt_dcbnl_ieee_getets(struct net_device *dev, struct ieee_ets *ets)
 {
 	struct bnxt *bp = netdev_priv(dev);
@@ -595,16 +610,13 @@ static int bnxt_dcbnl_ieee_getets(struct net_device *dev, struct ieee_ets *ets)
 		my_ets = kzalloc(sizeof(*my_ets), GFP_KERNEL);
 		if (!my_ets)
 			return -ENOMEM;
-		rc = bnxt_getets(bp, my_ets);
-		if (rc)
-			goto error;
-		rc = bnxt_hwrm_queue_pri2cos_qcfg(bp, my_ets);
-		if (rc)
-			goto error;
 
-		/* cache result */
 		bp->ieee_ets = my_ets;
 	}
+
+	rc = bnxt_update_ets(bp, my_ets);
+	if (rc)
+		return rc;
 
 	ets->cbs = my_ets->cbs;
 	memcpy(ets->tc_tx_bw, my_ets->tc_tx_bw, sizeof(ets->tc_tx_bw));
@@ -612,9 +624,6 @@ static int bnxt_dcbnl_ieee_getets(struct net_device *dev, struct ieee_ets *ets)
 	memcpy(ets->tc_tsa, my_ets->tc_tsa, sizeof(ets->tc_tsa));
 	memcpy(ets->prio_tc, my_ets->prio_tc, sizeof(ets->prio_tc));
 	return 0;
-error:
-	kfree(my_ets);
-	return rc;
 }
 
 static int bnxt_dcbnl_ieee_setets(struct net_device *dev, struct ieee_ets *ets)
@@ -688,10 +697,11 @@ static int bnxt_dcbnl_ieee_getpfc(struct net_device *dev, struct ieee_pfc *pfc)
 		if (!my_pfc)
 			return 0;
 		bp->ieee_pfc = my_pfc;
-		rc = bnxt_hwrm_queue_pfc_qcfg(bp, my_pfc);
-		if (rc)
-			return 0;
 	}
+
+	rc = bnxt_hwrm_queue_pfc_qcfg(bp, my_pfc);
+	if (rc)
+		return rc;
 
 	pfc->pfc_en = my_pfc->pfc_en;
 	pfc->mbc = my_pfc->mbc;
