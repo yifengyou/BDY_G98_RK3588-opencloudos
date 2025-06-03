@@ -1,3 +1,190 @@
+* Tue Jun  3 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.92-34
+- Merge linux-6.6.92 into TK5 release branch
+- Linux 6.6.92
+- Merge linux 6.6.91 into TK5 release branch
+- Linux 6.6.91
+- Merge linux 6.6.90 into TK5 release branch
+- Linux 6.6.90
+- Merge linux 6.6.89 into TK5 release branch
+- Linux 6.6.89
+- Merge branch 'linux-6.6/devel' into release
+- !393 drm/virtio: implement virtio_gpu_shutdown
+- drm/virtio: implement virtio_gpu_shutdown
+- virtgpu: don't reset on shutdown
+- virtio: break and reset virtio devices on device_shutdown()
+- LoongArch: sync kvm head file from upstream
+- LoongArch: fix migrate issue
+- LoongArch: Save and restore CSR.CNTC for hibernation
+- !392 [linux-6.6/devel][Feat]Hygon: Support to dec and enc userspace pages
+- x86/mm: support to dec and enc userspace pages
+- !391 [linux-6.6/devel][Bugfix]hugetlb: Fix NULL pointer dereference BUG
+- mm/hugetlb: fix kernel NULL pointer dereference when replacing free hugetlb folios
+- !389 phytium: pswiotlb: Add PSWIOTLB mechanism to improve DMA performance
+- phytium: pswiotlb: Add PSWIOTLB mechanism to improve DMA performance
+- !388 [linux-6.6/devel][Bugfix]Hygon: Address boot failures of CSV1/CSV2 VMs on Hygon 2g and C86-3g CPUs with firmware build ID below 1878 and 1810.
+- KVM: SVM: CSV is unsupported if both the firmware with a build ID < 1878 and SME is not in use
+- KVM: SVM: The ASID range available for CSV2 guests vary across different firmware
+- !377 net/hinic3:Add Huawei Intelligent Network Card Driver:hinic3
+- net/hinic3:Add Huawei Intelligent Network Card Driver:hinic3
+- !387 [linux-6.6/devel][bugfix]: drivers/scsi/hisi_raid: Convert files to Unix line endings
+- drivers/scsi/hisi_raid: Convert files to Unix line endings
+- !386 [linux-6.6/devel][bugfix]: LoongArch: fix sequence issues between DMA and interrupts on the Loongson platform.
+- nvme: loongarch: Add udelay to avoid data error caused by dma sequence
+- megaraid: loongarch: Add udelay to avoid data error caused by dma sequence
+- !385 [linux-6.6/devel][bugfix]: LoongArch: kvm: fix some known issues for loongarch drivers/iommu
+- drivers/iommu: Enhance the robustness of the iommu module
+- driver/vfio: disable vfio pci intx
+- drivers/iommu: Define the alias of the iommu device
+- loongarch/configs: enable vfio mdev config
+- drivers/iommu: Add the "iommu disable" probe
+- !384 [linux-6.6/devel][Bugfix]: LoongArch: sync some upstream patch.
+- LoongArch: Prevent cond_resched() occurring within kernel-fpu
+- mm/migrate: correct nr_failed in migrate_pages_sync()
+- mm/page_alloc.c: avoid infinite retries caused by cpuset race
+- mm/hugetlb: LoongArch: Return NULL from huge_pte_offset() for none PMD
+- !383 [linux-6.6/devel][Feature]: add loongson 2k3000 gmac and pwm drivers support
+- net: stmmac: dwmac-loongson: Add new GMAC's PCI device ID support
+- pwm: Add Loongson PWM controller support
+- !381 [linux-6.6/devel][Feature]Hygon: Add new pci device id and optimized hygon trusted function kernel driver
+- crypto: ccp: Fix for potential memory Out-of-Bounds access due to insufficient array size
+- crypto: ccp: add new pci device id and modify psp_do_cmd() interface to not rely on sev device
+- !380 SCSI: hisi_raid: support SPxxx serial RAID/HBA controllers
+- SCSI: hisi_raid: support SPxxx serial RAID/HBA controllers
+- !376 bcache: call force_wake_up_gc() if necessary in check_should_bypass()
+- bcache: call force_wake_up_gc() if necessary in check_should_bypass()
+- !378 Default enable drm accel driver
+- Default enable drm accel driver
+- !370 [linux-6.6/devel][Bugfix]Hygon：Avoid concurrent pinning shared pages at both KVM side and vfio side when passthrough device to CSV3 VM
+- KVM: SVM: CSV: fix CSV3 launch failures because of concurrent longterm pin
+- !369 [linux-6.6/devel][Feature]Hygon: In a CSV3 VM, the hypercall should notify real page enc/dec status
+- x86/kvm: Don't hypercall to enc all usable RAM on CSV3 platform
+- !368 [linux-6.6/devel][Bugfix]Hygon: Return 0 at the beginning of csv_guest_hygon_coco_extension() for non-CSV3 VMs
+- KVM: SVM: CSV: Return 0 at the beginning of csv_guest_hygon_coco_extension() for non-CSV3 VMs
+- !367 [linux-6.6/devel][Bugfix]Hygon: Remove HYDCU fixup header driver from kernel source code
+- Revert "drm/hygon: Add support to passthrough Hygon DCU to virtual machine"
+- !366 [linux-6.6/devel][Feature]Backport some mm related patches from recent (202504) Linux upstream
+- mm: compaction: use the proper flag to determine watermarks
+- mm/compaction: factor out code to test if we should run compaction for target order
+- mm/hugetlb: wait for hugetlb folios to be freed
+- mm: replace free hugepage folios after migration
+- mm/cma: using per-CMA locks to improve concurrent allocation performance
+- Revert "mm/cma: add API to enable concurrent allocation from the CMA"
+- Revert "x86/mm: CSV allows CMA allocation concurrently"
+- KVM: SEV: Use long-term pin when registering encrypted memory regions
+- Revert "KVM: SEV: Pin SEV guest memory out of CMA area"
+- mm: hugetlb_vmemmap: fix hugetlb page number decrease failed on movable nodes
+- !372 [linux-6.6/devel][Feature]: LoongArch: support CONFIG_SCHED_MC
+- LoongArch: support CONFIG_SCHED_MC
+- !371 [linux-6.6/devel][Feature]: LoongArch: configs: Enable some configs for looongarch
+- LoongArch: configs: Enable GPIO_PCA953X driver
+- LoongArch: configs: Enable IGC driver.
+- LoongArch: configs: CONFIG_NR_CPUS expanded to 2048.
+- add LICENSE.
+- Merge branch 'korantli/release-cve' into 'release' (merge request !478)
+- thermal: core: Reference count the zone in thermal_zone_get_by_id()
+- Merge branch 'rongwei.wang/uncachedv2' into 'release' (merge request !404)
+- mm/truncate: don't skip dirty page in folio_unmap_invalidate()
+- mm/filemap: fix miscalculated file range for filemap_fdatawrite_range_kick()
+- xfs: flag as supporting FOP_DONTCACHE
+- iomap: make buffered writes work with RWF_DONTCACHE
+- mm: add FGP_DONTCACHE folio creation flag
+- mm: call filemap_fdatawrite_range_kick() after IOCB_DONTCACHE issue
+- mm/filemap: add filemap_fdatawrite_range_kick() helper
+- mm/filemap: drop streaming/uncached pages when writeback completes
+- mm/filemap: add read support for RWF_DONTCACHE
+- fs: add RWF_DONTCACHE iocb and FOP_DONTCACHE file_operations flag
+- mm/truncate: add folio_unmap_invalidate() helper
+- mm/readahead: add readahead_control->dropbehind member
+- mm: add PG_dropbehind folio flag
+- mm/readahead: add folio allocation helper
+- mm/filemap: use page_cache_sync_ra() to kick off read-ahead
+- mm/filemap: change filemap_create_folio() to take a struct kiocb
+- mm: allow read-ahead with IOCB_NOWAIT set
+- fs: claw back a few FMODE_* bits
+- mm: separate out FOLIO_FLAGS from PAGEFLAGS
+- Merge branch 'new_swap' into 'release' (merge request !522)
+- mm, swap: fix false warning for large allocation with !THP_SWAP
+- mm/workingset.c: fix using uninitialized variables
+- emm/oversell: adapt process interface for memory overselling
+- emm/oversell: adapt memcg interface for memory overselling
+- emm/oversell: adapt vmstat interface for memory overselling
+- emm/oversell: adapt meminfo interface for memory overselling
+- emm/oversell: wrap the overbooking judgment statement into an inline function
+- emm/oversell: Added emm_oversell and emm_manager fields in mem_cgroup
+- mm/memcontrol: enable zram_memcg_nocharge
+- mm, swap: simplify folio swap allocation
+- mm, swap: remove swap slot cache
+- mm, swap: use percpu cluster as allocation fast path
+- mm, swap: don't update the counter up-front
+- mm, swap: avoid redundant swap device pinning
+- mm, swap: drop the flag TTRS_DIRECT
+- mm, swap: avoid reclaiming irrelevant swap cache
+- mm, swap: correct comment in swap_usage_sub()
+- mm, swap: remove setting SWAP_MAP_BAD for discard cluster
+- mm/swapfile.c: remove the incorrect code comment
+- mm/swap_state.c: fix the obsolete code comment
+- mm, swap: avoid BUG_ON in relocate_cluster()
+- mm: swap: use correct step in loop to wait all clusters in wait_for_allocation()
+- mm: swap: add back full cluster when no entry is reclaimed
+- mm, swap: fix reclaim offset calculation error during allocation
+- mm, swap_slots: remove slot cache for freeing path
+- mm, swap: use a global swap cluster for non-rotation devices
+- mm, swap: introduce a helper for retrieving cluster from offset
+- mm, swap: simplify percpu cluster updating
+- mm, swap: reduce contention on device lock
+- mm, swap: use an enum to define all cluster flags and wrap flags changes
+- mm, swap: hold a reference during scan and cleanup flag usage
+- mm, swap: clean up plist removal and adding
+- mm, swap: clean up device availability check
+- mm, swap: use cluster lock for HDD
+- mm, swap: remove old allocation path for HDD
+- mm, swap: fold swap_info_get_cont in the only caller
+- mm, swap: minor clean up for swap entry allocation
+- mm, swap: fix allocation and scanning race with swapoff
+- mm: swapfile: fix cluster reclaim work crash on rotational devices
+- mm, swap: avoid over reclaim of full clusters
+- mm: swap: prevent possible data-race in __try_to_reclaim_swap
+- mm: swapfile: fix SSD detection with swapfile on btrfs
+- mm: rename instances of swap_info_struct to meaningful 'si'
+- mm: swap: add a adaptive full cluster cache reclaim
+- mm: swap: relaim the cached parts that got scanned
+- mm: swap: add a fragment cluster list
+- mm: swap: allow cache reclaim to skip slot cache
+- mm: swap: skip slot cache on freeing for mTHP
+- mm: swap: clean up initialization helper
+- mm: swap: separate SSD allocation from scan_swap_map_slots()
+- mm: swap: mTHP allocate swap entries from nonfull list
+- mm: swap: swap cluster switch to double link list
+- mm/swapfile: mark racy access on si->highest_bit
+- mm,swap: add document about RCU read lock and swapoff interaction
+- mm: swap: allow storage of all mTHP orders
+- Revert "swapfile: add a helper get_cached_swap_page_of_type"
+- mm: swap: update get_swap_pages() to take folio order
+- mm: swap: simplify struct percpu_cluster
+- mm: swap: remove CLUSTER_FLAG_HUGE from swap_cluster_info:flags
+- mm/swapfile:__swap_duplicate: drop redundant WRITE_ONCE on swap_map for err cases
+- mm: swap: enforce updating inuse_pages at the end of swap_range_free()
+- config: delete no longer existed FRONTSWAP
+- Merge branch 'leonylgao/add_more_kabi_reserved' into 'release' (merge request !427)
+- kabi: add paddings (part 6)
+- kabi: add paddings (part 5)
+- kabi: add paddings (part 4)
+- Merge branch 'haoqinhuang/release-cna-spinlock' into 'release' (merge request !418)
+- locking/qspinlock: Add config to open CNA
+- locking/qspinlock: Introduce the shuffle reduction optimization into CNA
+- locking/qspinlock: Avoid moving certain threads between waiting queues in CNA
+- locking/qspinlock: Introduce starvation avoidance into CNA
+- locking/qspinlock: Introduce CNA into the slow path of qspinlock
+- locking/qspinlock: Refactor the qspinlock slow path
+- locking/qspinlock: Rename mcs lock/unlock macros and make them more generic
+- thirdparty support
+- samples: add hung_task detector mutex blocking sample
+- hung_task: show the blocker task if the task is hung on mutex
+- mm/vmscan: wake up flushers conditionally to avoid cgroup OOM
+- rue/cgroupfs: correct cgroupfs_stat_show_cpuacct_info=2 result with unlimited quota
+- io_uring: add sysctl interface for iowait
+- thirdpaty/bnxt: update bnxt_en driver to 233
+
 * Thu May 29 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.88-33.1
 - config: Add bt sched configuration items support
 - rue/cpu/bt: Add basic framework of offline scheduler class
