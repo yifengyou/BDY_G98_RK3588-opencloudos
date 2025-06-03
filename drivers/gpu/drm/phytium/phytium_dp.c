@@ -877,7 +877,10 @@ void phytium_dp_hw_config_video(struct phytium_dp_device *phytium_dp)
 	/* mul 10 for register setting */
 	data_per_tu = 10*tu_size * date_rate/link_bw;
 	symbols_per_tu = (data_per_tu/10)&0xff;
-	frac_symbols_per_tu = (data_per_tu%10*16/10) & 0xf;
+	if (symbols_per_tu == 63)
+		frac_symbols_per_tu = 0;
+	else
+		frac_symbols_per_tu = (data_per_tu%10*16/10) & 0xf;
 	phytium_writel_reg(priv, frac_symbols_per_tu<<24 | symbols_per_tu<<16 | tu_size,
 			   group_offset, PHYTIUM_DP_TRANSFER_UNIT_SIZE);
 
@@ -1103,7 +1106,6 @@ static int phytium_dp_dpcd_set_link(struct phytium_dp_device *phytium_dp,
 	link_config[1] = lane_count;
 	if (drm_dp_enhanced_frame_cap(phytium_dp->dpcd))
 		link_config[1] |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
-
 	ret = drm_dp_dpcd_write(&phytium_dp->aux, DP_LINK_BW_SET, link_config, 2);
 	if (ret < 0) {
 		DRM_NOTE("write dpcd DP_LINK_BW_SET fail: ret:%d\n", ret);
@@ -1727,6 +1729,7 @@ static int phytium_dp_long_pulse(struct drm_connector *connector, bool hpd_raw_s
 	enum drm_connector_status status = connector->status;
 	bool video_enable = false;
 	uint32_t index = 0;
+	struct edid *edid = NULL;
 
 	if (phytium_dp->is_edp)
 		status = connector_status_connected;
@@ -1760,6 +1763,15 @@ static int phytium_dp_long_pulse(struct drm_connector *connector, bool hpd_raw_s
 			mdelay(2);
 			phytium_dp_hw_enable_video(phytium_dp);
 		}
+
+		edid = drm_get_edid(connector, &phytium_dp->aux.ddc);
+
+		if (edid && drm_edid_is_valid(edid))
+			phytium_dp->has_audio = drm_detect_monitor_audio(edid);
+		else
+			phytium_dp->has_audio = false;
+
+		kfree(edid);
 	}
 
 out:
@@ -2195,7 +2207,6 @@ static void phytium_encoder_enable(struct drm_encoder *encoder)
 
 	if (phytium_dp->is_edp)
 		phytium_edp_backlight_on(phytium_dp);
-
 }
 
 enum drm_mode_status
@@ -2211,13 +2222,13 @@ phytium_encoder_mode_valid(struct drm_encoder *encoder, const struct drm_display
 	case 8:
 		break;
 	default:
-		DRM_INFO("not support bpc(%d)\n", display_info->bpc);
+		DRM_DEBUG_KMS("not support bpc(%d)\n", display_info->bpc);
 		display_info->bpc = 8;
 		break;
 	}
 
 	if ((display_info->color_formats & DRM_COLOR_FORMAT_RGB444) == 0) {
-		DRM_INFO("not support color_format(%d)\n", display_info->color_formats);
+		DRM_DEBUG_KMS("not support color_format(%d)\n", display_info->color_formats);
 		display_info->color_formats = DRM_COLOR_FORMAT_RGB444;
 	}
 
@@ -2584,6 +2595,7 @@ int phytium_dp_init(struct drm_device *dev, int port)
 	if (phytium_dp_is_edp(phytium_dp, port)) {
 		phytium_dp->is_edp = true;
 		type = DRM_MODE_CONNECTOR_eDP;
+		phytium_dp->pwm = priv->info.pwm;
 		phytium_dp_panel_init_backlight_funcs(phytium_dp);
 		phytium_edp_backlight_off(phytium_dp);
 		phytium_edp_panel_poweroff(phytium_dp);

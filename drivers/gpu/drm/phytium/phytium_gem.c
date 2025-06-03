@@ -95,7 +95,7 @@ phytium_gem_prime_get_sg_table(struct drm_gem_object *obj)
 			DRM_ERROR("failed to allocate sg\n");
 			goto sgt_free;
 		}
-		page = phys_to_page(phytium_gem_obj->phys_addr);
+		page = pfn_to_page(__phys_to_pfn(phytium_gem_obj->phys_addr));
 		sg_set_page(sgt->sgl, page, PAGE_ALIGN(phytium_gem_obj->size), 0);
 	} else if (phytium_gem_obj->memory_type == MEMORY_TYPE_SYSTEM_UNIFIED) {
 		ret = dma_get_sgtable_attrs(dev->dev, sgt, phytium_gem_obj->vaddr,
@@ -169,7 +169,11 @@ int phytium_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 
 void phytium_gem_prime_vunmap(struct drm_gem_object *obj, struct iosys_map *map)
 {
+}
 
+int phytium_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+{
+	return phytium_gem_mmap_obj(obj, vma);
 }
 
 static void phytium_dma_callback(void *callback_param)
@@ -391,10 +395,7 @@ int phytium_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	int ret = 0;
 
 	ret = drm_gem_mmap(filp, vma);
-	if (ret < 0)
-		return ret;
-
-	return phytium_gem_mmap_obj(vma->vm_private_data, vma);
+	return ret;
 }
 
 static const struct vm_operations_struct phytium_vm_ops = {
@@ -408,6 +409,7 @@ static const struct drm_gem_object_funcs phytium_drm_gem_object_funcs = {
 	.vmap = phytium_gem_prime_vmap,
 	.vunmap = phytium_gem_prime_vunmap,
 	.vm_ops = &phytium_vm_ops,
+	.mmap = phytium_gem_prime_mmap,
 };
 
 struct phytium_gem_object *phytium_gem_create_object(struct drm_device *dev, unsigned long size)
@@ -447,7 +449,7 @@ struct phytium_gem_object *phytium_gem_create_object(struct drm_device *dev, uns
 			DRM_ERROR("fail to allocate carveout memory with size %lx\n", size);
 			goto failed_dma_alloc;
 		}
-		page = phys_to_page(phytium_gem_obj->phys_addr);
+		page = pfn_to_page(__phys_to_pfn(phytium_gem_obj->phys_addr));
 		phytium_gem_obj->iova = dma_map_page(dev->dev, page, 0, size, DMA_TO_DEVICE);
 		if (dma_mapping_error(dev->dev, phytium_gem_obj->iova)) {
 			DRM_ERROR("fail to dma map carveout memory with size %lx\n", size);
