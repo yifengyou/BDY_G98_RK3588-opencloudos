@@ -14,6 +14,16 @@
 #include <linux/psp.h>
 #include <linux/psp-hygon.h>
 #include <asm/cpuid.h>
+#include <linux/bsearch.h>
+#include <linux/sort.h>
+#include <linux/bitfield.h>
+#include <linux/workqueue.h>
+#include <linux/hashtable.h>
+
+#include "ring-buffer.h"
+#include "psp-dev.h"
+#include "csv-dev.h"
+#include "vpsp.h"
 
 #ifdef pr_fmt
 #undef pr_fmt
@@ -47,23 +57,138 @@
  *					|<=> psp device driver
  */
 
+/**
+ * used to locate the command context,
+ * when the guest enters the host via vmmcall
+ */
+DEFINE_HASHTABLE(vpsp_cmd_ctx_table, 11);
+DEFINE_RWLOCK(table_rwlock);
+bool vpsp_in_ringbuffer_mode;
+static struct vpsp_cmd_ctx *vpsp_cmd_ctx_array[CSV_COMMAND_PRIORITY_NUM]
+				[CSV_RING_BUFFER_SIZE / CSV_RING_BUFFER_ESIZE];
+
+static struct vpsp_cmd_ctx *vpsp_hashtable_find_cmd_ctx(gpa_t key1, pid_t key2)
+{
+	struct vpsp_cmd_ctx *entry = NULL;
+	bool is_found = false;
+
+	read_lock(&table_rwlock);
+	hash_for_each_possible(vpsp_cmd_ctx_table, entry, node, key1) {
+		if (entry->key1 == key1 && entry->key2 == key2) {
+			is_found = true;
+			break;
+		}
+	}
+	read_unlock(&table_rwlock);
+	if (!is_found)
+		entry = NULL;
+
+	return entry;
+}
+
+static void vpsp_hashtable_add_cmd_ctx(struct vpsp_cmd_ctx *ctx)
+{
+	struct vpsp_cmd_ctx *entry = NULL;
+
+	write_lock(&table_rwlock);
+	hash_for_each_possible(vpsp_cmd_ctx_table, entry, node, ctx->key1) {
+		if (entry->key1 == ctx->key1 &&
+				entry->key2 == ctx->key2) {
+			vpsp_cmd_ctx_obj_put(entry, true);
+			break;
+		}
+	}
+	hash_add(vpsp_cmd_ctx_table, &ctx->node, ctx->key1);
+	write_unlock(&table_rwlock);
+
+	vpsp_cmd_ctx_obj_get(ctx);
+}
+
+static void vpsp_hashtable_remove_cmd_ctx(struct vpsp_cmd_ctx *ctx)
+{
+	write_lock(&table_rwlock);
+	hash_del(&ctx->node);
+	write_unlock(&table_rwlock);
+
+	vpsp_cmd_ctx_obj_put(ctx, false);
+}
+
+/**
+ * Create a vpsp_cmd_ctx object and insert it into the
+ * vpsp_cmd_ctx_table hash table.
+ *
+ * @hkey: The key value for the hash table vpsp_cmd_ctx_table
+ *
+ * Return: the address of the vpsp_cmd_ctx object
+ *	   if created successfully, otherwise returns NULL
+ */
+static struct vpsp_cmd_ctx *vpsp_cmd_ctx_create(gpa_t key1, pid_t key2)
+{
+	struct vpsp_cmd_ctx *cmd_ctx = kmem_cache_zalloc(vpsp_cmd_ctx_slab, GFP_KERNEL);
+
+	if (cmd_ctx) {
+		/**
+		 * According to the implementation of refcount,
+		 * the initial value must be greater than 0.
+		 */
+		refcount_set(&cmd_ctx->ref, 1);
+		cmd_ctx->statval = VPSP_CMD_STATUS_RUNNING;
+		cmd_ctx->key1 = key1;
+		cmd_ctx->key2 = key2;
+		vpsp_hashtable_add_cmd_ctx(cmd_ctx);
+	}
+	return cmd_ctx;
+}
+
+/**
+ * Destroys the specified vpsp_cmd_ctx object,
+ * indicating it will no longer be accessed.
+ *
+ * But does not necessarily free the cmd_ctx memory immediately,
+ * only additional to perform decrement refcount.
+ *
+ * Actual memory release occurs when the refcount drops to 0,
+ * which may happen during the vpsp_worker_handler or
+ * vpsp_cmd_ctx_destroy process.
+ *
+ * @cmd_ctx: the vpsp_cmd_ctx object
+ */
+static void vpsp_cmd_ctx_destroy(struct vpsp_cmd_ctx *cmd_ctx)
+{
+	if (!cmd_ctx)
+		return;
+	/**
+	 * The initial refcount is 1,
+	 * need to additional decrement a refcount.
+	 */
+	vpsp_cmd_ctx_obj_put(cmd_ctx, false);
+	vpsp_hashtable_remove_cmd_ctx(cmd_ctx);
+}
+
+void vpsp_cmd_ctx_obj_get(struct vpsp_cmd_ctx *cmd_ctx)
+{
+	refcount_inc(&cmd_ctx->ref);
+}
+
+void vpsp_cmd_ctx_obj_put(struct vpsp_cmd_ctx *cmd_ctx, bool force)
+{
+	do {
+		if (refcount_dec_and_test(&cmd_ctx->ref)) {
+			kfree(cmd_ctx->data);
+			memset(cmd_ctx, 0, sizeof(*cmd_ctx));
+			kmem_cache_free(vpsp_cmd_ctx_slab, cmd_ctx);
+			force = false;
+		}
+	} while (force);
+}
+
 struct psp_cmdresp_head {
 	uint32_t buf_size;
 	uint32_t cmdresp_size;
 	uint32_t cmdresp_code;
 } __packed;
 
-/* save command data for restoring later */
-struct vpsp_hbuf_wrapper {
-	void *data;
-	uint32_t data_size;
-};
-
-/* Virtual PSP host memory information maintenance, used in ringbuffer mode */
-struct vpsp_hbuf_wrapper
-g_hbuf_wrap[CSV_COMMAND_PRIORITY_NUM][CSV_RING_BUFFER_SIZE / CSV_RING_BUFFER_ESIZE] = {0};
-
-static int check_gpa_range(struct vpsp_context *vpsp_ctx, gpa_t addr, uint32_t size)
+static int check_gpa_range(struct vpsp_dev_ctx *vpsp_ctx, gpa_t addr, uint32_t size)
 {
 	if (!vpsp_ctx || !addr)
 		return -EFAULT;
@@ -73,7 +198,7 @@ static int check_gpa_range(struct vpsp_context *vpsp_ctx, gpa_t addr, uint32_t s
 	return -EFAULT;
 }
 
-static int check_psp_mem_range(struct vpsp_context *vpsp_ctx,
+static int check_psp_mem_range(struct vpsp_dev_ctx *vpsp_ctx,
 			void *data, uint32_t size)
 {
 	if ((((uintptr_t)data + size - 1) & ~PSP_2MB_MASK) !=
@@ -89,18 +214,20 @@ static int check_psp_mem_range(struct vpsp_context *vpsp_ctx,
 }
 
 /**
- * Copy the guest data to the host kernel buffer
- * and record the host buffer address in 'hbuf'.
- * This 'hbuf' is used to restore context information
- * during asynchronous processing.
+ * Copy Guest data to the Host kernel buffer
+ * and allocate a cmd_ctx to insert into the vpsp_cmd_ctx_table.
  */
 static int kvm_pv_psp_cmd_pre_op(struct kvm_vpsp *vpsp, gpa_t data_gpa,
-		struct vpsp_hbuf_wrapper *hbuf)
+		struct vpsp_cmd_ctx **cmd_ctx)
 {
 	int ret = 0;
 	void *data = NULL;
 	struct psp_cmdresp_head psp_head;
 	uint32_t data_size;
+
+	if (unlikely(!cmd_ctx))
+		return -EFAULT;
+	*cmd_ctx = NULL;
 
 	if (unlikely(vpsp->read_guest(vpsp->kvm, data_gpa, &psp_head,
 					sizeof(struct psp_cmdresp_head))))
@@ -114,34 +241,42 @@ static int kvm_pv_psp_cmd_pre_op(struct kvm_vpsp *vpsp, gpa_t data_gpa,
 	if (!data)
 		return -ENOMEM;
 
+	*cmd_ctx = vpsp_cmd_ctx_create(data_gpa, vpsp->kvm->userspace_pid);
+	if (!(*cmd_ctx)) {
+		ret = -EFAULT;
+		goto end;
+	}
+
 	if (unlikely(vpsp->read_guest(vpsp->kvm, data_gpa, data, data_size))) {
 		ret = -EFAULT;
 		goto end;
 	}
 
-	hbuf->data = data;
-	hbuf->data_size = data_size;
-
+	(*cmd_ctx)->data = data;
+	(*cmd_ctx)->data_size = data_size;
 end:
+	if (ret) {
+		vpsp_cmd_ctx_destroy(*cmd_ctx);
+		kfree(data);
+	}
 	return ret;
 }
 
 static int kvm_pv_psp_cmd_post_op(struct kvm_vpsp *vpsp, gpa_t data_gpa,
-				struct vpsp_hbuf_wrapper *hbuf)
+				struct vpsp_cmd_ctx *cmd_ctx)
 {
 	int ret = 0;
 
 	/* restore cmdresp's buffer from context */
-	if (unlikely(vpsp->write_guest(vpsp->kvm, data_gpa, hbuf->data,
-					hbuf->data_size))) {
+	if (unlikely(vpsp->write_guest(vpsp->kvm, data_gpa, cmd_ctx->data,
+					cmd_ctx->data_size))) {
 		pr_err("[%s]: kvm_write_guest for cmdresp data failed\n",
 			__func__);
 		ret = -EFAULT;
 		goto end;
 	}
 end:
-	kfree(hbuf->data);
-	memset(hbuf, 0, sizeof(*hbuf));
+	vpsp_cmd_ctx_destroy(cmd_ctx);
 	return ret;
 }
 
@@ -248,7 +383,7 @@ static phys_addr_t gpa_to_hpa(struct kvm_vpsp *vpsp, unsigned long data_gpa)
 
 }
 
-static int check_cmd_forward_op_permission(struct kvm_vpsp *vpsp, struct vpsp_context *vpsp_ctx,
+static int check_cmd_forward_op_permission(struct kvm_vpsp *vpsp, struct vpsp_dev_ctx *vpsp_ctx,
 				uint64_t data, uint32_t cmd)
 {
 	int ret;
@@ -294,7 +429,7 @@ static int check_cmd_forward_op_permission(struct kvm_vpsp *vpsp, struct vpsp_co
 
 static int
 check_cmd_copy_forward_op_permission(struct kvm_vpsp *vpsp,
-				struct vpsp_context *vpsp_ctx,
+				struct vpsp_dev_ctx *vpsp_ctx,
 				uint64_t data, uint32_t cmd)
 {
 	int ret = 0;
@@ -318,7 +453,7 @@ check_cmd_copy_forward_op_permission(struct kvm_vpsp *vpsp,
 	return ret;
 }
 
-static int vpsp_try_bind_vtkm(struct kvm_vpsp *vpsp, struct vpsp_context *vpsp_ctx,
+static int vpsp_try_bind_vtkm(struct kvm_vpsp *vpsp, struct vpsp_dev_ctx *vpsp_ctx,
 				uint32_t cmd, uint32_t *psp_ret)
 {
 	int ret;
@@ -353,58 +488,65 @@ int kvm_pv_psp_forward_op(struct kvm_vpsp *vpsp, uint32_t cmd,
 			gpa_t data_gpa, uint32_t psp_ret)
 {
 	int ret;
-	uint64_t data_hpa;
-	uint32_t index = 0, vid = 0;
+	uint32_t vid = 0;
 	struct vpsp_ret psp_async = {0};
-	struct vpsp_context *vpsp_ctx = NULL;
-	struct vpsp_cmd *vcmd = (struct vpsp_cmd *)&cmd;
-	uint8_t prio = CSV_COMMAND_PRIORITY_LOW;
+	struct vpsp_dev_ctx *vpsp_dev_ctx = NULL;
+	struct vpsp_cmd_ctx *cmd_ctx = NULL;
 	phys_addr_t hpa;
 
-	vpsp_get_context(&vpsp_ctx, vpsp->kvm->userspace_pid);
+	vpsp_get_dev_ctx(&vpsp_dev_ctx, vpsp->kvm->userspace_pid);
 
-	ret = check_cmd_forward_op_permission(vpsp, vpsp_ctx, data_gpa, cmd);
+	ret = check_cmd_forward_op_permission(vpsp, vpsp_dev_ctx, data_gpa, cmd);
 	if (unlikely(ret)) {
 		pr_err("directly operation not allowed\n");
 		goto end;
 	}
 
-	ret = vpsp_try_bind_vtkm(vpsp, vpsp_ctx, cmd, (uint32_t *)&psp_async);
+	ret = vpsp_try_bind_vtkm(vpsp, vpsp_dev_ctx, cmd, (uint32_t *)&psp_async);
 	if (unlikely(ret || *(uint32_t *)&psp_async)) {
 		pr_err("try to bind vtkm failed (ret %x, psp_async %x)\n",
 			ret, *(uint32_t *)&psp_async);
 		goto end;
 	}
 
-	if (vpsp_ctx)
-		vid = vpsp_ctx->vid;
+	if (vpsp_dev_ctx)
+		vid = vpsp_dev_ctx->vid;
 
 	*((uint32_t *)&psp_async) = psp_ret;
 
-	hpa = gpa_to_hpa(vpsp, data_gpa);
-	if (unlikely(!hpa)) {
-		ret = -EFAULT;
-		goto end;
-	}
-
-	data_hpa = PUT_PSP_VID(hpa, vid);
-
 	switch (psp_async.status) {
 	case VPSP_INIT:
+		cmd_ctx = vpsp_cmd_ctx_create(data_gpa,
+			vpsp->kvm->userspace_pid);
+		if (unlikely(!cmd_ctx)) {
+			ret = -ENOMEM;
+			goto end;
+		}
+
+		hpa = gpa_to_hpa(vpsp, data_gpa);
+		if (unlikely(!hpa)) {
+			ret = -EFAULT;
+			goto end;
+		}
 		/* try to send command to the device for execution*/
-		ret = vpsp_try_do_cmd(cmd, data_hpa, &psp_async);
+		ret = vpsp_try_do_cmd(cmd, PUT_PSP_VID(hpa, vid), cmd_ctx, &psp_async);
 		if (unlikely(ret)) {
-			pr_err("[%s]: vpsp_do_cmd failed\n", __func__);
+			pr_err("[%s]: vpsp_try_do_cmd failed\n", __func__);
 			goto end;
 		}
 		break;
 
 	case VPSP_RUNNING:
-		prio = vcmd->is_high_rb ? CSV_COMMAND_PRIORITY_HIGH :
-			CSV_COMMAND_PRIORITY_LOW;
-		index = psp_async.index;
+		cmd_ctx = vpsp_hashtable_find_cmd_ctx(data_gpa, vpsp->kvm->userspace_pid);
+		if (unlikely(!cmd_ctx)) {
+			pr_err("[%s]: vpsp_hashtable_find_cmd_ctx failed, data_gpa %llx\n",
+				__func__, data_gpa);
+			ret = -EFAULT;
+			goto end;
+		}
+
 		/* try to get the execution result from ringbuffer*/
-		ret = vpsp_try_get_result(prio, index, data_hpa, &psp_async);
+		ret = vpsp_try_get_result(cmd_ctx, &psp_async);
 		if (unlikely(ret)) {
 			pr_err("[%s]: vpsp_try_get_result failed\n", __func__);
 			goto end;
@@ -414,6 +556,11 @@ int kvm_pv_psp_forward_op(struct kvm_vpsp *vpsp, uint32_t cmd,
 	default:
 		pr_err("[%s]: invalid command status\n", __func__);
 		break;
+	}
+
+	if (psp_async.status == VPSP_FINISH) {
+		vpsp_cmd_ctx_destroy(cmd_ctx);
+		ret = 0;
 	}
 
 end:
@@ -427,6 +574,8 @@ end:
 		if (ret > 0)
 			ret = -ret;
 		psp_async.pret = (uint16_t)ret;
+		psp_async.status = VPSP_FINISH;
+		vpsp_cmd_ctx_destroy(cmd_ctx);
 	}
 	return *((int *)&psp_async);
 }
@@ -444,24 +593,21 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 {
 	int ret = 0;
 	struct vpsp_ret psp_ret = {0};
-	struct vpsp_hbuf_wrapper hbuf = {0};
-	struct vpsp_cmd *vcmd = (struct vpsp_cmd *)&cmd;
-	struct vpsp_context *vpsp_ctx = NULL;
+	struct vpsp_cmd_ctx *cmd_ctx = NULL;
+	struct vpsp_dev_ctx *vpsp_dev_ctx = NULL;
 	phys_addr_t data_paddr = 0;
-	uint8_t prio = CSV_COMMAND_PRIORITY_LOW;
-	uint32_t index = 0;
 	uint32_t vid = 0;
 
-	vpsp_get_context(&vpsp_ctx, vpsp->kvm->userspace_pid);
+	vpsp_get_dev_ctx(&vpsp_dev_ctx, vpsp->kvm->userspace_pid);
 
-	ret = check_cmd_copy_forward_op_permission(vpsp, vpsp_ctx, data_gpa, cmd);
+	ret = check_cmd_copy_forward_op_permission(vpsp, vpsp_dev_ctx, data_gpa, cmd);
 	if (unlikely(ret)) {
 		pr_err("copy operation not allowed\n");
 		return -EPERM;
 	}
 
-	if (vpsp_ctx)
-		vid = vpsp_ctx->vid;
+	if (vpsp_dev_ctx)
+		vid = vpsp_dev_ctx->vid;
 
 	if (unlikely(vpsp->read_guest(vpsp->kvm, psp_ret_gpa, &psp_ret,
 					sizeof(psp_ret))))
@@ -470,32 +616,25 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 	switch (psp_ret.status) {
 	case VPSP_INIT:
 		/* copy data from guest */
-		ret = kvm_pv_psp_cmd_pre_op(vpsp, data_gpa, &hbuf);
+		ret = kvm_pv_psp_cmd_pre_op(vpsp, data_gpa, &cmd_ctx);
 		if (unlikely(ret)) {
-			psp_ret.status = VPSP_FINISH;
 			pr_err("[%s]: kvm_pv_psp_cmd_pre_op failed\n",
 					__func__);
 			ret = -EFAULT;
 			goto end;
 		}
 
-		data_paddr = PUT_PSP_VID(__psp_pa(hbuf.data), vid);
+		data_paddr = PUT_PSP_VID(__psp_pa(cmd_ctx->data), vid);
 		/* try to send command to the device for execution*/
-		ret = vpsp_try_do_cmd(cmd, data_paddr, (struct vpsp_ret *)&psp_ret);
+		ret = vpsp_try_do_cmd(cmd, data_paddr, cmd_ctx, (struct vpsp_ret *)&psp_ret);
 		if (unlikely(ret)) {
 			pr_err("[%s]: vpsp_try_do_cmd failed\n", __func__);
 			ret = -EFAULT;
 			goto end;
 		}
 
-		if (psp_ret.status == VPSP_RUNNING) {
-			prio = vcmd->is_high_rb ? CSV_COMMAND_PRIORITY_HIGH :
-				CSV_COMMAND_PRIORITY_LOW;
-			g_hbuf_wrap[prio][psp_ret.index] = hbuf;
-			break;
-
-		} else if (psp_ret.status == VPSP_FINISH) {
-			ret = kvm_pv_psp_cmd_post_op(vpsp, data_gpa, &hbuf);
+		if (psp_ret.status == VPSP_FINISH) {
+			ret = kvm_pv_psp_cmd_post_op(vpsp, data_gpa, cmd_ctx);
 			if (unlikely(ret)) {
 				pr_err("[%s]: kvm_pv_psp_cmd_post_op failed\n",
 						__func__);
@@ -506,13 +645,16 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 		break;
 
 	case VPSP_RUNNING:
-		prio = vcmd->is_high_rb ? CSV_COMMAND_PRIORITY_HIGH :
-			CSV_COMMAND_PRIORITY_LOW;
-		index = psp_ret.index;
-		data_paddr = PUT_PSP_VID(__psp_pa(g_hbuf_wrap[prio][index].data), vid);
+		cmd_ctx = vpsp_hashtable_find_cmd_ctx(data_gpa, vpsp->kvm->userspace_pid);
+		if (unlikely(!cmd_ctx)) {
+			pr_err("[%s]: vpsp_hashtable_find_cmd_ctx failed, data_gpa %llx\n",
+				__func__, data_gpa);
+			ret = -EFAULT;
+			goto end;
+		}
+
 		/* try to get the execution result from ringbuffer*/
-		ret = vpsp_try_get_result(prio, index, data_paddr,
-					(struct vpsp_ret *)&psp_ret);
+		ret = vpsp_try_get_result(cmd_ctx, (struct vpsp_ret *)&psp_ret);
 		if (unlikely(ret)) {
 			pr_err("[%s]: vpsp_try_get_result failed\n", __func__);
 			ret = -EFAULT;
@@ -524,8 +666,8 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 			goto end;
 		} else if (psp_ret.status == VPSP_FINISH) {
 			/* copy data to guest */
-			ret = kvm_pv_psp_cmd_post_op(vpsp, data_gpa,
-					&g_hbuf_wrap[prio][index]);
+			ret = kvm_pv_psp_cmd_post_op(vpsp, data_gpa, cmd_ctx);
+			cmd_ctx = NULL;
 			if (unlikely(ret)) {
 				pr_err("[%s]: kvm_pv_psp_cmd_post_op failed\n",
 						__func__);
@@ -542,8 +684,749 @@ int kvm_pv_psp_copy_forward_op(struct kvm_vpsp *vpsp, int cmd, gpa_t data_gpa, g
 		break;
 	}
 end:
+	if (ret) {
+		psp_ret.status = VPSP_FINISH;
+		vpsp_cmd_ctx_destroy(cmd_ctx);
+	}
 	/* return psp_ret to guest */
 	vpsp->write_guest(vpsp->kvm, psp_ret_gpa, &psp_ret, sizeof(psp_ret));
 	return ret;
 }
 EXPORT_SYMBOL_GPL(kvm_pv_psp_copy_forward_op);
+
+DEFINE_RWLOCK(vpsp_dev_rwlock);
+
+/* VPSP_VID_MAX_ENTRIES determines the maximum number of vms that can set vid.
+ * but, the performance of finding vid is determined by g_vpsp_vid_num,
+ * so VPSP_VID_MAX_ENTRIES can be set larger.
+ */
+#define VPSP_VID_MAX_ENTRIES    2048
+#define VPSP_VID_NUM_MAX        64
+
+static struct vpsp_dev_ctx g_vpsp_context_array[VPSP_VID_MAX_ENTRIES];
+static uint32_t g_vpsp_vid_num;
+static int compare_vid_entries(const void *a, const void *b)
+{
+	return ((struct vpsp_dev_ctx *)a)->pid - ((struct vpsp_dev_ctx *)b)->pid;
+}
+static void swap_vid_entries(void *a, void *b, int size)
+{
+	struct vpsp_dev_ctx entry;
+
+	memcpy(&entry, a, size);
+	memcpy(a, b, size);
+	memcpy(b, &entry, size);
+}
+
+/**
+ * When 'allow_default_vid' is set to 1,
+ * QEMU is allowed to use 'vid 0' by default
+ * in the absence of a valid 'vid' setting.
+ */
+uint32_t allow_default_vid = 1;
+void vpsp_set_default_vid_permission(uint32_t is_allow)
+{
+	allow_default_vid = is_allow;
+}
+
+int vpsp_get_default_vid_permission(void)
+{
+	return allow_default_vid;
+}
+
+/**
+ * get a vpsp device context from pid
+ */
+int vpsp_get_dev_ctx(struct vpsp_dev_ctx **ctx, pid_t pid)
+{
+	struct vpsp_dev_ctx new_entry = {.pid = pid};
+	struct vpsp_dev_ctx *existing_entry = NULL;
+
+	read_lock(&vpsp_dev_rwlock);
+	existing_entry = bsearch(&new_entry, g_vpsp_context_array, g_vpsp_vid_num,
+				sizeof(struct vpsp_dev_ctx), compare_vid_entries);
+	read_unlock(&vpsp_dev_rwlock);
+
+	if (!existing_entry)
+		return -ENOENT;
+
+	if (ctx)
+		*ctx = existing_entry;
+
+	return 0;
+}
+
+/**
+ * Upon qemu startup, this section checks whether
+ * the '-device psp,vid' parameter is specified.
+ * If set, it utilizes the 'vpsp_add_vid' function
+ * to insert the 'vid' and 'pid' values into the 'g_vpsp_context_array'.
+ * The insertion is done in ascending order of 'pid'.
+ */
+static int vpsp_add_vid(uint32_t vid)
+{
+	pid_t cur_pid = task_pid_nr(current);
+	struct vpsp_dev_ctx new_entry = {.vid = vid, .pid = cur_pid};
+
+	if (vpsp_get_dev_ctx(NULL, cur_pid) == 0)
+		return -EEXIST;
+	if (g_vpsp_vid_num == VPSP_VID_MAX_ENTRIES)
+		return -ENOMEM;
+	if (vid >= VPSP_VID_NUM_MAX)
+		return -EINVAL;
+
+	write_lock(&vpsp_dev_rwlock);
+	memcpy(&g_vpsp_context_array[g_vpsp_vid_num++], &new_entry, sizeof(struct vpsp_dev_ctx));
+	sort(g_vpsp_context_array, g_vpsp_vid_num, sizeof(struct vpsp_dev_ctx),
+				compare_vid_entries, swap_vid_entries);
+	pr_info("PSP: add vid %d, by pid %d, total vid num is %d\n", vid, cur_pid, g_vpsp_vid_num);
+	write_unlock(&vpsp_dev_rwlock);
+	return 0;
+}
+
+/**
+ * Upon the virtual machine is shut down,
+ * the 'vpsp_del_vid' function is employed to remove
+ * the 'vid' associated with the current 'pid'.
+ */
+static int vpsp_del_vid(void)
+{
+	pid_t cur_pid = task_pid_nr(current);
+	int i, ret = -ENOENT;
+
+	write_lock(&vpsp_dev_rwlock);
+	for (i = 0; i < g_vpsp_vid_num; ++i) {
+		if (g_vpsp_context_array[i].pid == cur_pid) {
+			--g_vpsp_vid_num;
+			pr_info("PSP: delete vid %d, by pid %d, total vid num is %d\n",
+				g_vpsp_context_array[i].vid, cur_pid, g_vpsp_vid_num);
+			memmove(&g_vpsp_context_array[i], &g_vpsp_context_array[i + 1],
+				sizeof(struct vpsp_dev_ctx) * (g_vpsp_vid_num - i));
+			ret = 0;
+			goto end;
+		}
+	}
+
+end:
+	write_unlock(&vpsp_dev_rwlock);
+	return ret;
+}
+
+static int vpsp_set_gpa_range(u64 gpa_start, u64 gpa_end)
+{
+	pid_t cur_pid = task_pid_nr(current);
+	struct vpsp_dev_ctx *ctx = NULL;
+
+	vpsp_get_dev_ctx(&ctx, cur_pid);
+	if (!ctx) {
+		pr_err("PSP: %s get vpsp_context failed from pid %d\n", __func__, cur_pid);
+		return -ENOENT;
+	}
+
+	ctx->gpa_start = gpa_start;
+	ctx->gpa_end = gpa_end;
+	pr_info("PSP: set gpa range (start 0x%llx, end 0x%llx), by pid %d\n",
+		gpa_start, gpa_end, cur_pid);
+	return 0;
+}
+
+int do_vpsp_op_ioctl(struct vpsp_dev_ctrl *ctrl)
+{
+	int ret = 0;
+	unsigned char op = ctrl->op;
+
+	switch (op) {
+	case VPSP_OP_VID_ADD:
+		ret = vpsp_add_vid(ctrl->data.vid);
+		break;
+
+	case VPSP_OP_VID_DEL:
+		ret = vpsp_del_vid();
+		break;
+
+	case VPSP_OP_SET_DEFAULT_VID_PERMISSION:
+		vpsp_set_default_vid_permission(ctrl->data.def_vid_perm);
+		break;
+
+	case VPSP_OP_GET_DEFAULT_VID_PERMISSION:
+		ctrl->data.def_vid_perm = vpsp_get_default_vid_permission();
+		break;
+
+	case VPSP_OP_SET_GPA:
+		ret = vpsp_set_gpa_range(ctrl->data.gpa.gpa_start, ctrl->data.gpa.gpa_end);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+
+static DEFINE_MUTEX(vpsp_rb_mutex);
+struct csv_ringbuffer_queue vpsp_ring_buffer[CSV_COMMAND_PRIORITY_NUM];
+
+static unsigned int vpsp_queue_cmd_size(int prio)
+{
+	return csv_cmd_queue_size(&vpsp_ring_buffer[prio].cmd_ptr);
+}
+
+static int get_queue_tail(int prio)
+{
+	struct csv_ringbuffer_queue *ringbuffer = &vpsp_ring_buffer[prio];
+	return ringbuffer->cmd_ptr.tail & ringbuffer->cmd_ptr.mask;
+}
+
+static int get_queue_overcommit_tail(int prio)
+{
+	uint32_t que_size = vpsp_queue_cmd_size(prio);
+	struct csv_ringbuffer_queue *ringbuffer = &vpsp_ring_buffer[prio];
+
+	if (que_size >= VPSP_RB_OVERCOMMIT_SIZE || que_size == 0 || !vpsp_rb_oc_supported)
+		return get_queue_tail(prio);
+	return (ringbuffer->cmd_ptr.head + VPSP_RB_OVERCOMMIT_SIZE) & ringbuffer->cmd_ptr.mask;
+}
+
+static int get_queue_head(struct csv_ringbuffer_queue *ringbuffer)
+{
+	return ringbuffer->cmd_ptr.head & ringbuffer->cmd_ptr.mask;
+}
+
+static void vpsp_set_cmd_status(int prio, int index, int status)
+{
+	struct csv_queue *ringbuf = &vpsp_ring_buffer[prio].stat_val;
+	struct csv_statval_entry *statval = (struct csv_statval_entry *)ringbuf->data;
+
+	statval[index].status = status;
+}
+
+static int vpsp_get_cmd_status(int prio, int index)
+{
+	struct csv_queue *ringbuf = &vpsp_ring_buffer[prio].stat_val;
+	struct csv_statval_entry *statval = (struct csv_statval_entry *)ringbuf->data;
+
+	return statval[index].status;
+}
+
+static int vpsp_dequeue_and_notify(int prio, struct csv_cmdptr_entry *cmd_ptr)
+{
+	struct vpsp_cmd_ctx *ctx = NULL;
+	int mask = vpsp_ring_buffer[prio].cmd_ptr.mask;
+	int index = vpsp_ring_buffer[prio].cmd_ptr.head & mask;
+
+	ctx = vpsp_cmd_ctx_array[prio][index];
+	if (ctx) {
+		/**
+		 * Write the result back to the cmd ctx,
+		 * after which we can safely perform
+		 * the ringbuffer dequeue operation without
+		 * waiting for the Guest to retrieve the result.
+		 */
+		ctx->statval = vpsp_get_cmd_status(prio, index);
+		vpsp_cmd_ctx_obj_put(ctx, false);
+	}
+
+	/* The status update must be before the head update */
+	vpsp_set_cmd_status(prio, index, 0);
+
+	mutex_lock(&vpsp_rb_mutex);
+	csv_dequeue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, (void *)cmd_ptr, 1);
+	mutex_unlock(&vpsp_rb_mutex);
+	return 0;
+}
+
+/**
+ * Ensure that the 'status' field of cmd statval
+ * in the range from tail to overcommit tail in the queue is 0.
+ */
+static void vpsp_queue_overcommit_entry_inactive(int prio)
+{
+	int tail = 0, overcommit_tail = 0, i = 0;
+
+	mutex_lock(&vpsp_rb_mutex);
+
+	tail = get_queue_tail(prio);
+	overcommit_tail = get_queue_overcommit_tail(prio);
+	for (i = tail; i < overcommit_tail; ++i)
+		vpsp_set_cmd_status(prio, i, 0);
+
+	mutex_unlock(&vpsp_rb_mutex);
+}
+
+/*
+ * Populate the command from the virtual machine to the queue to
+ * support execution in ringbuffer mode
+ */
+static int vpsp_fill_cmd_queue(int prio, int cmd, phys_addr_t phy_addr, uint16_t flags)
+{
+	struct csv_cmdptr_entry cmdptr = { };
+	int index = -1;
+
+	cmdptr.cmd_buf_ptr = phy_addr;
+	cmdptr.cmd_id = cmd;
+	cmdptr.cmd_flags = flags;
+
+	mutex_lock(&vpsp_rb_mutex);
+	index = get_queue_tail(prio);
+
+	/**
+	 * If the firmware does not support the overcommit function:
+	 *      the firmware may not check the 'status' before executing cmd.
+	 *      Therefore, the 'status' must be written before the cmd be enqueued,
+	 *      otherwise, X86 may overwrite the result written by the firmware.
+	 *
+	 * If the firmware support the overcommit function:
+	 *      The firmware will forcefully check the 'status'
+	 *      before executing cmd until the 'status' becomes 0xffff.
+	 *      In order to prevent the firmware from getting the cmd to be valid,
+	 *      the 'status' must be written after waiting for the cmd to be queued.
+	 */
+	if (vpsp_rb_oc_supported) {
+		if (csv_enqueue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, &cmdptr, 1) != 1) {
+			vpsp_set_cmd_status(prio, index, 0);
+			index = -1;
+			goto out;
+		}
+		vpsp_set_cmd_status(prio, index, VPSP_CMD_STATUS_RUNNING);
+	} else {
+		vpsp_set_cmd_status(prio, index, VPSP_CMD_STATUS_RUNNING);
+		if (csv_enqueue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, &cmdptr, 1) != 1) {
+			vpsp_set_cmd_status(prio, index, 0);
+			index = -1;
+			goto out;
+		}
+	}
+
+out:
+	mutex_unlock(&vpsp_rb_mutex);
+	return index;
+}
+
+static void vpsp_ring_update_head(int prio, uint32_t new_head)
+{
+	struct csv_ringbuffer_queue *ring_buffer = &vpsp_ring_buffer[prio];
+	uint32_t orig_head = get_queue_head(ring_buffer);
+	struct csv_cmdptr_entry entry;
+	uint32_t comple_num = 0;
+	int i;
+
+	if (new_head >= orig_head)
+		comple_num = new_head - orig_head;
+	else
+		comple_num = ring_buffer->cmd_ptr.mask - (orig_head - new_head)
+			+ 1;
+
+	for (i = 0; i < comple_num; ++i)
+		vpsp_dequeue_and_notify(prio, &entry);
+}
+
+static int vpsp_psp_mutex_trylock(void)
+{
+	int mutex_enabled = READ_ONCE(hygon_psp_hooks.psp_mutex_enabled);
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (mutex_enabled)
+		return psp_mutex_trylock(&hygon_psp_hooks.psp_misc->data_pg_aligned->mb_mutex);
+	else
+		return mutex_trylock(hygon_psp_hooks.sev_cmd_mutex);
+}
+
+static int vpsp_psp_mutex_unlock(void)
+{
+	int mutex_enabled = READ_ONCE(hygon_psp_hooks.psp_mutex_enabled);
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (mutex_enabled)
+		psp_mutex_unlock(&hygon_psp_hooks.psp_misc->data_pg_aligned->mb_mutex);
+	else
+		mutex_unlock(hygon_psp_hooks.sev_cmd_mutex);
+
+	return 0;
+}
+
+static int __vpsp_ring_buffer_enter_locked(int *error)
+{
+	int ret;
+	struct csv_data_ring_buffer *data;
+	struct csv_ringbuffer_queue *low_queue;
+	struct csv_ringbuffer_queue *hi_queue;
+	struct sev_device *sev = psp_master->sev_data;
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (csv_comm_mode == CSV_COMM_RINGBUFFER_ON)
+		return -EEXIST;
+
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	low_queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_LOW];
+	hi_queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH];
+
+	data->queue_lo_cmdptr_address = __psp_pa(low_queue->cmd_ptr.data_align);
+	data->queue_lo_statval_address = __psp_pa(low_queue->stat_val.data_align);
+	data->queue_hi_cmdptr_address = __psp_pa(hi_queue->cmd_ptr.data_align);
+	data->queue_hi_statval_address = __psp_pa(hi_queue->stat_val.data_align);
+	data->queue_lo_size = 1;
+	data->queue_hi_size = 1;
+	data->int_on_empty = 1;
+
+	ret = hygon_psp_hooks.__sev_do_cmd_locked(CSV_CMD_RING_BUFFER, data, error);
+	if (!ret) {
+		iowrite32(0, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
+		csv_comm_mode = CSV_COMM_RINGBUFFER_ON;
+	}
+
+	kfree(data);
+	return ret;
+}
+
+void vpsp_worker_handler(struct work_struct *unused)
+{
+	struct sev_user_data_status data;
+	struct sev_device *sev = psp_master->sev_data;
+	unsigned int reg;
+	unsigned int rb_head, rb_tail;
+
+	reg = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
+	/* cmd error happends */
+	if (reg & PSP_RBHEAD_QPAUSE_INT_STAT)
+		goto end;
+
+	rb_head = reg;
+	rb_tail = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
+
+	pr_debug("ringbuffer exit rb_head %x, rb_tail %x\n", rb_head, rb_tail);
+	/* update head */
+	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_HIGH,
+			(reg & PSP_RBHEAD_QHI_HEAD_MASK) >> PSP_RBHEAD_QHI_HEAD_SHIFT);
+	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_LOW,
+			reg & PSP_RBHEAD_QLO_HEAD_MASK);
+
+end:
+	/**
+	 * Before send new mailbox command, set vpsp_in_ringbuffer_mode
+	 * to false to avoid nested triggering of the workqueue.
+	 */
+	vpsp_in_ringbuffer_mode = false;
+
+	/* exit ringbuf mode by send CMD in mailbox mode */
+	hygon_psp_hooks.__sev_do_cmd_locked(SEV_CMD_PLATFORM_STATUS,
+					&data, NULL);
+	csv_comm_mode = CSV_COMM_MAILBOX_ON;
+	vpsp_psp_mutex_unlock();
+}
+
+static int __vpsp_do_ringbuf_cmds_locked(void)
+{
+	struct psp_device *psp = psp_master;
+	unsigned int rb_tail, rb_head;
+	unsigned int rb_ctl;
+	struct sev_device *sev;
+	struct csv_queue *queue;
+	struct csv_cmdptr_entry *first_cmd;
+
+	if (!psp || !hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (*hygon_psp_hooks.psp_dead)
+		return -EBUSY;
+
+	sev = psp->sev_data;
+
+	/* update rb tail */
+	vpsp_queue_overcommit_entry_inactive(CSV_COMMAND_PRIORITY_LOW);
+	rb_tail = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
+	rb_tail &= (~PSP_RBTAIL_QHI_TAIL_MASK);
+	rb_tail |= (get_queue_tail(CSV_COMMAND_PRIORITY_HIGH)
+					<< PSP_RBTAIL_QHI_TAIL_SHIFT);
+	rb_tail &= (~PSP_RBTAIL_QLO_TAIL_MASK);
+	rb_tail |= get_queue_overcommit_tail(CSV_COMMAND_PRIORITY_LOW);
+	iowrite32(rb_tail, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
+
+	/* update rb head */
+	rb_head = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
+	rb_head &= (~PSP_RBHEAD_QHI_HEAD_MASK);
+	rb_head |= (get_queue_head(&vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH])
+					<< PSP_RBHEAD_QHI_HEAD_SHIFT);
+	rb_head &= (~PSP_RBHEAD_QLO_HEAD_MASK);
+	rb_head |= get_queue_head(&vpsp_ring_buffer[CSV_COMMAND_PRIORITY_LOW]);
+	iowrite32(rb_head, sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
+
+	/**
+	 * In some PSP firmware, even if the high priority queue is empty,
+	 * it will still try to read the element at the head of the queue and try to process it.
+	 * When the element at the head of the queue happens to be an illegal cmd id,
+	 * PSP returns the PSP_RBHEAD_QPAUSE_INT_STAT error.
+	 *
+	 * Therefore, now we need to manually set the head element of the queue to
+	 * the default tkm cmd id before sending the ringbuffer each time when
+	 * the high priority queue is empty.
+	 *
+	 * The low priority queue has no such bug, and future PSP firmware should fix it.
+	 */
+	if (vpsp_queue_cmd_size(CSV_COMMAND_PRIORITY_HIGH) == 0) {
+		queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH].cmd_ptr;
+		first_cmd = (struct csv_cmdptr_entry *)queue->data_align;
+		first_cmd[queue->head & queue->mask].cmd_id = TKM_PSP_CMDID;
+	}
+
+	pr_debug("ringbuffer launch rb_head %x, rb_tail %x\n", rb_head, rb_tail);
+
+	/* update rb ctl to trigger psp irq */
+	sev->int_rcvd = 0;
+	/* PSP response to x86 only when all queue is empty or error happends */
+	rb_ctl = (PSP_RBCTL_X86_WRITES | PSP_RBCTL_RBMODE_ACT | PSP_RBCTL_CLR_INTSTAT);
+	iowrite32(rb_ctl, sev->io_regs + sev->vdata->cmdresp_reg);
+
+	vpsp_in_ringbuffer_mode = true;
+	return 0;
+}
+
+static int vpsp_do_ringbuf_cmds_locked(int *psp_ret)
+{
+	int rc;
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	rc = __vpsp_ring_buffer_enter_locked(psp_ret);
+	if (rc)
+		goto end;
+
+	rc = __vpsp_do_ringbuf_cmds_locked();
+end:
+	return rc;
+}
+
+static int __vpsp_do_cmd_locked(int cmd, phys_addr_t phy_addr, int *psp_ret)
+{
+	struct psp_device *psp = psp_master;
+	struct sev_device *sev;
+	unsigned int phys_lsb, phys_msb;
+	unsigned int reg, ret = 0;
+
+	if (!psp || !psp->sev_data || !hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (*hygon_psp_hooks.psp_dead)
+		return -EBUSY;
+
+	sev = psp->sev_data;
+
+	/* Get the physical address of the command buffer */
+	phys_lsb = phy_addr ? lower_32_bits(phy_addr) : 0;
+	phys_msb = phy_addr ? upper_32_bits(phy_addr) : 0;
+
+	dev_dbg(sev->dev, "sev command id %#x buffer 0x%08x%08x timeout %us\n",
+		cmd, phys_msb, phys_lsb, *hygon_psp_hooks.psp_timeout);
+
+	iowrite32(phys_lsb, sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
+	iowrite32(phys_msb, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
+
+	sev->int_rcvd = 0;
+
+	reg = FIELD_PREP(SEV_CMDRESP_CMD, cmd) | SEV_CMDRESP_IOC;
+	iowrite32(reg, sev->io_regs + sev->vdata->cmdresp_reg);
+
+	/* wait for command completion */
+	ret = hygon_psp_hooks.sev_wait_cmd_ioc(sev, &reg, *hygon_psp_hooks.psp_timeout);
+	if (ret) {
+		if (psp_ret)
+			*psp_ret = 0;
+
+		dev_err(sev->dev, "sev command %#x timed out, disabling PSP\n", cmd);
+		*hygon_psp_hooks.psp_dead = true;
+
+		return ret;
+	}
+
+	*hygon_psp_hooks.psp_timeout = *hygon_psp_hooks.psp_cmd_timeout;
+
+	if (psp_ret)
+		*psp_ret = FIELD_GET(PSP_CMDRESP_STS, reg);
+
+	if (FIELD_GET(PSP_CMDRESP_STS, reg)) {
+		dev_dbg(sev->dev, "sev command %#x failed (%#010lx)\n",
+			cmd, FIELD_GET(PSP_CMDRESP_STS, reg));
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+int vpsp_do_cmd(int cmd, phys_addr_t phy_addr, int *psp_ret)
+{
+	int rc;
+	int mutex_enabled = READ_ONCE(hygon_psp_hooks.psp_mutex_enabled);
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	if (mutex_enabled) {
+		if (psp_mutex_lock_timeout(&hygon_psp_hooks.psp_misc->data_pg_aligned->mb_mutex,
+					PSP_MUTEX_TIMEOUT) != 1) {
+			return -EBUSY;
+		}
+	} else {
+		mutex_lock(hygon_psp_hooks.sev_cmd_mutex);
+	}
+
+	rc = __vpsp_do_cmd_locked(cmd, phy_addr, psp_ret);
+
+	if (mutex_enabled)
+		psp_mutex_unlock(&hygon_psp_hooks.psp_misc->data_pg_aligned->mb_mutex);
+	else
+		mutex_unlock(hygon_psp_hooks.sev_cmd_mutex);
+
+	return rc;
+}
+
+/*
+ * Try to obtain the result again by the command index, this
+ * interface is used in ringbuffer mode
+ */
+int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
+{
+	int ret = 0;
+	uint8_t prio = cmd_ctx->rb_prio;
+	uint16_t statval = VPSP_CMD_STATUS_RUNNING;
+	uint32_t index = cmd_ctx->rb_index;
+	phys_addr_t phy_addr = cmd_ctx->psp_cmdbuf_paddr;
+	struct csv_cmdptr_entry cmd = {0};
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	/* Get the retult directly if the command has been executed */
+	if (index >= 0) {
+		if (cmd_ctx->statval != VPSP_CMD_STATUS_RUNNING)
+			statval = cmd_ctx->statval;
+		else
+			statval = vpsp_get_cmd_status(prio, index);
+		if (statval != VPSP_CMD_STATUS_RUNNING) {
+			psp_ret->pret = statval;
+			psp_ret->status = VPSP_FINISH;
+			return 0;
+		}
+	}
+
+	if (vpsp_psp_mutex_trylock()) {
+		/* Use mailbox mode to execute a command if there is only one command */
+		if (vpsp_queue_cmd_size(prio) == 1) {
+			/* dequeue command from queue*/
+			vpsp_dequeue_and_notify(prio, &cmd);
+
+			ret = __vpsp_do_cmd_locked(cmd.cmd_id, phy_addr, (int *)psp_ret);
+			psp_ret->status = VPSP_FINISH;
+			vpsp_psp_mutex_unlock();
+			if (unlikely(ret)) {
+				if (ret == -EIO) {
+					ret = 0;
+				} else {
+					pr_err("[%s]: psp do cmd error, %d\n",
+						__func__, psp_ret->pret);
+					ret = -EIO;
+					goto end;
+				}
+			}
+		} else {
+			ret = vpsp_do_ringbuf_cmds_locked((int *)psp_ret);
+			if (unlikely(ret)) {
+				pr_err("[%s]: vpsp_do_ringbuf_cmds_locked failed %d\n",
+						__func__, ret);
+				psp_ret->status = VPSP_FINISH;
+				vpsp_psp_mutex_unlock();
+				goto end;
+			}
+			psp_ret->status = VPSP_RUNNING;
+		}
+	} else {
+		/* Change the command to the running state if getting the mutex fails */
+		psp_ret->status = VPSP_RUNNING;
+		return 0;
+	}
+end:
+	return ret;
+}
+
+/*
+ * Send the virtual psp command to the PSP device and try to get the
+ * execution result, the interface and the vpsp_try_get_result
+ * interface are executed asynchronously. If the execution succeeds,
+ * the result is returned to the VM. If the execution fails, the
+ * vpsp_try_get_result interface will be used to obtain the result
+ * later again
+ */
+int vpsp_try_do_cmd(int cmd, phys_addr_t phy_addr,
+		struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
+{
+	int ret = 0;
+	int rb_supported;
+	int index = -1;
+	uint8_t prio = CSV_COMMAND_PRIORITY_LOW;
+
+	if (!hygon_psp_hooks.sev_dev_hooks_installed)
+		return -ENODEV;
+
+	/* ringbuffer mode check and parse command prio*/
+	rb_supported = vpsp_rb_check_and_cmd_prio_parse(&prio,
+			(struct vpsp_cmd *)&cmd);
+	if (rb_supported) {
+		/* fill command in ringbuffer's queue and get index */
+		index = vpsp_fill_cmd_queue(prio, cmd, phy_addr, 0);
+		if (unlikely(index < 0)) {
+			/* do mailbox command if queuing failed*/
+			ret = vpsp_do_cmd(cmd, phy_addr, (int *)psp_ret);
+			if (unlikely(ret)) {
+				if (ret == -EIO) {
+					ret = 0;
+				} else {
+					pr_err("[%s]: psp do cmd error, %d\n",
+						__func__, psp_ret->pret);
+					ret = -EIO;
+					goto end;
+				}
+			}
+			psp_ret->status = VPSP_FINISH;
+			goto end;
+		}
+
+		cmd_ctx->rb_index = index;
+		cmd_ctx->rb_prio = prio;
+		cmd_ctx->psp_cmdbuf_paddr = phy_addr;
+		vpsp_cmd_ctx_array[prio][index] = cmd_ctx;
+		vpsp_cmd_ctx_obj_get(cmd_ctx);
+
+		/* try to get result from the ringbuffer command */
+		ret = vpsp_try_get_result(cmd_ctx, psp_ret);
+		if (unlikely(ret)) {
+			pr_err("[%s]: vpsp_try_get_result failed %d\n", __func__, ret);
+			goto end;
+		}
+	} else {
+		/* mailbox mode */
+		ret = vpsp_do_cmd(cmd, phy_addr, (int *)psp_ret);
+		if (unlikely(ret)) {
+			if (ret == -EIO) {
+				ret = 0;
+			} else {
+				pr_err("[%s]: psp do cmd error, %d\n",
+						__func__, psp_ret->pret);
+				ret = -EIO;
+				goto end;
+			}
+		}
+		psp_ret->status = VPSP_FINISH;
+	}
+
+end:
+	return ret;
+}
