@@ -20,7 +20,6 @@
 #include <linux/workqueue.h>
 #include <linux/hashtable.h>
 
-#include "ring-buffer.h"
 #include "psp-dev.h"
 #include "csv-dev.h"
 #include "vpsp.h"
@@ -63,7 +62,6 @@
  */
 DEFINE_HASHTABLE(vpsp_cmd_ctx_table, 11);
 DEFINE_RWLOCK(table_rwlock);
-bool vpsp_in_ringbuffer_mode;
 static struct vpsp_cmd_ctx *vpsp_cmd_ctx_array[CSV_COMMAND_PRIORITY_NUM]
 				[CSV_RING_BUFFER_SIZE / CSV_RING_BUFFER_ESIZE];
 
@@ -132,7 +130,7 @@ static struct vpsp_cmd_ctx *vpsp_cmd_ctx_create(gpa_t key1, pid_t key2)
 		 * the initial value must be greater than 0.
 		 */
 		refcount_set(&cmd_ctx->ref, 1);
-		cmd_ctx->statval = VPSP_CMD_STATUS_RUNNING;
+		cmd_ctx->statval = PSP_CMD_STATUS_RUNNING;
 		cmd_ctx->key1 = key1;
 		cmd_ctx->key2 = key2;
 		vpsp_hashtable_add_cmd_ctx(cmd_ctx);
@@ -148,7 +146,7 @@ static struct vpsp_cmd_ctx *vpsp_cmd_ctx_create(gpa_t key1, pid_t key2)
  * only additional to perform decrement refcount.
  *
  * Actual memory release occurs when the refcount drops to 0,
- * which may happen during the vpsp_worker_handler or
+ * which may happen during the psp_worker_handler or
  * vpsp_cmd_ctx_destroy process.
  *
  * @cmd_ctx: the vpsp_cmd_ctx object
@@ -863,162 +861,35 @@ int do_vpsp_op_ioctl(struct vpsp_dev_ctrl *ctrl)
 	return ret;
 }
 
-
-static DEFINE_MUTEX(vpsp_rb_mutex);
 struct csv_ringbuffer_queue vpsp_ring_buffer[CSV_COMMAND_PRIORITY_NUM];
-
-static unsigned int vpsp_queue_cmd_size(int prio)
-{
-	return csv_cmd_queue_size(&vpsp_ring_buffer[prio].cmd_ptr);
-}
-
-static int get_queue_tail(int prio)
-{
-	struct csv_ringbuffer_queue *ringbuffer = &vpsp_ring_buffer[prio];
-	return ringbuffer->cmd_ptr.tail & ringbuffer->cmd_ptr.mask;
-}
-
-static int get_queue_overcommit_tail(int prio)
-{
-	uint32_t que_size = vpsp_queue_cmd_size(prio);
-	struct csv_ringbuffer_queue *ringbuffer = &vpsp_ring_buffer[prio];
-
-	if (que_size >= VPSP_RB_OVERCOMMIT_SIZE || que_size == 0 || !vpsp_rb_oc_supported)
-		return get_queue_tail(prio);
-	return (ringbuffer->cmd_ptr.head + VPSP_RB_OVERCOMMIT_SIZE) & ringbuffer->cmd_ptr.mask;
-}
-
-static int get_queue_head(struct csv_ringbuffer_queue *ringbuffer)
-{
-	return ringbuffer->cmd_ptr.head & ringbuffer->cmd_ptr.mask;
-}
-
-static void vpsp_set_cmd_status(int prio, int index, int status)
-{
-	struct csv_queue *ringbuf = &vpsp_ring_buffer[prio].stat_val;
-	struct csv_statval_entry *statval = (struct csv_statval_entry *)ringbuf->data;
-
-	statval[index].status = status;
-}
-
-static int vpsp_get_cmd_status(int prio, int index)
-{
-	struct csv_queue *ringbuf = &vpsp_ring_buffer[prio].stat_val;
-	struct csv_statval_entry *statval = (struct csv_statval_entry *)ringbuf->data;
-
-	return statval[index].status;
-}
-
-static int vpsp_dequeue_and_notify(int prio, struct csv_cmdptr_entry *cmd_ptr)
-{
-	struct vpsp_cmd_ctx *ctx = NULL;
-	int mask = vpsp_ring_buffer[prio].cmd_ptr.mask;
-	int index = vpsp_ring_buffer[prio].cmd_ptr.head & mask;
-
-	ctx = vpsp_cmd_ctx_array[prio][index];
-	if (ctx) {
-		/**
-		 * Write the result back to the cmd ctx,
-		 * after which we can safely perform
-		 * the ringbuffer dequeue operation without
-		 * waiting for the Guest to retrieve the result.
-		 */
-		ctx->statval = vpsp_get_cmd_status(prio, index);
-		vpsp_cmd_ctx_obj_put(ctx, false);
-	}
-
-	/* The status update must be before the head update */
-	vpsp_set_cmd_status(prio, index, 0);
-
-	mutex_lock(&vpsp_rb_mutex);
-	csv_dequeue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, (void *)cmd_ptr, 1);
-	mutex_unlock(&vpsp_rb_mutex);
-	return 0;
-}
-
-/**
- * Ensure that the 'status' field of cmd statval
- * in the range from tail to overcommit tail in the queue is 0.
- */
-static void vpsp_queue_overcommit_entry_inactive(int prio)
-{
-	int tail = 0, overcommit_tail = 0, i = 0;
-
-	mutex_lock(&vpsp_rb_mutex);
-
-	tail = get_queue_tail(prio);
-	overcommit_tail = get_queue_overcommit_tail(prio);
-	for (i = tail; i < overcommit_tail; ++i)
-		vpsp_set_cmd_status(prio, i, 0);
-
-	mutex_unlock(&vpsp_rb_mutex);
-}
-
-/*
- * Populate the command from the virtual machine to the queue to
- * support execution in ringbuffer mode
- */
-static int vpsp_fill_cmd_queue(int prio, int cmd, phys_addr_t phy_addr, uint16_t flags)
-{
-	struct csv_cmdptr_entry cmdptr = { };
-	int index = -1;
-
-	cmdptr.cmd_buf_ptr = phy_addr;
-	cmdptr.cmd_id = cmd;
-	cmdptr.cmd_flags = flags;
-
-	mutex_lock(&vpsp_rb_mutex);
-	index = get_queue_tail(prio);
-
-	/**
-	 * If the firmware does not support the overcommit function:
-	 *      the firmware may not check the 'status' before executing cmd.
-	 *      Therefore, the 'status' must be written before the cmd be enqueued,
-	 *      otherwise, X86 may overwrite the result written by the firmware.
-	 *
-	 * If the firmware support the overcommit function:
-	 *      The firmware will forcefully check the 'status'
-	 *      before executing cmd until the 'status' becomes 0xffff.
-	 *      In order to prevent the firmware from getting the cmd to be valid,
-	 *      the 'status' must be written after waiting for the cmd to be queued.
-	 */
-	if (vpsp_rb_oc_supported) {
-		if (csv_enqueue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, &cmdptr, 1) != 1) {
-			vpsp_set_cmd_status(prio, index, 0);
-			index = -1;
-			goto out;
-		}
-		vpsp_set_cmd_status(prio, index, VPSP_CMD_STATUS_RUNNING);
-	} else {
-		vpsp_set_cmd_status(prio, index, VPSP_CMD_STATUS_RUNNING);
-		if (csv_enqueue_cmd(&vpsp_ring_buffer[prio].cmd_ptr, &cmdptr, 1) != 1) {
-			vpsp_set_cmd_status(prio, index, 0);
-			index = -1;
-			goto out;
-		}
-	}
-
-out:
-	mutex_unlock(&vpsp_rb_mutex);
-	return index;
-}
-
 static void vpsp_ring_update_head(int prio, uint32_t new_head)
 {
 	struct csv_ringbuffer_queue *ring_buffer = &vpsp_ring_buffer[prio];
-	uint32_t orig_head = get_queue_head(ring_buffer);
-	struct csv_cmdptr_entry entry;
-	uint32_t comple_num = 0;
-	int i;
+	uint32_t orig_head = cmd_queue_head(&ring_buffer->cmd_ptr);
+	uint32_t comple_num = 0, index = orig_head;
+	struct vpsp_cmd_ctx *ctx = NULL;
+	int i, mask = ring_buffer->cmd_ptr.mask;
 
 	if (new_head >= orig_head)
 		comple_num = new_head - orig_head;
 	else
-		comple_num = ring_buffer->cmd_ptr.mask - (orig_head - new_head)
-			+ 1;
+		comple_num = mask - (orig_head - new_head) + 1;
 
-	for (i = 0; i < comple_num; ++i)
-		vpsp_dequeue_and_notify(prio, &entry);
+	for (i = 0; i < comple_num; ++i) {
+		index = (orig_head + i) & mask;
+		ctx = vpsp_cmd_ctx_array[prio][index];
+		if (ctx) {
+			/**
+			 * Write the result back to the cmd ctx,
+			 * after which we can safely perform
+			 * the ringbuffer dequeue operation without
+			 * waiting for the Guest to retrieve the result.
+			 */
+			ctx->statval = ringbuffer_get_status(ring_buffer, index);
+			vpsp_cmd_ctx_obj_put(ctx, false);
+		}
+	}
+	psp_ringbuffer_dequeue(ring_buffer, NULL, NULL, comple_num);
 }
 
 static int vpsp_psp_mutex_trylock(void)
@@ -1049,217 +920,21 @@ static int vpsp_psp_mutex_unlock(void)
 	return 0;
 }
 
-static int __vpsp_ring_buffer_enter_locked(int *error)
-{
-	int ret;
-	struct csv_data_ring_buffer *data;
-	struct csv_ringbuffer_queue *low_queue;
-	struct csv_ringbuffer_queue *hi_queue;
-	struct sev_device *sev = psp_master->sev_data;
-
-	if (!hygon_psp_hooks.sev_dev_hooks_installed)
-		return -ENODEV;
-
-	if (csv_comm_mode == CSV_COMM_RINGBUFFER_ON)
-		return -EEXIST;
-
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
-	low_queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_LOW];
-	hi_queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH];
-
-	data->queue_lo_cmdptr_address = __psp_pa(low_queue->cmd_ptr.data_align);
-	data->queue_lo_statval_address = __psp_pa(low_queue->stat_val.data_align);
-	data->queue_hi_cmdptr_address = __psp_pa(hi_queue->cmd_ptr.data_align);
-	data->queue_hi_statval_address = __psp_pa(hi_queue->stat_val.data_align);
-	data->queue_lo_size = 1;
-	data->queue_hi_size = 1;
-	data->int_on_empty = 1;
-
-	ret = hygon_psp_hooks.__sev_do_cmd_locked(CSV_CMD_RING_BUFFER, data, error);
-	if (!ret) {
-		iowrite32(0, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
-		csv_comm_mode = CSV_COMM_RINGBUFFER_ON;
-	}
-
-	kfree(data);
-	return ret;
-}
-
-void vpsp_worker_handler(struct work_struct *unused)
+static void vpsp_ringbuffer_wakeup_locked(struct work_struct *unused)
 {
 	struct sev_user_data_status data;
-	struct sev_device *sev = psp_master->sev_data;
-	unsigned int reg;
-	unsigned int rb_head, rb_tail;
+	unsigned int hi_head = 0, low_head = 0;
 
-	reg = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
-	/* cmd error happends */
-	if (reg & PSP_RBHEAD_QPAUSE_INT_STAT)
-		goto end;
+	psp_ringbuffer_get_newhead(&hi_head, &low_head);
 
-	rb_head = reg;
-	rb_tail = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
-
-	pr_debug("ringbuffer exit rb_head %x, rb_tail %x\n", rb_head, rb_tail);
 	/* update head */
-	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_HIGH,
-			(reg & PSP_RBHEAD_QHI_HEAD_MASK) >> PSP_RBHEAD_QHI_HEAD_SHIFT);
-	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_LOW,
-			reg & PSP_RBHEAD_QLO_HEAD_MASK);
+	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_HIGH, hi_head);
+	vpsp_ring_update_head(CSV_COMMAND_PRIORITY_LOW, low_head);
 
-end:
-	/**
-	 * Before send new mailbox command, set vpsp_in_ringbuffer_mode
-	 * to false to avoid nested triggering of the workqueue.
-	 */
-	vpsp_in_ringbuffer_mode = false;
-
-	/* exit ringbuf mode by send CMD in mailbox mode */
-	hygon_psp_hooks.__sev_do_cmd_locked(SEV_CMD_PLATFORM_STATUS,
-					&data, NULL);
-	csv_comm_mode = CSV_COMM_MAILBOX_ON;
-	vpsp_psp_mutex_unlock();
-}
-
-static int __vpsp_do_ringbuf_cmds_locked(void)
-{
-	struct psp_device *psp = psp_master;
-	unsigned int rb_tail, rb_head;
-	unsigned int rb_ctl;
-	struct sev_device *sev;
-	struct csv_queue *queue;
-	struct csv_cmdptr_entry *first_cmd;
-
-	if (!psp || !hygon_psp_hooks.sev_dev_hooks_installed)
-		return -ENODEV;
-
-	if (*hygon_psp_hooks.psp_dead)
-		return -EBUSY;
-
-	sev = psp->sev_data;
-
-	/* update rb tail */
-	vpsp_queue_overcommit_entry_inactive(CSV_COMMAND_PRIORITY_LOW);
-	rb_tail = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
-	rb_tail &= (~PSP_RBTAIL_QHI_TAIL_MASK);
-	rb_tail |= (get_queue_tail(CSV_COMMAND_PRIORITY_HIGH)
-					<< PSP_RBTAIL_QHI_TAIL_SHIFT);
-	rb_tail &= (~PSP_RBTAIL_QLO_TAIL_MASK);
-	rb_tail |= get_queue_overcommit_tail(CSV_COMMAND_PRIORITY_LOW);
-	iowrite32(rb_tail, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
-
-	/* update rb head */
-	rb_head = ioread32(sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
-	rb_head &= (~PSP_RBHEAD_QHI_HEAD_MASK);
-	rb_head |= (get_queue_head(&vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH])
-					<< PSP_RBHEAD_QHI_HEAD_SHIFT);
-	rb_head &= (~PSP_RBHEAD_QLO_HEAD_MASK);
-	rb_head |= get_queue_head(&vpsp_ring_buffer[CSV_COMMAND_PRIORITY_LOW]);
-	iowrite32(rb_head, sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
-
-	/**
-	 * In some PSP firmware, even if the high priority queue is empty,
-	 * it will still try to read the element at the head of the queue and try to process it.
-	 * When the element at the head of the queue happens to be an illegal cmd id,
-	 * PSP returns the PSP_RBHEAD_QPAUSE_INT_STAT error.
-	 *
-	 * Therefore, now we need to manually set the head element of the queue to
-	 * the default tkm cmd id before sending the ringbuffer each time when
-	 * the high priority queue is empty.
-	 *
-	 * The low priority queue has no such bug, and future PSP firmware should fix it.
-	 */
-	if (vpsp_queue_cmd_size(CSV_COMMAND_PRIORITY_HIGH) == 0) {
-		queue = &vpsp_ring_buffer[CSV_COMMAND_PRIORITY_HIGH].cmd_ptr;
-		first_cmd = (struct csv_cmdptr_entry *)queue->data_align;
-		first_cmd[queue->head & queue->mask].cmd_id = TKM_PSP_CMDID;
+	if (!psp_generic_rb_supported) {
+		/* exit ringbuf mode by send CMD in mailbox mode */
+		psp_do_cmd_locked(SEV_CMD_PLATFORM_STATUS, &data, NULL, 0);
 	}
-
-	pr_debug("ringbuffer launch rb_head %x, rb_tail %x\n", rb_head, rb_tail);
-
-	/* update rb ctl to trigger psp irq */
-	sev->int_rcvd = 0;
-	/* PSP response to x86 only when all queue is empty or error happends */
-	rb_ctl = (PSP_RBCTL_X86_WRITES | PSP_RBCTL_RBMODE_ACT | PSP_RBCTL_CLR_INTSTAT);
-	iowrite32(rb_ctl, sev->io_regs + sev->vdata->cmdresp_reg);
-
-	vpsp_in_ringbuffer_mode = true;
-	return 0;
-}
-
-static int vpsp_do_ringbuf_cmds_locked(int *psp_ret)
-{
-	int rc;
-
-	if (!hygon_psp_hooks.sev_dev_hooks_installed)
-		return -ENODEV;
-
-	rc = __vpsp_ring_buffer_enter_locked(psp_ret);
-	if (rc)
-		goto end;
-
-	rc = __vpsp_do_ringbuf_cmds_locked();
-end:
-	return rc;
-}
-
-static int __vpsp_do_cmd_locked(int cmd, phys_addr_t phy_addr, int *psp_ret)
-{
-	struct psp_device *psp = psp_master;
-	struct sev_device *sev;
-	unsigned int phys_lsb, phys_msb;
-	unsigned int reg, ret = 0;
-
-	if (!psp || !psp->sev_data || !hygon_psp_hooks.sev_dev_hooks_installed)
-		return -ENODEV;
-
-	if (*hygon_psp_hooks.psp_dead)
-		return -EBUSY;
-
-	sev = psp->sev_data;
-
-	/* Get the physical address of the command buffer */
-	phys_lsb = phy_addr ? lower_32_bits(phy_addr) : 0;
-	phys_msb = phy_addr ? upper_32_bits(phy_addr) : 0;
-
-	dev_dbg(sev->dev, "sev command id %#x buffer 0x%08x%08x timeout %us\n",
-		cmd, phys_msb, phys_lsb, *hygon_psp_hooks.psp_timeout);
-
-	iowrite32(phys_lsb, sev->io_regs + sev->vdata->cmdbuff_addr_lo_reg);
-	iowrite32(phys_msb, sev->io_regs + sev->vdata->cmdbuff_addr_hi_reg);
-
-	sev->int_rcvd = 0;
-
-	reg = FIELD_PREP(SEV_CMDRESP_CMD, cmd) | SEV_CMDRESP_IOC;
-	iowrite32(reg, sev->io_regs + sev->vdata->cmdresp_reg);
-
-	/* wait for command completion */
-	ret = hygon_psp_hooks.sev_wait_cmd_ioc(sev, &reg, *hygon_psp_hooks.psp_timeout);
-	if (ret) {
-		if (psp_ret)
-			*psp_ret = 0;
-
-		dev_err(sev->dev, "sev command %#x timed out, disabling PSP\n", cmd);
-		*hygon_psp_hooks.psp_dead = true;
-
-		return ret;
-	}
-
-	*hygon_psp_hooks.psp_timeout = *hygon_psp_hooks.psp_cmd_timeout;
-
-	if (psp_ret)
-		*psp_ret = FIELD_GET(PSP_CMDRESP_STS, reg);
-
-	if (FIELD_GET(PSP_CMDRESP_STS, reg)) {
-		dev_dbg(sev->dev, "sev command %#x failed (%#010lx)\n",
-			cmd, FIELD_GET(PSP_CMDRESP_STS, reg));
-		ret = -EIO;
-	}
-
-	return ret;
 }
 
 int vpsp_do_cmd(int cmd, phys_addr_t phy_addr, int *psp_ret)
@@ -1279,7 +954,7 @@ int vpsp_do_cmd(int cmd, phys_addr_t phy_addr, int *psp_ret)
 		mutex_lock(hygon_psp_hooks.sev_cmd_mutex);
 	}
 
-	rc = __vpsp_do_cmd_locked(cmd, phy_addr, psp_ret);
+	rc = psp_do_cmd_locked(cmd, (void *)phy_addr, psp_ret, PSP_DO_CMD_OP_PHYADDR);
 
 	if (mutex_enabled)
 		psp_mutex_unlock(&hygon_psp_hooks.psp_misc->data_pg_aligned->mb_mutex);
@@ -1297,7 +972,7 @@ int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
 {
 	int ret = 0;
 	uint8_t prio = cmd_ctx->rb_prio;
-	uint16_t statval = VPSP_CMD_STATUS_RUNNING;
+	uint16_t statval = PSP_CMD_STATUS_RUNNING;
 	uint32_t index = cmd_ctx->rb_index;
 	phys_addr_t phy_addr = cmd_ctx->psp_cmdbuf_paddr;
 	struct csv_cmdptr_entry cmd = {0};
@@ -1307,11 +982,11 @@ int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
 
 	/* Get the retult directly if the command has been executed */
 	if (index >= 0) {
-		if (cmd_ctx->statval != VPSP_CMD_STATUS_RUNNING)
+		if (cmd_ctx->statval != PSP_CMD_STATUS_RUNNING)
 			statval = cmd_ctx->statval;
 		else
-			statval = vpsp_get_cmd_status(prio, index);
-		if (statval != VPSP_CMD_STATUS_RUNNING) {
+			statval = ringbuffer_get_status(&vpsp_ring_buffer[prio], index);
+		if (statval != PSP_CMD_STATUS_RUNNING) {
 			psp_ret->pret = statval;
 			psp_ret->status = VPSP_FINISH;
 			return 0;
@@ -1320,11 +995,11 @@ int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
 
 	if (vpsp_psp_mutex_trylock()) {
 		/* Use mailbox mode to execute a command if there is only one command */
-		if (vpsp_queue_cmd_size(prio) == 1) {
+		if (cmd_queue_size(&vpsp_ring_buffer[prio].cmd_ptr) == 1) {
 			/* dequeue command from queue*/
-			vpsp_dequeue_and_notify(prio, &cmd);
-
-			ret = __vpsp_do_cmd_locked(cmd.cmd_id, phy_addr, (int *)psp_ret);
+			psp_ringbuffer_dequeue(&vpsp_ring_buffer[prio], &cmd, NULL, 1);
+			ret = psp_do_cmd_locked(cmd.cmd_id, (void *)phy_addr,
+						(int *)psp_ret, PSP_DO_CMD_OP_PHYADDR);
 			psp_ret->status = VPSP_FINISH;
 			vpsp_psp_mutex_unlock();
 			if (unlikely(ret)) {
@@ -1338,9 +1013,10 @@ int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
 				}
 			}
 		} else {
-			ret = vpsp_do_ringbuf_cmds_locked((int *)psp_ret);
+			psp_worker_register_notify(vpsp_ringbuffer_wakeup_locked);
+			ret = psp_do_ringbuffer_cmds_locked(vpsp_ring_buffer, (int *)psp_ret);
 			if (unlikely(ret)) {
-				pr_err("[%s]: vpsp_do_ringbuf_cmds_locked failed %d\n",
+				pr_err("[%s]: psp ringbuf execute failed %d\n",
 						__func__, ret);
 				psp_ret->status = VPSP_FINISH;
 				vpsp_psp_mutex_unlock();
@@ -1377,11 +1053,11 @@ int vpsp_try_do_cmd(int cmd, phys_addr_t phy_addr,
 		return -ENODEV;
 
 	/* ringbuffer mode check and parse command prio*/
-	rb_supported = vpsp_rb_check_and_cmd_prio_parse(&prio,
+	rb_supported = vpsp_parse_ringbuffer_cmd_prio(&prio,
 			(struct vpsp_cmd *)&cmd);
 	if (rb_supported) {
 		/* fill command in ringbuffer's queue and get index */
-		index = vpsp_fill_cmd_queue(prio, cmd, phy_addr, 0);
+		index = psp_ringbuffer_enqueue(&vpsp_ring_buffer[prio], cmd, phy_addr, 0);
 		if (unlikely(index < 0)) {
 			/* do mailbox command if queuing failed*/
 			ret = vpsp_do_cmd(cmd, phy_addr, (int *)psp_ret);
@@ -1429,4 +1105,26 @@ int vpsp_try_do_cmd(int cmd, phys_addr_t phy_addr,
 
 end:
 	return ret;
+}
+
+/*
+ * parse commands from the virtual machine
+ */
+int vpsp_parse_ringbuffer_cmd_prio(uint8_t *prio,
+		struct vpsp_cmd *vcmd)
+{
+	int rb_supported;
+
+	psp_ringbuffer_check_support();
+	rb_supported = (psp_legacy_rb_supported || psp_generic_rb_supported);
+
+	/* parse prio by vcmd */
+	if (rb_supported && vcmd->is_high_rb)
+		*prio = CSV_COMMAND_PRIORITY_HIGH;
+	else
+		*prio = CSV_COMMAND_PRIORITY_LOW;
+	/* clear rb level bit in vcmd */
+	vcmd->is_high_rb = 0;
+
+	return rb_supported;
 }
