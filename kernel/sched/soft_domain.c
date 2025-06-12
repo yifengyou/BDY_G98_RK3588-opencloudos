@@ -435,3 +435,65 @@ out:
 
 	return ret;
 }
+
+int init_soft_domain(struct task_group *tg, struct task_group *parent)
+{
+	struct soft_domain_ctx *sf_ctx = NULL;
+	struct soft_domain_ctx *psf_ctx = NULL;
+
+	if (!soft_domain_enabled())
+		return 0;
+
+	sf_ctx = kzalloc(sizeof(*sf_ctx) + cpumask_size(), GFP_KERNEL);
+	if (!sf_ctx)
+		return -ENOMEM;
+
+	mutex_lock(&soft_domain_mutex);
+	psf_ctx = parent->sf_ctx;
+	if (psf_ctx) {
+		sf_ctx->policy = psf_ctx->policy;
+		sf_ctx->nr_cpus = psf_ctx->nr_cpus;
+		cpumask_copy(to_cpumask(sf_ctx->span), to_cpumask(psf_ctx->span));
+	}
+
+	tg->sf_ctx = sf_ctx;
+	mutex_unlock(&soft_domain_mutex);
+
+	return 0;
+}
+
+void offline_soft_domain(struct task_group *tg)
+{
+	struct soft_domain_ctx *sf_ctx = NULL;
+	struct soft_domain_ctx *psf_ctx = NULL;
+
+	if (!soft_domain_enabled())
+		return;
+
+	sf_ctx = tg->sf_ctx;
+	psf_ctx = tg->parent->sf_ctx;
+
+	if (!sf_ctx)
+		return;
+
+	mutex_lock(&soft_domain_mutex);
+	if (sf_ctx->policy != 0) {
+		/*
+		 * parent group is not set, this group set
+		 * soft domain by user.
+		 */
+		if (psf_ctx == NULL || psf_ctx->policy == 0)
+			__sched_group_unset_soft_domain(tg);
+	}
+	mutex_unlock(&soft_domain_mutex);
+}
+
+int destroy_soft_domain(struct task_group *tg)
+{
+	if (!soft_domain_enabled())
+		return 0;
+
+	kfree(tg->sf_ctx);
+
+	return 0;
+}
