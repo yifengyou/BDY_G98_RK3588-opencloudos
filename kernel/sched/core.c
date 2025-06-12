@@ -12294,15 +12294,10 @@ static int cpu_soft_domain_quota_write_u64(struct cgroup_subsys_state *css,
 {
 	struct task_group *tg = css_tg(css);
 
-	if (tg->sf_ctx->policy != 0)
-		return -EINVAL;
-
 	if (val > cpumask_weight(cpumask_of_node(0)))
 		return -EINVAL;
 
-	tg->sf_ctx->nr_cpus = (int)val;
-
-	return 0;
+	return sched_group_set_soft_domain_quota(tg, val);
 }
 
 static u64 cpu_soft_domain_quota_read_u64(struct cgroup_subsys_state *css,

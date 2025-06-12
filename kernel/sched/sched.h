@@ -4211,6 +4211,7 @@ void build_soft_domain(void);
 int init_soft_domain(struct task_group *tg);
 
 int sched_group_set_soft_domain(struct task_group *tg, long val);
+int sched_group_set_soft_domain_quota(struct task_group *tg, long val);
 
 static inline struct cpumask *soft_domain_span(unsigned long span[])
 {

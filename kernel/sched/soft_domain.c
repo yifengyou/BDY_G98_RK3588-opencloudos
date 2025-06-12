@@ -61,7 +61,7 @@ static int build_soft_sub_domain(struct sched_domain *sd, struct cpumask *cpus)
 	sf_d->nr_available_cpus = cpumask_weight(span);
 	cpumask_copy(to_cpumask(sf_d->span), span);
 
-	for_each_cpu_and(i, sched_domain_span(sd), cpus) {
+	for_each_cpu_and(i, span, cpus) {
 		struct soft_subdomain *sub_d = NULL;
 
 		sub_d = kzalloc_node(sizeof(struct soft_subdomain) + cpumask_size(),
@@ -70,13 +70,12 @@ static int build_soft_sub_domain(struct sched_domain *sd, struct cpumask *cpus)
 			free_sub_soft_domain(sf_d);
 			return -ENOMEM;
 		}
-
 		list_add_tail(&sub_d->node, &sf_d->child_domain);
-		cpumask_copy(soft_domain_span(sub_d->span), cpu_clustergroup_mask(i));
+		cpumask_and(soft_domain_span(sub_d->span), span, cpu_clustergroup_mask(i));
 		cpumask_andnot(cpus, cpus, cpu_clustergroup_mask(i));
 	}
 
-	for_each_cpu(i, sched_domain_span(sd)) {
+	for_each_cpu(i, span) {
 		rcu_assign_pointer(per_cpu(g_sf_d, i), sf_d);
 	}
 
@@ -166,6 +165,7 @@ static int subdomain_cmp(const void *a, const void *b)
 
 struct soft_domain_args {
 	int policy;
+	int nr_cpu;
 	struct cpumask *cpus;
 };
 
@@ -174,9 +174,10 @@ static int tg_set_soft_domain(struct task_group *tg, void *data)
 	struct soft_domain_args *args = (struct soft_domain_args *)data;
 
 	tg->sf_ctx->policy = args->policy;
-	if (args->policy)
+	if (args->policy) {
 		cpumask_copy(to_cpumask(tg->sf_ctx->span), args->cpus);
-	else
+		tg->sf_ctx->nr_cpus = args->nr_cpu;
+	} else
 		cpumask_clear(to_cpumask(tg->sf_ctx->span));
 
 	return 0;
@@ -192,8 +193,6 @@ static int __calc_cpu(struct task_group *tg)
 	else if (tg->cfs_bandwidth.quota != RUNTIME_INF)
 		nr_cpu = DIV_ROUND_UP_ULL(tg->cfs_bandwidth.quota, tg->cfs_bandwidth.period);
 #endif
-
-	tg->sf_ctx->nr_cpus = nr_cpu;
 
 	return nr_cpu;
 }
@@ -231,21 +230,34 @@ static struct soft_domain *find_idlest_llc(long policy,
 	int cpu;
 	int max_cpu = 0;
 	struct soft_domain *idlest = NULL;
+	unsigned long min_util = ULONG_MAX;
 
 	/* The user has specified the llc. */
 	if (policy > 0) {
-		cpu = cpumask_first(cpumask_of_node(policy-1));
-		idlest = rcu_dereference(per_cpu(g_sf_d, cpu));
-		return idlest;
+		for_each_cpu(cpu, cpumask_of_node(policy-1)) {
+			idlest = rcu_dereference(per_cpu(g_sf_d, cpu));
+			if (idlest != NULL)
+				break;
+		}
+
+		if (idlest && nr_cpu <= cpumask_weight(to_cpumask(idlest->span)))
+			return idlest;
+
+		return NULL;
 	}
 
 	cpumask_copy(cpus, cpu_active_mask);
 	for_each_cpu(cpu, cpus) {
 		struct soft_domain *sf_d = NULL;
-		unsigned long min_util = ULONG_MAX;
+		struct cpumask *mask;
 
 		sf_d = rcu_dereference(per_cpu(g_sf_d, cpu));
 		if (sf_d == NULL)
+			continue;
+
+		mask = to_cpumask(sf_d->span);
+		cpumask_andnot(cpus, cpus, mask);
+		if (nr_cpu > cpumask_weight(mask))
 			continue;
 
 		/*
@@ -260,15 +272,13 @@ static struct soft_domain *find_idlest_llc(long policy,
 			max_cpu = sf_d->nr_available_cpus;
 			idlest = sf_d;
 		} else if (max_cpu == 0) {   /* No llc meets the demand */
-			unsigned long util = sum_util(to_cpumask(sf_d->span));
+			unsigned long util = sum_util(mask);
 
 			if (idlest == NULL || util < min_util) {
 				idlest = sf_d;
 				min_util = util;
 			}
 		}
-
-		cpumask_andnot(cpus, cpus, to_cpumask(sf_d->span));
 	}
 
 	return idlest;
@@ -279,9 +289,9 @@ static int __sched_group_set_soft_domain(struct task_group *tg, long policy)
 	int cpu;
 	int ret = 0;
 	cpumask_var_t cpus;
-	int nr_cpu = __calc_cpu(tg);
 	struct soft_domain_args args;
 	struct domain_node nodes[NR_MAX_CLUSTER] = {0};
+	int nr_cpu = __calc_cpu(tg);
 
 	if (check_policy(tg, policy))
 		return -EINVAL;
@@ -315,7 +325,7 @@ static int __sched_group_set_soft_domain(struct task_group *tg, long policy)
 			cpumask_clear(cpus);
 
 			sort(nodes, nr, sizeof(struct domain_node), subdomain_cmp, NULL);
-			sf_d->nr_available_cpus -= min(sf_d->nr_available_cpus, tmp_cpu);
+			sf_d->nr_available_cpus -= tmp_cpu;
 			for (i = 0; i < nr; i++) {
 				sub_d = nodes[i].sud_d;
 				tmpmask = to_cpumask(sub_d->span);
@@ -329,12 +339,14 @@ static int __sched_group_set_soft_domain(struct task_group *tg, long policy)
 			/* 3. attach task group to softdomain. */
 			args.policy = policy;
 			args.cpus = cpus;
+			args.nr_cpu = tmp_cpu;
 			walk_tg_tree_from(tg, tg_set_soft_domain, tg_nop, &args);
 
 			/*
 			 * 4. TODO
 			 * add tg to llc domain task_groups list for load balance.
 			 */
+			tg->sf_ctx->nr_cpus = tmp_cpu;
 			tg->sf_ctx->sf_d = sf_d;
 		} else {
 			ret = -EINVAL;
@@ -357,7 +369,7 @@ static int __sched_group_unset_soft_domain(struct task_group *tg)
 	struct list_head *children = NULL;
 
 	/* If parent has set soft domain, child group can't unset itself. */
-	if (tg->parent->sf_ctx->policy != 0)
+	if (tg->parent->sf_ctx != NULL && tg->parent->sf_ctx->policy != 0)
 		return -EINVAL;
 
 	sf_d = tg->sf_ctx->sf_d;
@@ -397,6 +409,26 @@ int sched_group_set_soft_domain(struct task_group *tg, long val)
 
 	if (!ret)
 		tg->sf_ctx->policy = val;
+
+out:
+	mutex_unlock(&soft_domain_mutex);
+
+	return ret;
+}
+
+int sched_group_set_soft_domain_quota(struct task_group *tg, long val)
+{
+	int ret = 0;
+
+	if (!soft_domain_enabled())
+		return -EPERM;
+
+	mutex_lock(&soft_domain_mutex);
+	if (tg->sf_ctx->policy != 0) {
+		ret = -EINVAL;
+		goto out;
+	} else
+		tg->sf_ctx->nr_cpus = (int)val;
 
 out:
 	mutex_unlock(&soft_domain_mutex);
