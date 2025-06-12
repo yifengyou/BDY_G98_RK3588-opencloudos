@@ -17,6 +17,30 @@
 
 #include <linux/sort.h>
 
+static DEFINE_STATIC_KEY_TRUE(__soft_domain_switch);
+
+static int __init soft_domain_switch_setup(char *str)
+{
+	int val = 0;
+
+	if (kstrtoint(str, 0, &val))
+		pr_warn("sched_soft_domain parameter is error: %s\n", str);
+	else {
+		if (val == 1)
+			static_branch_enable(&__soft_domain_switch);
+		else if (val == 0)
+			static_branch_disable(&__soft_domain_switch);
+	}
+
+	return 1;
+}
+__setup("sched_soft_domain=", soft_domain_switch_setup);
+
+static bool soft_domain_enabled(void)
+{
+	return static_branch_likely(&__soft_domain_switch);
+}
+
 static DEFINE_PER_CPU(struct soft_domain *, g_sf_d);
 
 static void free_sub_soft_domain(struct soft_domain *sf_d);
@@ -87,6 +111,8 @@ static void free_soft_domain(void)
 		if (sf_d)
 			free_sub_soft_domain(sf_d);
 	}
+
+	static_branch_disable(&__soft_domain_switch);
 }
 
 void build_soft_domain(void)
@@ -94,6 +120,9 @@ void build_soft_domain(void)
 	struct sched_domain *sd;
 	static struct cpumask cpus;
 	int i, ret;
+
+	if (!soft_domain_enabled())
+		return;
 
 	cpumask_copy(&cpus, cpu_active_mask);
 	rcu_read_lock();
@@ -348,6 +377,9 @@ static int __sched_group_unset_soft_domain(struct task_group *tg)
 int sched_group_set_soft_domain(struct task_group *tg, long val)
 {
 	int ret = 0;
+
+	if (!soft_domain_enabled())
+		return -EPERM;
 
 	if (val < -1 || val > nr_node_ids)
 		return -EINVAL;
