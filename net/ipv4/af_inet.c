@@ -221,7 +221,11 @@ int __inet_listen_sk(struct sock *sk, int backlog)
 		if (err)
 			return err;
 
-		tcp_call_bpf(sk, BPF_SOCK_OPS_TCP_LISTEN_CB, 0, NULL);
+		err = tcp_call_bpf(sk, BPF_SOCK_OPS_TCP_LISTEN_CB, 0, NULL);
+		if (err == SOCK_OPS_RET_REJECT) {
+			tcp_set_state(sk, TCP_CLOSE);
+			return -EPERM;
+		}
 	}
 	return 0;
 }
