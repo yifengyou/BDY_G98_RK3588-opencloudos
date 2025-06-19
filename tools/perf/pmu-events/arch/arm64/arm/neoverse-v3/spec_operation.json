@@ -52,6 +52,10 @@
         "PublicDescription": "Counts speculatively executed store operations including Single Instruction Multiple Data (SIMD) store operations."
     },
     {
+        "ArchStdEvent": "LDST_SPEC",
+        "PublicDescription": "Counts load and store operations that have been speculatively executed."
+    },
+    {
         "ArchStdEvent": "DP_SPEC",
         "PublicDescription": "Counts speculatively executed logical or arithmetic instructions such as MOV/MVN operations."
     },
@@ -104,7 +108,19 @@
         "PublicDescription": "Counts any store release operations that are speculatively executed. For example: STLR, STLRH, STLRB"
     },
     {
+        "ArchStdEvent": "SIMD_INST_SPEC",
+        "PublicDescription": "Counts speculatively executed operations that are SIMD or SVE vector operations or Advanced SIMD non-scalar operations."
+    },
+    {
         "ArchStdEvent": "ASE_INST_SPEC",
         "PublicDescription": "Counts speculatively executed Advanced SIMD operations."
+    },
+    {
+        "ArchStdEvent": "INT_SPEC",
+        "PublicDescription": "Counts speculatively executed integer arithmetic operations."
+    },
+    {
+        "ArchStdEvent": "PRF_SPEC",
+        "PublicDescription": "Counts speculatively executed operations that prefetch memory. For example: Scalar: PRFM, SVE: PRFB, PRFD, PRFH, or PRFW."
     }
 ]

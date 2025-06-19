@@ -16,6 +16,14 @@
         "PublicDescription": "Counts level 2 cache line allocates that do not fetch data from outside the level 2 data or unified cache."
     },
     {
+        "ArchStdEvent": "L2I_CACHE",
+        "PublicDescription": "Counts accesses to the level 2 cache due to instruction accesses. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the first level instruction cache."
+    },
+    {
+        "ArchStdEvent": "L2I_CACHE_REFILL",
+        "PublicDescription": "Counts cache line refills into the level 2 cache. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the level 1 instruction cache."
+    },
+    {
         "ArchStdEvent": "L2D_CACHE_RD",
         "PublicDescription": "Counts level 2 data cache accesses due to memory read operations. Level 2 cache is a unified cache for data and instruction accesses, accesses are for misses in the level 1 data cache or translation resolutions due to accesses."
     },
@@ -46,5 +54,25 @@
     {
         "ArchStdEvent": "L2D_CACHE_LMISS_RD",
         "PublicDescription": "Counts cache line refills into the level 2 unified cache from any memory read operations that incurred additional latency."
+    },
+    {
+        "ArchStdEvent": "L2I_CACHE_LMISS",
+        "PublicDescription": "Counts cache line refills into the level 2 unified cache from any instruction read operations that incurred additional latency."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_RW",
+        "PublicDescription": "Counts level 2 cache demand accesses from any load/store operations. Level 2 cache is a unified cache for data and instruction accesses, accesses are for misses in the level 1 data cache or translation resolutions due to accesses."
+    },
+    {
+        "ArchStdEvent": "L2I_CACHE_RD",
+        "PublicDescription": "Counts level 2 cache accesses that are due to a demand instruction cache access."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_PRF",
+        "PublicDescription": "Counts level 2 data cache accesses from software preload or prefetch instructions or hardware prefetcher."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_PRF",
+        "PublicDescription": "Counts refills due to accesses generated as a result of prefetches."
     }
 ]

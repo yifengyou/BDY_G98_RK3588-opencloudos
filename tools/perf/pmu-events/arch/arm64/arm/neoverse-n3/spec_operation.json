@@ -16,26 +16,6 @@
         "PublicDescription": "Counts micro-operations speculatively executed. This is the count of the number of micro-operations dispatched in a cycle."
     },
     {
-        "ArchStdEvent": "UNALIGNED_LD_SPEC",
-        "PublicDescription": "Counts unaligned memory read operations issued by the CPU. This event counts unaligned accesses (as defined by the actual instruction), even if they are subsequently issued as multiple aligned accesses. The event does not count preload operations (PLD, PLI)."
-    },
-    {
-        "ArchStdEvent": "UNALIGNED_ST_SPEC",
-        "PublicDescription": "Counts unaligned memory write operations issued by the CPU. This event counts unaligned accesses (as defined by the actual instruction), even if they are subsequently issued as multiple aligned accesses."
-    },
-    {
-        "ArchStdEvent": "UNALIGNED_LDST_SPEC",
-        "PublicDescription": "Counts unaligned memory operations issued by the CPU. This event counts unaligned accesses (as defined by the actual instruction), even if they are subsequently issued as multiple aligned accesses."
-    },
-    {
-        "ArchStdEvent": "LDREX_SPEC",
-        "PublicDescription": "Counts Load-Exclusive operations that have been speculatively executed. For example: LDREX, LDX"
-    },
-    {
-        "ArchStdEvent": "STREX_PASS_SPEC",
-        "PublicDescription": "Counts store-exclusive operations that have been speculatively executed and have successfully completed the store operation."
-    },
-    {
         "ArchStdEvent": "STREX_FAIL_SPEC",
         "PublicDescription": "Counts store-exclusive operations that have been speculatively executed and have not successfully completed the store operation."
     },
@@ -72,18 +52,6 @@
         "PublicDescription": "Counts speculatively executed cryptographic operations except for PMULL and VMULL operations."
     },
     {
-        "ArchStdEvent": "BR_IMMED_SPEC",
-        "PublicDescription": "Counts direct branch operations which are speculatively executed."
-    },
-    {
-        "ArchStdEvent": "BR_RETURN_SPEC",
-        "PublicDescription": "Counts procedure return operations (RET, RETAA and RETAB) which are speculatively executed."
-    },
-    {
-        "ArchStdEvent": "BR_INDIRECT_SPEC",
-        "PublicDescription": "Counts indirect branch operations including procedure returns, which are speculatively executed. This includes operations that force a software change of the PC, other than exception-generating operations and direct branch instructions. Some examples of the instructions counted by this event include BR Xn, RET, etc..."
-    },
-    {
         "ArchStdEvent": "ISB_SPEC",
         "PublicDescription": "Counts ISB operations that are executed."
     },
@@ -106,5 +74,17 @@
     {
         "ArchStdEvent": "ASE_INST_SPEC",
         "PublicDescription": "Counts speculatively executed Advanced SIMD operations."
+    },
+    {
+        "ArchStdEvent": "CAS_NEAR_PASS",
+        "PublicDescription": "Counts compare and swap instructions that executed locally to the PE and updated the location accessed."
+    },
+    {
+        "ArchStdEvent": "CAS_NEAR_SPEC",
+        "PublicDescription": "Counts compare and swap instructions that executed locally to the PE."
+    },
+    {
+        "ArchStdEvent": "CAS_FAR_SPEC",
+        "PublicDescription": "Counts compare and swap instructions that did not execute locally to the PE."
     }
 ]

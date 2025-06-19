@@ -42,5 +42,17 @@
     {
         "ArchStdEvent": "MEM_ACCESS_CHECKED_WR",
         "PublicDescription": "Counts the number of memory write accesses in a cycle that is tag checked by the Memory Tagging Extension (MTE)."
+    },
+    {
+        "ArchStdEvent": "INST_FETCH_PERCYC",
+        "PublicDescription": "Counts number of instruction fetches outstanding per cycle, which will provide an average latency of instruction fetch."
+    },
+    {
+        "ArchStdEvent": "MEM_ACCESS_RD_PERCYC",
+        "PublicDescription": "Counts the number of outstanding loads or memory read accesses per cycle."
+    },
+    {
+        "ArchStdEvent": "INST_FETCH",
+        "PublicDescription": "Counts Instruction memory accesses that the PE makes."
     }
 ]

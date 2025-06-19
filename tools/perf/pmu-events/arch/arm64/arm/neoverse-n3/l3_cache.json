@@ -18,5 +18,9 @@
     {
         "ArchStdEvent": "L3D_CACHE_LMISS_RD",
         "PublicDescription": "Counts any cache line refill into the level 3 cache from memory read operations that incurred additional latency."
+    },
+    {
+        "ArchStdEvent": "L3D_CACHE_MISS",
+        "PublicDescription": "Counts level 3 cache accesses that missed in the level 3 cache."
     }
 ]
