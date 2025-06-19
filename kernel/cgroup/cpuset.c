@@ -3144,7 +3144,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 		nice = kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		system = kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
 		kcpustat_cpu_fetch(&kcs, i);
-		idle += get_idle_time(&kcs, i);
+		idle = get_idle_time(&kcs, i);
 		iowait = get_iowait_time(&kcs, i);
 		irq = kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
 		softirq = kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
