@@ -961,7 +961,7 @@ int proc_watchdog_cpumask(struct ctl_table *table, int write,
 #if defined(CONFIG_KASAN)
 static const int three_hundred = 300;
 #else
-static const int sixty = 60;
+static const int one_hundred_fifty = 150;
 #endif
 
 static struct ctl_table watchdog_sysctls[] = {
@@ -984,7 +984,7 @@ static struct ctl_table watchdog_sysctls[] = {
 #if defined(CONFIG_KASAN)
 		.extra2		= (void *)&three_hundred,
 #else
-		.extra2		= (void *)&sixty,
+		.extra2		= (void *)&one_hundred_fifty,
 #endif
 	},
 	{
