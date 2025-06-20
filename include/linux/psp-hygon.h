@@ -318,6 +318,9 @@ struct csv3_data_dbg_read_mem {
  * struct csv3_data_attestation_report - ATTESTATION secure call command parameters
  *
  * @handle: handle of the VM to process
+ * @flags: the bit flags used to indicate how to extend the attestation report.
+ *	   It's copied from user space's parameter before issuing the ATTESTATION
+ *	   secure call command.
  * @resp_gpa: guest physical address to save the generated report
  * @resp_length: length of the generated report
  * @req_gpa: guest physical address of the input for the report
@@ -326,7 +329,7 @@ struct csv3_data_dbg_read_mem {
  */
 struct csv3_data_attestation_report {
 	u32 handle;				/* Out */
-	u32 reserved1;
+	u32 flags;				/* In */
 	u64 resp_gpa;				/* In */
 	u8 reserved2[16];
 	u32 resp_len;				/* In/Out */

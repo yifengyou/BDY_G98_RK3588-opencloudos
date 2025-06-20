@@ -23,6 +23,9 @@
 /* Mutex to serialize the command handling. */
 static DEFINE_MUTEX(csv_cmd_mutex);
 
+/* The magic string is used to identify extended attestation aware requests. */
+static char csv_attestation_magic[CSV_ATTESTATION_MAGIC_LEN] = CSV_ATTESTATION_MAGIC_STRING;
+
 static int csv_get_report(unsigned long arg)
 {
 	u8	*csv_report;
@@ -68,6 +71,7 @@ static int csv3_get_report(unsigned long arg)
 	struct csv3_data_attestation_report *cmd_buff = NULL;
 	void *req_buff = NULL;
 	void *resp_buff = NULL;
+	struct csv_guest_user_data_attestation_ext *udata = NULL;
 	int ret;
 
 	if (copy_from_user(&input, (void __user *)arg, sizeof(input)))
@@ -81,6 +85,28 @@ static int csv3_get_report(unsigned long arg)
 	if (!page)
 		return -ENOMEM;
 	cmd_buff = (struct csv3_data_attestation_report *)page_address(page);
+
+	/*
+	 * If user space issues an extended attestation aware request, then sync
+	 * the flags to @cmd_buff.
+	 */
+	if (input.len >= CSV_ATTESTATION_USER_DATA_EXT_LEN) {
+		udata = kzalloc(CSV_ATTESTATION_USER_DATA_EXT_LEN, GFP_KERNEL);
+		if (!udata) {
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		if (copy_from_user((void *)udata, input.report_data,
+				   CSV_ATTESTATION_USER_DATA_EXT_LEN)) {
+			ret = -EFAULT;
+			goto err;
+		}
+
+		if (!strncmp((char *)udata->magic, csv_attestation_magic,
+						CSV_ATTESTATION_MAGIC_LEN))
+			cmd_buff->flags = udata->flags;
+	}
 
 	/*
 	 * Query the firmware to get minimum length of request buffer and
@@ -145,6 +171,8 @@ err:
 		free_page((unsigned long)req_buff);
 	if (cmd_buff)
 		free_page((unsigned long)cmd_buff);
+
+	kfree(udata);
 
 	return ret;
 }

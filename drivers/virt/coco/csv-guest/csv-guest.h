@@ -21,6 +21,62 @@
 					+ CSV_REPORT_HASH_LEN)
 
 /**
+ * struct csv_guest_user_data_attestation - ATTESTATION command parameters.
+ *	This is used for legacy attestation.
+ *
+ *	In the legacy attestation, the size of tee info portion of the
+ *	attestation report is 0x150. The tee info does not contain rtmr.
+ *
+ * @user_data: user defined data, it's suggest that contains challenge data
+ *	       from the relying party.
+ * @mnonce: user's random nonce, just for anti-replay attack protection.
+ * @hash: the sm3 hash of the @user_data and @mnonce.
+ */
+struct csv_guest_user_data_attestation {
+	__u8 user_data[CSV_REPORT_USER_DATA_LEN];	/* In */
+	__u8 mnonce[CSV_REPORT_MNONCE_LEN];		/* In */
+	__u8 hash[CSV_REPORT_HASH_LEN];			/* In */
+} __packed;
+
+#define CSV_ATTESTATION_USER_DATA_EXT_LEN	132U
+
+#define CSV_ATTESTATION_MAGIC_LEN		16
+#define CSV_ATTESTATION_MAGIC_STRING		"ATTESTATION_EXT"
+
+#define CSV_ATTESTATION_FLAG_REPORT_EXT_BIT	0
+#define CSV_ATTESTATION_FLAG_REPORT_EXT		(1U << CSV_ATTESTATION_FLAG_REPORT_EXT)
+
+/**
+ * struct csv_guest_user_data_attestation_ext - ATTESTATION command parameters.
+ *	This is used for extended attestation.
+ *
+ *	In the extended attestation, the size of tee info portion of the
+ *	attestation report is 0x490. The tee info contains rtmr by default.
+ *
+ *	Currently, the extended attestation only supported for CSV3 guest.
+ *
+ * @user_data: user defined data, it's suggest that contains challenge data
+ *	       from the relying party.
+ * @mnonce: user's random nonce, just for anti-replay attack protection.
+ * @hash: the sm3 hash of the @user_data and @mnonce.
+ * @magic: The magic string indicates this is an extended attestation aware
+ *	   request. Due to historical reasons, users always provide a buffer
+ *	   that is much larger than the size of structure
+ *	   csv_guest_user_data_attestation_ext. The magic string will be used to
+ *	   determine whether the user space uses the extended attestation aware
+ *	   request. If the user space is using such a request, the flags field
+ *	   will be used to indicate the format of the attestation report.
+ * @flags: the bit flags used to indicate how to extend the attestation report.
+ */
+struct csv_guest_user_data_attestation_ext {
+	__u8  user_data[CSV_REPORT_USER_DATA_LEN];	/* In */
+	__u8  mnonce[CSV_REPORT_MNONCE_LEN];		/* In */
+	__u8  hash[CSV_REPORT_HASH_LEN];		/* In */
+	__u8  magic[CSV_ATTESTATION_MAGIC_LEN];		/* In */
+	__u32 flags;					/* In */
+} __packed;
+
+/**
  * struct csv_report_req - Request struct for CSV_CMD_GET_REPORT IOCTL.
  *
  * @report_data:User buffer with REPORT_DATA to be included into CSV_REPORT, and it's also
