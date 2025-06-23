@@ -32,14 +32,6 @@ thirdparty_bnxt(){
 	fi
 }
 
-thirdparty_mpt3sas(){
-	if [ -e release-drivers/mpt3sas ]; then
-		rm -rf ../../drivers/scsi/mpt3sas
-		cp -a release-drivers/mpt3sas ../../drivers/scsi/
-		sed -i 's/---help---/help/g' ../../drivers/scsi/mpt3sas/Kconfig
-	fi
-}
-
 thirdparty_i40e(){
 	if [ -e release-drivers/i40e ]; then
 		rm -rf ../../drivers/net/ethernet/intel/i40e
@@ -87,6 +79,14 @@ thirdparty_ixgbevf(){
 	fi
 }
 
+thirdparty_mpt3sas(){
+	if [ -e release-drivers/mpt3sas ]; then
+		rm -rf ../../drivers/scsi/mpt3sas
+		cp -a release-drivers/mpt3sas ../../drivers/scsi/
+		sed -i 's/---help---/help/g' ../../drivers/scsi/mpt3sas/Kconfig
+	fi
+}
+
 thirdparty_megaraid_sas(){
 	if [ -e release-drivers/megaraid_sas ]; then
 		rm -rf ../../drivers/scsi/megaraid_sas
@@ -102,13 +102,6 @@ thirdparty_mpi3mr(){
 	fi
 }
 
-thirdparty_smartpqi(){
-	if [ -e release-drivers/smartpqi* ]; then
-		rm -rf ../../drivers/scsi/smartpqi
-		cp -a release-drivers/smartpqi* ../../drivers/scsi/smartpqi
-		sed -i 's/source \"drivers\/scsi\/smartpqi\/Kconfig\"/ /g' ../../drivers/scsi/Kconfig
-	fi
-}
 ##
 ## main , script start run at here.
 ##
@@ -117,8 +110,6 @@ if [[ $1 != without_mlnx ]]; then
 fi
 
 thirdparty_bnxt
-
-thirdparty_mpt3sas
 
 thirdparty_i40e
 
@@ -129,8 +120,9 @@ thirdparty_iavf
 thirdparty_ixgbe
 
 thirdparty_ixgbevf
+
+thirdparty_mpt3sas
+
 thirdparty_megaraid_sas
 
 thirdparty_mpi3mr
-
-thirdparty_smartpqi
