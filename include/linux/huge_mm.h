@@ -181,10 +181,15 @@ static inline bool thp_disabled_by_hw(void)
 #define hugetext_anon_enabled()			\
 	(transparent_hugepage_flags &		\
 	 (1<<TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG))
+
+extern unsigned long hugetext_pad_threshold;
+#define hugetext_padding_enabled()			\
+	(hugetext_file_enabled() && hugetext_pad_threshold > 0)
 #else
 #define hugetext_enabled()	false
 #define hugetext_file_enabled() false
 #define hugetext_anon_enabled() false
+#define hugetext_padding_enabled()	false
 #endif /* CONFIG_HUGETEXT */
 
 unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,

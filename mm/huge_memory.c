@@ -442,6 +442,35 @@ static ssize_t hugetext_enabled_store(struct kobject *kobj,
 }
 struct kobj_attribute hugetext_enabled_attr =
 	__ATTR(hugetext_enabled, 0644, hugetext_enabled_show, hugetext_enabled_store);
+
+unsigned long hugetext_pad_threshold;
+
+static ssize_t hugetext_pad_threshold_show(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   char *buf)
+{
+	return sprintf(buf, "%ld\n", hugetext_pad_threshold);
+}
+
+static ssize_t hugetext_pad_threshold_store(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    const char *buf, size_t count)
+{
+	int err;
+	unsigned long pad_size;
+
+	err = kstrtoul(buf, 10, &pad_size);
+	if (err || pad_size > HPAGE_PMD_SIZE - 1)
+		return -EINVAL;
+
+	hugetext_pad_threshold = pad_size;
+
+	return count;
+}
+
+static struct kobj_attribute hugetext_pad_threshold_attr =
+	__ATTR(hugetext_pad_threshold, 0644, hugetext_pad_threshold_show,
+			hugetext_pad_threshold_store);
 #endif /* CONFIG_HUGETEXT */
 
 static struct attribute *hugepage_attr[] = {
@@ -454,6 +483,7 @@ static struct attribute *hugepage_attr[] = {
 #endif
 #ifdef CONFIG_HUGETEXT
 	&hugetext_enabled_attr.attr,
+	&hugetext_pad_threshold_attr.attr,
 #endif
 	NULL,
 };
