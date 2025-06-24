@@ -67,6 +67,8 @@ int drop_caches_sysctl_handler(struct ctl_table *table, int write,
 		if (sysctl_drop_caches & 2) {
 			drop_slab();
 			count_vm_event(DROP_SLAB);
+			if (sysctl_vfs_cache_pressure == 0)
+				pr_info("vfs_cache_pressure=0: dentry/inode caches cannot be reclaimed!\n");
 		}
 		if (!stfu) {
 			pr_info("%s (%d): drop_caches: %d\n",
@@ -75,5 +77,21 @@ int drop_caches_sysctl_handler(struct ctl_table *table, int write,
 		}
 		stfu |= sysctl_drop_caches & 4;
 	}
+	return 0;
+}
+
+int vfs_cache_pressure_sysctl_handler(struct ctl_table *table, int write,
+		void *buffer, size_t *length, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (ret)
+		return ret;
+	if (write && sysctl_vfs_cache_pressure == 0)
+		pr_info("task %s[%d] write vfs_cache_pressure=0, "
+			"dentry/inode caches cannot be reclaimed!\n",
+			current->comm, task_pid_nr(current));
+
 	return 0;
 }
