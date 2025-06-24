@@ -77,7 +77,7 @@
 #include <linux/ptrace.h>
 #include <linux/vmalloc.h>
 #include <linux/sched/sysctl.h>
-
+#include <linux/khugepaged.h>
 #include <trace/events/kmem.h>
 
 #include <asm/io.h>
@@ -4599,6 +4599,18 @@ static vm_fault_t do_read_fault(struct vm_fault *vmf)
 {
 	vm_fault_t ret = 0;
 	struct folio *folio;
+
+#ifdef CONFIG_HUGETEXT
+	/* Add the candidate hugetext vma into khugepaged scan list */
+	if (pmd_none(*vmf->pmd) && hugetext_enabled()) {
+		struct vm_area_struct *vma = vmf->vma;
+		unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+
+		if (vma_is_hugetext(vma, vma->vm_flags) &&
+		    transhuge_vma_suitable(vma, haddr))
+			khugepaged_enter_vma(vma, vma->vm_flags);
+	}
+#endif
 
 	/*
 	 * Let's call ->map_pages() first and use ->fault() as fallback
