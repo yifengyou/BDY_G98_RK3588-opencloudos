@@ -1217,6 +1217,11 @@ out_free_interp:
 				             ELF_PAGESTART(load_bias + vaddr);
 				reloc_func_desc = load_bias;
 			}
+#ifdef CONFIG_HUGETEXT
+			if (hugetext_enabled() && interpreter &&
+			    total_size >= HPAGE_PMD_SIZE)
+				load_bias &= HPAGE_PMD_MASK;
+#endif
 		}
 
 		/*
