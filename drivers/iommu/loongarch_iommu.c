@@ -596,13 +596,14 @@ static struct iommu_domain *la_iommu_domain_alloc(unsigned int type)
 
 	switch (type) {
 	case IOMMU_DOMAIN_BLOCKED:
+	case IOMMU_DOMAIN_IDENTITY:
 	case IOMMU_DOMAIN_UNMANAGED:
 		info = alloc_dom_info();
 		if (info == NULL)
-			return NULL;
+			return ERR_PTR(-ENOMEM);
 		break;
 	default:
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	return &info->domain;
 }
@@ -756,7 +757,6 @@ static void la_iommu_remove_device(struct device *dev)
 {
 	struct la_iommu_dev_data *dev_data;
 
-	iommu_group_remove_device(dev);
 	dev_data = dev->archdata.iommu;
 	dev->archdata.iommu = NULL;
 	kfree(dev_data);
@@ -846,10 +846,12 @@ static int la_iommu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	struct iommu_info *info;
 	unsigned short bdf;
 
-	if (domain != NULL && domain->type == IOMMU_DOMAIN_BLOCKED) 
-		return 0;
-
 	la_iommu_detach_dev(dev);
+
+	if (domain != NULL &&
+		(domain->type == IOMMU_DOMAIN_IDENTITY ||
+			domain->type == IOMMU_DOMAIN_BLOCKED))
+		return 0;
 
 	if (domain == NULL)
 		return 0;
@@ -1186,6 +1188,11 @@ static void la_domain_set_plaform_dma_ops(struct device *dev)
 	 */
 }
 
+static int la_iommu_def_domain_type(struct device *dev)
+{
+	return IOMMU_DOMAIN_IDENTITY;
+}
+
 const struct iommu_ops la_iommu_ops = {
 	.capable = la_iommu_capable,
 	.domain_alloc = la_iommu_domain_alloc,
@@ -1193,6 +1200,7 @@ const struct iommu_ops la_iommu_ops = {
 	.release_device = la_iommu_remove_device,
 	.device_group = la_iommu_device_group,
 	.pgsize_bitmap	= LA_IOMMU_PGSIZE,
+	.def_domain_type = la_iommu_def_domain_type,
 	.owner = THIS_MODULE,
 	.set_platform_dma_ops = la_domain_set_plaform_dma_ops,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
