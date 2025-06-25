@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -24,6 +24,10 @@
  */
 #define TXGBE_MAX_VFS_DRV_LIMIT  (TXGBE_MAX_VF_FUNCTIONS - 1)
 
+#define TXGBE_VF_LINK_STATE_DISABLE 0
+#define TXGBE_VF_LINK_STATE_AUTO 1
+#define TXGBE_VF_LINK_STATE_ENABLE 2
+
 void txgbe_restore_vf_multicasts(struct txgbe_adapter *adapter);
 int txgbe_set_vf_vlan(struct txgbe_adapter *adapter, int add, int vid, u16 vf);
 void txgbe_set_vmolr(struct txgbe_hw *hw, u16 vf, bool aupe);
@@ -32,6 +36,9 @@ int txgbe_set_vf_mac(struct txgbe_adapter *adapter,
 		     u16 vf, unsigned char *mac_addr);
 void txgbe_disable_tx_rx(struct txgbe_adapter *adapter);
 void txgbe_ping_all_vfs(struct txgbe_adapter *adapter);
+void txgbe_ping_all_vfs_with_link_status(struct txgbe_adapter *adapter, bool link_up);
+void txgbe_ping_vf_with_link_status(struct txgbe_adapter *adapter, bool link_up, u16 vf);
+int txgbe_trans_vf_link_state(int state);
 void txgbe_set_all_vfs(struct txgbe_adapter *adapter);
 #ifdef IFLA_VF_MAX
 int txgbe_ndo_set_vf_mac(struct net_device *netdev, int queue, u8 *mac);
@@ -66,6 +73,7 @@ int txgbe_vf_configuration(struct pci_dev *pdev, unsigned int event_mask);
 void txgbe_enable_sriov(struct txgbe_adapter *adapter);
 #endif
 int txgbe_pci_sriov_configure(struct pci_dev *dev, int num_vfs);
+void txgbe_check_vf_rate_limit(struct txgbe_adapter *adapter);
 void txgbe_set_vf_link_state(struct txgbe_adapter *adapter, int vf, int state);
 
 /*

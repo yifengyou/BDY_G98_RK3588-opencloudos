@@ -14,8 +14,22 @@ int txgbe_bp_mode_setting(struct txgbe_adapter *adapter)
 	struct txgbe_hw *hw = &adapter->hw;
 
 	/*default to open an73*/
-	adapter->backplane_an = AUTO?1:0;
-	adapter->an37 = AUTO?1:0;
+	if ((hw->subsystem_device_id & TXGBE_DEV_MASK) == TXGBE_ID_KR_KX_KX4)
+		adapter->backplane_an = AUTO ? 1 : 0;
+
+	switch (hw->mac.type) {
+	case txgbe_mac_sp:
+		if (AUTO > 1)
+			adapter->backplane_an = AUTO ? 1 : 0;
+		break;
+	case txgbe_mac_aml40:
+	case txgbe_mac_aml:
+	default:
+		adapter->backplane_an = AUTO ? 1 : 0;
+		break;
+	}
+
+	adapter->autoneg = AUTO ? 1 : 0;
 	switch (adapter->backplane_mode) {
 	case TXGBE_BP_M_KR:
 		hw->subsystem_device_id = TXGBE_ID_WX1820_KR_KX_KX4;
@@ -35,13 +49,13 @@ int txgbe_bp_mode_setting(struct txgbe_adapter *adapter)
 
 	if (adapter->backplane_auto == TXGBE_BP_M_AUTO) {
 		adapter->backplane_an = 1;
-		adapter->an37 = 1;
+		adapter->autoneg = 1;
 	} else if (adapter->backplane_auto == TXGBE_BP_M_NAUTO) {
 		adapter->backplane_an = 0;
-		adapter->an37 = 0;
+		adapter->autoneg = 0;
 	}
 
-	if (adapter->ffe_set == 0)
+	if ((adapter->ffe_set == 0) && (KR_SET == 0))
 		return 0;
 
 	if (KR_SET == 1) {
@@ -66,27 +80,23 @@ int txgbe_bp_mode_setting(struct txgbe_adapter *adapter)
 
 void txgbe_bp_watchdog_event(struct txgbe_adapter *adapter)
 {
-	u32 value = 0;
 	struct txgbe_hw *hw = &adapter->hw;
-	struct net_device *netdev = adapter->netdev;
+	u32 value = 0;
+	int ret = 0;
 	
 	/* only continue if link is down */
-	if (netif_carrier_ok(netdev))
+	if (netif_carrier_ok(adapter->netdev))
 		return;
 
-	if (KR_POLLING == 1) {
+	if (adapter->flags2 & TXGBE_FLAG2_KR_TRAINING) {
 		value = txgbe_rd32_epcs(hw, 0x78002);
-		value = value & 0x4;
-		if (value == 0x4) {
-			e_dev_info("Enter training\n");
-			handle_bkp_an73_flow(0, adapter);
+		if ((value & BIT(2)) == BIT(2)) {
+			e_info(hw, "Enter training\n");
+			ret = handle_bkp_an73_flow(0, adapter);
+			if (ret)
+				txgbe_set_link_to_kr(hw, 1);
 		}
-	} else {
-		if(adapter->flags2 & TXGBE_FLAG2_KR_TRAINING){
-			e_dev_info("Enter training\n");
-			handle_bkp_an73_flow(0, adapter);
-			adapter->flags2 &= ~TXGBE_FLAG2_KR_TRAINING;
-		}
+		adapter->flags2 &= ~TXGBE_FLAG2_KR_TRAINING;
 	}
 }
 
@@ -98,30 +108,13 @@ void txgbe_bp_down_event(struct txgbe_adapter *adapter)
 	if (adapter->backplane_an == 0)
 		return;
 
-	switch (KR_RESTART_T_MODE) {
-	case 1:
-		txgbe_wr32_epcs(hw, TXGBE_VR_AN_KR_MODE_CL, 0x0000);
-		txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0x0000);
-		txgbe_wr32_epcs(hw, 0x78001, 0x0000);
+	val = txgbe_rd32_epcs(hw, 0x78002);
+	val1 = txgbe_rd32_epcs(hw, TXGBE_SR_AN_MMD_CTL);
+	kr_dbg(KR_MODE, "AN INT : %x - AN CTL : %x - PL : %x\n",
+	       val, val1, txgbe_rd32_epcs(hw, 0x70012));
+	switch (AN73_TRAINNING_MODE) {
+	case 0:
 		msleep(1000);
-		txgbe_set_link_to_kr(hw, 1);
-		break;
-	case 2:
-		txgbe_wr32_epcs(hw, TXGBE_VR_AN_KR_MODE_CL, 0x0000);
-		txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0x0000);
-		txgbe_wr32_epcs(hw, 0x78001, 0x0000);
-		msleep(1050);
-		txgbe_wr32_epcs(hw, TXGBE_VR_AN_KR_MODE_CL, 0x0001);
-		txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0x3200);
-		txgbe_wr32_epcs(hw, 0x78001, 0x0007);
-		break;
-	default:
-		if (AN73_TRAINNING_MODE == 1)
-			msleep(100);
-		else
-			msleep(1000);
-		val = txgbe_rd32_epcs(hw, 0x78002);
-		val1 = txgbe_rd32_epcs(hw, TXGBE_SR_AN_MMD_CTL);
 		if ((val & BIT(2)) == BIT(2)) {
 			if (!(adapter->flags2 & TXGBE_FLAG2_KR_TRAINING))
 				adapter->flags2 |= TXGBE_FLAG2_KR_TRAINING;
@@ -130,8 +123,19 @@ void txgbe_bp_down_event(struct txgbe_adapter *adapter)
 			txgbe_wr32_epcs(hw, 0x78002, 0x0000);
 			txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0x3000);
 		}
-		kr_dbg(KR_MODE, "0x78002 : %x - 0x70000 : %x\n", val, val1);
-		kr_dbg(KR_MODE, "0x70012 : %x\n", txgbe_rd32_epcs(hw, 0x70012));
+		break;
+	case 1:
+		msleep(100);
+		if ((val & BIT(2)) == BIT(2)) {
+			if (!(adapter->flags2 & TXGBE_FLAG2_KR_TRAINING))
+				adapter->flags2 |= TXGBE_FLAG2_KR_TRAINING;
+		} else {
+			txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0);
+			txgbe_wr32_epcs(hw, 0x78002, 0x0000);
+			txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0x3000);
+		}
+		break;
+	default:
 		break;
 	}
 }
@@ -209,6 +213,83 @@ int chk_bkp_an73_ability(bkpan73ability tBkpAn73Ability, bkpan73ability tLpBkpAn
 	return 0;
 }
 
+static void txgbe_bp_print_page_status(struct txgbe_adapter *adapter)
+{
+	struct txgbe_hw *hw = &adapter->hw;
+	u32 rdata = 0;
+
+	rdata = txgbe_rd32_epcs(hw, 0x70010);
+	kr_dbg(KR_MODE, "read 70010 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70011);
+	kr_dbg(KR_MODE, "read 70011 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70012);
+	kr_dbg(KR_MODE, "read 70012 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70013);
+	kr_dbg(KR_MODE, "read 70013 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70014);
+	kr_dbg(KR_MODE, "read 70014 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70015);
+	kr_dbg(KR_MODE, "read 70015 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70016);
+	kr_dbg(KR_MODE, "read 70016 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70017);
+	kr_dbg(KR_MODE, "read 70017 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70018);
+	kr_dbg(KR_MODE, "read 70018 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70019);
+	kr_dbg(KR_MODE, "read 70019 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70020);
+	kr_dbg(KR_MODE, "read 70020 data %0x\n", rdata);
+	rdata = txgbe_rd32_epcs(hw, 0x70021);
+	kr_dbg(KR_MODE, "read 70021 data %0x\n", rdata);
+}
+
+static void txgbe_bp_exchange_page(struct txgbe_adapter *adapter)
+{
+	struct txgbe_hw *hw = &adapter->hw;
+	u32 an_int, base_page = 0;
+	int count = 0;
+
+	an_int = txgbe_rd32_epcs(hw, 0x78002);
+	if (!(an_int & BIT(2)))
+		return;
+	/* 500ms timeout */
+	for (count = 0; count < 5000; count++) {
+		kr_dbg(KR_MODE, "-----count----- %d\n", count);
+		if (an_int & BIT(2)) {
+			u8 next_page = 0;
+			u32 rdata, addr;
+
+			txgbe_bp_print_page_status(adapter);
+			addr = base_page == 0 ? 0x70013 : 0x70019;
+			rdata = txgbe_rd32_epcs(hw, addr);
+			if (rdata & BIT(14)) {
+				if (rdata & BIT(15)) {
+					/* always set null message */
+					txgbe_wr32_epcs(hw, 0x70016, 0x2001);
+					kr_dbg(KR_MODE, "write 70016 0x%0x\n",
+					       0x2001);
+					rdata = txgbe_rd32_epcs(hw, 0x70010);
+					txgbe_wr32_epcs(hw, 0x70010,
+							rdata | BIT(15));
+					kr_dbg(KR_MODE, "write 70010 0x%0x\n",
+					       rdata);
+					next_page = 1;
+				} else {
+					next_page = 0;
+				}
+				base_page = 1;
+			}
+			/* clear an pacv int */
+			txgbe_wr32_epcs(hw, 0x78002, 0x0000);
+			kr_dbg(KR_MODE, "write 78002 0x%0x\n", 0x0000);
+			usec_delay(100);
+			if (next_page == 0)
+				return;
+		}
+		usec_delay(100);
+	}
+}
 
 /*Get Ethernet Backplane AN73 Base Page Ability
 **byLinkPartner:
@@ -234,6 +315,10 @@ int get_bkp_an73_ability(bkpan73ability *pt_bkp_an73_ability, unsigned char byLi
 		kr_dbg(KR_MODE, "SR AN MMD LP Base Page Ability Register 1: 0x%x\n", rdata);
 		pt_bkp_an73_ability->nextPage = (rdata >> 15) & 0x01;
 		kr_dbg(KR_MODE, "  Next Page (bit15): %d\n", pt_bkp_an73_ability->nextPage);
+
+		/* if have next pages, exchange next pages. */
+		if (pt_bkp_an73_ability->nextPage)
+			txgbe_bp_exchange_page(adapter);
 
 		rdata = txgbe_rd32_epcs(hw, 0x70014);
 		kr_dbg(KR_MODE, "SR AN MMD LP Base Page Ability Register 2: 0x%x\n", rdata);
@@ -308,33 +393,7 @@ static void set_fields(
 	}
 }
 
-/*Clear Ethernet Backplane AN73 Interrupt status
-**- intIndexHi  =0, only intIndex bit will be cleared
-**- intIndexHi !=0, the [intIndexHi, intIndex] range will be cleared
-*/
-int clr_bkp_an73_int(unsigned int intIndex, unsigned int intIndexHi, struct txgbe_adapter * adapter)
-{
-	struct txgbe_hw *hw = &adapter->hw;
-	unsigned int rdata, wdata;
-	int status = 0;
-
-	rdata = txgbe_rd32_epcs(hw, 0x78002);
-	kr_dbg(KR_MODE, "[Before clear] Read VR AN MMD Interrupt Register: 0x%x\n", rdata);
-
-	wdata = rdata;
-	if (intIndexHi)
-		set_fields(&wdata, intIndexHi, intIndex, 0);
-	else
-		set_fields(&wdata, intIndex, intIndex, 0);
-
-	txgbe_wr32_epcs(hw, 0x78002, wdata);
-	rdata = txgbe_rd32_epcs(hw, 0x78002);
-	kr_dbg(KR_MODE, "[After clear] Read VR AN MMD Interrupt Register: 0x%x\n", rdata);
-
-	return status;
-}
-
-void read_phy_lane_txeq(unsigned short lane, struct txgbe_adapter *adapter)
+static void read_phy_lane_txeq(unsigned short lane, struct txgbe_adapter *adapter)
 {
 	struct txgbe_hw *hw = &adapter->hw;
 	unsigned int addr, rdata;
@@ -369,7 +428,7 @@ void read_phy_lane_txeq(unsigned short lane, struct txgbe_adapter *adapter)
 **- bits[1:0] =2'b11: Enable the CL72 KR training
 **- bits[1:0] =2'b01: Disable the CL72 KR training
 */
-int en_cl72_krtr(unsigned int enable, struct txgbe_adapter *adapter)
+static int en_cl72_krtr(unsigned int enable, struct txgbe_adapter *adapter)
 {
 	struct txgbe_hw *hw = &adapter->hw;
 	unsigned int wdata = 0;
@@ -409,7 +468,7 @@ int en_cl72_krtr(unsigned int enable, struct txgbe_adapter *adapter)
 	return 0;
 }
 
-int chk_cl72_krtr_status(struct txgbe_adapter *adapter)
+static int chk_cl72_krtr_status(struct txgbe_adapter *adapter)
 {
 	struct txgbe_hw *hw = &adapter->hw;
 	unsigned int rdata = 0, rdata1;
@@ -437,7 +496,6 @@ int chk_cl72_krtr_status(struct txgbe_adapter *adapter)
 		kr_dbg(KR_MODE, "  Start-Up Protocol Status (bit2): %d\n", ((rdata >> 2) & 0x01));
 		kr_dbg(KR_MODE, "  Frame Lock               (bit1): %d\n", ((rdata >> 1) & 0x01));
 		kr_dbg(KR_MODE, "  Receiver Status          (bit0): %d\n", ((rdata >> 0) & 0x01));
-
 		/*If bit3 is set, Training is completed with failure*/
 		if ((rdata1 >> 3) & 0x01) {
 			kr_dbg(KR_MODE, "Training is completed with failure!!!\n");
@@ -448,7 +506,7 @@ int chk_cl72_krtr_status(struct txgbe_adapter *adapter)
 		/*If bit0 is set, Receiver trained and ready to receive data*/
 		if ((rdata1 >> 0) & 0x01) {
 			kr_dbg(KR_MODE, "Receiver trained and ready to receive data ^_^\n");
-			e_dev_info("Receiver ready.\n");
+			e_info(hw, "Receiver ready.\n");
 			read_phy_lane_txeq(0, adapter);
 			return status;
 		}
@@ -459,21 +517,64 @@ int chk_cl72_krtr_status(struct txgbe_adapter *adapter)
 	return status;
 }
 
+static int txgbe_cl72_trainning(struct txgbe_adapter *adapter)
+{
+	struct txgbe_hw *hw = &adapter->hw;
+	u32 rdata = 0, rdata1 = 0;
+	bool lpld_all_rd = false;
+	int ret = 0;
+
+	if (AN73_TRAINNING_MODE == 1)
+		txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0);
+
+	ret |= en_cl72_krtr(3, adapter);
+	kr_dbg(KR_MODE, "\nCheck the Clause 72 KR Training status ...\n");
+	ret |= chk_cl72_krtr_status(adapter);
+
+	ret = read_poll_timeout(txgbe_rd32_epcs, rdata, (rdata & 0x8000), 1000,
+				200000, false, hw, 0x10099);
+	if (!ret) {
+		rdata1 = txgbe_rd32_epcs(hw, 0x1009b) & 0x8000;
+		if (rdata1 == 0x8000)
+			lpld_all_rd = true;
+	}
+
+	if (lpld_all_rd) {
+		rdata = rd32_ephy(hw, 0x100E);
+		rdata1 = rd32_ephy(hw, 0x100F);
+		e_dev_info("Lp and Ld all Ready, FFE : %d-%d-%d.\n",
+			   (rdata >> 6) & 0x3F, rdata1 & 0x3F, (rdata1 >> 6) & 0x3F);
+		if (AN73_TRAINNING_MODE == 1 && hw->dac_sfp == false)
+			if ((((rdata >> 6) & 0x3F) == 27) &&
+			    ((rdata1 & 0x3F) == 8) &&
+			    (((rdata1 >> 6) & 0x3F)) == 44)
+				return -1;
+		/* clear an pacv int */
+		txgbe_wr32_epcs(hw, 0x78002, 0x0000);
+		ret = read_poll_timeout(txgbe_rd32_epcs, rdata, (rdata & 0x1000), 1000,
+					   100000, false, hw, 0x30020);
+		if (!ret)
+			e_dev_info("INT_AN_INT_CMPLT =1, AN73 Done Success.\n");
+		return 0;
+	}
+	/* clear an pacv int */
+	txgbe_wr32_epcs(hw, 0x78002, 0x0000);
+	if (AN73_TRAINNING_MODE == 0)
+		en_cl72_krtr(1, adapter);
+
+	return -1;
+}
+
 int handle_bkp_an73_flow(unsigned char bp_link_mode, struct txgbe_adapter *adapter)
 {
 	bkpan73ability tBkpAn73Ability , tLpBkpAn73Ability ;
-	u32 rdata = 0, rdata1 = 0, round = 1;
 	struct txgbe_hw *hw = &adapter->hw;
-	bool lpld_all_rd = false;
-	unsigned int addr, data;
-	int status = 0, k;
+	bool fec_en = false;
+	u32 fecAbility = 0;
+	int ret = 0;
 
 	tBkpAn73Ability.currentLinkMode = bp_link_mode;
 
-	if (AN73_TRAINNING_MODE == 1) {
-		round = 2;
-		txgbe_wr32_epcs(hw, TXGBE_SR_AN_MMD_CTL, 0);
-	}
 	kr_dbg(KR_MODE, "HandleBkpAn73Flow().\n");
 	kr_dbg(KR_MODE, "---------------------------------\n");
 
@@ -482,8 +583,6 @@ int handle_bkp_an73_flow(unsigned char bp_link_mode, struct txgbe_adapter *adapt
 	get_bkp_an73_ability(&tBkpAn73Ability, 0, adapter);
 	/*2. Check the AN73 Interrupt Status*/
 	kr_dbg(KR_MODE, "<2>. Check the AN73 Interrupt Status ...\n");
-	/*3.Clear the AN_PG_RCV interrupt*/
-	clr_bkp_an73_int(2, 0x0, adapter);
 
 	/*3.1. Get the link partner AN73 Base Page Ability*/
 	kr_dbg(KR_MODE, "<3.1>. Get the link partner AN73 Base Page Ability ...\n");
@@ -497,57 +596,20 @@ int handle_bkp_an73_flow(unsigned char bp_link_mode, struct txgbe_adapter *adapt
 	chk_bkp_an73_ability(tBkpAn73Ability, tLpBkpAn73Ability, adapter);
 
 	/*Check the FEC and KR Training for KR mode*/
-	/* FEC handling */
 	kr_dbg(KR_MODE, "<3.3>. Check the FEC for KR mode ...\n");
-	tBkpAn73Ability.fecAbility = 0x3;
-	tLpBkpAn73Ability.fecAbility = 0x3;
-	if (((tBkpAn73Ability.fecAbility & tLpBkpAn73Ability.fecAbility) == 0x03)
-		&& (KR_FEC == 1)) {
-		e_dev_info("Enable KR FEC ...\n");
-		//Write 1 to SR_PMA_KR_FEC_CTRL bit0 to enable the FEC
-		data = 1;
-		addr = 0x100ab; //SR_PMA_KR_FEC_CTRL 
-		txgbe_wr32_epcs(hw, addr, data);
-	} else {
-		e_dev_info("KR FEC is disabled.\n");
-	}
+	fecAbility = tBkpAn73Ability.fecAbility & tLpBkpAn73Ability.fecAbility;
+	fec_en = fecAbility >= 0x1 ? TRUE : FALSE;
+	adapter->cur_fec_link = fec_en ?
+				TXGBE_PHY_FEC_BASER : TXGBE_PHY_FEC_OFF;
+	/* SR_PMA_KR_FEC_CTRL  bit0 */
+	txgbe_wr32_epcs(hw, 0x100ab, fec_en);
+	e_dev_info("KR FEC is %s.\n", fec_en ? "endabled" : "disabled");
+
 	kr_dbg(KR_MODE, "\n<3.4>. Check the CL72 KR Training for KR mode ...\n");
 
-	for (k = 0; k < round; k++) {
-		status |= en_cl72_krtr(3, adapter);
-		kr_dbg(KR_MODE, "\nCheck the Clause 72 KR Training status ...\n");
-		status |= chk_cl72_krtr_status(adapter);
+	ret = txgbe_cl72_trainning(adapter);
+	if (ret)
+		kr_dbg(KR_MODE, "Trainning failure\n");
 
-		status = read_poll_timeout(txgbe_rd32_epcs, rdata, (rdata & 0x8000), 1000,
-					   200000, false, hw, 0x10099);
-		if (!status) {
-			rdata1 = txgbe_rd32_epcs(hw, 0x1009b) & 0x8000;
-			if (rdata1 == 0x8000)
-				lpld_all_rd = true;
-		}
-
-		if (lpld_all_rd) {
-			rdata = rd32_ephy(hw, 0x100E);
-			rdata1 = rd32_ephy(hw, 0x100F);
-			e_dev_info("Lp and Ld all Ready, FFE : %d-%d-%d.\n",
-				   (rdata >> 6) & 0x3F, rdata1 & 0x3F, (rdata1 >> 6) & 0x3F);
-			clr_bkp_an73_int(2, 0, adapter);
-			clr_bkp_an73_int(1, 0, adapter);
-			clr_bkp_an73_int(0, 0, adapter);
-			status = read_poll_timeout(txgbe_rd32_epcs, rdata, (rdata & 0x1000), 1000,
-						   100000, false, hw, 0x30020);
-			if (!status)
-				e_dev_info("INT_AN_INT_CMPLT =1, AN73 Done Success.\n");
-			return 0;
-		}
-		clr_bkp_an73_int(2, 0, adapter);
-		clr_bkp_an73_int(1, 0, adapter);
-		clr_bkp_an73_int(0, 0, adapter);
-	}
-	e_dev_info("Trainning failure\n");
-
-	if (AN73_TRAINNING_MODE == 0)
-		status |= en_cl72_krtr(1, adapter);
-
-	return status;
+	return ret;
 }

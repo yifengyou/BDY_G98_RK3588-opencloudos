@@ -125,6 +125,37 @@
 #define CL72_KRTR_PRBS31_EN 0
 #endif
 
+#ifndef TXGBE_SWFW_MBOX_AML
+#define TXGBE_SWFW_MBOX_AML
+#endif
+
+#ifndef TXGBE_DMA_RESET
+#define TXGBE_DMA_RESET 1
+#endif
+
+#ifndef TXGBE_1588_PPS_LEVEL
+#define TXGBE_1588_PPS_LEVEL 1
+#endif
+
+#ifndef TXGBE_1588_PPS_WIDTH
+#define TXGBE_1588_PPS_WIDTH 100
+#endif
+
+#ifndef TXGBE_1588_TOD_ENABLE
+#define TXGBE_1588_TOD_ENABLE 1
+#endif
+
+#ifndef CL72_KRTR_PRBS_MODE_EN
+#define CL72_KRTR_PRBS_MODE_EN 0xffff			/*open kr prbs check */
+#endif
+
+#ifndef CL74_KRTR_TRAINNING_TIMEOUT
+#define CL74_KRTR_TRAINNING_TIMEOUT 3000
+#endif
+#ifndef AN_TRAINNING_MODE
+#define AN_TRAINNING_MODE 0
+#endif
+
 /**************************performance************************************/
 
 /**************************sfi************************************/
@@ -7819,6 +7850,10 @@ _kc_bpf_warn_invalid_xdp_action(__maybe_unused struct net_device *dev,
 
 #ifndef HAVE_ETHTOOL_COALESCE_EXTACK
 #define HAVE_ETHTOOL_COALESCE_EXTACK
+#endif
+
+#ifndef HAVE_PTP_CLOCK_INFO_ADJFINE
+#define HAVE_PTP_CLOCK_INFO_ADJFINE
 #endif
 
 #endif /* _TXGBE_KYLIN_H__ */

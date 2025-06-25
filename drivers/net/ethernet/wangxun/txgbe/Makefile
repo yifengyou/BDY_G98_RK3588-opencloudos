@@ -25,4 +25,8 @@ txgbe-objs := txgbe_main.o \
 			  txgbe_xsk.o \
 			  txgbe_lib.o \
 			  txgbe_pcierr.o \
+			  txgbe_e56.o  \
+			  txgbe_e56_bp.o \
+			  txgbe_aml.o \
+			  txgbe_aml40.o \
 			  txgbe_kcompat.o

@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_type.h, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_type.h, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -99,6 +99,11 @@
 /* Device IDs */
 #define TXGBE_DEV_ID_SP1000                     0x1001
 #define TXGBE_DEV_ID_WX1820                     0x2001
+#define TXGBE_DEV_ID_AML                        0x5000
+#define TXGBE_DEV_ID_AML5025                    0x5025
+#define TXGBE_DEV_ID_AML5125                    0x5125
+#define TXGBE_DEV_ID_AML5040                    0x5040
+#define TXGBE_DEV_ID_AML5140                    0x5140
 
 /* Subsystem IDs */
 /* SFP */
@@ -131,12 +136,14 @@
 #define TXGBE_WOL_MASK                          0x4000
 #define TXGBE_DEV_MASK                          0xf0
 
+#define TXGBE_FLASH_HEADER_FLAG                 0x5aa5
+
 
 /* Combined interface*/
 #define TXGBE_ID_SFI_XAUI						0x50
 
 /* Revision ID */
-#define TXGBE_SP_MPW  1
+#define TXGBE_SP_MPW  0xfe
 
 /* MDIO Manageable Devices (MMDs). */
 #define TXGBE_MDIO_PMA_PMD_DEV_TYPE            0x1 /* PMA and PMD */
@@ -144,12 +151,18 @@
 #define TXGBE_MDIO_PHY_XS_DEV_TYPE             0x4 /* PHY Extender Sublayer */
 #define TXGBE_MDIO_AUTO_NEG_DEV_TYPE           0x7 /* Auto-Negotiation */
 #define TXGBE_MDIO_VENDOR_SPECIFIC_1_DEV_TYPE  0x1E /* Vendor specific 1 */
+#define TXGBE_MDIO_VENDOR_SPECIFIC_2_DEV_TYPE  0x1F /* Vendor specific 2 */
 
 /* phy register definitions */
 /* VENDOR_SPECIFIC_1_DEV regs */
 #define TXGBE_MDIO_VENDOR_SPECIFIC_1_STATUS             0x1 /* VS1 Status Reg */
 #define TXGBE_MDIO_VENDOR_SPECIFIC_1_LINK_STATUS        0x0008 /* 1 = Link Up */
 #define TXGBE_MDIO_VENDOR_SPECIFIC_1_SPEED_STATUS       0x0010 /* 0-10G, 1-1G */
+
+/* VENDOR_SPECIFIC_2_DEV regs */
+#define TXGBE_MDIO_VENDOR_SPECIFIC_2_PORT_CTRL          0xF001
+#define TXGBE_MDIO_VENDOR_SPECIFIC_2_SW_RST             BIT(15)
+#define TXGBE_MDIO_VENDOR_SPECIFIC_2_POWER              BIT(11)
 
 /* AUTO_NEG_DEV regs */
 #define TXGBE_MDIO_AUTO_NEG_CONTROL              0x0  /* AUTO_NEG Control Reg */
@@ -210,6 +223,36 @@
 #define TNX_FW_REV                              0xB
 #define AQ_FW_REV                               0x20
 
+/* AMLITE ETH PHY Registers */
+#define SR_AN_CTRL                              0x70000
+#define VR_PCS_DIG_CTRL1                        0x38000
+#define SR_PCS_CTRL1                            0x30000
+#define SR_PCS_CTRL2                            0x30007
+#define SR_PMA_CTRL2                            0x10007
+#define VR_PCS_DIG_CTRL3                        0x38003
+#define VR_PMA_CTRL3                            0x180a8
+#define VR_PMA_CTRL4                            0x180a9
+#define SR_PMA_RS_FEC_CTRL                      0x100c8
+#define ANA_OVRDEN0                             0xca4
+#define ANA_OVRDEN1                             0xca8
+#define ANA_OVRDVAL0                            0xcb0
+#define ANA_OVRDVAL5                            0xcc4
+#define OSC_CAL_N_CDR4                          0x14
+#define PLL0_CFG0                               0xc10
+#define PLL0_CFG2                               0xc18
+#define PLL0_DIV_CFG0                           0xc1c
+#define PLL1_CFG0                               0xc48
+#define PLL1_CFG2                               0xc50
+#define PIN_OVRDEN0                             0xc8c
+#define PIN_OVRDVAL0                            0xc94
+#define DATAPATH_CFG0                           0x142c
+#define DATAPATH_CFG1                           0x1430
+#define AN_CFG1                                 0x1438
+#define SPARE52                                 0x16fc
+#define RXS_CFG0                                0x000
+#define PMD_CFG0                                0x1400
+#define SR_PCS_STS1                             0x30001
+
 /* ETH PHY Registers */
 #define TXGBE_SR_XS_PCS_MMD_STATUS1             0x30001
 #define TXGBE_SR_PCS_CTL2                       0x30007
@@ -228,7 +271,10 @@
 #define TXGBE_SR_AN_MMD_ADV_REG1_PAUSE_SYM      0x400
 #define TXGBE_SR_AN_MMD_ADV_REG1_PAUSE_ASM      0x800
 #define TXGBE_SR_AN_MMD_ADV_REG2                0x70011
+#define TXGBE_SR_AN_MMD_ADV_REG3                0x70012
 #define TXGBE_SR_AN_MMD_LP_ABL1                 0x70013
+#define TXGBE_SR_AN_MMD_LP_ABL2                 0x70014
+#define TXGBE_SR_AN_MMD_LP_ABL3                 0x70015
 #define TXGBE_VR_AN_KR_MODE_CL                  0x78003
 #define TXGBE_VR_XS_OR_PCS_MMD_DIGI_CTL1        0x38000
 #define TXGBE_VR_XS_OR_PCS_MMD_DIGI_STATUS      0x38010
@@ -354,6 +400,92 @@
 #define TXGBE_XPCS_POWER_GOOD_MAX_POLLING_TIME  100
 #define TXGBE_PHY_INIT_DONE_POLLING_TIME        100
 
+/* amlite: FPGA */
+/* PHY MDI STANDARD CONFIG */
+#define TXGBE_MDI_PHY_ID1_OFFSET                2
+#define TXGBE_MDI_PHY_ID2_OFFSET                3
+#define TXGBE_MDI_PHY_ID_MASK                   0xFFFFFC00U
+#define TXGBE_MDI_PHY_SPEED_SELECT1             0x0040
+#define TXGBE_MDI_PHY_DUPLEX                    0x0100
+#define TXGBE_MDI_PHY_RESTART_AN                0x0200
+#define TXGBE_MDI_PHY_ANE                       0x1000
+#define TXGBE_MDI_PHY_SPEED_SELECT0             0x2000
+#define TXGBE_MDI_PHY_RESET                     0x8000
+
+#define TXGBE_PHY_RST_WAIT_PERIOD               50
+
+#define TXGBE_MDI_PHY_INT_LSC                  0x0400
+#define TXGBE_MDI_PHY_INT_ANC                  0x0800
+
+#define MV1119_CTRL                     0       /* Page Any, Control reg */
+#define MV1119_STUS                     1       /* Page Any, Status reg */
+#define MV1119_PHY_ID_1                 2       /* Page Any, Phy Identifier 1 */
+#define MV1119_PHY_ID_2                 3       /* Page Any, Phy Identifier 2 */
+#define MV1119_AUTO_NEGO_ADVER          4       /* Page Any, Auto-Negotiation Advertisement reg */
+#define MV1119_LK_PARTNER_ABILITY       5       /* Page Any, Link Partner Ability reg */
+#define MV1119_AUTO_NEGO_EX             6       /* Page Any, Auto-Negotiation Expansion reg */
+#define MV1119_NEXT_PAGE_TRANS          7       /* Page Any, Next Page Transmit reg */
+#define MV1119_LK_PARTNER_NEXT_PAGE     8       /* Page Any, Link Partner Next Page reg */
+#define MV1119_1000BASE_T_CTRL          9       /* Page Any, 1000BASE-T Control reg */
+#define MV1119_1000BASE_T_STUS          10      /* Page Any, 1000BASE-T Status reg */
+#define MV1119_EX_STUS                  15      /* Page Any, Extended Status reg */
+#define MV1119_CO_SPEC_CTRL_1           16      /* Page 0,   Copper Specific Control reg 1 */
+#define MV1119_CO_SPEC_STUS_1           17      /* Page 0,   Copper Specific Status reg 1 */
+#define MV1119_CO_SPEC_INT_EN           18      /* Page 0,   Copper Specific Interrupt Enable reg */
+#define MV1119_CO_SPEC_STUS_2           19      /* Page 0,   Copper Specific Status reg 2 */
+#define MV1119_CO_SPEC_CTRL_3           20      /* Page 0,   Copper Specific Control reg 3 */
+#define MV1119_RECE_ERR_COUT            21      /* Page 0,   Receive Error Counter reg */
+#define MV1119_PAGE_ADD                 22      /* Page Any, Page Address */
+#define MV1119_GLO_INT_STUS             23      /* Page 0,2, Global Interrupt Status */
+#define MV1119_CO_SPEC_CTRL_2           26      /* Page 0,   Copper Specific Control reg 2 */
+#define MV1119_MAC_SPEC_CTRL_1          16      /* Page 2,   MAC Specific Control reg 1 */
+#define MV1119_MAC_SPEC_INT_EN          18      /* Page 2,   MAC Specific Interrupt Enable reg */
+#define MV1119_MAC_SPEC_STUS_2          19      /* Page 2,   MAC Specific Status reg 2 */
+#define MV1119_MAC_SPEC_CTRL            21      /* Page 2,   MAC Specific Control reg */
+#define MV1119_LED_FUN_CTRL             16      /* Page 3,   LED Function Control reg */
+#define MV1119_LED_POLAR_CTRL           17      /* Page 3,   LED Polarity Control reg */
+#define MV1119_LED_TIME_CTRL            18      /* Page 3,   LED Timer Control reg */
+
+#define CBIT(_x) (1 << (_x))
+
+#define MV1119_C_RESET                  CBIT(15)
+#define MV1119_C_LOOPBACK               CBIT(14)
+#define MV1119_C_AUTO_NE_EN             CBIT(12)
+#define MV1119_C_POWER_DOWN             CBIT(11)
+#define MV1119_C_RE_CO_AUTO_NE          CBIT(9)
+#define MV1119_C_CO_DUPLEX_MODE         CBIT(8)
+#define MV1119_C_SPEED_SELECT1          CBIT(6)
+#define MV1119_C_10M                    0x00
+#define MV1119_C_100M                   CBIT(13)
+#define MV1119_C_1000M                  CBIT(6)
+#define MV1119_C_FULL_DUP               CBIT(8)
+#define MV1119_C_HALF_DUP               0x00
+#define MV1119_ANA_ASYM_PAUSE           CBIT(11)
+#define MV1119_ANA_PAUSE                CBIT(10)
+#define MV1119_ANA_100FULL              CBIT(8)
+#define MV1119_ANA_100HALF              CBIT(7)
+#define MV1119_ANA_10FULL               CBIT(6)
+#define MV1119_ANA_10HALF               CBIT(5)
+#define MV1119_1000BC_1000FULL          CBIT(9)
+#define MV1119_1000BC_1000HALF          CBIT(8)
+#define MV1119_CSS1_SPEED               (CBIT(14) | CBIT(15))
+#define MV1119_CSS1_DUPLEX              CBIT(13)
+#define MV1119_CSS1_LINK                CBIT(10)
+#define MV1119_CSS2_AUTO_NE_ERR         CBIT(15)
+#define MV1119_CSS2_SPEED_CH            CBIT(14)
+#define MV1119_CSS2_DUPLEX_CH           CBIT(13)
+#define MV1119_CSS2_AUTO_NE_COMPLETE    CBIT(11)
+#define MV1119_CSS2_CO_LINK_STATUS_CH   CBIT(10)
+#define MV1119_CSC_DOWNSHIFT_COUNT      (CBIT(12) | CBIT(13) | CBIT(14))
+#define MV1119_CSC_DOWNSHIFT_EN         CBIT(11)
+#define MV1119_CSC_POWER_DOWN           CBIT(2)
+
+
+#define MV1119_ANA_100                  (MV1119_ANA_100FULL | MV1119_ANA_100HALF)
+#define MV1119_ANA_10                   (MV1119_ANA_10FULL | MV1119_ANA_10HALF)
+#define MV1119_ANA_100_AND_10           (MV1119_ANA_100 | MV1119_ANA_10)
+#define MV1119_1000BC_1000              (MV1119_1000BC_1000FULL | MV1119_1000BC_1000HALF)
+
 /**************** Global Registers ****************************/
 /* chip control Registers */
 #define TXGBE_MIS_RST                   0x1000C
@@ -365,9 +497,17 @@
 #define TXGBE_MIS_SWSM                  0x1002C
 #define TXGBE_MIS_RST_ST                0x10030
 
+#define PX_PF_PEND                      0x4C0
+#define PX_VF_PEND(i)                  (0x4D0 + 4 * (i)) /* i = [0,3]*/
+#define PX_PF_BME                       0x4B8
+
 #define TXGBE_MIS_RST_SW_RST            0x00000001U
 #define TXGBE_MIS_RST_LAN0_RST          0x00000002U
 #define TXGBE_MIS_RST_LAN1_RST          0x00000004U
+#define TXGBE_MIS_RST_LAN0_EPHY_RST     0x00080000U
+#define TXGBE_MIS_RST_LAN1_EPHY_RST     0x00010000U
+#define TXGBE_MIS_RST_LAN0_MAC_RST      0x00100000U
+#define TXGBE_MIS_RST_LAN1_MAC_RST      0x00020000U
 #define TXGBE_MIS_RST_LAN0_CHG_ETH_MODE 0x20000000U
 #define TXGBE_MIS_RST_LAN1_CHG_ETH_MODE 0x40000000U
 #define TXGBE_MIS_RST_GLOBAL_RST        0x80000000U
@@ -419,6 +559,33 @@
 #define TXGBE_TS_DALARM_THRE_MASK       0x000003FFU
 #define TXGBE_TS_INT_EN_DALARM_INT_EN   0x00000002U
 #define TXGBE_TS_INT_EN_ALARM_INT_EN    0x00000001U
+
+/* Sensors for AMLITE PVT(Process Voltage Temperature) */
+#define TXGBE_AML_INTR_RAW_HI           0x10300
+#define TXGBE_AML_INTR_RAW_ME           0x10304
+#define TXGBE_AML_INTR_RAW_LO           0x10308
+#define TXGBE_AML_TS_CTL1               0x10330
+#define TXGBE_AML_TS_CTL2               0x10334
+#define TXGBE_AML_TS_ENA                0x10338
+#define TXGBE_AML_TS_STS                0x1033C
+#define TXGBE_AML_INTR_HIGH_EN          0x10318
+#define TXGBE_AML_INTR_MED_EN           0x1031C
+#define TXGBE_AML_INTR_LOW_EN           0x10320
+#define TXGBE_AML_INTR_HIGH_STS         0x1030C
+#define TXGBE_AML_INTR_MED_STS          0x10310
+#define TXGBE_AML_INTR_LOW_STS          0x10314
+
+#define TXGBE_AML_TS_STS_VLD            0x1000
+#define TXGBE_AML_INTR_EN_HI            0x00000002U
+#define TXGBE_AML_INTR_EN_ME            0x00000001U
+#define TXGBE_AML_INTR_EN_LO            0x00000001U
+#define TXGBE_AML_INTR_CL_HI            0x00000002U
+#define TXGBE_AML_INTR_CL_ME            0x00000001U
+#define TXGBE_AML_INTR_CL_LO            0x00000001U
+#define TXGBE_AML_EVAL_MODE_MASK        0x010U
+#define TXGBE_AML_CAL_MODE_MASK         0x08U
+#define TXGBE_AML_ALARM_THRE_MASK       0x1FFE0000U
+#define TXGBE_AML_DALARM_THRE_MASK      0x0001FFE0U
 
 struct txgbe_thermal_diode_data {
 	s16 temp;
@@ -513,6 +680,9 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_I2C_TXFLR                 0x14974 /* Transmit FIFO Level Reg */
 #define TXGBE_I2C_RXFLR                 0x14978 /* Receive FIFO Level Reg */
 #define TXGBE_I2C_SDA_HOLD              0x1497C /* SDA hold time length reg */
+#define TXGBE_I2C_SDA_RX_HOLD           0xff0000 /* SDA rx hold time length reg */
+#define TXGBE_I2C_SDA_TX_HOLD           0xffff /* SDA tx hold time length reg */
+
 #define TXGBE_I2C_TX_ABRT_SOURCE        0x14980 /* I2C TX Abort Status Reg */
 #define TXGBE_I2C_SDA_SETUP             0x14994 /* I2C SDA Setup Register */
 #define TXGBE_I2C_ENABLE_STATUS         0x1499C /* I2C Enable Status Register */
@@ -544,7 +714,15 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_CFG_GENEVE                0x14418
 #define TXGBE_CFG_TEREDO                0x1441C
 #define TXGBE_CFG_TCP_TIME              0x14420
+#define TXGBE_LINKUP_FILTER             0x14428
+#define TXGBE_LINKUP_FILTER_TIME        30
 #define TXGBE_CFG_TAG_TPID(_i)          (0x14430 + ((_i) * 4))
+
+/*AML LINK STATUS OVERWRITE*/
+#define TXGBE_AML_EPCS_MISC_CTL         0x13240
+#define TXGBE_AML_LINK_STATUS_OVRD_EN   0x00000020
+#define TXGBE_AML_LINK_STATUS_OVRD_VAL  0x00000010
+
 /* port cfg bit */
 #define TXGBE_CFG_PORT_CTL_PFRSTD       0x00004000U /* Phy Function Reset Done */
 #define TXGBE_CFG_PORT_CTL_D_VLAN       0x00000001U /* double vlan*/
@@ -568,19 +746,39 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_CFG_PORT_ST_LINK_100M     0x00000008U
 #define TXGBE_CFG_PORT_ST_LAN_ID(_r)    ((0x00000100U & (_r)) >> 8)
 #define TXGBE_LINK_UP_TIME              90
+
+/* amlite: diff from sapphire */
+#define TXGBE_CFG_PORT_ST_AML_LINK_10G      0x00000010U
+#define TXGBE_CFG_PORT_ST_AML_LINK_25G      0x00000008U
+#define TXGBE_CFG_PORT_ST_AML_LINK_40G      0x00000004U
+#define TXGBE_CFG_PORT_ST_AML_LINK_50G      0x00000002U
+
 /* LED CTL Bit */
-#define TXGBE_CFG_LED_CTL_LINK_BSY_SEL  0x00000010U
-#define TXGBE_CFG_LED_CTL_LINK_100M_SEL 0x00000008U
-#define TXGBE_CFG_LED_CTL_LINK_1G_SEL   0x00000004U
-#define TXGBE_CFG_LED_CTL_LINK_10G_SEL  0x00000002U
-#define TXGBE_CFG_LED_CTL_LINK_UP_SEL   0x00000001U
-#define TXGBE_CFG_LED_CTL_LINK_OD_SHIFT 16
+#define TXGBE_CFG_LED_CTL_LINK_BSY_SEL      0x00000010U
+#define TXGBE_CFG_LED_CTL_LINK_100M_SEL     0x00000008U
+#define TXGBE_CFG_LED_CTL_LINK_1G_SEL       0x00000004U
+#define TXGBE_CFG_LED_CTL_LINK_10G_SEL      0x00000002U
+#define TXGBE_CFG_LED_CTL_LINK_UP_SEL       0x00000001U
+#define TXGBE_CFG_LED_CTL_LINK_OD_SHIFT     16
+
+#define TXGBE_AMLITE_CFG_LED_CTL_LINK_BSY_SEL  0x00000020U
+#define TXGBE_AMLITE_CFG_LED_CTL_LINK_10G_SEL  0x00000010U
+#define TXGBE_AMLITE_CFG_LED_CTL_LINK_25G_SEL  0x00000008U
+#define TXGBE_AMLITE_CFG_LED_CTL_LINK_40G_SEL  0x00000004U
+#define TXGBE_AMLITE_CFG_LED_CTL_LINK_50G_SEL  0x00000002U
+
 /* LED modes */
 #define TXGBE_LED_LINK_UP               TXGBE_CFG_LED_CTL_LINK_UP_SEL
 #define TXGBE_LED_LINK_10G              TXGBE_CFG_LED_CTL_LINK_10G_SEL
 #define TXGBE_LED_LINK_ACTIVE           TXGBE_CFG_LED_CTL_LINK_BSY_SEL
 #define TXGBE_LED_LINK_1G               TXGBE_CFG_LED_CTL_LINK_1G_SEL
 #define TXGBE_LED_LINK_100M             TXGBE_CFG_LED_CTL_LINK_100M_SEL
+
+#define TXGBE_AMLITE_LED_LINK_ACTIVE    TXGBE_AMLITE_CFG_LED_CTL_LINK_BSY_SEL
+#define TXGBE_AMLITE_LED_LINK_10G       TXGBE_AMLITE_CFG_LED_CTL_LINK_10G_SEL
+#define TXGBE_AMLITE_LED_LINK_25G       TXGBE_AMLITE_CFG_LED_CTL_LINK_25G_SEL
+#define TXGBE_AMLITE_LED_LINK_40G       TXGBE_AMLITE_CFG_LED_CTL_LINK_40G_SEL
+#define TXGBE_AMLITE_LED_LINK_50G       TXGBE_AMLITE_CFG_LED_CTL_LINK_50G_SEL
 
 /* GPIO Registers */
 #define TXGBE_GPIO_DR                   0x14800
@@ -589,8 +787,12 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_GPIO_INTEN                0x14830
 #define TXGBE_GPIO_INTMASK              0x14834
 #define TXGBE_GPIO_INTTYPE_LEVEL        0x14838
+#define TXGBE_GPIO_INT_POLARITY         0x1483C
 #define TXGBE_GPIO_INTSTATUS            0x14844
+#define TXGBE_GPIO_DEBOUNCE             0x14848
 #define TXGBE_GPIO_EOI                  0x1484C
+#define TXGBE_GPIO_EXT                  0x14850
+
 /*GPIO bit */
 #define TXGBE_GPIO_DR_0         0x00000001U /* SDP0 Data Value */
 #define TXGBE_GPIO_DR_1         0x00000002U /* SDP1 Data Value */
@@ -612,21 +814,33 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_GPIO_INTEN_1      0x00000002U /* SDP1 interrupt enable */
 #define TXGBE_GPIO_INTEN_2      0x00000004U /* SDP2 interrupt enable */
 #define TXGBE_GPIO_INTEN_3      0x00000008U /* SDP3 interrupt enable */
+#define TXGBE_GPIO_INTEN_4      0x00000010U /* SDP4 interrupt enable */
 #define TXGBE_GPIO_INTEN_5      0x00000020U /* SDP5 interrupt enable */
 #define TXGBE_GPIO_INTEN_6      0x00000040U /* SDP6 interrupt enable */
 #define TXGBE_GPIO_INTTYPE_LEVEL_2 0x00000004U /* SDP2 interrupt type level */
 #define TXGBE_GPIO_INTTYPE_LEVEL_3 0x00000008U /* SDP3 interrupt type level */
+#define TXGBE_GPIO_INTTYPE_LEVEL_4 0x00000010U /* SDP3 interrupt type level */
 #define TXGBE_GPIO_INTTYPE_LEVEL_5 0x00000020U /* SDP5 interrupt type level */
 #define TXGBE_GPIO_INTTYPE_LEVEL_6 0x00000040U /* SDP6 interrupt type level */
+#define TXGBE_GPIO_INT_POLARITY_3  0x00000008U
+#define TXGBE_GPIO_INT_POLARITY_4  0x00000010U
+#define TXGBE_GPIO_INT_DEBOUNCE_2  0x00000004U
+#define TXGBE_GPIO_INT_DEBOUNCE_3  0x00000008U
 #define TXGBE_GPIO_INTSTATUS_1  0x00000002U /* SDP1 interrupt status */
 #define TXGBE_GPIO_INTSTATUS_2  0x00000004U /* SDP2 interrupt status */
 #define TXGBE_GPIO_INTSTATUS_3  0x00000008U /* SDP3 interrupt status */
+#define TXGBE_GPIO_INTSTATUS_4  0x00000010U /* SDP4 interrupt status */
 #define TXGBE_GPIO_INTSTATUS_5  0x00000020U /* SDP5 interrupt status */
 #define TXGBE_GPIO_INTSTATUS_6  0x00000040U /* SDP6 interrupt status */
 #define TXGBE_GPIO_EOI_2        0x00000004U /* SDP2 interrupt clear */
 #define TXGBE_GPIO_EOI_3        0x00000008U /* SDP3 interrupt clear */
+#define TXGBE_GPIO_EOI_4        0x00000010U /* SDP3 interrupt clear */
 #define TXGBE_GPIO_EOI_5        0x00000020U /* SDP5 interrupt clear */
 #define TXGBE_GPIO_EOI_6        0x00000040U /* SDP6 interrupt clear */
+#define TXGBE_SFP1_MOD_ABS_LS   0x00000004U /* GPIO_EXT SFP ABSENT*/
+#define TXGBE_SFP1_RX_LOS_LS    0x00000008U /* GPIO_EXT RX LOSS */
+
+#define TXGBE_SFP1_MOD_PRST_LS   0x00000010U /* GPIO_EXT SFP ABSENT*/
 
 /* TPH registers */
 #define TXGBE_CFG_TPH_TDESC     0x14F00 /* TPH conf for Tx desc write back */
@@ -665,6 +879,8 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_TDM_TCP_FLG_L     0x18078
 #define TXGBE_TDM_TCP_FLG_H     0x1807C
 #define TXGBE_TDM_VLAN_INS(_i)  (0x18100 + ((_i) * 4)) /* 64 of these 0 - 63 */
+#define TXGBE_TDM_DESC_FATAL(i) (0x0180D0 + (i) * 4) /*0-3*/
+
 /* TDM CTL BIT */
 #define TXGBE_TDM_CTL_TE        0x1 /* Transmit Enable */
 #define TXGBE_TDM_CTL_PADDING   0x2 /* Padding byte number for ipsec ESP */
@@ -672,6 +888,7 @@ struct txgbe_thermal_sensor_data {
 /* Per VF Port VLAN insertion rules */
 #define TXGBE_TDM_VLAN_INS_VLANA_DEFAULT 0x40000000U /*Always use default VLAN*/
 #define TXGBE_TDM_VLAN_INS_VLANA_NEVER   0x80000000U /* Never insert VLAN tag */
+#define TXGBE_TDM_VLAN_INS_TPID_SEL_SHIFT 24 /*Tag tpid sel*/
 
 #define TXGBE_TDM_RP_CTL        0x18400
 #define TXGBE_TDM_RP_CTL_RST    ((0x1) << 0)
@@ -681,6 +898,22 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_TDM_RP_RATE       0x18404
 #define TXGBE_TDM_RP_RATE_MIN(v) ((0x3FFF & (v)))
 #define TXGBE_TDM_RP_RATE_MAX(v) ((0x3FFF & (v)) << 16)
+
+#define TXGBE_TDM_RL_QUEUE_IDX        0x18210
+#define TXGBE_TDM_RL_QUEUE_CFG        0x18214
+
+#define TXGBE_TDM_RL_VM_IDX        0x18218
+#define TXGBE_TDM_RL_VM_CFG        0x1821C
+#define TXGBE_TDM_RL_CFG           0x18400
+#define TXGBE_TDM_RL_EN            0x00000001U
+#define TXGBE_TDM_FACTOR_INT       0x00000001U
+#define TXGBE_TDM_FACTOR_FRA       0x00000001U
+#define TXGBE_TDM_FACTOR_INT_SHIFT 16
+#define TXGBE_TDM_FACTOR_FRA_SHIFT 2
+#define TXGBE_TDM_FACTOR_INT_MASK  0xffff0000
+#define TXGBE_TDM_FACTOR_FRA_MASK  0xfffc
+
+#define TXGBE_TDM_RL_EN        0x00000001U
 
 /* qos */
 #define TXGBE_TDM_PBWARB_CTL    0x18200
@@ -694,6 +927,7 @@ struct txgbe_thermal_sensor_data {
 /* etag */
 #define TXGBE_TDM_ETAG_INS(_i)  (0x18700 + ((_i) * 4)) /* 64 of these 0 - 63 */
 /* statistic */
+#define TXGBE_TDM_DRP_CNT       0x18300
 #define TXGBE_TDM_SEC_DRP       0x18304
 #define TXGBE_TDM_PKT_CNT       0x18308
 #define TXGBE_TDM_OS2BMC_CNT    0x18314
@@ -709,6 +943,13 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_RDM_PF_HIDE(_i)   (0x12090 + ((_i) * 4))
 /* VFRE bitmask */
 #define TXGBE_RDM_VF_RE_ENABLE_ALL  0xFFFFFFFFU
+
+#define TXGBE_RDM_DCACHE_CTL             0x120A8
+#define TXGBE_RDM_DCACHE_CTL_EN          0x1
+#define TXGBE_RDM_RSC_CTL_FREE_CNT_DIS   0x100
+
+/* amlite: rdm_rsc_ctl_free_ctl */
+#define TXGBE_RDM_RSC_CTL_FREE_CTL  0x00000080U
 
 /* FCoE DMA Context Registers */
 #define TXGBE_RDM_FCPTRL            0x12410
@@ -799,6 +1040,8 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_RDB_FCRE_TBL_RING(_v) (((_v) & 0x7F)) /* output queue number */
 /* statistic */
 #define TXGBE_RDB_MPCNT(_i)         (0x19040 + ((_i) * 4)) /* 8 of 3FA0-3FBC*/
+#define TXGBE_RDB_PKT_CNT           0x19060
+#define TXGBE_RDB_DRP_CNT           0x19068
 #define TXGBE_RDB_LXONTXC           0x1921C
 #define TXGBE_RDB_LXOFFTXC          0x19218
 #define TXGBE_RDB_PXON2OFFCNT(_i)   (0x19280 + ((_i) * 4)) /* 8 of these */
@@ -816,6 +1059,8 @@ struct txgbe_thermal_sensor_data {
 #define TXGBE_RDB_PL_CFG_TUN_TUNHDR     0x10
 #define TXGBE_RDB_PL_CFG_RSS_PL_MASK    0x7
 #define TXGBE_RDB_PL_CFG_RSS_PL_SHIFT   29
+#define TXGBE_RDB_PL_CFG_RSS_EN         0x1000000
+#define TXGBE_RDB_PL_CFG_RSS_MASK       0xFF0000
 /* RQTC Bit Masks and Shifts */
 #define TXGBE_RDB_RSS_TC_SHIFT_TC(_i)   ((_i) * 4)
 #define TXGBE_RDB_RSS_TC_TC0_MASK       (0x7 << 0)
@@ -854,6 +1099,8 @@ enum {
 /* Immediate Interrupt Rx (A.K.A. Low Latency Interrupt) */
 #define TXGBE_RDB_5T_CTL1_SIZE_BP       0x00001000U /* Packet size bypass */
 #define TXGBE_RDB_5T_CTL1_LLI           0x00100000U /* Enables low latency Int */
+#define TXGBE_RDB_5T_CTL1_RING_MASK     0x0FE00000U /* Rx queue index mask */
+#define TXGBE_RDB_5T_CTL1_RING_SHIFT    21
 #define TXGBE_RDB_LLI_THRE_PRIORITY_MASK 0x00070000U /* VLAN priority mask */
 #define TXGBE_RDB_LLI_THRE_PRIORITY_EN  0x00080000U /* VLAN priority enable */
 #define TXGBE_RDB_LLI_THRE_CMN_EN       0x00100000U /* cmn packet receiveed */
@@ -887,7 +1134,7 @@ enum {
 #define TXGBE_RDB_PB_CTL_DISABLED       0x1
 
 #define TXGBE_RDB_RA_CTL_RSS_EN         0x00000004U /* RSS Enable */
-//#define TXGBE_RDB_RA_CTL_MULTI_RSS    0x00000001U /* VF RSS Hash Rule Enable */
+#define TXGBE_RDB_RA_CTL_MULTI_RSS      0x00000001U /* VF RSS Hash Rule Enable */
 #define TXGBE_RDB_RA_CTL_RSS_MASK       0xFFFF0000U
 #define TXGBE_RDB_RA_CTL_RSS_IPV4_TCP   0x00010000U
 #define TXGBE_RDB_RA_CTL_RSS_IPV4       0x00020000U
@@ -976,6 +1223,8 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_PSR_CTL                   0x15000
 #define TXGBE_PSR_VLAN_CTL              0x15088
 #define TXGBE_PSR_VM_CTL                0x151B0
+#define TXGBE_PSR_PKT_CNT               0x151B8
+#define TXGBE_PSR_DBG_DRP_CNT           0x151C0
 /* Header split receive */
 #define TXGBE_PSR_CTL_SW_EN             0x00040000U
 #define TXGBE_PSR_CTL_RSC_DIS           0x00010000U
@@ -1018,7 +1267,7 @@ enum txgbe_fdir_pballoc_type {
 /* etype switcher 1st stage */
 #define TXGBE_PSR_ETYPE_SWC(_i) (0x15128 + ((_i) * 4)) /* EType Queue Filter */
 /* ETYPE Queue Filter/Select Bit Masks */
-#define TXGBE_MAX_PSR_ETYPE_SWC_FILTERS         8
+#define TXGBE_MAX_PSR_ETYPE_SWC_FILTERS         2 /* now only support 2 custom filters */
 #define TXGBE_PSR_ETYPE_SWC_FCOE                0x08000000U /* bit 27 */
 #define TXGBE_PSR_ETYPE_SWC_TX_ANTISPOOF        0x20000000U /* bit 29 */
 #define TXGBE_PSR_ETYPE_SWC_1588                0x40000000U /* bit 30 */
@@ -1234,6 +1483,9 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_TXPKT_SIZE_MAX    0xA /* Max Tx Packet size */
 #define TXGBE_MAX_PB            8
 
+/* statistic */
+#define TXGBE_TDB_OUT_PKT_CNT           0x1CF00
+
 /****************************** TSEC *****************************************/
 /* Security Control Registers */
 #define TXGBE_TSC_CTL                   0x1D000
@@ -1250,6 +1502,7 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_TSC_ST_SECTX_RDY          0x00000001U
 #define TXGBE_TSC_ST_OFF_DIS            0x00000002U
 #define TXGBE_TSC_ST_ECC_TXERR          0x00000004U
+#define TXGBE_TSC_MACTX_AFIFO_RD_WTRMRK 0x000f0000U
 
 /* LinkSec (MacSec) Registers */
 #define TXGBE_TSC_LSEC_CAP              0x1D200
@@ -1290,9 +1543,43 @@ enum txgbe_fdir_pballoc_type {
 
 #define TXGBE_TSC_1588_ADJL         0x1D418 /* Time Adjustment Offset reg Low */
 #define TXGBE_TSC_1588_ADJH         0x1D41C /* Time Adjustment Offset reg High*/
+
 /* 1588 fields */
 #define TXGBE_TSC_1588_CTL_VALID    0x00000001U /* Tx timestamp valid */
 #define TXGBE_TSC_1588_CTL_ENABLED  0x00000010U /* Tx timestamping enabled */
+
+#define TXGBE_TSEC_1588_AUX_CTL          0x1D428
+#define TXGBE_TSEC_1588_TRGT_L(i)        (0x1D42C + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_TRGT_H(i)        (0x1D430 + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_FREQ_CLK_L(i)    (0x1D43C + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_FREQ_CLK_H(i)    (0x1D440 + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_AUX_STMP_L(i)    (0x1D44C + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_AUX_STMP_H(i)    (0x1D450 + ((i) * 8)) /* [0,1] */
+#define TXGBE_TSEC_1588_SDP(n)           (0x1D45C + ((n) * 4)) /* [0,3] */
+
+#define TXGBE_TSEC_1588_INT_ST           0x1D420
+#define TXGBE_TSEC_1588_INT_EN           0x1D424
+
+#define TXGBE_TSEC_1588_INT_ST_TT0         0x10
+#define TXGBE_TSEC_1588_INT_ST_TT1         0x20
+#define TXGBE_TSEC_1588_INT_EN_TT0         0x10
+#define TXGBE_TSEC_1588_INT_EN_TT1         0x20
+
+#define TXGBE_TSEC_1588_AUX_CTL_EN_TT0     0x1
+#define TXGBE_TSEC_1588_AUX_CTL_PLSG       0x2
+#define TXGBE_TSEC_1588_AUX_CTL_EN_TT1     0x4
+#define TXGBE_TSEC_1588_AUX_CTL_EN_TS0     0x100
+#define TXGBE_TSEC_1588_AUX_CTL_EN_TS1     0x400
+
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_TT0    0x1
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_TT1    0x2
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_CL0    0x3
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_CL1    0x4
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_TS0    0x5
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_TS1    0x6
+#define TXGBE_TSEC_1588_SDP_FUN_SEL_MASK   0x7
+#define TXGBE_TSEC_1588_SDP_OUT_LEVEL_LOW  0x10
+#define TXGBE_TSEC_1588_SDP_OUT_LEVEL_HIGH 0x0
 
 
 /********************************* RSEC **************************************/
@@ -1320,8 +1607,8 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_RSC_LSEC_PKNUM1           0x1721C
 #define TXGBE_RSC_LSEC_KEY0(_n)         0x17220
 #define TXGBE_RSC_LSEC_KEY1(_n)         0x17230
-#define TXGBE_RSC_LSEC_UNTAG_PKT        0x17240
-#define TXGBE_RSC_LSEC_DEC_OCTET        0x17244
+#define TXGBE_RSEC_LSEC_UNTAG_PKT        0x17240
+#define TXGBE_RSC_LSEC_DEC_OCTET       0x17244
 #define TXGBE_RSC_LSEC_VLD_OCTET        0x17248
 #define TXGBE_RSC_LSEC_BAD_PKT          0x1724C
 #define TXGBE_RSC_LSEC_NOSCI_PKT        0x17250
@@ -1370,6 +1657,14 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_MNG_OS2BMC_CNT    0x1E094
 #define TXGBE_MNG_BMC2OS_CNT    0x1E090
 
+/* amlite: swfw mailbox changes */
+#define TXGBE_AML_MNG_MBOX_CTL_SW2FW      0x1E0A0
+#define TXGBE_AML_MNG_MBOX_SW2FW          0x1E200
+#define TXGBE_AML_MNG_MBOX_CTL_FW2SW      0x1E0A4
+#define TXGBE_AML_MNG_MBOX_FW2SW          0x1E300
+
+#define TXGBE_AML_MNG_MBOX_NOTIFY         0x80000000U
+
 /* Firmware Semaphore Register */
 #define TXGBE_MNG_FW_SM_MODE_MASK       0xE
 #define TXGBE_MNG_FW_SM_TS_ENABLED      0x1
@@ -1396,6 +1691,7 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_MAC_RX_FLOW_CTRL          0x11090
 #define TXGBE_MAC_ADDRESS0_HIGH         0x11300
 #define TXGBE_MAC_ADDRESS0_LOW          0x11304
+#define TXGBE_MAC_MISC_CTL              0x11f00
 
 #define TXGBE_MAC_TX_CFG_TE             0x00000001U
 #define TXGBE_MAC_TX_CFG_SPEED_MASK     0x60000000U
@@ -1407,6 +1703,35 @@ enum txgbe_fdir_pballoc_type {
 #define TXGBE_MAC_WDG_TIMEOUT_PWE       0x00000100U
 #define TXGBE_MAC_WDG_TIMEOUT_WTO_MASK  0x0000000FU
 #define TXGBE_MAC_WDG_TIMEOUT_WTO_DELTA 2
+#define TXGBE_MAC_MISC_LINK_STS_MOD     0x1
+
+#define TXGBE_LINK_BOTH_PCS_MAC         0x1
+
+
+#define TXGBE_EPHY_STAT                 0x13404
+#define TXGBE_EPHY_STAT_PPL_LOCK        0x3
+
+/* amlite: new MAC_TX_CONFIG */
+/* 
+{SS_3, SS_2, SS}
+SS_3 in bit27, SS_2 in bit30, SS in bits29~28
+■ 4'b0000 : 40-gigabit operation using XLGMII
+■ 4'b0001 : 25-gigabit operation using XLGMII
+■ 4'b0010 : 50-gigabit operation using XLGMII
+■ 4'b0011 : 100-gigabit operation using XLGMII
+■ 4'b0100 : 10-gigabit operation using XGMII
+■ 4'b0101 : 5-gigabit operation using XGMII
+■ 4'b0110 : 2.5-gigabit operation using GMII
+■ 4'b0111 : 1-gigabit operation using GMII
+■ 4'b1000 : 2.5-gigabit operation using XGMII
+■ 4'b1001-4'b1111: Reserved
+*/
+#define TXGBE_MAC_TX_CFG_AML_SPEED_MASK     0x78000000U
+#define TXGBE_MAC_TX_CFG_AML_SPEED_50G      0x20000000U
+#define TXGBE_MAC_TX_CFG_AML_SPEED_40G      0x00000000U
+#define TXGBE_MAC_TX_CFG_AML_SPEED_25G      0x10000000U
+#define TXGBE_MAC_TX_CFG_AML_SPEED_10G      0x40000000U
+#define TXGBE_MAC_TX_CFG_AML_SPEED_1G       0x70000000U
 
 #define TXGBE_MAC_RX_FLOW_CTRL_RFE      0x00000001U /* receive fc enable */
 #define TXGBE_MAC_RX_FLOW_CTRL_PFCE     0x00000100U /* pfc enable */
@@ -1427,6 +1752,9 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_MSCC_SADDR                ((0x1U) << 18)
 #define TXGBE_MSCC_CR(v)                ((0x8U & (v)) << 19)
 #define TXGBE_MSCC_BUSY                 ((0x1U) << 22)
+
+#define TXGBE_MAC_MDIO_CLAUSE_22_PORT    0x11220
+#define TXGBE_MAC_MDIO_CLAUSE_ALL_PRTCL22    0xF
 
 /* EEE registers */
 
@@ -1488,13 +1816,18 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_MISC_IC_ETH_AN         0x00080000U /* link auto-nego done */
 #define TXGBE_PX_MISC_IC_INT_ERR        0x00100000U /* integrity error */
 #define TXGBE_PX_MISC_IC_SPI            0x00200000U /* SPI interface */
+#define TXGBE_PX_MISC_IC_TXDESC         0x00400000U /* tx desc error */
 #define TXGBE_PX_MISC_IC_VF_MBOX        0x00800000U /* VF-PF message box */
 #define TXGBE_PX_MISC_IC_GPIO           0x04000000U /* GPIO interrupt */
 #define TXGBE_PX_MISC_IC_PCIE_REQ_ERR   0x08000000U /* pcie request error int */
 #define TXGBE_PX_MISC_IC_OVER_HEAT      0x10000000U /* overheat detection */
 #define TXGBE_PX_MISC_IC_PROBE_MATCH    0x20000000U /* probe match */
-#define TXGBE_PX_MISC_IC_MNG_HOST_MBOX  0x40000000U /* mng mailbox */
+//#define TXGBE_PX_MISC_IC_MNG_HOST_MBOX  0x40000000U /* mng mailbox */
 #define TXGBE_PX_MISC_IC_TIMER          0x80000000U /* tcp timer */
+
+#define TXGBE_PX_MISC_AML_ETH_LK_CHANGE 0x00000100U /* link change */
+#define TXGBE_PX_MISC_AML_ETH_PHY_EVENT 0x00040000U /* Eth phy event */
+
 
 /* Extended Interrupt Cause Set */
 #define TXGBE_PX_MISC_ICS_ETH_LKDN      0x00000100U
@@ -1515,7 +1848,7 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_MISC_ICS_PCIE_REQ_ERR  0x08000000U
 #define TXGBE_PX_MISC_ICS_OVER_HEAT     0x10000000U
 #define TXGBE_PX_MISC_ICS_PROBE_MATCH   0x20000000U
-#define TXGBE_PX_MISC_ICS_MNG_HOST_MBOX 0x40000000U
+//#define TXGBE_PX_MISC_ICS_MNG_HOST_MBOX 0x40000000U
 #define TXGBE_PX_MISC_ICS_TIMER         0x80000000U
 
 /* Extended Interrupt Enable Set */
@@ -1532,12 +1865,13 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_MISC_IEN_ETH_AN        0x00080000U
 #define TXGBE_PX_MISC_IEN_INT_ERR       0x00100000U
 #define TXGBE_PX_MISC_IEN_SPI           0x00200000U
+#define TXGBE_PX_MISC_IEN_TXDESC        0x00400000U
 #define TXGBE_PX_MISC_IEN_VF_MBOX       0x00800000U
 #define TXGBE_PX_MISC_IEN_GPIO          0x04000000U
 #define TXGBE_PX_MISC_IEN_PCIE_REQ_ERR  0x08000000U
 #define TXGBE_PX_MISC_IEN_OVER_HEAT     0x10000000U
 #define TXGBE_PX_MISC_IEN_PROBE_MATCH   0x20000000U
-#define TXGBE_PX_MISC_IEN_MNG_HOST_MBOX 0x40000000U
+//#define TXGBE_PX_MISC_IEN_MNG_HOST_MBOX 0x40000000U
 #define TXGBE_PX_MISC_IEN_TIMER         0x80000000U
 
 #define TXGBE_PX_MISC_IEN_MASK ( \
@@ -1549,7 +1883,6 @@ enum TXGBE_MSCA_CMD_value {
 				TXGBE_PX_MISC_IEN_INT_ERR | \
 				TXGBE_PX_MISC_IEN_VF_MBOX | \
 				TXGBE_PX_MISC_IEN_GPIO | \
-				TXGBE_PX_MISC_IEN_MNG_HOST_MBOX | \
 				TXGBE_PX_MISC_IEN_STALL | \
 				TXGBE_PX_MISC_IEN_PCIE_REQ_ERR | \
 				TXGBE_PX_MISC_IEN_TIMER)
@@ -1567,6 +1900,7 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_MAX_INT_RATE              500000
 #define TXGBE_MIN_INT_RATE              980
 #define TXGBE_MAX_EITR                  0x00000FF8U
+#define TXGBE_AMLITE_MAX_EITR           0x00000FFFU
 #define TXGBE_MIN_EITR                  8
 #define TXGBE_PX_ITR_ITR_INT_MASK       0x00000FF8U
 #define TXGBE_PX_ITR_LLI_CREDIT         0x001f0000U
@@ -1580,12 +1914,19 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_TR_WP(_i)      (0x03008 + ((_i) * 0x40))
 #define TXGBE_PX_TR_RP(_i)      (0x0300C + ((_i) * 0x40))
 #define TXGBE_PX_TR_CFG(_i)     (0x03010 + ((_i) * 0x40))
+
+/* amlite: tx head wb */
+#define TXGBE_PX_TR_HEAD_ADDRL(_i)      (0x03028 + ((_i) * 0x40))
+#define TXGBE_PX_TR_HEAD_ADDRH(_i)      (0x0302C + ((_i) * 0x40))
+
 /* Transmit Config masks */
 #define TXGBE_PX_TR_CFG_ENABLE          (1) /* Ena specific Tx Queue */
 #define TXGBE_PX_TR_CFG_TR_SIZE_SHIFT   1 /* tx desc number per ring */
 #define TXGBE_PX_TR_CFG_SWFLSH          (1 << 26) /* Tx Desc. wr-bk flushing */
 #define TXGBE_PX_TR_CFG_WTHRESH_SHIFT   16 /* shift to WTHRESH bits */
 #define TXGBE_PX_TR_CFG_THRE_SHIFT      8
+#define TXGBE_PX_TR_CFG_HEAD_WB         (1 << 27) /* amlite head wb */
+#define TXGBE_PX_TR_CFG_HEAD_WB_64BYTE  (1 << 28) /* amlite head wb 64byte */
 
 
 #define TXGBE_PX_TR_RPn(q_per_pool, vf_number, vf_q_index) \
@@ -1599,6 +1940,10 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_RR_WP(_i)              (0x01008 + ((_i) * 0x40))
 #define TXGBE_PX_RR_RP(_i)              (0x0100C + ((_i) * 0x40))
 #define TXGBE_PX_RR_CFG(_i)             (0x01010 + ((_i) * 0x40))
+
+#define TXGBE_TDM_DESC_CHK(i)		0x0180B0 + (i) * 4 /*0-3*/
+#define TXGBE_TDM_DESC_NONFATAL(i)	(0x0180C0 + (i) * 4) /*0-3*/
+#define TXGBE_TDM_DESC_FATAL(i)		(0x0180D0 + (i) * 4) /*0-3*/
 /* PX_RR_CFG bit definitions */
 #define TXGBE_PX_RR_CFG_RR_SIZE_SHIFT           1
 #define TXGBE_PX_RR_CFG_BSIZEPKT_SHIFT          2 /* so many KBs */
@@ -1624,6 +1969,9 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_PX_RR_CFG_RR_BUF_SZ       0x00000F00U
 #define TXGBE_PX_RR_CFG_RR_SZ           0x0000007EU
 #define TXGBE_PX_RR_CFG_RR_EN           0x00000001U
+
+/* amlite: desc merge */
+#define TXGBE_PX_RR_CFG_DESC_MERGE      0x00080000U
 
 /* statistic */
 #define TXGBE_PX_MPRC(_i)               (0x1020 + ((_i) * 64))
@@ -1720,6 +2068,9 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_ALT_MAC_ADDR_PTR          0x37
 #define TXGBE_FREE_SPACE_PTR            0x3E
 #define TXGBE_SW_REGION_PTR             0x1C
+#define TXGBE_SHOWROM_I2C_PTR           0xB00
+#define TXGBE_SHOWROM_I2C_END           0xF00
+
 
 #define TXGBE_SAN_MAC_ADDR_PTR          0x18
 #define TXGBE_DEVICE_CAPS               0x1C
@@ -1893,6 +2244,7 @@ enum TXGBE_MSCA_CMD_value {
 #define TXGBE_RXD_STAT_FCSTAT_FCPRSP    0x00080000U /* 10: Recv. FCP_RSP */
 #define TXGBE_RXD_STAT_FCSTAT_DDP       0x000C0000U /* 11: Ctxt w/ DDP */
 
+#define TXGBE_RXD_IPV6EX                0x00001000U /* IPv6EX  */
 #define TXGBE_RXD_ERR_MASK              0xfff00000U /* RDESC.ERRORS mask */
 #define TXGBE_RXD_ERR_SHIFT             20         /* RDESC.ERRORS shift */
 #define TXGBE_RXD_ERR_FCEOFE            0x80000000U /* FCEOFe/IPE */
@@ -2029,9 +2381,6 @@ enum txgbe_l2_ptypes {
 #define TXGBE_PTYPE_PKT(_pt) ((_pt) & 0x30)
 #define TXGBE_PTYPE_TYP(_pt) ((_pt) & 0x0F)
 #define TXGBE_PTYPE_TYPL4(_pt) ((_pt) & 0x07)
-
-#define TXGBE_RXD_IPV6EX(_rxd) \
-	((le32_to_cpu((_rxd)->wb.lower.lo_dword.data) >> 6) & 0x1)
 
 /* Security Processing bit Indication */
 #define TXGBE_RXD_LNKSEC_STATUS_SECP            0x00020000U
@@ -2242,6 +2591,26 @@ union txgbe_atr_hash_dword {
 	__be32 dword;
 };
 
+struct txgbe_ethertype_filter {
+	u16 rule_idx;
+	u64 action;
+	u16 ethertype;
+	u32 etqf;
+	u32 etqs;
+};
+
+/* Structure to store ethertype filters' info. */
+struct txgbe_etype_filter_info {
+	int count;
+	u8 ethertype_mask;  /* Bit mask for every used ethertype filter */
+	/* store used ethertype filters */
+	struct txgbe_ethertype_filter etype_filters[TXGBE_MAX_PSR_ETYPE_SWC_FILTERS];
+};
+
+/* Structure to store 5-tuple filters' info. */
+struct txgbe_5tuple_filter_info {
+	u32 fivetuple_mask[4]; /* Bit mask for max 128 filters */
+};
 
 /****************** Manageablility Host Interface defines ********************/
 #define TXGBE_HI_MAX_BLOCK_BYTE_LENGTH  256 /* Num of bytes in range */
@@ -2283,9 +2652,15 @@ union txgbe_atr_hash_dword {
 #define FW_FLASH_UPGRADE_VERIFY_LEN     0x4
 #define FW_DW_OPEN_NOTIFY               0xE9
 #define FW_DW_CLOSE_NOTIFY              0xEA
+#define FW_PPS_SET_CMD                  0xF6
+#define FW_PPS_SET_LEN                  0x14
+#define FW_AN_STA_CMD                   0xF3
+#define FW_AN_STA_LEN                   0x1
 
 #define TXGBE_CHECKSUM_CAP_ST_PASS      0x80658383
 #define TXGBE_CHECKSUM_CAP_ST_FAIL      0x70657376
+
+#define TXGBE_HIC_HDR_INDEX_MAX 255
 
 /* Host Interface Command Structures */
 struct txgbe_hic_hdr {
@@ -2295,21 +2670,30 @@ struct txgbe_hic_hdr {
 		u8 cmd_resv;
 		u8 ret_status;
 	} cmd_or_resp;
-	u8 checksum;
+	union {
+		u8 checksum;
+		u8 index;
+	} cksum_or_index;
 };
 
 struct txgbe_hic_hdr2_req {
 	u8 cmd;
 	u8 buf_lenh;
 	u8 buf_lenl;
-	u8 checksum;
+	union {
+		u8 checksum;
+		u8 index;
+	} cksum_or_index;
 };
 
 struct txgbe_hic_hdr2_rsp {
 	u8 cmd;
 	u8 buf_lenl;
 	u8 buf_lenh_status;     /* 7-5: high bits of buf_len, 4-0: status */
-	u8 checksum;
+	union {
+		u8 checksum;
+		u8 index;
+	} cksum_or_index;
 };
 
 union txgbe_hic_hdr2 {
@@ -2408,6 +2792,27 @@ struct txgbe_hic_write_lldp{
 	u16 pad3;
 };
 
+struct txgbe_hic_set_pps {
+	struct txgbe_hic_hdr hdr;
+	u8 lan_id;
+	u8 enable;
+	u16 pad2;
+	u64 nsec;
+	u64 cycles;
+};
+
+struct txgbe_hic_write_autoneg {
+	struct txgbe_hic_hdr hdr;
+	u8 lan_id;
+	bool autoneg;
+	u16 pad;
+};
+
+struct txgbe_led_active_set {
+	struct txgbe_hic_hdr hdr;
+	u32 active_flag;
+};
+
 /* Number of 100 microseconds we wait for PCI Express master disable */
 #define TXGBE_PCI_MASTER_DISABLE_TIMEOUT        800
 
@@ -2445,6 +2850,18 @@ typedef u32 txgbe_autoneg_advertised;
 				   TXGBE_LINK_SPEED_1GB_FULL | \
 				   TXGBE_LINK_SPEED_10GB_FULL | \
 				   TXGBE_LINK_SPEED_10_FULL)
+
+#define TXGBE_LINK_SPEED_25GB_FULL      0x10
+#define TXGBE_LINK_SPEED_40GB_FULL      0x20
+#define TXGBE_LINK_SPEED_50GB_FULL      0x40
+
+#define TXGBE_LINK_SPEED_AMLITE_AUTONEG  (TXGBE_LINK_SPEED_10GB_FULL | \
+				TXGBE_LINK_SPEED_25GB_FULL)
+/* Amlite eth mode */
+enum amlite_eth_mode {
+	ETH_RATE_10G = 0,
+	ETH_RATE_25G
+};
 
 /* Physical layer type */
 typedef u32 txgbe_physical_layer;
@@ -2614,6 +3031,20 @@ enum txgbe_sfp_type {
 	txgbe_sfp_type_1g_lx_core1 = 14,
 	txgbe_sfp_type_10g_cu_core0 = 15,       /* add for qi'an'xin 10G fiber2copper sfp */
 	txgbe_sfp_type_10g_cu_core1 = 16,
+	txgbe_sfp_type_25g_sr_core0 = 17,
+	txgbe_sfp_type_25g_sr_core1 = 18,
+	txgbe_sfp_type_25g_lr_core0 = 19,
+	txgbe_sfp_type_25g_lr_core1 = 20,
+	txgbe_sfp_type_25g_aoc_core0 = 21,
+	txgbe_sfp_type_25g_aoc_core1 = 22,
+	txgbe_qsfp_type_40g_cu_core0 = 23,
+	txgbe_qsfp_type_40g_cu_core1 = 24,
+	txgbe_qsfp_type_40g_sr_core0 = 25,
+	txgbe_qsfp_type_40g_sr_core1 = 26,
+	txgbe_qsfp_type_40g_lr_core0 = 27,
+	txgbe_qsfp_type_40g_lr_core1 = 28,
+	txgbe_qsfp_type_40g_active_core0 = 29,
+	txgbe_qsfp_type_40g_active_core1 = 30,
 	txgbe_sfp_type_not_present = 0xFFFE,
 	txgbe_sfp_type_unknown = 0xFFFF
 };
@@ -2621,9 +3052,10 @@ enum txgbe_sfp_type {
 enum txgbe_media_type {
 	txgbe_media_type_unknown = 0,
 	txgbe_media_type_fiber,
+	txgbe_media_type_fiber_qsfp,
 	txgbe_media_type_copper,
 	txgbe_media_type_backplane,
-	txgbe_media_type_virtual
+	txgbe_media_type_virtual,
 };
 
 /* Flow Control Settings */
@@ -2738,6 +3170,14 @@ struct txgbe_hw_stats {
 	u64 gprc;
 	u64 bprc;
 	u64 mprc;
+	u64 rdpc;
+	u64 rddc;
+	u64 psrpc;
+	u64 psrdc;
+	u64 untag;
+	u64 tdmpc;
+	u64 tdmdc;
+	u64 tdbpc;
 	u64 gptc;
 	u64 gorc;
 	u64 gotc;
@@ -2829,6 +3269,7 @@ struct txgbe_mac_operations {
 	s32 (*stop_adapter)(struct txgbe_hw *);
 	s32 (*get_bus_info)(struct txgbe_hw *);
 	void (*set_lan_id)(struct txgbe_hw *);
+	s32 (*setup_sfp)(struct txgbe_hw *);
 	s32 (*enable_rx_dma)(struct txgbe_hw *, u32);
 	s32 (*disable_sec_rx_path)(struct txgbe_hw *);
 	s32 (*enable_sec_rx_path)(struct txgbe_hw *);
@@ -2897,6 +3338,7 @@ struct txgbe_mac_operations {
 struct txgbe_phy_operations {
 	s32 (*identify)(struct txgbe_hw *);
 	s32 (*identify_sfp)(struct txgbe_hw *);
+	s32 (*setup_sfp)(struct txgbe_hw *);
 	s32 (*init)(struct txgbe_hw *);
 	s32 (*reset)(struct txgbe_hw *);
 	s32 (*read_reg)(struct txgbe_hw *, u32, u32, u16 *);
@@ -2911,6 +3353,7 @@ struct txgbe_phy_operations {
 	s32 (*read_i2c_byte)(struct txgbe_hw *, u8, u8, u8 *);
 	s32 (*write_i2c_byte)(struct txgbe_hw *, u8, u8, u8);
 	s32 (*read_i2c_sff8472)(struct txgbe_hw *, u8, u8 *);
+	s32 (*read_i2c_sff8636)(struct txgbe_hw *, u8, u8, u8 *);
 	s32 (*read_i2c_eeprom)(struct txgbe_hw *, u8, u8 *);
 	s32 (*read_i2c_sfp_phy)(struct txgbe_hw *, u16, u16 *);
 	s32 (*write_i2c_eeprom)(struct txgbe_hw *, u8, u8);
@@ -2935,9 +3378,17 @@ struct txgbe_flash_info {
 	u16 address_bits;
 };
 
+enum txgbe_mac_type {
+	txgbe_mac_unknown = 0,
+	txgbe_mac_sp,
+	txgbe_mac_aml,
+	txgbe_mac_aml40
+};
 
 #define TXGBE_FLAGS_DOUBLE_RESET_REQUIRED       0x01
 struct txgbe_mac_info {
+	enum txgbe_mac_type type;
+
 	struct txgbe_mac_operations ops;
 	u8 addr[TXGBE_ETH_LENGTH_OF_ADDRESS];
 	u8 perm_addr[TXGBE_ETH_LENGTH_OF_ADDRESS];
@@ -2974,6 +3425,7 @@ struct txgbe_mac_info {
 	bool thermal_sensor_enabled;
 	struct txgbe_dmac_config dmac_config;
 	bool set_lben;
+	bool autoneg;
 };
 
 struct txgbe_phy_info {
@@ -2982,6 +3434,7 @@ struct txgbe_phy_info {
 	u32 addr;
 	u32 id;
 	enum txgbe_sfp_type sfp_type;
+	u32 fiber_suppport_speed;
 	bool sfp_setup_needed;
 	u32 revision;
 	enum txgbe_media_type media_type;
@@ -3006,6 +3459,13 @@ struct txgbe_mbx_operations {
 	s32  (*check_for_msg)(struct txgbe_hw *, u16);
 	s32  (*check_for_ack)(struct txgbe_hw *, u16);
 	s32  (*check_for_rst)(struct txgbe_hw *, u16);
+};
+
+struct phytxeq {
+	u32 main; //TX EQ main (bit[5:0])
+	u32 pre1; //TX EQ pre1 (bit[5:0])
+	u32 pre2; //TX EQ pre2 (bit[5:0])
+	u32 post; //TX EQ post (bit[5:0])
 };
 
 struct txgbe_mbx_stats {
@@ -3067,6 +3527,9 @@ struct txgbe_hw {
 	u16 oem_ssid;
 	u16 oem_svid;
 	bool f2c_mod_status;         /* fiber to copper modules internal phy link status */
+	bool dac_sfp;         /* force dac sfp to kr mode */
+	bool bypassCtle; /* DAC cable length */
+	u32 q_tx_regs[512];
 };
 
 #define TCALL(hw, func, args...) (((hw)->func != NULL) \

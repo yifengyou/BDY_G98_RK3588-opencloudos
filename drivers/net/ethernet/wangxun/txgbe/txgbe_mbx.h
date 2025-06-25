@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_mbx.h, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_mbx.h, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -81,6 +81,7 @@
 #define TXGBE_VT_MSGTYPE_CTS    0x20000000 /* Indicates that VF is still
 					    * clear to send requests */
 #define TXGBE_VT_MSGINFO_SHIFT  16
+#define TXGBE_VT_MSGINFO_VLAN_OFFLOAD_SHIFT  17
 /* bits 23:16 are used for extra info for certain messages */
 #define TXGBE_VT_MSGINFO_MASK   (0xFF << TXGBE_VT_MSGINFO_SHIFT)
 
@@ -97,6 +98,8 @@ enum txgbe_pfvf_api_rev {
 	txgbe_mbox_api_12,      /* API version 1.2, linux/freebsd VF driver */
 	txgbe_mbox_api_13,	/* API version 1.3, linux/freebsd VF driver */
 	txgbe_mbox_api_20,      /* API version 2.0, solaris Phase1 VF driver */
+	txgbe_mbox_api_21,      /* API version 2.1 */
+	txgbe_mbox_api_22,      /* API version 2.2 */
 	txgbe_mbox_api_unknown, /* indicates that API version is not known */
 };
 
@@ -120,14 +123,41 @@ enum txgbe_pfvf_api_rev {
 #define TXGBE_VF_UPDATE_XCAST_MODE	0x0c
 #define TXGBE_VF_GET_LINK_STATE 0x10 /* get vf link state */
 #define TXGBE_VF_GET_FW_VERSION 0x11 /* get fw version */
+
+/* mailbox API, version 2.1 VF requests */
+#define TXGBE_VF_SET_5TUPLE	0x20 /* VF request PF for 5-tuple filter */
+#define TXGBE_VF_QUEUE_RATE_LIMIT 0x21 /* VF request PF to set vf-queue rate limit */
+
+/* mailbox API, version 2.2 VF requests */
+#define TXGBE_VF_QUEUE_RATE_LIMIT 0x21 /* VF request PF to set vf-queue rate limit */
+
 #define TXGBE_VF_BACKUP		0x8001 /* VF requests backup */
 
-/* mode choices for IXGBE_VF_UPDATE_XCAST_MODE */
+/* mode choices for TXGBE_VF_UPDATE_XCAST_MODE */
 enum txgbevf_xcast_modes {
 	TXGBEVF_XCAST_MODE_NONE = 0,
 	TXGBEVF_XCAST_MODE_MULTI,
 	TXGBEVF_XCAST_MODE_ALLMULTI,
 	TXGBEVF_XCAST_MODE_PROMISC,
+};
+
+enum txgbevf_5tuple_msg {
+	TXGBEVF_5T_REQ = 0,
+	TXGBEVF_5T_CMD,
+	TXGBEVF_5T_CTRL0,
+	TXGBEVF_5T_CTRL1,
+	TXGBEVF_5T_PORT,
+	TXGBEVF_5T_DA,
+	TXGBEVF_5T_SA,
+	TXGBEVF_5T_MAX, /* must be last */
+};
+
+#define TXGBEVF_5T_ADD_SHIFT	31
+
+enum txgbevf_queue_rate_limit_msg {
+	TXGBEVF_Q_RATE_REQ = 0,
+	TXGBEVF_Q_RATE_INDEX,
+	TXGBEVF_Q_RATE_LIMIT,
 };
 
 /* GET_QUEUES return data indices within the mailbox */
@@ -142,6 +172,9 @@ enum txgbevf_xcast_modes {
 #define TXGBE_VF_MC_TYPE_WORD           3
 
 #define TXGBE_PF_CONTROL_MSG            0x0100 /* PF control message */
+#define TXGBE_PF_NOFITY_VF_LINK_STATUS     0x1
+#define TXGBE_PF_NOFITY_VF_NET_NOT_RUNNING BIT(31)
+
 
 /* mailbox API, version 2.0 VF requests */
 #define TXGBE_VF_API_NEGOTIATE          0x08 /* negotiate API version */
@@ -157,7 +190,7 @@ enum txgbevf_xcast_modes {
 #define TXGBE_PF_TRANSPARENT_VLAN       0x0101 /* enable transparent vlan */
 
 #define TXGBE_VF_MBX_INIT_TIMEOUT       2000 /* number of retries on mailbox */
-#define TXGBE_VF_MBX_INIT_DELAY         500  /* microseconds between retries */
+#define TXGBE_VF_MBX_INIT_DELAY         50  /* microseconds between retries */
 
 int txgbe_read_mbx(struct txgbe_hw *, u32 *, u16, u16);
 int txgbe_write_mbx(struct txgbe_hw *, u32 *, u16, u16);

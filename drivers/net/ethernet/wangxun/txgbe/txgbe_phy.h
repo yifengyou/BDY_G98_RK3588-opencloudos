@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_phy.h, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_phy.h, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -39,11 +39,15 @@
 /* EEPROM byte offsets */
 #define TXGBE_SFF_IDENTIFIER            0x0
 #define TXGBE_SFF_IDENTIFIER_SFP        0x3
+#define TXGBE_SFF_IDENTIFIER_QSFP       0xC
+#define TXGBE_SFF_IDENTIFIER_QSFP_PLUS  0xD
 #define TXGBE_SFF_VENDOR_OUI_BYTE0      0x25
 #define TXGBE_SFF_VENDOR_OUI_BYTE1      0x26
 #define TXGBE_SFF_VENDOR_OUI_BYTE2      0x27
 #define TXGBE_SFF_1GBE_COMP_CODES       0x6
 #define TXGBE_SFF_10GBE_COMP_CODES      0x3
+#define TXGBE_SFF_25GBE_COMP_CODES      0x24
+#define TXGBE_SFF_COPPER_LENGTH         0x12
 #define TXGBE_SFF_CABLE_TECHNOLOGY      0x8
 #define TXGBE_SFF_CABLE_SPEC_COMP       0x3C
 #define TXGBE_SFF_DDM_IMPLEMENTED		0x40
@@ -51,6 +55,11 @@
 #define TXGBE_SFF_SFF_8472_COMP         0x5E
 #define TXGBE_SFF_SFF_8472_OSCB         0x6E
 #define TXGBE_SFF_SFF_8472_ESCB         0x76
+#define TXGBE_SFF_SFF_REVISION_ADDR     0x01
+#define TXGBE_SFF_QSFP_PAGE_SELECT      0x7F
+
+#define TXGBE_MODULE_QSFP_MAX_LEN       640
+
 #define TXGBE_SFF_IDENTIFIER_QSFP_PLUS  0xD
 #define TXGBE_SFF_QSFP_VENDOR_OUI_BYTE0 0xA5
 #define TXGBE_SFF_QSFP_VENDOR_OUI_BYTE1 0xA6
@@ -67,12 +76,37 @@
 /* Bitmasks */
 #define TXGBE_SFF_DA_PASSIVE_CABLE      0x4
 #define TXGBE_SFF_DA_ACTIVE_CABLE       0x8
-#define TXGBE_SFF_DA_SPEC_ACTIVE_LIMITING       0x4
 #define TXGBE_SFF_1GBASESX_CAPABLE      0x1
 #define TXGBE_SFF_1GBASELX_CAPABLE      0x2
 #define TXGBE_SFF_1GBASET_CAPABLE       0x8
 #define TXGBE_SFF_10GBASESR_CAPABLE     0x10
 #define TXGBE_SFF_10GBASELR_CAPABLE     0x20
+#define TXGBE_SFF_25GBASESR_CAPABLE     0x2
+#define TXGBE_SFF_25GBASELR_CAPABLE     0x3
+#define TXGBE_SFF_25GBASEER_CAPABLE     0x4
+#define TXGBE_SFF_25GBASECR_91FEC       0xB
+#define TXGBE_SFF_25GBASECR_74FEC       0xC
+#define TXGBE_SFF_25GBASECR_NOFEC       0xD
+#define TXGBE_SFF_40GBASE_SR_CAPABLE    0x10
+#define TXGBE_SFF_4x10GBASESR_CAP       0x11
+#define TXGBE_SFF_40GBASEPSM4_Parallel  0x12
+#define TXGBE_SFF_40GBASE_SWMD4_CAP     0x1f
+#define TXGBE_SFF_COPPER_5M             0x5
+#define TXGBE_SFF_COPPER_3M             0x3
+#define TXGBE_SFF_COPPER_1M             0x1
+
+#define TXGBE_SFF_DA_SPEC_ACTIVE_LIMITING  0x4
+#define TXGBE_SFF_25GAUI_C2M_AOC_BER_5     0x1
+#define TXGBE_SFF_25GAUI_C2M_ACC_BER_5     0x8
+#define TXGBE_SFF_25GAUI_C2M_AOC_BER_12    0x18
+#define TXGBE_SFF_25GAUI_C2M_ACC_BER_12    0x19
+
+#define TXGBE_ETHERNET_COMP_OFFSET      0x83
+#define TXGBE_SFF_ETHERNET_40G_CR4      BIT(3)
+#define TXGBE_SFF_ETHERNET_40G_SR4      BIT(2)
+#define TXGBE_SFF_ETHERNET_40G_LR4      BIT(1)
+#define TXGBE_SFF_ETHERNET_40G_ACTIVE   BIT(0)
+
 #define TXGBE_SFF_SOFT_RS_SELECT_MASK   0x8
 #define TXGBE_SFF_SOFT_RS_SELECT_10G    0x8
 #define TXGBE_SFF_SOFT_RS_SELECT_1G     0x0
@@ -168,6 +202,7 @@ s32 txgbe_get_phy_firmware_version(struct txgbe_hw *hw,
 
 s32 txgbe_identify_module(struct txgbe_hw *hw);
 s32 txgbe_identify_sfp_module(struct txgbe_hw *hw);
+s32 txgbe_identify_qsfp_module(struct txgbe_hw *hw);
 s32 txgbe_tn_check_overtemp(struct txgbe_hw *hw);
 s32 txgbe_init_i2c(struct txgbe_hw *hw);
 s32 txgbe_clear_i2c(struct txgbe_hw *hw);
@@ -186,6 +221,8 @@ s32 txgbe_write_i2c_eeprom(struct txgbe_hw *hw, u8 byte_offset,
 				   u8 eeprom_data);
 s32 txgbe_read_i2c_sff8472(struct txgbe_hw *hw, u8 byte_offset,
 							u8 *sff8472_data);
+s32 txgbe_read_i2c_sff8636(struct txgbe_hw *hw, u8 page ,u8 byte_offset,
+					  u8 *sff8636_data);
 s32 txgbe_read_i2c_sfp_phy(struct txgbe_hw *hw, u16 byte_offset,
 					  u16 *data);
 
@@ -194,6 +231,8 @@ s32 txgbe_uninit_external_phy(struct txgbe_hw *hw);
 s32 txgbe_set_phy_pause_advertisement(struct txgbe_hw *hw, u32 pause_bit);
 s32 txgbe_get_phy_advertised_pause(struct txgbe_hw *hw, u8 *pause_bit);
 s32 txgbe_get_lp_advertised_pause(struct txgbe_hw *hw, u8 *pause_bit);
+s32 txgbe_external_phy_suspend(struct txgbe_hw *hw);
+s32 txgbe_external_phy_resume(struct txgbe_hw *hw);
 
 MTD_STATUS txgbe_read_mdio(
 						MTD_DEV * dev,

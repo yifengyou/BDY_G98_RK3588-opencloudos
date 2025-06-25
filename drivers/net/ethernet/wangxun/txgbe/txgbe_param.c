@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_param.c, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_param.c, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -66,6 +66,15 @@
 	module_param_array_named(X, X, int, &num_##X, 0); \
 	MODULE_PARM_DESC(X, desc);
 #endif /* module_param_array */
+
+/* Tx unidirectional mode
+ *
+ * Valid Range: [0, 1]
+ *
+ * Default Value: 0
+ */
+TXGBE_PARAM(TX_UNIDIR_MODE, "Tx Unidirectional Mode [0, 1]");
+#define TX_DEFAULT_UNIDIR_MODE              0
 
 /* ffe_main (KR/KX4/KX/SFI)
  *
@@ -523,6 +532,33 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 		bd = TXGBE_MAX_NIC;
 #endif
 	}
+		{
+			u32 tx_unidir_mode;
+			static struct txgbe_option opt = {
+				.type = range_option,
+				.name = "TX_UNIDIR_MODE",
+				.err =
+				  "using default of "__MODULE_STRING(TX_DEFAULT_UNIDIR_MODE),
+				.def = 0,
+				.arg = { .r = { .min = 0,
+						.max = 1} }
+			};
+
+#ifdef module_param_array
+			if (num_TX_UNIDIR_MODE > bd) {
+#endif
+				tx_unidir_mode = TX_UNIDIR_MODE[bd];
+				if (tx_unidir_mode == OPTION_UNSET)
+					tx_unidir_mode = TX_UNIDIR_MODE[bd];
+				txgbe_validate_option(&tx_unidir_mode, &opt);
+				adapter->tx_unidir_mode = tx_unidir_mode;
+#ifdef module_param_array
+			} else {
+				adapter->tx_unidir_mode = 0;
+			}
+#endif
+		}
+
 		{ /* MAIN */
 			u32 ffe_main;
 			static struct txgbe_option opt = {
@@ -831,7 +867,8 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 			.arg  = { .r = { .min = 0,
 					 .max = 1} }
 		};
-		u32 rss = RSS[bd];
+		u32 rss = min_t(int, txgbe_max_rss_indices(adapter),
+                                    num_online_cpus());
 		/* adjust Max allowed RSS queues based on MAC type */
 		opt.arg.r.max = min_t(int, txgbe_max_rss_indices(adapter),
 						     num_online_cpus());
@@ -839,6 +876,7 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 #ifdef module_param_array
 		if (num_RSS > bd) {
 #endif
+			rss = RSS[bd];
 			txgbe_validate_option(&rss, &opt);
 			/* base it off num_online_cpus() with hardware limit */
 			if (!rss)
@@ -937,7 +975,7 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 					"Disabling SR-IOV.\n");
 			}
 
-			adapter->num_vfs = vfs;
+			adapter->max_vfs = vfs;
 
 			if (vfs)
 				*aflags |= TXGBE_FLAG_SRIOV_ENABLED;
@@ -946,10 +984,10 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 #ifdef module_param_array
 		} else {
 			if (opt.def == OPTION_DISABLED) {
-				adapter->num_vfs = 0;
+				adapter->max_vfs = 0;
 				*aflags &= ~TXGBE_FLAG_SRIOV_ENABLED;
 			} else {
-				adapter->num_vfs = opt.def;
+				adapter->max_vfs = opt.def;
 				*aflags |= TXGBE_FLAG_SRIOV_ENABLED;
 			}
 		}
@@ -962,14 +1000,14 @@ void __devinit txgbe_check_options(struct txgbe_adapter *adapter)
 					"IOV is not supported on this "
 					"hardware.  Disabling IOV.\n");
 				*aflags &= ~TXGBE_FLAG_SRIOV_ENABLED;
-				adapter->num_vfs = 0;
+				adapter->max_vfs = 0;
 			} else if (!(*aflags & TXGBE_FLAG_MQ_CAPABLE)) {
 				DPRINTK(PROBE, INFO,
 					"IOV is not supported while multiple "
 					"queues are disabled.  "
 					"Disabling IOV.\n");
 				*aflags &= ~TXGBE_FLAG_SRIOV_ENABLED;
-				adapter->num_vfs = 0;
+				adapter->max_vfs = 0;
 			}
 		}
 	}

@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_lib.c, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_lib.c, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -799,6 +799,7 @@ static void txgbe_add_ring(struct txgbe_ring *ring,
 	ring->next = head->ring;
 	head->ring = ring;
 	head->count++;
+	head->next_update = jiffies + 1;
 }
 
 /**
@@ -821,7 +822,11 @@ static int txgbe_alloc_q_vector(struct txgbe_adapter *adapter,
 {
 	struct txgbe_q_vector *q_vector;
 	struct txgbe_ring *ring;
+#ifdef HAVE_CPUMASK_LOCAL_SPREAD
+	int node = dev_to_node(&adapter->pdev->dev);
+#else
 	int node = -1;
+#endif
 #ifdef HAVE_IRQ_AFFINITY_HINT
 	int cpu = -1;
 	u8 tcs = netdev_get_num_tc(adapter->netdev);
@@ -839,7 +844,11 @@ static int txgbe_alloc_q_vector(struct txgbe_adapter *adapter,
 		u16 rss_i = adapter->ring_feature[RING_F_RSS].indices;
 		if (rss_i > 1 && adapter->atr_sample_rate) {
 			if (cpu_online(v_idx)) {
+#ifdef HAVE_CPUMASK_LOCAL_SPREAD
+				cpu = cpumask_local_spread(v_idx, node);
+#else
 				cpu = v_idx;
+#endif
 				node = cpu_to_node(cpu);
 			}
 		}
@@ -896,8 +905,11 @@ static int txgbe_alloc_q_vector(struct txgbe_adapter *adapter,
 	q_vector->tx.work_limit = adapter->tx_work_limit;
 	q_vector->rx.work_limit = adapter->rx_work_limit;
 
-	/* initialize pointer to rings */
-	ring = q_vector->ring;
+	/* Initialize setting for adaptive ITR */
+	q_vector->tx.itr = TXGBE_ITR_ADAPTIVE_MAX_USECS |
+			   TXGBE_ITR_ADAPTIVE_LATENCY;
+	q_vector->rx.itr = TXGBE_ITR_ADAPTIVE_MAX_USECS |
+			   TXGBE_ITR_ADAPTIVE_LATENCY;
 
 	/* intialize ITR */
 	if (txr_count && !rxr_count) {
@@ -913,6 +925,9 @@ static int txgbe_alloc_q_vector(struct txgbe_adapter *adapter,
 		else
 			q_vector->itr = adapter->rx_itr_setting;
 	}
+
+	/* initialize pointer to rings */
+	ring = q_vector->ring;
 
 	while (txr_count) {
 		/* assign generic ring traits */

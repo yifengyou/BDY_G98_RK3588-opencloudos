@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -186,7 +186,7 @@ MTD_STATUS mtdWait(IN MTD_UINT x)
 #define MTD_REG_CCCR9 31, 0xF05E	/* do not enclose in parentheses */
 #define MTD_REG_SCR   31, 0xF0F0	/* do not enclose in parentheses */
 #define MTD_REG_ECSR  31, 0xF0F5	/* do not enclose in parentheses */
-MTD_STATUS mtdCheckDeviceCapabilities(
+static MTD_STATUS mtdCheckDeviceCapabilities(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port,
 	OUT MTD_BOOL * phyHasMacsec,
@@ -298,7 +298,7 @@ MTD_STATUS mtdCheckDeviceCapabilities(
 	return MTD_OK;
 }
 
-MTD_STATUS mtdIsPhyReadyAfterReset(
+static MTD_STATUS mtdIsPhyReadyAfterReset(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port,
 	OUT MTD_BOOL * phyReady)
@@ -351,7 +351,7 @@ MTD_STATUS mtdSoftwareReset(
 	}
 }
 
-MTD_STATUS mtdIsPhyReadyAfterHardwareReset(
+static MTD_STATUS mtdIsPhyReadyAfterHardwareReset(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port,
 	OUT MTD_BOOL *phyReady)
@@ -931,7 +931,7 @@ MTD_STATUS mtdSetPauseAdvertisement(
 	autonegotiation like fast retrain, fast retrain type, etc.
 
 ******************************************************************************/
-MTD_STATUS mtdAutonegIsCompleted(
+static MTD_STATUS mtdAutonegIsCompleted(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port,
 	OUT MTD_BOOL *anStatusReady)
@@ -1219,7 +1219,7 @@ MTD_STATUS mtdIsPhyRevisionValid(IN MTD_DEVICE_ID phyRev)
 }
 
 /* mtdCunit.c */
-MTD_STATUS mtdCunitSwReset(
+static MTD_STATUS mtdCunitSwReset(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port)
 {
@@ -1227,7 +1227,7 @@ MTD_STATUS mtdCunitSwReset(
 }
 
 /* mtdHxunit.c */
-MTD_STATUS mtdRerunSerdesAutoInitializationUseAutoMode(
+static MTD_STATUS mtdRerunSerdesAutoInitializationUseAutoMode(
 	IN MTD_DEV_PTR devPtr,
 	IN MTD_U16 port)
 {
@@ -1375,7 +1375,7 @@ MTD_STATUS mtdSetMacInterfaceControl(
 *	   None
 *
 *******************************************************************************/
-MTD_SEM mtdSemCreate(
+static MTD_SEM mtdSemCreate(
 	IN MTD_DEV * dev,
 	IN MTD_SEM_BEGIN_STATE state)
 {
@@ -1405,7 +1405,7 @@ MTD_SEM mtdSemCreate(
 *	   None
 *
 *******************************************************************************/
-MTD_STATUS mtdSemDelete(
+static MTD_STATUS mtdSemDelete(
 	IN MTD_DEV * dev,
 	IN MTD_SEM smid)
 {

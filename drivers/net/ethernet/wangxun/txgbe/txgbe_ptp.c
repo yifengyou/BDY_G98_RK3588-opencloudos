@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_ptp.c, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_ptp.c, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -23,6 +23,7 @@
 
 
 #include "txgbe.h"
+#include "txgbe_hw.h"
 #include <linux/ptp_classify.h>
 
 /*
@@ -55,7 +56,7 @@
  * 100  Mbps    6.25  MHz   160*10^-9    0xA00000(0xFFFF/ns)
  * 10   Mbps    0.625 MHz   1600*10^-9   0xC7F380(0xFFF/ns)
  * FPGA         31.25 MHz   32 *10^-9    0x800000(0x3FFFF/ns)
- *
+ * AMLITE       400MHZ      2.5*10^-9    0x0A0000
  * These diagrams are only for the 10Gb link period
  *
  *       +--------------+  +--------------+
@@ -71,15 +72,103 @@
 #define TXGBE_INCVAL_100  0xA00000
 #define TXGBE_INCVAL_10   0xC7F380
 #define TXGBE_INCVAL_FPGA 0x800000
+#define TXGBE_INCVAL_AML  0xA00000
 
 #define TXGBE_INCVAL_SHIFT_10GB  20
 #define TXGBE_INCVAL_SHIFT_1GB   18
 #define TXGBE_INCVAL_SHIFT_100   15
 #define TXGBE_INCVAL_SHIFT_10    12
 #define TXGBE_INCVAL_SHIFT_FPGA  17
+#define TXGBE_INCVAL_SHIFT_AML   21
 
 #define TXGBE_OVERFLOW_PERIOD    (HZ * 30)
 #define TXGBE_PTP_TX_TIMEOUT     (HZ)
+
+#define NS_PER_SEC      1000000000ULL
+#define NS_PER_MSEC     1000000ULL
+
+static void txgbe_ptp_setup_sdp(struct txgbe_adapter *adapter)
+{
+	struct cyclecounter *cc = &adapter->hw_cc;
+	struct txgbe_hw *hw = &adapter->hw;
+	u32 tsauxc, rem, tssdp, tssdp1;
+	u32 trgttiml0,trgttimh0, trgttiml1, trgttimh1;
+	u64 ns = 0;
+	unsigned long flags;
+
+	if (hw->mac.type != txgbe_mac_aml &&
+				hw->mac.type != txgbe_mac_aml40)
+		return;
+
+	if (TXGBE_1588_PPS_WIDTH * NS_PER_MSEC >= NS_PER_SEC) {
+		e_dev_err("PTP pps width cannot be longer than 1s!\n");
+		return;
+	}
+
+	/* disable the pin first */
+	wr32(hw, TXGBE_TSEC_1588_AUX_CTL, 0);
+	TXGBE_WRITE_FLUSH(hw);
+
+	if (!(adapter->flags2 & TXGBE_FLAG2_PTP_PPS_ENABLED)) {
+		if (adapter->pps_enabled == 1) {
+			adapter->pps_enabled = 0;
+			if (TXGBE_1588_TOD_ENABLE)
+				txgbe_set_pps(hw, adapter->pps_enabled, 0, 0);
+		}
+		return;
+	}
+
+	adapter->pps_enabled = 1;
+
+	tssdp = TXGBE_TSEC_1588_SDP_FUN_SEL_TT0;
+	tssdp |= TXGBE_1588_PPS_LEVEL ? TXGBE_TSEC_1588_SDP_OUT_LEVEL_HIGH : TXGBE_TSEC_1588_SDP_OUT_LEVEL_LOW;
+	tsauxc = TXGBE_TSEC_1588_AUX_CTL_PLSG | TXGBE_TSEC_1588_AUX_CTL_EN_TT0 | 
+		TXGBE_TSEC_1588_AUX_CTL_EN_TT1 | TXGBE_TSEC_1588_AUX_CTL_EN_TS0;
+
+	tssdp1 = TXGBE_TSEC_1588_SDP_FUN_SEL_TS0;
+
+	/* Read the current clock time, and save the cycle counter value */
+	spin_lock_irqsave(&adapter->tmreg_lock, flags);
+	ns = timecounter_read(&adapter->hw_tc);
+	adapter->pps_edge_start = adapter->hw_tc.cycle_last;
+	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
+	adapter->pps_edge_end = adapter->pps_edge_start;
+
+	/* Figure out how far past the next second we are */
+	div_u64_rem(ns, NS_PER_SEC, &rem);
+
+	/* Figure out how many nanoseconds to add to round the clock edge up
+	 * to the next full second
+	 */
+	rem = (NS_PER_SEC - rem);
+
+	/* Adjust the clock edge to align with the next full second. */
+	adapter->pps_edge_start += div_u64(((u64)rem << cc->shift), cc->mult);
+	trgttiml0 = (u32)adapter->pps_edge_start;
+	trgttimh0 = (u32)(adapter->pps_edge_start >> 32);
+
+	if (TXGBE_1588_TOD_ENABLE)
+		txgbe_set_pps(hw, adapter->pps_enabled, ns + rem, adapter->pps_edge_start);
+
+	rem += TXGBE_1588_PPS_WIDTH * NS_PER_MSEC;
+	adapter->pps_edge_end += div_u64(((u64)rem << cc->shift), cc->mult);
+	trgttiml1 = (u32)adapter->pps_edge_end;
+	trgttimh1 = (u32)(adapter->pps_edge_end >> 32);
+
+	wr32(hw, TXGBE_TSEC_1588_TRGT_L(0), trgttiml0);
+	wr32(hw, TXGBE_TSEC_1588_TRGT_H(0), trgttimh0);
+	wr32(hw, TXGBE_TSEC_1588_TRGT_L(1), trgttiml1);
+	wr32(hw, TXGBE_TSEC_1588_TRGT_H(1), trgttimh1);
+	wr32(hw, TXGBE_TSEC_1588_SDP(0), tssdp);
+	wr32(hw, TXGBE_TSEC_1588_SDP(1), tssdp1);
+	wr32(hw, TXGBE_TSEC_1588_AUX_CTL, tsauxc);
+	wr32(hw, TXGBE_TSEC_1588_INT_EN, TXGBE_TSEC_1588_INT_EN_TT1);
+	TXGBE_WRITE_FLUSH(hw);
+
+	rem = NS_PER_SEC;
+	/* Adjust the clock edge to align with the next full second. */
+	adapter->sec_to_cc = div_u64(((u64)rem << cc->shift), cc->mult);
+}
 
 /**
  * txgbe_ptp_read - read raw cycle counter (to be used by time counter)
@@ -135,6 +224,7 @@ static void txgbe_ptp_convert_to_hwtstamp(struct txgbe_adapter *adapter,
 	hwtstamp->hwtstamp = ns_to_ktime(ns);
 }
 
+#ifdef HAVE_PTP_CLOCK_INFO_ADJFINE
 /**
  * txgbe_ptp_adjfreq
  * @ptp: the ptp clock structure
@@ -143,7 +233,34 @@ static void txgbe_ptp_convert_to_hwtstamp(struct txgbe_adapter *adapter,
  * adjust the frequency of the ptp cycle counter by the
  * indicated ppb from the base frequency.
  */
-#ifndef HAVE_NOT_PTT_ADJFREQ
+static int txgbe_ptp_adjfine(struct ptp_clock_info *ptp, long ppb)
+{
+	struct txgbe_adapter *adapter =
+		container_of(ptp, struct txgbe_adapter, ptp_caps);
+	struct txgbe_hw *hw = &adapter->hw;
+	u64 incval;
+
+	smp_mb();
+	incval = READ_ONCE(adapter->base_incval);
+	incval = adjust_by_scaled_ppm(incval, ppb);
+
+	if (incval > TXGBE_TSC_1588_INC_IV(~0))
+		e_dev_warn("PTP ppb adjusted SYSTIME rate overflowed!\n");
+	wr32(hw, TXGBE_TSC_1588_INC,
+			TXGBE_TSC_1588_INC_IVP(incval, 2));
+
+	return 0;
+}
+
+#else
+/**
+ * txgbe_ptp_adjfreq
+ * @ptp: the ptp clock structure
+ * @ppb: parts per billion adjustment from base
+ *
+ * adjust the frequency of the ptp cycle counter by the
+ * indicated ppb from the base frequency.
+ */
 static int txgbe_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 {
 	struct txgbe_adapter *adapter =
@@ -194,8 +311,50 @@ static int txgbe_ptp_adjtime(struct ptp_clock_info *ptp,
 	timecounter_adjtime(&adapter->hw_tc, delta);
 	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
 
+	if (adapter->ptp_setup_sdp)
+		adapter->ptp_setup_sdp(adapter);
+
 	return 0;
 }
+
+#ifdef HAVE_PTP_CLOCK_INFO_GETTIME64
+#ifdef HAVE_PTP_SYS_OFFSET_EXTENDED_IOCTL
+/**
+ * txgbe_ptp_gettimex
+ * @ptp: the ptp clock structure
+ * @ts: timespec to hold the PHC timestamp
+ * @sts: structure to hold the system time before and after reading the PHC
+ *
+ * read the timecounter and return the correct value on ns,
+ * after converting it into a struct timespec.
+ */
+static int txgbe_ptp_gettimex(struct ptp_clock_info *ptp,
+			      struct timespec64 *ts,
+			      struct ptp_system_timestamp *sts)
+{
+	struct txgbe_adapter *adapter =
+		container_of(ptp, struct txgbe_adapter, ptp_caps);
+	struct txgbe_hw *hw = &adapter->hw;
+	unsigned long flags;
+	u64 ns, stamp;
+
+	spin_lock_irqsave(&adapter->tmreg_lock, flags);
+
+	ptp_read_system_prets(sts);
+	stamp = rd32(hw, TXGBE_TSC_1588_SYSTIML);
+	ptp_read_system_postts(sts);
+	stamp |= (u64)rd32(hw, TXGBE_TSC_1588_SYSTIMH) << 32;
+
+	ns = timecounter_cyc2time(&adapter->hw_tc, stamp);
+
+	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
+
+	*ts = ns_to_timespec64(ns);
+
+	return 0;
+}
+#endif
+#endif
 
 /**
  * txgbe_ptp_gettime64
@@ -245,6 +404,9 @@ static int txgbe_ptp_settime64(struct ptp_clock_info *ptp,
 	timecounter_init(&adapter->hw_tc, &adapter->hw_cc, ns);
 	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
 
+	if (adapter->ptp_setup_sdp)
+		adapter->ptp_setup_sdp(adapter);
+
 	return 0;
 }
 
@@ -285,6 +447,28 @@ static int txgbe_ptp_settime(struct ptp_clock_info *ptp,
 static int txgbe_ptp_feature_enable(struct ptp_clock_info *ptp,
 				    struct ptp_clock_request *rq, int on)
 {
+	struct txgbe_adapter *adapter =
+		container_of(ptp, struct txgbe_adapter, ptp_caps);
+	struct txgbe_hw *hw = &adapter->hw;
+	/**
+	 * When PPS is enabled, unmask the interrupt for the ClockOut
+	 * feature, so that the interrupt handler can send the PPS
+	 * event when the clock SDP triggers. Clear mask when PPS is
+	 * disabled
+	 */
+	if (hw->mac.type == txgbe_mac_aml || hw->mac.type == txgbe_mac_aml40) {
+		if (rq->type != PTP_CLK_REQ_PPS || !adapter->ptp_setup_sdp)
+			return -ENOTSUPP;
+
+		if (on)
+			adapter->flags2 |= TXGBE_FLAG2_PTP_PPS_ENABLED;
+		else
+			adapter->flags2 &= ~TXGBE_FLAG2_PTP_PPS_ENABLED;
+
+		adapter->ptp_setup_sdp(adapter);
+		return 0;
+	}
+
 	return -ENOTSUPP;
 }
 
@@ -298,9 +482,12 @@ static int txgbe_ptp_feature_enable(struct ptp_clock_info *ptp,
  */
 void txgbe_ptp_check_pps_event(struct txgbe_adapter *adapter)
 {
-	struct ptp_clock_event event;
-
-	event.type = PTP_CLOCK_PPS;
+	struct txgbe_hw *hw = &adapter->hw;
+	struct cyclecounter *cc = &adapter->hw_cc;
+	u32 tsauxc, rem, int_status;
+	u32 trgttiml0,trgttimh0, trgttiml1, trgttimh1;
+	u64 ns = 0;
+	unsigned long flags;
 
 	/* this check is necessary in case the interrupt was enabled via some
 	 * alternative means (ex. debug_fs). Better to check here than
@@ -309,7 +496,54 @@ void txgbe_ptp_check_pps_event(struct txgbe_adapter *adapter)
 	if (!adapter->ptp_clock)
 		return;
 
-	/* we don't config PPS on SDP yet, so just return.
+	if (hw->mac.type == txgbe_mac_aml || hw->mac.type == txgbe_mac_aml40) {
+		int_status = rd32(hw, TXGBE_TSEC_1588_INT_ST);
+		if (int_status & TXGBE_TSEC_1588_INT_ST_TT1) {
+			/* disable the pin first */
+			wr32(hw, TXGBE_TSEC_1588_AUX_CTL, 0);
+			TXGBE_WRITE_FLUSH(hw);
+
+			tsauxc = TXGBE_TSEC_1588_AUX_CTL_PLSG | TXGBE_TSEC_1588_AUX_CTL_EN_TT0 | 
+				TXGBE_TSEC_1588_AUX_CTL_EN_TT1 | TXGBE_TSEC_1588_AUX_CTL_EN_TS0;
+
+			/* Read the current clock time, and save the cycle counter value */
+			spin_lock_irqsave(&adapter->tmreg_lock, flags);
+			ns = timecounter_read(&adapter->hw_tc);
+			adapter->pps_edge_start = adapter->hw_tc.cycle_last;
+			spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
+			adapter->pps_edge_end = adapter->pps_edge_start;
+
+			/* Figure out how far past the next second we are */
+			div_u64_rem(ns, NS_PER_SEC, &rem);
+
+			/* Figure out how many nanoseconds to add to round the clock edge up
+			 * to the next full second
+			 */
+			rem = (NS_PER_SEC - rem);
+
+			/* Adjust the clock edge to align with the next full second. */
+			adapter->pps_edge_start += div_u64(((u64)rem << cc->shift), cc->mult);
+
+			/* Adjust the clock edge to align with the next full second. */
+			trgttiml0 = (u32)adapter->pps_edge_start;
+			trgttimh0 = (u32)(adapter->pps_edge_start >> 32);
+
+			rem += TXGBE_1588_PPS_WIDTH * NS_PER_MSEC;
+			adapter->pps_edge_end += div_u64(((u64)rem << cc->shift), cc->mult);
+
+			trgttiml1 = (u32)adapter->pps_edge_end;
+			trgttimh1 = (u32)(adapter->pps_edge_end >> 32);
+
+			wr32(hw, TXGBE_TSEC_1588_TRGT_L(0), trgttiml0);
+			wr32(hw, TXGBE_TSEC_1588_TRGT_H(0), trgttimh0);
+			wr32(hw, TXGBE_TSEC_1588_TRGT_L(1), trgttiml1);
+			wr32(hw, TXGBE_TSEC_1588_TRGT_H(1), trgttimh1);
+
+			wr32(hw, TXGBE_TSEC_1588_AUX_CTL, tsauxc);
+			TXGBE_WRITE_FLUSH(hw);
+		}
+	}
+	/* we don't config PPS on SDP for txgbe_mac_sp yet, so just return.
 	 * ptp_clock_event(adapter->ptp_clock, &event);
 	 */
 }
@@ -672,6 +906,7 @@ int txgbe_ptp_set_ts_config(struct txgbe_adapter *adapter, struct ifreq *ifr)
 static void txgbe_ptp_link_speed_adjust(struct txgbe_adapter *adapter,
 					u32 *shift, u32 *incval)
 {
+	struct txgbe_hw *hw = &adapter->hw;
 	/**
 	 * Scale the NIC cycle counter by a large factor so that
 	 * relatively small corrections to the frequency can be added
@@ -686,26 +921,32 @@ static void txgbe_ptp_link_speed_adjust(struct txgbe_adapter *adapter,
 	 * link speed is 10Gb. Set the registers correctly even when link is
 	 * down to preserve the clock setting
 	 */
-	switch (adapter->link_speed) {
-	case TXGBE_LINK_SPEED_10_FULL:
-		*shift = TXGBE_INCVAL_SHIFT_10;
-		*incval = TXGBE_INCVAL_10;
-		break;
-	case TXGBE_LINK_SPEED_100_FULL:
-		*shift = TXGBE_INCVAL_SHIFT_100;
-		*incval = TXGBE_INCVAL_100;
-		break;
-	case TXGBE_LINK_SPEED_1GB_FULL:
-		*shift = TXGBE_INCVAL_SHIFT_1GB;
-		*incval = TXGBE_INCVAL_1GB;
-		break;
-	case TXGBE_LINK_SPEED_10GB_FULL:
-	default: /* TXGBE_LINK_SPEED_10GB_FULL */
-		*shift = TXGBE_INCVAL_SHIFT_10GB;
-		*incval = TXGBE_INCVAL_10GB;
-		break;
-	}
 
+	/*amlite TODO*/
+	if (hw->mac.type == txgbe_mac_aml || hw->mac.type == txgbe_mac_aml40) {
+		*shift = TXGBE_INCVAL_SHIFT_AML;
+		*incval = TXGBE_INCVAL_AML;
+	} else {
+		switch (adapter->link_speed) {
+		case TXGBE_LINK_SPEED_10_FULL:
+			*shift = TXGBE_INCVAL_SHIFT_10;
+			*incval = TXGBE_INCVAL_10;
+			break;
+		case TXGBE_LINK_SPEED_100_FULL:
+			*shift = TXGBE_INCVAL_SHIFT_100;
+			*incval = TXGBE_INCVAL_100;
+			break;
+		case TXGBE_LINK_SPEED_1GB_FULL:
+			*shift = TXGBE_INCVAL_SHIFT_1GB;
+			*incval = TXGBE_INCVAL_1GB;
+			break;
+		case TXGBE_LINK_SPEED_10GB_FULL:
+		default: /* TXGBE_LINK_SPEED_10GB_FULL */
+			*shift = TXGBE_INCVAL_SHIFT_10GB;
+			*incval = TXGBE_INCVAL_10GB;
+			break;
+		}
+	}
 	return;
 }
 
@@ -756,6 +997,14 @@ void txgbe_ptp_start_cyclecounter(struct txgbe_adapter *adapter)
 	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
 }
 
+static void txgbe_ptp_init_systime(struct txgbe_adapter *adapter)
+{
+	struct txgbe_hw *hw = &adapter->hw;
+	wr32(hw, TXGBE_TSC_1588_SYSTIML, 0);
+	wr32(hw, TXGBE_TSC_1588_SYSTIMH, 0);
+	TXGBE_WRITE_FLUSH(hw);
+}
+
 /**
  * txgbe_ptp_reset
  * @adapter: the txgbe private board structure
@@ -770,11 +1019,15 @@ void txgbe_ptp_start_cyclecounter(struct txgbe_adapter *adapter)
  */
 void txgbe_ptp_reset(struct txgbe_adapter *adapter)
 {
+	struct txgbe_hw *hw = &adapter->hw;
 	unsigned long flags;
 
 	/* reset the hardware timestamping mode */
 	txgbe_ptp_set_timestamp_mode(adapter, &adapter->tstamp_config);
 	txgbe_ptp_start_cyclecounter(adapter);
+
+	if (hw->mac.type == txgbe_mac_aml || hw->mac.type == txgbe_mac_aml40)
+		txgbe_ptp_init_systime(adapter);
 
 	spin_lock_irqsave(&adapter->tmreg_lock, flags);
 	timecounter_init(&adapter->hw_tc, &adapter->hw_cc,
@@ -782,6 +1035,12 @@ void txgbe_ptp_reset(struct txgbe_adapter *adapter)
 	spin_unlock_irqrestore(&adapter->tmreg_lock, flags);
 
 	adapter->last_overflow_check = jiffies;
+
+	/* Now that the shift has been calculated and the systime
+	 * registers reset, (re-)enable the Clock out feature
+	 */
+	if (adapter->ptp_setup_sdp)
+		adapter->ptp_setup_sdp(adapter);
 }
 
 /**
@@ -798,6 +1057,7 @@ void txgbe_ptp_reset(struct txgbe_adapter *adapter)
 static long txgbe_ptp_create_clock(struct txgbe_adapter *adapter)
 {
 	struct net_device *netdev = adapter->netdev;
+	struct txgbe_hw *hw = &adapter->hw;
 	long err;
 
 	/* do nothing if we already have a clock device */
@@ -811,19 +1071,32 @@ static long txgbe_ptp_create_clock(struct txgbe_adapter *adapter)
 	adapter->ptp_caps.n_alarm = 0;
 	adapter->ptp_caps.n_ext_ts = 0;
 	adapter->ptp_caps.n_per_out = 0;
-	adapter->ptp_caps.pps = 0;
-#ifndef HAVE_NOT_PTT_ADJFREQ
-	adapter->ptp_caps.adjfreq = txgbe_ptp_adjfreq;
+
+	if (hw->mac.type == txgbe_mac_aml ||
+			hw->mac.type == txgbe_mac_aml40)
+		adapter->ptp_caps.pps = 1;
+	else
+		adapter->ptp_caps.pps = 0;
+
+#ifdef HAVE_PTP_CLOCK_INFO_ADJFINE
+		adapter->ptp_caps.adjfine = txgbe_ptp_adjfine;
+#else
+		adapter->ptp_caps.adjfreq = txgbe_ptp_adjfreq;
 #endif
 	adapter->ptp_caps.adjtime = txgbe_ptp_adjtime;
 #ifdef HAVE_PTP_CLOCK_INFO_GETTIME64
+#ifdef HAVE_PTP_SYS_OFFSET_EXTENDED_IOCTL
+		adapter->ptp_caps.gettimex64 = txgbe_ptp_gettimex;
+#else
 	adapter->ptp_caps.gettime64 = txgbe_ptp_gettime64;
+#endif /* HAVE_PTP_SYS_OFFSET_EXTENDED_IOCTL */
 	adapter->ptp_caps.settime64 = txgbe_ptp_settime64;
 #else
 	adapter->ptp_caps.gettime = txgbe_ptp_gettime;
 	adapter->ptp_caps.settime = txgbe_ptp_settime;
 #endif
 	adapter->ptp_caps.enable = txgbe_ptp_feature_enable;
+	adapter->ptp_setup_sdp = txgbe_ptp_setup_sdp;
 
 	adapter->ptp_clock = ptp_clock_register(&adapter->ptp_caps,
 						pci_dev_to_dev(adapter->pdev));
@@ -890,6 +1163,9 @@ void txgbe_ptp_suspend(struct txgbe_adapter *adapter)
 		return;
 
 	adapter->flags2 &= ~TXGBE_FLAG2_PTP_PPS_ENABLED;
+
+	if (adapter->ptp_setup_sdp)
+		adapter->ptp_setup_sdp(adapter);
 
 	cancel_work_sync(&adapter->ptp_tx_work);
 	txgbe_ptp_clear_tx_timestamp(adapter);

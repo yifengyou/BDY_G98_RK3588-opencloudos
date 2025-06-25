@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -47,12 +47,22 @@
 #define SPI_CMD_CFG1_ADDR            0x10118  // Flash command configuration register 1
 #define MISC_RST_REG_ADDR            0x1000c  // Misc reset register address
 #define MGR_FLASH_RELOAD_REG_ADDR    0x101a0  // MGR reload flash read
+#define PRB_CTL                      0x10200  // used to check whether has been upgraded
+#define PRB_SCRATCH                  0x10230  // used to check whether has been upgraded
 
 #define MAC_ADDR0_WORD0_OFFSET_1G    0x006000c  // MAC Address for LAN0, stored in external FLASH
 #define MAC_ADDR0_WORD1_OFFSET_1G    0x0060014
 #define MAC_ADDR1_WORD0_OFFSET_1G    0x007000c  // MAC Address for LAN1, stored in external FLASH
 #define MAC_ADDR1_WORD1_OFFSET_1G    0x0070014
+
+#define AMLITE_MAC_ADDR0_WORD0_OFFSET 0x00f010c // MAC Address for LAN0, stored in external FLASH
+#define AMLITE_MAC_ADDR0_WORD1_OFFSET 0x00f0114
+#define AMLITE_MAC_ADDR1_WORD0_OFFSET 0x00f020c // MAC Address for LAN1, stored in external FLASH
+#define AMLITE_MAC_ADDR1_WORD1_OFFSET 0x00f0214
+
 #define PRODUCT_SERIAL_NUM_OFFSET_1G    0x00f0000  // Product Serial Number, stored in external FLASH last sector
+#define TXGBE_VPD_OFFSET    0x500
+#define TXGBE_VPD_END    0x600
 
 struct txgbe_hic_read_cab {
 	union txgbe_hic_hdr2 hdr;
@@ -63,6 +73,32 @@ struct txgbe_hic_read_cab {
 	} dbuf;
 };
 
+#ifndef read_poll_timeout
+#define read_poll_timeout(op, val, cond, sleep_us, timeout_us, \
+				sleep_before_read, args...) \
+({ \
+	u64 __timeout_us = (timeout_us); \
+	unsigned long __sleep_us = (sleep_us); \
+	ktime_t __timeout = ktime_add_us(ktime_get(), __timeout_us); \
+	might_sleep_if((__sleep_us) != 0); \
+	if (sleep_before_read && __sleep_us) \
+		usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+	for (;;) { \
+		(val) = op(args); \
+		if (cond) \
+			break; \
+		if (__timeout_us && \
+		    ktime_compare(ktime_get(), __timeout) > 0) { \
+			(val) = op(args); \
+			break; \
+		} \
+		if (__sleep_us) \
+			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		cpu_relax(); \
+	} \
+	(cond) ? 0 : -ETIMEDOUT; \
+})
+#endif
 
 /**
  * Packet Type decoding
@@ -125,6 +161,10 @@ struct txgbe_dec_ptype {
 };
 typedef struct txgbe_dec_ptype txgbe_dptype;
 
+u32 rd32_ephy(struct txgbe_hw *hw, u32 addr);
+u32 txgbe_rd32_epcs(struct txgbe_hw *hw, u32 addr);
+void txgbe_wr32_ephy(struct txgbe_hw *hw, u32 addr, u32 data);
+void txgbe_wr32_epcs(struct txgbe_hw *hw, u32 addr, u32 data);
 
 void txgbe_dcb_get_rtrup2tc(struct txgbe_hw *hw, u8 *map);
 u16 txgbe_get_pcie_msix_count(struct txgbe_hw *hw);
@@ -248,23 +288,25 @@ void txgbe_atr_compute_perfect_hash(union txgbe_atr_input *input,
 u32 txgbe_atr_compute_sig_hash(union txgbe_atr_hash_dword input,
 				     union txgbe_atr_hash_dword common);
 
-s32 txgbe_get_link_capabilities(struct txgbe_hw *hw,
+s32 txgbe_get_link_capabilities_sp(struct txgbe_hw *hw,
 				      u32 *speed, bool *autoneg);
-enum txgbe_media_type txgbe_get_media_type(struct txgbe_hw *hw);
+enum txgbe_media_type txgbe_get_media_type_sp(struct txgbe_hw *hw);
 void txgbe_disable_tx_laser_multispeed_fiber(struct txgbe_hw *hw);
 void txgbe_enable_tx_laser_multispeed_fiber(struct txgbe_hw *hw);
 void txgbe_flap_tx_laser_multispeed_fiber(struct txgbe_hw *hw);
 void txgbe_set_hard_rate_select_speed(struct txgbe_hw *hw,
 					u32 speed);
-s32 txgbe_setup_mac_link(struct txgbe_hw *hw, u32 speed,
+int txgbe_init_shared_code(struct txgbe_hw *hw);
+s32 txgbe_setup_mac_link_sp(struct txgbe_hw *hw, u32 speed,
 			       bool autoneg_wait_to_complete);
-void txgbe_init_mac_link_ops(struct txgbe_hw *hw);
+void txgbe_init_mac_link_ops_sp(struct txgbe_hw *hw);
 s32 txgbe_reset_hw(struct txgbe_hw *hw);
 s32 txgbe_identify_phy(struct txgbe_hw *hw);
-s32 txgbe_init_phy_ops(struct txgbe_hw *hw);
+s32 txgbe_init_phy_ops_sp(struct txgbe_hw *hw);
 s32 txgbe_enable_rx_dma(struct txgbe_hw *hw, u32 regval);
-s32 txgbe_init_ops(struct txgbe_hw *hw);
+s32 txgbe_init_ops_generic(struct txgbe_hw *hw);
 s32 txgbe_setup_eee(struct txgbe_hw *hw, bool enable_eee);
+int txgbe_reconfig_mac(struct txgbe_hw *hw);
 
 s32 txgbe_init_flash_params(struct txgbe_hw *hw);
 s32 txgbe_read_flash_buffer(struct txgbe_hw *hw, u32 offset,
@@ -311,6 +353,17 @@ s32 txgbe_set_link_to_kx(struct txgbe_hw *hw,
 int txgbe_flash_read_dword(struct txgbe_hw *hw, u32 addr, u32 *data);
 s32 txgbe_hic_write_lldp(struct txgbe_hw *hw,u32 open);
 int txgbe_is_lldp(struct txgbe_hw *hw);
+s32 txgbe_set_sgmii_an37_ability(struct txgbe_hw *hw);
+int txgbe_set_pps(struct txgbe_hw *hw, bool enable, u64 nsec, u64 cycles);
+void txgbe_hic_write_autoneg_status(struct txgbe_hw *hw,bool autoneg);
+int txgbe_enable_rx_adapter(struct txgbe_hw *hw);
 
+extern s32 txgbe_init_ops_aml(struct txgbe_hw *hw);
+extern s32 txgbe_init_ops_aml40(struct txgbe_hw *hw);
+
+void txgbe_set_queue_rate_limit(struct txgbe_hw *hw, int queue, u16 max_tx_rate);
+
+int txgbe_hic_notify_led_active(struct txgbe_hw *hw, int active_flag);
+bool txgbe_is_backplane(struct txgbe_hw *hw);
 
 #endif /* _TXGBE_HW_H_ */

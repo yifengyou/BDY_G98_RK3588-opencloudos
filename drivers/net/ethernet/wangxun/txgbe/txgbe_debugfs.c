@@ -1,6 +1,6 @@
 /*
- * WangXun 10 Gigabit PCI Express Linux driver
- * Copyright (c) 2015 - 2017 Beijing WangXun Technology Co., Ltd.
+ * WangXun RP1000/RP2000/FF50XX PCI Express Linux driver
+ * Copyright (c) 2015 - 2025 Beijing WangXun Technology Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,7 @@
  * The full GNU General Public License is included in this distribution in
  * the file called "COPYING".
  *
- * based on ixgbe_debugfs.c, Copyright(c) 1999 - 2017 Intel Corporation.
+ * based on txgbe_debugfs.c, Copyright(c) 1999 - 2017 Intel Corporation.
  * Contact Information:
  * Linux NICS <linux.nics@intel.com>
  * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
@@ -45,7 +45,7 @@ enum txgbe_data_func {
 /**
  * data operation
  **/
-ssize_t
+static ssize_t
 txgbe_simple_read_from_pcibar(struct txgbe_adapter *adapter, int res,
 		void __user *buf, size_t size, loff_t *ppos)
 {
@@ -71,7 +71,7 @@ txgbe_simple_read_from_pcibar(struct txgbe_adapter *adapter, int res,
 	return size;
 }
 
-ssize_t
+static ssize_t
 txgbe_simple_read_from_flash(struct txgbe_adapter *adapter,
 		void __user *buf, size_t size, loff_t *ppos)
 {
@@ -116,7 +116,7 @@ txgbe_simple_read_from_flash(struct txgbe_adapter *adapter,
 	return size;
 }
 
-ssize_t
+static ssize_t
 txgbe_simple_write_to_flash(struct txgbe_adapter *adapter,
 	const void __user *from, size_t size, loff_t *ppos, size_t available)
 {
