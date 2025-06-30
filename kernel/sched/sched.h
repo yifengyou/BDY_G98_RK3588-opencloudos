@@ -2681,6 +2681,7 @@ struct sched_class {
 
 	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 	struct task_struct *(*pick_task)(struct rq *rq);
+	struct task_struct *(*pick_task_balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 	/*
 	 * Optional! When implemented pick_next_task() should be equivalent to:
 	 *

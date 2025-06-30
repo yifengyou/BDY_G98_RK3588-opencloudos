@@ -6295,7 +6295,10 @@ restart:
 			if (p)
 				return p;
 		} else {
-			p = class->pick_task(rq);
+			if (class->pick_task_balance)
+				p = class->pick_task_balance(rq, prev, rf);
+			else
+				p = class->pick_task(rq);
 			if (p) {
 				put_prev_set_next_task(rq, prev, p);
 				return p;

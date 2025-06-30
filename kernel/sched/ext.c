@@ -2157,7 +2157,7 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 		/*
 		 * If @prev is runnable & has slice left, it has priority and
 		 * fetching more just increases latency for the fetched tasks.
-		 * Tell pick_task_scx() to keep running @prev. If the BPF
+		 * Tell pick_task_balance_scx() to keep running @prev. If the BPF
 		 * scheduler wants to handle this explicitly, it should
 		 * implement ->cpu_release().
 		 *
@@ -2251,7 +2251,7 @@ static int balance_scx(struct rq *rq, struct task_struct *prev,
 #ifdef CONFIG_SCHED_SMT
 	/*
 	 * When core-sched is enabled, this ops.balance() call will be followed
-	 * by pick_task_scx() on this CPU and the SMT siblings. Balance the
+	 * by pick_task_balance_scx() on this CPU and the SMT siblings. Balance the
 	 * siblings too.
 	 */
 	if (sched_core_enabled(rq)) {
@@ -2449,12 +2449,11 @@ static struct task_struct *first_local_task(struct rq *rq)
 					struct task_struct, scx.dsq_list.node);
 }
 
-static struct task_struct *pick_task_scx(struct rq *rq)
+static struct task_struct *pick_task_balance_scx(struct rq *rq,
+		struct task_struct *prev, struct rq_flags *rf)
 {
-	struct task_struct *prev = rq->curr;
 	struct task_struct *p;
 	bool keep_prev = rq->scx.flags & SCX_RQ_BAL_KEEP;
-	bool kick_idle = false;
 
 	/*
 	 * WORKAROUND:
@@ -2462,23 +2461,20 @@ static struct task_struct *pick_task_scx(struct rq *rq)
 	 * %SCX_RQ_BAL_KEEP should be set iff $prev is on SCX as it must just
 	 * have gone through balance_scx(). Unfortunately, there currently is a
 	 * bug where fair could say yes on balance() but no on pick_task(),
-	 * which then ends up calling pick_task_scx() without preceding
+	 * which then ends up calling pick_task_balance_scx() without preceding
 	 * balance_scx().
 	 *
 	 * Keep running @prev if possible and avoid stalling from entering idle
 	 * without balancing.
 	 *
 	 * Once fair is fixed, remove the workaround and trigger WARN_ON_ONCE()
-	 * if pick_task_scx() is called without preceding balance_scx().
+	 * if pick_task_balance_scx() is called without preceding balance_scx().
 	 */
 
 	if (unlikely(rq->scx.flags & SCX_RQ_BAL_PENDING)) {
-		if (prev->scx.flags & SCX_TASK_QUEUED) {
-			keep_prev = true;
-		} else {
-			keep_prev = false;
-			kick_idle = true;
-		}
+		WARN_ON_ONCE(task_on_scx(prev) || is_idle_task(prev));
+		keep_prev = false;
+		balance_scx(rq, prev, rf);
 	} else if (unlikely(keep_prev &&
 			    prev->sched_class != &ext_sched_class)) {
 		/*
@@ -2501,8 +2497,6 @@ static struct task_struct *pick_task_scx(struct rq *rq)
 	} else {
 		p = first_local_task(rq);
 		if (!p) {
-			if (kick_idle)
-				scx_bpf_kick_cpu(cpu_of(rq), SCX_KICK_IDLE);
 			return NULL;
 		}
 
@@ -2535,7 +2529,7 @@ static struct task_struct *pick_task_scx(struct rq *rq)
  * behavior.
  *
  * When ops.core_sched_before() is enabled, @p->scx.core_sched_at is used to
- * implement FIFO ordering within each local DSQ. See pick_task_scx().
+ * implement FIFO ordering within each local DSQ. See pick_task_balance_scx().
  */
 bool scx_prio_less(const struct task_struct *a, const struct task_struct *b,
 		   bool in_fi)
@@ -3904,7 +3898,7 @@ DEFINE_SCHED_CLASS(ext) = {
 	.wakeup_preempt		= wakeup_preempt_scx,
 
 	.balance		= balance_scx,
-	.pick_task		= pick_task_scx,
+	.pick_task_balance      = pick_task_balance_scx,
 
 	.put_prev_task		= put_prev_task_scx,
 	.set_next_task		= set_next_task_scx,
