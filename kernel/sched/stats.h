@@ -278,6 +278,10 @@ static inline void sched_info_depart(struct rq *rq, struct task_struct *t)
 
 	rq_sched_info_depart(rq, delta);
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (t->sched_class != &ext_sched_class)
+		rq->rq_non_scx_cpu_time += delta;
+#endif
 	if (task_is_running(t))
 		sched_info_enqueue(rq, t);
 }

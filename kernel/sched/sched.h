@@ -1461,7 +1461,9 @@ struct rq {
 	struct sched_info	rq_sched_info;
 	unsigned long long	rq_cpu_time;
 	/* could above be rq->cfs_rq.exec_clock + rq->rt_rq.rt_runtime ? */
-
+#ifdef CONFIG_SCHED_CLASS_EXT
+	unsigned long long	rq_non_scx_cpu_time;
+#endif
 	/* sys_sched_yield() stats */
 	unsigned int		yld_count;
 
