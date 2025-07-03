@@ -63,6 +63,7 @@ int panic_on_warn __read_mostly;
 unsigned long panic_on_taint;
 bool panic_on_taint_nousertaint = false;
 static unsigned int warn_limit __read_mostly;
+static bool panic_console_replay;
 
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);
@@ -213,12 +214,6 @@ void nmi_panic(struct pt_regs *regs, const char *msg)
 		nmi_panic_self_stop(regs);
 }
 EXPORT_SYMBOL(nmi_panic);
-
-static void panic_console_replay(void)
-{
-	if (panic_print & SYS_INFO_PANIC_CONSOLE_REPLAY)
-		console_flush_on_panic(CONSOLE_REPLAY_ALL);
-}
 
 void check_panic_on_warn(const char *origin)
 {
@@ -387,7 +382,9 @@ void panic(const char *fmt, ...)
 	debug_locks_off();
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 
-	panic_console_replay();
+	if ((panic_print & SYS_INFO_PANIC_CONSOLE_REPLAY) ||
+		panic_console_replay)
+		console_flush_on_panic(CONSOLE_REPLAY_ALL);
 
 	if (!panic_blink)
 		panic_blink = no_blink;
@@ -775,6 +772,7 @@ core_param(panic_print, panic_print, ulong, 0644);
 core_param(pause_on_oops, pause_on_oops, int, 0644);
 core_param(panic_on_warn, panic_on_warn, int, 0644);
 core_param(crash_kexec_post_notifiers, crash_kexec_post_notifiers, bool, 0644);
+core_param(panic_console_replay, panic_console_replay, bool, 0644);
 
 static int __init oops_setup(char *s)
 {
