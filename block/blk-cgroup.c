@@ -1160,7 +1160,7 @@ static int blkcg_dkstats_show(struct seq_file *sf, void *v)
 
 const char *blkg_dev_name(struct blkcg_gq *blkg)
 {
-	if (!blkg->q->disk)
+	if (!blkg->q->disk || !blkg->q->disk->bdi->dev)
 		return NULL;
 	return bdi_dev_name(blkg->q->disk->bdi);
 }
