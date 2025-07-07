@@ -3382,6 +3382,33 @@ static bool can_age_anon_pages(struct pglist_data *pgdat,
 
 #ifdef CONFIG_LRU_GEN
 
+DEFINE_STATIC_KEY_FALSE(lru_gen_migrating);
+
+static inline bool lru_gen_is_migrating(void)
+{
+	return static_branch_unlikely(&lru_gen_migrating);
+}
+
+static inline void shrink_lruvec_migrating(struct lruvec *lruvec)
+{
+	if (lru_gen_enabled()) {
+		/*
+		 * Enabling MGLRU. If we see lrugen.enabled == true here, when
+		 * we get the lru_lock, the migrating thread will have filled the
+		 * lruvec with some pages, so we can continue without waiting.
+		 */
+		while (!lruvec->lrugen.enabled) {
+			/* Not switching this one yet. Wait for a while. */
+			schedule_timeout_uninterruptible(1);
+		}
+	} else {
+		/* Same above */
+		while (lruvec->lrugen.enabled) {
+			schedule_timeout_uninterruptible(1);
+		}
+	}
+}
+
 #ifdef CONFIG_LRU_GEN_ENABLED
 DEFINE_STATIC_KEY_ARRAY_TRUE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_likely(&lru_gen_caps[cap])
@@ -5921,6 +5948,8 @@ static void lru_gen_change_state(bool enabled)
 	if (enabled == lru_gen_enabled())
 		goto unlock;
 
+	static_branch_enable_cpuslocked(&lru_gen_migrating);
+
 	if (enabled)
 		static_branch_enable_cpuslocked(&lru_gen_caps[LRU_GEN_CORE]);
 	else
@@ -5951,6 +5980,9 @@ static void lru_gen_change_state(bool enabled)
 
 		cond_resched();
 	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)));
+
+	static_branch_disable_cpuslocked(&lru_gen_migrating);
+
 unlock:
 	mutex_unlock(&state_mutex);
 	put_online_mems();
@@ -6517,6 +6549,15 @@ __setup("lru_gen=", parse_cmdlinelru_gen);
 
 #else /* !CONFIG_LRU_GEN */
 
+static inline bool lru_gen_is_migrating(void)
+{
+	return false;
+}
+
+static inline void shrink_lruvec_migrating(struct lruvec *lruvec)
+{
+}
+
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
 }
@@ -6541,6 +6582,10 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	bool proportional_reclaim;
 	struct blk_plug plug;
+
+	if (lru_gen_is_migrating()) {
+		shrink_lruvec_migrating(lruvec);
+	}
 
 	if (lru_gen_enabled() && !root_reclaim(sc)) {
 		lru_gen_shrink_lruvec(lruvec, sc);
