@@ -12633,6 +12633,14 @@ static ssize_t cpu_scx_max_write(struct kernfs_open_file *of,
 #endif
 
 static struct cftype cpu_files[] = {
+#ifdef CONFIG_CGROUPFS
+	{
+		.name = "quota_aware",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_quota_aware_read_u64,
+		.write_u64 = cpu_quota_aware_write_u64,
+	},
+#endif
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
 	{
 		.name = "weight",

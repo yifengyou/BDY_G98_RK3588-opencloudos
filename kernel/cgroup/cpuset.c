@@ -36,6 +36,7 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/sched/deadline.h>
+#include <linux/sched/cputime.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/task.h>
 #include <linux/sched/stat.h>
@@ -3230,7 +3231,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	bool is_top_cgrp;
 	struct timespec64 boottime;
 	struct cgroup_subsys_state *css;
-	u64 sys, usr, cpu_total, cpu_idle, acct_total, total_sys, total_usr, total_idle;
+	u64 sys, usr, cpu_total, cpu_idle, acct_total, total_sys, total_usr, total_idle, cpu_total_v2;
 	u64 n_ctx_switch, n_process, n_running, n_blocked;
 	int i, k = 0, num_cpu = nr_cpu_ids + 1;;
 	total_sys = 0, total_usr = 0, total_idle = 0;
@@ -3247,8 +3248,21 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	 * of each cpus less than total. To make sum of usage of each cpu equal to total,
 	 * set quota_aware=0 or configure quota equal to cpuset num.
 	 */
-	css = cgroupfs_get_parent_role_cgroup(current,
-			CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
+	if (cgroup_subsys_on_dfl(cpuset_cgrp_subsys)) {
+		struct cgroup *cgrp;
+
+		css = cgroupfs_get_parent_role_cgroup(current,
+				CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuset_cgrp_id);
+		cgrp = css->cgroup;
+		cgroup_rstat_flush_hold(cgrp);
+		cputime_adjust(&cgrp->bstat.cputime, &cgrp->prev_cputime,
+			       &total_usr, &total_sys);
+		cgroup_rstat_flush_release();
+	} else {
+		css = cgroupfs_get_parent_role_cgroup(current,
+				CGROUPFS_CGROUP_ROLE_POD_GROUPS, cpuacct_cgrp_id);
+	}
+
 	for_each_cpu(i, cs->effective_cpus) {
 		struct kernel_cpustat kcs;
 		kcpustat_cpu_fetch(&kcs, i);
@@ -3265,22 +3279,41 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
-		cpuacct_cgroupfs_cpu_usage(css, i, &sys, &usr);
-		acct_total = sys + usr;
-		if (cpu_total > acct_total)
-			cpu_idle = cpu_idle + (cpu_total - acct_total);
-		total_sys += sys;
-		total_usr += usr;
-		total_idle += cpu_idle;
-		if (k < num_cpu) {
-			res[k].sys = sys;
-			res[k].usr = usr;
-			res[k].idle = cpu_idle;
-			res[k].cpuid = i;
+		cpu_total_v2 += cpu_total;
+
+		if (!cgroup_subsys_on_dfl(cpuset_cgrp_subsys)) {
+			cpuacct_cgroupfs_cpu_usage(css, i, &sys, &usr);
+			acct_total = sys + usr;
+			if (cpu_total > acct_total)
+				cpu_idle = cpu_idle + (cpu_total - acct_total);
+			total_sys += sys;
+			total_usr += usr;
+			total_idle += cpu_idle;
+			if (k < num_cpu) {
+				res[k].sys = sys;
+				res[k].usr = usr;
+				res[k].idle = cpu_idle;
+				res[k].cpuid = i;
+			}
+		} else {
+			total_idle += cpu_idle;
+			if (k < num_cpu)
+				res[k].cpuid = i;
 		}
 	}
 
-	if (cgroupfs_stat_show_cpuacct_info == 2) {
+	if (cgroup_subsys_on_dfl(cpuset_cgrp_subsys)) {
+		if (cpu_total_v2 > (total_usr + total_sys))
+			total_idle = total_idle + (cpu_total_v2 - total_usr - total_sys);
+	}
+
+	/*
+	 * Since there is no cpuacct subsystem in cgroup v2,
+	 * displaying per cpu time is not supported.
+	 * When cgroupfs_stat_show_cpuacct_info is set to 1,
+	 * it behaves the same as when the value is 2.
+	 */
+	if (cgroupfs_stat_show_cpuacct_info == 2 || cgroup_subsys_on_dfl(cpuset_cgrp_subsys)) {
 		int show_cpus = min(max_cpu, k);
 
 		cpu_idle = show_cpus * (total_sys + total_usr + total_idle) / k
@@ -3292,6 +3325,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 			res[i].idle = total_idle / show_cpus;
 		}
 	}
+
 	css_put(css);
 	res[0].sys = total_sys;
 	res[0].usr = total_usr;
