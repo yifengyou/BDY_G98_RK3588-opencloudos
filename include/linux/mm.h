@@ -3755,6 +3755,8 @@ extern bool process_shares_mm(struct task_struct *p, struct mm_struct *mm);
 extern int sysctl_drop_caches;
 int drop_caches_sysctl_handler(struct ctl_table *, int, void *, size_t *,
 		loff_t *);
+int vfs_cache_pressure_sysctl_handler(struct ctl_table *, int, void *, size_t *,
+		loff_t *);
 #endif
 
 void drop_slab(void);
