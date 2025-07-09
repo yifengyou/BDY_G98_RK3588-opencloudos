@@ -114,7 +114,9 @@ bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
 
 #ifdef CONFIG_HUGETEXT
 	/* Enable hugetext does not require THP settings */
-	if (hugetext_enabled() && vma_is_hugetext(vma, vm_flags))
+	if (hugetext_anon_enabled() && vma_is_hugetext_anon(vma, vm_flags))
+		return true;
+	if (!in_pf && hugetext_vma_enabled(vma, vm_flags))
 		return true;
 #endif
 

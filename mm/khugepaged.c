@@ -427,9 +427,6 @@ void khugepaged_enter_exec_vma(struct vm_area_struct *vma,
 	struct mm_slot *slot;
 	int i;
 
-	if (!vma_is_hugetext(vma, vm_flags))
-		return;
-
 	spin_lock(&khugepaged_mm_lock);
 
 	slot = mm_slot_lookup(mm_slots_hash, vma->vm_mm);
@@ -490,7 +487,7 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 			__khugepaged_enter(vma->vm_mm);
 	}
 
-	if (unlikely(vma->vm_flags & VM_EXEC) && hugetext_enabled() &&
+	if (hugetext_vma_enabled(vma, vm_flags) &&
 	    test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags))
 		khugepaged_enter_exec_vma(vma, vm_flags);
 }
