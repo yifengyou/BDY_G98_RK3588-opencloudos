@@ -1161,6 +1161,17 @@ config DMAPOOL_TEST
 	  provide a consistent way to measure how changes to the
 	  dma_pool_alloc/free routines affect performance.
 
+config HUGETEXT
+	bool "THP for text segments"
+	depends on READ_ONLY_THP_FOR_FS
+
+	help
+	  Allow khugepaged to put read-only file-backed pages, including
+	  shared libraries, as well as the anonymous and executable pages
+	  in THP.
+
+	  This feature builds on and extends READ_ONLY_THP_FOR_FS.
+
 config ARCH_HAS_PTE_SPECIAL
 	bool
 

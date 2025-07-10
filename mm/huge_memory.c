@@ -112,6 +112,14 @@ bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
 		return shmem_is_huge(file_inode(vma->vm_file), vma->vm_pgoff,
 				     !enforce_sysfs, vma->vm_mm, vm_flags);
 
+#ifdef CONFIG_HUGETEXT
+	/* Enable hugetext does not require THP settings */
+	if (hugetext_anon_enabled() && vma_is_hugetext_anon(vma, vm_flags))
+		return true;
+	if (!in_pf && hugetext_vma_enabled(vma, vm_flags))
+		return true;
+#endif
+
 	/* Enforce sysfs THP requirements as necessary */
 	if (enforce_sysfs &&
 	    (!hugepage_flags_enabled() || (!(vm_flags & VM_HUGEPAGE) &&
@@ -381,6 +389,90 @@ static ssize_t hpage_pmd_size_show(struct kobject *kobj,
 static struct kobj_attribute hpage_pmd_size_attr =
 	__ATTR_RO(hpage_pmd_size);
 
+#ifdef CONFIG_HUGETEXT
+static ssize_t hugetext_enabled_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	int val = 0;
+
+	if (test_bit(TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG, &transparent_hugepage_flags))
+		val |= 0x01;
+	if (test_bit(TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG, &transparent_hugepage_flags))
+		val |= 0x02;
+
+	return sprintf(buf, "%d\n", val);
+}
+
+static ssize_t hugetext_enabled_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret;
+	unsigned long val = 0;
+
+	if (!buf)
+		return -EINVAL;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret < 0 || val > 3)
+		return -EINVAL;
+
+	ret = count;
+	if (val & 0x01)
+		set_bit(TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
+			&transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	if (val & 0x02)
+		set_bit(TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
+			&transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	if (ret > 0) {
+		int err = start_stop_khugepaged();
+
+		if (err)
+			ret = err;
+	}
+
+	return ret;
+}
+struct kobj_attribute hugetext_enabled_attr =
+	__ATTR(hugetext_enabled, 0644, hugetext_enabled_show, hugetext_enabled_store);
+
+unsigned long hugetext_pad_threshold;
+
+static ssize_t hugetext_pad_threshold_show(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   char *buf)
+{
+	return sprintf(buf, "%ld\n", hugetext_pad_threshold);
+}
+
+static ssize_t hugetext_pad_threshold_store(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    const char *buf, size_t count)
+{
+	int err;
+	unsigned long pad_size;
+
+	err = kstrtoul(buf, 10, &pad_size);
+	if (err || pad_size > HPAGE_PMD_SIZE - 1)
+		return -EINVAL;
+
+	hugetext_pad_threshold = pad_size;
+
+	return count;
+}
+
+static struct kobj_attribute hugetext_pad_threshold_attr =
+	__ATTR(hugetext_pad_threshold, 0644, hugetext_pad_threshold_show,
+			hugetext_pad_threshold_store);
+#endif /* CONFIG_HUGETEXT */
+
 static struct attribute *hugepage_attr[] = {
 	&enabled_attr.attr,
 	&defrag_attr.attr,
@@ -388,6 +480,10 @@ static struct attribute *hugepage_attr[] = {
 	&hpage_pmd_size_attr.attr,
 #ifdef CONFIG_SHMEM
 	&shmem_enabled_attr.attr,
+#endif
+#ifdef CONFIG_HUGETEXT
+	&hugetext_enabled_attr.attr,
+	&hugetext_pad_threshold_attr.attr,
 #endif
 	NULL,
 };
@@ -537,6 +633,41 @@ out:
 	return ret;
 }
 __setup("transparent_hugepage=", setup_transparent_hugepage);
+
+#ifdef CONFIG_HUGETEXT
+static int __init setup_hugetext(char *str)
+{
+	int err = -1;
+	unsigned long val = 0;
+
+	if (!str)
+		goto out;
+
+	err = kstrtoul(str, 0, &val);
+	if (err < 0 || val > 3)
+		goto out;
+
+	if (val & 0x01)
+		set_bit(TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	if (val & 0x02)
+		set_bit(TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+out:
+	if (err)
+		pr_warn("hugetext= cannot parse, ignored\n");
+	return !err;
+}
+__setup("hugetext=", setup_hugetext);
+#endif
 
 pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 {

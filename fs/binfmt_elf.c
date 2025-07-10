@@ -432,6 +432,43 @@ static unsigned long elf_load(struct file *filep, unsigned long addr,
 }
 
 
+#ifdef CONFIG_HUGETEXT
+static void elf_map_pad(struct file *filep, unsigned long addr,
+			const struct elf_phdr *eppnt, int prot, int type)
+{
+	unsigned long map_addr;
+	unsigned long prev_size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
+	unsigned long prev_off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+	unsigned long pad_size;
+	loff_t max_off = i_size_read(filep->f_inode);
+
+	prev_size = ELF_PAGEALIGN(prev_size);
+
+	/*
+	 * mmap() will return -EINVAL if given a zero size, but a
+	 * segment with zero filesize is perfectly valid.
+	 */
+	if (!prev_size)
+		return;
+
+	/*
+	 * Make sure the total size that after padding will not
+	 * over file size
+	 */
+	if (ALIGN(prev_off + prev_size, HPAGE_PMD_SIZE) > max_off)
+		return;
+
+	pad_size  = HPAGE_PMD_SIZE - (addr & (HPAGE_PMD_SIZE - 1));
+	map_addr = vm_mmap(filep, addr, pad_size, prot, type,
+			prev_off + prev_size);
+
+	if ((type & MAP_FIXED_NOREPLACE) &&
+	    PTR_ERR((void *)map_addr) == -EEXIST)
+		pr_info("%d (%s): Uhuuh, elf segment at %p requested but the memory is mapped already\n",
+			task_pid_nr(current), current->comm, (void *)addr);
+}
+#endif
+
 static unsigned long total_mapping_size(const struct elf_phdr *phdr, int nr)
 {
 	elf_addr_t min_addr = -1;
@@ -1210,6 +1247,49 @@ out_free_interp:
 			goto out_free_dentry;
 		}
 
+#ifdef CONFIG_HUGETEXT
+		if (hugetext_padding_enabled() &&
+		    (elf_ex->e_type == ET_EXEC ||
+		     (elf_ex->e_type == ET_DYN &&
+		      interpreter && IS_ALIGNED(load_bias, HPAGE_PMD_SIZE)))
+		    && (elf_prot & PROT_EXEC)) {
+			unsigned long size =
+				ELF_PAGEALIGN(elf_ppnt->p_filesz + ELF_PAGEOFFSET(vaddr));
+			unsigned long end_vaddr_mapped =
+				ELF_PAGESTART(load_bias + vaddr) + size;
+			unsigned long off = end_vaddr_mapped & (HPAGE_PMD_SIZE - 1);
+			struct elf_phdr *next_eppnt;
+			unsigned int next_type = PT_NULL;
+			unsigned int next_alignment = 0;
+
+			/*
+			 * To find next PT_LOAD and check it's alignment, make sure
+			 * this padding action can not overlap next PT_LOAD.
+			 */
+			for (next_eppnt = elf_ppnt + 1;
+			     next_eppnt <= (elf_phdata + elf_ex->e_phnum - 1);
+			     next_eppnt++) {
+				if (next_eppnt->p_type == PT_LOAD) {
+					next_type = PT_LOAD;
+					next_alignment = ELF_PAGEALIGN(next_eppnt->p_align);
+					break;
+				}
+			}
+
+			/*
+			 * Pad this PT_LOAD segment when its offset is bigger
+			 * than hugetext_pad_threshold.
+			 */
+			alignment = ELF_PAGEALIGN(elf_ppnt->p_align);
+			if (alignment >= HPAGE_PMD_SIZE && (off && size >= off) &&
+				((next_type == PT_LOAD && next_alignment >= HPAGE_PMD_SIZE) ||
+					(next_type == PT_NULL)) && off >= hugetext_pad_threshold) {
+				elf_map_pad(bprm->file, end_vaddr_mapped, elf_ppnt,
+					elf_prot, elf_flags);
+			}
+		}
+#endif
+
 		if (first_pt_load) {
 			first_pt_load = 0;
 			if (elf_ex->e_type == ET_DYN) {
@@ -1217,6 +1297,11 @@ out_free_interp:
 				             ELF_PAGESTART(load_bias + vaddr);
 				reloc_func_desc = load_bias;
 			}
+#ifdef CONFIG_HUGETEXT
+			if (hugetext_file_enabled() && interpreter &&
+			    total_size >= HPAGE_PMD_SIZE)
+				load_bias &= HPAGE_PMD_MASK;
+#endif
 		}
 
 		/*

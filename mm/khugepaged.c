@@ -116,6 +116,8 @@ struct khugepaged_mm_slot {
  * @mm_head: the head of the mm list to scan
  * @mm_slot: the current mm_slot we are scanning
  * @address: the next address inside that to be scanned
+ * @ex_slot: the current exec mm_slot we are scanning
+ * @ex_addr: the next address inside ex_slot that to be scanned
  *
  * There is only the one khugepaged_scan instance of this cursor structure.
  */
@@ -123,6 +125,10 @@ struct khugepaged_scan {
 	struct list_head mm_head;
 	struct khugepaged_mm_slot *mm_slot;
 	unsigned long address;
+#ifdef CONFIG_HUGETEXT
+	struct khugepaged_mm_slot *ex_slot;
+	unsigned long ex_addr;
+#endif
 };
 
 static struct khugepaged_scan khugepaged_scan = {
@@ -409,6 +415,37 @@ static inline int hpage_collapse_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
+#ifdef CONFIG_HUGETEXT
+/*
+ * Record vma->vm_start, instead of vma itself which is volatile, and
+ * revalidate the cached address when scan.
+ */
+void khugepaged_enter_exec_vma(struct vm_area_struct *vma,
+			       unsigned long vm_flags)
+{
+	struct khugepaged_mm_slot *mm_slot;
+	struct mm_slot *slot;
+	int i;
+
+	spin_lock(&khugepaged_mm_lock);
+
+	slot = mm_slot_lookup(mm_slots_hash, vma->vm_mm);
+	mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
+	if (!mm_slot ||
+	    mm_slot == khugepaged_scan.ex_slot ||
+	    slot->nr_exec_vma >= MAX_EXEC_VMA)
+		goto out;
+
+	for (i = 0; i < slot->nr_exec_vma; i++)
+		if (slot->exec_vma[i] == vma->vm_start)
+			goto out;
+	slot->exec_vma[slot->nr_exec_vma++] = vma->vm_start;
+
+out:
+	spin_unlock(&khugepaged_mm_lock);
+}
+#endif
+
 void __khugepaged_enter(struct mm_struct *mm)
 {
 	struct khugepaged_mm_slot *mm_slot;
@@ -449,6 +486,10 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 		if (hugepage_vma_check(vma, vm_flags, false, false, true))
 			__khugepaged_enter(vma->vm_mm);
 	}
+
+	if (hugetext_vma_enabled(vma, vm_flags) &&
+	    test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags))
+		khugepaged_enter_exec_vma(vma, vm_flags);
 }
 
 void __khugepaged_exit(struct mm_struct *mm)
@@ -460,7 +501,11 @@ void __khugepaged_exit(struct mm_struct *mm)
 	spin_lock(&khugepaged_mm_lock);
 	slot = mm_slot_lookup(mm_slots_hash, mm);
 	mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
-	if (mm_slot && khugepaged_scan.mm_slot != mm_slot) {
+	if (mm_slot &&
+#ifdef CONFIG_HUGETEXT
+	    khugepaged_scan.ex_slot != mm_slot &&
+#endif
+	    khugepaged_scan.mm_slot != mm_slot) {
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
 		free = 1;
@@ -1409,6 +1454,12 @@ static void collect_mm_slot(struct khugepaged_mm_slot *mm_slot)
 	lockdep_assert_held(&khugepaged_mm_lock);
 
 	if (hpage_collapse_test_exit(mm)) {
+#ifdef CONFIG_HUGETEXT
+		if (khugepaged_scan.ex_slot == mm_slot)
+			khugepaged_scan.ex_slot = NULL;
+		if (khugepaged_scan.mm_slot == mm_slot)
+			khugepaged_scan.mm_slot = NULL;
+#endif
 		/* free mm_slot */
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
@@ -2474,6 +2525,177 @@ breakouterloop_mmap_lock:
 	return progress;
 }
 
+#ifdef CONFIG_HUGETEXT
+static unsigned int khugepaged_scan_exec_mm_slot(unsigned int pages, int *result,
+						 struct collapse_control *cc)
+	__releases(&khugepaged_mm_lock)
+	__acquires(&khugepaged_mm_lock)
+{
+	struct khugepaged_mm_slot *exec_mm_slot;
+	struct mm_slot *slot;
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	int progress = 0;
+	int i = 0;
+
+	VM_BUG_ON(!pages);
+	lockdep_assert_held(&khugepaged_mm_lock);
+	*result = SCAN_FAIL;
+
+	if (khugepaged_scan.ex_slot) {
+		exec_mm_slot = khugepaged_scan.ex_slot;
+		slot = &exec_mm_slot->slot;
+	} else {
+		slot = list_entry(khugepaged_scan.mm_head.next,
+				     struct mm_slot, mm_node);
+		exec_mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
+		khugepaged_scan.ex_addr = 0;
+		khugepaged_scan.ex_slot = exec_mm_slot;
+	}
+	spin_unlock(&khugepaged_mm_lock);
+
+	mm = slot->mm;
+	if (!slot->nr_exec_vma)
+		goto breakouterloop_mmap_lock;
+
+	/*
+	 * Don't wait for semaphore (to avoid long wait times).  Just move to
+	 * the next mm on the list.
+	 */
+	vma = NULL;
+	if (unlikely(!mmap_read_trylock(mm)))
+		goto breakouterloop_mmap_lock;
+
+	progress++;
+	if (unlikely(hpage_collapse_test_exit(mm)))
+		goto breakouterloop;
+
+	for (i = 0; i < slot->nr_exec_vma; i++) {
+		unsigned long hstart, hend;
+
+		cond_resched();
+		if (unlikely(hpage_collapse_test_exit(mm))) {
+			progress++;
+			break;
+		}
+
+		vma = find_vma(mm, slot->exec_vma[i]);
+		if (!vma && !hugepage_vma_check(vma, vma->vm_flags, false, false, true)) {
+skip:
+			progress++;
+			continue;
+		}
+		hstart = round_up(vma->vm_start, HPAGE_PMD_SIZE);
+		hend = round_down(vma->vm_end, HPAGE_PMD_SIZE);
+		if (khugepaged_scan.ex_addr > hend)
+			goto skip;
+		if (khugepaged_scan.ex_addr < hstart)
+			khugepaged_scan.ex_addr = hstart;
+		VM_BUG_ON(khugepaged_scan.ex_addr & ~HPAGE_PMD_MASK);
+
+		while (khugepaged_scan.ex_addr < hend) {
+			bool mmap_locked = true;
+
+			cond_resched();
+			if (unlikely(hpage_collapse_test_exit(mm)))
+				goto breakouterloop;
+
+			VM_BUG_ON(khugepaged_scan.ex_addr < hstart ||
+				  khugepaged_scan.ex_addr + HPAGE_PMD_SIZE >
+				  hend);
+			if (IS_ENABLED(CONFIG_SHMEM) && vma->vm_file) {
+				struct file *file = get_file(vma->vm_file);
+				pgoff_t pgoff = linear_page_index(vma,
+						khugepaged_scan.ex_addr);
+
+				mmap_read_unlock(mm);
+				mmap_locked = false;
+				*result = hpage_collapse_scan_file(mm,
+					khugepaged_scan.ex_addr, file, pgoff, cc);
+				fput(file);
+				if (*result == SCAN_PTE_MAPPED_HUGEPAGE) {
+					mmap_read_lock(mm);
+					if (hpage_collapse_test_exit(mm))
+						goto breakouterloop;
+					*result = collapse_pte_mapped_thp(mm,
+						khugepaged_scan.ex_addr, false);
+					if (*result == SCAN_PMD_MAPPED)
+						*result = SCAN_SUCCEED;
+					mmap_read_unlock(mm);
+				}
+			} else {
+				*result = hpage_collapse_scan_pmd(mm, vma,
+					khugepaged_scan.ex_addr, &mmap_locked, cc);
+			}
+
+			if (*result == SCAN_SUCCEED)
+				++khugepaged_pages_collapsed;
+
+			/* move to next address */
+			khugepaged_scan.ex_addr += HPAGE_PMD_SIZE;
+			progress += HPAGE_PMD_NR;
+			if (!mmap_locked)
+				/*
+				 * We released mmap_lock so break loop.  Note
+				 * that we drop mmap_lock before all hugepage
+				 * allocations, so if allocation fails, we are
+				 * guaranteed to break here and report the
+				 * correct result back to caller.
+				 */
+				goto breakouterloop_mmap_lock;
+			if (progress >= pages)
+				goto breakouterloop;
+		}
+	}
+breakouterloop:
+	mmap_read_unlock(mm); /* exit_mmap will destroy ptes after this */
+breakouterloop_mmap_lock:
+
+	spin_lock(&khugepaged_mm_lock);
+	VM_BUG_ON(khugepaged_scan.ex_slot != exec_mm_slot);
+
+	slot->nr_exec_vma -= i;
+	/*
+	 * Release the current mm_slot if this mm is about to die, or
+	 * if we scanned all vmas of this mm.
+	 */
+	if (hpage_collapse_test_exit(mm) || !slot->nr_exec_vma) {
+		/*
+		 * Make sure that if mm_users is reaching zero while
+		 * khugepaged runs here, khugepaged_exit will find
+		 * mm_slot not pointing to the exiting mm.
+		 */
+		if (slot->mm_node.next != &khugepaged_scan.mm_head) {
+			slot = list_entry(slot->mm_node.next,
+					  struct mm_slot, mm_node);
+			khugepaged_scan.ex_slot =
+				mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
+			khugepaged_scan.ex_addr = 0;
+		} else {
+			khugepaged_scan.ex_slot = NULL;
+			khugepaged_full_scans++;
+		}
+
+		collect_mm_slot(exec_mm_slot);
+	} else if (i != 0) {
+		int j;
+		unsigned int nr_vma = slot->nr_exec_vma;
+
+		for (j = 0; j < MAX_EXEC_VMA; j++)
+			slot->exec_vma[j] = (j < nr_vma) ? slot->exec_vma[j + i] : 0;
+	}
+
+	return progress;
+}
+#else
+static unsigned int khugepaged_scan_exec_mm_slot(unsigned int pages, int *result,
+						 struct collapse_control *cc)
+{
+	BUILD_BUG();
+	return 0;
+}
+#endif /* CONFIG_HUGETEXT */
+
 static int khugepaged_has_work(void)
 {
 	return !list_empty(&khugepaged_scan.mm_head) &&
@@ -2492,6 +2714,9 @@ static void khugepaged_do_scan(struct collapse_control *cc)
 	unsigned int pages = READ_ONCE(khugepaged_pages_to_scan);
 	bool wait = true;
 	int result = SCAN_SUCCEED;
+#ifdef CONFIG_HUGETEXT
+	unsigned int exec_pass_through_head = 0;
+#endif
 
 	lru_add_drain_all();
 
@@ -2502,6 +2727,26 @@ static void khugepaged_do_scan(struct collapse_control *cc)
 			break;
 
 		spin_lock(&khugepaged_mm_lock);
+
+#ifdef CONFIG_HUGETEXT
+		/* Chance to skip exec_vma scan */
+		if (!hugetext_enabled() && !khugepaged_scan.ex_slot)
+			goto next;
+
+		/* Scan through exec_vma in advance */
+		if (exec_pass_through_head < 2) {
+			if (!khugepaged_scan.ex_slot)
+				exec_pass_through_head++;
+			if (khugepaged_has_work() &&
+			    exec_pass_through_head < 2)
+				progress += khugepaged_scan_exec_mm_slot(
+						pages - progress, &result, cc);
+			spin_unlock(&khugepaged_mm_lock);
+			continue;
+		}
+
+next:
+#endif
 		if (!khugepaged_scan.mm_slot)
 			pass_through_head++;
 		if (khugepaged_has_work() &&
@@ -2557,6 +2802,9 @@ static void khugepaged_wait_work(void)
 static int khugepaged(void *none)
 {
 	struct khugepaged_mm_slot *mm_slot;
+#ifdef CONFIG_HUGETEXT
+	struct khugepaged_mm_slot *exec_mm_slot;
+#endif
 
 	set_freezable();
 	set_user_nice(current, MAX_NICE);
@@ -2571,6 +2819,12 @@ static int khugepaged(void *none)
 	khugepaged_scan.mm_slot = NULL;
 	if (mm_slot)
 		collect_mm_slot(mm_slot);
+#ifdef CONFIG_HUGETEXT
+	exec_mm_slot = khugepaged_scan.ex_slot;
+	khugepaged_scan.ex_slot = NULL;
+	if (exec_mm_slot)
+		collect_mm_slot(exec_mm_slot);
+#endif
 	spin_unlock(&khugepaged_mm_lock);
 	return 0;
 }
