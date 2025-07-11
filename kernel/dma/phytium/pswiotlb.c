@@ -662,13 +662,13 @@ static struct p_io_tlb_pool *pswiotlb_formal_alloc(struct device *dev,
 	pool = pswiotlb_alloc_pool(dev, mem->numa_node_id,
 				P_IO_TLB_MIN_SLABS, dynamic_inc_thr_npslabs,
 				dynamic_inc_thr_npslabs, mem->phys_limit,
-				0, GFP_NOWAIT | __GFP_NOWARN);
+				0, GFP_ATOMIC | GFP_NOWAIT | __GFP_NOWARN);
 	if (!pool) {
 		pr_warn_once("Failed to allocate new formal pool");
 		return NULL;
 	}
 
-	pool->busy_record = bitmap_zalloc(pool->nareas, GFP_KERNEL);
+	pool->busy_record = bitmap_zalloc(pool->nareas, GFP_ATOMIC);
 	if (!pool->busy_record) {
 		pr_warn_ratelimited("%s: Failed to allocate pool busy record.\n", __func__);
 		return NULL;
