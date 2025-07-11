@@ -1494,6 +1494,12 @@ dma_addr_t pswiotlb_map(struct device *dev, int nid, phys_addr_t paddr, size_t s
 		arch_sync_dma_for_device(pswiotlb_addr, size, dir);
 	return dma_addr;
 }
+
+const struct pswiotlb_bypass_rules bypass_rules_list[] = {
+	{PCI_VENDOR_ID_MELLANOX, true, DMA_BIDIRECTIONAL},
+	{0, }
+};
+
 size_t pswiotlb_max_mapping_size(struct device *dev)
 {
 	int min_align_mask = dma_get_min_align_mask(dev);
