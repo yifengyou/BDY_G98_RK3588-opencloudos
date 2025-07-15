@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright(c) 2014-2024 Broadcom
+/* Copyright(c) 2014-2025 Broadcom
  * All rights reserved.
  */
 
@@ -14,1527 +14,7 @@
  */
 struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 	[1] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB800000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		},
-	},
-	[2] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA00000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[3] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA00000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[4] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA40000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[5] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA78000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		},
-	},
-	[6] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA36000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		},
-	},
-	[7] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4F000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[8] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46C00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[9] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4F000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[10] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46C00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[11] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49E00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[12] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48D80000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[13] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBE20000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 5,
-		[92] = 6,
-		[94] = 7,
-		[96] = 8,
-		[98] = 9,
-		[100] = 10,
-		[102] = 11,
-		[104] = 12,
-		[106] = 13,
-		},
-	},
-	[14] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBE00000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 5,
-		[110] = 6,
-		[112] = 7,
-		[114] = 8,
-		},
-	},
-	[15] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC4000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 8,
-		[92] = 9,
-		[94] = 10,
-		[96] = 11,
-		[98] = 12,
-		[100] = 13,
-		[102] = 14,
-		[104] = 15,
-		[106] = 16,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[16] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC0000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 8,
-		[110] = 9,
-		[112] = 10,
-		[114] = 11,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[17] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC4000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 8,
-		[92] = 9,
-		[94] = 10,
-		[96] = 11,
-		[98] = 12,
-		[100] = 13,
-		[102] = 14,
-		[104] = 15,
-		[106] = 16,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[18] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC0000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 8,
-		[110] = 9,
-		[112] = 10,
-		[114] = 11,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[19] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA58800000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 11,
-		[92] = 12,
-		[94] = 13,
-		[96] = 14,
-		[98] = 15,
-		[100] = 16,
-		[102] = 17,
-		[104] = 18,
-		[106] = 19,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[20] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA58000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 11,
-		[110] = 12,
-		[112] = 13,
-		[114] = 14,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[21] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA7E200000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[90] = 13,
-		[92] = 14,
-		[94] = 15,
-		[96] = 16,
-		[98] = 17,
-		[100] = 18,
-		[102] = 19,
-		[104] = 20,
-		[106] = 21,
-		},
-	},
-	[22] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA37880000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[90] = 15,
-		[92] = 16,
-		[94] = 17,
-		[96] = 18,
-		[98] = 19,
-		[100] = 20,
-		[102] = 21,
-		[104] = 22,
-		[106] = 23,
-		},
-	},
-	[23] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA7E000000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		},
-	},
-	[24] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA37800000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		},
-	},
-	[25] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC40000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[90] = 16,
-		[92] = 17,
-		[94] = 18,
-		[96] = 19,
-		[98] = 20,
-		[100] = 21,
-		[102] = 22,
-		[104] = 23,
-		[106] = 24,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[26] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F10000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[90] = 18,
-		[92] = 19,
-		[94] = 20,
-		[96] = 21,
-		[98] = 22,
-		[100] = 23,
-		[102] = 24,
-		[104] = 25,
-		[106] = 26,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[27] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[108] = 16,
-		[110] = 17,
-		[112] = 18,
-		[114] = 19,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[28] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[108] = 18,
-		[110] = 19,
-		[112] = 20,
-		[114] = 21,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[29] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC40000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[90] = 16,
-		[92] = 17,
-		[94] = 18,
-		[96] = 19,
-		[98] = 20,
-		[100] = 21,
-		[102] = 22,
-		[104] = 23,
-		[106] = 24,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[30] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F10000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[90] = 18,
-		[92] = 19,
-		[94] = 20,
-		[96] = 21,
-		[98] = 22,
-		[100] = 23,
-		[102] = 24,
-		[104] = 25,
-		[106] = 26,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[31] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[108] = 16,
-		[110] = 17,
-		[112] = 18,
-		[114] = 19,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[32] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F00000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[108] = 18,
-		[110] = 19,
-		[112] = 20,
-		[114] = 21,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[33] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49F88000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[90] = 19,
-		[92] = 20,
-		[94] = 21,
-		[96] = 22,
-		[98] = 23,
-		[100] = 24,
-		[102] = 25,
-		[104] = 26,
-		[106] = 27,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[34] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48DE2000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[90] = 21,
-		[92] = 22,
-		[94] = 23,
-		[96] = 24,
-		[98] = 25,
-		[100] = 26,
-		[102] = 27,
-		[104] = 28,
-		[106] = 29,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[35] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49F80000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[108] = 19,
-		[110] = 20,
-		[112] = 21,
-		[114] = 22,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[36] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48DE0000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[108] = 21,
-		[110] = 22,
-		[112] = 23,
-		[114] = 24,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[37] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A100000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[38] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006840000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[39] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[40] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[41] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105800000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[42] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841600000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[43] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101600000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[44] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006840580000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[45] = {
-	.app_id = 0,
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -1543,11 +23,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170B00000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000A00000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -1582,8 +62,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[46] = {
-	.app_id = 0,
+	[2] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -1592,11 +72,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2C0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB000000280000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -1633,8 +113,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[47] = {
-	.app_id = 0,
+	[3] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -1643,11 +123,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702C0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB000000280000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -1684,8 +164,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[48] = {
-	.app_id = 0,
+	[4] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -1694,11 +174,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0B0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000A0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -1737,816 +217,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[49] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A160000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 21,
-		[93] = 22,
-		[95] = 23,
-		[97] = 24,
-		[99] = 25,
-		[101] = 26,
-		[103] = 27,
-		[105] = 28,
-		[107] = 29,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[50] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006858000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[91] = 23,
-		[93] = 24,
-		[95] = 25,
-		[97] = 26,
-		[99] = 27,
-		[101] = 28,
-		[103] = 29,
-		[105] = 30,
-		[107] = 31,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[51] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A160000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 21,
-		[110] = 14,
-		[111] = 22,
-		[112] = 15,
-		[113] = 23,
-		[114] = 16,
-		[115] = 24,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[52] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006858000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[109] = 23,
-		[110] = 16,
-		[111] = 24,
-		[112] = 17,
-		[113] = 25,
-		[114] = 18,
-		[115] = 26,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[53] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A17C000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 24,
-		[93] = 25,
-		[95] = 26,
-		[97] = 27,
-		[99] = 28,
-		[101] = 29,
-		[103] = 30,
-		[105] = 31,
-		[107] = 32,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[54] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685F000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[91] = 26,
-		[93] = 27,
-		[95] = 28,
-		[97] = 29,
-		[99] = 30,
-		[101] = 31,
-		[103] = 32,
-		[105] = 33,
-		[107] = 34,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[55] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A17C000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 24,
-		[110] = 14,
-		[111] = 25,
-		[112] = 15,
-		[113] = 26,
-		[114] = 16,
-		[115] = 27,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[56] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685F000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[109] = 26,
-		[110] = 16,
-		[111] = 27,
-		[112] = 17,
-		[113] = 28,
-		[114] = 18,
-		[115] = 29,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[57] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105E00000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[91] = 29,
-		[93] = 30,
-		[95] = 31,
-		[97] = 32,
-		[99] = 33,
-		[101] = 34,
-		[103] = 35,
-		[105] = 36,
-		[107] = 37,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[58] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841780000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[59] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101780000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[60] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB0068405E0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[91] = 33,
-		[93] = 34,
-		[95] = 35,
-		[97] = 36,
-		[99] = 37,
-		[101] = 38,
-		[103] = 39,
-		[105] = 40,
-		[107] = 41,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[61] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105E00000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[108] = 13,
-		[109] = 29,
-		[110] = 14,
-		[111] = 30,
-		[112] = 15,
-		[113] = 31,
-		[114] = 16,
-		[115] = 32,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[62] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841780000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 15,
-		[109] = 31,
-		[110] = 16,
-		[111] = 32,
-		[112] = 17,
-		[113] = 33,
-		[114] = 18,
-		[115] = 34,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[63] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101780000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 31,
-		[110] = 14,
-		[111] = 32,
-		[112] = 15,
-		[113] = 33,
-		[114] = 16,
-		[115] = 34,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[64] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB0068405E0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
-	.class_tid = 1,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[108] = 15,
-		[109] = 33,
-		[110] = 16,
-		[111] = 34,
-		[112] = 17,
-		[113] = 35,
-		[114] = 18,
-		[115] = 36,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[65] = {
-	.app_id = 0,
+	[5] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -2556,11 +228,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_TCP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170BC0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000AC0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2604,8 +276,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[66] = {
-	.app_id = 0,
+	[6] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -2615,11 +287,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_TCP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2F0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2665,8 +337,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[67] = {
-	.app_id = 0,
+	[7] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -2676,11 +348,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_TCP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702F0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2726,8 +398,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[68] = {
-	.app_id = 0,
+	[8] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -2737,11 +409,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_TCP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0BC000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000AC000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2789,8 +461,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[69] = {
-	.app_id = 0,
+	[9] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -2800,11 +472,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_UDP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170BC0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000AC0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2843,8 +515,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[70] = {
-	.app_id = 0,
+	[10] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -2854,11 +526,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_UDP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2F0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2899,8 +571,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[71] = {
-	.app_id = 0,
+	[11] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -2910,11 +582,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_UDP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702F0000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -2955,8 +627,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[72] = {
-	.app_id = 0,
+	[12] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -2966,11 +638,11 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_UDP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0BC000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000AC000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -3013,17 +685,371 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[73] = {
-	.app_id = 0,
+	[13] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F1 |
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
 		BNXT_ULP_HDR_BIT_O_UDP |
 		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x200A000000000000,
-	.field_opt_bitmap = 0x9000000000000000,
+	.field_man_bitmap = 0xA100000000000,
+	.field_opt_bitmap = 0xB000000B00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 21,
+		[14] = 3,
+		[15] = 22,
+		[16] = 4,
+		[17] = 23,
+		[29] = 32,
+		[31] = 33,
+		[33] = 34,
+		[35] = 35,
+		[37] = 36,
+		[58] = 5,
+		[59] = 24,
+		[60] = 6,
+		[61] = 25,
+		[62] = 7,
+		[63] = 26,
+		[64] = 8,
+		[65] = 27,
+		[66] = 9,
+		[67] = 28,
+		[68] = 10,
+		[69] = 29,
+		[70] = 11,
+		[71] = 30,
+		[72] = 12,
+		[73] = 31,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		[128] = 17,
+		[129] = 18,
+		[130] = 19,
+		[131] = 20,
+		},
+	},
+	[14] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840000000000,
+	.field_opt_bitmap = 0xB0000002C0000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 23,
+		[14] = 3,
+		[15] = 24,
+		[16] = 4,
+		[17] = 25,
+		[29] = 34,
+		[31] = 35,
+		[33] = 36,
+		[35] = 37,
+		[37] = 38,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[59] = 26,
+		[61] = 27,
+		[63] = 28,
+		[65] = 29,
+		[67] = 30,
+		[69] = 31,
+		[71] = 32,
+		[73] = 33,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		[128] = 19,
+		[129] = 20,
+		[130] = 21,
+		[131] = 22,
+		},
+	},
+	[15] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV4 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100000000000,
+	.field_opt_bitmap = 0xB0000002C0000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 21,
+		[14] = 3,
+		[15] = 22,
+		[16] = 4,
+		[17] = 23,
+		[29] = 34,
+		[31] = 35,
+		[33] = 36,
+		[35] = 37,
+		[37] = 38,
+		[39] = 24,
+		[41] = 25,
+		[43] = 26,
+		[45] = 27,
+		[47] = 28,
+		[49] = 29,
+		[51] = 30,
+		[53] = 31,
+		[55] = 32,
+		[57] = 33,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		[128] = 17,
+		[129] = 18,
+		[130] = 19,
+		[131] = 20,
+		},
+	},
+	[16] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV4 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840000000000,
+	.field_opt_bitmap = 0xB0000000B0000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 23,
+		[14] = 3,
+		[15] = 24,
+		[16] = 4,
+		[17] = 25,
+		[29] = 36,
+		[31] = 37,
+		[33] = 38,
+		[35] = 39,
+		[37] = 40,
+		[38] = 5,
+		[39] = 26,
+		[40] = 6,
+		[41] = 27,
+		[42] = 7,
+		[43] = 28,
+		[44] = 8,
+		[45] = 29,
+		[46] = 9,
+		[47] = 30,
+		[48] = 10,
+		[49] = 31,
+		[50] = 11,
+		[51] = 32,
+		[52] = 12,
+		[53] = 33,
+		[54] = 13,
+		[55] = 34,
+		[56] = 14,
+		[57] = 35,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		[128] = 19,
+		[129] = 20,
+		[130] = 21,
+		[131] = 22,
+		},
+	},
+	[17] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[18] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[19] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA05E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[90] = 13,
+		[92] = 14,
+		[94] = 15,
+		[96] = 16,
+		[98] = 17,
+		[100] = 18,
+		[102] = 19,
+		[104] = 20,
+		[106] = 21,
+		},
+	},
+	[20] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[90] = 15,
+		[92] = 16,
+		[94] = 17,
+		[96] = 18,
+		[98] = 19,
+		[100] = 20,
+		[102] = 21,
+		[104] = 22,
+		[106] = 23,
+		},
+	},
+	[21] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA05E000000000000,
 	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
 	.flow_pattern_id = 2,
@@ -3044,23 +1070,17 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[110] = 14,
 		[112] = 15,
 		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
 		},
 	},
-	[74] = {
-	.app_id = 0,
+	[22] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F1 |
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
 		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x2002800000000000,
-	.field_opt_bitmap = 0x9000000000000000,
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA017800000000000,
 	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
 	.flow_pattern_id = 2,
@@ -3083,929 +1103,265 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[110] = 16,
 		[112] = 17,
 		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
 		},
 	},
-	[75] = {
-	.app_id = 0,
+	[23] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
+		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010301800000000,
+	.field_man_bitmap = 0x8000000000000,
+	.field_opt_bitmap = 0xA050000000000000,
 	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
 	.flow_pattern_id = 3,
 	.field_list = {
 		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[58] = 2,
-		[59] = 21,
-		[60] = 3,
-		[61] = 22,
-		[62] = 4,
-		[63] = 23,
-		[64] = 5,
-		[65] = 24,
-		[66] = 6,
-		[67] = 25,
-		[68] = 7,
-		[69] = 26,
-		[70] = 8,
-		[71] = 27,
-		[72] = 9,
-		[73] = 28,
-		[108] = 10,
-		[110] = 11,
-		[112] = 12,
-		[114] = 13,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 13,
+		[30] = 14,
+		[32] = 15,
+		[34] = 16,
+		[36] = 17,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
 		},
 	},
-	[76] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C0600000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[40] = 3,
-		[42] = 4,
-		[44] = 5,
-		[46] = 6,
-		[48] = 7,
-		[50] = 8,
-		[52] = 9,
-		[54] = 10,
-		[56] = 11,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 12,
-		[110] = 13,
-		[112] = 14,
-		[114] = 15,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[77] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010300600000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 2,
-		[60] = 3,
-		[62] = 4,
-		[64] = 5,
-		[66] = 6,
-		[68] = 7,
-		[70] = 8,
-		[72] = 9,
-		[108] = 10,
-		[110] = 11,
-		[112] = 12,
-		[114] = 13,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[78] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C0180000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[39] = 23,
-		[40] = 3,
-		[41] = 24,
-		[42] = 4,
-		[43] = 25,
-		[44] = 5,
-		[45] = 26,
-		[46] = 6,
-		[47] = 27,
-		[48] = 7,
-		[49] = 28,
-		[50] = 8,
-		[51] = 29,
-		[52] = 9,
-		[53] = 30,
-		[54] = 10,
-		[55] = 31,
-		[56] = 11,
-		[57] = 32,
-		[108] = 12,
-		[110] = 13,
-		[112] = 14,
-		[114] = 15,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[79] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010301E00000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[58] = 2,
-		[59] = 21,
-		[60] = 3,
-		[61] = 22,
-		[62] = 4,
-		[63] = 23,
-		[64] = 5,
-		[65] = 24,
-		[66] = 6,
-		[67] = 25,
-		[68] = 7,
-		[69] = 26,
-		[70] = 8,
-		[71] = 27,
-		[72] = 9,
-		[73] = 28,
-		[91] = 29,
-		[93] = 30,
-		[95] = 31,
-		[97] = 32,
-		[99] = 33,
-		[101] = 34,
-		[103] = 35,
-		[105] = 36,
-		[107] = 37,
-		[108] = 10,
-		[110] = 11,
-		[112] = 12,
-		[114] = 13,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[80] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C0780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[40] = 3,
-		[42] = 4,
-		[44] = 5,
-		[46] = 6,
-		[48] = 7,
-		[50] = 8,
-		[52] = 9,
-		[54] = 10,
-		[56] = 11,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 12,
-		[110] = 13,
-		[112] = 14,
-		[114] = 15,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[81] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010300780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 2,
-		[60] = 3,
-		[62] = 4,
-		[64] = 5,
-		[66] = 6,
-		[68] = 7,
-		[70] = 8,
-		[72] = 9,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 10,
-		[110] = 11,
-		[112] = 12,
-		[114] = 13,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[82] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C01E0000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[39] = 23,
-		[40] = 3,
-		[41] = 24,
-		[42] = 4,
-		[43] = 25,
-		[44] = 5,
-		[45] = 26,
-		[46] = 6,
-		[47] = 27,
-		[48] = 7,
-		[49] = 28,
-		[50] = 8,
-		[51] = 29,
-		[52] = 9,
-		[53] = 30,
-		[54] = 10,
-		[55] = 31,
-		[56] = 11,
-		[57] = 32,
-		[91] = 33,
-		[93] = 34,
-		[95] = 35,
-		[97] = 36,
-		[99] = 37,
-		[101] = 38,
-		[103] = 39,
-		[105] = 40,
-		[107] = 41,
-		[108] = 12,
-		[110] = 13,
-		[112] = 14,
-		[114] = 15,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[83] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010301E00000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[58] = 2,
-		[59] = 21,
-		[60] = 3,
-		[61] = 22,
-		[62] = 4,
-		[63] = 23,
-		[64] = 5,
-		[65] = 24,
-		[66] = 6,
-		[67] = 25,
-		[68] = 7,
-		[69] = 26,
-		[70] = 8,
-		[71] = 27,
-		[72] = 9,
-		[73] = 28,
-		[108] = 10,
-		[109] = 29,
-		[110] = 11,
-		[111] = 30,
-		[112] = 12,
-		[113] = 31,
-		[114] = 13,
-		[115] = 32,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[84] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C0780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[40] = 3,
-		[42] = 4,
-		[44] = 5,
-		[46] = 6,
-		[48] = 7,
-		[50] = 8,
-		[52] = 9,
-		[54] = 10,
-		[56] = 11,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 12,
-		[109] = 31,
-		[110] = 13,
-		[111] = 32,
-		[112] = 14,
-		[113] = 33,
-		[114] = 15,
-		[115] = 34,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[85] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010300780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 2,
-		[60] = 3,
-		[62] = 4,
-		[64] = 5,
-		[66] = 6,
-		[68] = 7,
-		[70] = 8,
-		[72] = 9,
-		[108] = 10,
-		[109] = 31,
-		[110] = 11,
-		[111] = 32,
-		[112] = 12,
-		[113] = 33,
-		[114] = 13,
-		[115] = 34,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[86] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C01E0000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 3,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[38] = 2,
-		[39] = 23,
-		[40] = 3,
-		[41] = 24,
-		[42] = 4,
-		[43] = 25,
-		[44] = 5,
-		[45] = 26,
-		[46] = 6,
-		[47] = 27,
-		[48] = 7,
-		[49] = 28,
-		[50] = 8,
-		[51] = 29,
-		[52] = 9,
-		[53] = 30,
-		[54] = 10,
-		[55] = 31,
-		[56] = 11,
-		[57] = 32,
-		[108] = 12,
-		[109] = 33,
-		[110] = 13,
-		[111] = 34,
-		[112] = 14,
-		[113] = 35,
-		[114] = 15,
-		[115] = 36,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[87] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_ICMP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0xC0800000000000,
-	.field_opt_bitmap = 0x8010300600000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 4,
-	.field_list = {
-		[1] = 1,
-		[13] = 18,
-		[15] = 19,
-		[17] = 20,
-		[29] = 31,
-		[31] = 32,
-		[33] = 33,
-		[35] = 34,
-		[37] = 35,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 2,
-		[60] = 3,
-		[62] = 4,
-		[64] = 5,
-		[66] = 6,
-		[68] = 7,
-		[70] = 8,
-		[72] = 9,
-		[108] = 10,
-		[110] = 11,
-		[112] = 12,
-		[114] = 13,
-		[128] = 14,
-		[129] = 15,
-		[130] = 16,
-		[131] = 17,
-		},
-	},
-	[88] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_F2 |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_ICMP |
-		BNXT_ULP_FLOW_DIR_BITMASK_ING },
-	.field_man_bitmap = 0x30200000000000,
-	.field_opt_bitmap = 0x80040C0180000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 1,
-	.flow_pattern_id = 4,
-	.field_list = {
-		[1] = 1,
-		[13] = 20,
-		[15] = 21,
-		[17] = 22,
-		[29] = 33,
-		[31] = 34,
-		[33] = 35,
-		[35] = 36,
-		[37] = 37,
-		[38] = 2,
-		[39] = 23,
-		[40] = 3,
-		[41] = 24,
-		[42] = 4,
-		[43] = 25,
-		[44] = 5,
-		[45] = 26,
-		[46] = 6,
-		[47] = 27,
-		[48] = 7,
-		[49] = 28,
-		[50] = 8,
-		[51] = 29,
-		[52] = 9,
-		[53] = 30,
-		[54] = 10,
-		[55] = 31,
-		[56] = 11,
-		[57] = 32,
-		[108] = 12,
-		[110] = 13,
-		[112] = 14,
-		[114] = 15,
-		[128] = 16,
-		[129] = 17,
-		[130] = 18,
-		[131] = 19,
-		},
-	},
-	[89] = {
-	.app_id = 0,
+	[24] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_GENEVE |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2000000000000,
+	.field_opt_bitmap = 0xA014000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 3,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 15,
+		[30] = 16,
+		[32] = 17,
+		[34] = 18,
+		[36] = 19,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[25] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000B000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		},
+	},
+	[26] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000BC00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		[91] = 28,
+		[93] = 29,
+		[95] = 30,
+		[97] = 31,
+		[99] = 32,
+		[101] = 33,
+		[103] = 34,
+		[105] = 35,
+		[107] = 36,
+		},
+	},
+	[27] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000BC00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		[109] = 28,
+		[111] = 29,
+		[113] = 30,
+		[115] = 31,
+		},
+	},
+	[28] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_BTH |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
 	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xA002800000000000,
-	.field_exclude_bitmap = 0x2000000000000000,
+	.field_opt_bitmap = 0xB85F000000000000,
+	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
 	.flow_pattern_id = 5,
 	.field_list = {
 		[1] = 1,
+		[2] = 13,
+		[4] = 14,
+		[6] = 15,
 		[12] = 2,
 		[14] = 3,
 		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
 		},
 	},
-	[90] = {
-	.app_id = 0,
+	[29] = {
+	.app_id = 2,
 	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_SVIF |
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_BTH |
 		BNXT_ULP_FLOW_DIR_BITMASK_ING },
 	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0x8000000000000000,
+	.field_opt_bitmap = 0xB817C00000000000,
 	.field_exclude_bitmap = 0x0,
 	.class_tid = 1,
-	.flow_pattern_id = 6,
+	.flow_pattern_id = 5,
 	.field_list = {
 		[1] = 1,
-		},
-	},
-	[91] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB800000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		},
-	},
-	[92] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA00000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[93] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA00000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[94] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA40000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[95] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA78000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		},
-	},
-	[96] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA36000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
+		[2] = 15,
+		[4] = 16,
+		[6] = 17,
 		[12] = 2,
 		[14] = 3,
 		[16] = 4,
@@ -4021,1390 +1377,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[56] = 14,
 		},
 	},
-	[97] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4F000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[98] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46C00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[99] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4F000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[100] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46C00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[101] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49E00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[102] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48D80000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[103] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBE20000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 5,
-		[92] = 6,
-		[94] = 7,
-		[96] = 8,
-		[98] = 9,
-		[100] = 10,
-		[102] = 11,
-		[104] = 12,
-		[106] = 13,
-		},
-	},
-	[104] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBE00000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 5,
-		[110] = 6,
-		[112] = 7,
-		[114] = 8,
-		},
-	},
-	[105] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC4000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 8,
-		[92] = 9,
-		[94] = 10,
-		[96] = 11,
-		[98] = 12,
-		[100] = 13,
-		[102] = 14,
-		[104] = 15,
-		[106] = 16,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[106] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC0000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 8,
-		[110] = 9,
-		[112] = 10,
-		[114] = 11,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[107] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC4000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 8,
-		[92] = 9,
-		[94] = 10,
-		[96] = 11,
-		[98] = 12,
-		[100] = 13,
-		[102] = 14,
-		[104] = 15,
-		[106] = 16,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[108] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBAC0000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 8,
-		[110] = 9,
-		[112] = 10,
-		[114] = 11,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[109] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA58800000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[90] = 11,
-		[92] = 12,
-		[94] = 13,
-		[96] = 14,
-		[98] = 15,
-		[100] = 16,
-		[102] = 17,
-		[104] = 18,
-		[106] = 19,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[110] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA58000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[108] = 11,
-		[110] = 12,
-		[112] = 13,
-		[114] = 14,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[111] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA7E200000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[90] = 13,
-		[92] = 14,
-		[94] = 15,
-		[96] = 16,
-		[98] = 17,
-		[100] = 18,
-		[102] = 19,
-		[104] = 20,
-		[106] = 21,
-		},
-	},
-	[112] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA37880000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[90] = 15,
-		[92] = 16,
-		[94] = 17,
-		[96] = 18,
-		[98] = 19,
-		[100] = 20,
-		[102] = 21,
-		[104] = 22,
-		[106] = 23,
-		},
-	},
-	[113] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA7E000000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		},
-	},
-	[114] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA37800000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		},
-	},
-	[115] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC40000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[90] = 16,
-		[92] = 17,
-		[94] = 18,
-		[96] = 19,
-		[98] = 20,
-		[100] = 21,
-		[102] = 22,
-		[104] = 23,
-		[106] = 24,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[116] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F10000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[90] = 18,
-		[92] = 19,
-		[94] = 20,
-		[96] = 21,
-		[98] = 22,
-		[100] = 23,
-		[102] = 24,
-		[104] = 25,
-		[106] = 26,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[117] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[108] = 16,
-		[110] = 17,
-		[112] = 18,
-		[114] = 19,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[118] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[108] = 18,
-		[110] = 19,
-		[112] = 20,
-		[114] = 21,
-		[116] = 5,
-		[120] = 6,
-		[124] = 7,
-		},
-	},
-	[119] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC40000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[90] = 16,
-		[92] = 17,
-		[94] = 18,
-		[96] = 19,
-		[98] = 20,
-		[100] = 21,
-		[102] = 22,
-		[104] = 23,
-		[106] = 24,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[120] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F10000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[90] = 18,
-		[92] = 19,
-		[94] = 20,
-		[96] = 21,
-		[98] = 22,
-		[100] = 23,
-		[102] = 24,
-		[104] = 25,
-		[106] = 26,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[121] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA4FC00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 8,
-		[60] = 9,
-		[62] = 10,
-		[64] = 11,
-		[66] = 12,
-		[68] = 13,
-		[70] = 14,
-		[72] = 15,
-		[108] = 16,
-		[110] = 17,
-		[112] = 18,
-		[114] = 19,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[122] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA46F00000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 8,
-		[40] = 9,
-		[42] = 10,
-		[44] = 11,
-		[46] = 12,
-		[48] = 13,
-		[50] = 14,
-		[52] = 15,
-		[54] = 16,
-		[56] = 17,
-		[108] = 18,
-		[110] = 19,
-		[112] = 20,
-		[114] = 21,
-		[117] = 5,
-		[121] = 6,
-		[125] = 7,
-		},
-	},
-	[123] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49F88000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[90] = 19,
-		[92] = 20,
-		[94] = 21,
-		[96] = 22,
-		[98] = 23,
-		[100] = 24,
-		[102] = 25,
-		[104] = 26,
-		[106] = 27,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[124] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48DE2000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[90] = 21,
-		[92] = 22,
-		[94] = 23,
-		[96] = 24,
-		[98] = 25,
-		[100] = 26,
-		[102] = 27,
-		[104] = 28,
-		[106] = 29,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[125] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA49F80000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 11,
-		[60] = 12,
-		[62] = 13,
-		[64] = 14,
-		[66] = 15,
-		[68] = 16,
-		[70] = 17,
-		[72] = 18,
-		[108] = 19,
-		[110] = 20,
-		[112] = 21,
-		[114] = 22,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[126] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_OO_VLAN |
-		BNXT_ULP_HDR_BIT_OI_VLAN |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xBA48DE0000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 0,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 11,
-		[40] = 12,
-		[42] = 13,
-		[44] = 14,
-		[46] = 15,
-		[48] = 16,
-		[50] = 17,
-		[52] = 18,
-		[54] = 19,
-		[56] = 20,
-		[108] = 21,
-		[110] = 22,
-		[112] = 23,
-		[114] = 24,
-		[116] = 5,
-		[117] = 8,
-		[120] = 6,
-		[121] = 9,
-		[124] = 7,
-		[125] = 10,
-		},
-	},
-	[127] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A100000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[128] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006840000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[129] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[130] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[131] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105800000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[132] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841600000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[133] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101600000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[134] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006840580000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[135] = {
-	.app_id = 0,
+	[30] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -5412,12 +1386,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_T_VXLAN |
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170B00000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000A00000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -5452,8 +1426,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[136] = {
-	.app_id = 0,
+	[31] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -5461,12 +1435,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_T_VXLAN |
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2C0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB000000280000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -5503,8 +1477,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[137] = {
-	.app_id = 0,
+	[32] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -5512,12 +1486,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_T_VXLAN |
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702C0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB000000280000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -5554,8 +1528,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[138] = {
-	.app_id = 0,
+	[33] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -5563,12 +1537,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_T_VXLAN |
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0B0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000A0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -5607,816 +1581,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[139] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A160000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 21,
-		[93] = 22,
-		[95] = 23,
-		[97] = 24,
-		[99] = 25,
-		[101] = 26,
-		[103] = 27,
-		[105] = 28,
-		[107] = 29,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[140] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006858000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[91] = 23,
-		[93] = 24,
-		[95] = 25,
-		[97] = 26,
-		[99] = 27,
-		[101] = 28,
-		[103] = 29,
-		[105] = 30,
-		[107] = 31,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[141] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A160000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 21,
-		[110] = 14,
-		[111] = 22,
-		[112] = 15,
-		[113] = 23,
-		[114] = 16,
-		[115] = 24,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[142] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006858000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[109] = 23,
-		[110] = 16,
-		[111] = 24,
-		[112] = 17,
-		[113] = 25,
-		[114] = 18,
-		[115] = 26,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[143] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A17C000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 24,
-		[93] = 25,
-		[95] = 26,
-		[97] = 27,
-		[99] = 28,
-		[101] = 29,
-		[103] = 30,
-		[105] = 31,
-		[107] = 32,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[144] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685F000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[91] = 26,
-		[93] = 27,
-		[95] = 28,
-		[97] = 29,
-		[99] = 30,
-		[101] = 31,
-		[103] = 32,
-		[105] = 33,
-		[107] = 34,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[145] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A17C000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 21,
-		[14] = 3,
-		[15] = 22,
-		[16] = 4,
-		[17] = 23,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 24,
-		[110] = 14,
-		[111] = 25,
-		[112] = 15,
-		[113] = 26,
-		[114] = 16,
-		[115] = 27,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[146] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_ETH |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685F000000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[13] = 23,
-		[14] = 3,
-		[15] = 24,
-		[16] = 4,
-		[17] = 25,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[108] = 15,
-		[109] = 26,
-		[110] = 16,
-		[111] = 27,
-		[112] = 17,
-		[113] = 28,
-		[114] = 18,
-		[115] = 29,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[147] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105E00000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[91] = 29,
-		[93] = 30,
-		[95] = 31,
-		[97] = 32,
-		[99] = 33,
-		[101] = 34,
-		[103] = 35,
-		[105] = 36,
-		[107] = 37,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[148] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[149] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[91] = 31,
-		[93] = 32,
-		[95] = 33,
-		[97] = 34,
-		[99] = 35,
-		[101] = 36,
-		[103] = 37,
-		[105] = 38,
-		[107] = 39,
-		[108] = 13,
-		[110] = 14,
-		[112] = 15,
-		[114] = 16,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[150] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB0068405E0000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[91] = 33,
-		[93] = 34,
-		[95] = 35,
-		[97] = 36,
-		[99] = 37,
-		[101] = 38,
-		[103] = 39,
-		[105] = 40,
-		[107] = 41,
-		[108] = 15,
-		[110] = 16,
-		[112] = 17,
-		[114] = 18,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[151] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A105E00000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[58] = 5,
-		[59] = 21,
-		[60] = 6,
-		[61] = 22,
-		[62] = 7,
-		[63] = 23,
-		[64] = 8,
-		[65] = 24,
-		[66] = 9,
-		[67] = 25,
-		[68] = 10,
-		[69] = 26,
-		[70] = 11,
-		[71] = 27,
-		[72] = 12,
-		[73] = 28,
-		[108] = 13,
-		[109] = 29,
-		[110] = 14,
-		[111] = 30,
-		[112] = 15,
-		[113] = 31,
-		[114] = 16,
-		[115] = 32,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[152] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV6 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB006841780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[40] = 6,
-		[42] = 7,
-		[44] = 8,
-		[46] = 9,
-		[48] = 10,
-		[50] = 11,
-		[52] = 12,
-		[54] = 13,
-		[56] = 14,
-		[59] = 23,
-		[61] = 24,
-		[63] = 25,
-		[65] = 26,
-		[67] = 27,
-		[69] = 28,
-		[71] = 29,
-		[73] = 30,
-		[108] = 15,
-		[109] = 31,
-		[110] = 16,
-		[111] = 32,
-		[112] = 17,
-		[113] = 33,
-		[114] = 18,
-		[115] = 34,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[153] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV6 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A101780000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[39] = 21,
-		[41] = 22,
-		[43] = 23,
-		[45] = 24,
-		[47] = 25,
-		[49] = 26,
-		[51] = 27,
-		[53] = 28,
-		[55] = 29,
-		[57] = 30,
-		[58] = 5,
-		[60] = 6,
-		[62] = 7,
-		[64] = 8,
-		[66] = 9,
-		[68] = 10,
-		[70] = 11,
-		[72] = 12,
-		[108] = 13,
-		[109] = 31,
-		[110] = 14,
-		[111] = 32,
-		[112] = 15,
-		[113] = 33,
-		[114] = 16,
-		[115] = 34,
-		[128] = 17,
-		[129] = 18,
-		[130] = 19,
-		[131] = 20,
-		},
-	},
-	[154] = {
-	.app_id = 0,
-	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_O_ETH |
-		BNXT_ULP_HDR_BIT_O_IPV4 |
-		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_VXLAN |
-		BNXT_ULP_HDR_BIT_I_IPV4 |
-		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB0068405E0000000,
-	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
-	.field_list = {
-		[1] = 1,
-		[12] = 2,
-		[14] = 3,
-		[16] = 4,
-		[38] = 5,
-		[39] = 23,
-		[40] = 6,
-		[41] = 24,
-		[42] = 7,
-		[43] = 25,
-		[44] = 8,
-		[45] = 26,
-		[46] = 9,
-		[47] = 27,
-		[48] = 10,
-		[49] = 28,
-		[50] = 11,
-		[51] = 29,
-		[52] = 12,
-		[53] = 30,
-		[54] = 13,
-		[55] = 31,
-		[56] = 14,
-		[57] = 32,
-		[108] = 15,
-		[109] = 33,
-		[110] = 16,
-		[111] = 34,
-		[112] = 17,
-		[113] = 35,
-		[114] = 18,
-		[115] = 36,
-		[128] = 19,
-		[129] = 20,
-		[130] = 21,
-		[131] = 22,
-		},
-	},
-	[155] = {
-	.app_id = 0,
+	[34] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -6425,12 +1591,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170BC0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000AC0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6474,8 +1640,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[156] = {
-	.app_id = 0,
+	[35] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -6484,12 +1650,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2F0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6535,8 +1701,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[157] = {
-	.app_id = 0,
+	[36] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -6545,12 +1711,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702F0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6596,8 +1762,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[158] = {
-	.app_id = 0,
+	[37] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -6606,12 +1772,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_TCP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0BC000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000AC000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6659,8 +1825,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[159] = {
-	.app_id = 0,
+	[38] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -6669,12 +1835,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A170BC0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100100000000,
+	.field_opt_bitmap = 0xB000000AC0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6713,8 +1879,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[160] = {
-	.app_id = 0,
+	[39] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -6723,12 +1889,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV6 |
 		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C2F0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6769,8 +1935,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[161] = {
-	.app_id = 0,
+	[40] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV6 |
@@ -6779,12 +1945,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB01A1702F0000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100040000000,
+	.field_opt_bitmap = 0xB0000002B0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6825,8 +1991,8 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 20,
 		},
 	},
-	[162] = {
-	.app_id = 0,
+	[41] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
@@ -6835,12 +2001,12 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		BNXT_ULP_HDR_BIT_I_ETH |
 		BNXT_ULP_HDR_BIT_I_IPV4 |
 		BNXT_ULP_HDR_BIT_I_UDP |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB00685C0BC000000,
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840010000000,
+	.field_opt_bitmap = 0xB0000000AC000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
-	.flow_pattern_id = 1,
+	.class_tid = 1,
+	.flow_pattern_id = 0,
 	.field_list = {
 		[1] = 1,
 		[12] = 2,
@@ -6883,18 +2049,404 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[131] = 22,
 		},
 	},
-	[163] = {
-	.app_id = 0,
+	[42] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100000000000,
+	.field_opt_bitmap = 0xB000000B00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 21,
+		[14] = 3,
+		[15] = 22,
+		[16] = 4,
+		[17] = 23,
+		[29] = 32,
+		[31] = 33,
+		[33] = 34,
+		[35] = 35,
+		[37] = 36,
+		[58] = 5,
+		[59] = 24,
+		[60] = 6,
+		[61] = 25,
+		[62] = 7,
+		[63] = 26,
+		[64] = 8,
+		[65] = 27,
+		[66] = 9,
+		[67] = 28,
+		[68] = 10,
+		[69] = 29,
+		[70] = 11,
+		[71] = 30,
+		[72] = 12,
+		[73] = 31,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		[128] = 17,
+		[129] = 18,
+		[130] = 19,
+		[131] = 20,
+		},
+	},
+	[43] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
 		BNXT_ULP_HDR_BIT_O_ETH |
 		BNXT_ULP_HDR_BIT_O_IPV4 |
 		BNXT_ULP_HDR_BIT_O_UDP |
-		BNXT_ULP_HDR_BIT_T_GENEVE |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0xB002800000000000,
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840000000000,
+	.field_opt_bitmap = 0xB0000002C0000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 23,
+		[14] = 3,
+		[15] = 24,
+		[16] = 4,
+		[17] = 25,
+		[29] = 34,
+		[31] = 35,
+		[33] = 36,
+		[35] = 37,
+		[37] = 38,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[59] = 26,
+		[61] = 27,
+		[63] = 28,
+		[65] = 29,
+		[67] = 30,
+		[69] = 31,
+		[71] = 32,
+		[73] = 33,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		[128] = 19,
+		[129] = 20,
+		[130] = 21,
+		[131] = 22,
+		},
+	},
+	[44] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV4 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0xA100000000000,
+	.field_opt_bitmap = 0xB0000002C0000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 21,
+		[14] = 3,
+		[15] = 22,
+		[16] = 4,
+		[17] = 23,
+		[29] = 34,
+		[31] = 35,
+		[33] = 36,
+		[35] = 37,
+		[37] = 38,
+		[39] = 24,
+		[41] = 25,
+		[43] = 26,
+		[45] = 27,
+		[47] = 28,
+		[49] = 29,
+		[51] = 30,
+		[53] = 31,
+		[55] = 32,
+		[57] = 33,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		[128] = 17,
+		[129] = 18,
+		[130] = 19,
+		[131] = 20,
+		},
+	},
+	[45] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_HDR_BIT_T_VXLAN |
+		BNXT_ULP_HDR_BIT_I_ETH |
+		BNXT_ULP_HDR_BIT_I_IPV4 |
+		BNXT_ULP_HDR_BIT_I_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2840000000000,
+	.field_opt_bitmap = 0xB0000000B0000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[13] = 23,
+		[14] = 3,
+		[15] = 24,
+		[16] = 4,
+		[17] = 25,
+		[29] = 36,
+		[31] = 37,
+		[33] = 38,
+		[35] = 39,
+		[37] = 40,
+		[38] = 5,
+		[39] = 26,
+		[40] = 6,
+		[41] = 27,
+		[42] = 7,
+		[43] = 28,
+		[44] = 8,
+		[45] = 29,
+		[46] = 9,
+		[47] = 30,
+		[48] = 10,
+		[49] = 31,
+		[50] = 11,
+		[51] = 32,
+		[52] = 12,
+		[53] = 33,
+		[54] = 13,
+		[55] = 34,
+		[56] = 14,
+		[57] = 35,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		[128] = 19,
+		[129] = 20,
+		[130] = 21,
+		[131] = 22,
+		},
+	},
+	[46] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[47] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[48] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA05E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[90] = 13,
+		[92] = 14,
+		[94] = 15,
+		[96] = 16,
+		[98] = 17,
+		[100] = 18,
+		[102] = 19,
+		[104] = 20,
+		[106] = 21,
+		},
+	},
+	[49] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[90] = 15,
+		[92] = 16,
+		[94] = 17,
+		[96] = 18,
+		[98] = 19,
+		[100] = 20,
+		[102] = 21,
+		[104] = 22,
+		[106] = 23,
+		},
+	},
+	[50] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA05E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		},
+	},
+	[51] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xA017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
 	.flow_pattern_id = 2,
 	.field_list = {
 		[1] = 1,
@@ -6917,18 +2469,916 @@ struct bnxt_ulp_class_match_info ulp_class_match_list[] = {
 		[114] = 18,
 		},
 	},
-	[164] = {
-	.app_id = 0,
+	[52] = {
+	.app_id = 1,
 	.hdr_bitmap = { .bits =
-		BNXT_ULP_HDR_BIT_SVIF |
-		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
-	.field_man_bitmap = 0x0,
-	.field_opt_bitmap = 0x8000000000000000,
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x8000000000000,
+	.field_opt_bitmap = 0xA050000000000000,
 	.field_exclude_bitmap = 0x0,
-	.class_tid = 2,
+	.class_tid = 1,
 	.flow_pattern_id = 3,
 	.field_list = {
 		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 13,
+		[30] = 14,
+		[32] = 15,
+		[34] = 16,
+		[36] = 17,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[53] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x2000000000000,
+	.field_opt_bitmap = 0xA014000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 3,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 15,
+		[30] = 16,
+		[32] = 17,
+		[34] = 18,
+		[36] = 19,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[54] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000B000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		},
+	},
+	[55] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000BC00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		[91] = 28,
+		[93] = 29,
+		[95] = 30,
+		[97] = 31,
+		[99] = 32,
+		[101] = 33,
+		[103] = 34,
+		[105] = 35,
+		[107] = 36,
+		},
+	},
+	[56] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_SRV6 |
+		BNXT_ULP_HDR_BIT_I_IPV6 |
+		BNXT_ULP_HDR_BIT_I_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x4D800000000000,
+	.field_opt_bitmap = 0xB00000BC00000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 4,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[59] = 20,
+		[60] = 6,
+		[61] = 21,
+		[62] = 7,
+		[63] = 22,
+		[64] = 8,
+		[65] = 23,
+		[66] = 9,
+		[67] = 24,
+		[68] = 10,
+		[69] = 25,
+		[70] = 11,
+		[71] = 26,
+		[72] = 12,
+		[73] = 27,
+		[76] = 13,
+		[78] = 14,
+		[80] = 15,
+		[82] = 16,
+		[84] = 17,
+		[86] = 18,
+		[88] = 19,
+		[109] = 28,
+		[111] = 29,
+		[113] = 30,
+		[115] = 31,
+		},
+	},
+	[57] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB85F000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 5,
+	.field_list = {
+		[1] = 1,
+		[2] = 13,
+		[4] = 14,
+		[6] = 15,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[58] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_ING },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB817C00000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 1,
+	.flow_pattern_id = 5,
+	.field_list = {
+		[1] = 1,
+		[2] = 15,
+		[4] = 16,
+		[6] = 17,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[59] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[60] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[61] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x805E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[90] = 13,
+		[92] = 14,
+		[94] = 15,
+		[96] = 16,
+		[98] = 17,
+		[100] = 18,
+		[102] = 19,
+		[104] = 20,
+		[106] = 21,
+		},
+	},
+	[62] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[90] = 15,
+		[92] = 16,
+		[94] = 17,
+		[96] = 18,
+		[98] = 19,
+		[100] = 20,
+		[102] = 21,
+		[104] = 22,
+		[106] = 23,
+		},
+	},
+	[63] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x805E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		},
+	},
+	[64] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		},
+	},
+	[65] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 13,
+		[30] = 14,
+		[32] = 15,
+		[34] = 16,
+		[36] = 17,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[66] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 15,
+		[30] = 16,
+		[32] = 17,
+		[34] = 18,
+		[36] = 19,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[67] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB85E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[2] = 13,
+		[4] = 14,
+		[6] = 15,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[68] = {
+	.app_id = 2,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB817800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[2] = 15,
+		[4] = 16,
+		[6] = 17,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[69] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[70] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[71] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x805E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[90] = 13,
+		[92] = 14,
+		[94] = 15,
+		[96] = 16,
+		[98] = 17,
+		[100] = 18,
+		[102] = 19,
+		[104] = 20,
+		[106] = 21,
+		},
+	},
+	[72] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_TCP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[90] = 15,
+		[92] = 16,
+		[94] = 17,
+		[96] = 18,
+		[98] = 19,
+		[100] = 20,
+		[102] = 21,
+		[104] = 22,
+		[106] = 23,
+		},
+	},
+	[73] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x805E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		[108] = 13,
+		[110] = 14,
+		[112] = 15,
+		[114] = 16,
+		},
+	},
+	[74] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_UDP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8017800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 0,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		[108] = 15,
+		[110] = 16,
+		[112] = 17,
+		[114] = 18,
+		},
+	},
+	[75] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8058000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 13,
+		[30] = 14,
+		[32] = 15,
+		[34] = 16,
+		[36] = 17,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[76] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_ICMP |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0x8016000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 1,
+	.field_list = {
+		[1] = 1,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[28] = 15,
+		[30] = 16,
+		[32] = 17,
+		[34] = 18,
+		[36] = 19,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
+		},
+	},
+	[77] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV6 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB85E000000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[2] = 13,
+		[4] = 14,
+		[6] = 15,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[58] = 5,
+		[60] = 6,
+		[62] = 7,
+		[64] = 8,
+		[66] = 9,
+		[68] = 10,
+		[70] = 11,
+		[72] = 12,
+		},
+	},
+	[78] = {
+	.app_id = 1,
+	.hdr_bitmap = { .bits =
+		BNXT_ULP_HDR_BIT_O_ETH |
+		BNXT_ULP_HDR_BIT_O_IPV4 |
+		BNXT_ULP_HDR_BIT_O_BTH |
+		BNXT_ULP_FLOW_DIR_BITMASK_EGR },
+	.field_man_bitmap = 0x0,
+	.field_opt_bitmap = 0xB817800000000000,
+	.field_exclude_bitmap = 0x0,
+	.class_tid = 2,
+	.flow_pattern_id = 2,
+	.field_list = {
+		[1] = 1,
+		[2] = 15,
+		[4] = 16,
+		[6] = 17,
+		[12] = 2,
+		[14] = 3,
+		[16] = 4,
+		[38] = 5,
+		[40] = 6,
+		[42] = 7,
+		[44] = 8,
+		[46] = 9,
+		[48] = 10,
+		[50] = 11,
+		[52] = 12,
+		[54] = 13,
+		[56] = 14,
 		},
 	}
 };

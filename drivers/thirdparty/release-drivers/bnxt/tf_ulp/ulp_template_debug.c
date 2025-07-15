@@ -271,7 +271,8 @@ const char *ulp_mapper_res_index_names[] = {
 	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_VFR_CFA_ACTION] = "CFA Action",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_INT_COUNT] = "Internal counter",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_INT_COUNT_ACC] = "Agg Counter",
-	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_EXT_COUNT] = "External Counter"
+	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_EXT_COUNT] = "External Counter",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_INDEX_TABLE_CFA_TBLS] = "CFA Tables"
 };
 
 const char *ulp_mapper_res_generic_names[] = {
@@ -323,6 +324,8 @@ const char *ulp_mapper_res_generic_names[] = {
 	"Tunnel Gparse Cache",
 	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_MULTI_FLOW_TUNNEL_CACHE] =
 	"Multiflow Tunnel Cache",
+	[BNXT_ULP_RESOURCE_SUB_TYPE_GENERIC_TABLE_L2_FILTER] =
+	"L2 filter Cache"
 };
 
 /* Utility Function to dump a simple buffer of a given length. */

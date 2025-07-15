@@ -57,4 +57,10 @@ int bnxt_ulp_nic_flows_roce_add(struct bnxt *bp,
 int bnxt_ulp_nic_flows_roce_del(struct bnxt *bp,
 				struct ulp_nic_flows *flows, enum cfa_dir dir);
 
+int bnxt_tf_l2_filter_create(struct bnxt *bp,
+			     struct bnxt_l2_filter *fltr);
+
+int bnxt_tf_l2_filter_delete(struct bnxt *bp,
+			     struct bnxt_l2_filter *fltr);
+
 #endif /* #ifndef _ULP_NIC_FLOW_H_ */
