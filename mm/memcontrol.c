@@ -8918,6 +8918,16 @@ static struct cftype memory_files[] = {
 		.read_u64 = pagecache_current_read,
 	},
 	{
+		.name = "latency_histogram",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = mem_cgroup_lat_seq_show,
+	},
+	{
+		.name = "page_cache_hit",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = mem_cgroup_page_cache_hit_show,
+	},
+	{
 		.name = "current",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = memory_current_read,
