@@ -126,6 +126,7 @@
 #include "bnxt_udcc.h"
 #include "bnxt_xsk.h"
 #include "bnxt_quic.h"
+#include "ulp_nic_flow.h"
 
 #ifdef HAVE_NETDEV_QMGMT_OPS
 #include <net/netdev_rx_queue.h>
@@ -8260,6 +8261,8 @@ static int bnxt_hwrm_set_vnic_filter(struct bnxt *bp, u16 vnic_id, u16 idx,
 		bnxt_del_l2_filter(bp, fltr);
 	} else {
 		bp->vnic_info[vnic_id].l2_filters[idx] = fltr;
+		if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp) && BNXT_CHIP_P7(bp))
+			bnxt_tf_l2_filter_create(bp, fltr);
 	}
 	return rc;
 }
@@ -8274,6 +8277,9 @@ static void bnxt_hwrm_clear_vnic_filter(struct bnxt *bp)
 
 		for (j = 0; j < vnic->uc_filter_count; j++) {
 			struct bnxt_l2_filter *fltr = vnic->l2_filters[j];
+
+			if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp) && BNXT_CHIP_P7(bp))
+				bnxt_tf_l2_filter_delete(bp, fltr);
 			bnxt_hwrm_l2_filter_free(bp, fltr);
 			bnxt_del_l2_filter(bp, fltr);
 		}
@@ -14029,10 +14035,6 @@ static int bnxt_init_chip(struct bnxt *bp, bool irq_re_init)
 		vnic->rx_mask |= mask;
 	}
 
-	rc = bnxt_cfg_rx_mode(bp);
-	if (rc)
-		goto err_out;
-
 skip_rx_mask:
 	if (BNXT_PF(bp) && bnxt_cfg_host_mtu(bp))
 		netdev_warn(bp->dev, "Could not configure host MTU\n");
@@ -15914,6 +15916,9 @@ static void bnxt_cfg_one_usr_fltr(struct bnxt *bp, struct bnxt_filter_base *fltr
 			bnxt_del_l2_filter(bp, l2_fltr);
 			netdev_err(bp->dev, "restoring previously configured l2 filter id %d failed\n",
 				   fltr->sw_id);
+		} else {
+			if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp) && BNXT_CHIP_P7(bp))
+				bnxt_tf_l2_filter_create(bp, l2_fltr);
 		}
 	}
 }
@@ -16046,6 +16051,10 @@ static int __bnxt_open_nic(struct bnxt *bp, bool irq_re_init, bool link_re_init)
 		WRITE_ONCE(bp->ptp_cfg->tx_avail, BNXT_MAX_TX_TS);
 	if (BNXT_SUPPORTS_MULTI_RSS_CTX(bp))
 		bnxt_hwrm_realloc_rss_ctx_vnic(bp);
+
+	if (bnxt_cfg_rx_mode(bp))
+		netdev_warn(bp->dev, "failed to config rx mode\n");
+
 	bnxt_cfg_usr_fltrs(bp);
 	bnxt_hwrm_get_peer_bar_maps(bp);
 
@@ -16848,6 +16857,8 @@ static int bnxt_cfg_rx_mode(struct bnxt *bp)
 	for (i = 1; i < vnic->uc_filter_count; i++) {
 		struct bnxt_l2_filter *fltr = vnic->l2_filters[i];
 
+		if (BNXT_PF(bp) && BNXT_TRUFLOW_EN(bp) && BNXT_CHIP_P7(bp))
+			bnxt_tf_l2_filter_delete(bp, fltr);
 		bnxt_hwrm_l2_filter_free(bp, fltr);
 		bnxt_del_l2_filter(bp, fltr);
 	}
@@ -22171,9 +22182,16 @@ static pci_ers_result_t bnxt_io_slot_reset(struct pci_dev *pdev)
 
 	netdev_info(bp->dev, "PCI Slot Reset\n");
 
-	if ((BNXT_MH(bp) || !(bp->flags & BNXT_FLAG_CHIP_P5_PLUS)) &&
-	    test_bit(BNXT_STATE_PCI_CHANNEL_IO_FROZEN, &bp->state))
-		msleep(900);
+	if (test_bit(BNXT_STATE_PCI_CHANNEL_IO_FROZEN, &bp->state)) {
+		if (BNXT_MH(bp) || !(bp->flags & BNXT_FLAG_CHIP_P5_PLUS))
+			msleep(900);
+		/* After DPC, the chip should return CRS when the vendor ID
+		 * config register is read until it is ready.  On Thor2, this
+		 * is not happening so we add a 5-second delay as a workaround.
+		 */
+		if (bp->flags & BNXT_FLAG_CHIP_P7)
+			msleep(5000);
+	}
 
 	rtnl_lock();
 

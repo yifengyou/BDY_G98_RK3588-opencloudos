@@ -1727,6 +1727,7 @@ struct bnxt_pf_info {
 	struct workqueue_struct		*vf_stat_wq;
 };
 
+#define BNXT_TF_L2_FILT_HNDLS	3
 struct bnxt_filter_base {
 	struct hlist_node	hash;
 	struct list_head	list;
@@ -1735,6 +1736,7 @@ struct bnxt_filter_base {
 		__le64		ntp_filter_id[BNXT_MAX_UC_ADDRS];
 #define BNXT_FLTRID_INVALID	((u64)-1)
 	};
+	u32			tf_l2_filter_flow_id[BNXT_TF_L2_FILT_HNDLS];
 	u8			type;
 #define BNXT_FLTR_TYPE_NTUPLE	1
 #define BNXT_FLTR_TYPE_L2	2

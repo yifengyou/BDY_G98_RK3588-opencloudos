@@ -439,19 +439,15 @@ static int bnxt_udcc_flow_create_p7(struct bnxt *bp,
 			BNXT_ULP_GEN_ACTION_ENABLES_COUNT;
 
 		if (BNXT_UDCC_DCQCN_EN(bp)) {
-			actions.enables |= BNXT_ULP_GEN_ACTION_ENABLES_SET_SMAC |
-				BNXT_ULP_GEN_ACTION_ENABLES_SET_DMAC;
+			actions.enables |= BNXT_ULP_GEN_ACTION_ENABLES_SET_DMAC;
 
-			if (is_valid_ether_addr(entry->dst_mac_mod) &&
-			    is_valid_ether_addr(entry->src_mac_mod)) {
+			if (is_valid_ether_addr(entry->dst_mac_mod)) {
 				ether_addr_copy(actions.dmac, entry->dst_mac_mod);
-				ether_addr_copy(actions.smac, entry->src_mac_mod);
 			} else {
 				/* PF case (non-switchdev): zero smac and dmac modify.
 				 * Just use the smac dmac given by FW in the entry.
 				 */
 				ether_addr_copy(actions.dmac, entry->dest_mac);
-				ether_addr_copy(actions.smac, entry->src_mac);
 			}
 		}
 	}

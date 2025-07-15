@@ -29,6 +29,7 @@
 #include "bnxt_nic_flow.h"
 #include "tfc.h"
 #include "tfc_debug.h"
+#include "ulp_nic_flow.h"
 
 /* Synchronize TF ULP port operations.
  * TBD: Revisit this global lock and consider making this a per-adapter lock.
@@ -78,6 +79,29 @@ static int bnxt_tf_release_afm_func(struct bnxt *bp)
 	return 0;
 }
 
+static void bnxt_tf_l2_filter_populate(struct bnxt *bp)
+{
+	struct bnxt_vnic_info *vnic = &bp->vnic_info[BNXT_VNIC_DEFAULT];
+	struct bnxt_l2_filter *fltr;
+	int i, off;
+
+	if (!BNXT_CHIP_P7(bp))
+		return;
+
+	if (!vnic) {
+		netdev_dbg(bp->dev, "VNIC is NULL, skip populate\n");
+		return;
+	}
+
+	mutex_lock(&bp->ntp_lock);
+	for (i = 1, off = 0; i < vnic->uc_filter_count; i++, off += ETH_ALEN) {
+		fltr = vnic->l2_filters[i];
+		if (fltr)
+			bnxt_tf_l2_filter_create(bp, fltr);
+	}
+	mutex_unlock(&bp->ntp_lock);
+}
+
 /* This function initializes Truflow feature which enables host based
  * flow offloads. The flag argument provides information about the TF
  * consumer and a reference to the consumer is set in bp->tf_flags.
@@ -111,6 +135,8 @@ exit:
 		netdev_err(bp->dev, "Failed to initialize Truflow feature rc=%d\n", rc);
 	}
 	mutex_unlock(&tf_port_lock);
+	if (!rc)
+		bnxt_tf_l2_filter_populate(bp);
 	return rc;
 }
 
