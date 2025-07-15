@@ -36,16 +36,17 @@ extern int sched_bt_disable_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 extern unsigned int sysctl_cpu_qos;
 extern unsigned int sysctl_sched_bt_ignore_cpubind;
+extern unsigned int sysctl_sched_bt_iowait;
+#ifdef CONFIG_BT_BANDWIDTH
+extern unsigned int sysctl_sched_bt_percpu_suppress_percent;
+extern unsigned int sysctl_sched_bt_percpu_max_throttle_time_sec;
+#endif
 extern unsigned int sysctl_rue_reserved0;
 extern unsigned int sysctl_rue_reserved1;
 extern unsigned int sysctl_rue_reserved2;
 extern unsigned int sysctl_rue_reserved3;
 extern unsigned int sysctl_rue_reserved4;
 extern unsigned int sysctl_rue_reserved5;
-#ifdef CONFIG_BT_BANDWIDTH
-extern unsigned int sysctl_sched_bt_percpu_suppress_percent;
-extern unsigned int sysctl_sched_bt_percpu_max_throttle_time_sec;
-#endif
 #endif
 
 #ifdef CONFIG_BT_BANDWIDTH

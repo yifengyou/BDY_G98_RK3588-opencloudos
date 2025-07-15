@@ -162,6 +162,7 @@ __read_mostly int scheduler_running;
 
 #ifdef CONFIG_BT_SCHED
 unsigned int sysctl_sched_bt_ignore_cpubind;
+unsigned int sysctl_sched_bt_iowait;
 #endif
 
 #ifdef CONFIG_SCHED_CORE
@@ -9467,11 +9468,11 @@ int io_schedule_prepare(void)
 	int old_iowait = current->in_iowait;
 #endif
 
-	current->in_iowait = 1;
 #ifdef CONFIG_BT_SCHED
-	current->in_iowait_bt = current->sched_class == &bt_sched_class
-		|| current->io_pending_bt;
+	current->in_iowait_bt = (current->sched_class == &bt_sched_class) |
+		current->io_pending_bt;
 #endif
+	current->in_iowait = 1;
 	blk_flush_plug(current->plug, true);
 	return old_iowait;
 }
