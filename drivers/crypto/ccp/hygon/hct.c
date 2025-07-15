@@ -27,6 +27,7 @@
 #include <linux/kfifo.h>
 #include <linux/eventfd.h>
 #include <linux/mem_encrypt.h>
+#include <asm/cpuid.h>
 #if IS_ENABLED(CONFIG_VFIO_MDEV)
 #include <linux/mdev.h>
 #endif
@@ -1812,9 +1813,13 @@ static struct page *hct_get_page(pgoff_t page_idx)
 	}
 	get_page(hct_share.pages[page_idx]);
 
+#ifdef CONFIG_NUMA
 	numa_node = hct_data.iommu[page_idx].pdev->dev.numa_node;
 	if (numa_node < 0)
 		numa_node = 0;
+#else
+	numa_node = 0;
+#endif
 
 	shr_cfg = (void *)page_to_virt(hct_share.pages[page_idx]);
 	shr_cfg->numa_node = numa_node;
@@ -2060,11 +2065,8 @@ static int hct_share_init(void)
 	if (!ret) {
 		hct_data.domain = iommu_domain_alloc(&pci_bus_type);
 		if (!hct_data.domain) {
+			pr_err("iommu domain alloc failed\n");
 			misc_deregister(&hct_misc);
-			if (!pci_bus_type.iommu_ops) {
-				pr_err("iommu is disabled\n");
-				return -ENODEV;
-			}
 			return -ENOMEM;
 		}
 		hct_data.prot = IOMMU_READ | IOMMU_WRITE;
@@ -2166,22 +2168,6 @@ static void _pfn_vm_pat_flags_moved(unsigned long addr)
 
 	if (vma->vm_flags & VM_PFNMAP)
 		vm_flags_clear(vma, VM_PAT);
-}
-
-#define CPUID_VENDOR_HygonGenuine_ebx	0x6f677948
-#define CPUID_VENDOR_HygonGenuine_ecx	0x656e6975
-#define CPUID_VENDOR_HygonGenuine_edx	0x6e65476e
-
-static inline void _cpuid(unsigned int *eax, unsigned int *ebx,
-			unsigned int *ecx, unsigned int *edx)
-{
-	asm volatile("cpuid"
-	    : "=a" (*eax),
-	      "=b" (*ebx),
-	      "=c" (*ecx),
-	      "=d" (*edx)
-	    : "0" (*eax), "2" (*ecx)
-	    : "memory");
 }
 
 /* set the flags PAT, PCT and PWT of page all to 0
@@ -2294,6 +2280,10 @@ struct miscdevice hct_noiommu_misc = {
 	.fops  = &hct_noiommu_fops,
 };
 
+#define CPUID_VENDOR_HygonGenuine_ebx	0x6f677948
+#define CPUID_VENDOR_HygonGenuine_ecx	0x656e6975
+#define CPUID_VENDOR_HygonGenuine_edx	0x6e65476e
+
 static int __init hct_dev_init(void)
 {
 	int __maybe_unused ret = 0;
@@ -2302,7 +2292,7 @@ static int __init hct_dev_init(void)
 	u32 vendor_edx = 0;
 	u32 vendor_eax = 0;
 
-	_cpuid(&vendor_eax, &vendor_ebx, &vendor_ecx, &vendor_edx);
+	cpuid(0, &vendor_eax, &vendor_ebx, &vendor_ecx, &vendor_edx);
 
 	/* HygonGenuine */
 	if (!(vendor_ebx == CPUID_VENDOR_HygonGenuine_ebx &&
