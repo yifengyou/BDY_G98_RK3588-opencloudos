@@ -74,6 +74,7 @@ static void vuart_serial_out(struct uart_port *port, int offset, int value)
 	writel(value, port->membase + offset);
 }
 
+#ifdef CONFIG_CONSOLE_POLL
 static void vuart_wait_for_xmitr(struct uart_port *port)
 {
 	unsigned int status, tmout = 10000;
@@ -91,6 +92,7 @@ static void vuart_wait_for_xmitr(struct uart_port *port)
 		touch_nmi_watchdog();
 	}
 }
+#endif
 
 static unsigned int vuart_tx_empty(struct uart_port *port)
 {
