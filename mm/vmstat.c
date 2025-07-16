@@ -31,6 +31,8 @@
 
 #include "internal.h"
 
+DEFINE_STATIC_KEY_TRUE(sysctl_deferable_decay_high);
+
 #ifdef CONFIG_NUMA
 int sysctl_vm_numa_stat = ENABLE_NUMA_STAT;
 
@@ -833,8 +835,8 @@ static int refresh_cpu_vm_stats(bool do_pagesets)
 
 		if (do_pagesets) {
 			cond_resched();
-
-			changes += decay_pcp_high(zone, this_cpu_ptr(pcp));
+			if (static_branch_likely(&sysctl_deferable_decay_high))
+				changes += decay_pcp_high(zone, this_cpu_ptr(pcp));
 #ifdef CONFIG_NUMA
 			/*
 			 * Deal with draining the remote pageset of this
@@ -1181,6 +1183,7 @@ const char * const vmstat_text[] = {
 	"nr_zspages",
 #endif
 	"nr_free_cma",
+	"nr_pcp_free",
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	"nr_unaccepted",
 #endif
@@ -1740,13 +1743,17 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 		pcp = per_cpu_ptr(zone->per_cpu_pageset, i);
 		seq_printf(m,
 			   "\n    cpu: %i"
-			   "\n              count: %i"
-			   "\n              high:  %i"
-			   "\n              batch: %i",
+			   "\n              count:      %i"
+			   "\n              high:       %i"
+			   "\n              batch:      %i"
+			   "\n              high_min:   %i"
+			   "\n              high_max:   %i",
 			   i,
 			   pcp->count,
 			   pcp->high,
-			   pcp->batch);
+			   pcp->batch,
+			   pcp->high_min,
+			   pcp->high_max);
 #ifdef CONFIG_SMP
 		pzstats = per_cpu_ptr(zone->per_cpu_zonestats, i);
 		seq_printf(m, "\n  vm stats threshold: %d",
@@ -1782,6 +1789,54 @@ static const struct seq_operations zoneinfo_op = {
 	.show	= zoneinfo_show,
 };
 
+/* fold all populated zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter(void)
+{
+	struct zone *zone;
+	long total = 0;
+
+	for_each_populated_zone(zone) {
+		total += fold_pcp_counter_zone(zone);
+	}
+	return (unsigned long)total;
+}
+EXPORT_SYMBOL(fold_pcp_counter);
+
+/* fold zone's pcp page, if the result < 0, return 0 */
+unsigned long fold_pcp_counter_zone(struct zone *zone)
+{
+	int cpu;
+	struct per_cpu_pages *pcp;
+	long total = 0;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu) {
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		total += pcp->count;
+	}
+	cpus_read_unlock();
+	if (total < 0)
+		total = 0;
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_zone);
+
+
+unsigned long fold_pcp_counter_node(struct pglist_data *pgdat, unsigned long *pcp)
+{
+	int i;
+	struct zone *zones = pgdat->node_zones;
+	unsigned long total = 0;
+
+	*pcp = 0;
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		*pcp += fold_pcp_counter_zone(zones + i);
+		total += zone_managed_pages(zones + i);
+	}
+	return total;
+}
+EXPORT_SYMBOL(fold_pcp_counter_node);
+
 #define NR_VMSTAT_ITEMS (NR_VM_ZONE_STAT_ITEMS + \
 			 NR_VM_NUMA_EVENT_ITEMS + \
 			 NR_VM_NODE_STAT_ITEMS + \
@@ -1805,6 +1860,10 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 		return ERR_PTR(-ENOMEM);
 	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
 		v[i] = global_zone_page_state(i);
+
+	v[NR_FREE_PCP] = fold_pcp_counter();
+	v[NR_FREE_PAGES] = count_pcp_in(v[NR_FREE_PCP], v[NR_FREE_PAGES],
+					totalram_pages());
 	v += NR_VM_ZONE_STAT_ITEMS;
 
 #ifdef CONFIG_NUMA
@@ -1875,7 +1934,10 @@ static const struct seq_operations vmstat_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
+static DEFINE_PER_CPU(struct delayed_work, decay_pcp_work);
 int sysctl_stat_interval __read_mostly = HZ;
+int sysctl_decay_high_interval __read_mostly = 1000;
+/* default: zoro */
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)
@@ -2020,6 +2082,52 @@ static void vmstat_shepherd(struct work_struct *w);
 
 static DECLARE_DEFERRABLE_WORK(shepherd, vmstat_shepherd);
 
+static inline bool need_decay_pcp(int cpu)
+{
+	struct zone *zone;
+	for_each_populated_zone(zone) {
+		struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		if (pcp->high > pcp->high_min)
+			return true;
+	}
+	return false;
+}
+
+static void pcp_high_decay_work(struct work_struct *work)
+{
+	struct zone *zone;
+	int freed = 0;
+
+	if (static_branch_likely(&sysctl_deferable_decay_high))
+		return;
+
+	for_each_populated_zone(zone) {
+		struct per_cpu_pages __percpu *pcp = zone->per_cpu_pageset;
+		freed += decay_pcp_high(zone, this_cpu_ptr(pcp));
+	}
+	if (!freed)
+		return;
+
+	queue_delayed_work_on(smp_processor_id(), mm_percpu_wq,
+			      this_cpu_ptr(&decay_pcp_work),
+			      round_jiffies_relative(msecs_to_jiffies(sysctl_decay_high_interval)));
+}
+
+static inline void queue_delay_work(int cpu)
+{
+	struct delayed_work *dw;
+
+	if (static_branch_likely(&sysctl_deferable_decay_high))
+		return;
+
+	if (!percpu_pagelist_auto_tune)
+		return;
+
+	dw = &per_cpu(decay_pcp_work, cpu);
+	if (!delayed_work_pending(dw) && need_decay_pcp(cpu))
+		queue_delayed_work_on(cpu, mm_percpu_wq, dw, 0);
+}
+
 static void vmstat_shepherd(struct work_struct *w)
 {
 	int cpu;
@@ -2046,6 +2154,8 @@ static void vmstat_shepherd(struct work_struct *w)
 		if (!delayed_work_pending(dw) && need_update(cpu))
 			queue_delayed_work_on(cpu, mm_percpu_wq, dw, 0);
 
+		queue_delay_work(cpu);
+
 		cond_resched();
 	}
 	cpus_read_unlock();
@@ -2058,9 +2168,12 @@ static void __init start_shepherd_timer(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu) {
 		INIT_DEFERRABLE_WORK(per_cpu_ptr(&vmstat_work, cpu),
 			vmstat_update);
+		INIT_DELAYED_WORK(per_cpu_ptr(&decay_pcp_work, cpu),
+			pcp_high_decay_work);
+	}
 
 	schedule_delayed_work(&shepherd,
 		round_jiffies_relative(sysctl_stat_interval));
@@ -2090,6 +2203,7 @@ static int vmstat_cpu_online(unsigned int cpu)
 static int vmstat_cpu_down_prep(unsigned int cpu)
 {
 	cancel_delayed_work_sync(&per_cpu(vmstat_work, cpu));
+	cancel_delayed_work_sync(&per_cpu(decay_pcp_work, cpu));
 	return 0;
 }
 
@@ -2276,6 +2390,22 @@ static int __init extfrag_debug_init(void)
 
 	return 0;
 }
-
 module_init(extfrag_debug_init);
 #endif
+
+int sysctl_pcp_as_free;
+unsigned long count_pcp_in(unsigned long pcp, unsigned long target,
+			   unsigned long totalram)
+{
+	if (!sysctl_pcp_as_free)
+		return target;
+
+	/* if pcp pages is less then 1/1024 we do not count pcp in */
+	if ((pcp << 10) < totalram)
+		return target;
+
+	/* pcp is a snapshot of all zone's per cpu pages, we guard it by totalram */
+	if (pcp + target >= totalram)
+		return target;
+	return pcp + target;
+}

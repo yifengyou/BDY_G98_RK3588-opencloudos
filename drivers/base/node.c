@@ -375,8 +375,9 @@ static ssize_t node_read_meminfo(struct device *dev,
 	struct sysinfo i;
 	unsigned long sreclaimable, sunreclaimable;
 	unsigned long swapcached = 0;
+	unsigned long pcp = 0;
 
-	si_meminfo_node(&i, nid);
+	si_meminfo_node(&i, nid, &pcp);
 	sreclaimable = node_page_state_pages(pgdat, NR_SLAB_RECLAIMABLE_B);
 	sunreclaimable = node_page_state_pages(pgdat, NR_SLAB_UNRECLAIMABLE_B);
 #ifdef CONFIG_SWAP
@@ -396,7 +397,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 			    "Node %d Unevictable:    %8lu kB\n"
 			    "Node %d Mlocked:        %8lu kB\n",
 			    nid, K(i.totalram),
-			    nid, K(i.freeram),
+		        nid, K(count_pcp_in(pcp, i.freeram, i.totalram)),
 			    nid, K(i.totalram - i.freeram),
 			    nid, K(swapcached),
 			    nid, K(node_page_state(pgdat, NR_ACTIVE_ANON) +
@@ -519,11 +520,22 @@ static ssize_t node_read_vmstat(struct device *dev,
 	struct pglist_data *pgdat = NODE_DATA(nid);
 	int i;
 	int len = 0;
+	unsigned long *v;
+	unsigned long totalram;
+
+	v = kzalloc(NR_VM_ZONE_STAT_ITEMS * sizeof(unsigned long), GFP_KERNEL);
+	if (!v)
+		return len;
 
 	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
-		len += sysfs_emit_at(buf, len, "%s %lu\n",
-				     zone_stat_name(i),
-				     sum_zone_node_page_state(nid, i));
+		v[i] = sum_zone_node_page_state(nid, i);
+
+	totalram = fold_pcp_counter_node(pgdat, v + NR_FREE_PCP);
+	v[NR_FREE_PAGES] = count_pcp_in(v[NR_FREE_PCP], v[NR_FREE_PAGES], totalram);
+
+	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
+		len += sysfs_emit_at(buf, len, "%s %lu\n", zone_stat_name(i), v[i]);
+	kfree(v);
 
 #ifdef CONFIG_NUMA
 	fold_vm_numa_events();

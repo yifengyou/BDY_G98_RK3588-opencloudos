@@ -37,10 +37,12 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	unsigned long committed;
 	long cached;
 	long available;
+	unsigned long pcp;
 	unsigned long pages[NR_LRU_LISTS];
 	unsigned long sreclaimable, sunreclaim;
 	int lru;
 
+	pcp = fold_pcp_counter();
 	si_meminfo(&i);
 	si_swapinfo(&i);
 	committed = vm_memory_committed();
@@ -58,8 +60,8 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	sunreclaim = global_node_page_state_pages(NR_SLAB_UNRECLAIMABLE_B);
 
 	show_val_kb(m, "MemTotal:       ", i.totalram);
-	show_val_kb(m, "MemFree:        ", i.freeram);
-	show_val_kb(m, "MemAvailable:   ", available);
+	show_val_kb(m, "MemFree:        ", count_pcp_in(pcp, i.freeram, i.totalram));
+	show_val_kb(m, "MemAvailable:   ", count_pcp_in(pcp, available, i.totalram));
 	show_val_kb(m, "Buffers:        ", i.bufferram);
 	show_val_kb(m, "Cached:         ", cached);
 	show_val_kb(m, "SwapCached:     ", total_swapcache_pages());
@@ -132,6 +134,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "VmallocUsed:    ", vmalloc_nr_pages());
 	show_val_kb(m, "VmallocChunk:   ", 0ul);
 	show_val_kb(m, "Percpu:         ", pcpu_nr_pages());
+	show_val_kb(m, "PCPFree:        ", pcp);
 
 	memtest_report_meminfo(m);
 

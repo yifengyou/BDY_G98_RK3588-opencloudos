@@ -152,7 +152,9 @@ enum zone_stat_item {
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	NR_UNACCEPTED,
 #endif
-	NR_VM_ZONE_STAT_ITEMS };
+	NR_FREE_PCP,
+	NR_VM_ZONE_STAT_ITEMS
+};
 
 enum node_stat_item {
 	NR_LRU_BASE,
@@ -348,6 +350,9 @@ enum lruvec_flags {
  */
 #define MIN_NR_GENS		2U
 #define MAX_NR_GENS		4U
+
+extern int percpu_pagelist_auto_tune;
+extern int percpu_pagelist_high_max;
 
 /*
  * Each generation is divided into multiple tiers. A page accessed N times

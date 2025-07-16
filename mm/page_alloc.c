@@ -1213,6 +1213,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	unsigned int order;
 	bool isolated_pageblocks;
 	struct page *page;
+	int batch;
 
 	/*
 	 * Ensure proper count is passed which otherwise would stuck in the
@@ -1226,6 +1227,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	spin_lock_irqsave(&zone->lock, flags);
 	isolated_pageblocks = has_isolate_pageblock(zone);
 
+	batch = 0;
 	while (count > 0) {
 		struct list_head *list;
 		int nr_pages;
@@ -1258,6 +1260,15 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 			__free_one_page(page, page_to_pfn(page), zone, order, mt, FPI_NONE);
 			trace_mm_page_pcpu_drain(page, order, mt);
+
+			if (++batch > READ_ONCE(pcp->batch)) {
+				batch = 0;
+				if (!spin_is_contended(&zone->lock))
+					continue;
+				spin_unlock_irqrestore(&zone->lock, flags);
+				spin_lock_irqsave(&zone->lock, flags);
+				isolated_pageblocks = has_isolate_pageblock(zone);
+			}
 		} while (count > 0 && !list_empty(list));
 	}
 
@@ -2186,7 +2197,8 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
  */
 int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 {
-	int high_min, to_drain, batch;
+	int high_min, count, batch, target;
+	int freed, target_batch;
 	int todo = 0;
 
 	high_min = READ_ONCE(pcp->high_min);
@@ -2203,14 +2215,28 @@ int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 			todo++;
 	}
 
-	to_drain = pcp->count - pcp->high;
-	if (to_drain > 0) {
-		spin_lock(&pcp->lock);
-		free_pcppages_bulk(zone, to_drain, pcp, 0);
-		spin_unlock(&pcp->lock);
+	/* this is kwork context */
+	target = pcp->count - pcp->high;
+	while (target > 0) {
 		todo++;
-	}
+		spin_lock(&pcp->lock);
 
+		if (!pcp->count) {
+			spin_unlock(&pcp->lock);
+			break;
+		}
+		count = pcp->count;
+		target_batch = min(count, batch);
+		free_pcppages_bulk(zone, target_batch, pcp, 0);
+		freed = count - pcp->count;
+		if (!pcp->count || freed < target_batch) {
+			spin_unlock(&pcp->lock);
+			break;
+		}
+		spin_unlock(&pcp->lock);
+		target -= freed;
+		cond_resched();
+	}
 	return todo;
 }
 
@@ -2227,6 +2253,7 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
 	batch = READ_ONCE(pcp->batch);
 	to_drain = min(pcp->count, batch);
 	if (to_drain > 0) {
+		/* max batch size == pcp->batch */
 		spin_lock(&pcp->lock);
 		free_pcppages_bulk(zone, to_drain, pcp, 0);
 		spin_unlock(&pcp->lock);
@@ -2257,6 +2284,40 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 }
 
 /*
+ * Drain pcplists of the indicated processor and zone.
+ */
+static void batched_drain_pages_zone(unsigned int cpu, struct zone *zone)
+{
+	struct per_cpu_pages *pcp;
+	int count, freed;
+	int target, target_batch, base_batch;
+
+	pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+	base_batch = READ_ONCE(pcp->batch);
+
+	spin_lock(&pcp->lock);
+	target = pcp->count;
+	while (target > 0) {
+		if (!pcp->count)
+			break;
+
+		count = pcp->count;
+		target_batch =  min(count, base_batch);
+		free_pcppages_bulk(zone, target_batch, pcp, 0);
+		freed = count - pcp->count;
+
+		if (!pcp->count || freed < target_batch)
+			break;
+
+		spin_unlock(&pcp->lock);
+		target -= freed;
+		cond_resched();
+		spin_lock(&pcp->lock);
+	}
+	spin_unlock(&pcp->lock);
+}
+
+/*
  * Drain pcplists of all zones on the indicated processor.
  */
 static void drain_pages(unsigned int cpu)
@@ -2270,6 +2331,7 @@ static void drain_pages(unsigned int cpu)
 
 /*
  * Spill all of this CPU's per-cpu pages back into the buddy allocator.
+ * this function can not switch out
  */
 void drain_local_pages(struct zone *zone)
 {
@@ -2350,12 +2412,15 @@ static void __drain_all_pages(struct zone *zone, bool force_all_cpus)
 	}
 
 	for_each_cpu(cpu, &cpus_with_pcps) {
+		struct zone *_zone;
 		if (zone)
-			drain_pages_zone(cpu, zone);
-		else
-			drain_pages(cpu);
+			batched_drain_pages_zone(cpu, zone);
+		else {
+			for_each_populated_zone(_zone) {
+				batched_drain_pages_zone(cpu, _zone);
+			}
+		}
 	}
-
 	mutex_unlock(&pcpu_drain_mutex);
 }
 
@@ -2385,10 +2450,11 @@ static bool free_unref_page_prepare(struct page *page, unsigned long pfn,
 static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free_high)
 {
 	int min_nr_free, max_nr_free;
+	int _batch = batch;
 
 	/* Free as much as possible if batch freeing high-order pages. */
 	if (unlikely(free_high))
-		return min(pcp->count, batch << CONFIG_PCP_BATCH_SCALE_MAX);
+		return min(pcp->count, batch);
 
 	/* Check for PCP disabled or boot pageset */
 	if (unlikely(high < batch))
@@ -2404,7 +2470,7 @@ static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free
 	 */
 	batch = clamp_t(int, pcp->free_count, min_nr_free, max_nr_free);
 
-	return batch;
+	return min(batch, _batch);
 }
 
 static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
@@ -2820,6 +2886,8 @@ static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
 			pcp->alloc_factor++;
 		batch = min(batch, max_nr_alloc);
 	}
+
+	batch = min(batch, base_batch);
 
 	/*
 	 * Scale batch relative to order if batch implies free pages
@@ -5586,6 +5654,15 @@ static void __zone_set_pageset_high_and_batch(struct zone *zone, unsigned long h
 	}
 }
 
+static int pcp_limit_high_max(int high_max, int high_min)
+{
+	int new_high_max;
+
+	new_high_max = min(high_max, percpu_pagelist_high_max);
+	new_high_max = max(new_high_max, high_min);
+	return new_high_max;
+}
+
 /*
  * Calculate and set new high and batch values for all per-cpu pagesets of a
  * zone based on the zone's size.
@@ -5603,10 +5680,14 @@ static void zone_set_pageset_high_and_batch(struct zone *zone, int cpu_online)
 		 * setting high_min and high_max to the manual value.
 		 */
 		new_high_max = new_high_min;
-	} else {
+	} else if (percpu_pagelist_auto_tune) {
 		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
 		new_high_max = zone_highsize(zone, new_batch, cpu_online,
 					     MIN_PERCPU_PAGELIST_HIGH_FRACTION);
+		new_high_max = pcp_limit_high_max(new_high_max, new_high_min);
+	} else {
+		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
+		new_high_max = new_high_min;
 	}
 
 	if (zone->pageset_high_min == new_high_min &&
@@ -6207,6 +6288,85 @@ out:
 	return ret;
 }
 
+int percpu_pagelist_auto_tune = 1;
+#define PCP_HIGH_MAX_DEFAULT ((int)(32 * 1024 * 1024 / PAGE_SIZE))
+int percpu_pagelist_high_max = PCP_HIGH_MAX_DEFAULT;
+
+int percpu_pagelist_auto_tune_sysctl_handler(struct ctl_table *table,
+					     int write, void *buffer,
+					     size_t *length, loff_t *ppos)
+{
+	struct zone *zone;
+	int old_percpu_pagelist_auto_tune;
+	int ret;
+
+	mutex_lock(&pcp_batch_high_lock);
+	old_percpu_pagelist_auto_tune = percpu_pagelist_auto_tune;
+
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (!write || ret < 0)
+		goto out;
+
+	/* Sanity checking to avoid pcp imbalance */
+	if (percpu_pagelist_auto_tune != 0 &&
+			percpu_pagelist_auto_tune != 1) {
+		percpu_pagelist_auto_tune = old_percpu_pagelist_auto_tune;
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* No change? */
+	if (percpu_pagelist_auto_tune == old_percpu_pagelist_auto_tune)
+		goto out;
+
+	for_each_populated_zone(zone)
+		zone_set_pageset_high_and_batch(zone, 0);
+
+	/* if close the auto tune pcp drain the pcp pages */
+	if (!percpu_pagelist_auto_tune) {
+		drain_all_pages(NULL);
+		percpu_pagelist_high_max = PCP_HIGH_MAX_DEFAULT;
+	}
+out:
+	mutex_unlock(&pcp_batch_high_lock);
+	return ret;
+}
+
+int percpu_pagelist_high_max_sysctl_handler(struct ctl_table *table,
+					     int write, void *buffer,
+					     size_t *length, loff_t *ppos)
+{
+	struct zone *zone;
+	int old_percpu_pagelist_high_max;
+	int ret;
+
+	mutex_lock(&pcp_batch_high_lock);
+
+	old_percpu_pagelist_high_max = percpu_pagelist_high_max;
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (!write || ret < 0)
+		goto out;
+
+	if (!percpu_pagelist_auto_tune) {
+		percpu_pagelist_high_max = old_percpu_pagelist_high_max;
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (old_percpu_pagelist_high_max == percpu_pagelist_high_max)
+		goto out;
+
+	for_each_populated_zone(zone) {
+		zone_set_pageset_high_and_batch(zone, 0);
+	}
+
+	if (percpu_pagelist_high_max < old_percpu_pagelist_high_max)
+		drain_all_pages(NULL);
+out:
+	mutex_unlock(&pcp_batch_high_lock);
+	return ret;
+}
+
 static struct ctl_table page_alloc_sysctl_table[] = {
 	{
 		.procname	= "min_free_kbytes",
@@ -6240,6 +6400,22 @@ static struct ctl_table page_alloc_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= percpu_pagelist_high_fraction_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
+	},
+	{
+		.procname       = "percpu_pagelist_auto_tune",
+		.data           = &percpu_pagelist_auto_tune,
+		.maxlen         = sizeof(percpu_pagelist_auto_tune),
+		.mode           = 0644,
+		.proc_handler   = percpu_pagelist_auto_tune_sysctl_handler,
+		.extra1         = SYSCTL_ZERO,
+	},
+	{
+		.procname       = "percpu_pagelist_high_max",
+		.data           = &percpu_pagelist_high_max,
+		.maxlen         = sizeof(percpu_pagelist_high_max),
+		.mode           = 0644,
+		.proc_handler   = percpu_pagelist_high_max_sysctl_handler,
+		.extra1         = SYSCTL_ZERO,
 	},
 	{
 		.procname	= "lowmem_reserve_ratio",
