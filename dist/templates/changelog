@@ -1,3 +1,230 @@
+* Wed Jul 16 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-35
+- Merge linux 6.6.68 into release
+- Merge linux 6.6.97 into release
+- Merge OCK branch 'linux-6.6/devel' into release
+- !438 fixed mm/memcontrol.c compilation failure when NUMA disabled and MEMCG enabled
+- fixed mm/memcontrol.c compilation failure when NUMA disabled and MEMCG enabled
+- !435 dma: phytium: fix some bugs of pswiotlb
+- pswiotlb: Check if min_align_mask of dma is valid
+- pswiotlb: Pass dma direction to pswiotlb straightly
+- pswiotlb: Fix kernel panic when the dma phy address is DMA_MAPPING_ERROR
+- pswiotlb: Add bypass rules of pswiotlb for specific application scenes
+- pswiotlb: Avoid releasing memory repeatedly for coherent dma memory free
+- pswiotlb: Adapt for coherent dma memory allocation
+- pswiotlb: Avoid dead lock when expansion occures
+- pswiotlb: Avoid sleep when pswiotlb is used in interrupt contexts
+- !436 Backport some hisi sas bugfix
+- scsi: hisi_sas: Fix warning detected by sparse
+- scsi: hisi_sas: Wait until error handling is complete
+- scsi: hisi_sas: Code style cleanup
+- scsi: hisi_sas: Use macro instead of magic number
+- scsi: hisi_sas: Enable force phy when SATA disk directly connected
+- scsi: hisi_sas: Fixed failure to issue vendor specific commands
+- Revert "scsi: hisi_sas: Enable force phy when SATA disk directly connected"
+- scsi: sd: Retry START STOP UNIT commands
+- scsi: core: Allow passthrough to request midlayer retries
+- scsi: hisi_sas: Add latest_dump for the debugfs dump
+- scsi: hisi_sas: Update v3 hw STP_LINK_TIMER setting
+- scsi: hisi_sas: Add time interval between two H2D FIS following soft reset spec
+- scsi: hisi_sas: Update disk locked timeout to 7 seconds
+- scsi: hisi_sas: Default enable interrupt coalescing
+- scsi: hisi_sas: Reset PHY again if phyup timeout
+- scsi: hisi_sas: Add firmware information check
+- scsi: hisi_sas: Create trigger_dump at the end of the debugfs initialization
+- scsi: hisi_sas: Adjust priority of registering and exiting debugfs for security
+- scsi: libsas: Set port when ex_phy is added or deleted
+- scsi: libsas: Move sas_add_parent_port() to sas_expander.c
+- scsi: libsas: Add helper for port add ex_phy
+- Merge branch 'release-cve' into release
+- bpf: abort verification if env->cur_state->loop_entry != NULL
+- bpf: copy_verifier_state() should copy 'loop_entry' field
+- drm/amdgpu: csa unmap use uninterruptible lock
+- RDMA/core: Fix "KASAN: slab-use-after-free Read in ib_register_device" problem
+- nvme-tcp: sanitize request list handling
+- llist: add interface to check if a node is on a list.
+- Merge branch 'txpeng/release/pcp' into 'release' (merge request !563)
+- mm/pcp: limit the batch alloc and free of pcp to pcp->batch
+- mm/pcp: put a limit 32MB to the per cpu pagesets
+- mm/pcp: make pcp batch scale max to 2
+- mm/pcp: check and release the zone->lock in free_pcppages_bulk()
+- mm/pcp: end loop in the batch drain,decay PCP processes More accurate
+- mm/pcp: batch limit and cond_resched for drain_all_pages() and decay_pcp_high
+- mm/vmstat: Fix CI
+- mm/vmstat: add pcp pages to memfree
+- mm/vmstat: add a high_min high_max to zoneinfo
+- mm/pcp: add a switch to close pcp auto tune feature
+- mm/pcp: make pcp decay high more accurate
+- mm/vmstat: add a PCPFree item to /proc/meminfo
+- dist,spec: let perf and bpf support C-plus demangle
+- Merge branch 'olice/release' into 'release' (merge request !559)
+- rue/sched: Support to remove offline task iowait to compat hotfix
+- Merge branch 'linuszeng/tk5/psi' into 'release' (merge request !560)
+- Revert "psi: only show SOME PSI for non-IRQ in cgroup v1"
+- Merge branch 'paulning/memqos-cache_hit-latency_histogram-cgroup-v2' into 'release' (merge request !566)
+- rue/mm: adaptation of the page_cache_hit rate feature for cgroup v2
+- rue/mm: adaptation of the latency_histogram statistics feature for cgroup v2
+- Merge branch 'txpeng/release/sev-snp' into 'release' (merge request !562)
+- memblock: Accept allocated memory before use in memblock_double_array()
+- x86/sev: Fix making shared pages private during kdump
+- dma/swiotlb: Provide new early param to allocate memblock in highmem
+- x86/sev: Fix unsharing all shared memory during kdump
+- Revert "Merge branch 'johnny/sev-snp' into 'sev-snp-release' (merge request !397)"
+- pci-dma: Add SWIOTLB_ANY flag for cc guest
+- x86/sev: Fix SNP guest kdump hang/softlockup/panic
+- sev: Fix a build error
+- x86/sev: Convert shared memory back to private on kexec
+- x86: Prepare convert shared memory back to private on kexec
+- x86/mm: Add callbacks to prepare encrypted memory for kexec
+- x86/mm: Refactor __set_clr_pte_enc()
+- x86/boot: Skip video memory access in the decompressor for SEV-ES/SNP
+- proc/kcore: do not try to access unaccepted memory
+- efi/unaccepted: do not let /proc/vmcore try to access unaccepted memory
+- x86/mm: Do not zap page table entries mapping unaccepted memory table during kdump
+- x86/mm: Make e820__end_ram_pfn() cover E820_TYPE_ACPI ranges
+- x86/mm: Return correct level from lookup_address() if pte is none
+- x86/sev: Move SEV compilation units
+- tsse: fix a build warning
+- config: Added CRYPTO option for GPU
+- x86/sev: Make the VMPL0 checking more straight forward
+- x86/sev: Rename snp_init() in boot/compressed/sev.c
+- x86/sev: Shorten struct name snp_secrets_page_layout to snp_secrets_page
+- x86/sev: Check for MWAITX and MONITORX opcodes in the #VC handler
+- x86/sev: Dump SEV_STATUS
+- x86/mm: Fix memory encryption features advertisement
+- x86/sev: Harden #VC instruction emulation somewhat
+- Merge branch 'leonylgao/update_bnxt_en' into 'release' (merge request !564)
+- thirdpaty/bnxt: update bnxt_en driver to 233
+- Merge branch 'leonylgao/softlockup_irq_storm' into 'release' (merge request !530)
+- config: open CONFIG_SOFTLOCKUP_DETECTOR_INTR_STORM
+- watchdog/softlockup: Report the most frequent interrupts
+- genirq: Avoid summation loops for /proc/interrupts
+- genirq: Provide a snapshot mechanism for interrupt statistics
+- genirq: Convert kstat_irqs to a struct
+- genirq: Deduplicate interrupt descriptor initialization
+- Merge branch 'cunhuang/disable_CONFIG_RANDOMIZE_BASE' into 'release' (merge request !425)
+- debug: config: disable CONFIG_RANDOMIZE_BASE for kasan version's performance
+- Merge branch 'cunhuang/nvme-interrupt-coalesce-v3' into 'release' (merge request !556)
+- Adaptive NVME SSD interrupt coalescing
+- Merge branch release-cve into branch release
+- net: stmmac: make sure that ptp_rate is not 0 before configuring EST
+- sched_ext: bpf_iter_scx_dsq_new() should always initialize iterator
+- net_sched: sch_sfq: reject invalid perturb period
+- net/sched: fix use-after-free in taprio_dev_notifier
+- sunrpc: handle SVC_GARBAGE during svc auth processing as auth error
+- espintcp: fix skb leaks
+- Merge branch 'rongwei.wang/release' into 'release' (merge request !536)
+- tk: mm: hugetext: support direct allocation of huge pages
+- anolis: mm: hugetext: pad binary mapping for THP candidate
+- anolis: mm, thp: hugetext: replace hugetext_enabled with hugetext_file{anon}_enabled
+- anolis: mm, thp: hugetext: redesign fine-grained hugetext_enabled
+- anolis: mm, thp: hugetext: speedup khugepaged for executable vmas
+- anolis: mm, thp: hugetext: support anonymous vmas with executable
+- anolis: mm, thp: hugetext: make PIC binary mapping address THP align
+- tk: mm: hugetext: check executable file mapping
+- anolis: mm, thp: introduce hugetext framework
+- Merge branch 'leonylgao/hungtask_sem_owner' into 'release' (merge request !547)
+- samples: extend hung_task detector test with semaphore support
+- hung_task: show the blocker task if the task is hung on semaphore
+- hung_task: replace blocker_mutex with encoded blocker
+- Merge branch 'leonylgao/ignore_hung_task_warnings' into 'release' (merge request !552)
+- hung_task: ignore hung_task_warnings when hung_task_panic is enabled
+- Merge branch 'leonylgao/rcu_cpu_stall_cputime' into 'release' (merge request !553)
+- config: enable CONFIG_RCU_CPU_STALL_CPUTIME
+- Merge OCK linux-6.6/devel branch into TS4 kernel's release branch
+- !432 drivers/net, wangxun: support wangxun 1G/10G/25G/40G
+- driver/net,wangxun: update driver to support 25G/40G
+- drivers,wangxun: fix compile error when using allyesconfig
+- drivers/net,wangxun: fix compile error
+- net: wangxun: txgbe: support wangxun 10GbE driver
+- net: wangxun: ngbe: support wangxun 1GbE driver
+- drivers/net, wangxun: remove linux uptream inbox wangxun driver
+- !428 [linux-6.6/devel]Hygon: Optimization of TDM kernel driver and corresponding tdm_kernel_guard module
+- [optimization][tdm]: optimize TDM driver code logic to avoid warning
+- [optimization]: crypto: ccp: add "tdm_guard" as kernel and module parameter
+- [bugfix]: crypto: ccp: Fix the issue of TDM support detection failure on Hygon platforms without psp firmware support
+- !427 fix psp_mutex_lock_timeout soft lockup
+- drivers/crypto/ccp: fix soft lockup warning in psp_mutex_lock_timeout()
+- Merge branch 'leonylgao/fix-blkg_dev_name' into 'release' (merge request !546)
+- Revert "blk-cgroup: remove the !bdi->dev check in blkg_dev_name"
+- Merge branch 'cunhuang/vfs_cache_pressure_info' into 'release' (merge request !535)
+- dcache: log: if vfs_cache_pressure is 0, doing drop_caches will print log
+- Merge branch 'yaoyaolli/release-fix-cgroupv2_cpustat' into 'release' (merge request !538)
+- rue/cgroupfs: support quota_aware in cgroup v2
+- rue/cgroupfs: correct /proc/stat cpu time in cgroup v2
+- Merge linux 6.6.96 into TS4 kernel's release branch
+- Merge linux 6.6.95 into TS4 kernel release branch
+- Merge branch 'cunhuang/android_support' into 'release' (merge request !533)
+- config: enable macro to support android
+- Merge branch 'yaoyaolli/release-fix-show_idle' into 'release' (merge request !532)
+- rue/cgroupfs: fix incorrect idle values when cgroupfs_stat_show_cpuacct_info=0
+- Merge branch 'cunhuang/watchdog_max_limit' into 'release' (merge request !531)
+- watchdog: enlarge watchdog_thresh limit
+- Merge linux-6.6.94 into TK5 release branch
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !422 [linux-6.6/devel]:drivers/new/ethernet/huawei:Modify the driver version
+- [linux-6.6/devel]:drivers/new/ethernet/huawei:Modify the driver version
+- !425 [devel-6.6] linkdata: ps3stor compilation problem solved
+- scsi: linkdata ps3stor compilation problem solved category: bugfix
+- !418 [linux-6.6/devel][Feature] perf vendor events arm64: Add events/metrics
+- perf vendor events arm64: Add V3 events/metrics
+- perf vendor events arm64: Add N3 events/metrics
+- perf vendor events arm64: Add FUJITSU-MONAKA PMU event
+- perf vendor events arm64: Update N2/V2 events from source
+- !403 DRM: Fix Phytium DRM build fail when allyesconfig
+- DRM: Fix Phytium DRM build fail when allyesonfig
+- !405 KVM: uncheck writeable_mask in arm64_check_features
+- KVM: uncheck writeable_mask in arm64_check_features
+- !411 PCI: phytium: Add hotplug and hotreset workaround patch for phytium SoCs
+- PCI: phytium: Add hotplug and hotreset workaround patch for phytium SoCs
+- !410 iommu: smmuv3: Not print information of SMMU 0x10 event
+- iommu: smmuv3: Not print information of SMMU 0x10 event
+- arm64: Add phytium PS24080 SoC platform judgement
+- !416 [linux-6.6/devel][Feature]: tpm: Add a driver for Loongson TPM device
+- tpm: Add a driver for Loongson TPM device
+- !415 [linux-6.6/devel][Bugfix]: LoongArch: Fix panic caused by NULL-PMD in huge_pte_offset()
+- LoongArch: Fix panic caused by NULL-PMD in huge_pte_offset()
+- !401 Eliminate the runtime dependency on CSV functionality for vpsp
+- crypto: ccp: fix The high priority queue changes cmd_id of the queued elements
+- crypto: ccp: support psp generic ringbuffer
+- crypto: ccp: Remove vpsp's dependency on sev module
+- crypto: ccp: Support userspace mmap psp mmio
+- drivers/thirdparty,smartpqi: delete smartpqi driver
+- net: bpf: use return of BPF_SOCK_OPS_TCP_{CONNECT, LISTEN}_CB
+- Merge branch 'likexu/kvm/fixes' into 'release' (merge request !528)
+- KVM: SVM: Force sev_es_host_save_area() to be inlined (for noinstr usage)
+- KVM: SVM: Set RFLAGS.IF=1 in C code, to get VMRUN out of the STI shadow
+- KVM: SVM: let alternatives handle the cases when RSB filling is required
+- KVM: Fix a goof where kvm_create_vm() returns 0 instead of -ENOMEM
+- KVM: x86: Stop compiling vmenter.S with OBJECT_FILES_NON_STANDARD
+- KVM: SVM: Create a stack frame in __svm_sev_es_vcpu_run()
+- KVM: SVM: Save/restore args across SEV-ES VMRUN via host save area
+- KVM: SVM: Save/restore non-volatile GPRs in SEV-ES VMRUN via host save area
+- KVM: SVM: Clobber RAX instead of RBX when discarding spec_ctrl_intercepted
+- KVM: SVM: Drop 32-bit "support" from __svm_sev_es_vcpu_run()
+- KVM: SVM: Wrap __svm_sev_es_vcpu_run() with #ifdef CONFIG_KVM_AMD_SEV
+- KVM: SVM: Create a stack frame in __svm_vcpu_run() for unwinding
+- KVM: SVM,VMX: Use %rip-relative addressing to access kvm_rebooting
+- Merge linux 6.6.93 into TK5 release branch
+- !399 Optimize the performance of Hygon key management in virtualized scenarios
+- crypto: ccp: Support vpsp ringbuffer overcommit
+- crypto: ccp: Use a workqueue to clean up the vpsp ringbuffer
+- crypto: ccp: move vpsp-related functions to vpsp.c
+- Merge OCK linux-6.6/devel branch into TK5 release
+- !396 drm/phytium: Fix some Bugs in Phytium Display Engine
+- drm/phytium: Fix some Bugs in Phytium Display Engine
+- !395 Intel-Sig: intel_idle: add Clearwater Forest and GNR-D SoC support
+- intel_idle: add Clearwater Forest SoC support
+- intel_idle: add Granite Rapids Xeon D support
+- !394 Intel-sig: platform/x86/intel-uncore-freq: Add efficiency latency control support
+- platform/x86/intel-uncore-freq: Add efficiency latency control to sysfs interface
+- platform/x86/intel-uncore-freq: Add support for efficiency latency control
+- platform/x86/intel-uncore-freq: Do not present separate package-die domain
+- Merge branch 'release-cve' into release
+- drm/amd/display: Fix slab-use-after-free in hdcp
+- drm/amd/display: Add scoped mutexes for amdgpu_dm_dhcp
+- dm-bufio: don't schedule in atomic context
+- btrfs: adjust subpage bit start based on sectorsize
+
 * Tue Jun  3 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.92-34
 - Merge linux-6.6.92 into TK5 release branch
 - Linux 6.6.92
