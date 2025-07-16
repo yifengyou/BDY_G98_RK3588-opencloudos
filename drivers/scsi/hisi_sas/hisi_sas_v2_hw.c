@@ -2543,9 +2543,7 @@ static void prep_ata_v2_hw(struct hisi_hba *hisi_hba,
 			(task->ata_task.fis.control & ATA_SRST))
 		dw1 |= 1 << CMD_HDR_RESET_OFF;
 
-	dw1 |= (hisi_sas_get_ata_protocol(
-		&task->ata_task.fis, task->data_dir))
-		<< CMD_HDR_FRAME_TYPE_OFF;
+	dw1 |= (hisi_sas_get_ata_protocol(task)) << CMD_HDR_FRAME_TYPE_OFF;
 	dw1 |= sas_dev->device_id << CMD_HDR_DEV_ID_OFF;
 	hdr->dw1 = cpu_to_le32(dw1);
 
@@ -2773,7 +2771,7 @@ static irqreturn_t int_phy_updown_v2_hw(int irq_no, void *p)
 	irq_msk = (hisi_sas_read32(hisi_hba, HGC_INVLD_DQE_INFO)
 		   >> HGC_INVLD_DQE_INFO_FB_CH0_OFF) & 0x1ff;
 	while (irq_msk) {
-		if (irq_msk  & 1) {
+		if (irq_msk & 1) {
 			u32 reg_value = hisi_sas_phy_read32(hisi_hba, phy_no,
 					    CHL_INT0);
 
@@ -3113,7 +3111,7 @@ static irqreturn_t fatal_axi_int_v2_hw(int irq_no, void *p)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t  cq_thread_v2_hw(int irq_no, void *p)
+static irqreturn_t cq_thread_v2_hw(int irq_no, void *p)
 {
 	struct hisi_sas_cq *cq = p;
 	struct hisi_hba *hisi_hba = cq->hisi_hba;
@@ -3501,7 +3499,7 @@ static int write_gpio_v2_hw(struct hisi_hba *hisi_hba, u8 reg_type,
 			 * numbered drive in the fourth byte.
 			 * See SFF-8485 Rev. 0.7 Table 24.
 			 */
-			void __iomem  *reg_addr = hisi_hba->sgpio_regs +
+			void __iomem *reg_addr = hisi_hba->sgpio_regs +
 					reg_index * 4 + phy_no;
 			int data_idx = phy_no + 3 - (phy_no % 4) * 2;
 
@@ -3566,6 +3564,23 @@ static void map_queues_v2_hw(struct Scsi_Host *shost)
 	}
 }
 
+static int check_fw_info_v2_hw(struct hisi_hba *hisi_hba)
+{
+	struct device *dev = hisi_hba->dev;
+
+	if (hisi_hba->n_phy < 0 || hisi_hba->n_phy > 9) {
+		dev_err(dev, "invalid phy number from FW\n");
+		return -EINVAL;
+	}
+
+	if (hisi_hba->queue_count < 0 || hisi_hba->queue_count > 16) {
+		dev_err(dev, "invalid queue count from FW\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct scsi_host_template sht_v2_hw = {
 	.name			= DRV_NAME,
 	.proc_name		= DRV_NAME,
@@ -3597,6 +3612,7 @@ static const struct scsi_host_template sht_v2_hw = {
 
 static const struct hisi_sas_hw hisi_sas_v2_hw = {
 	.hw_init = hisi_sas_v2_init,
+	.fw_info_check = check_fw_info_v2_hw,
 	.interrupt_preinit = hisi_sas_v2_interrupt_preinit,
 	.setup_itct = setup_itct_v2_hw,
 	.slot_index_alloc = slot_index_alloc_quirk_v2_hw,
