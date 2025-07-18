@@ -2477,9 +2477,11 @@ void arch_smt_update(void)
 
 #if defined(CONFIG_X86_HYGON_LMC_SSE2_ON) || \
 	defined(CONFIG_X86_HYGON_LMC_AVX2_ON)
+extern unsigned int fpu_kernel_nonatomic_xstate_size;
 static inline void update_lmc_branch_cond(void)
 {
-	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON &&
+			fpu_kernel_nonatomic_xstate_size)
 		static_branch_enable(&hygon_lmc_key);
 }
 #else
