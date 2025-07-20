@@ -12,10 +12,10 @@
 
 #ifndef __ASSEMBLY__
 
-#include <linux/hardirq.h>
 #include <linux/personality.h> /* for READ_IMPLIES_EXEC */
 #include <linux/types.h> /* for gfp_t */
 #include <asm/pgtable-types.h>
+#include <linux/preempt.h>
 
 struct page;
 struct vm_area_struct;
