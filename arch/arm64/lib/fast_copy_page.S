@@ -78,24 +78,23 @@ SYM_FUNC_START(fast_copy_page)
 	mov x0, #-1
 	b 20b
 	.previous
-.pushsection	__ex_table, "a"
-.align		3
-.long		(1b - .), (21b - .)
-.long		(2b - .), (21b - .)
-.long		(3b - .), (21b - .)
-.long		(4b - .), (21b - .)
-.long		(5b - .), (21b - .)
-.long		(6b - .), (21b - .)
-.long		(7b - .), (21b - .)
-.long		(8b - .), (21b - .)
-.long		(9b - .), (21b - .)
-.long		(10b - .), (21b - .)
-.long		(11b - .), (21b - .)
-.long		(12b - .), (21b - .)
-.long		(13b - .), (21b - .)
-.long		(14b - .), (21b - .)
-.long		(15b - .), (21b - .)
-.long		(16b - .), (21b - .)
-.popsection
+
+_asm_extable_uaccess 1b, 21b
+_asm_extable_uaccess 2b, 21b
+_asm_extable_uaccess 3b, 21b
+_asm_extable_uaccess 4b, 21b
+_asm_extable_uaccess 5b, 21b
+_asm_extable_uaccess 6b, 21b
+_asm_extable_uaccess 7b, 21b
+_asm_extable_uaccess 8b, 21b
+_asm_extable_uaccess 9b, 21b
+_asm_extable_uaccess 10b, 21b
+_asm_extable_uaccess 11b, 21b
+_asm_extable_uaccess 12b, 21b
+_asm_extable_uaccess 13b, 21b
+_asm_extable_uaccess 14b, 21b
+_asm_extable_uaccess 15b, 21b
+_asm_extable_uaccess 16b, 21b
+
 SYM_FUNC_END(fast_copy_page)
 EXPORT_SYMBOL(fast_copy_page)
