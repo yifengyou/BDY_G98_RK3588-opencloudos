@@ -894,7 +894,7 @@ static int nvme_set_irq_coalesce(struct nvme_ctrl *ctrl, u32 v)
 #define HIT_COUNT_BEFORE_CHANGE_DEFAULT 5	/* condition hit count before change */
 #define CHECK_INTERVAL                  0x7	/* check interval */
 
-static int disable = 0;
+static int disable = 1;
 static int switch_cnt = 0;
 static int hit_count_before_change = HIT_COUNT_BEFORE_CHANGE_DEFAULT;
 static int coalesce_value = 0x10a;
@@ -3874,7 +3874,7 @@ static int __init nvme_init(void)
 		return -ENOMEM;
 	}
 
-	pr_info("nvme.ko nvme_init() IN 20250703-1500.\n");
+	pr_info("nvme.ko nvme_init() version 3.\n");
 	ret = sysfs_create_file(nvme_kobj, &disable_attr.attr);
 	if (ret)
 		pr_err("Failed to create sysfs file: disable\n");
