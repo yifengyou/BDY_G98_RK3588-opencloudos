@@ -44,7 +44,6 @@ struct sev_device {
 
 	struct sev_vdata *vdata;
 
-	int state;
 	unsigned int int_rcvd;
 	wait_queue_head_t int_queue;
 	struct sev_misc_dev *misc;
@@ -59,6 +58,8 @@ struct sev_device {
 	bool cmd_buf_backup_active;
 
 	bool snp_initialized;
+
+	struct sev_user_data_status sev_plat_status;
 
 	/* Management of the Hygon RING BUFFER mode */
 	struct csv_ringbuffer_queue ring_buffer[CSV_COMMAND_PRIORITY_NUM];
