@@ -314,6 +314,19 @@ config SH_CPU_FREQ
 	  If unsure, say N.
 endif
 
+if SW64
+config SW64_CPUFREQ
+	bool "SW64 CPU Frequency interface"
+	default y
+	help
+	  This adds the CPUFreq driver for SW64 processor which supports
+	  software configurable cpu frequency.
+
+	  For details, take a look at <file:Documentation/cpu-freq>.
+
+	  If unsure, say N.
+endif
+
 config QORIQ_CPUFREQ
 	tristate "CPU frequency scaling driver for Freescale QorIQ SoCs"
 	depends on OF && COMMON_CLK
