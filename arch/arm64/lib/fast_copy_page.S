@@ -72,12 +72,9 @@ SYM_FUNC_START(fast_copy_page)
 	ldp     x29, x30, [sp], #64
 	ret
 
-	.section .fixup, "ax"
-	.align  2
 21:
 	mov x0, #-1
 	b 20b
-	.previous
 
 _asm_extable_uaccess 1b, 21b
 _asm_extable_uaccess 2b, 21b
