@@ -86,7 +86,7 @@ int psp_mutex_lock_timeout(struct psp_mutex *mutex, uint64_t ms)
 	int ret = 0;
 	unsigned long je, last_je;
 
-	last_je = jiffies + msecs_to_jiffies(100);
+	last_je = jiffies;
 	je = jiffies + msecs_to_jiffies(ms);
 	do {
 		if (psp_mutex_trylock(mutex)) {
@@ -95,9 +95,9 @@ int psp_mutex_lock_timeout(struct psp_mutex *mutex, uint64_t ms)
 		}
 
 		// avoid triggering soft lockup warning
-		if (time_before(jiffies, last_je)) {
+		if (time_after(jiffies, last_je + msecs_to_jiffies(100))) {
 			schedule();
-			last_je = jiffies + msecs_to_jiffies(100);
+			last_je = jiffies;
 		}
 	} while ((ms == 0) || time_before(jiffies, je));
 
