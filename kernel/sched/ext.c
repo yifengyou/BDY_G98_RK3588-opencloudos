@@ -2133,7 +2133,6 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 	bool prev_on_scx = prev->sched_class == &ext_sched_class;
 	bool prev_on_rq = prev->scx.flags & SCX_TASK_QUEUED;
 	int nr_loops = SCX_DSP_MAX_LOOPS;
-	int ret;
 
 	lockdep_assert_rq_held(rq);
 	rq->scx.flags |= SCX_RQ_IN_BALANCE;
@@ -2193,7 +2192,7 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 	do {
 		dspc->nr_tasks = 0;
 
-		ret = SCX_CALL_OP_RET(SCX_KF_DISPATCH, dispatch, cpu_of(rq),
+		SCX_CALL_OP(SCX_KF_DISPATCH, dispatch, cpu_of(rq),
 			    prev_on_scx ? prev : NULL);
 
 		flush_dispatch_buf(rq);
@@ -2206,9 +2205,6 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 			goto has_tasks;
 		if (consume_global_dsq(rq))
 			goto has_tasks;
-
-		if (ret)
-			break;
 
 		/*
 		 * ops.dispatch() can trap us in this loop by repeatedly
@@ -5490,7 +5486,7 @@ static s32 sched_ext_ops__select_cpu(struct task_struct *p, s32 prev_cpu, u64 wa
 static void sched_ext_ops__enqueue(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__queued(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__dequeue(struct task_struct *p, u64 enq_flags) {}
-static s32 sched_ext_ops__dispatch(s32 prev_cpu, struct task_struct *prev__nullable) { return -EINVAL;}
+static void sched_ext_ops__dispatch(s32 prev_cpu, struct task_struct *prev__nullable) {}
 static void sched_ext_ops__tick(struct task_struct *p) {}
 static void sched_ext_ops__runnable(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__running(struct task_struct *p) {}
