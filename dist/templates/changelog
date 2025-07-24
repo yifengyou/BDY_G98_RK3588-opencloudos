@@ -1,3 +1,15 @@
+* Thu Jul 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-37
+- Merge branch 'leonylgao/concurrent_lockup' into 'release' (merge request !584)
+- watchdog: if panicking and we dumped everything, don't re-enable dumping
+- watchdog/hardlockup: use printk_cpu_sync_get_irqsave() to serialize reporting
+- watchdog/softlockup: use printk_cpu_sync_get_irqsave() to serialize reporting
+- watchdog/hardlockup: adopt softlockup logic avoiding double-dumps
+- softlockup: serialized softlockup's log
+- Merge branch 'bingfangguo/release/fix-mglru-oom' into 'release' (merge request !558)
+- mm, lru_gen: fix OOM while switching MGLRU state
+- Merge branch 'rongwei.wang/release' into 'release' (merge request !581)
+- config: default enable hugetext
+
 * Thu Jul 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-36
 - nvme: dynamic interrupt coalescing is disabled by defaut
 
