@@ -1,3 +1,6 @@
+* Thu Jul 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-36
+- nvme: dynamic interrupt coalescing is disabled by defaut
+
 * Wed Jul 16 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-35
 - Merge linux 6.6.68 into release
 - Merge linux 6.6.97 into release
