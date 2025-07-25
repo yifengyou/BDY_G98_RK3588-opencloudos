@@ -24,6 +24,11 @@ static void extioi_update_irq(struct loongarch_extioi *s, int irq, int level)
 
 	cpu = s->sw_coremap[irq];
 	vcpu = kvm_get_vcpu(s->kvm, cpu);
+	if (vcpu == NULL) {
+		kvm_info("%s irq %d vcpu %d don't exist\n", __func__, irq, cpu);
+		return;
+	}
+
 	irq_index = irq / 32;
 	/* length of accessing core isr is 4 bytes */
 	irq_mask = 1 << (irq & 0x1f);
