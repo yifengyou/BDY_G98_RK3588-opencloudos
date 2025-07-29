@@ -3228,6 +3228,11 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 		goto out;
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (sysctl_scx_ignore_cpubind && p->sched_class == &ext_sched_class)
+		goto out;
+#endif
+
 	/*
 	 * Picking a ~random cpu helps in cases where we are changing affinity
 	 * for groups of tasks (ie. cpuset), so that load balancing is not
@@ -3242,7 +3247,6 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	__do_set_cpus_allowed(p, ctx);
 
 	return affine_move_task(rq, p, rf, dest_cpu, ctx->flags);
-
 out:
 	task_rq_unlock(rq, p, rf);
 
@@ -4937,6 +4941,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_SCHED_CLASS_EXT
 	} else if (task_should_scx(p)) {
 		p->sched_class = &ext_sched_class;
+		scx_ignore_cpubind(p);
 #endif
 	} else {
 #ifdef CONFIG_BT_SCHED
@@ -7350,6 +7355,10 @@ void __setscheduler_prio(struct task_struct *p, int prio)
 		p->sched_class = &fair_sched_class;
 
 	p->prio = prio;
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+	scx_ignore_cpubind(p);
+#endif
 }
 
 #ifdef CONFIG_RT_MUTEXES

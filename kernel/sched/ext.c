@@ -263,6 +263,7 @@ static struct delayed_work scx_watchdog_work;
 
 int sysctl_panic_on_scx_stall __read_mostly;
 int sysctl_debug_scx_stall __read_mostly;
+unsigned int sysctl_scx_ignore_cpubind;
 
 /* idle tracking */
 #ifdef CONFIG_SMP
@@ -3588,6 +3589,55 @@ bool scx_can_stop_tick(struct rq *rq)
 }
 #endif
 
+void scx_ignore_cpubind(struct task_struct *p)
+{
+	struct affinity_context ac = {
+		.new_mask  = cpu_active_mask,
+		.flags     = 0,
+	};
+
+	if (!sysctl_scx_ignore_cpubind || p->sched_class != &ext_sched_class)
+		return;
+
+	set_cpus_allowed_common(p, &ac);
+}
+
+int scx_ignore_cpubind_handler(struct ctl_table *table, int write,
+		  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct scx_task_iter sti;
+	struct task_struct *p;
+	int ret;
+	int old_val;
+
+	if (!write) {
+		ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+		return ret;
+	}
+
+	percpu_down_write(&scx_fork_rwsem);
+
+	if (!scx_enabled() || READ_ONCE(scx_switching_all)) {
+		ret = -EPERM;
+		goto out;
+	}
+
+	old_val = sysctl_scx_ignore_cpubind;
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !sysctl_scx_ignore_cpubind || sysctl_scx_ignore_cpubind == old_val)
+		goto out;
+
+	scx_task_iter_start(&sti);
+	while ((p = scx_task_iter_next_locked(&sti))) {
+		scx_ignore_cpubind(p);
+	}
+	scx_task_iter_stop(&sti);
+
+out:
+	percpu_up_write(&scx_fork_rwsem);
+	return ret;
+}
+
 #ifdef CONFIG_EXT_GROUP_SCHED
 
 DEFINE_STATIC_PERCPU_RWSEM(scx_cgroup_rwsem);
@@ -3624,12 +3674,14 @@ static void scx_cgroup_warn_missing_idle(struct task_group *tg)
 
 void scx_cgroup_fork(struct task_struct *p)
 {
-	if (scx_cgroup_enabled && !READ_ONCE(scx_switching_all)) {
-		if (p->sched_class != &ext_sched_class && p->sched_task_group->scx)
-			p->sched_class = &ext_sched_class;
-		else if (p->sched_class == &ext_sched_class && !p->sched_task_group->scx)
-			p->sched_class = &fair_sched_class;
-	}
+	if (!scx_cgroup_enabled || READ_ONCE(scx_switching_all))
+		return;
+
+	if (p->sched_class != &ext_sched_class && p->sched_task_group->scx) {
+		p->sched_class = &ext_sched_class;
+		scx_ignore_cpubind(p);
+	} else if (p->sched_class == &ext_sched_class && !p->sched_task_group->scx)
+		p->sched_class = &fair_sched_class;
 }
 
 int scx_tg_online(struct task_group *tg)
@@ -3738,9 +3790,10 @@ void scx_cgroup_move_task(struct task_struct *p)
 
 	prev_class = p->sched_class;
 	if (!READ_ONCE(scx_switching_all)) {
-		if (prev_class != &ext_sched_class && group->scx)
+		if (prev_class != &ext_sched_class && group->scx) {
 			p->sched_class = &ext_sched_class;
-		else if (prev_class == &ext_sched_class && !group->scx)
+			scx_ignore_cpubind(p);
+		} else if (prev_class == &ext_sched_class && !group->scx)
 			p->sched_class = &fair_sched_class;
 	}
 
@@ -3860,9 +3913,10 @@ int scx_cpu_cgroup_switch(struct task_group *tg, int val)
 
 		sched_deq_and_put_task(p, DEQUEUE_SAVE | DEQUEUE_MOVE,
 				&ctx);
-		if (old_class != &ext_sched_class && tg->scx)
+		if (old_class != &ext_sched_class && tg->scx) {
 			p->sched_class = &ext_sched_class;
-		else if (old_class == &ext_sched_class && !tg->scx)
+			scx_ignore_cpubind(p);
+		} else if (old_class == &ext_sched_class && !tg->scx)
 			p->sched_class = &fair_sched_class;
 		check_class_changing(rq, p, old_class);
 		sched_enq_and_set_task(&ctx);
