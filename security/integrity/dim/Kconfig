@@ -3,7 +3,7 @@
 #
 config DIM
     bool "DIM (Dynamic Integrity Measurement)"
-    depends on INTEGRITY
+    depends on INTEGRITY && ASYMMETRIC_KEY_TYPE
     default y
     help
       The Dynamic Integrity Measurement(DIM) architechture maintains a list
