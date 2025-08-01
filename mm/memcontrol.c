@@ -4281,7 +4281,7 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 	goal_pages_used = max_t(unsigned long, MIN_PAGECACHE_PAGES,
 				goal_pages_used);
 
-	if (pages_used > pages_max)
+	if (pages_used >= pages_max)
 		memcg_memory_event(memcg, MEMCG_PAGECACHE_MAX);
 
 	while (pages_used > goal_pages_used) {
