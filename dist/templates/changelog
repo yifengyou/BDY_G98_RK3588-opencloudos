@@ -1,3 +1,7 @@
+* Fri Aug  1 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-38
+- config: arm64 enable IKCONFIG and IKCONFIG_PROC as module
+- config: enable IKCONFIG and IKCONFIG_PROC as module
+
 * Thu Jul 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-37
 - Merge branch 'leonylgao/concurrent_lockup' into 'release' (merge request !584)
 - watchdog: if panicking and we dumped everything, don't re-enable dumping
