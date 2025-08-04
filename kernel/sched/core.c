@@ -7757,6 +7757,19 @@ int sched_core_idle_cpu(int cpu)
 
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+int scx_idle_cpu(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if (scx_enabled() && rq->curr == rq->idle)
+		return 1;
+
+	return sched_core_idle_cpu(cpu);
+}
+
+#endif
+
 #ifdef CONFIG_SMP
 /*
  * Load avg and utiliztion metrics need to be updated periodically and before
