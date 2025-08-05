@@ -2376,6 +2376,49 @@ estimator_fail:
 	return -ENOMEM;
 }
 
+static int __net_init __ip_vs_dev_init(struct net *net)
+{
+	int ret;
+	unsigned int afmask;
+	struct netns_ipvs *ipvs = NULL;
+
+	if (share_ns) {
+
+		ipvs = net_ipvs(net);
+
+		if (!ipvs) {
+			printk(KERN_WARNING "ipvs of net is NULL\n");
+			ret = -ENODATA;
+			goto hook_fail;
+		}
+
+		ret = nf_register_net_hooks(net, ip_vs_ops4, ARRAY_SIZE(ip_vs_ops4));
+		if (ret < 0)
+			goto hook_fail;
+
+		afmask = 1;
+		ipvs->hooks_afmask |= afmask;
+
+#ifdef CONFIG_IP_VS_IPV6
+		ret = nf_register_net_hooks(net, ip_vs_ops6, ARRAY_SIZE(ip_vs_ops6));
+		if (ret < 0)
+			goto hook_fail2;
+
+		afmask = 2;
+		ipvs->hooks_afmask |= afmask;
+#endif
+	}
+
+	return 0;
+
+hook_fail2:
+	afmask = 1;
+	nf_unregister_net_hooks(net, ip_vs_ops4, ARRAY_SIZE(ip_vs_ops4));
+	ipvs->hooks_afmask &= ~afmask;
+hook_fail:
+	return ret;
+}
+
 static void __net_exit __ip_vs_cleanup_batch(struct list_head *net_list)
 {
 	struct netns_ipvs *ipvs;
@@ -2417,6 +2460,7 @@ static struct pernet_operations ipvs_core_ops = {
 };
 
 static struct pernet_operations ipvs_core_dev_ops = {
+	.init = __ip_vs_dev_init,
 	.exit_batch = __ip_vs_dev_cleanup_batch,
 };
 
