@@ -77,6 +77,34 @@ struct tkm_cmdresp_device_info_get {
 	struct tkm_device_info dev_info;
 } __packed;
 
+struct vtkm_cmdresp_key_backup {
+	struct tkm_cmdresp_head head;
+	uint16_t vid;
+	struct {
+		uint32_t scheme          : 31;
+		uint32_t has_shared_data : 1;
+	};
+	uint64_t image_location;       /*In*/
+	uint32_t image_length;         /*In Out*/
+	uint64_t cert_chain_location;
+	uint32_t cert_chain_len;
+	uint64_t shared_data_location;
+	uint32_t shared_data_len;
+} __packed;
+
+struct vtkm_cmdresp_key_restore {
+	struct tkm_cmdresp_head head;
+	uint16_t vid;
+	struct {
+		uint32_t scheme          : 31;
+		uint32_t has_shared_data : 1;
+	};
+	uint64_t image_location;       /*In*/
+	uint32_t image_length;         /*In*/
+	uint64_t shared_data_location;
+	uint32_t shared_data_len;
+} __packed;
+
 struct queue_info {
 	uint32_t head;   /* In|Out */
 	uint32_t tail;   /* In */
@@ -97,6 +125,19 @@ struct psp_ringbuffer_cmd_buf {
 #define PSP_CMD_STATUS_RUNNING			0xffff
 #define PSP_RB_OVERCOMMIT_SIZE			1024
 #define TKM_DEVICE_INFO_GET			0x1001
+#define VTKM_KEY_BACKUP				0x905
+#define VTKM_KEY_RESTORE			0x906
+#define KEY_PROT_SAME_GENERATION		1
+#define TKM_CMDRESP_MIN_SIZE			4096
+
+// multiple level pointer or offset mode for tkm command
+#define OFFSET_MODE_BIT_SHIFT		63
+#define LOC_IS_OFFSET_MODE(location)	(((uint64_t)(location) >> OFFSET_MODE_BIT_SHIFT) == 1)
+#define LOC_IS_POINTER_MODE(location)	(!LOC_IS_OFFSET_MODE(location))
+#define LOC_CLEAR_MODE_BIT(location)	((uint64_t)(location) & ~((uint64_t)1	\
+					<< OFFSET_MODE_BIT_SHIFT))
+#define LOC_FILL_MODE_BIT(location)	((uint64_t)(location) | ((uint64_t)1	\
+					<< OFFSET_MODE_BIT_SHIFT))
 
 #define PSP_CMD_RING_BUFFER		0x304
 #define PSP_DO_CMD_OP_PHYADDR	BIT(0)   // Input data as physical address
@@ -149,6 +190,7 @@ void psp_ringbuffer_check_support(void);
  * psp_do_ringbuffer_cmds_locked is a no-wait PSP operation.
  * Must register notify via psp_worker_register_notify before use.
  */
-int psp_do_ringbuffer_cmds_locked(struct csv_ringbuffer_queue *ring_buffer, int *psp_ret);
+int psp_do_ringbuffer_cmds_locked(struct csv_ringbuffer_queue *ring_buffer, int *psp_ret,
+					bool overcommit);
 
 #endif	/* __CCP_HYGON_PSP_DEV_H__ */

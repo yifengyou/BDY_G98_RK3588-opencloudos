@@ -55,6 +55,9 @@ struct vpsp_ret {
 #define VPSP_RET_SYS_FORMAT    1
 #define VPSP_RET_PSP_FORMAT    0
 
+#define VPSP_MAGIC_NUM		0x56505350	/* "VPSP" */
+#define TKM_ERR_SIZE_SMALL	5
+
 #define PSP_2MB_MASK		(2*1024*1024 - 1)
 #define PSP_HUGEPAGE_2MB	(2*1024*1024)
 #define PSP_HUGEPAGE_NUM_MAX	128
@@ -101,13 +104,43 @@ struct vpsp_cmd_ctx {
 	struct hlist_node node;
 };
 
+struct vpsp_ctx_serialized {
+	gpa_t gpa;
+	uint32_t statval;
+	uint32_t data_size;
+	uint32_t data_offset;
+} __packed;
+
+#define VPSP_SERIALIZED_VERSION		1
+struct vpsp_serialized_header {
+	uint32_t magic;
+	uint32_t buffer_len;
+	uint32_t version;
+	uint32_t ctx_count;
+	struct vpsp_ctx_serialized ctx_meta[];
+} __packed;
+
 enum VPSP_DEV_CTRL_OPCODE {
 	VPSP_OP_VID_ADD,
 	VPSP_OP_VID_DEL,
 	VPSP_OP_SET_DEFAULT_VID_PERMISSION,
 	VPSP_OP_GET_DEFAULT_VID_PERMISSION,
 	VPSP_OP_SET_GPA,
+	VPSP_OP_BACKUP_KEY,
+	VPSP_OP_RESTORE_KEY,
+	VPSP_OP_BACKUP_CTX,
+	VPSP_OP_RESTORE_CTX,
 };
+
+struct key_img_ctl {
+	unsigned int img_len;
+	void __user *key_img_ptr;
+} __packed;
+
+struct cmd_ctx_ctl {
+	unsigned int buffer_len;
+	void __user *cmd_ctx_ptr;
+} __packed;
 
 struct vpsp_dev_ctrl {
 	unsigned char op;
@@ -124,6 +157,10 @@ struct vpsp_dev_ctrl {
 			u64 gpa_start;
 			u64 gpa_end;
 		} gpa;
+
+		struct key_img_ctl key_img_ctl;
+		struct cmd_ctx_ctl cmd_ctx_ctl;
+
 		unsigned char reserved[128];
 	} __packed data;
 };
