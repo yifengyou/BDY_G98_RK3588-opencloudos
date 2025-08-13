@@ -1,3 +1,10 @@
+* Wed Aug 13 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-39
+- config: enable CONFIG_PRINTK_CALLER
+- block: pktcdvd: disable pktcdvd config
+- PCI: Fix the issue of link speed downgrade after link retraining
+- ext4: fallback to complex scan if aligned scan doesn't work
+- dim: add dependency on CONFIG_ASYMMETRIC_KEY_TYPE
+
 * Fri Aug  1 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-38
 - config: arm64 enable IKCONFIG and IKCONFIG_PROC as module
 - config: enable IKCONFIG and IKCONFIG_PROC as module
