@@ -1496,6 +1496,27 @@ fi
 # When install TS private release, do not need install "usb-storage nouveau cfg80211" into initramfs.
 tk_private_val=1
 grep -q "tk_private=1" /etc/default/grub 2>/dev/null || tk_private_val=0
+
+# Support for earlier private versions of TS4 which hasn't the command parameter of "tk_private=1"
+set +e
+if (( $tk_private_val == 0 )); then
+	# Get version num before "-" char
+	kernel_ver=$(uname -r | grep "\.tl4" 2>/dev/null) && kernel_ver=$(echo "${kernel_ver%%-*}")
+	# Get version num after "6.6." chars.
+	kernel_ver=$(echo "${kernel_ver#6.6.}")
+
+	# If kernel version smaller than 6.6.88, private versions of TS4 which hasn't the command parameter of "tk_private=1"
+	if [[ -n $kernel_ver ]]; then
+		if (( $kernel_ver < 88 )); then tk_private_val=1 ; fi
+	fi
+fi
+
+# Support for private TS3
+if (( $tk_private_val == 0 )); then
+	$(uname -r | grep "tlinux4" 1>/dev/null 2>&1) && tk_private_val=1
+fi
+set -e
+
 if (( $tk_private_val == 1 )); then echo "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" >> /etc/dracut.conf ; fi
 
 %post modules
