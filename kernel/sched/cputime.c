@@ -26,10 +26,14 @@
  */
 DEFINE_PER_CPU(struct irqtime, cpu_irqtime);
 
+static bool irqtime_enable;
 int sched_clock_irqtime;
 
 void enable_sched_clock_irqtime(void)
 {
+	if (!irqtime_enable)
+		return;
+
 	sched_clock_irqtime = 1;
 }
 
@@ -37,6 +41,12 @@ void disable_sched_clock_irqtime(void)
 {
 	sched_clock_irqtime = 0;
 }
+
+static int __init parse_irqtime_enable(char *str)
+{
+	return kstrtobool(str, &irqtime_enable);
+}
+early_param("irqtime", parse_irqtime_enable);
 
 static void irqtime_account_delta(struct irqtime *irqtime, u64 delta,
 				  enum cpu_usage_stat idx)
