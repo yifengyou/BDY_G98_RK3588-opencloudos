@@ -5,6 +5,16 @@
 
 source "drivers/iommu/hisilicon/ummu-core/Kconfig"
 
+config UB_UMMU_BASE
+	bool "Hisilicon UB MMU Support Builtin"
+	depends on ARM64
+	default n
+	help
+	  Support for implementations of the hisilicon UMMU architecture.
+	  As the kernel provides the basic functionality for using UMMU features.
+	  Say Y here if your Soc includes an UMMU device implementing
+	  the Hisilicon UMMU architecture.
+
 config UB_UMMU
 	tristate "Hisilicon UB MMU Support"
 	depends on ARM64 && ARCH_HISI
@@ -15,6 +25,7 @@ config UB_UMMU
 	select GENERIC_MSI_IRQ
 	select IOMMUFD_DRIVER if IOMMUFD
 	select UMMU_CORE
+	select UB_UMMU_BASE
 	help
 	  Support for implementations of the hisilicon UMMU architecture.
 	  UMMU provides address translation for device access to the
