@@ -488,9 +488,7 @@ static void memory_failure_cb(struct callback_head *twork)
 	if (!ret || ret == -EHWPOISON || ret == -EOPNOTSUPP)
 		return;
 
-	pr_err("%#llx: Sending SIGBUS to %s:%d due to hardware memory corruption\n",
-			twcb->pfn, current->comm, task_pid_nr(current));
-	force_sig(SIGBUS);
+	kill_accessing_process(twcb->pfn, twcb->flags, true);
 }
 
 static bool ghes_do_memory_failure(u64 physical_addr, int flags)
