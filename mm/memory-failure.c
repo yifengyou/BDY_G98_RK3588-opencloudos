@@ -862,10 +862,10 @@ static const struct mm_walk_ops hwpoison_walk_ops = {
  * is proper in most cases, but it could be wrong when the application
  * process has multiple entries mapping the error page.
  */
-static int kill_accessing_process(struct task_struct *p, unsigned long pfn,
-				  int flags)
+static int kill_accessing_process(unsigned long pfn, int flags)
 {
 	int ret;
+	struct task_struct *p = current;
 	struct hwpoison_walk priv = {
 		.pfn = pfn,
 	};
@@ -2065,7 +2065,7 @@ retry:
 		pr_err("%#lx: already hardware poisoned\n", pfn);
 		if (flags & MF_ACTION_REQUIRED) {
 			folio = page_folio(p);
-			res = kill_accessing_process(current, folio_pfn(folio), flags);
+			res = kill_accessing_process(folio_pfn(folio), flags);
 		}
 		return res;
 	} else if (res == -EBUSY) {
@@ -2243,7 +2243,7 @@ try_again:
 		pr_err("%#lx: already hardware poisoned\n", pfn);
 		res = -EHWPOISON;
 		if (flags & MF_ACTION_REQUIRED)
-			res = kill_accessing_process(current, pfn, flags);
+			res = kill_accessing_process(pfn, flags);
 		if (flags & MF_COUNT_INCREASED)
 			put_page(p);
 		goto unlock_mutex;
