@@ -761,3 +761,49 @@ int udma_modify_and_destroy_jetty(struct udma_dev *dev,
 
 	return 0;
 }
+
+static void udma_free_jetty(struct ubcore_jetty *jetty)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+
+	if (dfx_switch)
+		udma_dfx_delete_id(udma_dev, &udma_dev->dfx_info->jetty,
+				   udma_jetty->sq.id);
+
+	xa_erase(&udma_dev->jetty_table.xa, udma_jetty->sq.id);
+
+	if (refcount_dec_and_test(&udma_jetty->ae_refcount))
+		complete(&udma_jetty->ae_comp);
+	wait_for_completion(&udma_jetty->ae_comp);
+
+	udma_free_sq_buf(udma_dev, &udma_jetty->sq);
+	free_jetty_id(udma_dev, udma_jetty, !!udma_jetty->sq.jetty_grp);
+	kfree(udma_jetty);
+}
+
+int udma_destroy_jetty(struct ubcore_jetty *jetty)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+	int ret;
+
+	if (!udma_jetty->ue_rx_closed && udma_close_ue_rx(udma_dev, true, true, false, 0)) {
+		dev_err(udma_dev->dev, "close ue rx failed when destroying jetty.\n");
+		return -EINVAL;
+	}
+
+	ret = udma_modify_and_destroy_jetty(udma_dev, &udma_jetty->sq);
+	if (ret) {
+		dev_err(udma_dev->dev, "udma modify error and destroy jetty failed, id: %u.\n",
+			jetty->jetty_id.id);
+		if (!udma_jetty->ue_rx_closed)
+			udma_open_ue_rx(udma_dev, true, true, false, 0);
+		return ret;
+	}
+
+	udma_free_jetty(jetty);
+	udma_open_ue_rx(udma_dev, true, true, false, 0);
+
+	return 0;
+}
