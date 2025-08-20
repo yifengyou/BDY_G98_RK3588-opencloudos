@@ -919,3 +919,44 @@ err_alloc_jetty_grp_id:
 
 	return NULL;
 }
+
+int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp)
+{
+	struct udma_jetty_grp *udma_jetty_grp = to_udma_jetty_grp(jetty_grp);
+	struct udma_dev *udma_dev = to_udma_dev(jetty_grp->ub_dev);
+	struct ubase_mbx_attr mbox_attr = {};
+	int ret;
+
+	mbox_attr.tag = udma_jetty_grp->jetty_grp_id;
+	mbox_attr.op = UDMA_CMD_DESTROY_JETTY_GROUP_CONTEXT;
+	ret = post_mailbox_update_ctx(udma_dev, NULL, 0, &mbox_attr);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"post mailbox destroy jetty group failed, ret = %d.\n", ret);
+		return ret;
+	}
+
+	xa_erase(&udma_dev->jetty_grp_table.xa, udma_jetty_grp->jetty_grp_id);
+
+	if (refcount_dec_and_test(&udma_jetty_grp->ae_refcount))
+		complete(&udma_jetty_grp->ae_comp);
+	wait_for_completion(&udma_jetty_grp->ae_comp);
+
+	if (dfx_switch)
+		udma_dfx_delete_id(udma_dev, &udma_dev->dfx_info->jetty_grp,
+				   udma_jetty_grp->jetty_grp_id);
+
+	if (udma_jetty_grp->valid != 0)
+		dev_err(udma_dev->dev,
+			"jetty group been used, jetty valid is 0x%x.\n",
+			udma_jetty_grp->valid);
+
+	mutex_destroy(&udma_jetty_grp->valid_lock);
+	udma_id_free(&udma_dev->jetty_grp_table.ida_table,
+		     udma_jetty_grp->jetty_grp_id);
+	udma_adv_id_free(&udma_dev->jetty_table.bitmap_table,
+			 udma_jetty_grp->start_jetty_id, true);
+	kfree(udma_jetty_grp);
+
+	return ret;
+}

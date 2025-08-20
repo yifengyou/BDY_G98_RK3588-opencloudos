@@ -228,8 +228,9 @@ int udma_destroy_jetty(struct ubcore_jetty *jetty);
 struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
 						 struct ubcore_jetty_grp_cfg *cfg,
 						 struct ubcore_udata *udata);
-int udma_destroy_hw_jetty_ctx(struct udma_dev *dev, uint32_t jetty_id);
+int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp);
 void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);
+int udma_destroy_hw_jetty_ctx(struct udma_dev *dev, uint32_t jetty_id);
 int udma_modify_and_destroy_jetty(struct udma_dev *dev,
 				  struct udma_jetty_queue *sq);
 

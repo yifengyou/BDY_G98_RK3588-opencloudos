@@ -191,6 +191,7 @@ static struct ubcore_ops g_dev_ops = {
 	.query_jetty = udma_query_jetty,
 	.destroy_jetty = udma_destroy_jetty,
 	.create_jetty_grp = udma_create_jetty_grp,
+	.delete_jetty_grp = udma_delete_jetty_grp,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)
