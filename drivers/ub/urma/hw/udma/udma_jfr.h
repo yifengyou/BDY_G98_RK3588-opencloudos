@@ -8,7 +8,67 @@
 #include "udma_ctx.h"
 #include "udma_common.h"
 
+#define RQE_VA_L_PAGE_4K_OFFSET 12U
+#define RQE_VA_L_VALID_BIT GENMASK(19, 0)
+#define RQE_VA_H_OFFSET 20
+#define RQE_VA_H_PAGE_4K_OFFSET (RQE_VA_H_OFFSET + RQE_VA_L_PAGE_4K_OFFSET)
+#define RQE_VA_H_VALID_BIT GENMASK(31, 0)
+
+#define RQE_TOKEN_ID_L_MASK GENMASK(13, 0)
+#define RQE_TOKEN_ID_H_OFFSET 14U
+#define RQE_TOKEN_ID_H_MASK GENMASK(5, 0)
+
+#define JFR_IDX_VA_L_PAGE_4K_OFFSET 12U
+#define JFR_IDX_VA_L_VALID_BIT GENMASK(31, 0)
+#define JFR_IDX_VA_H_OFFSET 32
+#define JFR_IDX_VA_H_PAGE_4K_OFFSET \
+	(JFR_IDX_VA_H_OFFSET + JFR_IDX_VA_L_PAGE_4K_OFFSET)
+#define JFR_IDX_VA_H_VALID_BIT GENMASK(19, 0)
+
+#define JFR_DB_VA_L_PAGE_64_OFFSET 6U
+#define JFR_DB_VA_L_VALID_BIT GENMASK(23, 0)
+#define JFR_DB_VA_M_OFFSET 24
+#define JFR_DB_VA_M_PAGE_64_OFFSET \
+	(JFR_DB_VA_M_OFFSET + JFR_DB_VA_L_PAGE_64_OFFSET)
+#define JFR_DB_VA_M_VALID_BIT GENMASK(31, 0)
+#define JFR_DB_VA_H_OFFSET 32
+#define JFR_DB_VA_H_PAGE_64_OFFSET \
+	(JFR_DB_VA_H_OFFSET + JFR_DB_VA_M_PAGE_64_OFFSET)
+#define JFR_DB_VA_H_VALID_BIT GENMASK(1, 0)
+
+#define JFR_JFCN_L_VALID_BIT GENMASK(11, 0)
 #define JFR_JFCN_H_OFFSET 12U
+#define JFR_JFCN_H_VALID_BIT GENMASK(7, 0)
+
+#define UDMA_JFR_DB_PI_M GENMASK(15, 0)
+
+#define JFR_PLD_TOKEN_ID_MASK GENMASK(19, 0)
+
+#define UDMA_MIN_JFR_DEPTH 64
+#define UDMA_SGE_SIZE 16U
+#define UDMA_IDX_QUE_ENTRY_SZ 4
+#define UDMA_RNR_MAX 19
+
+enum jfr_state {
+	UDMA_JFR_STATE_RESET = 0,
+	UDMA_JFR_STATE_READY,
+	UDMA_JFR_STATE_ERROR,
+	JFR_STATE_NUM,
+};
+
+enum udma_rx_limit_wl {
+	UDMA_RX_LIMIT_WL_0 = 0,
+	UDMA_RX_LIMIT_WL_64,
+	UDMA_RX_LIMIT_WL_512,
+	UDMA_RX_LIMIT_WL_4096
+};
+
+enum {
+	LIMIT_WL_0_V = 0,
+	LIMIT_WL_64_V = 64,
+	LIMIT_WL_512_V = 512,
+	LIMIT_WL_4096_V = 4096
+};
 
 struct udma_jfr_idx_que {
 	struct udma_buf buf;
@@ -91,5 +151,8 @@ static inline struct udma_jfr *to_udma_jfr_from_queue(struct udma_jetty_queue *q
 {
 	return container_of(queue, struct udma_jfr, rq);
 }
+
+struct ubcore_jfr *udma_create_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg,
+				   struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFR_H__ */
