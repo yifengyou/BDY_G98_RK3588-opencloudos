@@ -187,6 +187,7 @@ static struct ubcore_ops g_dev_ops = {
 	.destroy_jfr = udma_destroy_jfr,
 	.destroy_jfr_batch = udma_destroy_jfr_batch,
 	.query_jfr = udma_query_jfr,
+	.create_jetty = udma_create_jetty,
 	.query_jetty = udma_query_jetty,
 };
 
