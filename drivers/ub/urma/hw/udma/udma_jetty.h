@@ -160,6 +160,13 @@ struct udma_jetty_ctx {
 	uint32_t taack_nack_bm[32];
 };
 
+struct udma_jetty_grp_ctx {
+	uint32_t start_jetty_id : 16;
+	uint32_t rsv : 11;
+	uint32_t jetty_number : 5;
+	uint32_t valid;
+};
+
 static inline struct udma_jetty *to_udma_jetty(struct ubcore_jetty *jetty)
 {
 	return container_of(jetty, struct udma_jetty, ubcore_jetty);

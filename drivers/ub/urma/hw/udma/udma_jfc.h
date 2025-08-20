@@ -7,6 +7,8 @@
 #include "udma_dev.h"
 #include "udma_ctx.h"
 
+#define UDMA_JFC_DEPTH_SHIFT_BASE 6
+
 struct udma_jfc {
 	struct ubcore_jfc base;
 	uint32_t jfcn;
@@ -25,6 +27,75 @@ struct udma_jfc {
 	uint64_t stars_chnl_addr;
 	bool stars_en;
 	uint32_t cq_shift;
+};
+
+struct udma_jfc_ctx {
+	/* DW0 */
+	uint32_t state : 2;
+	uint32_t arm_st : 2;
+	uint32_t shift : 4;
+	uint32_t cqe_size : 1;
+	uint32_t record_db_en : 1;
+	uint32_t jfc_type : 1;
+	uint32_t inline_en : 1;
+	uint32_t cqe_va_l : 20;
+	/* DW1 */
+	uint32_t cqe_va_h;
+	/* DW2 */
+	uint32_t cqe_token_id : 20;
+	uint32_t cq_cnt_mode : 1;
+	uint32_t rsv0 : 3;
+	uint32_t ceqn : 8;
+	/* DW3 */
+	uint32_t cqe_token_value : 24;
+	uint32_t rsv1 : 8;
+	/* DW4 */
+	uint32_t pi : 22;
+	uint32_t cqe_coalesce_cnt : 10;
+	/* DW5 */
+	uint32_t ci : 22;
+	uint32_t cqe_coalesce_period : 3;
+	uint32_t rsv2 : 7;
+	/* DW6 */
+	uint32_t record_db_addr_l;
+	/* DW7 */
+	uint32_t record_db_addr_h : 26;
+	uint32_t rsv3 : 6;
+	/* DW8 */
+	uint32_t push_usi_en : 1;
+	uint32_t push_cqe_en : 1;
+	uint32_t token_en : 1;
+	uint32_t rsv4 : 9;
+	uint32_t tpn : 20;
+	/* DW9 ~ DW12 */
+	uint32_t rmt_eid[4];
+	/* DW13 */
+	uint32_t seid_idx : 10;
+	uint32_t rmt_token_id : 20;
+	uint32_t rsv5 : 2;
+	/* DW14 */
+	uint32_t remote_token_value;
+	/* DW15 */
+	uint32_t int_vector : 16;
+	uint32_t stars_en : 1;
+	uint32_t rsv6 : 15;
+	/* DW16 */
+	uint32_t poll : 1;
+	uint32_t cqe_report_timer : 24;
+	uint32_t se : 1;
+	uint32_t arm_sn : 2;
+	uint32_t rsv7 : 4;
+	/* DW17 */
+	uint32_t se_cqe_idx : 24;
+	uint32_t rsv8 : 8;
+	/* DW18 */
+	uint32_t wr_cqe_idx : 22;
+	uint32_t rsv9 : 10;
+	/* DW19 */
+	uint32_t cqe_cnt : 24;
+	uint32_t rsv10 : 8;
+	/* DW20 ~ DW31 */
+	uint32_t rsv11[12];
 };
 
 static inline struct udma_jfc *to_udma_jfc(struct ubcore_jfc *jfc)

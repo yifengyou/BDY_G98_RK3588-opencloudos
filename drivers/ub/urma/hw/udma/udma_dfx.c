@@ -432,6 +432,110 @@ err_res_jetty_ctx:
 	return ret;
 }
 
+static int udma_query_res_jetty_grp(struct udma_dev *udma_dev,
+				    struct ubcore_res_key *key,
+				    struct ubcore_res_val *val)
+{
+	struct ubcore_res_jetty_group_val *res_jetty_grp =
+		(struct ubcore_res_jetty_group_val *)val->addr;
+	struct udma_jetty_grp_ctx *jetty_grpc;
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	uint32_t *jetty_grp_id;
+	int i;
+
+	if (key->key_cnt == 0)
+		return udma_query_res_list(udma_dev, &udma_dev->dfx_info->jetty_grp,
+					   val, "jetty_grp");
+
+	jetty_grp_id = (uint32_t *)xa_load(&udma_dev->dfx_info->jetty_grp.table, key->key);
+	if (!jetty_grp_id) {
+		dev_err(udma_dev->dev, "failed to query jetty grp, jetty_grp_id = %u.\n",
+			key->key);
+		return -EINVAL;
+	}
+
+	res_jetty_grp->jetty_cnt = 0;
+	res_jetty_grp->jetty_list = vmalloc(sizeof(*res_jetty_grp->jetty_list) *
+				    NUM_JETTY_PER_GROUP);
+	if (!res_jetty_grp->jetty_list)
+		return -ENOMEM;
+
+	mbox_attr.tag = key->key;
+	mbox_attr.op = UDMA_CMD_QUERY_JETTY_GROUP_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(udma_dev, &mbox_attr);
+	if (!mailbox) {
+		vfree(res_jetty_grp->jetty_list);
+		res_jetty_grp->jetty_list = NULL;
+		return -ENOMEM;
+	}
+
+	jetty_grpc = (struct udma_jetty_grp_ctx *)mailbox->buf;
+	for (i = 0; i < NUM_JETTY_PER_GROUP; ++i) {
+		if (jetty_grpc->valid & BIT(i)) {
+			res_jetty_grp->jetty_list[res_jetty_grp->jetty_cnt] =
+				jetty_grpc->start_jetty_id + i;
+			++res_jetty_grp->jetty_cnt;
+		}
+	}
+
+	if (res_jetty_grp->jetty_cnt == 0) {
+		vfree(res_jetty_grp->jetty_list);
+		res_jetty_grp->jetty_list = NULL;
+	}
+
+	udma_dfx_ctx_print(udma_dev, "Jetty_grp", key->key, sizeof(*jetty_grpc) / sizeof(uint32_t),
+			   (uint32_t *)jetty_grpc);
+	udma_free_cmd_mailbox(udma_dev, mailbox);
+
+	return 0;
+}
+
+static int udma_query_res_jfc(struct udma_dev *udma_dev,
+			      struct ubcore_res_key *key,
+			      struct ubcore_res_val *val)
+{
+	struct ubcore_res_jfc_val *res_jfc = (struct ubcore_res_jfc_val *)val->addr;
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	struct udma_jfc_ctx *jfcc;
+	uint32_t *jfc_id;
+
+	if (key->key_cnt == 0)
+		return udma_query_res_list(udma_dev, &udma_dev->dfx_info->jfc, val, "jfc");
+
+	jfc_id = (uint32_t *)xa_load(&udma_dev->dfx_info->jfc.table, key->key);
+	if (!jfc_id) {
+		dev_err(udma_dev->dev, "failed to query jfc, jfc_id = %u.\n",
+			key->key);
+		return -EINVAL;
+	}
+
+	mbox_attr.tag = key->key;
+	mbox_attr.op = UDMA_CMD_QUERY_JFC_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(udma_dev, &mbox_attr);
+	if (!mailbox)
+		return -ENOMEM;
+
+	jfcc = (struct udma_jfc_ctx *)mailbox->buf;
+	res_jfc->jfc_id = key->key;
+	res_jfc->state = jfcc->state;
+	res_jfc->depth = 1 << (jfcc->shift + UDMA_JFC_DEPTH_SHIFT_BASE);
+	jfcc->cqe_va_l = 0;
+	jfcc->cqe_va_h = 0;
+	jfcc->token_en = 0;
+	jfcc->cqe_token_value = 0;
+	jfcc->record_db_addr_l = 0;
+	jfcc->record_db_addr_h = 0;
+	jfcc->remote_token_value = 0;
+
+	udma_dfx_ctx_print(udma_dev, "JFC", key->key, sizeof(*jfcc) / sizeof(uint32_t),
+			   (uint32_t *)jfcc);
+	udma_free_cmd_mailbox(udma_dev, mailbox);
+
+	return 0;
+}
+
 static int udma_query_res_jfs(struct udma_dev *udma_dev,
 			      struct ubcore_res_key *key,
 			      struct ubcore_res_val *val)
@@ -616,12 +720,19 @@ typedef int (*udma_query_res_handler)(struct udma_dev *udma_dev,
 
 static udma_query_res_handler g_udma_query_res_handlers[] = {
 	[0] = NULL,
+	[UBCORE_RES_KEY_VTP] = NULL,
+	[UBCORE_RES_KEY_TP] = NULL,
+	[UBCORE_RES_KEY_TPG] = NULL,
+	[UBCORE_RES_KEY_UTP] = NULL,
 	[UBCORE_RES_KEY_JFS] = udma_query_res_jfs,
 	[UBCORE_RES_KEY_JFR] = udma_query_res_jfr,
 	[UBCORE_RES_KEY_JETTY] = udma_query_res_jetty,
+	[UBCORE_RES_KEY_JETTY_GROUP] = udma_query_res_jetty_grp,
+	[UBCORE_RES_KEY_JFC] = udma_query_res_jfc,
 	[UBCORE_RES_KEY_RC] = udma_query_res_rc,
 	[UBCORE_RES_KEY_SEG] = udma_query_res_seg,
 	[UBCORE_RES_KEY_DEV_TA] = udma_query_res_dev_ta,
+	[UBCORE_RES_KEY_DEV_TP] = NULL,
 };
 
 int udma_query_res(struct ubcore_device *dev, struct ubcore_res_key *key,
