@@ -19,6 +19,7 @@
 #include "udma_dev.h"
 #include "udma_eq.h"
 #include "udma_segment.h"
+#include "udma_jfs.h"
 #include "udma_cmd.h"
 #include "udma_ctx.h"
 #include "udma_rct.h"
@@ -173,6 +174,7 @@ static struct ubcore_ops g_dev_ops = {
 	.unregister_seg = udma_unregister_seg,
 	.import_seg = udma_import_seg,
 	.unimport_seg = udma_unimport_seg,
+	.create_jfs = udma_create_jfs,
 	.query_jfs = udma_query_jfs,
 	.query_jfr = udma_query_jfr,
 	.query_jetty = udma_query_jetty,

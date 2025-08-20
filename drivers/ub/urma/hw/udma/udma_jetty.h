@@ -6,7 +6,24 @@
 
 #include "udma_common.h"
 
+#define SQE_TOKEN_ID_L_MASK GENMASK(11, 0)
+#define SQE_TOKEN_ID_H_OFFSET 12U
+#define SQE_TOKEN_ID_H_MASK GENMASK(7, 0)
+#define SQE_VA_L_OFFSET 12U
+#define SQE_VA_L_VALID_BIT GENMASK(19, 0)
+#define SQE_VA_H_OFFSET 32U
+#define SQE_VA_H_VALID_BIT GENMASK(31, 0)
 #define JETTY_CTX_JFRN_H_OFFSET 12
+#define AVAIL_SGMT_OST_INIT 512
+
+#define SQE_PLD_TOKEN_ID_MASK GENMASK(19, 0)
+
+#define UDMA_TA_TIMEOUT_128MS 128
+#define UDMA_TA_TIMEOUT_1000MS 1000
+#define UDMA_TA_TIMEOUT_8000MS 8000
+#define UDMA_TA_TIMEOUT_64000MS 64000
+
+#define UDMA_MAX_PRIORITY 16
 
 enum jetty_state {
 	JETTY_RESET,
@@ -25,6 +42,11 @@ struct udma_jetty {
 	struct completion ae_comp;
 	bool pi_type;
 	bool ue_rx_closed;
+};
+
+enum jfsc_mode {
+	JFS,
+	JETTY,
 };
 
 enum jetty_type {
@@ -167,6 +189,20 @@ struct udma_jetty_grp_ctx {
 	uint32_t valid;
 };
 
+static inline uint32_t to_udma_type(uint32_t trans_mode)
+{
+	switch (trans_mode) {
+	case UBCORE_TP_RM:
+		return JETTY_RM;
+	case UBCORE_TP_RC:
+		return JETTY_RC;
+	case UBCORE_TP_UM:
+		return JETTY_UM;
+	default:
+		return JETTY_TYPE_RESERVED;
+	}
+}
+
 static inline struct udma_jetty *to_udma_jetty(struct ubcore_jetty *jetty)
 {
 	return container_of(jetty, struct udma_jetty, ubcore_jetty);
@@ -181,5 +217,9 @@ static inline struct udma_jetty *to_udma_jetty_from_queue(struct udma_jetty_queu
 {
 	return container_of(queue, struct udma_jetty, sq);
 }
+
+int alloc_jetty_id(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
+		   uint32_t cfg_id, struct ubcore_jetty_group *jetty_grp);
+void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);
 
 #endif /* __UDMA_JETTY_H__ */

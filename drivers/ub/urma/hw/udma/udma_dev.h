@@ -17,7 +17,11 @@ extern bool dump_aux_info;
 
 #define UBCORE_MAX_DEV_NAME 64
 
+#define WQE_BB_SIZE_SHIFT 6
+
 #define MAX_JETTY_IN_JETTY_GRP 32
+
+#define UDMA_USER_DATA_H_OFFSET 32U
 
 #define MAX_WQEBB_IN_SQE 4
 

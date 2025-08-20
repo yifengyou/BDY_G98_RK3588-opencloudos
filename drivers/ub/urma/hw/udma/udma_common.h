@@ -6,6 +6,7 @@
 
 #include <linux/jhash.h>
 #include <ub/urma/ubcore_api.h>
+#include "udma_ctx.h"
 #include "udma_dev.h"
 
 struct udma_jetty_grp {
@@ -81,6 +82,21 @@ void udma_k_free_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_
 void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t *addr);
 void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_slot,
 		    dma_addr_t addr);
+
+static inline void udma_alloc_kernel_db(struct udma_dev *dev,
+					struct udma_jetty_queue *queue)
+{
+	queue->dwqe_addr = dev->k_db_base + JETTY_DSQE_OFFSET +
+			   UDMA_HW_PAGE_SIZE * queue->id;
+	queue->db_addr = queue->dwqe_addr + UDMA_DOORBELL_OFFSET;
+}
+
+static inline uint8_t to_ta_timeout(uint32_t err_timeout)
+{
+#define TA_TIMEOUT_DIVISOR 8
+	return err_timeout / TA_TIMEOUT_DIVISOR;
+}
+
 static inline uint64_t udma_cal_npages(uint64_t va, uint64_t len)
 {
 	return (ALIGN(va + len, PAGE_SIZE) - ALIGN_DOWN(va, PAGE_SIZE)) / PAGE_SIZE;
