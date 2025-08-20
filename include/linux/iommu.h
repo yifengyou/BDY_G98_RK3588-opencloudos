@@ -270,6 +270,9 @@ struct iommu_domain {
 		struct {	/* IOMMU_DOMAIN_SVA */
 			struct mm_struct *mm;
 			int users;
+#ifdef CONFIG_IOMMU_KSVA
+			KABI_FILL_HOLE(u32 isolated_pasid)
+#endif
 			/*
 			 * Next iommu_domain in mm->iommu_mm->sva-domains list
 			 * protected by iommu_sva_lock.
@@ -280,7 +283,11 @@ struct iommu_domain {
 	struct mutex switch_log_lock;
 
 	KABI_RESERVE(1);
+#ifdef CONFIG_IOMMU_KSVA
+	KABI_USE(2, void *sva_data);
+#else
 	KABI_RESERVE(2);
+#endif
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
@@ -1800,6 +1807,7 @@ static inline u32 iommu_sva_get_pasid(struct iommu_sva *handle)
 {
 	return IOMMU_PASID_INVALID;
 }
+
 static inline void mm_pasid_init(struct mm_struct *mm) {}
 static inline bool mm_valid_pasid(struct mm_struct *mm) { return false; }
 
@@ -1868,4 +1876,24 @@ static inline void iopf_group_response(struct iopf_group *group,
 {
 }
 #endif /* CONFIG_IOMMU_IOPF */
+
+#ifdef CONFIG_IOMMU_KSVA
+struct iommu_sva *iommu_sva_bind_device_isolated(struct device *dev,
+					    struct mm_struct *mm, void *data);
+void iommu_sva_unbind_device_isolated(struct iommu_sva *handle);
+u32 iommu_sva_get_isolated_pasid(struct iommu_sva *handle);
+#else
+static inline struct iommu_sva *
+iommu_sva_bind_device_isolated(struct device *dev, struct mm_struct *mm, void *data)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline void iommu_sva_unbind_device_isolated(struct iommu_sva *handle) {}
+
+static inline u32 iommu_sva_get_isolated_pasid(struct iommu_sva *handle)
+{
+	return IOMMU_PASID_INVALID;
+}
+#endif /* CONFIG_IOMMU_KSVA */
 #endif /* __LINUX_IOMMU_H */
