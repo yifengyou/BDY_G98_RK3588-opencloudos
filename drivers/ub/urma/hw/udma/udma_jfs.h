@@ -47,6 +47,7 @@ static inline uint32_t sq_cal_wqebb_num(uint32_t sqe_ctl_len, uint32_t sge_num)
 struct ubcore_jfs *udma_create_jfs(struct ubcore_device *ub_dev,
 				   struct ubcore_jfs_cfg *cfg,
 				   struct ubcore_udata *udata);
+int udma_destroy_jfs(struct ubcore_jfs *jfs);
 int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct udma_create_jetty_ucmd *ucmd);
 int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,

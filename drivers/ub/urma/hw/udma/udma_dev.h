@@ -37,6 +37,8 @@ extern bool dump_aux_info;
 #define UDMA_MAX_SL_NUM 16
 #define UDMA_DEFAULT_SL_NUM 0
 
+#define UDMA_RCV_SEND_MAX_DIFF 512U
+
 #define UDMA_CQE_SIZE 64
 
 #define UDMA_MAX_GRANT_SIZE 0xFFFFFFFFF000

@@ -15,6 +15,7 @@
 #define SQE_VA_H_VALID_BIT GENMASK(31, 0)
 #define JETTY_CTX_JFRN_H_OFFSET 12
 #define AVAIL_SGMT_OST_INIT 512
+#define UDMA_JFS_MASK_OFFSET 128
 
 #define SQE_PLD_TOKEN_ID_MASK GENMASK(19, 0)
 
@@ -220,6 +221,9 @@ static inline struct udma_jetty *to_udma_jetty_from_queue(struct udma_jetty_queu
 
 int alloc_jetty_id(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
 		   uint32_t cfg_id, struct ubcore_jetty_group *jetty_grp);
+int udma_destroy_hw_jetty_ctx(struct udma_dev *dev, uint32_t jetty_id);
 void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);
+int udma_modify_and_destroy_jetty(struct udma_dev *dev,
+				  struct udma_jetty_queue *sq);
 
 #endif /* __UDMA_JETTY_H__ */

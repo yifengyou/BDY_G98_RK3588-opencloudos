@@ -355,3 +355,57 @@ err_alloc_sq:
 	kfree(jfs);
 	return NULL;
 }
+
+static void udma_free_jfs(struct ubcore_jfs *jfs)
+{
+	struct udma_dev *dev = to_udma_dev(jfs->ub_dev);
+	struct udma_jfs *ujfs = to_udma_jfs(jfs);
+
+	xa_erase(&dev->jetty_table.xa, ujfs->sq.id);
+
+	if (refcount_dec_and_test(&ujfs->ae_refcount))
+		complete(&ujfs->ae_comp);
+	wait_for_completion(&ujfs->ae_comp);
+
+	if (dfx_switch)
+		udma_dfx_delete_id(dev, &dev->dfx_info->jfs, jfs->jfs_id.id);
+
+	if (ujfs->mode == UDMA_NORMAL_JFS_TYPE)
+		udma_free_sq_buf(dev, &ujfs->sq);
+	else
+		kfree(ujfs->sq.wrid);
+
+	if (ujfs->sq.id < dev->caps.jetty.start_idx)
+		udma_id_free(&dev->rsvd_jetty_ida_table, ujfs->sq.id);
+	else
+		udma_adv_id_free(&dev->jetty_table.bitmap_table,
+				 ujfs->sq.id, false);
+
+	kfree(ujfs);
+}
+
+int udma_destroy_jfs(struct ubcore_jfs *jfs)
+{
+	struct udma_dev *dev = to_udma_dev(jfs->ub_dev);
+	struct udma_jfs *ujfs = to_udma_jfs(jfs);
+	int ret;
+
+	if (!ujfs->ue_rx_closed && udma_close_ue_rx(dev, true, true, false, 0)) {
+		dev_err(dev->dev, "close ue rx failed when destroying jfs.\n");
+		return -EINVAL;
+	}
+
+	ret = udma_modify_and_destroy_jetty(dev, &ujfs->sq);
+	if (ret) {
+		dev_info(dev->dev, "udma modify error and destroy jfs failed, id: %u.\n",
+			 jfs->jfs_id.id);
+		if (!ujfs->ue_rx_closed)
+			udma_open_ue_rx(dev, true, true, false, 0);
+		return ret;
+	}
+
+	udma_free_jfs(jfs);
+	udma_open_ue_rx(dev, true, true, false, 0);
+
+	return 0;
+}
