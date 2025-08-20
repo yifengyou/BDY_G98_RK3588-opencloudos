@@ -173,6 +173,8 @@ static struct ubcore_ops g_dev_ops = {
 	.unregister_seg = udma_unregister_seg,
 	.import_seg = udma_import_seg,
 	.unimport_seg = udma_unimport_seg,
+	.query_jfs = udma_query_jfs,
+	.query_jetty = udma_query_jetty,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)

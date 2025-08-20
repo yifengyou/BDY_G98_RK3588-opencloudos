@@ -30,6 +30,56 @@ struct udma_jfr {
 	struct completion ae_comp;
 };
 
+struct udma_jfr_ctx {
+	/* DW0 */
+	uint32_t state : 2;
+	uint32_t limit_wl : 2;
+	uint32_t rqe_size_shift : 3;
+	uint32_t token_en : 1;
+	uint32_t rqe_shift : 4;
+	uint32_t rnr_timer : 5;
+	uint32_t record_db_en : 1;
+	uint32_t rqe_token_id_l : 14;
+	/* DW1 */
+	uint32_t rqe_token_id_h : 6;
+	uint32_t type : 3;
+	uint32_t rsv : 3;
+	uint32_t rqe_base_addr_l : 20;
+	/* DW2 */
+	uint32_t rqe_base_addr_h;
+	/* DW3 */
+	uint32_t rqe_position : 1;
+	uint32_t pld_position : 1;
+	uint32_t pld_token_id : 20;
+	uint32_t rsv1 : 10;
+	/* DW4 */
+	uint32_t token_value;
+	/* DW5 */
+	uint32_t user_data_l;
+	/* DW6 */
+	uint32_t user_data_h;
+	/* DW7 */
+	uint32_t pi : 16;
+	uint32_t ci : 16;
+	/* DW8 */
+	uint32_t idx_que_addr_l;
+	/* DW9 */
+	uint32_t idx_que_addr_h : 20;
+	uint32_t jfcn_l : 12;
+	/* DW10 */
+	uint32_t jfcn_h : 8;
+	uint32_t record_db_addr_l : 24;
+	/* DW11 */
+	uint32_t record_db_addr_m;
+	/* DW12 */
+	uint32_t record_db_addr_h : 2;
+	uint32_t cqeie : 1;
+	uint32_t cqesz : 1;
+	uint32_t rsv2 : 28;
+	/* padding */
+	uint32_t reserved[3];
+};
+
 static inline struct udma_jfr *to_udma_jfr(struct ubcore_jfr *jfr)
 {
 	return container_of(jfr, struct udma_jfr, ubcore_jfr);
