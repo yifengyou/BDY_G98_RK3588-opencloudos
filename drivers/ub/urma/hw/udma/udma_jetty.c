@@ -807,3 +807,115 @@ int udma_destroy_jetty(struct ubcore_jetty *jetty)
 
 	return 0;
 }
+
+static int udma_alloc_group_start_id(struct udma_dev *udma_dev,
+				     struct udma_group_bitmap *bitmap_table,
+				     uint32_t *start_jetty_id)
+{
+	int ret;
+
+	ret = udma_adv_id_alloc(udma_dev, bitmap_table, start_jetty_id, true,
+				bitmap_table->grp_next);
+	if (ret) {
+		ret = udma_adv_id_alloc(udma_dev, bitmap_table, start_jetty_id,
+					true, bitmap_table->min);
+		if (ret)
+			return ret;
+	}
+
+	bitmap_table->grp_next = (*start_jetty_id + NUM_JETTY_PER_GROUP) >
+				 bitmap_table->max ? bitmap_table->min :
+				 (*start_jetty_id + NUM_JETTY_PER_GROUP);
+
+	return 0;
+}
+
+static int udma_alloc_jetty_grp_id(struct udma_dev *udma_dev,
+				   struct udma_jetty_grp *jetty_grp)
+{
+	int ret;
+
+	ret = udma_alloc_group_start_id(udma_dev, &udma_dev->jetty_table.bitmap_table,
+					&jetty_grp->start_jetty_id);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"alloc jetty id for grp failed, ret = %d.\n", ret);
+		return ret;
+	}
+
+	ret = udma_id_alloc_auto_grow(udma_dev, &udma_dev->jetty_grp_table.ida_table,
+				      &jetty_grp->jetty_grp_id);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"alloc jetty grp id failed, ret = %d.\n", ret);
+		udma_adv_id_free(&udma_dev->jetty_table.bitmap_table,
+				 jetty_grp->start_jetty_id, true);
+		return ret;
+	}
+
+	jetty_grp->ubcore_jetty_grp.jetty_grp_id.id = jetty_grp->jetty_grp_id;
+
+	return 0;
+}
+
+struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
+						 struct ubcore_jetty_grp_cfg *cfg,
+						 struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+	struct ubase_mbx_attr mbox_attr = {};
+	struct udma_jetty_grp_ctx ctx = {};
+	struct udma_jetty_grp *jetty_grp;
+	int ret;
+
+	if (cfg->policy != UBCORE_JETTY_GRP_POLICY_HASH_HINT) {
+		dev_err(udma_dev->dev, "policy %u not support.\n", cfg->policy);
+		return NULL;
+	}
+
+	jetty_grp = kzalloc(sizeof(*jetty_grp), GFP_KERNEL);
+	if (!jetty_grp)
+		return NULL;
+
+	ret = udma_alloc_jetty_grp_id(udma_dev, jetty_grp);
+	if (ret)
+		goto err_alloc_jetty_grp_id;
+
+	ctx.start_jetty_id = jetty_grp->start_jetty_id;
+
+	ret = xa_err(xa_store(&udma_dev->jetty_grp_table.xa, jetty_grp->jetty_grp_id,
+			      jetty_grp, GFP_KERNEL));
+	if (ret) {
+		dev_err(udma_dev->dev, "store jetty group(%u) failed, ret = %d.\n",
+			jetty_grp->jetty_grp_id, ret);
+		goto err_store_jetty_grp;
+	}
+
+	mbox_attr.tag = jetty_grp->jetty_grp_id;
+	mbox_attr.op = UDMA_CMD_CREATE_JETTY_GROUP_CONTEXT;
+	ret = post_mailbox_update_ctx(udma_dev, &ctx, sizeof(ctx), &mbox_attr);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"post mailbox update jetty ctx failed, ret = %d.\n", ret);
+		goto err_post_mailbox;
+	}
+
+	mutex_init(&jetty_grp->valid_lock);
+	refcount_set(&jetty_grp->ae_refcount, 1);
+	init_completion(&jetty_grp->ae_comp);
+
+	if (dfx_switch)
+		udma_dfx_store_id(udma_dev, &udma_dev->dfx_info->jetty_grp,
+				  jetty_grp->jetty_grp_id, "jetty_grp");
+
+	return &jetty_grp->ubcore_jetty_grp;
+err_post_mailbox:
+	xa_erase(&udma_dev->jetty_grp_table.xa, jetty_grp->jetty_grp_id);
+err_store_jetty_grp:
+	udma_id_free(&udma_dev->jetty_grp_table.ida_table,
+		     jetty_grp->jetty_grp_id);
+err_alloc_jetty_grp_id:
+	kfree(jetty_grp);
+
+	return NULL;
+}
