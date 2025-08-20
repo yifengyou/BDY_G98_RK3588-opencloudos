@@ -8,6 +8,8 @@
 #include "udma_ctx.h"
 #include "udma_common.h"
 
+#define JFR_JFCN_H_OFFSET 12U
+
 struct udma_jfr_idx_que {
 	struct udma_buf buf;
 	struct udma_table jfr_idx_table;

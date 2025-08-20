@@ -34,6 +34,27 @@ static int to_udma_trans_mode(uint32_t type, struct udma_dev *dev,
 	return 0;
 }
 
+static int to_udma_jfr_ctx_state(uint32_t state, struct udma_dev *dev,
+				 enum ubcore_jfr_state *jfr_state)
+{
+	switch (state) {
+	case JETTY_RESET:
+		*jfr_state = UBCORE_JFR_STATE_RESET;
+		break;
+	case JETTY_READY:
+		*jfr_state = UBCORE_JFR_STATE_READY;
+		break;
+	case JETTY_ERROR:
+		*jfr_state = UBCORE_JFR_STATE_ERROR;
+		break;
+	default:
+		dev_err(dev->dev, "JFR context state error, state = %u.\n", state);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int to_udma_jetty_ctx_state(uint32_t state, struct udma_dev *dev,
 				   enum ubcore_jetty_state *jetty_state)
 {
@@ -56,6 +77,54 @@ static int to_udma_jetty_ctx_state(uint32_t state, struct udma_dev *dev,
 	}
 
 	return 0;
+}
+
+int udma_query_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_cfg *cfg,
+		   struct ubcore_jfr_attr *attr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	struct udma_jfr_ctx *jfr_ctx;
+	int ret;
+
+	mbox_attr.tag = jfr->jfr_id.id;
+	mbox_attr.op = UDMA_CMD_QUERY_JFR_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(udma_dev, &mbox_attr);
+	if (!mailbox)
+		return -ENOMEM;
+
+	jfr_ctx = (struct udma_jfr_ctx *)mailbox->buf;
+
+	attr->rx_threshold = to_udma_rx_threshold(jfr_ctx->limit_wl);
+
+	ret = to_udma_jfr_ctx_state(jfr_ctx->state, udma_dev, &attr->state);
+	if (ret)
+		goto err_jfr_ctx;
+
+	cfg->id = jfr->jfr_id.id;
+	cfg->flag = jfr->jfr_cfg.flag;
+	cfg->max_sge = 1 << jfr_ctx->rqe_size_shift;
+	cfg->depth = 1 << jfr_ctx->rqe_shift;
+	cfg->token_value.token = 0;
+	cfg->flag.bs.token_policy = UBCORE_TOKEN_NONE;
+	cfg->min_rnr_timer = jfr_ctx->rnr_timer;
+
+	ret = to_udma_trans_mode(jfr_ctx->type, udma_dev, &cfg->trans_mode);
+	if (ret)
+		goto err_jfr_ctx;
+
+	if (udma_jfr->rq.buf.kva) {
+		cfg->eid_index = jfr->jfr_cfg.eid_index;
+		cfg->jfc = jfr->jfr_cfg.jfc;
+	}
+
+err_jfr_ctx:
+	jfr_ctx->token_value = 0;
+	udma_free_cmd_mailbox(udma_dev, mailbox);
+
+	return ret;
 }
 
 int udma_query_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_cfg *cfg,
@@ -418,6 +487,66 @@ err_res_jetty_ctx:
 	return ret;
 }
 
+static int udma_query_res_jfr(struct udma_dev *udma_dev,
+			      struct ubcore_res_key *key,
+			      struct ubcore_res_val *val)
+{
+	struct ubcore_res_jfr_val *res_jfr = (struct ubcore_res_jfr_val *)val->addr;
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	enum ubcore_jfr_state jfr_state;
+	struct udma_jfr_ctx *jfrc;
+	uint32_t *jfr_id;
+	int ret;
+
+	if (key->key_cnt == 0)
+		return udma_query_res_list(udma_dev, &udma_dev->dfx_info->jfr, val, "jfr");
+
+	jfr_id = (uint32_t *)xa_load(&udma_dev->dfx_info->jfr.table, key->key);
+	if (!jfr_id) {
+		dev_err(udma_dev->dev, "failed to query jfr, jfr_id = %u.\n",
+			key->key);
+		return -EINVAL;
+	}
+
+	mbox_attr.tag = key->key;
+	mbox_attr.op = UDMA_CMD_QUERY_JFR_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(udma_dev, &mbox_attr);
+	if (!mailbox)
+		return -ENOMEM;
+
+	jfrc = (struct udma_jfr_ctx *)mailbox->buf;
+	res_jfr->jfr_id = key->key;
+
+	ret = to_udma_jfr_ctx_state(jfrc->state, udma_dev, &jfr_state);
+	if (ret)
+		goto err_res_jfr_ctx;
+
+	res_jfr->state = jfr_state;
+	res_jfr->depth = 1 << jfrc->rqe_shift;
+	res_jfr->jfc_id = jfrc->jfcn_l |
+			  jfrc->jfcn_h << JFR_JFCN_H_OFFSET;
+	jfrc->rqe_base_addr_l = 0;
+	jfrc->rqe_base_addr_h = 0;
+	jfrc->token_en = 0;
+	jfrc->token_value = 0;
+	jfrc->user_data_l = 0;
+	jfrc->user_data_h = 0;
+	jfrc->idx_que_addr_l = 0;
+	jfrc->idx_que_addr_h = 0;
+	jfrc->record_db_addr_l = 0;
+	jfrc->record_db_addr_m = 0;
+	jfrc->record_db_addr_h = 0;
+
+	udma_dfx_ctx_print(udma_dev, "JFR", key->key, sizeof(*jfrc) / sizeof(uint32_t),
+			   (uint32_t *)jfrc);
+err_res_jfr_ctx:
+	jfrc->token_value = 0;
+	udma_free_cmd_mailbox(udma_dev, mailbox);
+
+	return ret;
+}
+
 static int udma_query_res_seg(struct udma_dev *udma_dev, struct ubcore_res_key *key,
 			      struct ubcore_res_val *val)
 {
@@ -488,6 +617,7 @@ typedef int (*udma_query_res_handler)(struct udma_dev *udma_dev,
 static udma_query_res_handler g_udma_query_res_handlers[] = {
 	[0] = NULL,
 	[UBCORE_RES_KEY_JFS] = udma_query_res_jfs,
+	[UBCORE_RES_KEY_JFR] = udma_query_res_jfr,
 	[UBCORE_RES_KEY_JETTY] = udma_query_res_jetty,
 	[UBCORE_RES_KEY_RC] = udma_query_res_rc,
 	[UBCORE_RES_KEY_SEG] = udma_query_res_seg,

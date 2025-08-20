@@ -174,6 +174,7 @@ static struct ubcore_ops g_dev_ops = {
 	.import_seg = udma_import_seg,
 	.unimport_seg = udma_unimport_seg,
 	.query_jfs = udma_query_jfs,
+	.query_jfr = udma_query_jfr,
 	.query_jetty = udma_query_jetty,
 };
 
