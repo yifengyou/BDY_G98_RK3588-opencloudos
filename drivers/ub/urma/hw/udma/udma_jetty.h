@@ -229,6 +229,8 @@ struct ubcore_jetty *udma_create_jetty(struct ubcore_device *ub_dev,
 				       struct ubcore_jetty_cfg *cfg,
 				       struct ubcore_udata *udata);
 int udma_destroy_jetty(struct ubcore_jetty *jetty);
+int udma_modify_jetty(struct ubcore_jetty *jetty, struct ubcore_jetty_attr *attr,
+		      struct ubcore_udata *udata);
 struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
 						 struct ubcore_jetty_grp_cfg *cfg,
 						 struct ubcore_udata *udata);

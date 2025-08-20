@@ -866,6 +866,83 @@ enum jetty_state to_jetty_state(enum ubcore_jetty_state state)
 	return STATE_NUM;
 }
 
+static int udma_modify_jetty_state(struct udma_dev *udma_dev, struct udma_jetty *udma_jetty,
+				   struct ubcore_jetty_attr *attr)
+{
+	int ret;
+
+	switch (attr->state) {
+	case UBCORE_JETTY_STATE_RESET:
+		ret = udma_destroy_hw_jetty_ctx(udma_dev, udma_jetty->sq.id);
+		break;
+	case UBCORE_JETTY_STATE_READY:
+		ret = udma_create_hw_jetty_ctx(udma_dev, udma_jetty,
+					       &udma_jetty->ubcore_jetty.jetty_cfg);
+		if (ret)
+			break;
+
+		udma_reset_sw_k_jetty_queue(&udma_jetty->sq);
+		break;
+	default:
+		ret = udma_close_ue_rx(udma_dev, true, true, false, 0);
+		if (ret)
+			break;
+
+		if (!(udma_dev->caps.feature & UDMA_CAP_FEATURE_UE_RX_CLOSE)) {
+			if (udma_modify_jetty_precondition(udma_dev, &udma_jetty->sq)) {
+				ret = -ENOMEM;
+				udma_open_ue_rx(udma_dev, true, true, false, 0);
+				break;
+			}
+		}
+
+		ret = udma_set_jetty_state(udma_dev, udma_jetty->sq.id,
+					   to_jetty_state(attr->state));
+		if (ret)
+			udma_open_ue_rx(udma_dev, true, true, false, 0);
+		else
+			udma_jetty->ue_rx_closed = true;
+		break;
+	}
+
+	return ret;
+}
+
+int udma_modify_jetty(struct ubcore_jetty *jetty, struct ubcore_jetty_attr *attr,
+		      struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+	int ret;
+
+	if (!(attr->mask & UBCORE_JETTY_STATE)) {
+		dev_err(udma_dev->dev, "modify jetty mask is error or not set, jetty_id = %u.\n",
+			udma_jetty->sq.id);
+		return -EINVAL;
+	}
+
+	if (udma_jetty->sq.state == attr->state) {
+		dev_info(udma_dev->dev, "jetty state has been %s.\n", to_state_name(attr->state));
+		return 0;
+	}
+
+	if (!verify_modify_jetty(udma_jetty->sq.state, attr->state)) {
+		dev_err(udma_dev->dev, "not support modify jetty state from %s to %s.\n",
+			to_state_name(udma_jetty->sq.state), to_state_name(attr->state));
+		return -EINVAL;
+	}
+
+	ret = udma_modify_jetty_state(udma_dev, udma_jetty, attr);
+	if (ret) {
+		dev_err(udma_dev->dev, "modify jetty %u state to %s failed.\n",
+			udma_jetty->sq.id, to_state_name(attr->state));
+		return ret;
+	}
+	udma_jetty->sq.state = attr->state;
+
+	return 0;
+}
+
 static int udma_alloc_group_start_id(struct udma_dev *udma_dev,
 				     struct udma_group_bitmap *bitmap_table,
 				     uint32_t *start_jetty_id)
