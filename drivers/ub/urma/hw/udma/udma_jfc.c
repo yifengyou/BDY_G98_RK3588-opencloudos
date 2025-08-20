@@ -399,6 +399,111 @@ err_get_cmd:
 	return NULL;
 }
 
+static int udma_post_destroy_jfc_mbox(struct udma_dev *dev, uint32_t jfcn)
+{
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	struct udma_jfc_ctx *ctx;
+	int ret;
+
+	mailbox = udma_alloc_cmd_mailbox(dev);
+	if (!mailbox) {
+		dev_err(dev->dev, "failed to alloc mailbox for JFCC.\n");
+		return -ENOMEM;
+	}
+
+	ctx = (struct udma_jfc_ctx *)mailbox->buf;
+
+	mbox_attr.tag = jfcn;
+	mbox_attr.op = UDMA_CMD_DESTROY_JFC_CONTEXT;
+	ret = udma_post_mbox(dev, mailbox, &mbox_attr);
+	if (ret)
+		dev_err(dev->dev,
+			"failed to post destroy JFC mailbox, ret = %d.\n",
+			ret);
+
+	udma_free_cmd_mailbox(dev, mailbox);
+
+	return ret;
+}
+
+static int udma_query_jfc_destroy_done(struct udma_dev *dev, uint32_t jfcn)
+{
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	struct udma_jfc_ctx *jfc_ctx;
+	int ret;
+
+	mbox_attr.tag = jfcn;
+	mbox_attr.op = UDMA_CMD_QUERY_JFC_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(dev, &mbox_attr);
+	if (!mailbox)
+		return -ENOMEM;
+
+	jfc_ctx = (struct udma_jfc_ctx *)mailbox->buf;
+	ret = jfc_ctx->pi == jfc_ctx->wr_cqe_idx ? 0 : -EAGAIN;
+
+	jfc_ctx->cqe_token_value = 0;
+	jfc_ctx->remote_token_value = 0;
+	udma_free_cmd_mailbox(dev, mailbox);
+
+	return ret;
+}
+
+static int udma_destroy_and_flush_jfc(struct udma_dev *dev, uint32_t jfcn)
+{
+#define QUERY_MAX_TIMES 5
+	uint32_t wait_times = 0;
+	int ret;
+
+	ret = udma_post_destroy_jfc_mbox(dev, jfcn);
+	if (ret) {
+		dev_err(dev->dev, "failed to post mbox to destroy jfc, id: %u.\n", jfcn);
+		return ret;
+	}
+
+	while (true) {
+		if (udma_query_jfc_destroy_done(dev, jfcn) == 0)
+			return 0;
+		if (wait_times > QUERY_MAX_TIMES)
+			break;
+		msleep(1 << wait_times);
+		wait_times++;
+	}
+	dev_err(dev->dev, "jfc flush timed out, id: %u.\n", jfcn);
+
+	return -EFAULT;
+}
+
+int udma_destroy_jfc(struct ubcore_jfc *jfc)
+{
+	struct udma_dev *dev = to_udma_dev(jfc->ub_dev);
+	struct udma_jfc *ujfc = to_udma_jfc(jfc);
+	unsigned long flags;
+	int ret;
+
+	ret = udma_destroy_and_flush_jfc(dev, ujfc->jfcn);
+	if (ret)
+		return ret;
+
+	xa_lock_irqsave(&dev->jfc_table.xa, flags);
+	__xa_erase(&dev->jfc_table.xa, ujfc->jfcn);
+	xa_unlock_irqrestore(&dev->jfc_table.xa, flags);
+
+	if (refcount_dec_and_test(&ujfc->event_refcount))
+		complete(&ujfc->event_comp);
+	wait_for_completion(&ujfc->event_comp);
+
+	if (dfx_switch)
+		udma_dfx_delete_id(dev, &dev->dfx_info->jfc, jfc->id);
+
+	udma_free_jfc_buf(dev, ujfc);
+	udma_id_free(&dev->jfc_table.ida_table, ujfc->jfcn);
+	kfree(ujfc);
+
+	return 0;
+}
+
 int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data)
 {

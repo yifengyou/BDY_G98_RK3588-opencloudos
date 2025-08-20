@@ -139,6 +139,7 @@ static inline struct udma_jfc *to_udma_jfc(struct ubcore_jfc *jfc)
 struct ubcore_jfc *udma_create_jfc(struct ubcore_device *ubcore_dev,
 				   struct ubcore_jfc_cfg *cfg,
 				   struct ubcore_udata *udata);
+int udma_destroy_jfc(struct ubcore_jfc *jfc);
 int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data);
 
