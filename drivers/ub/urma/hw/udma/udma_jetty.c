@@ -18,6 +18,22 @@
 
 bool well_known_jetty_pgsz_check = true;
 
+const char *state_name[] = {
+	"RESET",
+	"READY",
+	"SUSPENDED",
+	"ERROR",
+	"INVALID"
+};
+
+const char *to_state_name(enum ubcore_jetty_state state)
+{
+	if ((int)state >= (int)STATE_NUM)
+		return state_name[STATE_NUM];
+
+	return state_name[state];
+}
+
 static int udma_get_user_jetty_cmd(struct udma_dev *dev, struct udma_jetty *jetty,
 				   struct ubcore_udata *udata,
 				   struct udma_create_jetty_ucmd *ucmd)
@@ -465,6 +481,14 @@ static void udma_free_jetty_id_buf(struct udma_dev *udma_dev,
 	free_jetty_id(udma_dev, udma_jetty, !!cfg->jetty_grp);
 }
 
+void udma_reset_sw_k_jetty_queue(struct udma_jetty_queue *sq)
+{
+	sq->kva_curr = sq->buf.kva;
+	sq->pi = 0;
+	sq->ci = 0;
+	sq->flush_flag = false;
+}
+
 static int udma_create_hw_jetty_ctx(struct udma_dev *dev, struct udma_jetty *udma_jetty,
 				    struct ubcore_jetty_cfg *cfg)
 {
@@ -806,6 +830,40 @@ int udma_destroy_jetty(struct ubcore_jetty *jetty)
 	udma_open_ue_rx(udma_dev, true, true, false, 0);
 
 	return 0;
+}
+
+bool verify_modify_jetty(enum ubcore_jetty_state jetty_state,
+			 enum ubcore_jetty_state attr_state)
+{
+	switch (jetty_state) {
+	case UBCORE_JETTY_STATE_RESET:
+		return attr_state == UBCORE_JETTY_STATE_READY;
+	case UBCORE_JETTY_STATE_READY:
+		return attr_state == UBCORE_JETTY_STATE_ERROR ||
+		       attr_state == UBCORE_JETTY_STATE_SUSPENDED;
+	case UBCORE_JETTY_STATE_SUSPENDED:
+		return attr_state == UBCORE_JETTY_STATE_ERROR;
+	case UBCORE_JETTY_STATE_ERROR:
+		return attr_state == UBCORE_JETTY_STATE_RESET;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+enum jetty_state to_jetty_state(enum ubcore_jetty_state state)
+{
+	switch (state) {
+	case UBCORE_JETTY_STATE_ERROR:
+		return JETTY_ERROR;
+	case UBCORE_JETTY_STATE_SUSPENDED:
+		return JETTY_SUSPEND;
+	default:
+		break;
+	}
+
+	return STATE_NUM;
 }
 
 static int udma_alloc_group_start_id(struct udma_dev *udma_dev,

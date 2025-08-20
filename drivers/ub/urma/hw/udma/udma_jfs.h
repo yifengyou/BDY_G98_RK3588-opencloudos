@@ -53,5 +53,7 @@ int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct ubcore_jfs_cfg *jfs_cfg);
 void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq);
+int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
+		    struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFS_H__ */

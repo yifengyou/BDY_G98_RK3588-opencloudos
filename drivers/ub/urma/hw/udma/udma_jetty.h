@@ -219,6 +219,10 @@ static inline struct udma_jetty *to_udma_jetty_from_queue(struct udma_jetty_queu
 	return container_of(queue, struct udma_jetty, sq);
 }
 
+enum jetty_state to_jetty_state(enum ubcore_jetty_state state);
+const char *to_state_name(enum ubcore_jetty_state state);
+bool verify_modify_jetty(enum ubcore_jetty_state jetty_state,
+			 enum ubcore_jetty_state attr_state);
 int alloc_jetty_id(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
 		   uint32_t cfg_id, struct ubcore_jetty_group *jetty_grp);
 struct ubcore_jetty *udma_create_jetty(struct ubcore_device *ub_dev,
@@ -229,9 +233,14 @@ struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
 						 struct ubcore_jetty_grp_cfg *cfg,
 						 struct ubcore_udata *udata);
 int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp);
-void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);
+int udma_set_jetty_state(struct udma_dev *dev, uint32_t jetty_id,
+			 enum jetty_state state);
+
+void udma_reset_sw_k_jetty_queue(struct udma_jetty_queue *sq);
 int udma_destroy_hw_jetty_ctx(struct udma_dev *dev, uint32_t jetty_id);
+void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);
 int udma_modify_and_destroy_jetty(struct udma_dev *dev,
 				  struct udma_jetty_queue *sq);
+int udma_modify_jetty_precondition(struct udma_dev *dev, struct udma_jetty_queue *sq);
 
 #endif /* __UDMA_JETTY_H__ */

@@ -181,6 +181,7 @@ static struct ubcore_ops g_dev_ops = {
 	.create_jfc = udma_create_jfc,
 	.destroy_jfc = udma_destroy_jfc,
 	.create_jfs = udma_create_jfs,
+	.modify_jfs = udma_modify_jfs,
 	.query_jfs = udma_query_jfs,
 	.destroy_jfs = udma_destroy_jfs,
 	.create_jfr = udma_create_jfr,

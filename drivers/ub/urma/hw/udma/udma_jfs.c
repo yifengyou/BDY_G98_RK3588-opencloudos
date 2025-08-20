@@ -409,3 +409,80 @@ int udma_destroy_jfs(struct ubcore_jfs *jfs)
 
 	return 0;
 }
+
+static int udma_modify_jfs_state(struct udma_dev *udma_dev, struct udma_jfs *udma_jfs,
+				 struct ubcore_jfs_attr *attr)
+{
+	int ret;
+
+	switch (attr->state) {
+	case UBCORE_JETTY_STATE_RESET:
+		ret = udma_destroy_hw_jetty_ctx(udma_dev, udma_jfs->sq.id);
+		break;
+	case UBCORE_JETTY_STATE_READY:
+		ret = udma_create_hw_jfs_ctx(udma_dev, udma_jfs, &udma_jfs->ubcore_jfs.jfs_cfg);
+		if (ret)
+			break;
+
+		udma_reset_sw_k_jetty_queue(&udma_jfs->sq);
+		break;
+	default:
+		ret = udma_close_ue_rx(udma_dev, true, true, false, 0);
+		if (ret)
+			break;
+
+		if (!(udma_dev->caps.feature & UDMA_CAP_FEATURE_UE_RX_CLOSE)) {
+			if (udma_modify_jetty_precondition(udma_dev, &udma_jfs->sq)) {
+				ret = -ENOMEM;
+				udma_open_ue_rx(udma_dev, true, true, false, 0);
+				break;
+			}
+		}
+
+		ret = udma_set_jetty_state(udma_dev, udma_jfs->sq.id, to_jetty_state(attr->state));
+		if (ret)
+			udma_open_ue_rx(udma_dev, true, true, false, 0);
+		else
+			udma_jfs->ue_rx_closed = true;
+		break;
+	}
+
+	return ret;
+}
+
+int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
+		    struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfs->ub_dev);
+	struct udma_jfs *udma_jfs = to_udma_jfs(jfs);
+	int ret = 0;
+
+	if (!(attr->mask & UBCORE_JFS_STATE)) {
+		dev_err(udma_dev->dev, "modify jfs mask is error or not set, jfs_id = %u.\n",
+			udma_jfs->sq.id);
+		return -EINVAL;
+	}
+
+	if (udma_jfs->sq.state == attr->state) {
+		dev_info(udma_dev->dev, "jfs state has been %s.\n",
+			 to_state_name(attr->state));
+		return 0;
+	}
+
+	if (!verify_modify_jetty(udma_jfs->sq.state, attr->state)) {
+		dev_err(udma_dev->dev, "not support modify jfs state from %s to %s.\n",
+			to_state_name(udma_jfs->sq.state), to_state_name(attr->state));
+		return -EINVAL;
+	}
+
+	ret = udma_modify_jfs_state(udma_dev, udma_jfs, attr);
+	if (ret) {
+		dev_err(udma_dev->dev, "modify jfs %u state to %u failed.\n",
+			udma_jfs->sq.id, attr->state);
+		return ret;
+	}
+
+	udma_jfs->sq.state = attr->state;
+
+	return 0;
+}
