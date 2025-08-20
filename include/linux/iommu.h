@@ -273,7 +273,7 @@ struct iommu_domain {
 			struct mm_struct *mm;
 			int users;
 #ifdef CONFIG_IOMMU_KSVA
-			KABI_FILL_HOLE(u32 isolated_pasid)
+			KABI_FILL_HOLE(u32 isolated_pasid);
 #endif
 			/*
 			 * Next iommu_domain in mm->iommu_mm->sva-domains list
