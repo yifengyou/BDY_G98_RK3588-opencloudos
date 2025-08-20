@@ -12,6 +12,7 @@
 #include <ub/urma/udma/udma_ctl.h>
 
 extern bool dfx_switch;
+extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
 

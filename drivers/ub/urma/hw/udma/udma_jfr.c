@@ -445,3 +445,208 @@ err_alloc_jfr_id:
 	kfree(udma_jfr);
 	return NULL;
 }
+
+static int modify_jfr_context(struct udma_dev *dev, uint32_t jfrn,
+			      bool state_flag, bool rx_threshold_flag,
+			      struct ubcore_jfr_attr *attr)
+{
+	struct ubase_mbx_attr mbox_attr = {};
+	struct udma_jfr_ctx *ctx, *ctx_mask;
+	struct ubase_cmd_mailbox *mailbox;
+	int ret;
+
+	mailbox = udma_alloc_cmd_mailbox(dev);
+	if (!mailbox) {
+		dev_err(dev->dev, "failed to alloc mailbox for JFRC.\n");
+		return -EINVAL;
+	}
+
+	ctx = (struct udma_jfr_ctx *)mailbox->buf;
+	ctx_mask = ctx + 1;
+	memset(ctx_mask, 0xff, sizeof(struct udma_jfr_ctx));
+	if (state_flag) {
+		ctx->state = attr->state;
+		ctx_mask->state = 0;
+	}
+
+	if (rx_threshold_flag) {
+		ctx->limit_wl = (uint32_t)to_udma_limit_wl(attr->rx_threshold);
+		ctx_mask->limit_wl = 0;
+	}
+
+	mbox_attr.tag = jfrn;
+	mbox_attr.op = UDMA_CMD_MODIFY_JFR_CONTEXT;
+
+	ret = udma_post_mbox(dev, mailbox, &mbox_attr);
+	if (ret)
+		dev_err(dev->dev,
+			"failed to post mbox cmd of modify JFRC, ret = %d.\n", ret);
+
+	udma_free_cmd_mailbox(dev, mailbox);
+
+	return ret;
+}
+
+static int udma_modify_jfr_to_error(struct ubcore_jfr *jfr, bool *need_sleep)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	struct ubcore_jfr_attr attr;
+	int ret = 0;
+
+	if (udma_jfr->state == UBCORE_JFR_STATE_READY) {
+		attr.state = UBCORE_JFR_STATE_ERROR;
+		attr.mask = UBCORE_JFR_STATE;
+		ret = modify_jfr_context(udma_dev, udma_jfr->rq.id, true, false, &attr);
+		if (ret) {
+			dev_err(udma_dev->dev, "failed to modify jfr state to error, id: %u.\n",
+				udma_jfr->rq.id);
+			return ret;
+		}
+
+		udma_jfr->state = UBCORE_JFR_STATE_ERROR;
+
+		*need_sleep = true;
+	}
+
+	return ret;
+}
+
+static int udma_modify_jfr_to_reset(struct ubcore_jfr *jfr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	struct ubase_mbx_attr mbox_attr = {};
+	int ret = 0;
+
+	if (udma_jfr->state != UBCORE_JFR_STATE_RESET) {
+		mbox_attr.tag = udma_jfr->rq.id;
+		mbox_attr.op = UDMA_CMD_DESTROY_JFR_CONTEXT;
+		ret = post_mailbox_update_ctx(udma_dev, NULL, 0, &mbox_attr);
+		if (ret) {
+			dev_err(udma_dev->dev, "failed to post jfr destroy cmd, id: %u.\n",
+				udma_jfr->rq.id);
+			return ret;
+		}
+
+		udma_jfr->state = UBCORE_JFR_STATE_RESET;
+	}
+
+	return ret;
+}
+
+static int udma_modify_and_del_jfr(struct udma_dev *udma_dev, struct udma_jfr *udma_jfr)
+{
+	bool large_payload = false;
+	bool need_sleep = false;
+	uint32_t sleep_time = 0;
+	int ret = 0;
+
+	ret = udma_modify_jfr_to_error(&udma_jfr->ubcore_jfr, &need_sleep);
+	if (ret)
+		return ret;
+	if (!udma_jfr->rq.buf.kva && udma_jfr->jfr_sleep_buf.page)
+		large_payload = !!(*(bool *)udma_jfr->jfr_sleep_buf.virt_addr);
+	if (need_sleep) {
+		sleep_time = large_payload ? jfr_sleep_time : UDMA_DEF_JFR_SLEEP_TIME;
+		dev_info_ratelimited(udma_dev->dev, "jfr sleep time = %u us.\n", sleep_time);
+		usleep_range(sleep_time, sleep_time + UDMA_SLEEP_DELAY_TIME);
+	}
+
+	return udma_modify_jfr_to_reset(&udma_jfr->ubcore_jfr);
+}
+
+static void udma_free_jfr(struct ubcore_jfr *jfr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+
+	if (dfx_switch)
+		udma_dfx_delete_id(udma_dev, &udma_dev->dfx_info->jfr, udma_jfr->rq.id);
+
+	xa_erase(&udma_dev->jfr_table.xa, udma_jfr->rq.id);
+
+	if (refcount_dec_and_test(&udma_jfr->ae_refcount))
+		complete(&udma_jfr->ae_comp);
+	wait_for_completion(&udma_jfr->ae_comp);
+
+	udma_put_jfr_buf(udma_dev, udma_jfr);
+	udma_id_free(&udma_dev->jfr_table.ida_table, udma_jfr->rq.id);
+	jfr->jfr_cfg.token_value.token = 0;
+	kfree(udma_jfr);
+}
+
+int udma_destroy_jfr(struct ubcore_jfr *jfr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	int ret;
+
+	ret = udma_modify_and_del_jfr(udma_dev, udma_jfr);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"failed to modify and delete jfr, id: %u, ret = %d.\n",
+			udma_jfr->rq.id, ret);
+		return ret;
+	}
+
+	udma_free_jfr(jfr);
+
+	return 0;
+}
+
+int udma_destroy_jfr_batch(struct ubcore_jfr **jfr, int jfr_cnt, int *bad_jfr_index)
+{
+	bool large_payload = false;
+	struct udma_dev *udma_dev;
+	struct udma_jfr *udma_jfr;
+	bool need_sleep = false;
+	uint32_t sleep_time = 0;
+	uint32_t i;
+	int ret;
+
+	if (!jfr) {
+		pr_info("jfr array is null.\n");
+		return -EINVAL;
+	}
+
+	if (!jfr_cnt) {
+		pr_info("jfr cnt is 0.\n");
+		return -EINVAL;
+	}
+
+	udma_dev = to_udma_dev(jfr[0]->ub_dev);
+
+	for (i = 0; i < jfr_cnt; i++) {
+		ret = udma_modify_jfr_to_error(jfr[i], &need_sleep);
+		if (ret) {
+			*bad_jfr_index = 0;
+			return ret;
+		}
+
+		if (unlikely(large_payload))
+			continue;
+		udma_jfr = to_udma_jfr(jfr[i]);
+		if (!udma_jfr->rq.buf.kva && udma_jfr->jfr_sleep_buf.page)
+			large_payload = !!(*(bool *)udma_jfr->jfr_sleep_buf.virt_addr);
+	}
+
+	if (need_sleep) {
+		sleep_time = large_payload ? jfr_sleep_time : UDMA_DEF_JFR_SLEEP_TIME;
+		dev_info(udma_dev->dev, "jfr sleep time = %u us.\n", sleep_time);
+		usleep_range(sleep_time, sleep_time + UDMA_SLEEP_DELAY_TIME);
+	}
+
+	for (i = 0; i < jfr_cnt; i++) {
+		ret = udma_modify_jfr_to_reset(jfr[i]);
+		if (ret) {
+			*bad_jfr_index = 0;
+			return ret;
+		}
+	}
+
+	for (i = 0; i < jfr_cnt; i++)
+		udma_free_jfr(jfr[i]);
+
+	return 0;
+}

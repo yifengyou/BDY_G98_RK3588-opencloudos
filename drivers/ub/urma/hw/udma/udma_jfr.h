@@ -49,6 +49,9 @@
 #define UDMA_IDX_QUE_ENTRY_SZ 4
 #define UDMA_RNR_MAX 19
 
+#define UDMA_DEF_JFR_SLEEP_TIME 1000
+#define UDMA_SLEEP_DELAY_TIME 10
+
 enum jfr_state {
 	UDMA_JFR_STATE_RESET = 0,
 	UDMA_JFR_STATE_READY,
@@ -154,5 +157,7 @@ static inline struct udma_jfr *to_udma_jfr_from_queue(struct udma_jetty_queue *q
 
 struct ubcore_jfr *udma_create_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg,
 				   struct ubcore_udata *udata);
+int udma_destroy_jfr(struct ubcore_jfr *jfr);
+int udma_destroy_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num, int *bad_jfr_index);
 
 #endif /* __UDMA_JFR_H__ */

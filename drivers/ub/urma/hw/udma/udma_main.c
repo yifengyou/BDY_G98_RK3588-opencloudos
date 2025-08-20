@@ -33,6 +33,7 @@
 
 bool is_rmmod;
 static DEFINE_MUTEX(udma_reset_mutex);
+uint32_t jfr_sleep_time = 1000;
 uint32_t jfc_arm_mode;
 bool dump_aux_info;
 
@@ -179,6 +180,8 @@ static struct ubcore_ops g_dev_ops = {
 	.query_jfs = udma_query_jfs,
 	.destroy_jfs = udma_destroy_jfs,
 	.create_jfr = udma_create_jfr,
+	.destroy_jfr = udma_destroy_jfr,
+	.destroy_jfr_batch = udma_destroy_jfr_batch,
 	.query_jfr = udma_query_jfr,
 	.query_jetty = udma_query_jetty,
 };
@@ -1091,6 +1094,9 @@ static void __exit udma_exit(void)
 module_init(udma_init);
 module_exit(udma_exit);
 MODULE_LICENSE("GPL");
+
+module_param(jfr_sleep_time, uint, 0444);
+MODULE_PARM_DESC(jfr_sleep_time, "Set the destroy jfr sleep time, default: 1000 us.\n");
 
 module_param(jfc_arm_mode, uint, 0444);
 MODULE_PARM_DESC(jfc_arm_mode,
