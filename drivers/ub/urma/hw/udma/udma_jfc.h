@@ -7,10 +7,43 @@
 #include "udma_dev.h"
 #include "udma_ctx.h"
 
+#define UDMA_JFC_DEPTH_MIN 64
 #define UDMA_JFC_DEPTH_SHIFT_BASE 6
+
+#define CQE_VA_L_OFFSET 12
+#define CQE_VA_H_OFFSET 32
+
+#define UDMA_DB_L_OFFSET 6
+#define UDMA_DB_H_OFFSET 38
+
+#define UDMA_STARS_SWITCH 1
+
+enum udma_jfc_state {
+	UDMA_JFC_STATE_INVALID,
+	UDMA_JFC_STATE_VALID,
+	UDMA_JFC_STATE_ERROR,
+};
+
+enum udma_armed_jfc {
+	UDMA_CTX_NO_ARMED,
+	UDMA_CTX_ALWAYS_ARMED,
+	UDMA_CTX_REG_NEXT_CEQE,
+	UDMA_CTX_REG_NEXT_SOLICITED_CEQE,
+};
+
+enum udma_record_db {
+	UDMA_NO_RECORD_EN,
+	UDMA_RECORD_EN,
+};
+
+enum udma_cq_cnt_mode {
+	UDMA_CQE_CNT_MODE_BY_COUNT,
+	UDMA_CQE_CNT_MODE_BY_CI_PI_GAP,
+};
 
 struct udma_jfc {
 	struct ubcore_jfc base;
+	struct udma_context *ctx;
 	uint32_t jfcn;
 	uint32_t ceqn;
 	uint32_t tid;
@@ -103,6 +136,9 @@ static inline struct udma_jfc *to_udma_jfc(struct ubcore_jfc *jfc)
 	return container_of(jfc, struct udma_jfc, base);
 }
 
+struct ubcore_jfc *udma_create_jfc(struct ubcore_device *ubcore_dev,
+				   struct ubcore_jfc_cfg *cfg,
+				   struct ubcore_udata *udata);
 int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data);
 

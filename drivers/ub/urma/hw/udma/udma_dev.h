@@ -12,6 +12,7 @@
 #include <ub/urma/udma/udma_ctl.h>
 
 extern bool dfx_switch;
+extern bool cqe_mode;
 extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
@@ -85,6 +86,11 @@ struct udma_mailbox_cmd {
 	struct rw_semaphore udma_mb_rwsem;
 };
 
+struct udma_ex_jfc_addr {
+	uint64_t cq_addr;
+	uint32_t cq_len;
+};
+
 struct udma_dev {
 	struct ubase_adev_com comdev;
 	struct ubcore_device ub_dev;
@@ -124,6 +130,7 @@ struct udma_dev {
 	uint32_t status;
 	struct udma_dev_debugfs *dbgfs;
 	uint32_t ue_num;
+	struct udma_ex_jfc_addr cq_addr_array[UDMA_JFC_TYPE_NUM];
 	uint32_t ue_id;
 	struct page *db_page;
 	u8 udma_tp_sl_num;
