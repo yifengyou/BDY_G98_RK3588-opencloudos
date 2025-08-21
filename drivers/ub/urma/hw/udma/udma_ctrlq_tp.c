@@ -145,6 +145,30 @@ struct udma_ctrlq_trans_map {
 	return -EINVAL;
 }
 
+static int udma_send_req_to_mue(struct udma_dev *dev, union ubcore_tp_handle *tp_handle)
+{
+	uint32_t data_len = (uint32_t)sizeof(struct udma_ue_tp_info);
+	struct udma_ue_tp_info *data;
+	struct ubcore_req *req_msg;
+	int ret;
+
+	req_msg = kzalloc(sizeof(*req_msg) + data_len, GFP_KERNEL);
+	if (!req_msg)
+		return -ENOMEM;
+
+	data = (struct udma_ue_tp_info *)req_msg->data;
+	data->start_tpn = tp_handle->bs.tpn_start;
+	data->tp_cnt = tp_handle->bs.tp_cnt;
+	req_msg->len = data_len;
+	ret = send_req_to_mue(dev, req_msg, UDMA_CMD_NOTIFY_MUE_SAVE_TP);
+	if (ret)
+		dev_err(dev->dev, "fail to notify mue save tp, ret %d.\n", ret);
+
+	kfree(req_msg);
+
+	return ret;
+}
+
 static int udma_ctrlq_store_one_tpid(struct udma_dev *udev, struct xarray *ctrlq_tpid_table,
 				     struct udma_ctrlq_tpid *tpid)
 {
@@ -318,6 +342,62 @@ void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpi
 	xa_destroy(ctrlq_tpid_table);
 }
 
+static int udma_k_ctrlq_create_active_tp_msg(struct udma_dev *udev,
+					     struct ubcore_active_tp_cfg *active_cfg,
+					     uint32_t *tp_id)
+{
+	struct udma_ctrlq_active_tp_resp_data active_tp_resp = {};
+	struct udma_ctrlq_active_tp_req_data active_tp_req = {};
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	active_tp_req.local_tp_id = active_cfg->tp_handle.bs.tpid;
+	active_tp_req.local_tpn_cnt = active_cfg->tp_handle.bs.tp_cnt;
+	active_tp_req.local_tpn_start = active_cfg->tp_handle.bs.tpn_start;
+	active_tp_req.local_psn = active_cfg->tp_attr.tx_psn;
+
+	active_tp_req.remote_tp_id = active_cfg->peer_tp_handle.bs.tpid;
+	active_tp_req.remote_tpn_cnt = active_cfg->peer_tp_handle.bs.tp_cnt;
+	active_tp_req.remote_tpn_start = active_cfg->peer_tp_handle.bs.tpn_start;
+	active_tp_req.remote_psn = active_cfg->tp_attr.rx_psn;
+
+	if (debug_switch)
+		udma_dfx_ctx_print(udev, "udma create active tp msg info",
+				   active_tp_req.local_tp_id,
+				   sizeof(struct udma_ctrlq_active_tp_req_data) / sizeof(uint32_t),
+				   (uint32_t *)&active_tp_req);
+
+	msg.opcode = UDMA_CMD_CTRLQ_ACTIVE_TP;
+	udma_ctrlq_set_tp_msg(&msg, (void *)&active_tp_req, sizeof(active_tp_req),
+			      (void *)&active_tp_resp, sizeof(active_tp_resp));
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret)
+		dev_err(udev->dev, "udma active tp send failed, ret = %d.\n", ret);
+
+	*tp_id = active_tp_resp.local_tp_id;
+
+	return ret;
+}
+
+int udma_ctrlq_set_active_tp_ex(struct udma_dev *dev,
+				struct ubcore_active_tp_cfg *active_cfg)
+{
+	uint32_t tp_id = active_cfg->tp_handle.bs.tpid;
+	int ret;
+
+	ret = udma_k_ctrlq_create_active_tp_msg(dev, active_cfg, &tp_id);
+	if (ret)
+		return ret;
+
+	active_cfg->tp_handle.bs.tpid = tp_id;
+
+	if (dev->is_ue)
+		(void)udma_send_req_to_mue(dev, &(active_cfg->tp_handle));
+
+	return 0;
+}
+
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode)
 {
 	struct udma_req_msg *req_msg;
@@ -373,6 +453,22 @@ int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
 			"send resp msg cmd failed, ret is %d.\n", ret);
 
 	kfree(udma_req);
+
+	return ret;
+}
+
+int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *active_cfg)
+{
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+	int ret;
+
+	if (debug_switch)
+		udma_dfx_ctx_print(udma_dev, "udma active tp ex", active_cfg->tp_handle.bs.tpid,
+				   sizeof(struct ubcore_active_tp_cfg) / sizeof(uint32_t),
+				   (uint32_t *)active_cfg);
+	ret = udma_ctrlq_set_active_tp_ex(udma_dev, active_cfg);
+	if (ret)
+		dev_err(udma_dev->dev, "Failed to set active tp msg, ret %d.\n", ret);
 
 	return ret;
 }

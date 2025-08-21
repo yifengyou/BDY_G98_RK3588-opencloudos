@@ -202,6 +202,7 @@ static struct ubcore_ops g_dev_ops = {
 	.create_jetty_grp = udma_create_jetty_grp,
 	.delete_jetty_grp = udma_delete_jetty_grp,
 	.get_tp_list = udma_get_tp_list,
+	.active_tp = udma_active_tp,
 	.post_jfs_wr = udma_post_jfs_wr,
 	.post_jfr_wr = udma_post_jfr_wr,
 	.post_jetty_send_wr = udma_post_jetty_send_wr,

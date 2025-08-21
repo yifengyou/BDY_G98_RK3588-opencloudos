@@ -54,6 +54,26 @@ struct udma_ctrlq_tpid_list_rsp {
 	struct udma_ctrlq_tpid tpid_list[UDMA_MAX_TPID_NUM];
 };
 
+struct udma_ctrlq_active_tp_req_data {
+	uint32_t local_tp_id : 24;
+	uint32_t local_tpn_cnt : 8;
+	uint32_t local_tpn_start : 24;
+	uint32_t rsv : 8;
+	uint32_t remote_tp_id : 24;
+	uint32_t remote_tpn_cnt : 8;
+	uint32_t remote_tpn_start : 24;
+	uint32_t rsv1 : 8;
+	uint32_t local_psn;
+	uint32_t remote_psn;
+};
+
+struct udma_ctrlq_active_tp_resp_data {
+	uint32_t local_tp_id : 24;
+	uint32_t local_tpn_cnt : 8;
+	uint32_t local_tpn_start : 24;
+	uint32_t rsv : 8;
+};
+
 struct udma_ctrlq_tp_flush_done_req_data {
 	uint32_t tpn : 24;
 	uint32_t rsv : 8;
@@ -136,5 +156,6 @@ void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpi
 int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
 		    uint8_t dst_ue_idx, uint16_t opcode);
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode);
+int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *active_cfg);
 
 #endif /* __UDMA_CTRLQ_TP_H__ */
