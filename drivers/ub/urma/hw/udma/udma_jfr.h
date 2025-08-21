@@ -161,5 +161,10 @@ struct ubcore_jfr *udma_create_jfr(struct ubcore_device *dev, struct ubcore_jfr_
 				   struct ubcore_udata *udata);
 int udma_destroy_jfr(struct ubcore_jfr *jfr);
 int udma_destroy_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num, int *bad_jfr_index);
+int udma_unimport_jfr(struct ubcore_tjetty *tjfr);
+struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
+					 struct ubcore_tjetty_cfg *cfg,
+					 struct ubcore_active_tp_cfg *active_tp_cfg,
+					 struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFR_H__ */

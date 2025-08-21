@@ -832,6 +832,44 @@ int udma_destroy_jetty(struct ubcore_jetty *jetty)
 	return 0;
 }
 
+static int udma_check_jetty_grp_info(struct ubcore_tjetty_cfg *cfg, struct udma_dev *dev)
+{
+	if (cfg->type == UBCORE_JETTY_GROUP) {
+		if (cfg->trans_mode != UBCORE_TP_RM) {
+			dev_err(dev->dev, "import jg only support RM, transmode is %u.\n",
+				cfg->trans_mode);
+			return -EINVAL;
+		}
+
+		if (cfg->policy != UBCORE_JETTY_GRP_POLICY_HASH_HINT) {
+			dev_err(dev->dev, "import jg only support hint, policy is %u.\n",
+				cfg->policy);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+int udma_unimport_jetty(struct ubcore_tjetty *tjetty)
+{
+	struct udma_target_jetty *udma_tjetty = to_udma_tjetty(tjetty);
+	struct udma_dev *udma_dev = to_udma_dev(tjetty->ub_dev);
+
+	if (!IS_ERR_OR_NULL(tjetty->vtpn)) {
+		dev_err(udma_dev->dev,
+			"the target jetty is still being used, id = %u.\n",
+			tjetty->cfg.id.id);
+		return -EINVAL;
+	}
+
+	udma_tjetty->token_value = 0;
+	tjetty->cfg.token_value.token = 0;
+	kfree(udma_tjetty);
+
+	return 0;
+}
+
 bool verify_modify_jetty(enum ubcore_jetty_state jetty_state,
 			 enum ubcore_jetty_state attr_state)
 {
@@ -1094,4 +1132,38 @@ int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp)
 	kfree(udma_jetty_grp);
 
 	return ret;
+}
+
+struct ubcore_tjetty *udma_import_jetty_ex(struct ubcore_device *ub_dev,
+					   struct ubcore_tjetty_cfg *cfg,
+					   struct ubcore_active_tp_cfg *active_tp_cfg,
+					   struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(ub_dev);
+	struct udma_target_jetty *tjetty;
+	int ret = 0;
+
+	if (cfg->type != UBCORE_JETTY_GROUP && cfg->type != UBCORE_JETTY) {
+		dev_err(udma_dev->dev,
+			"the jetty of the type %u cannot be imported in exp.\n",
+			cfg->type);
+		return NULL;
+	}
+
+	ret = udma_check_jetty_grp_info(cfg, udma_dev);
+	if (ret)
+		return NULL;
+
+	tjetty = kzalloc(sizeof(*tjetty), GFP_KERNEL);
+	if (!tjetty)
+		return NULL;
+
+	if (cfg->flag.bs.token_policy != UBCORE_TOKEN_NONE) {
+		tjetty->token_value = cfg->token_value.token;
+		tjetty->token_value_valid = true;
+	}
+
+	udma_swap_endian(cfg->id.eid.raw, tjetty->le_eid.raw, UBCORE_EID_SIZE);
+
+	return &tjetty->ubcore_tjetty;
 }

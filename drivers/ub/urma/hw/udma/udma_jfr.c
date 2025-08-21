@@ -790,3 +790,38 @@ int udma_modify_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_attr *attr,
 
 	return 0;
 }
+
+int udma_unimport_jfr(struct ubcore_tjetty *tjfr)
+{
+	struct udma_target_jetty *udma_tjfr = to_udma_tjetty(tjfr);
+
+	udma_tjfr->token_value = 0;
+	tjfr->cfg.token_value.token = 0;
+
+	kfree(udma_tjfr);
+
+	return 0;
+}
+
+struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
+					 struct ubcore_tjetty_cfg *cfg,
+					 struct ubcore_active_tp_cfg *active_tp_cfg,
+					 struct ubcore_udata *udata)
+{
+	struct udma_target_jetty *udma_tjfr;
+
+	udma_tjfr = kzalloc(sizeof(*udma_tjfr), GFP_KERNEL);
+	if (!udma_tjfr)
+		return NULL;
+
+	if (!udata) {
+		if (cfg->flag.bs.token_policy != UBCORE_TOKEN_NONE) {
+			udma_tjfr->token_value = cfg->token_value.token;
+			udma_tjfr->token_value_valid = true;
+		}
+	}
+
+	udma_swap_endian(cfg->id.eid.raw, udma_tjfr->le_eid.raw, UBCORE_EID_SIZE);
+
+	return &udma_tjfr->ubcore_tjetty;
+}
