@@ -23,6 +23,8 @@ extern bool dump_aux_info;
 
 #define UDMA_CTX_NUM 2
 
+#define UDMA_BITS_PER_INT 32
+
 #define MAX_JETTY_IN_JETTY_GRP 32
 
 #define UDMA_USER_DATA_H_OFFSET 32U

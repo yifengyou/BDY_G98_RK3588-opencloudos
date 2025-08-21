@@ -172,6 +172,112 @@ static void udma_init_jettyc(struct udma_dev *dev, struct ubcore_jetty_cfg *cfg,
 	ctx->next_rcv_ssn = ctx->next_send_ssn;
 }
 
+static int update_jetty_grp_ctx_valid(struct udma_dev *udma_dev,
+				      struct udma_jetty_grp *jetty_grp)
+{
+	struct udma_jetty_grp_ctx ctx[UDMA_CTX_NUM];
+	struct ubase_mbx_attr mbox_attr = {};
+	int ret;
+
+	ctx[0].valid = jetty_grp->valid;
+	/* jetty number indicates the location of the jetty with the largest ID. */
+	ctx[0].jetty_number = fls(jetty_grp->valid) - 1;
+	memset(ctx + 1, 0xff, sizeof(ctx[1]));
+	ctx[1].valid = 0;
+	ctx[1].jetty_number = 0;
+
+	mbox_attr.tag = jetty_grp->jetty_grp_id;
+	mbox_attr.op = UDMA_CMD_MODIFY_JETTY_GROUP_CONTEXT;
+	ret = post_mailbox_update_ctx(udma_dev, ctx, sizeof(ctx), &mbox_attr);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"post mailbox update jetty grp ctx failed, ret = %d.\n",
+			ret);
+
+	return ret;
+}
+
+static uint32_t udma_get_jetty_grp_jetty_id(uint32_t *valid, uint32_t *next)
+{
+	uint32_t bit_idx;
+
+	bit_idx = find_next_zero_bit((unsigned long *)valid, UDMA_BITS_PER_INT, *next);
+	if (bit_idx >= UDMA_BITS_PER_INT)
+		bit_idx = find_next_zero_bit((unsigned long *)valid, UDMA_BITS_PER_INT, 0);
+
+	*next = (*next + 1) >= UDMA_BITS_PER_INT ? 0 : *next + 1;
+
+	return bit_idx;
+}
+
+static int add_jetty_to_grp(struct udma_dev *udma_dev, struct ubcore_jetty_group *jetty_grp,
+			    struct udma_jetty_queue *sq, uint32_t cfg_id)
+{
+	struct udma_jetty_grp *udma_jetty_grp = to_udma_jetty_grp(jetty_grp);
+	uint32_t bit_idx = cfg_id - udma_jetty_grp->start_jetty_id;
+	int ret = 0;
+
+	mutex_lock(&udma_jetty_grp->valid_lock);
+
+	if (cfg_id == 0)
+		bit_idx = udma_get_jetty_grp_jetty_id(&udma_jetty_grp->valid,
+						      &udma_jetty_grp->next_jetty_id);
+
+	if (bit_idx >= UDMA_BITS_PER_INT || (udma_jetty_grp->valid & BIT(bit_idx))) {
+		dev_err(udma_dev->dev,
+			"jg(%u.%u) vallid %u is full or user id(%u) error",
+			udma_jetty_grp->jetty_grp_id, udma_jetty_grp->start_jetty_id,
+			udma_jetty_grp->valid, cfg_id);
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	udma_jetty_grp->valid |= BIT(bit_idx);
+	sq->id = udma_jetty_grp->start_jetty_id + bit_idx;
+	sq->jetty_grp = udma_jetty_grp;
+
+	ret = update_jetty_grp_ctx_valid(udma_dev, udma_jetty_grp);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"update jetty grp ctx valid failed, jetty_grp id is %u.\n",
+			udma_jetty_grp->jetty_grp_id);
+
+		udma_jetty_grp->valid &= ~BIT(bit_idx);
+	}
+out:
+	mutex_unlock(&udma_jetty_grp->valid_lock);
+
+	return ret;
+}
+
+static void remove_jetty_from_grp(struct udma_dev *udma_dev,
+				  struct udma_jetty *jetty)
+{
+	struct udma_jetty_grp *jetty_grp = jetty->sq.jetty_grp;
+	uint32_t bit_idx;
+	int ret;
+
+	bit_idx = jetty->sq.id - jetty_grp->start_jetty_id;
+	if (bit_idx >= UDMA_BITS_PER_INT) {
+		dev_err(udma_dev->dev,
+			"jetty_id(%u) is not in jetty grp, start_jetty_id(%u).\n",
+			jetty->sq.id, jetty_grp->start_jetty_id);
+		return;
+	}
+
+	mutex_lock(&jetty_grp->valid_lock);
+	jetty_grp->valid &= ~BIT(bit_idx);
+	jetty->sq.jetty_grp = NULL;
+
+	ret = update_jetty_grp_ctx_valid(udma_dev, jetty_grp);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"update jetty grp ctx valid failed, jetty_grp id is %u.\n",
+			jetty_grp->jetty_grp_id);
+
+	mutex_unlock(&jetty_grp->valid_lock);
+}
+
 static int udma_specify_rsvd_jetty_id(struct udma_dev *udma_dev, uint32_t cfg_id)
 {
 	struct udma_ida *ida_table = &udma_dev->rsvd_jetty_ida_table;
@@ -391,6 +497,13 @@ int alloc_jetty_id(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
 			return ret;
 
 		sq->id = cfg_id;
+	} else if (jetty_grp) {
+		ret = add_jetty_to_grp(udma_dev, jetty_grp, sq, cfg_id);
+		if (ret) {
+			dev_err(udma_dev->dev,
+				"add jetty to grp failed, ret = %d.\n", ret);
+			return ret;
+		}
 	} else {
 		ret = udma_alloc_jetty_id_own(udma_dev, &sq->id, sq->jetty_type);
 	}
@@ -403,6 +516,8 @@ static void free_jetty_id(struct udma_dev *udma_dev,
 {
 	if (udma_jetty->sq.id < udma_dev->caps.jetty.start_idx)
 		udma_id_free(&udma_dev->rsvd_jetty_ida_table, udma_jetty->sq.id);
+	else if (is_grp)
+		remove_jetty_from_grp(udma_dev, udma_jetty);
 	else
 		udma_adv_id_free(&udma_dev->jetty_table.bitmap_table,
 				 udma_jetty->sq.id, false);
