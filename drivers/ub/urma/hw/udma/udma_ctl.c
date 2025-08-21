@@ -18,6 +18,169 @@
 #include <ub/urma/udma/udma_ctl.h>
 #include "udma_def.h"
 
+static int send_cmd_query_cqe_aux_info(struct udma_dev *udma_dev,
+				       struct udma_cmd_query_cqe_aux_info *info)
+{
+	struct ubase_cmd_buf cmd_in, cmd_out;
+	int ret;
+
+	udma_fill_buf(&cmd_in, UDMA_CMD_GET_CQE_AUX_INFO, true,
+		      sizeof(struct udma_cmd_query_cqe_aux_info), info);
+	udma_fill_buf(&cmd_out, UDMA_CMD_GET_CQE_AUX_INFO, true,
+		      sizeof(struct udma_cmd_query_cqe_aux_info), info);
+
+	ret = ubase_cmd_send_inout(udma_dev->comdev.adev, &cmd_in, &cmd_out);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"failed to query cqe aux info, ret = %d.\n", ret);
+
+	return ret;
+}
+
+static void free_kernel_cqe_aux_info(struct udma_cqe_aux_info_out *user_aux_info_out,
+				     struct udma_cqe_aux_info_out *aux_info_out)
+{
+	if (!user_aux_info_out->aux_info_type)
+		return;
+
+	kfree(aux_info_out->aux_info_type);
+	aux_info_out->aux_info_type = NULL;
+
+	kfree(aux_info_out->aux_info_value);
+	aux_info_out->aux_info_value = NULL;
+}
+
+static int copy_out_cqe_data_from_user(struct udma_dev *udma_dev,
+				       struct ubcore_user_ctl_out *out,
+				       struct udma_cqe_aux_info_out *aux_info_out,
+				       struct ubcore_ucontext *uctx,
+				       struct udma_cqe_aux_info_out *user_aux_info_out)
+{
+	if (out->addr != 0 && out->len == sizeof(struct udma_cqe_aux_info_out)) {
+		memcpy(aux_info_out, (void *)(uintptr_t)out->addr,
+		       sizeof(struct udma_cqe_aux_info_out));
+		if (uctx && aux_info_out->aux_info_num > 0 &&
+		    aux_info_out->aux_info_type != NULL &&
+		    aux_info_out->aux_info_value != NULL) {
+			if (aux_info_out->aux_info_num > MAX_CQE_AUX_INFO_TYPE_NUM) {
+				dev_err(udma_dev->dev,
+					"invalid cqe aux info num %u.\n",
+					aux_info_out->aux_info_num);
+				return -EINVAL;
+			}
+
+			user_aux_info_out->aux_info_type = aux_info_out->aux_info_type;
+			user_aux_info_out->aux_info_value = aux_info_out->aux_info_value;
+			aux_info_out->aux_info_type =
+				kcalloc(aux_info_out->aux_info_num,
+					sizeof(enum udma_cqe_aux_info_type), GFP_KERNEL);
+			if (!aux_info_out->aux_info_type)
+				return -ENOMEM;
+
+			aux_info_out->aux_info_value =
+				kcalloc(aux_info_out->aux_info_num,
+					sizeof(uint32_t), GFP_KERNEL);
+			if (!aux_info_out->aux_info_value) {
+				kfree(aux_info_out->aux_info_type);
+				return -ENOMEM;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int copy_out_cqe_data_to_user(struct udma_dev *udma_dev,
+				     struct ubcore_user_ctl_out *out,
+				     struct udma_cqe_aux_info_out *aux_info_out,
+				     struct ubcore_ucontext *uctx,
+				     struct udma_cqe_aux_info_out *user_aux_info_out)
+{
+	unsigned long byte;
+
+	if (out->addr != 0 && out->len == sizeof(struct udma_cqe_aux_info_out)) {
+		if (uctx && aux_info_out->aux_info_num > 0 &&
+		    aux_info_out->aux_info_type != NULL &&
+		    aux_info_out->aux_info_value != NULL) {
+			byte = copy_to_user((void __user *)user_aux_info_out->aux_info_type,
+					    (void *)aux_info_out->aux_info_type,
+					    aux_info_out->aux_info_num *
+					    sizeof(enum udma_cqe_aux_info_type));
+			if (byte) {
+				dev_err(udma_dev->dev,
+					"copy resp to aux info type failed, byte = %lu.\n", byte);
+				return -EFAULT;
+			}
+
+			byte = copy_to_user((void __user *)user_aux_info_out->aux_info_value,
+					    (void *)aux_info_out->aux_info_value,
+					    aux_info_out->aux_info_num *
+					    sizeof(uint32_t));
+			if (byte) {
+				dev_err(udma_dev->dev,
+					"copy resp to aux info value failed, byte = %lu.\n", byte);
+				return -EFAULT;
+			}
+
+			kfree(aux_info_out->aux_info_type);
+			kfree(aux_info_out->aux_info_value);
+			aux_info_out->aux_info_type = user_aux_info_out->aux_info_type;
+			aux_info_out->aux_info_value = user_aux_info_out->aux_info_value;
+		}
+		memcpy((void *)(uintptr_t)out->addr, aux_info_out,
+		       sizeof(struct udma_cqe_aux_info_out));
+	}
+
+	return 0;
+}
+
+int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_cqe_aux_info_out user_aux_info_out = {};
+	struct udma_cqe_aux_info_out aux_info_out = {};
+	struct udma_cmd_query_cqe_aux_info info = {};
+	struct udma_cqe_info_in cqe_info_in = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	int ret;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct udma_cqe_info_in))) {
+		dev_err(udev->dev, "parameter invalid in query cqe aux info, in_len = %u.\n",
+			in->len);
+		return -EINVAL;
+	}
+	memcpy(&cqe_info_in, (void *)(uintptr_t)in->addr,
+	       sizeof(struct udma_cqe_info_in));
+
+	ret = copy_out_cqe_data_from_user(udev, out, &aux_info_out, uctx, &user_aux_info_out);
+	if (ret) {
+		dev_err(udev->dev,
+			"copy out data from user failed, ret = %d.\n", ret);
+		return ret;
+	}
+
+	info.status = cqe_info_in.status;
+	info.is_client = !(cqe_info_in.s_r & 1);
+
+	ret = send_cmd_query_cqe_aux_info(udev, &info);
+	if (ret) {
+		dev_err(udev->dev,
+			"send cmd query aux info failed, ret = %d.\n",
+			ret);
+		free_kernel_cqe_aux_info(&user_aux_info_out, &aux_info_out);
+		return ret;
+	}
+
+	ret = copy_out_cqe_data_to_user(udev, out, &aux_info_out, uctx, &user_aux_info_out);
+	if (ret) {
+		dev_err(udev->dev,
+			"copy out data to user failed, ret = %d.\n", ret);
+		free_kernel_cqe_aux_info(&user_aux_info_out, &aux_info_out);
+	}
+
+	return ret;
+}
+
 static int to_hw_ae_event_type(struct udma_dev *udma_dev, uint32_t event_type,
 			       struct udma_cmd_query_ae_aux_info *info)
 {

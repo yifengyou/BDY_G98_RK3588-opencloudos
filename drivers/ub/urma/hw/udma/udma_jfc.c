@@ -645,3 +645,388 @@ int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
 
 	return ret;
 }
+
+static enum jfc_poll_state udma_get_cr_status(struct udma_dev *dev,
+					      uint8_t src_status,
+					      uint8_t substatus,
+					      enum ubcore_cr_status *dst_status)
+{
+#define UDMA_SRC_STATUS_NUM 7
+#define UDMA_SUB_STATUS_NUM 5
+
+struct udma_cr_status {
+	bool is_valid;
+	enum ubcore_cr_status cr_status;
+};
+
+	static struct udma_cr_status map[UDMA_SRC_STATUS_NUM][UDMA_SUB_STATUS_NUM] = {
+		{{true, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}},
+		{{true, UBCORE_CR_UNSUPPORTED_OPCODE_ERR}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}},
+		{{false, UBCORE_CR_SUCCESS}, {true, UBCORE_CR_LOC_LEN_ERR},
+		 {true, UBCORE_CR_LOC_ACCESS_ERR}, {true, UBCORE_CR_REM_RESP_LEN_ERR},
+		 {true, UBCORE_CR_LOC_DATA_POISON}},
+		{{false, UBCORE_CR_SUCCESS}, {true, UBCORE_CR_REM_UNSUPPORTED_REQ_ERR},
+		 {true, UBCORE_CR_REM_ACCESS_ABORT_ERR}, {false, UBCORE_CR_SUCCESS},
+		 {true, UBCORE_CR_REM_DATA_POISON}},
+		{{true, UBCORE_CR_RNR_RETRY_CNT_EXC_ERR}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}},
+		{{true, UBCORE_CR_ACK_TIMEOUT_ERR}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}},
+		{{true, UBCORE_CR_FLUSH_ERR}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}, {false, UBCORE_CR_SUCCESS},
+		 {false, UBCORE_CR_SUCCESS}}
+	};
+
+	if ((src_status < UDMA_SRC_STATUS_NUM) && (substatus < UDMA_SUB_STATUS_NUM) &&
+	    map[src_status][substatus].is_valid) {
+		*dst_status = map[src_status][substatus].cr_status;
+		return JFC_OK;
+	}
+
+	dev_err(dev->dev, "cqe status is error, status = %u, substatus = %u.\n",
+		src_status, substatus);
+
+	return JFC_POLL_ERR;
+}
+
+static void udma_handle_inline_cqe(struct udma_jfc_cqe *cqe, uint8_t opcode,
+				   struct udma_jetty_queue *queue,
+				   struct ubcore_cr *cr)
+{
+	struct udma_jfr *jfr = to_udma_jfr_from_queue(queue);
+	uint32_t rqe_idx, data_len, sge_idx, size;
+	struct udma_wqe_sge *sge_list;
+	void *cqe_inline_buf;
+
+	rqe_idx = cqe->entry_idx;
+	sge_list = (struct udma_wqe_sge *)(jfr->rq.buf.kva +
+					   rqe_idx * jfr->rq.buf.entry_size);
+	data_len = cqe->byte_cnt;
+	cqe_inline_buf = opcode == HW_CQE_OPC_SEND ?
+			 (void *)&cqe->data_l : (void *)&cqe->inline_data;
+
+	for (sge_idx = 0; (sge_idx < jfr->max_sge) && data_len; sge_idx++) {
+		size = sge_list[sge_idx].length < data_len ?
+		       sge_list[sge_idx].length : data_len;
+		memcpy((void *)(uintptr_t)sge_list[sge_idx].va,
+		       cqe_inline_buf, size);
+		data_len -= size;
+		cqe_inline_buf += size;
+	}
+	cr->completion_len = cqe->byte_cnt - data_len;
+
+	if (data_len) {
+		cqe->status = UDMA_CQE_LOCAL_OP_ERR;
+		cqe->substatus = UDMA_CQE_LOCAL_LENGTH_ERR;
+	}
+}
+
+static void udma_parse_opcode_for_res(struct udma_dev *dev,
+				      struct udma_jfc_cqe *cqe,
+				      struct ubcore_cr *cr,
+				      struct list_head *tid_list)
+{
+	uint8_t opcode = cqe->opcode;
+	struct udma_inv_tid *inv_tid;
+
+	switch (opcode) {
+	case HW_CQE_OPC_SEND:
+		cr->opcode = UBCORE_CR_OPC_SEND;
+		break;
+	case HW_CQE_OPC_SEND_WITH_IMM:
+		cr->imm_data = (uint64_t)cqe->data_h << UDMA_IMM_DATA_SHIFT |
+			       cqe->data_l;
+		cr->opcode = UBCORE_CR_OPC_SEND_WITH_IMM;
+		break;
+	case HW_CQE_OPC_SEND_WITH_INV:
+		cr->invalid_token.token_id = cqe->data_l & (uint32_t)UDMA_CQE_INV_TOKEN_ID;
+		cr->invalid_token.token_id <<= UDMA_TID_SHIFT;
+		cr->invalid_token.token_value.token = cqe->data_h;
+		cr->opcode = UBCORE_CR_OPC_SEND_WITH_INV;
+
+		inv_tid = kzalloc(sizeof(*inv_tid), GFP_ATOMIC);
+		if (!inv_tid)
+			return;
+
+		inv_tid->tid = cr->invalid_token.token_id >> UDMA_TID_SHIFT;
+		list_add(&inv_tid->list, tid_list);
+
+		break;
+	case HW_CQE_OPC_WRITE_WITH_IMM:
+		cr->imm_data = (uint64_t)cqe->data_h << UDMA_IMM_DATA_SHIFT |
+			       cqe->data_l;
+		cr->opcode = UBCORE_CR_OPC_WRITE_WITH_IMM;
+		break;
+	default:
+		cr->opcode = (enum ubcore_cr_opcode)HW_CQE_OPC_ERR;
+		dev_err(dev->dev, "receive invalid opcode :%u.\n", opcode);
+		cr->status = UBCORE_CR_UNSUPPORTED_OPCODE_ERR;
+		break;
+	}
+}
+
+static struct udma_jfr *udma_get_jfr(struct udma_dev *udma_dev,
+				     struct udma_jfc_cqe *cqe,
+				     struct ubcore_cr *cr)
+{
+	struct udma_jetty_queue *udma_sq;
+	struct udma_jetty *jetty = NULL;
+	struct udma_jfr *jfr = NULL;
+	uint32_t local_id;
+
+	local_id = cr->local_id;
+	if (cqe->is_jetty) {
+		udma_sq = (struct udma_jetty_queue *)xa_load(&udma_dev->jetty_table.xa, local_id);
+		if (!udma_sq) {
+			dev_warn(udma_dev->dev,
+				 "get jetty failed, jetty_id = %u.\n", local_id);
+			return NULL;
+		}
+		jetty = to_udma_jetty_from_queue(udma_sq);
+		jfr = jetty->jfr;
+		cr->user_data = (uintptr_t)&jetty->ubcore_jetty;
+	} else {
+		jfr = (struct udma_jfr *)xa_load(&udma_dev->jfr_table.xa, local_id);
+		if (!jfr) {
+			dev_warn(udma_dev->dev,
+				 "get jfr failed jfr id = %u.\n", local_id);
+			return NULL;
+		}
+		cr->user_data = (uintptr_t)&jfr->ubcore_jfr;
+	}
+
+	return jfr;
+}
+
+static bool udma_update_jfr_idx(struct udma_dev *dev,
+				struct udma_jfc_cqe *cqe,
+				struct ubcore_cr *cr,
+				bool is_clean)
+{
+	struct udma_jetty_queue *queue;
+	uint8_t opcode = cqe->opcode;
+	struct udma_jfr *jfr;
+	uint32_t entry_idx;
+
+	jfr = udma_get_jfr(dev, cqe, cr);
+	if (!jfr)
+		return true;
+
+	queue = &jfr->rq;
+	entry_idx = cqe->entry_idx;
+	cr->user_ctx = queue->wrid[entry_idx & (queue->buf.entry_cnt - (uint32_t)1)];
+
+	if (!is_clean && cqe->inline_en)
+		udma_handle_inline_cqe(cqe, opcode, queue, cr);
+
+	if (!jfr->ubcore_jfr.jfr_cfg.flag.bs.lock_free)
+		spin_lock(&jfr->lock);
+
+	udma_id_free(&jfr->idx_que.jfr_idx_table.ida_table, entry_idx);
+	queue->ci++;
+
+	if (!jfr->ubcore_jfr.jfr_cfg.flag.bs.lock_free)
+		spin_unlock(&jfr->lock);
+
+	return false;
+}
+
+static enum jfc_poll_state udma_parse_cqe_for_send(struct udma_dev *dev,
+						   struct udma_jfc_cqe *cqe,
+						   struct ubcore_cr *cr)
+{
+	struct udma_jetty_queue *queue;
+	struct udma_jetty *jetty;
+	struct udma_jfs *jfs;
+
+	queue = (struct udma_jetty_queue *)(uintptr_t)(
+		(uint64_t)cqe->user_data_h << UDMA_ADDR_SHIFT |
+		cqe->user_data_l);
+	if (!queue) {
+		dev_err(dev->dev, "jetty queue addr is null, jetty_id = %u.\n", cr->local_id);
+		return JFC_POLL_ERR;
+	}
+
+	if (unlikely(udma_get_cr_status(dev, cqe->status, cqe->substatus, &cr->status)))
+		return JFC_POLL_ERR;
+
+	if (!!cqe->fd) {
+		cr->status = UBCORE_CR_WR_FLUSH_ERR_DONE;
+		queue->flush_flag = true;
+	} else {
+		queue->ci += (cqe->entry_idx - queue->ci) & (queue->buf.entry_cnt - 1);
+		cr->user_ctx = queue->wrid[queue->ci & (queue->buf.entry_cnt - 1)];
+		queue->ci++;
+	}
+
+	if (!!cr->flag.bs.jetty) {
+		jetty = to_udma_jetty_from_queue(queue);
+		cr->user_data = (uintptr_t)&jetty->ubcore_jetty;
+	} else {
+		jfs = container_of(queue, struct udma_jfs, sq);
+		cr->user_data = (uintptr_t)&jfs->ubcore_jfs;
+	}
+
+	return JFC_OK;
+}
+
+static enum jfc_poll_state udma_parse_cqe_for_recv(struct udma_dev *dev,
+						   struct udma_jfc_cqe *cqe,
+						   struct ubcore_cr *cr,
+						   struct list_head *tid_list)
+{
+	uint8_t substatus;
+	uint8_t status;
+
+	if (unlikely(udma_update_jfr_idx(dev, cqe, cr, false)))
+		return JFC_POLL_ERR;
+
+	udma_parse_opcode_for_res(dev, cqe, cr, tid_list);
+	status = cqe->status;
+	substatus = cqe->substatus;
+	if (unlikely(udma_get_cr_status(dev, status, substatus, &cr->status)))
+		return JFC_POLL_ERR;
+
+	return JFC_OK;
+}
+
+static enum jfc_poll_state parse_cqe_for_jfc(struct udma_dev *dev,
+					     struct udma_jfc_cqe *cqe,
+					     struct ubcore_cr *cr,
+					     struct list_head *tid_list)
+{
+	enum jfc_poll_state ret;
+
+	cr->flag.bs.s_r = cqe->s_r;
+	cr->flag.bs.jetty = cqe->is_jetty;
+	cr->completion_len = cqe->byte_cnt;
+	cr->tpn = cqe->tpn;
+	cr->local_id = cqe->local_num_h << UDMA_SRC_IDX_SHIFT | cqe->local_num_l;
+	cr->remote_id.id = cqe->rmt_idx;
+	udma_swap_endian((uint8_t *)(cqe->rmt_eid), cr->remote_id.eid.raw, UBCORE_EID_SIZE);
+
+	if (cqe->s_r == CQE_FOR_RECEIVE)
+		ret = udma_parse_cqe_for_recv(dev, cqe, cr, tid_list);
+	else
+		ret = udma_parse_cqe_for_send(dev, cqe, cr);
+
+	return ret;
+}
+
+static struct udma_jfc_cqe *get_next_cqe(struct udma_jfc *jfc, uint32_t n)
+{
+	struct udma_jfc_cqe *cqe;
+	uint32_t valid_owner;
+
+	cqe = (struct udma_jfc_cqe *)get_buf_entry(&jfc->buf, n);
+
+	valid_owner = (n >> jfc->cq_shift) & UDMA_JFC_DB_VALID_OWNER_M;
+	if (!(cqe->owner ^ valid_owner))
+		return NULL;
+
+	return cqe;
+}
+
+static void dump_cqe_aux_info(struct udma_dev *dev, struct ubcore_cr *cr)
+{
+	struct ubcore_user_ctl_out out = {};
+	struct ubcore_user_ctl_in in = {};
+	struct udma_cqe_info_in info_in;
+
+	info_in.status = cr->status;
+	info_in.s_r = cr->flag.bs.s_r;
+	in.addr = (uint64_t)&info_in;
+	in.len = sizeof(struct udma_cqe_info_in);
+	in.opcode = UDMA_USER_CTL_QUERY_CQE_AUX_INFO;
+
+	(void)udma_query_cqe_aux_info(&dev->ub_dev, NULL, &in, &out);
+}
+
+static enum jfc_poll_state udma_poll_one(struct udma_dev *dev,
+					 struct udma_jfc *jfc,
+					 struct ubcore_cr *cr,
+					 struct list_head *tid_list)
+{
+	struct udma_jfc_cqe *cqe;
+
+	cqe = get_next_cqe(jfc, jfc->ci);
+	if (!cqe)
+		return JFC_EMPTY;
+
+	++jfc->ci;
+	/* Memory barrier */
+	rmb();
+
+	if (parse_cqe_for_jfc(dev, cqe, cr, tid_list))
+		return JFC_POLL_ERR;
+
+	if (unlikely(cr->status != UBCORE_CR_SUCCESS) && dump_aux_info)
+		dump_cqe_aux_info(dev, cr);
+
+	return JFC_OK;
+}
+
+static void udma_inv_tid(struct udma_dev *dev, struct list_head *tid_list)
+{
+	struct udma_inv_tid *tid_node;
+	struct udma_inv_tid *tmp;
+	struct iommu_sva *ksva;
+	uint32_t tid;
+
+	mutex_lock(&dev->ksva_mutex);
+	list_for_each_entry_safe(tid_node, tmp, tid_list, list) {
+		tid = tid_node->tid;
+		ksva = (struct iommu_sva *)xa_load(&dev->ksva_table, tid);
+		if (!ksva) {
+			dev_warn(dev->dev, "tid may have been released.\n");
+		} else {
+			ummu_ksva_unbind_device(ksva);
+			__xa_erase(&dev->ksva_table, tid);
+		}
+
+		list_del(&tid_node->list);
+		kfree(tid_node);
+	}
+	mutex_unlock(&dev->ksva_mutex);
+}
+
+/* thanks to drivers/infiniband/hw/bnxt_re/ib_verbs.c */
+int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
+{
+	struct udma_dev *dev = to_udma_dev(jfc->ub_dev);
+	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
+	enum jfc_poll_state err = JFC_OK;
+	struct list_head tid_list;
+	uint32_t ci;
+	int npolled;
+
+	INIT_LIST_HEAD(&tid_list);
+
+	if (!jfc->jfc_cfg.flag.bs.lock_free)
+		spin_lock(&udma_jfc->lock);
+
+	for (npolled = 0; npolled < cr_cnt; ++npolled) {
+		err = udma_poll_one(dev, udma_jfc, cr + npolled, &tid_list);
+		if (err != JFC_OK)
+			break;
+	}
+
+	if (npolled) {
+		ci = udma_jfc->ci;
+		*udma_jfc->db.db_record = ci & (uint32_t)UDMA_JFC_DB_CI_IDX_M;
+	}
+
+	if (!jfc->jfc_cfg.flag.bs.lock_free)
+		spin_unlock(&udma_jfc->lock);
+
+	if (!list_empty(&tid_list))
+		udma_inv_tid(dev, &tid_list);
+
+	return err == JFC_POLL_ERR ? -UDMA_INTER_ERR : npolled;
+}

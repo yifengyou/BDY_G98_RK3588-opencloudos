@@ -18,6 +18,9 @@
 
 #define UDMA_STARS_SWITCH 1
 
+#define UDMA_JFC_DB_CI_IDX_M GENMASK(21, 0)
+#define UDMA_CQE_INV_TOKEN_ID GENMASK(19, 0)
+
 enum udma_jfc_state {
 	UDMA_JFC_STATE_INVALID,
 	UDMA_JFC_STATE_VALID,
@@ -131,6 +134,46 @@ struct udma_jfc_ctx {
 	uint32_t rsv11[12];
 };
 
+struct udma_jfc_cqe {
+	/* DW0 */
+	uint32_t s_r : 1;
+	uint32_t is_jetty : 1;
+	uint32_t owner : 1;
+	uint32_t inline_en : 1;
+	uint32_t opcode : 3;
+	uint32_t fd : 1;
+	uint32_t rsv : 8;
+	uint32_t substatus : 8;
+	uint32_t status : 8;
+	/* DW1 */
+	uint32_t entry_idx : 16;
+	uint32_t local_num_l : 16;
+	/* DW2 */
+	uint32_t local_num_h : 4;
+	uint32_t rmt_idx : 20;
+	uint32_t rsv1 : 8;
+	/* DW3 */
+	uint32_t tpn : 24;
+	uint32_t rsv2 : 8;
+	/* DW4 */
+	uint32_t byte_cnt;
+	/* DW5 ~ DW6 */
+	uint32_t user_data_l;
+	uint32_t user_data_h;
+	/* DW7 ~ DW10 */
+	uint32_t rmt_eid[4];
+	/* DW11 ~ DW12 */
+	uint32_t data_l;
+	uint32_t data_h;
+	/* DW13 ~ DW15 */
+	uint32_t inline_data[3];
+};
+
+struct udma_inv_tid {
+	uint32_t tid;
+	struct list_head list;
+};
+
 static inline struct udma_jfc *to_udma_jfc(struct ubcore_jfc *jfc)
 {
 	return container_of(jfc, struct udma_jfc, base);
@@ -144,5 +187,6 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data);
 int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
 		    struct ubcore_udata *udata);
+int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr);
 
 #endif /* __UDMA_JFC_H__ */
