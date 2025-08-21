@@ -33,7 +33,7 @@ struct perf_mem_event *perf_mem_events__ptr(int i)
 	if (i >= PERF_MEM_EVENTS__MAX)
 		return NULL;
 
-	if (x86__is_amd_cpu())
+	if (x86__is_amd_cpu() || x86__is_hygon_cpu())
 		return &perf_mem_events_amd[i];
 
 	return &perf_mem_events_intel[i];

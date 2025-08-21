@@ -17,3 +17,18 @@ bool x86__is_amd_cpu(void)
 ret:
 	return is_amd >= 1 ? true : false;
 }
+
+bool x86__is_hygon_cpu(void)
+{
+	struct perf_env env = { .total_mem = 0, };
+	static int is_hygon; /* 0: Uninitialized, 1: Yes, -1: No */
+
+	if (is_hygon)
+		goto ret;
+
+	perf_env__cpuid(&env);
+	is_hygon = env.cpuid && strstarts(env.cpuid, "HygonGenuine") ? 1 : -1;
+	perf_env__exit(&env);
+ret:
+	return is_hygon >= 1 ? true : false;
+}

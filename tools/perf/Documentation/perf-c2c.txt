@@ -21,9 +21,9 @@ you to track down the cacheline contentions.
 
 On Intel, the tool is based on load latency and precise store facility events
 provided by Intel CPUs. On PowerPC, the tool uses random instruction sampling
-with thresholding feature. On AMD, the tool uses IBS op pmu (due to hardware
-limitations, perf c2c is not supported on Zen3 cpus). On Arm64 it uses SPE to
-sample load and store operations, therefore hardware and kernel support is
+with thresholding feature. On AMD and Hygon, the tool uses IBS op pmu (due to
+hardware limitations, perf c2c is not supported on Zen3 cpus). On Arm64 it uses
+SPE to sample load and store operations, therefore hardware and kernel support is
 required. See linkperf:perf-arm-spe[1] for a setup guide. Due to the
 statistical nature of Arm SPE sampling, not every memory operation will be
 sampled.
@@ -152,7 +152,7 @@ default on Intel:
   cpu/mem-loads,ldlat=30/P
   cpu/mem-stores/P
 
-following on AMD:
+following on AMD and Hygon:
 
   ibs_op//
 
