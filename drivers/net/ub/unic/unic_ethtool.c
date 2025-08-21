@@ -109,6 +109,175 @@ static int unic_set_fecparam(struct net_device *ndev,
 	return 0;
 }
 
+static int unic_get_coalesce(struct net_device *netdev,
+			     struct ethtool_coalesce *cmd,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct unic_coalesce *tx_coal = &unic_dev->channels.unic_coal.tx_coal;
+	struct unic_coalesce *rx_coal = &unic_dev->channels.unic_coal.rx_coal;
+
+	if (unic_resetting(netdev))
+		return -EBUSY;
+
+	cmd->tx_coalesce_usecs = tx_coal->int_gl;
+	cmd->rx_coalesce_usecs = rx_coal->int_gl;
+
+	cmd->tx_max_coalesced_frames = tx_coal->int_ql;
+	cmd->rx_max_coalesced_frames = rx_coal->int_ql;
+
+	return 0;
+}
+
+static int unic_check_gl_coalesce_para(struct net_device *netdev,
+				       struct ethtool_coalesce *cmd)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	u32 rx_gl, tx_gl;
+
+	if (cmd->rx_coalesce_usecs > unic_dev->caps.max_int_gl) {
+		unic_err(unic_dev,
+			 "invalid rx-usecs value, rx-usecs range is [0, %u].\n",
+			 unic_dev->caps.max_int_gl);
+		return -EINVAL;
+	}
+
+	if (cmd->tx_coalesce_usecs > unic_dev->caps.max_int_gl) {
+		unic_err(unic_dev,
+			 "invalid tx-usecs value, tx-usecs range is [0, %u].\n",
+			 unic_dev->caps.max_int_gl);
+		return -EINVAL;
+	}
+
+	rx_gl = unic_cqe_period_round_down(cmd->rx_coalesce_usecs);
+	if (rx_gl != cmd->rx_coalesce_usecs) {
+		unic_err(unic_dev,
+			 "invalid rx_usecs(%u), because it must be power of 4.\n",
+			 cmd->rx_coalesce_usecs);
+		return -EINVAL;
+	}
+
+	tx_gl = unic_cqe_period_round_down(cmd->tx_coalesce_usecs);
+	if (tx_gl != cmd->tx_coalesce_usecs) {
+		unic_err(unic_dev,
+			 "invalid tx_usecs(%u), because it must be power of 4.\n",
+			 cmd->tx_coalesce_usecs);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int unic_check_ql_coalesce_para(struct net_device *netdev,
+				       struct ethtool_coalesce *cmd)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+
+	if ((cmd->tx_max_coalesced_frames || cmd->rx_max_coalesced_frames) &&
+	    !unic_dev->caps.max_int_ql) {
+		unic_err(unic_dev, "coalesced frames is not supported.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (cmd->tx_max_coalesced_frames > unic_dev->caps.max_int_ql ||
+	    cmd->rx_max_coalesced_frames > unic_dev->caps.max_int_ql) {
+		unic_err(unic_dev,
+			 "invalid coalesced frames value, range is [0, %u].\n",
+			 unic_dev->caps.max_int_ql);
+		return -ERANGE;
+	}
+
+	return 0;
+}
+
+static int
+unic_check_coalesce_para(struct net_device *netdev,
+			 struct ethtool_coalesce *cmd,
+			 struct kernel_ethtool_coalesce *kernel_coal)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	int ret;
+
+	if (cmd->use_adaptive_rx_coalesce || cmd->use_adaptive_tx_coalesce) {
+		unic_err(unic_dev,
+			 "not support to enable adaptive coalesce.\n");
+		return -EINVAL;
+	}
+
+	ret = unic_check_gl_coalesce_para(netdev, cmd);
+	if (ret) {
+		unic_err(unic_dev,
+			 "failed to check gl coalesce param, ret = %d.\n", ret);
+		return ret;
+	}
+
+	ret = unic_check_ql_coalesce_para(netdev, cmd);
+	if (ret)
+		unic_err(unic_dev,
+			 "failed to check ql coalesce param, ret = %d.\n", ret);
+
+	return ret;
+}
+
+static int unic_set_coalesce(struct net_device *netdev,
+			     struct ethtool_coalesce *cmd,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct unic_coal_txrx *unic_coal = &unic_dev->channels.unic_coal;
+	struct unic_coalesce *tx_coal = &unic_coal->tx_coal;
+	struct unic_coalesce *rx_coal = &unic_coal->rx_coal;
+	struct unic_coalesce old_tx_coal, old_rx_coal;
+	int ret, ret1;
+
+	if (test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state)) {
+		unic_err(unic_dev,
+			 "failed to set coalesce, due to dev deacitve.\n");
+		return -EBUSY;
+	}
+
+	if (unic_resetting(netdev))
+		return -EBUSY;
+
+	ret = unic_check_coalesce_para(netdev, cmd, kernel_coal);
+	if (ret)
+		return ret;
+
+	memcpy(&old_tx_coal, tx_coal, sizeof(struct unic_coalesce));
+	memcpy(&old_rx_coal, rx_coal, sizeof(struct unic_coalesce));
+
+	tx_coal->int_gl = cmd->tx_coalesce_usecs;
+	rx_coal->int_gl = cmd->rx_coalesce_usecs;
+
+	tx_coal->int_ql = cmd->tx_max_coalesced_frames;
+	rx_coal->int_ql = cmd->rx_max_coalesced_frames;
+
+	unic_net_stop_no_link_change(netdev);
+	unic_uninit_channels(unic_dev);
+
+	ret = unic_init_channels(unic_dev, unic_dev->channels.num);
+	if (ret) {
+		netdev_err(netdev, "failed to init channels, ret = %d.\n", ret);
+		memcpy(tx_coal, &old_tx_coal, sizeof(struct unic_coalesce));
+		memcpy(rx_coal, &old_rx_coal, sizeof(struct unic_coalesce));
+		ret1 = unic_init_channels(unic_dev, unic_dev->channels.num);
+		if (ret1) {
+			unic_err(unic_dev,
+				 "failed to recover old channels, ret = %d.\n",
+				 ret1);
+			return ret;
+		}
+	}
+
+	ret1 = unic_net_open_no_link_change(netdev);
+	if (ret1)
+		unic_err(unic_dev, "failed to set net open, ret = %d.\n", ret1);
+
+	return ret;
+}
+
 #define UNIC_ETHTOOL_RING	(ETHTOOL_RING_USE_RX_BUF_LEN | \
 				 ETHTOOL_RING_USE_TX_PUSH)
 #define UNIC_ETHTOOL_COALESCE	(ETHTOOL_COALESCE_USECS | \
@@ -131,6 +300,8 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.get_fecparam = unic_get_fecparam,
 	.set_fecparam = unic_set_fecparam,
 	.get_fec_stats = unic_get_fec_stats,
+	.get_coalesce = unic_get_coalesce,
+	.set_coalesce = unic_set_coalesce,
 };
 
 void unic_set_ethtool_ops(struct net_device *netdev)

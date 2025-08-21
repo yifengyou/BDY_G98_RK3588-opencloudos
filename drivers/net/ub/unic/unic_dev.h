@@ -247,6 +247,7 @@ void unic_start_period_task(struct net_device *netdev);
 void unic_remove_period_task(struct unic_dev *unic_dev);
 int unic_init_wq(void);
 void unic_destroy_wq(void);
+u16 unic_cqe_period_round_down(u16 cqe_period);
 int unic_init_rx(struct unic_dev *unic_dev, u32 num);
 int unic_init_tx(struct unic_dev *unic_dev, u32 num);
 void unic_destroy_rx(struct unic_dev *unic_dev, u32 num);

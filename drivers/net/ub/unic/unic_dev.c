@@ -293,6 +293,30 @@ static void unic_uninit_channels_attr(struct unic_dev *unic_dev)
 	mutex_destroy(&channels->mutex);
 }
 
+u16 unic_cqe_period_round_down(u16 cqe_period)
+{
+	u16 period[] = {
+		UNIC_CQE_PERIOD_0,
+		UNIC_CQE_PERIOD_4,
+		UNIC_CQE_PERIOD_16,
+		UNIC_CQE_PERIOD_64,
+		UNIC_CQE_PERIOD_256,
+		UNIC_CQE_PERIOD_1024,
+		UNIC_CQE_PERIOD_4096,
+		UNIC_CQE_PERIOD_16384,
+		UNIC_CQE_PERIOD_ERR
+	};
+	u16 i;
+
+	for (i = 0; i < ARRAY_SIZE(period) - 1; i++) {
+		if (cqe_period >= period[i] &&
+		    cqe_period < period[i + 1])
+			return period[i];
+	}
+
+	return UNIC_CQE_PERIOD_ERR;
+}
+
 int unic_init_tx(struct unic_dev *unic_dev, u32 num)
 {
 	struct unic_channel *c;
