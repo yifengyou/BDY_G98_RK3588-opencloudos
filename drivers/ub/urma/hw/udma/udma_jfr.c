@@ -19,6 +19,14 @@ const char *state_str[] = {
 	"INVALID"
 };
 
+static const char *to_state_str(enum ubcore_jfr_state state)
+{
+	if ((int)state >= (int)JFR_STATE_NUM)
+		return state_str[JFR_STATE_NUM];
+
+	return state_str[state];
+}
+
 static int udma_verify_jfr_param(struct udma_dev *dev,
 				 struct ubcore_jfr_cfg *cfg)
 {
@@ -647,6 +655,138 @@ int udma_destroy_jfr_batch(struct ubcore_jfr **jfr, int jfr_cnt, int *bad_jfr_in
 
 	for (i = 0; i < jfr_cnt; i++)
 		udma_free_jfr(jfr[i]);
+
+	return 0;
+}
+
+static bool verify_modify_jfr_state(enum ubcore_jfr_state jfr_state,
+				    enum ubcore_jfr_state attr_state)
+{
+	switch (jfr_state) {
+	case UBCORE_JFR_STATE_RESET:
+		return attr_state == UBCORE_JFR_STATE_READY;
+	case UBCORE_JFR_STATE_READY:
+		return attr_state == UBCORE_JFR_STATE_ERROR;
+	case UBCORE_JFR_STATE_ERROR:
+		return attr_state == UBCORE_JFR_STATE_RESET;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+static int verify_modify_jfr(struct udma_dev *udma_dev, struct udma_jfr *udma_jfr,
+			     struct ubcore_jfr_attr *attr, bool *state_flag,
+			     bool *rx_threshold_flag)
+{
+	*rx_threshold_flag = false;
+	*state_flag = false;
+
+	if (!(attr->mask & (UBCORE_JFR_RX_THRESHOLD | UBCORE_JFR_STATE))) {
+		dev_err(udma_dev->dev,
+			"modify jfr mask is error or not set, jfrn = %u.\n",
+			udma_jfr->rq.id);
+		return -EINVAL;
+	}
+
+	if (attr->mask & UBCORE_JFR_RX_THRESHOLD) {
+		if (attr->rx_threshold >= udma_jfr->wqe_cnt) {
+			dev_err(udma_dev->dev,
+				"JFR rx_threshold(%u) must less than wqe num(%u).\n",
+				attr->rx_threshold, udma_jfr->wqe_cnt);
+			return -EINVAL;
+		}
+		*rx_threshold_flag = true;
+	}
+
+	if (attr->mask & UBCORE_JFR_STATE) {
+		if (udma_jfr->state == attr->state) {
+			dev_info(udma_dev->dev,
+				 "jfr(%u) state has been %s, keep it unchanged.\n",
+				 udma_jfr->rq.id, to_state_str(attr->state));
+			return 0;
+		} else if (!verify_modify_jfr_state(udma_jfr->state,
+						    attr->state)) {
+			dev_err(udma_dev->dev,
+				"jfr(%u) not support modify jfr state from %s to %s.\n",
+				udma_jfr->rq.id, to_state_str(udma_jfr->state),
+				to_state_str(attr->state));
+			return -EINVAL;
+		} else if ((attr->state == UBCORE_JFR_STATE_RESET ||
+			    attr->state == UBCORE_JFR_STATE_ERROR) &&
+			    *rx_threshold_flag) {
+			dev_err(udma_dev->dev,
+				"jfr(%u) not support set rx threshold when change state to %s.\n",
+				udma_jfr->rq.id, to_state_str(attr->state));
+			return -EINVAL;
+		}
+		*state_flag = true;
+	}
+
+	return 0;
+}
+
+static int udma_destroy_hw_jfr_ctx(struct udma_dev *dev, uint32_t jfr_id)
+{
+	struct ubase_mbx_attr attr = {};
+	int ret;
+
+	attr.tag = jfr_id;
+	attr.op = UDMA_CMD_DESTROY_JFR_CONTEXT;
+	ret = post_mailbox_update_ctx(dev, NULL, 0, &attr);
+	if (ret)
+		dev_err(dev->dev,
+			"post mailbox destroy jfr ctx failed, ret = %d.\n", ret);
+
+	return ret;
+}
+
+int udma_modify_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_attr *attr,
+		    struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	bool rx_threshold_flag = false;
+	bool state_flag = false;
+	int ret = 0;
+
+	ret = verify_modify_jfr(udma_dev, udma_jfr, attr, &state_flag,
+				&rx_threshold_flag);
+	if (ret)
+		return ret;
+
+	if (!(rx_threshold_flag || state_flag))
+		return 0;
+
+	if (rx_threshold_flag && !state_flag) {
+		ret = modify_jfr_context(udma_dev, udma_jfr->rq.id, state_flag,
+					 rx_threshold_flag, attr);
+	} else {
+		switch (attr->state) {
+		case UBCORE_JFR_STATE_RESET:
+			ret = udma_destroy_hw_jfr_ctx(udma_dev, udma_jfr->rq.id);
+			break;
+		case UBCORE_JFR_STATE_READY:
+			ret = udma_hw_init_jfrc(udma_dev, &jfr->jfr_cfg, udma_jfr,
+						rx_threshold_flag ?
+						attr->rx_threshold : udma_jfr->rx_threshold);
+			break;
+		default:
+			ret = modify_jfr_context(udma_dev, udma_jfr->rq.id, state_flag,
+						rx_threshold_flag, attr);
+			break;
+		}
+	}
+
+	if (ret)
+		return ret;
+
+	if (state_flag)
+		udma_jfr->state = attr->state;
+
+	if (rx_threshold_flag)
+		udma_jfr->rx_threshold = attr->rx_threshold;
 
 	return 0;
 }
