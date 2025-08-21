@@ -10,6 +10,7 @@
 #include <linux/iommu.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
+#include <linux/property.h>
 
 #define eid_t u128
 
@@ -61,16 +62,30 @@ struct ummu_tid_param {
 	KABI_RESERVE(5)
 };
 
+struct tdev_attr {
+	const char *name;
+	enum dev_dma_attr dma_attr;
+	u8 *priv;
+	u32 priv_len;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
 /**
  * struct ummu_core_ops - ummu ops for normal use, expand from iommu_ops.
  * @add_eid: Add EID to the UMMU device.
  * @del_eid: Add EID to the UMMU device.
+ * @tdev_support_attr: Check whether the UMMU device supports the tdev attribute.
  */
 struct ummu_core_ops {
 	int (*add_eid)(struct ummu_core_device *dev, guid_t *guid, eid_t eid,
 		       enum eid_type type);
 	void (*del_eid)(struct ummu_core_device *dev, guid_t *guid, eid_t eid,
 			enum eid_type type);
+	bool (*tdev_support_attr)(struct ummu_core_device *dev, struct tdev_attr *attr);
 
 	KABI_RESERVE(1)
 	KABI_RESERVE(2)
@@ -94,6 +109,7 @@ struct ummu_core_device {
 	struct ummu_tid_manager *tid_manager;
 	struct iommu_device iommu;
 	const struct ummu_core_ops *ops;
+	struct device *ummu_core_root;
 
 	KABI_RESERVE(1)
 	KABI_RESERVE(2)
@@ -160,6 +176,14 @@ static inline struct ummu_base_domain *
 to_ummu_base_domain(struct iommu_domain *dom)
 {
 	return container_of(dom, struct ummu_base_domain, domain);
+}
+
+static inline void tdev_attr_init(struct tdev_attr *attr)
+{
+	attr->dma_attr = DEV_DMA_COHERENT;
+	attr->name = NULL;
+	attr->priv = NULL;
+	attr->priv_len = 0;
 }
 
 #ifdef CONFIG_UB_UMMU_CORE
@@ -298,6 +322,22 @@ enum ummu_mapt_mode ummu_core_get_mapt_mode(struct ummu_core_device *dev,
  */
 struct device *ummu_core_get_device(struct ummu_core_device *dev, u32 tid);
 void ummu_core_put_device(struct device *dev);
+
+/**
+ *  Allocate a virtual device to hold a tid.
+ * @attr: attributes of tdev
+ * @ptid: tid pointer
+ * Return: device on success or NULL error.
+ */
+struct device *ummu_core_alloc_tdev(struct tdev_attr *attr, u32 *ptid);
+
+/**
+ * Free the virtual device
+ * @dev: Return value allocated by ummu_core_alloc_tdev
+ *
+ * Return: 0 on success or an error.
+ */
+int ummu_core_free_tdev(struct device *dev);
 #else
 static inline int ummu_core_alloc_tid(struct ummu_core_device *dev,
 				      struct ummu_tid_param *drvdata,
@@ -324,6 +364,16 @@ static inline struct device *ummu_core_get_device(struct ummu_core_device *dev,
 
 static inline void ummu_core_put_device(struct device *dev)
 {
+}
+
+static inline struct device *ummu_core_alloc_tdev(struct tdev_attr *attr, u32 *ptid)
+{
+	return NULL;
+}
+
+static inline int ummu_core_free_tdev(struct device *dev)
+{
+	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_UB_UMMU_CORE_DRIVER */
 #endif /* _UMMU_CORE_H_ */
