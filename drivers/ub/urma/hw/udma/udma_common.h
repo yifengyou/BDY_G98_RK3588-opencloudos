@@ -91,6 +91,13 @@ static inline void udma_alloc_kernel_db(struct udma_dev *dev,
 	queue->db_addr = queue->dwqe_addr + UDMA_DOORBELL_OFFSET;
 }
 
+static inline void *get_buf_entry(struct udma_buf *buf, uint32_t n)
+{
+	uint32_t entry_index = n & (buf->entry_cnt - 1);
+
+	return (char *)buf->kva + (entry_index * buf->entry_size);
+}
+
 static inline uint8_t to_ta_timeout(uint32_t err_timeout)
 {
 #define TA_TIMEOUT_DIVISOR 8

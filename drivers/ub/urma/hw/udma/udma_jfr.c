@@ -803,6 +803,106 @@ int udma_unimport_jfr(struct ubcore_tjetty *tjfr)
 	return 0;
 }
 
+static void fill_wqe_idx(struct udma_jfr *jfr, uint32_t wqe_idx)
+{
+	uint32_t *idx_buf;
+
+	idx_buf = (uint32_t *)get_buf_entry(&jfr->idx_que.buf, jfr->rq.pi);
+	*idx_buf = cpu_to_le32(wqe_idx);
+
+	jfr->rq.pi++;
+}
+
+static void fill_recv_sge_to_wqe(struct ubcore_jfr_wr *wr, void *wqe,
+				 uint32_t max_sge)
+{
+	struct udma_wqe_sge *sge = (struct udma_wqe_sge *)wqe;
+	uint32_t i, cnt;
+
+	for (i = 0, cnt = 0; i < wr->src.num_sge; i++) {
+		if (!wr->src.sge[i].len)
+			continue;
+		set_data_of_sge(sge + cnt, wr->src.sge + i);
+		++cnt;
+	}
+
+	if (cnt < max_sge)
+		memset(sge + cnt, 0, (max_sge - cnt) * UDMA_SGE_SIZE);
+}
+
+static int post_recv_one(struct udma_dev *dev, struct udma_jfr *jfr,
+			 struct ubcore_jfr_wr *wr)
+{
+	uint32_t wqe_idx;
+	int ret = 0;
+	void *wqe;
+
+	if (unlikely(wr->src.num_sge > jfr->max_sge)) {
+		dev_err(dev->dev,
+			"failed to check sge, wr_num_sge = %u, max_sge = %u, jfrn = %u.\n",
+			wr->src.num_sge, jfr->max_sge, jfr->rq.id);
+		return -EINVAL;
+	}
+
+	if (udma_jfrwq_overflow(jfr)) {
+		dev_err(dev->dev, "failed to check jfrwq, jfrwq is full, jfrn = %u.\n",
+			jfr->rq.id);
+		return -ENOMEM;
+	}
+
+	ret = udma_id_alloc(dev, &jfr->idx_que.jfr_idx_table.ida_table,
+			    &wqe_idx);
+	if (ret) {
+		dev_err(dev->dev, "failed to get jfr wqe idx.\n");
+		return ret;
+	}
+	wqe = get_buf_entry(&jfr->rq.buf, wqe_idx);
+
+	fill_recv_sge_to_wqe(wr, wqe, jfr->max_sge);
+
+	fill_wqe_idx(jfr, wqe_idx);
+
+	jfr->rq.wrid[wqe_idx] = wr->user_ctx;
+
+	return ret;
+}
+
+/* thanks to drivers/infiniband/hw/bnxt_re/ib_verbs.c */
+int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
+		     struct ubcore_jfr_wr **bad_wr)
+{
+	struct udma_dev *dev = to_udma_dev(ubcore_jfr->ub_dev);
+	struct udma_jfr *jfr = to_udma_jfr(ubcore_jfr);
+	uint32_t nreq;
+	int ret = 0;
+
+	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
+		spin_lock(&jfr->lock);
+
+	for (nreq = 0; wr; ++nreq, wr = wr->next) {
+		ret = post_recv_one(dev, jfr, wr);
+		if (ret) {
+			*bad_wr = wr;
+			break;
+		}
+	}
+
+	if (likely(nreq)) {
+		/*
+		 * Ensure that the pipeline fills all RQEs into the RQ queue,
+		 * then updating the PI pointer.
+		 */
+		wmb();
+		*jfr->sw_db.db_record = jfr->rq.pi &
+					(uint32_t)UDMA_JFR_DB_PI_M;
+	}
+
+	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
+		spin_unlock(&jfr->lock);
+
+	return ret;
+}
+
 struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
 					 struct ubcore_tjetty_cfg *cfg,
 					 struct ubcore_active_tp_cfg *active_tp_cfg,

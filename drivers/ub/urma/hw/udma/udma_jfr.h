@@ -95,6 +95,12 @@ struct udma_jfr {
 	struct completion ae_comp;
 };
 
+struct udma_wqe_sge {
+	uint32_t length;
+	uint32_t token_id;
+	uint64_t va;
+};
+
 struct udma_jfr_ctx {
 	/* DW0 */
 	uint32_t state : 2;
@@ -150,6 +156,17 @@ static inline struct udma_jfr *to_udma_jfr(struct ubcore_jfr *jfr)
 	return container_of(jfr, struct udma_jfr, ubcore_jfr);
 }
 
+static inline bool udma_jfrwq_overflow(struct udma_jfr *jfr)
+{
+	return (jfr->rq.pi - jfr->rq.ci) >= jfr->wqe_cnt;
+}
+
+static inline void set_data_of_sge(struct udma_wqe_sge *sge, struct ubcore_sge *sg)
+{
+	sge->va = cpu_to_le64(sg->addr);
+	sge->length = cpu_to_le32(sg->len);
+}
+
 static inline struct udma_jfr *to_udma_jfr_from_queue(struct udma_jetty_queue *queue)
 {
 	return container_of(queue, struct udma_jfr, rq);
@@ -166,5 +183,7 @@ struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
 					 struct ubcore_tjetty_cfg *cfg,
 					 struct ubcore_active_tp_cfg *active_tp_cfg,
 					 struct ubcore_udata *udata);
+int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
+		     struct ubcore_jfr_wr **bad_wr);
 
 #endif /* __UDMA_JFR_H__ */
