@@ -6373,12 +6373,17 @@ static ssize_t mem_cgroup_bind_blkio_write(struct kernfs_open_file *of,
 	if (!buff_wb_enabled())
 		return -EPERM;
 
+	if (!mutex_trylock(&cgroup_mutex))
+		return -EBUSY;
+
 	buf = strstrip(buf);
 
 	/* alloc memory outside mutex */
 	pbuf = kzalloc(PATH_MAX, GFP_KERNEL);
-	if (!pbuf)
+	if (!pbuf) {
+		mutex_unlock(&cgroup_mutex);
 		return -ENOMEM;
+	}
 	strscpy(pbuf, buf, PATH_MAX - 1);
 
 	mutex_lock(&memcg_max_mutex);
@@ -6396,6 +6401,7 @@ static ssize_t mem_cgroup_bind_blkio_write(struct kernfs_open_file *of,
 
 	if (!strnlen(buf, PATH_MAX)) {
 		mutex_unlock(&memcg_max_mutex);
+		mutex_unlock(&cgroup_mutex);
 		kfree(pbuf);
 		return nbytes;
 	}
@@ -6415,11 +6421,13 @@ static ssize_t mem_cgroup_bind_blkio_write(struct kernfs_open_file *of,
 	memcg->bind_blkio_path = pbuf;
 	memcg->bind_blkio = css;
 	mutex_unlock(&memcg_max_mutex);
+	mutex_unlock(&cgroup_mutex);
 	return nbytes;
 
 err:
 	kfree(pbuf);
 	mutex_unlock(&memcg_max_mutex);
+	mutex_unlock(&cgroup_mutex);
 	return ret;
 }
 
