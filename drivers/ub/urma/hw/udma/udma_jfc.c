@@ -646,6 +646,24 @@ int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
 	return ret;
 }
 
+int udma_rearm_jfc(struct ubcore_jfc *jfc, bool solicited_only)
+{
+	struct udma_dev *dev = to_udma_dev(jfc->ub_dev);
+	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
+	struct udma_jfc_db db;
+
+	db.ci = udma_jfc->ci & (uint32_t)UDMA_JFC_DB_CI_IDX_M;
+	db.notify = solicited_only;
+	db.arm_sn = udma_jfc->arm_sn;
+	db.type = UDMA_CQ_ARM_DB;
+	db.jfcn = udma_jfc->jfcn;
+
+	udma_write64(dev, (uint64_t *)&db, (void __iomem *)(dev->k_db_base +
+		UDMA_JFC_HW_DB_OFFSET));
+
+	return 0;
+}
+
 static enum jfc_poll_state udma_get_cr_status(struct udma_dev *dev,
 					      uint8_t src_status,
 					      uint8_t substatus,
@@ -1029,4 +1047,57 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 		udma_inv_tid(dev, &tid_list);
 
 	return err == JFC_POLL_ERR ? -UDMA_INTER_ERR : npolled;
+}
+
+void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *udma_dev)
+{
+	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
+	struct udma_jfc_cqe *dest;
+	struct udma_jfc_cqe *cqe;
+	struct ubcore_cr cr;
+	uint32_t nfreed = 0;
+	uint32_t local_id;
+	uint8_t owner_bit;
+	uint32_t pi;
+
+	if (udma_jfc->mode != (uint32_t)UDMA_NORMAL_JFC_TYPE)
+		return;
+
+	if (!jfc->jfc_cfg.flag.bs.lock_free)
+		spin_lock(&udma_jfc->lock);
+
+	for (pi = udma_jfc->ci; get_next_cqe(udma_jfc, pi) != NULL; ++pi) {
+		if (pi > udma_jfc->ci + udma_jfc->buf.entry_cnt)
+			break;
+	}
+	while ((int) --pi - (int) udma_jfc->ci >= 0) {
+		cqe = get_buf_entry(&udma_jfc->buf, pi);
+		/* make sure cqe buffer is valid */
+		rmb();
+		local_id = (cqe->local_num_h << UDMA_SRC_IDX_SHIFT) | cqe->local_num_l;
+		if (local_id == jetty_id) {
+			if (cqe->s_r == CQE_FOR_RECEIVE) {
+				cr.local_id = local_id;
+				(void)udma_update_jfr_idx(udma_dev, cqe, &cr, true);
+			}
+
+			++nfreed;
+		} else if (!!nfreed) {
+			dest = get_buf_entry(&udma_jfc->buf, pi + nfreed);
+			/* make sure owner bit is valid */
+			rmb();
+			owner_bit = dest->owner;
+			(void)memcpy(dest, cqe, udma_dev->caps.cqe_size);
+			dest->owner = owner_bit;
+		}
+	}
+
+	if (!!nfreed) {
+		udma_jfc->ci += nfreed;
+		wmb(); /* be sure software get cqe data before update doorbell */
+		*udma_jfc->db.db_record = udma_jfc->ci & (uint32_t)UDMA_JFC_DB_CI_IDX_M;
+	}
+
+	if (!jfc->jfc_cfg.flag.bs.lock_free)
+		spin_unlock(&udma_jfc->lock);
 }

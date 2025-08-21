@@ -361,6 +361,8 @@ static void udma_free_jfs(struct ubcore_jfs *jfs)
 	struct udma_dev *dev = to_udma_dev(jfs->ub_dev);
 	struct udma_jfs *ujfs = to_udma_jfs(jfs);
 
+	udma_clean_cqe_for_jetty(dev, &ujfs->sq, jfs->jfs_cfg.jfc, NULL);
+
 	xa_erase(&dev->jetty_table.xa, ujfs->sq.id);
 
 	if (refcount_dec_and_test(&ujfs->ae_refcount))

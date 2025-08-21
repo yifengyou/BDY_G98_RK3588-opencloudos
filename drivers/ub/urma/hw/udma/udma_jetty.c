@@ -768,6 +768,19 @@ static int udma_query_jetty_ctx(struct udma_dev *dev,
 	return 0;
 }
 
+void udma_clean_cqe_for_jetty(struct udma_dev *dev, struct udma_jetty_queue *sq,
+			      struct ubcore_jfc *send_jfc,
+			      struct ubcore_jfc *recv_jfc)
+{
+	if (sq->buf.kva) {
+		if (send_jfc)
+			udma_clean_jfc(send_jfc, sq->id, dev);
+
+		if (recv_jfc && recv_jfc != send_jfc)
+			udma_clean_jfc(recv_jfc, sq->id, dev);
+	}
+}
+
 static bool udma_wait_timeout(uint32_t *sum_times, uint32_t times, uint32_t ta_timeout)
 {
 	uint32_t wait_time;
@@ -905,6 +918,9 @@ static void udma_free_jetty(struct ubcore_jetty *jetty)
 {
 	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
 	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+
+	udma_clean_cqe_for_jetty(udma_dev, &udma_jetty->sq, jetty->jetty_cfg.send_jfc,
+				 jetty->jetty_cfg.recv_jfc);
 
 	if (dfx_switch)
 		udma_dfx_delete_id(udma_dev, &udma_dev->dfx_info->jetty,

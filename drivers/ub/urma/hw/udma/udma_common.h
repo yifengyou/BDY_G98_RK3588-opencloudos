@@ -83,6 +83,12 @@ void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t 
 void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_slot,
 		    dma_addr_t addr);
 
+static inline void udma_write64(struct udma_dev *udma_dev,
+				uint64_t *val, void __iomem *dest)
+{
+	writeq(*val, dest);
+}
+
 static inline void udma_alloc_kernel_db(struct udma_dev *dev,
 					struct udma_jetty_queue *queue)
 {

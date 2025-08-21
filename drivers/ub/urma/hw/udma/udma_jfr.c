@@ -569,6 +569,9 @@ static void udma_free_jfr(struct ubcore_jfr *jfr)
 	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
 	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
 
+	if (udma_jfr->rq.buf.kva && jfr->jfr_cfg.jfc)
+		udma_clean_jfc(jfr->jfr_cfg.jfc, udma_jfr->rq.id, udma_dev);
+
 	if (dfx_switch)
 		udma_dfx_delete_id(udma_dev, &udma_dev->dfx_info->jfr, udma_jfr->rq.id);
 

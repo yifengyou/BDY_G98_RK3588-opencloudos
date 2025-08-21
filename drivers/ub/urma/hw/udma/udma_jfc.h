@@ -187,6 +187,8 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data);
 int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
 		    struct ubcore_udata *udata);
+int udma_rearm_jfc(struct ubcore_jfc *jfc, bool solicited_only);
 int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr);
+void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *udma_dev);
 
 #endif /* __UDMA_JFC_H__ */

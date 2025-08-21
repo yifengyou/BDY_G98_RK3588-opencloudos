@@ -264,5 +264,8 @@ struct ubcore_tjetty *udma_import_jetty_ex(struct ubcore_device *ub_dev,
 					    struct ubcore_tjetty_cfg *cfg,
 					    struct ubcore_active_tp_cfg *active_tp_cfg,
 					    struct ubcore_udata *udata);
+void udma_clean_cqe_for_jetty(struct udma_dev *dev, struct udma_jetty_queue *sq,
+			      struct ubcore_jfc *send_jfc,
+			      struct ubcore_jfc *recv_jfc);
 
 #endif /* __UDMA_JETTY_H__ */
