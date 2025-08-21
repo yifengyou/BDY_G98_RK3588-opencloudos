@@ -23,6 +23,7 @@ struct tid_dev {
 };
 
 /* private definition */
+#define UMMU_CORE_VER_NO "1.0.0"
 #define to_tid_dev(n) container_of(to_platform_device(n), struct tid_dev, pdev)
 
 /* private variable */
@@ -36,7 +37,6 @@ void ummu_flush_cached_eid(struct ummu_core_device *core_device);
 struct device *ummu_alloc_tdev(struct tdev_attr *attr, u32 *ptid);
 int ummu_core_get_resource(struct iommu_sva *sva, struct resource_args *args);
 void ummu_core_put_resource(struct iommu_sva *sva, struct resource_args *args);
-int ummu_get_tid(struct device *dev, struct iommu_sva *sva, uint32_t *tidp);
 void setup_tdev_dma_ops(struct device *dev, bool coherent);
 
 #endif /* __UMMU_CORE_PRIV_H__ */
