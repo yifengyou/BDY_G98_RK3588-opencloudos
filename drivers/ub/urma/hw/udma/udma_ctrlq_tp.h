@@ -74,6 +74,15 @@ struct udma_ctrlq_active_tp_resp_data {
 	uint32_t rsv : 8;
 };
 
+struct udma_ctrlq_deactive_tp_req_data {
+	uint32_t tp_id : 24;
+	uint32_t tpn_cnt : 8;
+	uint32_t start_tpn : 24;
+	uint32_t rsv : 8;
+	uint32_t pid_flag : 24;
+	uint32_t rsv1 : 8;
+};
+
 struct udma_ctrlq_tp_flush_done_req_data {
 	uint32_t tpn : 24;
 	uint32_t rsv : 8;
@@ -157,5 +166,7 @@ int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
 		    uint8_t dst_ue_idx, uint16_t opcode);
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode);
 int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *active_cfg);
+int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle,
+		     struct ubcore_udata *udata);
 
 #endif /* __UDMA_CTRLQ_TP_H__ */

@@ -9,6 +9,8 @@
 #include "udma_ctx.h"
 #include "udma_dev.h"
 
+#define UDMA_TPHANDLE_TPID_SHIFT 0xFFFFFF
+
 struct udma_jetty_grp {
 	struct ubcore_jetty_group ubcore_jetty_grp;
 	uint32_t start_jetty_id;

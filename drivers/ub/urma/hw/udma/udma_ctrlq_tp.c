@@ -398,6 +398,49 @@ int udma_ctrlq_set_active_tp_ex(struct udma_dev *dev,
 	return 0;
 }
 
+static int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_handle,
+				    struct ubcore_udata *udata)
+{
+#define UDMA_RSP_TP_MUL 2
+	uint32_t tp_id = tp_handle.bs.tpid & UDMA_TPHANDLE_TPID_SHIFT;
+	struct udma_ctrlq_deactive_tp_req_data deactive_tp_req = {};
+	uint32_t tp_num = tp_handle.bs.tp_cnt;
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	if (tp_num) {
+		ret = udma_close_ue_rx(udev, true, false, false, tp_num * UDMA_RSP_TP_MUL);
+		if (ret) {
+			dev_err(udev->dev, "close ue rx failed in deactivate tp.\n");
+			return ret;
+		}
+	}
+
+	msg.opcode = UDMA_CMD_CTRLQ_DEACTIVE_TP;
+	deactive_tp_req.tp_id = tp_id;
+	deactive_tp_req.tpn_cnt = tp_handle.bs.tp_cnt;
+	deactive_tp_req.start_tpn = tp_handle.bs.tpn_start;
+	if (!udata)
+		deactive_tp_req.pid_flag = UDMA_DEFAULT_PID;
+	else
+		deactive_tp_req.pid_flag = (uint32_t)current->tgid & UDMA_PID_MASK;
+
+	udma_ctrlq_set_tp_msg(&msg, (void *)&deactive_tp_req, sizeof(deactive_tp_req), NULL, 0);
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret != -EAGAIN && ret) {
+		dev_err(udev->dev, "deactivate tp send msg failed, tp_id = %u, ret = %d.\n",
+			tp_id, ret);
+		if (tp_num)
+			udma_open_ue_rx(udev, true, false, false, tp_num * UDMA_RSP_TP_MUL);
+		return ret;
+	}
+
+	udma_ctrlq_erase_one_tpid(&udev->ctrlq_tpid_table, tp_id);
+
+	return (ret == -EAGAIN) ? 0 : ret;
+}
+
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode)
 {
 	struct udma_req_msg *req_msg;
@@ -471,4 +514,15 @@ int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *activ
 		dev_err(udma_dev->dev, "Failed to set active tp msg, ret %d.\n", ret);
 
 	return ret;
+}
+
+int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle,
+		     struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+
+	if (debug_switch)
+		dev_info(udma_dev->dev, "udma deactivate tp ex tp_id = %u\n", tp_handle.bs.tpid);
+
+	return udma_k_ctrlq_deactive_tp(udma_dev, tp_handle, udata);
 }
