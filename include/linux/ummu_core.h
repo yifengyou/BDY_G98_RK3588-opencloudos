@@ -7,6 +7,7 @@
 #ifndef _UMMU_CORE_H_
 #define _UMMU_CORE_H_
 
+#include <uapi/linux/ummu_core.h>
 #include <linux/iommu.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
@@ -32,22 +33,91 @@ enum tid_alloc_mode {
 	TID_ALLOC_NORMAL = 2,
 };
 
+enum ummu_resource_type {
+	UMMU_BLOCK,
+	UMMU_QUEUE,
+	UMMU_QUEUE_LIST,
+	UMMU_CNT,
+	UMMU_TID_RES,
+};
+
 enum default_tid_ops_types {
 	PASID_OPS,
 	DEFAULT_OPS,
 	TID_OPS_MAX,
 };
 
-enum ummu_mapt_mode {
-	MAPT_MODE_TABLE = 0,
-	MAPT_MODE_ENTRY,
-	MAPT_MODE_END,
-};
-
 struct iova_slot;
 struct ummu_tid_manager;
 struct ummu_base_domain;
 struct ummu_core_device;
+
+struct block_args {
+	u32 index;
+	int block_size_order;
+	phys_addr_t out_addr;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+};
+
+struct queue_args {
+	phys_addr_t pcmdq_base;
+	phys_addr_t pcplq_base;
+	phys_addr_t ctrl_page;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+};
+
+struct tid_args {
+	u8 pcmdq_order;
+	u8 pcplq_order;
+	size_t blk_exp_size;
+	u64 hw_cap;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+};
+
+struct resource_args {
+	enum ummu_resource_type type;
+	union {
+		struct block_args block;
+		struct queue_args queue;
+		struct queue_args *queues;
+		struct tid_args tid_res;
+		u32 ummu_cnt;
+		u32 block_index;
+	};
+	int align;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+};
+
+struct ummu_param {
+	enum ummu_mapt_mode mode;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+};
 
 struct ummu_tid_param {
 	struct device *device;
@@ -76,11 +146,15 @@ struct tdev_attr {
 
 /**
  * struct ummu_core_ops - ummu ops for normal use, expand from iommu_ops.
+ * @get_resource: Get resource for SVA.
+ * @put_resource: Put resource for SVA.
  * @add_eid: Add EID to the UMMU device.
  * @del_eid: Add EID to the UMMU device.
  * @tdev_support_attr: Check whether the UMMU device supports the tdev attribute.
  */
 struct ummu_core_ops {
+	int (*get_resource)(struct ummu_base_domain *d, struct resource_args *arg);
+	void (*put_resource)(struct ummu_base_domain *d, struct resource_args *arg);
 	int (*add_eid)(struct ummu_core_device *dev, guid_t *guid, eid_t eid,
 		       enum eid_type type);
 	void (*del_eid)(struct ummu_core_device *dev, guid_t *guid, eid_t eid,

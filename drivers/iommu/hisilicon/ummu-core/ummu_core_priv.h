@@ -14,6 +14,8 @@
 /* private initialization */
 void tdev_exit(void);
 int tdev_init(void);
+int tid_misc_init(void);
+void tid_misc_exit(void);
 
 struct tid_dev {
 	struct platform_device pdev;
@@ -32,6 +34,8 @@ extern struct device tid_bus;
 /* private interfaces */
 void ummu_flush_cached_eid(struct ummu_core_device *core_device);
 struct device *ummu_alloc_tdev(struct tdev_attr *attr, u32 *ptid);
+int ummu_core_get_resource(struct iommu_sva *sva, struct resource_args *args);
+void ummu_core_put_resource(struct iommu_sva *sva, struct resource_args *args);
 int ummu_get_tid(struct device *dev, struct iommu_sva *sva, uint32_t *tidp);
 void setup_tdev_dma_ops(struct device *dev, bool coherent);
 
