@@ -80,6 +80,7 @@ struct vpsp_dev_ctx {
 	// `vm_is_bound` indicates whether the binding operation has been performed
 	u32 vm_is_bound;
 	u32 vm_handle;	// only for csv
+	struct mutex mutex;
 };
 
 struct vpsp_cmd_ctx {

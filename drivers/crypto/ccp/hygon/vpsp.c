@@ -494,16 +494,33 @@ static int vpsp_try_bind_vtkm(struct kvm_vpsp *vpsp, struct vpsp_dev_ctx *vpsp_c
 	int ret;
 	struct vpsp_cmd *vcmd = (struct vpsp_cmd *)&cmd;
 
-	if (vpsp_ctx && !vpsp_ctx->vm_is_bound && vpsp->is_csv_guest) {
-		ret = kvm_bind_vtkm(vpsp->vm_handle, vcmd->cmd_id,
-					vpsp_ctx->vid, psp_ret);
-		if (ret || *psp_ret) {
-			pr_err("[%s] kvm bind vtkm failed with ret: %d, pspret: %d\n",
-				__func__, ret, *psp_ret);
-			return ret;
-		}
-		vpsp_ctx->vm_is_bound = 1;
+	if (!vpsp || !vpsp_ctx || !psp_ret)
+		return -EINVAL;
+
+	if (vpsp_ctx->vm_is_bound || !vpsp->is_csv_guest)
+		return 0;
+
+	/**
+	 * The vpsp_ctx->mutex ensures that kvm_bind_vtkm is
+	 * only executed once.
+	 *
+	 * otherwise error code -62 will be thrown.
+	 */
+	mutex_lock(&vpsp_ctx->mutex);
+	if (vpsp_ctx->vm_is_bound)
+		return 0;
+
+	ret = kvm_bind_vtkm(vpsp->vm_handle, vcmd->cmd_id,
+				vpsp_ctx->vid, psp_ret);
+	if (ret || *psp_ret) {
+		pr_err("[%s] kvm bind vtkm failed with ret: %d, pspret: %d\n",
+			__func__, ret, *psp_ret);
+		mutex_unlock(&vpsp_ctx->mutex);
+		return ret;
 	}
+
+	vpsp_ctx->vm_is_bound = 1;
+	mutex_unlock(&vpsp_ctx->mutex);
 	return 0;
 }
 
@@ -802,6 +819,8 @@ static int vpsp_add_vid(uint32_t vid)
 {
 	pid_t cur_pid = task_pid_nr(current);
 	struct vpsp_dev_ctx new_entry = {.vid = vid, .pid = cur_pid};
+
+	mutex_init(&new_entry.mutex);
 
 	if (vpsp_get_dev_ctx(NULL, cur_pid) == 0)
 		return -EEXIST;
