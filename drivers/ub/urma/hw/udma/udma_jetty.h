@@ -250,7 +250,10 @@ struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
 int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp);
 int udma_set_jetty_state(struct udma_dev *dev, uint32_t jetty_id,
 			 enum jetty_state state);
-
+int udma_post_jetty_send_wr(struct ubcore_jetty *jetty, struct ubcore_jfs_wr *wr,
+			    struct ubcore_jfs_wr **bad_wr);
+int udma_post_jetty_recv_wr(struct ubcore_jetty *jetty, struct ubcore_jfr_wr *wr,
+			    struct ubcore_jfr_wr **bad_wr);
 void udma_reset_sw_k_jetty_queue(struct udma_jetty_queue *sq);
 int udma_destroy_hw_jetty_ctx(struct udma_dev *dev, uint32_t jetty_id);
 void udma_set_query_flush_time(struct udma_jetty_queue *sq, uint8_t err_timeout);

@@ -202,6 +202,8 @@ static struct ubcore_ops g_dev_ops = {
 	.delete_jetty_grp = udma_delete_jetty_grp,
 	.post_jfs_wr = udma_post_jfs_wr,
 	.post_jfr_wr = udma_post_jfr_wr,
+	.post_jetty_send_wr = udma_post_jetty_send_wr,
+	.post_jetty_recv_wr = udma_post_jetty_recv_wr,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)

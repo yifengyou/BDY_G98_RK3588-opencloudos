@@ -1249,6 +1249,40 @@ int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp)
 	return ret;
 }
 
+int udma_post_jetty_send_wr(struct ubcore_jetty *jetty, struct ubcore_jfs_wr *wr,
+			    struct ubcore_jfs_wr **bad_wr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+	int ret;
+
+	ret = udma_post_sq_wr(udma_dev, &udma_jetty->sq, wr, bad_wr);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"jetty post sq wr failed, ret = %d, jetty id = %u.\n",
+			ret, udma_jetty->sq.id);
+
+	return ret;
+}
+
+int udma_post_jetty_recv_wr(struct ubcore_jetty *jetty, struct ubcore_jfr_wr *wr,
+			    struct ubcore_jfr_wr **bad_wr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+	struct ubcore_jfr *jfr;
+	int ret;
+
+	jfr = &udma_jetty->jfr->ubcore_jfr;
+	ret = udma_post_jfr_wr(jfr, wr, bad_wr);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"jetty post jfr wr failed, ret = %d, jetty id = %u.\n",
+			ret, udma_jetty->sq.id);
+
+	return ret;
+}
+
 struct ubcore_tjetty *udma_import_jetty_ex(struct ubcore_device *ub_dev,
 					   struct ubcore_tjetty_cfg *cfg,
 					   struct ubcore_active_tp_cfg *active_tp_cfg,
