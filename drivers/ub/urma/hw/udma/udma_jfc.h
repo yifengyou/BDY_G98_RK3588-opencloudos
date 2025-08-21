@@ -142,5 +142,7 @@ struct ubcore_jfc *udma_create_jfc(struct ubcore_device *ubcore_dev,
 int udma_destroy_jfc(struct ubcore_jfc *jfc);
 int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 			void *data);
+int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
+		    struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFC_H__ */

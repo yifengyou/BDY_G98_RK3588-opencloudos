@@ -536,3 +536,112 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 
 	return 0;
 }
+
+static int udma_get_cqe_period(uint16_t cqe_period)
+{
+	uint16_t period[] = {
+		UDMA_CQE_PERIOD_0,
+		UDMA_CQE_PERIOD_4,
+		UDMA_CQE_PERIOD_16,
+		UDMA_CQE_PERIOD_64,
+		UDMA_CQE_PERIOD_256,
+		UDMA_CQE_PERIOD_1024,
+		UDMA_CQE_PERIOD_4096,
+		UDMA_CQE_PERIOD_16384
+	};
+	uint32_t i;
+
+	for (i = 0; i < ARRAY_SIZE(period); ++i) {
+		if (cqe_period == period[i])
+			return i;
+	}
+
+	return -EINVAL;
+}
+
+static int udma_check_jfc_attr(struct udma_dev *udma_dev, struct ubcore_jfc_attr *attr)
+{
+	if (!(attr->mask & (UBCORE_JFC_MODERATE_COUNT | UBCORE_JFC_MODERATE_PERIOD))) {
+		dev_err(udma_dev->dev,
+			"udma modify jfc mask is not set or invalid.\n");
+		return -EINVAL;
+	}
+
+	if ((attr->mask & UBCORE_JFC_MODERATE_COUNT) &&
+	    (attr->moderate_count >= UDMA_CQE_COALESCE_CNT_MAX)) {
+		dev_err(udma_dev->dev, "udma cqe coalesce cnt %u is invalid.\n",
+			attr->moderate_count);
+		return -EINVAL;
+	}
+
+	if ((attr->mask & UBCORE_JFC_MODERATE_PERIOD) &&
+	    (udma_get_cqe_period(attr->moderate_period) == -EINVAL)) {
+		dev_err(udma_dev->dev, "udma cqe coalesce period %u is invalid.\n",
+			attr->moderate_period);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int udma_modify_jfc_attr(struct udma_dev *dev, uint32_t jfcn,
+				struct ubcore_jfc_attr *attr)
+{
+	struct udma_jfc_ctx *jfc_context, *ctx_mask;
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+	int ret;
+
+	mailbox = udma_alloc_cmd_mailbox(dev);
+	if (!mailbox) {
+		dev_err(dev->dev, "failed to alloc mailbox for modify jfc.\n");
+		return -ENOMEM;
+	}
+
+	jfc_context = &((struct udma_jfc_ctx *)mailbox->buf)[0];
+	ctx_mask = &((struct udma_jfc_ctx *)mailbox->buf)[1];
+	memset(ctx_mask, 0xff, sizeof(struct udma_jfc_ctx));
+
+	if (attr->mask & UBCORE_JFC_MODERATE_COUNT) {
+		jfc_context->cqe_coalesce_cnt = attr->moderate_count;
+		ctx_mask->cqe_coalesce_cnt = 0;
+	}
+
+	if (attr->mask & UBCORE_JFC_MODERATE_PERIOD) {
+		jfc_context->cqe_coalesce_period =
+			udma_get_cqe_period(attr->moderate_period);
+		ctx_mask->cqe_coalesce_period = 0;
+	}
+
+	mbox_attr.tag = jfcn;
+	mbox_attr.op = UDMA_CMD_MODIFY_JFC_CONTEXT;
+	ret = udma_post_mbox(dev, mailbox, &mbox_attr);
+	if (ret)
+		dev_err(dev->dev,
+			"failed to send post mbox in modify JFCC, ret = %d.\n",
+			ret);
+
+	udma_free_cmd_mailbox(dev, mailbox);
+
+	return ret;
+}
+
+int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
+		    struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_device = to_udma_dev(ubcore_jfc->ub_dev);
+	struct udma_jfc *udma_jfc = to_udma_jfc(ubcore_jfc);
+	int ret;
+
+	ret = udma_check_jfc_attr(udma_device, attr);
+	if (ret)
+		return ret;
+
+	ret = udma_modify_jfc_attr(udma_device, udma_jfc->jfcn, attr);
+	if (ret)
+		dev_err(udma_device->dev,
+			"failed to modify JFC, jfcn = %u, ret = %d.\n",
+			udma_jfc->jfcn, ret);
+
+	return ret;
+}
