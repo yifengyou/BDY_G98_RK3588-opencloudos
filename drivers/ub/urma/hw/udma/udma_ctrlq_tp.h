@@ -8,7 +8,12 @@
 
 #define UDMA_EID_SIZE		16
 #define UDMA_CNA_SIZE		16
+#define UDMA_PID_MASK		24
+#define UDMA_DEFAULT_PID	1
 #define UDMA_UE_NUM		64
+#define UDMA_MAX_TPID_NUM	5
+
+#define UDMA_TPN_CNT_MASK 0x1F
 
 enum udma_ctrlq_cmd_code_type {
 	UDMA_CMD_CTRLQ_REMOVE_SINGLE_TP = 0x13,
@@ -34,6 +39,19 @@ enum udma_ctrlq_tpid_status {
 	UDMA_CTRLQ_TPID_IN_USE = 0,
 	UDMA_CTRLQ_TPID_EXITED,
 	UDMA_CTRLQ_TPID_IDLE,
+};
+
+struct udma_ctrlq_tpid {
+	uint32_t tpid : 24;
+	uint32_t tpn_cnt : 8;
+	uint32_t tpn_start : 24;
+	uint32_t rsv : 8;
+};
+
+struct udma_ctrlq_tpid_list_rsp {
+	uint32_t tp_list_cnt : 16;
+	uint32_t rsv : 16;
+	struct udma_ctrlq_tpid tpid_list[UDMA_MAX_TPID_NUM];
 };
 
 struct udma_ctrlq_tp_flush_done_req_data {
@@ -79,6 +97,14 @@ struct udma_ctrlq_check_tp_active_rsp_info {
 	struct udma_ctrlq_check_tp_active_rsp_data data[];
 };
 
+struct udma_ctrlq_get_tp_list_req_data {
+	uint8_t seid[UDMA_EID_SIZE];
+	uint8_t deid[UDMA_EID_SIZE];
+	uint32_t trans_type : 4;
+	uint32_t rsv : 4;
+	uint32_t flag : 24;
+};
+
 enum udma_cmd_ue_opcode {
 	UDMA_CMD_UBCORE_COMMAND = 0x1,
 	UDMA_CMD_NOTIFY_MUE_SAVE_TP = 0x2,
@@ -101,7 +127,14 @@ struct udma_notify_flush_done {
 
 int udma_ctrlq_tp_flush_done(struct udma_dev *udev, uint32_t tpn);
 int udma_ctrlq_remove_single_tp(struct udma_dev *udev, uint32_t tpn, int status);
+int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_cfg,
+		     uint32_t *tp_cnt, struct ubcore_tp_info *tp_list,
+		     struct ubcore_udata *udata);
+
+void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpid_table,
+				  bool is_need_flush);
 int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
 		    uint8_t dst_ue_idx, uint16_t opcode);
+int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode);
 
 #endif /* __UDMA_CTRLQ_TP_H__ */

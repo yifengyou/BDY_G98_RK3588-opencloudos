@@ -201,6 +201,7 @@ static struct ubcore_ops g_dev_ops = {
 	.unimport_jetty = udma_unimport_jetty,
 	.create_jetty_grp = udma_create_jetty_grp,
 	.delete_jetty_grp = udma_delete_jetty_grp,
+	.get_tp_list = udma_get_tp_list,
 	.post_jfs_wr = udma_post_jfs_wr,
 	.post_jfr_wr = udma_post_jfr_wr,
 	.post_jetty_send_wr = udma_post_jetty_send_wr,
@@ -238,6 +239,7 @@ static void udma_destroy_tp_ue_idx_table(struct udma_dev *udma_dev)
 
 void udma_destroy_tables(struct udma_dev *udma_dev)
 {
+	udma_ctrlq_destroy_tpid_list(udma_dev, &udma_dev->ctrlq_tpid_table, false);
 	udma_destroy_eid_table(udma_dev);
 	mutex_destroy(&udma_dev->disable_ue_rx_mutex);
 	if (!ida_is_empty(&udma_dev->rsvd_jetty_ida_table.ida))
@@ -299,6 +301,7 @@ static void udma_init_managed_by_ctrl_cpu_table(struct udma_dev *udma_dev)
 {
 	mutex_init(&udma_dev->eid_mutex);
 	xa_init(&udma_dev->eid_table);
+	xa_init(&udma_dev->ctrlq_tpid_table);
 }
 
 int udma_init_tables(struct udma_dev *udma_dev)
