@@ -1374,8 +1374,10 @@ hit_next:
 		prealloc->start = start;
 		prealloc->end = this_end;
 		err = insert_state(tree, prealloc, bits, NULL);
-		if (err)
+		if (err) {
 			extent_io_tree_panic(tree, err);
+			goto out;
+		}
 		cache_state(prealloc, cached_state);
 		prealloc = NULL;
 		start = this_end + 1;
