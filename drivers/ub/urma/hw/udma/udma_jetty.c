@@ -1299,6 +1299,15 @@ int udma_post_jetty_recv_wr(struct ubcore_jetty *jetty, struct ubcore_jfr_wr *wr
 	return ret;
 }
 
+int udma_unbind_jetty(struct ubcore_jetty *jetty)
+{
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+
+	udma_jetty->sq.rc_tjetty = NULL;
+
+	return 0;
+}
+
 struct ubcore_tjetty *udma_import_jetty_ex(struct ubcore_device *ub_dev,
 					   struct ubcore_tjetty_cfg *cfg,
 					   struct ubcore_active_tp_cfg *active_tp_cfg,
@@ -1331,4 +1340,16 @@ struct ubcore_tjetty *udma_import_jetty_ex(struct ubcore_device *ub_dev,
 	udma_swap_endian(cfg->id.eid.raw, tjetty->le_eid.raw, UBCORE_EID_SIZE);
 
 	return &tjetty->ubcore_tjetty;
+}
+
+int udma_bind_jetty_ex(struct ubcore_jetty *jetty,
+		       struct ubcore_tjetty *tjetty,
+		       struct ubcore_active_tp_cfg *active_tp_cfg,
+		       struct ubcore_udata *udata)
+{
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+
+	udma_jetty->sq.rc_tjetty = tjetty;
+
+	return 0;
 }
