@@ -18,6 +18,51 @@
 #include <ub/urma/udma/udma_ctl.h>
 #include "udma_def.h"
 
+const char *udma_cqe_aux_info_type_str[] = {
+	"TPP2TQEM_WR_CNT",
+	"DEVICE_RAS_STATUS_2",
+	"RXDMA_WR_PAYL_AXI_ERR",
+	"RXDMA_HEAD_SPLIT_ERR_FLAG0",
+	"RXDMA_HEAD_SPLIT_ERR_FLAG1",
+	"RXDMA_HEAD_SPLIT_ERR_FLAG2",
+	"RXDMA_HEAD_SPLIT_ERR_FLAG3",
+	"TP_RCP_INNER_ALM",
+	"TWP_AE_DFX",
+	"PA_OUT_PKT_ERR_CNT",
+	"TP_DAM_AXI_ALARM",
+	"TP_DAM_VFT_BT_ALARM",
+	"TP_EUM_AXI_ALARM",
+	"TP_EUM_VFT_BT_ALARM",
+	"TP_TPMM_AXI_ALARM",
+	"TP_TPMM_VFT_BT_ALARM",
+	"TP_TPGCM_AXI_ALARM",
+	"TP_TPGCM_VFT_BT_ALARM",
+	"TWP_ALM",
+	"TP_RWP_INNER_ALM",
+	"TWP_DFX21",
+	"LQC_TA_RNR_TANACK_CNT",
+	"FVT",
+	"RQMT0",
+	"RQMT1",
+	"RQMT2",
+	"RQMT3",
+	"RQMT4",
+	"RQMT5",
+	"RQMT6",
+	"RQMT7",
+	"RQMT8",
+	"RQMT9",
+	"RQMT10",
+	"RQMT11",
+	"RQMT12",
+	"RQMT13",
+	"RQMT14",
+	"RQMT15",
+	"PROC_ERROR_ALM",
+	"LQC_TA_TIMEOUT_TAACK_CNT",
+	"TP_RRP_ERR_FLG_0",
+};
+
 const char *udma_ae_aux_info_type_str[] = {
 	"TP_RRP_FLUSH_TIMER_PKT_CNT",
 	"TPP_DFX5",
@@ -28,6 +73,305 @@ const char *udma_ae_aux_info_type_str[] = {
 	"TP_RCP_INNER_ALM",
 	"LQC_TA_TQEP_WQE_ERR",
 	"LQC_TA_CQM_CQE_INNER_ALARM",
+};
+
+static void dump_cqe_client_loc_len_err_aux_info(struct udma_dev *dev,
+						 struct udma_cqe_aux_info_out *aux_info_out,
+						 struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		TPP2TQEM_WR_CNT,
+		DEVICE_RAS_STATUS_2,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_client_loc_access_err_aux_info(struct udma_dev *dev,
+						    struct udma_cqe_aux_info_out *aux_info_out,
+						    struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		RXDMA_WR_PAYL_AXI_ERR,
+		RXDMA_HEAD_SPLIT_ERR_FLAG0,
+		RXDMA_HEAD_SPLIT_ERR_FLAG1,
+		RXDMA_HEAD_SPLIT_ERR_FLAG2,
+		RXDMA_HEAD_SPLIT_ERR_FLAG3,
+		TP_RCP_INNER_ALM_FOR_CQE,
+		TWP_AE_DFX_FOR_CQE,
+		PA_OUT_PKT_ERR_CNT,
+		TP_DAM_AXI_ALARM,
+		TP_DAM_VFT_BT_ALARM,
+		TP_EUM_AXI_ALARM,
+		TP_EUM_VFT_BT_ALARM,
+		TP_TPMM_AXI_ALARM,
+		TP_TPMM_VFT_BT_ALARM,
+		TP_TPGCM_AXI_ALARM,
+		TP_TPGCM_VFT_BT_ALARM,
+		DEVICE_RAS_STATUS_2,
+		TWP_ALM,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_client_rem_resp_len_err_aux_info(struct udma_dev *dev,
+						      struct udma_cqe_aux_info_out *aux_info_out,
+						      struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		TP_RWP_INNER_ALM_FOR_CQE,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void
+dump_cqe_client_rem_access_abort_err_aux_info(struct udma_dev *dev,
+					      struct udma_cqe_aux_info_out *aux_info_out,
+					      struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		RXDMA_WR_PAYL_AXI_ERR,
+		RXDMA_HEAD_SPLIT_ERR_FLAG0,
+		RXDMA_HEAD_SPLIT_ERR_FLAG1,
+		RXDMA_HEAD_SPLIT_ERR_FLAG2,
+		RXDMA_HEAD_SPLIT_ERR_FLAG3,
+		TP_RCP_INNER_ALM_FOR_CQE,
+		TP_RRP_ERR_FLG_0_FOR_CQE,
+		TPP2TQEM_WR_CNT,
+		TWP_DFX21
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_client_ack_timeout_err_aux_info(struct udma_dev *dev,
+						     struct udma_cqe_aux_info_out *aux_info_out,
+						     struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		LQC_TA_TIMEOUT_TAACK_CNT,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void
+dump_cqe_client_rnr_retry_cnt_exc_err_aux_info(struct udma_dev *dev,
+					       struct udma_cqe_aux_info_out *aux_info_out,
+					       struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		LQC_TA_RNR_TANACK_CNT,
+		FVT,
+		RQMT0,
+		RQMT1,
+		RQMT2,
+		RQMT3,
+		RQMT4,
+		RQMT5,
+		RQMT6,
+		RQMT7,
+		RQMT8,
+		RQMT9,
+		RQMT10,
+		RQMT11,
+		RQMT12,
+		RQMT13,
+		RQMT14,
+		RQMT15,
+		PROC_ERROR_ALM,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_server_loc_access_err_aux_info(struct udma_dev *dev,
+						    struct udma_cqe_aux_info_out *aux_info_out,
+						    struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		TP_RWP_INNER_ALM_FOR_CQE,
+		RXDMA_WR_PAYL_AXI_ERR,
+		RXDMA_HEAD_SPLIT_ERR_FLAG0,
+		RXDMA_HEAD_SPLIT_ERR_FLAG1,
+		RXDMA_HEAD_SPLIT_ERR_FLAG2,
+		RXDMA_HEAD_SPLIT_ERR_FLAG3,
+		TP_RCP_INNER_ALM_FOR_CQE,
+		TP_RRP_ERR_FLG_0_FOR_CQE,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_server_loc_len_err_aux_info(struct udma_dev *dev,
+						 struct udma_cqe_aux_info_out *aux_info_out,
+						 struct udma_cmd_query_cqe_aux_info *info)
+{
+	enum udma_cqe_aux_info_type type[] = {
+		TP_RWP_INNER_ALM_FOR_CQE,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[type[i]], info->cqe_aux_info[type[i]]);
+}
+
+static void dump_cqe_all_aux_info(struct udma_dev *dev,
+				  struct udma_cqe_aux_info_out *aux_info_out,
+				  struct udma_cmd_query_cqe_aux_info *info)
+{
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= MAX_CQE_AUX_INFO_TYPE_NUM) {
+		for (i = 0; i < MAX_CQE_AUX_INFO_TYPE_NUM; i++) {
+			aux_info_out->aux_info_type[i] = i;
+			aux_info_out->aux_info_value[i] = info->cqe_aux_info[i];
+		}
+		aux_info_out->aux_info_num = MAX_CQE_AUX_INFO_TYPE_NUM;
+	}
+
+	for (i = 0; i < MAX_CQE_AUX_INFO_TYPE_NUM; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n",
+			 udma_cqe_aux_info_type_str[i], info->cqe_aux_info[i]);
+}
+
+static void (*udma_cqe_aux_info_dump[14][2])(struct udma_dev *dev,
+	struct udma_cqe_aux_info_out *aux_info_out,
+	struct udma_cmd_query_cqe_aux_info *info) = {
+	{NULL, NULL},
+	{dump_cqe_all_aux_info, dump_cqe_all_aux_info},
+	{dump_cqe_server_loc_len_err_aux_info,
+		dump_cqe_client_loc_len_err_aux_info},
+	{NULL, NULL},
+	{dump_cqe_server_loc_access_err_aux_info,
+		dump_cqe_client_loc_access_err_aux_info},
+	{dump_cqe_all_aux_info,
+		dump_cqe_client_rem_resp_len_err_aux_info},
+	{dump_cqe_all_aux_info, dump_cqe_all_aux_info},
+	{NULL, NULL},
+	{dump_cqe_all_aux_info,
+		dump_cqe_client_rem_access_abort_err_aux_info},
+	{dump_cqe_all_aux_info,
+		dump_cqe_client_ack_timeout_err_aux_info},
+	{dump_cqe_all_aux_info,
+		dump_cqe_client_rnr_retry_cnt_exc_err_aux_info},
+	{dump_cqe_all_aux_info, dump_cqe_all_aux_info},
+	{NULL, NULL},
+	{dump_cqe_all_aux_info, dump_cqe_all_aux_info},
 };
 
 static void dump_fill_aux_info(struct udma_dev *dev, struct udma_ae_aux_info_out *aux_info_out,
@@ -246,7 +590,7 @@ static int copy_out_cqe_data_to_user(struct udma_dev *udma_dev,
 }
 
 int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
-				   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+			    struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
 {
 	struct udma_cqe_aux_info_out user_aux_info_out = {};
 	struct udma_cqe_aux_info_out aux_info_out = {};
@@ -263,15 +607,21 @@ int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *u
 	memcpy(&cqe_info_in, (void *)(uintptr_t)in->addr,
 	       sizeof(struct udma_cqe_info_in));
 
+	info.status = cqe_info_in.status;
+	info.is_client = !(cqe_info_in.s_r & 1);
+	if (cqe_info_in.status >= ARRAY_SIZE(udma_cqe_aux_info_dump) ||
+		udma_cqe_aux_info_dump[info.status][info.is_client] == NULL) {
+		dev_err(udev->dev, "status %u is invalid or does not need to be queried.\n",
+			cqe_info_in.status);
+		return -EINVAL;
+	}
+
 	ret = copy_out_cqe_data_from_user(udev, out, &aux_info_out, uctx, &user_aux_info_out);
 	if (ret) {
 		dev_err(udev->dev,
 			"copy out data from user failed, ret = %d.\n", ret);
 		return ret;
 	}
-
-	info.status = cqe_info_in.status;
-	info.is_client = !(cqe_info_in.s_r & 1);
 
 	ret = send_cmd_query_cqe_aux_info(udev, &info);
 	if (ret) {
@@ -281,6 +631,8 @@ int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *u
 		free_kernel_cqe_aux_info(&user_aux_info_out, &aux_info_out);
 		return ret;
 	}
+
+	udma_cqe_aux_info_dump[info.status][info.is_client](udev, &aux_info_out, &info);
 
 	ret = copy_out_cqe_data_to_user(udev, out, &aux_info_out, uctx, &user_aux_info_out);
 	if (ret) {
