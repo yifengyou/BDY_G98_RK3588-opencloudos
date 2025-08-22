@@ -108,6 +108,10 @@ SCHED_FEAT(WARN_DOUBLE_CLOCK, false)
 SCHED_FEAT(IDLE_REVERT, false)
 #endif
 
+#ifdef CONFIG_SMP
+SCHED_FEAT(STOP_SMT_RACE, false)
+#endif
+
 #ifdef HAVE_RT_PUSH_IPI
 /*
  * In order to avoid a thundering herd attack of CPUs that are

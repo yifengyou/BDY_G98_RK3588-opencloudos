@@ -7812,6 +7812,61 @@ static inline int select_idle_smt(struct task_struct *p, struct sched_domain *sd
 
 #endif /* CONFIG_SCHED_SMT */
 
+#ifdef CONFIG_SMP
+int sysctl_smt_util_ratio = 100;
+
+#ifdef CONFIG_SCHED_SMT
+static inline int core_remain_resource(int cpu)
+{
+	int first = cpumask_first(cpu_smt_mask(cpu));
+	struct rq *rq = cpu_rq(first);
+	unsigned long util = rq->cfs.avg.util_avg;
+	unsigned long capacity = capacity_of(first);
+
+	if (sched_feat(STOP_SMT_RACE) && static_branch_likely(&sched_smt_present))
+		return util * 100 < capacity * sysctl_smt_util_ratio;
+
+	return 0;
+}
+
+static inline int get_available_smt(int cpu)
+{
+	int new_cpu;
+
+	/* Be careful, only overload scenario is advised */
+	if (core_remain_resource(cpu))
+		new_cpu  = cpumask_first(cpu_smt_mask(cpu));
+	else
+		new_cpu = cpu;
+
+	return new_cpu;
+}
+
+static inline bool can_migrate_to_peer_smt(int cpu)
+{
+	if (core_remain_resource(cpu) &&
+	    cpumask_first(cpu_smt_mask(cpu)) != cpu)
+		return false;
+
+	return true;
+}
+
+#else
+static inline int core_remain_resource(int cpu)
+{
+	return 0;
+}
+static inline int get_available_smt(int cpu)
+{
+	return cpu;
+}
+static inline bool can_migrate_to_peer_smt(int cpu)
+{
+	return true;
+}
+#endif
+#endif
+
 /*
  * Scan the LLC domain for idle CPUs; this is dynamically regulated by
  * comparing the average scan cost (tracked in sd->avg_scan_cost) against the
@@ -8969,6 +9024,9 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		/* Fast path */
 		new_cpu = select_idle_sibling(p, prev_cpu, new_cpu);
 	}
+
+	new_cpu = get_available_smt(new_cpu);
+
 	rcu_read_unlock();
 
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
@@ -9679,6 +9737,9 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	lockdep_assert_rq_held(env->src_rq);
 	if (p->sched_task_hot)
 		p->sched_task_hot = 0;
+
+	if (!can_migrate_to_peer_smt(env->dst_cpu))
+		return 0;
 
 	/*
 	 * We do not migrate tasks that are:

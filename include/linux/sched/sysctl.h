@@ -22,6 +22,10 @@ extern unsigned int sysctl_tg_idle_revert_enabled;
 extern unsigned int sysctl_tg_idle_revert_scan_count;
 #endif
 
+#ifdef CONFIG_SMP
+extern int sysctl_smt_util_ratio;
+#endif
+
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,
 	SCHED_TUNABLESCALING_LOG,

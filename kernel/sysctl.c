@@ -127,6 +127,10 @@ static const int six_hundred_forty_kb = 640 * 1024;
 static const int ngroups_max = NGROUPS_MAX;
 static const int cap_last_cap = CAP_LAST_CAP;
 
+#ifdef CONFIG_SMP
+static __maybe_unused int max_util_ratio_val = 200;
+#endif
+
 #ifdef CONFIG_PROC_SYSCTL
 
 /**
@@ -3040,6 +3044,17 @@ static struct ctl_table kern_table[] = {
 		.maxlen         = sizeof(unsigned int),
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec_minmax,
+	},
+#endif
+#ifdef CONFIG_SMP
+	{
+		.procname       = "smt_util_ratio",
+		.data           = &sysctl_smt_util_ratio,
+		.maxlen         = sizeof(sysctl_smt_util_ratio),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = &max_util_ratio_val,
 	},
 #endif
 	{ }
