@@ -18,6 +18,117 @@
 #include <ub/urma/udma/udma_ctl.h>
 #include "udma_def.h"
 
+const char *udma_ae_aux_info_type_str[] = {
+	"TP_RRP_FLUSH_TIMER_PKT_CNT",
+	"TPP_DFX5",
+	"TWP_AE_DFX",
+	"TP_RRP_ERR_FLG_0",
+	"TP_RRP_ERR_FLG_1",
+	"TP_RWP_INNER_ALM",
+	"TP_RCP_INNER_ALM",
+	"LQC_TA_TQEP_WQE_ERR",
+	"LQC_TA_CQM_CQE_INNER_ALARM",
+};
+
+static void dump_fill_aux_info(struct udma_dev *dev, struct udma_ae_aux_info_out *aux_info_out,
+			       struct udma_cmd_query_ae_aux_info *info,
+			       enum udma_ae_aux_info_type *type, uint32_t aux_info_num)
+{
+	int i;
+
+	if (aux_info_out->aux_info_type != NULL &&
+	    aux_info_out->aux_info_value != NULL &&
+	    aux_info_out->aux_info_num >= aux_info_num) {
+		for (i = 0; i < aux_info_num; i++) {
+			aux_info_out->aux_info_type[i] = type[i];
+			aux_info_out->aux_info_value[i] = info->ae_aux_info[type[i]];
+		}
+		aux_info_out->aux_info_num = aux_info_num;
+	}
+
+	for (i = 0; i < aux_info_num; i++)
+		dev_info(dev->dev, "%s\t0x%08x\n", udma_ae_aux_info_type_str[type[i]],
+			 info->ae_aux_info[type[i]]);
+}
+
+static void dump_ae_tp_flush_done_aux_info(struct udma_dev *dev,
+					   struct udma_ae_aux_info_out *aux_info_out,
+					   struct udma_cmd_query_ae_aux_info *info)
+{
+	enum udma_ae_aux_info_type type[] = {
+		TP_RRP_FLUSH_TIMER_PKT_CNT,
+		TPP_DFX5,
+	};
+
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+
+	dump_fill_aux_info(dev, aux_info_out, info, type, aux_info_num);
+}
+
+static void dump_ae_tp_err_aux_info(struct udma_dev *dev,
+				    struct udma_ae_aux_info_out *aux_info_out,
+				    struct udma_cmd_query_ae_aux_info *info)
+{
+	enum udma_ae_aux_info_type type[] = {
+		TWP_AE_DFX_FOR_AE,
+		TP_RRP_ERR_FLG_0_FOR_AE,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+
+	dump_fill_aux_info(dev, aux_info_out, info, type, aux_info_num);
+}
+
+static void dump_ae_jetty_err_aux_info(struct udma_dev *dev,
+				       struct udma_ae_aux_info_out *aux_info_out,
+				       struct udma_cmd_query_ae_aux_info *info)
+{
+	enum udma_ae_aux_info_type type[] = {
+		TP_RRP_ERR_FLG_0_FOR_AE,
+		TP_RRP_ERR_FLG_1,
+		TP_RWP_INNER_ALM_FOR_AE,
+		TP_RCP_INNER_ALM_FOR_AE,
+		LQC_TA_TQEP_WQE_ERR,
+		LQC_TA_CQM_CQE_INNER_ALARM,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+
+	dump_fill_aux_info(dev, aux_info_out, info, type, aux_info_num);
+}
+
+static void dump_ae_jfc_err_aux_info(struct udma_dev *dev,
+				     struct udma_ae_aux_info_out *aux_info_out,
+				     struct udma_cmd_query_ae_aux_info *info)
+{
+	enum udma_ae_aux_info_type type[] = {
+		LQC_TA_CQM_CQE_INNER_ALARM,
+	};
+	uint32_t aux_info_num = ARRAY_SIZE(type);
+
+	dump_fill_aux_info(dev, aux_info_out, info, type, aux_info_num);
+}
+
+static void dump_ae_aux_info(struct udma_dev *dev,
+			     struct udma_ae_aux_info_out *aux_info_out,
+			     struct udma_cmd_query_ae_aux_info *info)
+{
+	switch (info->event_type) {
+	case UBASE_EVENT_TYPE_TP_FLUSH_DONE:
+		dump_ae_tp_flush_done_aux_info(dev, aux_info_out, info);
+		break;
+	case UBASE_EVENT_TYPE_TP_LEVEL_ERROR:
+		dump_ae_tp_err_aux_info(dev, aux_info_out, info);
+		break;
+	case UBASE_EVENT_TYPE_JETTY_LEVEL_ERROR:
+		if (info->sub_type == UBASE_SUBEVENT_TYPE_JFS_CHECK_ERROR)
+			dump_ae_jetty_err_aux_info(dev, aux_info_out, info);
+		else
+			dump_ae_jfc_err_aux_info(dev, aux_info_out, info);
+		break;
+	default:
+		break;
+	}
+}
+
 static int send_cmd_query_cqe_aux_info(struct udma_dev *udma_dev,
 				       struct udma_cmd_query_cqe_aux_info *info)
 {
@@ -361,6 +472,8 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 		free_kernel_ae_aux_info(&user_aux_info_out, &aux_info_out);
 		return ret;
 	}
+
+	dump_ae_aux_info(udma_dev, &aux_info_out, &info);
 
 	ret = copy_out_ae_data_to_user(udma_dev, out, &aux_info_out, uctx, &user_aux_info_out);
 	if (ret) {
