@@ -167,12 +167,16 @@ enum scx_ops_flags {
 	SCX_OPS_HAS_CGROUP_WEIGHT = 1LLU << 16, /* cpu.weight */
 
 
+	SCX_OPS_ENQ_NOLOAD = 1LLU << 32,
+
+
 	SCX_OPS_ALL_FLAGS	= SCX_OPS_KEEP_BUILTIN_IDLE |
 				  SCX_OPS_ENQ_LAST |
 				  SCX_OPS_ENQ_EXITING |
 				  SCX_OPS_SWITCH_PARTIAL |
 				  SCX_OPS_ENQ_MIGRATION_DISABLED |
-				  SCX_OPS_HAS_CGROUP_WEIGHT,
+				  SCX_OPS_HAS_CGROUP_WEIGHT |
+				  SCX_OPS_ENQ_NOLOAD,
 };
 
 /* argument container for ops.init_task() */

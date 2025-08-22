@@ -1949,9 +1949,11 @@ extern const struct sched_class ext_sched_class;
 
 DECLARE_STATIC_KEY_FALSE(__scx_ops_enabled);	/* SCX BPF scheduler loaded */
 DECLARE_STATIC_KEY_FALSE(__scx_switched_all);	/* all fair class tasks on SCX */
+DECLARE_STATIC_KEY_TRUE(__scx_contrib_load);
 
 #define scx_enabled()		static_branch_unlikely(&__scx_ops_enabled)
 #define scx_switched_all()	static_branch_unlikely(&__scx_switched_all)
+#define scx_contrib_load()	static_branch_likely(&__scx_contrib_load)
 
 static inline void scx_rq_clock_update(struct rq *rq, u64 clock)
 {
@@ -1971,6 +1973,7 @@ static inline void scx_rq_clock_invalidate(struct rq *rq)
 #else /* !CONFIG_SCHED_CLASS_EXT */
 #define scx_enabled()		false
 #define scx_switched_all()	false
+#define scx_contrib_load()	true
 
 static inline void scx_rq_clock_update(struct rq *rq, u64 clock) {}
 static inline void scx_rq_clock_invalidate(struct rq *rq) {}

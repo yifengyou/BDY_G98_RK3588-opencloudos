@@ -213,6 +213,7 @@ static int scx_ops_bypass_depth;
 static bool scx_ops_init_task_enabled;
 static bool scx_switching_all;
 DEFINE_STATIC_KEY_FALSE(__scx_switched_all);
+DEFINE_STATIC_KEY_TRUE(__scx_contrib_load);
 
 static struct sched_ext_ops scx_ops;
 static bool scx_warned_zero_slice;
@@ -1477,7 +1478,8 @@ static void enqueue_task_scx(struct rq *rq, struct task_struct *p, int enq_flags
 	set_task_runnable(rq, p);
 	p->scx.flags |= SCX_TASK_QUEUED;
 	rq->scx.nr_running++;
-	add_nr_running(rq, 1);
+	if (scx_contrib_load())
+		add_nr_running(rq, 1);
 
 	if (SCX_HAS_OP(runnable) && !task_on_rq_migrating(p))
 		SCX_CALL_OP_TASK(SCX_KF_REST, runnable, p, enq_flags);
@@ -1573,7 +1575,8 @@ static bool dequeue_task_scx(struct rq *rq, struct task_struct *p, int deq_flags
 
 	p->scx.flags &= ~SCX_TASK_QUEUED;
 	rq->scx.nr_running--;
-	sub_nr_running(rq, 1);
+	if (scx_contrib_load())
+		sub_nr_running(rq, 1);
 
 	dispatch_dequeue(rq, p);
 	return true;
@@ -4600,6 +4603,7 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 	static_branch_disable(&scx_ops_enq_migration_disabled);
 	static_branch_disable(&scx_ops_cpu_preempt);
 	static_branch_disable(&scx_builtin_idle_enabled);
+	static_branch_enable(&__scx_contrib_load);
 	synchronize_rcu();
 
 	if (ei->kind >= SCX_EXIT_ERROR) {
@@ -5221,6 +5225,11 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 	} else {
 		static_branch_disable(&scx_builtin_idle_enabled);
 	}
+
+	if (ops->flags & SCX_OPS_ENQ_NOLOAD)
+		static_branch_disable(&__scx_contrib_load);
+	else
+		static_branch_enable(&__scx_contrib_load);
 
 	/*
 	 * Lock out forks, cgroup on/offlining and moves before opening the

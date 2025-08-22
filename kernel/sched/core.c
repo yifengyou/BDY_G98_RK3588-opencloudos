@@ -6922,6 +6922,9 @@ static void __sched notrace __schedule(int sched_mode)
 				!(prev_state & TASK_NOLOAD) &&
 				!(prev_state & TASK_FROZEN);
 
+			if (task_on_scx(prev) && !scx_contrib_load())
+				prev->sched_contributes_to_load = false;
+
 			if (prev->sched_contributes_to_load) {
 				rq->nr_uninterruptible++;
 #ifdef CONFIG_BT_SCHED
