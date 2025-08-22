@@ -30,6 +30,8 @@
 #define SQE_WRITE_NOTIFY_CTL_LEN 80
 #define SQE_WRITE_IMM_INLINE_SIZE 192
 
+#define UINT8_MAX 0xff
+
 enum udma_jfs_type {
 	UDMA_NORMAL_JFS_TYPE,
 	UDMA_KERNEL_STARS_JFS_TYPE,
@@ -142,9 +144,12 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq);
 int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 		    struct ubcore_udata *udata);
+int udma_flush_jfs(struct ubcore_jfs *jfs, int cr_cnt, struct ubcore_cr *cr);
 int udma_post_sq_wr(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
 		    struct ubcore_jfs_wr *wr, struct ubcore_jfs_wr **bad_wr);
 int udma_post_jfs_wr(struct ubcore_jfs *jfs, struct ubcore_jfs_wr *wr,
 		     struct ubcore_jfs_wr **bad_wr);
+void udma_flush_sq(struct udma_dev *udma_dev,
+		   struct udma_jetty_queue *sq, struct ubcore_cr *cr);
 
 #endif /* __UDMA_JFS_H__ */

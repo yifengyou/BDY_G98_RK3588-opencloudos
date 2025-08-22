@@ -1568,6 +1568,31 @@ int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp)
 	return ret;
 }
 
+int udma_flush_jetty(struct ubcore_jetty *jetty, int cr_cnt, struct ubcore_cr *cr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jetty->ub_dev);
+	struct udma_jetty *udma_jetty = to_udma_jetty(jetty);
+	struct udma_jetty_queue *sq = &udma_jetty->sq;
+	int n_flushed;
+
+	if (!sq->flush_flag)
+		return 0;
+
+	if (!sq->lock_free)
+		spin_lock(&sq->lock);
+
+	for (n_flushed = 0; n_flushed < cr_cnt; n_flushed++) {
+		if (sq->ci == sq->pi)
+			break;
+		udma_flush_sq(udma_dev, sq, cr + n_flushed);
+	}
+
+	if (!sq->lock_free)
+		spin_unlock(&sq->lock);
+
+	return n_flushed;
+}
+
 int udma_post_jetty_send_wr(struct ubcore_jetty *jetty, struct ubcore_jfs_wr *wr,
 			    struct ubcore_jfs_wr **bad_wr)
 {

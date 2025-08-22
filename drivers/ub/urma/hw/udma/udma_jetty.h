@@ -249,6 +249,7 @@ struct ubcore_jetty_group *udma_create_jetty_grp(struct ubcore_device *dev,
 						 struct ubcore_jetty_grp_cfg *cfg,
 						 struct ubcore_udata *udata);
 int udma_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp);
+int udma_flush_jetty(struct ubcore_jetty *jetty, int cr_cnt, struct ubcore_cr *cr);
 int udma_set_jetty_state(struct udma_dev *dev, uint32_t jetty_id,
 			 enum jetty_state state);
 int udma_post_jetty_send_wr(struct ubcore_jetty *jetty, struct ubcore_jfs_wr *wr,

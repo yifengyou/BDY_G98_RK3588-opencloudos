@@ -531,6 +531,94 @@ int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	return 0;
 }
 
+static void fill_imm_data_or_token_for_cr(struct udma_dev *udma_dev,
+					  struct udma_sqe_ctl *sqe_ctl,
+					  struct ubcore_cr *cr,
+					  uint32_t opcode)
+{
+	switch (opcode) {
+	case UDMA_OPC_SEND:
+	case UDMA_OPC_WRITE:
+	case UDMA_OPC_READ:
+	case UDMA_OPC_CAS:
+	case UDMA_OPC_FAA:
+		break;
+	case UDMA_OPC_SEND_WITH_IMM:
+		memcpy(&cr->imm_data, (void *)sqe_ctl + SQE_SEND_IMM_FIELD,
+		       sizeof(uint64_t));
+		break;
+	case UDMA_OPC_SEND_WITH_INVALID:
+		cr->invalid_token.token_id = sqe_ctl->rmt_addr_l_or_token_id;
+		cr->invalid_token.token_value.token = sqe_ctl->rmt_addr_h_or_token_value;
+		break;
+	case UDMA_OPC_WRITE_WITH_IMM:
+		memcpy(&cr->imm_data, (void *)sqe_ctl + SQE_WRITE_IMM_FIELD,
+		       sizeof(uint64_t));
+		break;
+	default:
+		dev_err(udma_dev->dev, "Flush invalid opcode :%u.\n", opcode);
+		break;
+	}
+}
+
+static void fill_cr_by_sqe_ctl(struct udma_dev *udma_dev,
+			       struct udma_sqe_ctl *sqe_ctl,
+			       struct ubcore_cr *cr)
+{
+	uint32_t opcode = sqe_ctl->opcode;
+	struct udma_normal_sge *sge;
+	uint32_t src_sge_num = 0;
+	uint64_t total_len = 0;
+	uint32_t ctrl_len;
+	uint32_t i;
+
+	fill_imm_data_or_token_for_cr(udma_dev, sqe_ctl, cr, opcode);
+
+	cr->tpn = sqe_ctl->tpn;
+	cr->remote_id.id = sqe_ctl->rmt_obj_id;
+	memcpy(cr->remote_id.eid.raw, sqe_ctl->rmt_eid, UBCORE_EID_SIZE);
+
+	if (sqe_ctl->inline_en) {
+		cr->completion_len = sqe_ctl->inline_msg_len;
+		return;
+	}
+
+	src_sge_num = sqe_ctl->sge_num;
+	ctrl_len = get_ctl_len(opcode);
+	sge = (struct udma_normal_sge *)((void *)sqe_ctl + ctrl_len);
+
+	for (i = 0; i < src_sge_num; i++) {
+		total_len += sge->length;
+		sge++;
+	}
+
+	if (total_len > UINT32_MAX) {
+		cr->completion_len = UINT32_MAX;
+		dev_warn(udma_dev->dev, "total len %llu is overflow.\n", total_len);
+	} else {
+		cr->completion_len = total_len;
+	}
+}
+
+static void udma_copy_from_sq(struct udma_jetty_queue *sq, uint32_t wqebb_cnt,
+			      struct udma_jfs_wqebb *tmp_sq)
+{
+	uint32_t field_h;
+	uint32_t field_l;
+	uint32_t offset;
+	uint32_t remain;
+
+	remain = sq->buf.entry_cnt - (sq->ci & (sq->buf.entry_cnt - 1));
+	offset = (sq->ci & (sq->buf.entry_cnt - 1)) * UDMA_JFS_WQEBB_SIZE;
+	field_h = remain > wqebb_cnt ? wqebb_cnt : remain;
+	field_l = wqebb_cnt > field_h ? wqebb_cnt - field_h : 0;
+
+	memcpy(tmp_sq, sq->buf.kva + offset, field_h * sizeof(*tmp_sq));
+
+	if (field_l)
+		memcpy(tmp_sq + field_h, sq->buf.kva, field_l * sizeof(*tmp_sq));
+}
+
 static uint32_t get_wqebb_num(struct udma_sqe_ctl *sqe_ctl)
 {
 	uint32_t opcode = sqe_ctl->opcode;
@@ -556,6 +644,47 @@ static uint32_t get_wqebb_num(struct udma_sqe_ctl *sqe_ctl)
 	}
 
 	return sq_cal_wqebb_num(sqe_ctl_len, sqe_ctl->sge_num);
+}
+
+void udma_flush_sq(struct udma_dev *udma_dev,
+		   struct udma_jetty_queue *sq, struct ubcore_cr *cr)
+{
+	struct udma_jfs_wqebb tmp_sq[MAX_WQEBB_NUM] = {};
+
+	udma_copy_from_sq(sq, MAX_WQEBB_NUM, tmp_sq);
+	fill_cr_by_sqe_ctl(udma_dev, (struct udma_sqe_ctl *)tmp_sq, cr);
+	cr->status = UBCORE_CR_WR_UNHANDLED;
+	cr->user_ctx = sq->wrid[sq->ci & (sq->buf.entry_cnt - 1)];
+	/* Fill in UINT8_MAX for send direction */
+	cr->opcode = UINT8_MAX;
+	cr->local_id = sq->id;
+
+	sq->ci += get_wqebb_num((struct udma_sqe_ctl *)tmp_sq);
+}
+
+int udma_flush_jfs(struct ubcore_jfs *jfs, int cr_cnt, struct ubcore_cr *cr)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfs->ub_dev);
+	struct udma_jfs *udma_jfs = to_udma_jfs(jfs);
+	struct udma_jetty_queue *sq = &udma_jfs->sq;
+	int n_flushed;
+
+	if (!sq->flush_flag)
+		return 0;
+
+	if (!jfs->jfs_cfg.flag.bs.lock_free)
+		spin_lock(&sq->lock);
+
+	for (n_flushed = 0; n_flushed < cr_cnt; n_flushed++) {
+		if (sq->ci == sq->pi)
+			break;
+		udma_flush_sq(udma_dev, sq, cr + n_flushed);
+	}
+
+	if (!jfs->jfs_cfg.flag.bs.lock_free)
+		spin_unlock(&sq->lock);
+
+	return n_flushed;
 }
 
 static uint8_t udma_get_jfs_opcode(enum ubcore_opcode opcode)
