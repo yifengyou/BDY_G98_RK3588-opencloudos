@@ -162,6 +162,31 @@ static int udma_query_device_attr(struct ubcore_device *dev,
 	return 0;
 }
 
+static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *key,
+			    struct ubcore_stats_val *val)
+{
+	struct ubcore_stats_com_val *com_val = (struct ubcore_stats_com_val *)val->addr;
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+	struct ubase_ub_dl_stats dl_stats = {};
+	int ret;
+
+	ret = ubase_get_ub_port_stats(udma_dev->comdev.adev,
+				      udma_dev->port_logic_id, &dl_stats);
+	if (ret) {
+		dev_err(udma_dev->dev, "failed to query port stats, ret = %d.\n", ret);
+		return ret;
+	}
+
+	com_val->tx_pkt = dl_stats.dl_tx_busi_pkt_num;
+	com_val->rx_pkt = dl_stats.dl_rx_busi_pkt_num;
+	com_val->rx_pkt_err = 0;
+	com_val->tx_pkt_err = 0;
+	com_val->tx_bytes = 0;
+	com_val->rx_bytes = 0;
+
+	return ret;
+}
+
 static struct ubcore_ops g_dev_ops = {
 	.owner = THIS_MODULE,
 	.abi_version = 0,
@@ -216,6 +241,7 @@ static struct ubcore_ops g_dev_ops = {
 	.post_jetty_send_wr = udma_post_jetty_send_wr,
 	.post_jetty_recv_wr = udma_post_jetty_recv_wr,
 	.poll_jfc = udma_poll_jfc,
+	.query_stats = udma_query_stats,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)

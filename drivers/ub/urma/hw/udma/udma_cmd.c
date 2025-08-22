@@ -6,7 +6,11 @@
 #include <linux/slab.h>
 #include <linux/dmapool.h>
 #include <ub/ubase/ubase_comm_dev.h>
+#include "udma_eid.h"
 #include "udma_cmd.h"
+#include "udma_jfc.h"
+#include "udma_jfr.h"
+#include "udma_jetty.h"
 
 bool debug_switch = true;
 
@@ -71,6 +75,19 @@ void udma_free_cmd_mailbox(struct udma_dev *dev,
 	kfree(mailbox);
 }
 
+static void udma_set_mb_flag_or_fd(uint8_t op, struct udma_mbx_op_match *match,
+				   void *buf)
+{
+	struct udma_jetty_ctx *jfs_ctx;
+
+	if (op == UDMA_CMD_QUERY_JFS_CONTEXT) {
+		jfs_ctx = (struct udma_jetty_ctx *)buf;
+		jfs_ctx->flush_cqe_done = 1;
+		jfs_ctx->state = 1;
+		jfs_ctx->flush_ssn_vld = 1;
+	}
+}
+
 static bool udma_op_ignore_eagain(uint8_t op, void *buf)
 {
 	struct udma_mbx_op_match matches[] = {
@@ -100,8 +117,10 @@ static bool udma_op_ignore_eagain(uint8_t op, void *buf)
 	uint32_t i;
 
 	for (i = 0; i < ARRAY_SIZE(matches); i++) {
-		if (op == matches[i].op)
+		if (op == matches[i].op) {
+			udma_set_mb_flag_or_fd(op, &matches[i], buf);
 			return matches[i].ignore_ret;
+		}
 	}
 
 	return false;
