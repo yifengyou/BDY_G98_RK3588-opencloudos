@@ -11,6 +11,7 @@
 #define UDMA_PID_MASK		24
 #define UDMA_DEFAULT_PID	1
 #define UDMA_UE_NUM		64
+#define UDMA_MAX_UE_IDX		256
 #define UDMA_MAX_TPID_NUM	5
 
 #define UDMA_TPN_CNT_MASK 0x1F
@@ -154,6 +155,16 @@ struct udma_notify_flush_done {
 	uint32_t tpn;
 };
 
+struct udma_dev_resource_ratio {
+	struct ubase_bus_eid eid;
+	uint32_t index;
+};
+
+int udma_register_npu_cb(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			 struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+
+int udma_unregister_npu_cb(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 int udma_ctrlq_tp_flush_done(struct udma_dev *udev, uint32_t tpn);
 int udma_ctrlq_remove_single_tp(struct udma_dev *udev, uint32_t tpn, int status);
 int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_cfg,

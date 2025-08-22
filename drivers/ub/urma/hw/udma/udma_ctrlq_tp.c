@@ -115,6 +115,157 @@ int udma_ctrlq_tp_flush_done(struct udma_dev *udev, uint32_t tpn)
 	return ret;
 }
 
+int udma_get_dev_resource_ratio(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev_resource_ratio dev_res = {};
+	struct udma_dev_pair_info dev_res_out = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg ctrlq_msg = {};
+	int ret = 0;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(dev_res.index))) {
+		dev_err(udev->dev, "parameter invalid in get dev res, len = %u.\n", in->len);
+		return -EINVAL;
+	}
+
+	if (out->addr == 0 || out->len != sizeof(dev_res_out)) {
+		dev_err(udev->dev, "get dev resource ratio, addr is NULL:%d, len:%u.\n",
+			out->addr == 0, out->len);
+		return -EINVAL;
+	}
+
+	memcpy(&dev_res.index, (void *)(uintptr_t)in->addr, sizeof(dev_res.index));
+
+	ret = ubase_get_bus_eid(udev->comdev.adev, &dev_res.eid);
+	if (ret) {
+		dev_err(udev->dev, "get dev bus eid failed, ret is %d.\n", ret);
+		return ret;
+	}
+
+	ctrlq_msg.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	ctrlq_msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	ctrlq_msg.need_resp = 1;
+	ctrlq_msg.in_size = sizeof(dev_res);
+	ctrlq_msg.in = (void *)&dev_res;
+	ctrlq_msg.out_size = sizeof(dev_res_out);
+	ctrlq_msg.out = &dev_res_out;
+	ctrlq_msg.opcode = UDMA_CTRLQ_GET_DEV_RESOURCE_RATIO;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &ctrlq_msg);
+	if (ret) {
+		dev_err(udev->dev, "get dev res send ctrlq msg failed, ret is %d.\n", ret);
+		return ret;
+	}
+	memcpy((void *)(uintptr_t)out->addr, &dev_res_out, sizeof(dev_res_out));
+
+	return ret;
+}
+
+static int udma_dev_res_ratio_ctrlq_handler(struct auxiliary_device *adev,
+					    uint8_t service_ver, void *data,
+					    uint16_t len, uint16_t seq)
+{
+	struct udma_dev *udev = (struct udma_dev *)get_udma_dev(adev);
+	struct udma_ctrlq_event_nb *udma_cb;
+	int ret;
+
+	mutex_lock(&udev->npu_nb_mutex);
+	udma_cb = xa_load(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
+	if (!udma_cb) {
+		dev_err(udev->dev, "failed to query npu info cb while xa_load.\n");
+		mutex_unlock(&udev->npu_nb_mutex);
+		return -EINVAL;
+	}
+
+	ret = udma_cb->crq_handler(&udev->ub_dev, data, len);
+	if (ret)
+		dev_err(udev->dev, "npu crq handler failed, ret = %d.\n", ret);
+	mutex_unlock(&udev->npu_nb_mutex);
+
+	return ret;
+}
+
+int udma_register_npu_cb(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			 struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct ubase_ctrlq_event_nb ubase_cb = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_ctrlq_event_nb *udma_cb;
+	int ret;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(udma_cb->crq_handler))) {
+		dev_err(udev->dev, "parameter invalid in register npu cb, len = %u.\n", in->len);
+		return -EINVAL;
+	}
+
+	udma_cb = kzalloc(sizeof(*udma_cb), GFP_KERNEL);
+	if (!udma_cb)
+		return -ENOMEM;
+
+	udma_cb->opcode = UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO;
+	udma_cb->crq_handler = (void *)(uintptr_t)in->addr;
+
+	mutex_lock(&udev->npu_nb_mutex);
+	if (xa_load(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO)) {
+		dev_err(udev->dev, "query npu info callback exist.\n");
+		ret = -EINVAL;
+		goto err_release_udma_cb;
+	}
+	ret = xa_err(__xa_store(&udev->npu_nb_table, udma_cb->opcode, udma_cb, GFP_KERNEL));
+	if (ret) {
+		dev_err(udev->dev,
+			"save crq nb entry failed, opcode is %u, ret is %d.\n",
+			udma_cb->opcode, ret);
+		goto err_release_udma_cb;
+	}
+
+	ubase_cb.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	ubase_cb.opcode = UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO;
+	ubase_cb.back = udev->comdev.adev;
+	ubase_cb.crq_handler = udma_dev_res_ratio_ctrlq_handler;
+	ret = ubase_ctrlq_register_crq_event(udev->comdev.adev, &ubase_cb);
+	if (ret) {
+		__xa_erase(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
+		dev_err(udev->dev, "ubase register npu crq event failed, ret is %d.\n", ret);
+		goto err_release_udma_cb;
+	}
+	mutex_unlock(&udev->npu_nb_mutex);
+
+	return 0;
+
+err_release_udma_cb:
+	mutex_unlock(&udev->npu_nb_mutex);
+	kfree(udma_cb);
+	return ret;
+}
+
+int udma_unregister_npu_cb(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_ctrlq_event_nb *nb;
+
+	ubase_ctrlq_unregister_crq_event(udev->comdev.adev,
+					 UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+					 UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
+
+	mutex_lock(&udev->npu_nb_mutex);
+	nb = xa_load(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
+	if (!nb) {
+		dev_warn(udev->dev, "query npu info cb not exist.\n");
+		goto err_find_npu_nb;
+	}
+
+	__xa_erase(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
+	kfree(nb);
+	nb = NULL;
+
+err_find_npu_nb:
+	mutex_unlock(&udev->npu_nb_mutex);
+	return 0;
+}
+
 static int udma_ctrlq_get_trans_type(struct udma_dev *dev,
 				     enum ubcore_transport_mode trans_mode,
 				     enum udma_ctrlq_trans_type *tp_type)

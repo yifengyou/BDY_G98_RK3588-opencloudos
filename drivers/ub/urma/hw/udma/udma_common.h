@@ -72,6 +72,7 @@ struct ubcore_umem *udma_umem_get(struct udma_umem_param *param);
 void udma_umem_release(struct ubcore_umem *umem, bool is_kernel);
 void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min);
 void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex);
+void udma_destroy_npu_cb_table(struct udma_dev *dev);
 void udma_destroy_udma_table(struct udma_dev *dev, struct udma_table *table,
 			     const char *table_name);
 void udma_destroy_eid_table(struct udma_dev *udma_dev);

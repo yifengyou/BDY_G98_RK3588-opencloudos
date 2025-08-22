@@ -204,6 +204,7 @@ static struct ubcore_ops g_dev_ops = {
 	.get_tp_list = udma_get_tp_list,
 	.active_tp = udma_active_tp,
 	.deactive_tp = udma_deactive_tp,
+	.user_ctl = udma_user_ctl,
 	.post_jfs_wr = udma_post_jfs_wr,
 	.post_jfr_wr = udma_post_jfr_wr,
 	.post_jetty_send_wr = udma_post_jetty_send_wr,
@@ -254,6 +255,7 @@ void udma_destroy_tables(struct udma_dev *udma_dev)
 	xa_destroy(&udma_dev->crq_nb_table);
 
 	udma_destroy_tp_ue_idx_table(udma_dev);
+	udma_destroy_npu_cb_table(udma_dev);
 
 	if (!xa_empty(&udma_dev->ksva_table))
 		dev_err(udma_dev->dev, "ksva table is not empty.\n");

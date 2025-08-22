@@ -371,3 +371,132 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 
 	return ret;
 }
+
+static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
+	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
+	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
+	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
+	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
+};
+
+static udma_user_ctl_ops g_udma_user_ctl_u_ops[] = {
+	[UDMA_USER_CTL_CREATE_JFS_EX] = NULL,
+	[UDMA_USER_CTL_DELETE_JFS_EX] = NULL,
+	[UDMA_USER_CTL_CREATE_JFC_EX] = NULL,
+	[UDMA_USER_CTL_DELETE_JFC_EX] = NULL,
+	[UDMA_USER_CTL_SET_CQE_ADDR] = NULL,
+	[UDMA_USER_CTL_QUERY_UE_INFO] = NULL,
+	[UDMA_USER_CTL_GET_DEV_RES_RATIO] = NULL,
+	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = NULL,
+	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = NULL,
+	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
+	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
+	[UDMA_USER_CTL_QUERY_UBMEM_INFO] = NULL,
+	[UDMA_USER_CTL_QUERY_PAIR_DEVNUM] = NULL,
+};
+
+static int udma_user_data(struct ubcore_device *dev,
+			  struct ubcore_user_ctl *k_user_ctl)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubcore_user_ctl_out out = {};
+	struct ubcore_user_ctl_in in = {};
+	unsigned long byte;
+	int ret;
+
+	if (k_user_ctl->in.len >= UDMA_HW_PAGE_SIZE || k_user_ctl->out.len >= UDMA_HW_PAGE_SIZE) {
+		dev_err(udev->dev, "The len exceeds the maximum value in user ctrl.\n");
+		return -EINVAL;
+	}
+
+	in.opcode = k_user_ctl->in.opcode;
+	if (!g_udma_user_ctl_u_ops[in.opcode]) {
+		dev_err(udev->dev, "invalid user opcode: 0x%x.\n", in.opcode);
+		return -EINVAL;
+	}
+
+	if (k_user_ctl->in.len) {
+		in.addr = (uint64_t)kzalloc(k_user_ctl->in.len, GFP_KERNEL);
+		if (!in.addr)
+			return -ENOMEM;
+
+		in.len = k_user_ctl->in.len;
+		byte = copy_from_user((void *)(uintptr_t)in.addr,
+			(void __user *)(uintptr_t)k_user_ctl->in.addr,
+			k_user_ctl->in.len);
+		if (byte) {
+			dev_err(udev->dev,
+				"failed to copy user data in user ctrl, byte = %lu.\n", byte);
+			kfree((void *)in.addr);
+			return -EFAULT;
+		}
+	}
+
+	if (k_user_ctl->out.len) {
+		out.addr = (uint64_t)kzalloc(k_user_ctl->out.len, GFP_KERNEL);
+		if (!out.addr) {
+			kfree((void *)in.addr);
+
+			return -ENOMEM;
+		}
+		out.len = k_user_ctl->out.len;
+
+		if (k_user_ctl->out.addr) {
+			byte = copy_from_user((void *)(uintptr_t)out.addr,
+				(void __user *)(uintptr_t)k_user_ctl->out.addr,
+				k_user_ctl->out.len);
+			if (byte) {
+				dev_err(udev->dev,
+					"failed to copy user data out user ctrl, byte = %lu.\n",
+					byte);
+				kfree((void *)out.addr);
+				kfree((void *)in.addr);
+
+				return -EFAULT;
+			}
+		}
+	}
+
+	ret = g_udma_user_ctl_u_ops[in.opcode](dev, k_user_ctl->uctx, &in, &out);
+	kfree((void *)in.addr);
+
+	if (out.addr) {
+		byte = copy_to_user((void __user *)(uintptr_t)k_user_ctl->out.addr,
+				    (void *)(uintptr_t)out.addr, min(out.len, k_user_ctl->out.len));
+		if (byte) {
+			dev_err(udev->dev,
+				"copy resp to user failed in user ctrl, byte = %lu.\n", byte);
+			ret = -EFAULT;
+		}
+
+		kfree((void *)out.addr);
+	}
+
+	return ret;
+}
+
+int udma_user_ctl(struct ubcore_device *dev, struct ubcore_user_ctl *k_user_ctl)
+{
+	struct udma_dev *udev;
+
+	if (dev == NULL || k_user_ctl == NULL)
+		return -EINVAL;
+
+	udev = to_udma_dev(dev);
+
+	if (k_user_ctl->in.opcode >= UDMA_USER_CTL_MAX) {
+		dev_err(udev->dev, "invalid opcode: 0x%x.\n", k_user_ctl->in.opcode);
+		return -EINVAL;
+	}
+
+	if (k_user_ctl->uctx)
+		return udma_user_data(dev, k_user_ctl);
+
+	if (!g_udma_user_ctl_k_ops[k_user_ctl->in.opcode]) {
+		dev_err(udev->dev, "invalid user opcode: 0x%x.\n", k_user_ctl->in.opcode);
+		return -EINVAL;
+	}
+
+	return g_udma_user_ctl_k_ops[k_user_ctl->in.opcode](dev, k_user_ctl->uctx, &k_user_ctl->in,
+	       &k_user_ctl->out);
+}

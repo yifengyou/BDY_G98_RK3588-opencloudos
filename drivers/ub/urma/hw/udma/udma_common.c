@@ -430,6 +430,28 @@ void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex)
 	mutex_init(udma_mutex);
 }
 
+void udma_destroy_npu_cb_table(struct udma_dev *dev)
+{
+	struct udma_ctrlq_event_nb *nb = NULL;
+	unsigned long index = 0;
+
+	mutex_lock(&dev->npu_nb_mutex);
+	if (!xa_empty(&dev->npu_nb_table)) {
+		xa_for_each(&dev->npu_nb_table, index, nb) {
+			ubase_ctrlq_unregister_crq_event(dev->comdev.adev,
+							 UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+							 nb->opcode);
+			__xa_erase(&dev->npu_nb_table, index);
+			kfree(nb);
+			nb = NULL;
+		}
+	}
+
+	mutex_unlock(&dev->npu_nb_mutex);
+	xa_destroy(&dev->npu_nb_table);
+	mutex_destroy(&dev->npu_nb_mutex);
+}
+
 void udma_destroy_udma_table(struct udma_dev *dev, struct udma_table *table,
 				    const char *table_name)
 {
