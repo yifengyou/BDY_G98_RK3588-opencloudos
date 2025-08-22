@@ -68,6 +68,12 @@ struct udma_umem_param {
 	bool is_kernel;
 };
 
+struct udma_ue_index_cmd {
+	uint16_t ue_idx;
+	uint8_t rsv[2];
+	uint8_t guid[16];
+};
+
 struct ubcore_umem *udma_umem_get(struct udma_umem_param *param);
 void udma_umem_release(struct ubcore_umem *umem, bool is_kernel);
 void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min);
@@ -118,6 +124,8 @@ static inline uint64_t udma_cal_npages(uint64_t va, uint64_t len)
 	return (ALIGN(va + len, PAGE_SIZE) - ALIGN_DOWN(va, PAGE_SIZE)) / PAGE_SIZE;
 }
 
+int udma_query_ue_idx(struct ubcore_device *ub_dev, struct ubcore_devid *devid,
+		      uint16_t *ue_idx);
 void udma_dfx_ctx_print(struct udma_dev *udev, const char *name, uint32_t id, uint32_t len,
 			uint32_t *ctx);
 void udma_swap_endian(uint8_t arr[], uint8_t res[], uint32_t res_size);

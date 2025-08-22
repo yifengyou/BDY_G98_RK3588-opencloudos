@@ -242,6 +242,7 @@ static struct ubcore_ops g_dev_ops = {
 	.post_jetty_recv_wr = udma_post_jetty_recv_wr,
 	.poll_jfc = udma_poll_jfc,
 	.query_stats = udma_query_stats,
+	.query_ue_idx = udma_query_ue_idx,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)

@@ -650,6 +650,35 @@ void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_
 	dma_free_iova(slot);
 }
 
+int udma_query_ue_idx(struct ubcore_device *ubcore_dev, struct ubcore_devid *devid,
+		      uint16_t *ue_idx)
+{
+	struct udma_dev *dev = to_udma_dev(ubcore_dev);
+	struct udma_ue_index_cmd cmd = {};
+	struct ubase_cmd_buf out;
+	struct ubase_cmd_buf in;
+	int ret;
+
+	if (!devid) {
+		dev_err(dev->dev, "failed to query ue idx, devid is NULL.\n");
+		return -EINVAL;
+	}
+
+	(void)memcpy(cmd.guid, devid->raw, sizeof(devid->raw));
+
+	udma_fill_buf(&in, UDMA_CMD_QUERY_UE_INDEX, true, sizeof(cmd), &cmd);
+	udma_fill_buf(&out, UDMA_CMD_QUERY_UE_INDEX, true, sizeof(cmd), &cmd);
+
+	ret = ubase_cmd_send_inout(dev->comdev.adev, &in, &out);
+	if (ret) {
+		dev_err(dev->dev, "failed to query ue idx, ret = %d.\n", ret);
+		return ret;
+	}
+	*ue_idx = cmd.ue_idx;
+
+	return 0;
+}
+
 void udma_dfx_ctx_print(struct udma_dev *udev, const char *name, uint32_t id, uint32_t len,
 			uint32_t *ctx)
 {
