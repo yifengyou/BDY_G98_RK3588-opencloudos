@@ -241,6 +241,7 @@ struct ubcore_jetty *udma_create_jetty(struct ubcore_device *ub_dev,
 				       struct ubcore_jetty_cfg *cfg,
 				       struct ubcore_udata *udata);
 int udma_destroy_jetty(struct ubcore_jetty *jetty);
+int udma_destroy_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num, int *bad_jetty_index);
 int udma_unimport_jetty(struct ubcore_tjetty *tjetty);
 int udma_modify_jetty(struct ubcore_jetty *jetty, struct ubcore_jetty_attr *attr,
 		      struct ubcore_udata *udata);
@@ -272,5 +273,8 @@ int udma_bind_jetty_ex(struct ubcore_jetty *jetty,
 void udma_clean_cqe_for_jetty(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			      struct ubcore_jfc *send_jfc,
 			      struct ubcore_jfc *recv_jfc);
+int udma_batch_modify_and_destroy_jetty(struct udma_dev *dev,
+					struct udma_jetty_queue **sq_list,
+					uint32_t jetty_cnt, int *bad_jetty_index);
 
 #endif /* __UDMA_JETTY_H__ */

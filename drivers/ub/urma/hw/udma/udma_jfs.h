@@ -134,6 +134,7 @@ struct ubcore_jfs *udma_create_jfs(struct ubcore_device *ub_dev,
 				   struct ubcore_jfs_cfg *cfg,
 				   struct ubcore_udata *udata);
 int udma_destroy_jfs(struct ubcore_jfs *jfs);
+int udma_destroy_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num, int *bad_jfs_index);
 int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct udma_create_jetty_ucmd *ucmd);
 int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,

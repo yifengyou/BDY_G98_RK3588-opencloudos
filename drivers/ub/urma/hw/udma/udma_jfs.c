@@ -412,6 +412,48 @@ int udma_destroy_jfs(struct ubcore_jfs *jfs)
 	return 0;
 }
 
+int udma_destroy_jfs_batch(struct ubcore_jfs **jfs, int jfs_cnt, int *bad_jfs_index)
+{
+	struct udma_jetty_queue **sq_list;
+	struct udma_dev *udma_dev;
+	uint32_t i;
+	int ret;
+
+	if (!jfs) {
+		pr_err("jfs array is null.\n");
+		return -EINVAL;
+	}
+
+	if (!jfs_cnt) {
+		pr_err("jfs cnt is 0.\n");
+		return -EINVAL;
+	}
+
+	udma_dev = to_udma_dev(jfs[0]->ub_dev);
+
+	sq_list = kcalloc(jfs_cnt, sizeof(*sq_list), GFP_KERNEL);
+	if (!sq_list)
+		return -ENOMEM;
+
+	for (i = 0; i < jfs_cnt; i++)
+		sq_list[i] = &(to_udma_jfs(jfs[i])->sq);
+
+	ret = udma_batch_modify_and_destroy_jetty(udma_dev, sq_list, jfs_cnt, bad_jfs_index);
+
+	kfree(sq_list);
+
+	if (ret) {
+		dev_err(udma_dev->dev,
+			 "udma batch modify error and destroy jfs failed.\n");
+		return ret;
+	}
+
+	for (i = 0; i < jfs_cnt; i++)
+		udma_free_jfs(jfs[i]);
+
+	return 0;
+}
+
 static int udma_modify_jfs_state(struct udma_dev *udma_dev, struct udma_jfs *udma_jfs,
 				 struct ubcore_jfs_attr *attr)
 {
