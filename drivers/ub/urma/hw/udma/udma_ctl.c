@@ -276,6 +276,208 @@ static int udma_delete_jfs_ops_ex(struct ubcore_device *dev, struct ubcore_ucont
 	return 0;
 }
 
+static int udma_get_jfc_buf_ex(struct udma_dev *dev,
+			       struct udma_jfc *jfc,
+			       struct udma_jfc_cfg_ex *cfg_ex)
+{
+	uint32_t size;
+	int ret = 0;
+
+	if (!jfc->lock_free)
+		spin_lock_init(&jfc->lock);
+	jfc->buf.entry_size = dev->caps.cqe_size;
+	jfc->tid = dev->tid;
+	size = jfc->buf.entry_size * jfc->buf.entry_cnt;
+
+	if (size != cfg_ex->cstm_cfg.cq.buff_size) {
+		dev_err(dev->dev, "cqe buff size is wrong, buf size = %u.\n", size);
+		return -EINVAL;
+	}
+
+	jfc->buf.addr = (dma_addr_t)(uintptr_t)cfg_ex->cstm_cfg.cq.buff;
+
+	if (jfc->buf.addr == 0) {
+		dev_err(dev->dev, "cq buff addr is wrong.\n");
+		return -EINVAL;
+	}
+
+	jfc->buf.kva = (void *)(uintptr_t)jfc->buf.addr;
+
+	ret = udma_alloc_sw_db(dev, &jfc->db, UDMA_JFC_TYPE_DB);
+	if (ret) {
+		dev_err(dev->dev, "failed to alloc sw db for jfc(%u).\n", jfc->jfcn);
+		return -ENOMEM;
+	}
+
+	return ret;
+}
+
+static struct ubcore_jfc *udma_create_jfc_ex(struct ubcore_device *ubcore_dev,
+					     struct udma_jfc_cfg_ex *cfg_ex)
+{
+	struct udma_dev *dev = to_udma_dev(ubcore_dev);
+	struct ubcore_jfc_cfg *cfg = &cfg_ex->base_cfg;
+	unsigned long flags_store;
+	unsigned long flags_erase;
+	struct udma_jfc *jfc;
+	int ret;
+
+	jfc = kzalloc(sizeof(struct udma_jfc), GFP_KERNEL);
+	if (!jfc)
+		return NULL;
+
+	jfc->arm_sn = 1;
+	jfc->buf.entry_cnt = cfg->depth ? roundup_pow_of_two(cfg->depth) : cfg->depth;
+
+	ret = udma_check_jfc_cfg(dev, jfc, &cfg_ex->base_cfg);
+	if (ret)
+		goto err_check_cfg;
+
+	ret = udma_id_alloc_auto_grow(dev, &dev->jfc_table.ida_table, &jfc->jfcn);
+	if (ret)
+		goto err_alloc_jfc_id;
+
+	udma_init_jfc_param(cfg, jfc);
+	jfc->base.ub_dev = ubcore_dev;
+	jfc->base.uctx = NULL;
+	jfc->base.jfae_handler = cfg_ex->jfae_handler;
+	jfc->base.jfce_handler = cfg_ex->jfce_handler;
+	jfc->mode = UDMA_KERNEL_STARS_JFC_TYPE;
+
+	xa_lock_irqsave(&dev->jfc_table.xa, flags_store);
+	ret = xa_err(__xa_store(&dev->jfc_table.xa, jfc->jfcn, jfc, GFP_ATOMIC));
+	xa_unlock_irqrestore(&dev->jfc_table.xa, flags_store);
+	if (ret) {
+		dev_err(dev->dev,
+			"failed to stored jfc id to jfc_table, jfcn: %u.\n",
+			jfc->jfcn);
+		goto err_store_jfcn;
+	}
+
+	ret = udma_get_jfc_buf_ex(dev, jfc, cfg_ex);
+	if (ret)
+		goto err_get_jfc_buf;
+
+	ret = udma_post_create_jfc_mbox(dev, jfc);
+	if (ret)
+		goto err_alloc_cqc;
+
+	refcount_set(&jfc->event_refcount, 1);
+
+	init_completion(&jfc->event_comp);
+
+	if (dfx_switch)
+		udma_dfx_store_id(dev, &dev->dfx_info->jfc, jfc->jfcn, "jfc");
+
+	return &jfc->base;
+
+err_alloc_cqc:
+	udma_free_sw_db(dev, &jfc->db);
+err_get_jfc_buf:
+	xa_lock_irqsave(&dev->jfc_table.xa, flags_erase);
+	__xa_erase(&dev->jfc_table.xa, jfc->jfcn);
+	xa_unlock_irqrestore(&dev->jfc_table.xa, flags_erase);
+err_store_jfcn:
+	udma_id_free(&dev->jfc_table.ida_table, jfc->jfcn);
+err_alloc_jfc_id:
+err_check_cfg:
+	kfree(jfc);
+	return NULL;
+}
+
+static int udma_create_jfc_ops_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				  struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_jfc_cfg_ex cfg_ex;
+	struct ubcore_jfc *jfc;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct udma_jfc_cfg_ex)) ||
+		udma_check_base_param(out->addr, out->len, sizeof(struct ubcore_jfc *))) {
+		dev_err(udev->dev, "input parameter invalid in create jfc, in_len = %u, out_len = %u.\n",
+			in->len, out->len);
+		return -EINVAL;
+	}
+
+	memcpy(&cfg_ex, (void *)(uintptr_t)in->addr,
+		min(in->len, sizeof(struct udma_jfc_cfg_ex)));
+
+	jfc = udma_create_jfc_ex(dev, &cfg_ex);
+	if (jfc == NULL)
+		return -EFAULT;
+
+	memcpy((void *)(uintptr_t)out->addr, &jfc, sizeof(struct ubcore_jfc *));
+
+	return 0;
+}
+
+static int udma_delete_jfc_ops_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				  struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubcore_jfc *jfc;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct ubcore_jfc *))) {
+		dev_err(udev->dev, "parameter invalid in delete jfc, len = %u.\n",
+			in->len);
+		return -EINVAL;
+	}
+
+	memcpy(&jfc, (void *)(uintptr_t)in->addr,
+		min(in->len, sizeof(struct ubcore_jfc *)));
+	if (jfc == NULL)
+		return -EINVAL;
+
+	if (udma_destroy_jfc(jfc))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int udma_set_cqe_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_ex_jfc_addr *jfc_addr;
+	struct udma_set_cqe_ex cqe_ex;
+	uint32_t cq_depth;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct udma_set_cqe_ex))) {
+		dev_err(udev->dev, "parameter invalid in set cqe, len = %u.\n",
+			in->len);
+		return -EINVAL;
+	}
+
+	memcpy(&cqe_ex, (void *)(uintptr_t)in->addr,
+		min(in->len, sizeof(struct udma_set_cqe_ex)));
+
+	if (cqe_ex.jfc_type != UDMA_STARS_JFC_TYPE &&
+	    cqe_ex.jfc_type != UDMA_CCU_JFC_TYPE) {
+		dev_err(udev->dev, "invalid jfc type, mode = %u.\n", cqe_ex.jfc_type);
+		return -EINVAL;
+	}
+
+	if (cqe_ex.addr == 0) {
+		dev_err(udev->dev, "cq addr is wrong in set cqe.\n");
+		return -EINVAL;
+	}
+
+	cq_depth = cqe_ex.len / udev->caps.cqe_size;
+	if (cq_depth < UDMA_JFC_DEPTH_MIN || cq_depth > udev->caps.jfc.depth ||
+	    (cqe_ex.len % udev->caps.cqe_size) != 0 ||
+	    cq_depth != roundup_pow_of_two(cq_depth)) {
+		dev_err(udev->dev, "cq buff size is wrong in set cqe, size = %u.\n",
+			cqe_ex.len);
+		return -EINVAL;
+	}
+
+	jfc_addr = &udev->cq_addr_array[cqe_ex.jfc_type];
+	jfc_addr->cq_addr = cqe_ex.addr;
+	jfc_addr->cq_len = cqe_ex.len;
+
+	return 0;
+}
+
 static int udma_ctrlq_query_tp_sport(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
 {
@@ -1084,6 +1286,9 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_CREATE_JFS_EX] = udma_create_jfs_ops_ex,
 	[UDMA_USER_CTL_DELETE_JFS_EX] = udma_delete_jfs_ops_ex,
+	[UDMA_USER_CTL_CREATE_JFC_EX] = udma_create_jfc_ops_ex,
+	[UDMA_USER_CTL_DELETE_JFC_EX] = udma_delete_jfc_ops_ex,
+	[UDMA_USER_CTL_SET_CQE_ADDR] = udma_set_cqe_ex,
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
 	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,

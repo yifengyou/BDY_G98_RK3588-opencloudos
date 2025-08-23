@@ -189,6 +189,10 @@ int udma_modify_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_jfc_attr *attr,
 		    struct ubcore_udata *udata);
 int udma_rearm_jfc(struct ubcore_jfc *jfc, bool solicited_only);
 int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr);
+int udma_check_jfc_cfg(struct udma_dev *dev, struct udma_jfc *jfc,
+		       struct ubcore_jfc_cfg *cfg);
+void udma_init_jfc_param(struct ubcore_jfc_cfg *cfg, struct udma_jfc *jfc);
+int udma_post_create_jfc_mbox(struct udma_dev *dev, struct udma_jfc *jfc);
 void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *udma_dev);
 
 #endif /* __UDMA_JFC_H__ */
