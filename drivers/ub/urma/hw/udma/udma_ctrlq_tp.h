@@ -151,8 +151,27 @@ struct udma_ue_idx_table {
 	uint8_t ue_idx[UDMA_UE_NUM];
 };
 
-struct udma_notify_flush_done {
-	uint32_t tpn;
+struct udma_ctrlq_tp_attr {
+	uint32_t tp_attr_bitmap;
+	struct ubcore_tp_attr_value tp_attr_value;
+};
+
+struct udma_ctrlq_get_tp_attr_req {
+	struct udma_ctrlq_tpid tpid;
+};
+
+struct udma_ctrlq_set_tp_attr_req {
+	uint32_t tpid : 24;
+	uint32_t tpn_cnt : 8;
+	uint32_t tpn_start : 24;
+	uint32_t tp_attr_cnt : 8;
+	struct udma_ctrlq_tp_attr tp_attr;
+};
+
+struct udma_ctrlq_get_tp_attr_resp {
+	uint32_t tpid : 24;
+	uint32_t tp_attr_cnt : 8;
+	struct udma_ctrlq_tp_attr tp_attr;
 };
 
 struct udma_dev_resource_ratio {
@@ -173,6 +192,13 @@ int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_c
 
 void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpid_table,
 				  bool is_need_flush);
+
+int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
+		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
+		     const struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata);
+int udma_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
+		    uint8_t *tp_attr_cnt, uint32_t *tp_attr_bitmap,
+		    struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata);
 int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
 		    uint8_t dst_ue_idx, uint16_t opcode);
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode);

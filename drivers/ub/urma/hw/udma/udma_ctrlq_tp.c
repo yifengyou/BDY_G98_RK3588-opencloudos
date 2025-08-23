@@ -592,6 +592,69 @@ static int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handl
 	return (ret == -EAGAIN) ? 0 : ret;
 }
 
+int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
+		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
+		     const struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata)
+{
+	struct udma_ctrlq_set_tp_attr_req tp_attr_req = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	union ubcore_tp_handle tp_handle_val;
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	tp_handle_val.value = tp_handle;
+	tp_attr_req.tpid = tp_handle_val.bs.tpid;
+	tp_attr_req.tpn_cnt = tp_handle_val.bs.tp_cnt;
+	tp_attr_req.tpn_start = tp_handle_val.bs.tpn_start;
+	tp_attr_req.tp_attr_cnt = tp_attr_cnt;
+	tp_attr_req.tp_attr.tp_attr_bitmap = tp_attr_bitmap;
+	memcpy(&tp_attr_req.tp_attr.tp_attr_value, (void *)tp_attr, sizeof(*tp_attr));
+
+	udma_ctrlq_set_tp_msg(&msg, &tp_attr_req, sizeof(tp_attr_req), NULL, 0);
+	msg.opcode = UDMA_CMD_CTRLQ_SET_TP_ATTR;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret)
+		dev_err(udev->dev, "set tp attr failed, tpid = %u, ret = %d.\n",
+			tp_attr_req.tpid, ret);
+
+	return ret;
+}
+
+int udma_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
+		     uint8_t *tp_attr_cnt, uint32_t *tp_attr_bitmap,
+		     struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata)
+{
+	struct udma_ctrlq_get_tp_attr_resp tp_attr_resp = {};
+	struct udma_ctrlq_get_tp_attr_req tp_attr_req = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	union ubcore_tp_handle tp_handle_val;
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	tp_handle_val.value = tp_handle;
+	tp_attr_req.tpid.tpid = tp_handle_val.bs.tpid;
+	tp_attr_req.tpid.tpn_cnt = tp_handle_val.bs.tp_cnt;
+	tp_attr_req.tpid.tpn_start = tp_handle_val.bs.tpn_start;
+	udma_ctrlq_set_tp_msg(&msg, &tp_attr_req, sizeof(tp_attr_req), &tp_attr_resp,
+			      sizeof(tp_attr_resp));
+	msg.opcode = UDMA_CMD_CTRLQ_GET_TP_ATTR;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret) {
+		dev_err(udev->dev, "get tp attr failed, tpid = %u, ret = %d.\n",
+			tp_attr_req.tpid.tpid, ret);
+		return ret;
+	}
+
+	*tp_attr_cnt = tp_attr_resp.tp_attr_cnt;
+	*tp_attr_bitmap = tp_attr_resp.tp_attr.tp_attr_bitmap;
+	memcpy((void *)tp_attr, &tp_attr_resp.tp_attr.tp_attr_value,
+	       sizeof(tp_attr_resp.tp_attr.tp_attr_value));
+
+	return 0;
+}
+
 int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode)
 {
 	struct udma_req_msg *req_msg;

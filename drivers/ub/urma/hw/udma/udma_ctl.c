@@ -75,6 +75,49 @@ const char *udma_ae_aux_info_type_str[] = {
 	"LQC_TA_CQM_CQE_INNER_ALARM",
 };
 
+static int udma_ctrlq_query_tp_sport(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_tp_sport_out tp_sport_out = {};
+	struct udma_tp_sport_in tp_sport_in = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_cmd_mailbox *mailbox = NULL;
+	struct ubase_mbx_attr mbox_attr = {};
+	struct udma_tp_ctx *tpc;
+
+	if (udma_check_base_param(out->addr, out->len, sizeof(struct udma_tp_sport_out)) ||
+	    udma_check_base_param(in->addr, in->len, sizeof(struct udma_tp_sport_in))) {
+		dev_err(udev->dev, "parameter invalid in query tp sport, in_len = %u, out_len = %u.\n",
+			in->len, out->len);
+		return -EINVAL;
+	}
+
+	if (udev->is_ue) {
+		dev_err(udev->dev, "ue is not supported.\n");
+		return -EINVAL;
+	}
+
+	memcpy(&tp_sport_in, (void *)(uintptr_t)in->addr, sizeof(struct udma_tp_sport_in));
+
+	mbox_attr.tag = tp_sport_in.tpn;
+	mbox_attr.op = UDMA_CMD_QUERY_TP_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(udev, &mbox_attr);
+	if (!mailbox)
+		return -ENOMEM;
+
+	tpc = (struct udma_tp_ctx *)mailbox->buf;
+
+	tp_sport_out.ack_udp_srcport = tpc->ack_udp_srcport_h << TP_ACK_UDP_SPORT_H_OFFSET |
+				       tpc->ack_udp_srcport_l;
+	tp_sport_out.data_udp_srcport = tpc->data_udp_srcport;
+
+	memcpy((void *)(uintptr_t)out->addr, &tp_sport_out, out->len);
+
+	udma_free_cmd_mailbox(udev, mailbox);
+
+	return 0;
+}
+
 static void dump_cqe_client_loc_len_err_aux_info(struct udma_dev *dev,
 						 struct udma_cqe_aux_info_out *aux_info_out,
 						 struct udma_cmd_query_cqe_aux_info *info)
@@ -840,6 +883,7 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
+	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,
 	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
 	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
 };
@@ -854,6 +898,7 @@ static udma_user_ctl_ops g_udma_user_ctl_u_ops[] = {
 	[UDMA_USER_CTL_GET_DEV_RES_RATIO] = NULL,
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = NULL,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = NULL,
+	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,
 	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
 	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
 	[UDMA_USER_CTL_QUERY_UBMEM_INFO] = NULL,
