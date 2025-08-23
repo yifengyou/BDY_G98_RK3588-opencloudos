@@ -179,6 +179,12 @@ struct udma_dev_resource_ratio {
 	uint32_t index;
 };
 
+int udma_query_pair_dev_count(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			      struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+
+int udma_get_dev_resource_ratio(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+
 int udma_register_npu_cb(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 			 struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
@@ -192,6 +198,8 @@ int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_c
 
 void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpid_table,
 				  bool is_need_flush);
+int udma_ctrlq_set_active_tp_ex(struct udma_dev *dev,
+				struct ubcore_active_tp_cfg *active_cfg);
 
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,

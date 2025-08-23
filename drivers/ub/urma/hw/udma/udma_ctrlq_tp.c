@@ -740,3 +740,44 @@ int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle
 
 	return udma_k_ctrlq_deactive_tp(udma_dev, tp_handle, udata);
 }
+
+int udma_query_pair_dev_count(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			      struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg ctrlq_msg = {};
+	struct ubase_bus_eid eid = {};
+	uint32_t pair_device_num = 0;
+	int ret;
+
+	if (out->addr == 0 || out->len != sizeof(pair_device_num)) {
+		dev_err(udev->dev, "query pair dev count, addr is NULL:%d, len:%u.\n",
+			out->addr == 0, out->len);
+		return -EINVAL;
+	}
+
+	ret = ubase_get_bus_eid(udev->comdev.adev, &eid);
+	if (ret) {
+		dev_err(udev->dev, "get dev bus eid failed, ret is %d.\n", ret);
+		return ret;
+	}
+
+	ctrlq_msg.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	ctrlq_msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	ctrlq_msg.need_resp = 1;
+	ctrlq_msg.in_size = sizeof(eid);
+	ctrlq_msg.in = (void *)&eid;
+	ctrlq_msg.out_size = sizeof(pair_device_num);
+	ctrlq_msg.out = &pair_device_num;
+	ctrlq_msg.opcode = UDMA_CTRLQ_GET_DEV_RESOURCE_COUNT;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &ctrlq_msg);
+	if (ret) {
+		dev_err(udev->dev, "get dev res send ctrlq msg failed, ret is %d.\n", ret);
+		return ret;
+	}
+
+	memcpy((void *)(uintptr_t)out->addr, &pair_device_num, sizeof(pair_device_num));
+
+	return ret;
+}

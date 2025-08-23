@@ -1315,11 +1315,13 @@ static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_DELETE_JFC_EX] = udma_delete_jfc_ops_ex,
 	[UDMA_USER_CTL_SET_CQE_ADDR] = udma_set_cqe_ex,
 	[UDMA_USER_CTL_QUERY_UE_INFO] = udma_query_ue_info_ex,
+	[UDMA_USER_CTL_GET_DEV_RES_RATIO] = udma_get_dev_resource_ratio,
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
 	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,
 	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
 	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
+	[UDMA_USER_CTL_QUERY_PAIR_DEVNUM] = udma_query_pair_dev_count,
 };
 
 static udma_user_ctl_ops g_udma_user_ctl_u_ops[] = {
