@@ -478,6 +478,31 @@ static int udma_set_cqe_ex(struct ubcore_device *dev, struct ubcore_ucontext *uc
 	return 0;
 }
 
+static int udma_query_ue_info_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				 struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_ue_info_ex info = {};
+
+	if (udma_check_base_param(out->addr, out->len, sizeof(struct udma_ue_info_ex))) {
+		dev_err(udev->dev, "parameter invalid in query ue, len = %u.\n",
+			out->len);
+		return -EINVAL;
+	}
+
+	info.chip_id = udev->chip_id;
+	info.die_id = udev->die_id;
+	info.dwqe_addr = udev->db_base + JETTY_DSQE_OFFSET;
+	info.db_base_addr = info.dwqe_addr + UDMA_DOORBELL_OFFSET;
+	info.ue_id = udev->ue_id;
+	info.register_base_addr = udev->db_base;
+	info.offset_len = PAGE_SIZE;
+
+	memcpy((void *)(uintptr_t)out->addr, &info, sizeof(struct udma_ue_info_ex));
+
+	return 0;
+}
+
 static int udma_ctrlq_query_tp_sport(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
 {
@@ -1289,6 +1314,7 @@ static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_CREATE_JFC_EX] = udma_create_jfc_ops_ex,
 	[UDMA_USER_CTL_DELETE_JFC_EX] = udma_delete_jfc_ops_ex,
 	[UDMA_USER_CTL_SET_CQE_ADDR] = udma_set_cqe_ex,
+	[UDMA_USER_CTL_QUERY_UE_INFO] = udma_query_ue_info_ex,
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
 	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,
