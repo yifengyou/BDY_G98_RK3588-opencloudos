@@ -14,6 +14,7 @@
 #include "unic_dev.h"
 #include "unic_hw.h"
 #include "unic_qos_debugfs.h"
+#include "unic_entry_debugfs.h"
 #include "unic_debugfs.h"
 
 static int unic_dbg_dump_dev_info(struct seq_file *s, void *data)
@@ -258,6 +259,10 @@ static bool unic_dbg_dentry_support(struct device *dev, u32 property)
 
 static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 	{
+		.name = "ip_tbl",
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+	}, {
 		.name = "context",
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
@@ -276,6 +281,20 @@ static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 
 static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 	{
+		.name = "ip_tbl_spec",
+		.dentry_index = UNIC_DBG_DENTRY_IP,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_ip_tbl_spec,
+	}, {
+		.name = "ip_tbl_list",
+		.dentry_index = UNIC_DBG_DENTRY_IP,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_ip_tbl_list,
+	}, {
 		.name = "jfs_context",
 		.dentry_index = UNIC_DBG_DENTRY_CONTEXT,
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,

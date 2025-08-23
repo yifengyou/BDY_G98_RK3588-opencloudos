@@ -9,5 +9,5 @@ ccflags-y += -I$(srctree)/drivers/net/ub/unic/debugfs
 obj-$(CONFIG_UB_UNIC) += unic.o
 unic-objs = unic_main.o unic_ethtool.o unic_hw.o unic_guid.o unic_netdev.o unic_dev.o unic_qos_hw.o unic_event.o unic_crq.o
 unic-objs += unic_channel.o debugfs/unic_debugfs.o unic_rx.o unic_tx.o unic_txrx.o unic_comm_addr.o unic_rack_ip.o unic_stats.o
-unic-objs += debugfs/unic_ctx_debugfs.o unic_reset.o debugfs/unic_qos_debugfs.o
+unic-objs += debugfs/unic_ctx_debugfs.o unic_reset.o debugfs/unic_qos_debugfs.o debugfs/unic_entry_debugfs.o
 unic-$(CONFIG_UB_UNIC_DCB) += unic_dcbnl.o
