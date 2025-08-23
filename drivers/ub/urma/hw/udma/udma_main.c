@@ -187,6 +187,10 @@ static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *
 	return ret;
 }
 
+static void udma_disassociate_ucontext(struct ubcore_ucontext *uctx)
+{
+}
+
 static struct ubcore_ops g_dev_ops = {
 	.owner = THIS_MODULE,
 	.abi_version = 0,
@@ -245,6 +249,7 @@ static struct ubcore_ops g_dev_ops = {
 	.poll_jfc = udma_poll_jfc,
 	.query_stats = udma_query_stats,
 	.query_ue_idx = udma_query_ue_idx,
+	.disassociate_ucontext = udma_disassociate_ucontext,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)

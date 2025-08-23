@@ -1321,6 +1321,7 @@ static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,
 	[UDMA_USER_CTL_QUERY_CQE_AUX_INFO] = udma_query_cqe_aux_info,
 	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
+	[UDMA_USER_CTL_QUERY_UBMEM_INFO] = udma_ctrlq_query_ubmem_info,
 	[UDMA_USER_CTL_QUERY_PAIR_DEVNUM] = udma_query_pair_dev_count,
 };
 

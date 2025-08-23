@@ -14,6 +14,7 @@
 #define UDMA_MAX_UE_IDX		256
 #define UDMA_MAX_TPID_NUM	5
 
+#define UDMA_CTRLQ_UBMEM_INFO_NUM (96)
 #define UDMA_TPN_CNT_MASK 0x1F
 
 enum udma_ctrlq_cmd_code_type {
@@ -26,6 +27,10 @@ enum udma_ctrlq_cmd_code_type {
 	UDMA_CMD_CTRLQ_SET_TP_ATTR,
 	UDMA_CMD_CTRLQ_GET_TP_ATTR,
 	UDMA_CMD_CTRLQ_MAX
+};
+
+enum udma_ctrlq_ubmem_opcode {
+	UDMA_CTRLQ_QUERY_UBMEM_INFO = 0x1,
 };
 
 enum udma_ctrlq_trans_type {
@@ -151,6 +156,10 @@ struct udma_ue_idx_table {
 	uint8_t ue_idx[UDMA_UE_NUM];
 };
 
+struct udma_ctrlq_ubmem_out_query {
+	uint32_t data[UDMA_CTRLQ_UBMEM_INFO_NUM];
+};
+
 struct udma_ctrlq_tp_attr {
 	uint32_t tp_attr_bitmap;
 	struct ubcore_tp_attr_value tp_attr_value;
@@ -200,6 +209,8 @@ void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpi
 				  bool is_need_flush);
 int udma_ctrlq_set_active_tp_ex(struct udma_dev *dev,
 				struct ubcore_active_tp_cfg *active_cfg);
+int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,

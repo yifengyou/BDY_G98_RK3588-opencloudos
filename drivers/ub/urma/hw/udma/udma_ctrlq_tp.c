@@ -592,6 +592,42 @@ static int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handl
 	return (ret == -EAGAIN) ? 0 : ret;
 }
 
+int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+#define UDMA_CTRLQ_SER_TYPE_UBMEM 0x5
+	struct udma_ctrlq_ubmem_out_query ubmem_info_out = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg ctrlq_msg = {};
+	uint32_t input_buf = 0;
+	int ret;
+
+	if (out->addr == 0 || out->len != sizeof(struct udma_ctrlq_ubmem_out_query)) {
+		dev_err(udev->dev, "query ubmem info failed, addr is NULL:%d, len:%u.\n",
+			out->addr == 0, out->len);
+		return -EINVAL;
+	}
+
+	ctrlq_msg.service_type = UDMA_CTRLQ_SER_TYPE_UBMEM;
+	ctrlq_msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	ctrlq_msg.need_resp = 1;
+	ctrlq_msg.in_size = sizeof(input_buf);
+	ctrlq_msg.in = (void *)&input_buf;
+	ctrlq_msg.out_size = sizeof(ubmem_info_out);
+	ctrlq_msg.out = &ubmem_info_out;
+	ctrlq_msg.opcode = UDMA_CTRLQ_QUERY_UBMEM_INFO;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &ctrlq_msg);
+	if (ret) {
+		dev_err(udev->dev, "get dev res send ctrlq msg failed, ret is %d.\n", ret);
+		return ret;
+	}
+
+	memcpy((void *)(uintptr_t)out->addr, &ubmem_info_out, sizeof(ubmem_info_out));
+
+	return ret;
+}
+
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
 		     const struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata)
