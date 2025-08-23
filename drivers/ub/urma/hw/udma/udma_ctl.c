@@ -11,6 +11,7 @@
 #include <uapi/ub/urma/udma/udma_abi.h>
 #include "udma_cmd.h"
 #include "udma_jetty.h"
+#include "udma_segment.h"
 #include "udma_jfs.h"
 #include "udma_jfc.h"
 #include "udma_db.h"
@@ -74,6 +75,206 @@ const char *udma_ae_aux_info_type_str[] = {
 	"LQC_TA_TQEP_WQE_ERR",
 	"LQC_TA_CQM_CQE_INNER_ALARM",
 };
+
+static int udma_get_sq_buf_ex(struct udma_dev *dev, struct udma_jetty_queue *sq,
+			      struct udma_jfs_cfg_ex *cfg_ex)
+{
+	struct ubcore_jfs_cfg *jfs_cfg;
+	uint32_t wqe_bb_depth;
+	uint32_t sqe_bb_cnt;
+	uint32_t size;
+
+	jfs_cfg = &cfg_ex->base_cfg;
+
+	if (!jfs_cfg->flag.bs.lock_free)
+		spin_lock_init(&sq->lock);
+	sq->max_inline_size = jfs_cfg->max_inline_data;
+	sq->max_sge_num = jfs_cfg->max_sge;
+	sq->tid = dev->tid;
+	sq->lock_free = jfs_cfg->flag.bs.lock_free;
+
+	sqe_bb_cnt = sq_cal_wqebb_num(SQE_WRITE_NOTIFY_CTL_LEN, jfs_cfg->max_sge);
+	if (sqe_bb_cnt > MAX_WQEBB_NUM)
+		sqe_bb_cnt = MAX_WQEBB_NUM;
+	sq->sqe_bb_cnt = sqe_bb_cnt;
+
+	wqe_bb_depth = roundup_pow_of_two(sqe_bb_cnt * jfs_cfg->depth);
+	sq->buf.entry_size = UDMA_JFS_WQEBB_SIZE;
+	size = ALIGN(wqe_bb_depth * sq->buf.entry_size, UDMA_HW_PAGE_SIZE);
+	sq->buf.entry_cnt = size >> WQE_BB_SIZE_SHIFT;
+
+	if (size != cfg_ex->cstm_cfg.sq.buff_size) {
+		dev_err(dev->dev, "buff size is wrong, buf size = %u.\n", size);
+		return -EINVAL;
+	}
+
+	if (cfg_ex->cstm_cfg.sq.buff == 0) {
+		dev_err(dev->dev, "cstm_cfg sq buff is wrong.\n");
+		return -EINVAL;
+	}
+
+	sq->buf.addr = (dma_addr_t)(uintptr_t)phys_to_virt((uint64_t)
+		       (uintptr_t)cfg_ex->cstm_cfg.sq.buff);
+	if (sq->buf.addr == 0) {
+		dev_err(dev->dev, "sq buff addr is wrong.\n");
+		return -EINVAL;
+	}
+
+	sq->buf.kva = (void *)(uintptr_t)sq->buf.addr;
+
+	sq->wrid = kcalloc(1, sq->buf.entry_cnt * sizeof(uint64_t), GFP_KERNEL);
+	if (!sq->wrid) {
+		sq->buf.kva = NULL;
+		sq->buf.addr = 0;
+		dev_err(dev->dev,
+			"failed to alloc wrid for jfs id = %u when entry cnt = %u.\n",
+			sq->id, sq->buf.entry_cnt);
+		return -ENOMEM;
+	}
+
+	udma_alloc_kernel_db(dev, sq);
+	sq->kva_curr = sq->buf.kva;
+
+	sq->trans_mode = jfs_cfg->trans_mode;
+
+	return 0;
+}
+
+static int udma_get_jfs_buf_ex(struct udma_dev *dev, struct udma_jfs *jfs,
+			       struct udma_jfs_cfg_ex *cfg_ex)
+{
+	int ret;
+
+	jfs->jfs_addr = (uintptr_t)&jfs->sq;
+
+	ret = udma_get_sq_buf_ex(dev, &jfs->sq, cfg_ex);
+	if (ret)
+		dev_err(dev->dev,
+			"failed to get sq buf in jfs process, ret = %d.\n", ret);
+
+	return ret;
+}
+
+static struct ubcore_jfs *udma_create_jfs_ex(struct ubcore_device *ub_dev,
+					     struct udma_jfs_cfg_ex *cfg_ex)
+{
+	struct ubcore_jfs_cfg *cfg = &cfg_ex->base_cfg;
+	struct udma_dev *dev = to_udma_dev(ub_dev);
+	struct ubase_mbx_attr attr = {};
+	struct udma_jetty_ctx ctx = {};
+	struct udma_jfs *jfs;
+	int ret;
+
+	ret = udma_verify_jfs_param(dev, cfg, true);
+	if (ret)
+		return NULL;
+
+	jfs = kcalloc(1, sizeof(*jfs), GFP_KERNEL);
+	if (!jfs)
+		return NULL;
+
+	dev_info(dev->dev, "start alloc id!\n");
+	ret = udma_alloc_jetty_id(dev, &jfs->sq.id, &dev->caps.jetty);
+	if (ret) {
+		dev_err(dev->dev, "alloc JFS id failed, ret = %d.\n", ret);
+		goto err_alloc_jfsn;
+	}
+	jfs->ubcore_jfs.jfs_id.id = jfs->sq.id;
+	jfs->ubcore_jfs.jfs_cfg = *cfg;
+	jfs->ubcore_jfs.ub_dev = ub_dev;
+	jfs->ubcore_jfs.uctx = NULL;
+	jfs->ubcore_jfs.jfae_handler = cfg_ex->jfae_handler;
+	jfs->mode = UDMA_KERNEL_STARS_JFS_TYPE;
+
+	ret = xa_err(xa_store(&dev->jetty_table.xa, jfs->sq.id, &jfs->sq, GFP_KERNEL));
+	if (ret) {
+		dev_err(dev->dev, "store jfs sq(%u) failed, ret = %d.\n",
+			jfs->sq.id, ret);
+		goto err_store_jfs_sq;
+	}
+
+	dev_info(dev->dev, "start get stars jfs buf!\n");
+	ret = udma_get_jfs_buf_ex(dev, jfs, cfg_ex);
+	if (ret)
+		goto err_alloc_jfs_id;
+
+	udma_set_query_flush_time(&jfs->sq, cfg->err_timeout);
+	jfs->sq.state = UBCORE_JETTY_STATE_READY;
+	udma_init_jfsc(dev, cfg, jfs, &ctx);
+	attr.tag = jfs->sq.id;
+	attr.op = UDMA_CMD_CREATE_JFS_CONTEXT;
+	ret = post_mailbox_update_ctx(dev, &ctx, sizeof(ctx), &attr);
+	if (ret) {
+		dev_err(dev->dev, "failed to upgrade JFSC, ret = %d.\n", ret);
+		goto err_update_ctx;
+	}
+
+	refcount_set(&jfs->ae_refcount, 1);
+	init_completion(&jfs->ae_comp);
+
+	if (dfx_switch)
+		udma_dfx_store_jfs_id(dev, jfs);
+
+	dev_info(dev->dev, "create stars jfs success!\n");
+
+	return &jfs->ubcore_jfs;
+
+err_update_ctx:
+	kfree(jfs->sq.wrid);
+err_alloc_jfs_id:
+	xa_erase(&dev->jetty_table.xa, jfs->sq.id);
+err_store_jfs_sq:
+	udma_adv_id_free(&dev->jetty_table.bitmap_table, jfs->sq.id, false);
+err_alloc_jfsn:
+	kfree(jfs);
+	return NULL;
+}
+
+static int udma_create_jfs_ops_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct udma_jfs_cfg_ex cfg_ex;
+	struct ubcore_jfs *jfs;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct udma_jfs_cfg_ex)) ||
+		udma_check_base_param(out->addr, out->len, sizeof(struct ubcore_jfs *))) {
+		dev_err(udev->dev, "param invalid in create jfs, in_len = %u, out_len = %u.\n",
+			in->len, out->len);
+		return -EINVAL;
+	}
+
+	memcpy(&cfg_ex, (void *)(uintptr_t)in->addr, sizeof(struct udma_jfs_cfg_ex));
+
+	jfs = udma_create_jfs_ex(dev, &cfg_ex);
+	if (jfs == NULL)
+		return -EFAULT;
+
+	memcpy((void *)(uintptr_t)out->addr, &jfs, sizeof(struct ubcore_jfs *));
+
+	return 0;
+}
+
+static int udma_delete_jfs_ops_ex(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubcore_jfs *jfs;
+
+	if (udma_check_base_param(in->addr, in->len, sizeof(struct ubcore_jfs *))) {
+		dev_err(udev->dev, "parameter invalid in delete jfs, len = %u.\n",
+			in->len);
+		return -EFAULT;
+	}
+	memcpy(&jfs, (void *)(uintptr_t)in->addr, sizeof(struct ubcore_jfs *));
+	if (jfs == NULL)
+		return -EINVAL;
+
+	if (udma_destroy_jfs(jfs))
+		return -EFAULT;
+
+	return 0;
+}
 
 static int udma_ctrlq_query_tp_sport(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
@@ -881,6 +1082,8 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 }
 
 static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
+	[UDMA_USER_CTL_CREATE_JFS_EX] = udma_create_jfs_ops_ex,
+	[UDMA_USER_CTL_DELETE_JFS_EX] = udma_delete_jfs_ops_ex,
 	[UDMA_USER_CTL_NPU_REGISTER_INFO_CB] = udma_register_npu_cb,
 	[UDMA_USER_CTL_NPU_UNREGISTER_INFO_CB] = udma_unregister_npu_cb,
 	[UDMA_USER_CTL_QUERY_TP_SPORT] = udma_ctrlq_query_tp_sport,

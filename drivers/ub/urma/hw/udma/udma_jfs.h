@@ -151,5 +151,10 @@ int udma_post_jfs_wr(struct ubcore_jfs *jfs, struct ubcore_jfs_wr *wr,
 		     struct ubcore_jfs_wr **bad_wr);
 void udma_flush_sq(struct udma_dev *udma_dev,
 		   struct udma_jetty_queue *sq, struct ubcore_cr *cr);
+void udma_dfx_store_jfs_id(struct udma_dev *udma_dev, struct udma_jfs *udma_jfs);
+void udma_init_jfsc(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
+		    struct udma_jfs *jfs, void *mb_buf);
+int udma_verify_jfs_param(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
+			  bool enable_stars);
 
 #endif /* __UDMA_JFS_H__ */

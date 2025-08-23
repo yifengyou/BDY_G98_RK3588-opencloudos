@@ -155,6 +155,40 @@ void udma_init_jfsc(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 	ctx->next_rcv_ssn = ctx->next_send_ssn;
 }
 
+int udma_verify_jfs_param(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
+			  bool enable_stars)
+{
+	if (!cfg->depth || cfg->depth > dev->caps.jfs.depth ||
+	    cfg->max_sge > dev->caps.jfs_sge || cfg->trans_mode == UBCORE_TP_RC) {
+		dev_err(dev->dev,
+			"jfs param is invalid, depth = %u, seg = %u, max_depth = %u, max_jfs_seg = %u, trans_mode = %u.\n",
+			cfg->depth, cfg->max_sge, dev->caps.jfs.depth,
+			dev->caps.jfs_sge, cfg->trans_mode);
+		return -EINVAL;
+	}
+
+	if (enable_stars && cfg->max_inline_data != 0 &&
+	    cfg->max_inline_data > dev->caps.jfs_inline_sz) {
+		dev_err(dev->dev, "jfs param is invalid, inline_data:%u, max_inline_len:%u.\n",
+			cfg->max_inline_data, dev->caps.jfs_inline_sz);
+		return -EINVAL;
+	}
+
+	if (enable_stars && cfg->max_rsge > dev->caps.jfs_rsge) {
+		dev_err(dev->dev, "jfs param is invalid, rsge:%u, max_rsge:%u.\n",
+			cfg->max_rsge, dev->caps.jfs_rsge);
+		return -EINVAL;
+	}
+
+	if (cfg->priority >= UDMA_MAX_PRIORITY) {
+		dev_err(dev->dev, "kernel mode jfs priority is out of range, priority is %u.\n",
+			cfg->priority);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 void udma_dfx_store_jfs_id(struct udma_dev *udma_dev, struct udma_jfs *udma_jfs)
 {
 	struct udma_dfx_jfs *jfs;
