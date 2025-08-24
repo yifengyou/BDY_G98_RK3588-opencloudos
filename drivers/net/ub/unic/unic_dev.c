@@ -574,6 +574,7 @@ static int unic_dev_init_mtu(struct unic_dev *unic_dev)
 
 static int unic_init_mac(struct unic_dev *unic_dev)
 {
+	struct unic_link_stats *record = &unic_dev->stats.link_record;
 	struct unic_mac *mac = &unic_dev->hw.mac;
 	int ret;
 
@@ -601,7 +602,15 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 		return ret;
 	}
 
+	mutex_init(&record->lock);
 	return 0;
+}
+
+static void unic_uninit_mac(struct unic_dev *unic_dev)
+{
+	struct unic_link_stats *record = &unic_dev->stats.link_record;
+
+	mutex_destroy(&record->lock);
 }
 
 int unic_set_mtu(struct unic_dev *unic_dev, int new_mtu)
@@ -822,11 +831,11 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 	ret = unic_init_dev_addr(priv);
 	if (ret)
-		goto err_uninit_vport;
+		goto unic_unint_mac;
 
 	ret = unic_init_channels_attr(priv);
 	if (ret)
-		goto err_uninit_vport;
+		goto unic_unint_mac;
 
 	ret = unic_init_channels(priv, priv->channels.num);
 	if (ret) {
@@ -840,6 +849,8 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 err_uninit_channels_attr:
 	unic_uninit_channels_attr(priv);
+unic_unint_mac:
+	unic_uninit_mac(priv);
 err_uninit_vport:
 	unic_uninit_vport(priv);
 destroy_lock:
@@ -854,6 +865,7 @@ static void unic_uninit_netdev_priv(struct net_device *netdev)
 
 	unic_uninit_channels(priv);
 	unic_uninit_channels_attr(priv);
+	unic_uninit_mac(priv);
 	unic_uninit_vport(priv);
 	mutex_destroy(&priv->act_info.mutex);
 }

@@ -182,8 +182,20 @@ struct unic_fec_stats {
 	struct unic_fec_stats_item	lane[UNIC_FEC_STATS_MAX_LANE];
 };
 
+#define LINK_STAT_MAX_IDX 10U
+struct unic_link_stats {
+	u64			link_up_cnt;
+	u64			link_down_cnt;
+	struct {
+		bool		link_status;
+		time64_t	link_tv_sec;
+	} stats[LINK_STAT_MAX_IDX];
+	struct mutex		lock; /* protects link record */
+};
+
 struct unic_stats {
 	struct unic_fec_stats			fec_stats;
+	struct unic_link_stats			link_record;
 };
 
 struct unic_addr_tbl {

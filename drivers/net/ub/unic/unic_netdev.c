@@ -164,6 +164,27 @@ static int unic_net_up(struct net_device *netdev)
 	return 0;
 }
 
+static void unic_link_status_record(struct net_device *netdev, bool linkup)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct unic_link_stats *record = &unic_dev->stats.link_record;
+	u64 idx, total;
+
+	mutex_lock(&record->lock);
+
+	if (linkup)
+		record->link_up_cnt++;
+	else
+		record->link_down_cnt++;
+
+	total = record->link_up_cnt + record->link_down_cnt;
+	idx = (total - 1) % LINK_STAT_MAX_IDX;
+	record->stats[idx].link_tv_sec = ktime_get_real_seconds();
+	record->stats[idx].link_status = linkup;
+
+	mutex_unlock(&record->lock);
+}
+
 static void unic_clear_fec_stats(struct unic_dev *unic_dev)
 {
 	struct unic_fec_stats *fec_stats = &unic_dev->stats.fec_stats;
@@ -194,6 +215,8 @@ void unic_link_status_change(struct net_device *netdev, bool linkup)
 out:
 	if (netif_msg_link(unic_dev))
 		unic_info(unic_dev, "%s.\n", linkup ? "link up" : "link down");
+
+	unic_link_status_record(netdev, linkup);
 }
 
 void unic_link_status_update(struct unic_dev *unic_dev)
