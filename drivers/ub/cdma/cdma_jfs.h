@@ -157,6 +157,19 @@ struct cdma_cas_wr {
 	};
 };
 
+struct cdma_faa_wr {
+	struct cdma_sge_info *dst; /* len in the sge is the length of FAA
+				    * operation, only support 4/8B
+				    */
+	struct cdma_sge_info *src; /* local address for destination original
+				    * value written back
+				    */
+	union {
+		u64 operand; /* Addend */
+		u64 operand_addr;
+	};
+};
+
 struct cdma_jfs_wr {
 	enum cdma_wr_opcode opcode;
 	union cdma_jfs_wr_flag flag;
@@ -165,6 +178,7 @@ struct cdma_jfs_wr {
 	union {
 		struct cdma_rw_wr rw;
 		struct cdma_cas_wr cas;
+		struct cdma_faa_wr faa;
 	};
 	struct cdma_jfs_wr *next;
 };

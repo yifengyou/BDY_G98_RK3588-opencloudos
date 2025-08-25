@@ -16,5 +16,7 @@ int cdma_read(struct cdma_dev *cdev, struct cdma_queue *queue,
 int cdma_cas(struct cdma_dev *cdev, struct cdma_queue *queue,
 	     struct dma_seg *local_seg, struct dma_seg *rmt_seg,
 	     struct dma_cas_data *data);
+int cdma_faa(struct cdma_dev *cdev, struct cdma_queue *queue,
+	     struct dma_seg *local_seg, struct dma_seg *rmt_seg, u64 add);
 
 #endif /* CDMA_HANDLE_H */

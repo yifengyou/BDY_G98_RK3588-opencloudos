@@ -40,6 +40,7 @@ enum cdma_sq_opcode {
 	CDMA_OPC_WRITE_WITH_NOTIFY = 0x5,
 	CDMA_OPC_READ = 0x6,
 	CDMA_OPC_CAS,
+	CDMA_OPC_FAA = 0xb,
 	CDMA_OPC_INVALID = 0x12,
 };
 

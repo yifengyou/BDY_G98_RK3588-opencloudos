@@ -150,3 +150,31 @@ int cdma_cas(struct cdma_dev *cdev, struct cdma_queue *queue,
 
 	return ret;
 }
+
+int cdma_faa(struct cdma_dev *cdev, struct cdma_queue *queue,
+	     struct dma_seg *local_seg, struct dma_seg *rmt_seg, u64 add)
+{
+	struct cdma_jfs_wr wr = { .opcode = CDMA_WR_OPC_FADD };
+	struct cdma_sge_info rmt_sge, local_sge;
+	struct cdma_jfs_wr *bad_wr = NULL;
+	int ret;
+
+	if (cdma_rw_check(cdev, rmt_seg, local_seg)) {
+		dev_err(cdev->dev, "faa param check failed.\n");
+		return -EINVAL;
+	}
+
+	cdma_fill_comm_wr(&wr, queue);
+
+	cdma_fill_sge(&rmt_sge, &local_sge, rmt_seg, local_seg);
+
+	wr.faa.src = &local_sge;
+	wr.faa.dst = &rmt_sge;
+	wr.faa.operand = add;
+
+	ret = cdma_post_jfs_wr((struct cdma_jfs *)queue->jfs, &wr, &bad_wr);
+	if (ret)
+		dev_err(cdev->dev, "post jfs for faa failed, ret = %d.\n", ret);
+
+	return ret;
+}

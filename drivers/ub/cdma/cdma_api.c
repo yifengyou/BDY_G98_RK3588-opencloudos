@@ -574,6 +574,30 @@ enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 }
 EXPORT_SYMBOL_GPL(dma_cas);
 
+enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			struct dma_seg *local_seg, int queue_id, u64 add)
+{
+	struct cdma_queue *cdma_queue = NULL;
+	struct cdma_dev *cdev = NULL;
+	int ret;
+
+	if (!dma_dev || !rmt_seg || !local_seg) {
+		pr_err("faa input parameters error.\n");
+		return DMA_STATUS_INVAL;
+	}
+
+	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	ret = cdma_faa(cdev, cdma_queue, local_seg, rmt_seg, add);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	return DMA_STATUS_OK;
+}
+EXPORT_SYMBOL_GPL(dma_faa);
+
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)
 {
