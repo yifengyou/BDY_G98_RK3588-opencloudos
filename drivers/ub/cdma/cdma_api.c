@@ -549,6 +549,31 @@ enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 }
 EXPORT_SYMBOL_GPL(dma_read);
 
+enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			struct dma_seg *local_seg, int queue_id,
+			struct dma_cas_data *data)
+{
+	struct cdma_queue *cdma_queue = NULL;
+	struct cdma_dev *cdev = NULL;
+	int ret;
+
+	if (!dma_dev || !rmt_seg || !local_seg || !data) {
+		pr_err("cas input parameters error.\n");
+		return DMA_STATUS_INVAL;
+	}
+
+	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	ret = cdma_cas(cdev, cdma_queue, local_seg, rmt_seg, data);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	return DMA_STATUS_OK;
+}
+EXPORT_SYMBOL_GPL(dma_cas);
+
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)
 {

@@ -28,6 +28,10 @@
 
 #define CDMA_DB_SIZE 64
 
+#define CDMA_ATOMIC_LEN_4 4
+#define CDMA_ATOMIC_LEN_8 8
+#define CDMA_ATOMIC_LEN_16 16
+
 #define SQE_PLD_TOKEN_ID_MASK GENMASK(19, 0)
 
 /* thanks to include/rdma/ib_verbs.h */
@@ -35,6 +39,7 @@ enum cdma_sq_opcode {
 	CDMA_OPC_WRITE = 0x3,
 	CDMA_OPC_WRITE_WITH_NOTIFY = 0x5,
 	CDMA_OPC_READ = 0x6,
+	CDMA_OPC_CAS,
 	CDMA_OPC_INVALID = 0x12,
 };
 

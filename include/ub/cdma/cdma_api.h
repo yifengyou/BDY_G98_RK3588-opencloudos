@@ -77,6 +77,11 @@ enum dma_status {
 	DMA_STATUS_INVAL,
 };
 
+struct dma_cas_data {
+	u64 compare_data;
+	u64 swap_data;
+};
+
 struct dma_notify_data {
 	struct dma_seg *notify_seg;
 	u64 notify_data;
@@ -116,6 +121,10 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 
 enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 			 struct dma_seg *local_seg, int queue_id);
+
+enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			struct dma_seg *local_seg, int queue_id,
+			struct dma_cas_data *data);
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr);

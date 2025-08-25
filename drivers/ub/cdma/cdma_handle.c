@@ -114,3 +114,39 @@ int cdma_read(struct cdma_dev *cdev, struct cdma_queue *queue,
 
 	return ret;
 }
+
+int cdma_cas(struct cdma_dev *cdev, struct cdma_queue *queue,
+	     struct dma_seg *local_seg, struct dma_seg *rmt_seg,
+	     struct dma_cas_data *data)
+{
+	struct cdma_jfs_wr wr = { .opcode = CDMA_WR_OPC_CAS };
+	struct cdma_sge_info rmt_sge, local_sge;
+	struct cdma_jfs_wr *bad_wr = NULL;
+	int ret;
+
+	if (cdma_rw_check(cdev, rmt_seg, local_seg)) {
+		dev_err(cdev->dev, "cas param check failed.\n");
+		return -EINVAL;
+	}
+
+	cdma_fill_comm_wr(&wr, queue);
+
+	cdma_fill_sge(&rmt_sge, &local_sge, rmt_seg, local_seg);
+
+	wr.cas.src = &local_sge;
+	wr.cas.dst = &rmt_sge;
+
+	if (local_sge.len <= CDMA_ATOMIC_LEN_8) {
+		wr.cas.cmp_data = data->compare_data;
+		wr.cas.swap_data = data->swap_data;
+	} else {
+		wr.cas.cmp_addr = data->compare_data;
+		wr.cas.swap_addr = data->swap_data;
+	}
+
+	ret = cdma_post_jfs_wr((struct cdma_jfs *)queue->jfs, &wr, &bad_wr);
+	if (ret)
+		dev_err(cdev->dev, "post jfs for cas failed, ret = %d.\n", ret);
+
+	return ret;
+}

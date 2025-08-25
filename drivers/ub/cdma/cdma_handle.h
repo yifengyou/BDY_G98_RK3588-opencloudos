@@ -13,5 +13,8 @@ int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
 	       struct dma_notify_data *data);
 int cdma_read(struct cdma_dev *cdev, struct cdma_queue *queue,
 	      struct dma_seg *local_seg, struct dma_seg *rmt_seg);
+int cdma_cas(struct cdma_dev *cdev, struct cdma_queue *queue,
+	     struct dma_seg *local_seg, struct dma_seg *rmt_seg,
+	     struct dma_cas_data *data);
 
 #endif /* CDMA_HANDLE_H */

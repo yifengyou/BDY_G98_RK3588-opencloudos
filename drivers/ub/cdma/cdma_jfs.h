@@ -15,6 +15,8 @@
 #define CDMA_JFS_MAX_SGE_NOTIFY 11
 #define CDMA_JFS_SGE_SIZE 16
 #define SQE_WRITE_NOTIFY_CTL_LEN 80
+#define CDMA_ATOMIC_SGE_NUM 1
+#define CDMA_ATOMIC_SGE_NUM_ATOMIC 2
 #define SQE_CTL_RMA_ADDR_OFFSET 32
 #define SQE_CTL_RMA_ADDR_BIT GENMASK(31, 0)
 #define SQE_NOTIFY_TOKEN_ID_FIELD 48
@@ -135,6 +137,26 @@ struct cdma_rw_wr {
 	u32 notify_tokenvalue;
 };
 
+struct cdma_cas_wr {
+	struct cdma_sge_info *dst; /* len in the sge is the length of CAS
+				    * operation, only support 8/16/32B
+				    */
+	struct cdma_sge_info *src; /* local address for destination original
+				    * value written back
+				    */
+	union {
+		u64 cmp_data; /* when the len is 8B, it indicates the compare value. */
+		u64 cmp_addr; /* when the len is 16/32B, it indicates the data address. */
+	};
+	union {
+		/* if destination value is the same as cmp_data,
+		 * destination value will be change to swap_data.
+		 */
+		u64 swap_data;
+		u64 swap_addr;
+	};
+};
+
 struct cdma_jfs_wr {
 	enum cdma_wr_opcode opcode;
 	union cdma_jfs_wr_flag flag;
@@ -142,6 +164,7 @@ struct cdma_jfs_wr {
 	u32 rmt_eid;
 	union {
 		struct cdma_rw_wr rw;
+		struct cdma_cas_wr cas;
 	};
 	struct cdma_jfs_wr *next;
 };
