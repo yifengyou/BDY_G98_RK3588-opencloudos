@@ -386,6 +386,9 @@ static void update_cpustat(void)
 	u8 tail = __this_cpu_read(cpustat_tail);
 	u16 sample_period_16 = get_16bit_precision(sample_period);
 
+	if (!irqtime_enabled())
+		return;
+
 	kcpustat_cpu_fetch(&kcpustat, smp_processor_id());
 
 	for (i = 0; i < NUM_STATS_PER_GROUP; i++) {
@@ -457,6 +460,9 @@ static bool need_counting_irqs(void)
 	u8 util;
 	int tail = __this_cpu_read(cpustat_tail);
 
+	if (!irqtime_enabled())
+		return false;
+
 	tail = (tail + NUM_HARDIRQ_REPORT - 1) % NUM_HARDIRQ_REPORT;
 	util = __this_cpu_read(cpustat_util[tail][STATS_HARDIRQ]);
 	return util > HARDIRQ_PERCENT_THRESH;
@@ -464,6 +470,9 @@ static bool need_counting_irqs(void)
 
 static void start_counting_irqs(void)
 {
+	if (!irqtime_enabled())
+		return;
+
 	if (!__this_cpu_read(snapshot_taken)) {
 		kstat_snapshot_irqs();
 		__this_cpu_write(snapshot_taken, true);
@@ -472,6 +481,9 @@ static void start_counting_irqs(void)
 
 static void stop_counting_irqs(void)
 {
+	if (!irqtime_enabled())
+		return;
+
 	__this_cpu_write(snapshot_taken, false);
 }
 
@@ -516,6 +528,9 @@ static void print_irq_counts(void)
 
 static void report_cpu_status(void)
 {
+	if (!irqtime_enabled())
+		return;
+
 	print_cpustat();
 	print_irq_counts();
 }
