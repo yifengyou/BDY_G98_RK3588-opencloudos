@@ -1,3 +1,8 @@
+* Mon Aug 25 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-39.1
+- rue/mm: improve pagecache_max event accuracy in pagecache limit feature
+- dist,spec: tk_private_val support private TS3 and private versions of TS4
+- rue/io: avoid deadlock of inode i_rwsem
+
 * Wed Aug 13 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-39
 - config: enable CONFIG_PRINTK_CALLER
 - block: pktcdvd: disable pktcdvd config
