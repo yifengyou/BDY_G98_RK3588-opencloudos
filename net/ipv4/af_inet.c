@@ -125,6 +125,10 @@
 #include <linux/tkernel.h>
 #include <linux/hook_frame.h>
 
+#if IS_ENABLED(CONFIG_OENETCLS)
+#include <linux/oenetcls.h>
+#endif
+
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
@@ -226,6 +230,9 @@ int __inet_listen_sk(struct sock *sk, int backlog)
 			tcp_set_state(sk, TCP_CLOSE);
 			return -EPERM;
 		}
+#if IS_ENABLED(CONFIG_OENETCLS)
+		oenetcls_cfg_rxcls(sk, 0);
+#endif
 	}
 	return 0;
 }

@@ -158,6 +158,12 @@
 #include "dev.h"
 #include "net-sysfs.h"
 
+#if IS_ENABLED(CONFIG_OENETCLS)
+#include <linux/oenetcls.h>
+const struct oecls_hook_ops __rcu *oecls_ops __read_mostly;
+EXPORT_SYMBOL_GPL(oecls_ops);
+#endif
+
 static DEFINE_SPINLOCK(ptype_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
@@ -4732,6 +4738,10 @@ bool rps_may_expire_flow(struct net_device *dev, u16 rxq_index,
 	bool expire = true;
 	unsigned int cpu;
 
+#if IS_ENABLED(CONFIG_OENETCLS)
+	if (oenetcls_may_expire_flow(dev, rxq_index, flow_id, filter_id, &expire))
+		return expire;
+#endif
 	rcu_read_lock();
 	flow_table = rcu_dereference(rxqueue->rps_flow_table);
 	if (flow_table && flow_id <= flow_table->mask) {
@@ -5813,6 +5823,11 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 		}
 	}
 #endif
+
+#if IS_ENABLED(CONFIG_OENETCLS)
+	oenetcls_skb_set_cpu(skb);
+#endif
+
 	ret = __netif_receive_skb(skb);
 	rcu_read_unlock();
 	return ret;
@@ -5847,6 +5862,11 @@ void netif_receive_skb_list_internal(struct list_head *head)
 		}
 	}
 #endif
+
+#if IS_ENABLED(CONFIG_OENETCLS)
+	oenetcls_skblist_set_cpu(head);
+#endif
+
 	__netif_receive_skb_list(head);
 	rcu_read_unlock();
 }
@@ -9978,6 +9998,9 @@ sync_lower:
 
 	return err < 0 ? 0 : 1;
 }
+#if IS_ENABLED(CONFIG_OENETCLS)
+EXPORT_SYMBOL(__netdev_update_features);
+#endif
 
 /**
  *	netdev_update_features - recalculate device features
