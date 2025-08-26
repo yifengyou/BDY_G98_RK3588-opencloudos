@@ -314,6 +314,11 @@ struct cdma_jfs_ctx {
 	u32 taack_nack_bm[32];
 };
 
+static inline struct cdma_jfs *to_cdma_jfs(struct cdma_base_jfs *jfs)
+{
+	return container_of(jfs, struct cdma_jfs, base_jfs);
+}
+
 struct cdma_base_jfs *cdma_create_jfs(struct cdma_dev *cdev,
 				      struct cdma_jfs_cfg *cfg,
 				      struct cdma_udata *udata);

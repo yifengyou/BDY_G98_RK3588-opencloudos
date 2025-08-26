@@ -11,6 +11,7 @@
 #include "cdma_chardev.h"
 #include <ub/ubase/ubase_comm_dev.h>
 #include "cdma_eq.h"
+#include "cdma_debugfs.h"
 #include "cdma_cmd.h"
 
 /* Enabling jfc_arm_mode will cause jfc to report cqe; otherwise, it will not. */
@@ -64,6 +65,11 @@ static int cdma_init_dev_info(struct auxiliary_device *auxdev, struct cdma_dev *
 	if (ret)
 		dev_warn(&auxdev->dev, "query eu failed, ret = %d.\n", ret);
 
+	ret = cdma_dbg_init(auxdev);
+	if (ret)
+		dev_warn(&auxdev->dev, "init cdma debugfs failed, ret = %d.\n",
+			 ret);
+
 	return 0;
 }
 
@@ -108,6 +114,7 @@ static void cdma_uninit_dev(struct auxiliary_device *auxdev)
 		return;
 	}
 
+	cdma_dbg_uninit(auxdev);
 	cdma_unregister_event(auxdev);
 	cdma_destroy_chardev(cdev);
 	cdma_destroy_dev(cdev);

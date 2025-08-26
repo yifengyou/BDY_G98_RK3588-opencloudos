@@ -4,9 +4,10 @@
 #ifndef __CDMA_QUEUE_H__
 #define __CDMA_QUEUE_H__
 
+#include <ub/cdma/cdma_api.h>
+
 struct cdma_dev;
 struct cdma_context;
-struct queue_cfg;
 
 enum cdma_queue_res_type {
 	QUEUE_RES_TP,

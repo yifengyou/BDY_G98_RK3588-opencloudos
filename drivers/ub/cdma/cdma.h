@@ -9,6 +9,7 @@
 #include <linux/cdev.h>
 #include <ub/ubus/ubus.h>
 #include <ub/ubase/ubase_comm_eq.h>
+#include "cdma_debugfs.h"
 #include <ub/cdma/cdma_api.h>
 
 extern u32 jfc_arm_mode;
@@ -163,6 +164,7 @@ struct cdma_dev {
 	struct auxiliary_device *adev;
 	struct cdma_chardev chardev;
 	struct cdma_caps caps;
+	struct cdma_dbgfs cdbgfs;
 
 	u32 eid;
 	u32 upi;
