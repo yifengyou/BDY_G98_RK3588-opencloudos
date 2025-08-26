@@ -715,6 +715,7 @@ static int __kprobes do_translation_fault(unsigned long far,
 	return 0;
 }
 
+#ifdef CONFIG_ALTRA_ERRATUM_82288
 static int copy_from_user_io(void *to, const void __user *from, unsigned long n)
 {
 	const u8 __user *src = from;
@@ -1665,6 +1666,7 @@ static int fixup_alignment(unsigned long addr, unsigned int esr,
 	}
 	return res;
 }
+#endif
 
 static int do_alignment_fault(unsigned long far, unsigned long esr,
 			      struct pt_regs *regs)
