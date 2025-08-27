@@ -1100,7 +1100,8 @@ static inline void adjust_coalesce(struct nvme_queue *nvmeq, struct request *req
 		/* lower threshold for big op */
 		int max_threshold = (req_size >= 8192) ? (max_coalesce_threshold>>1) : max_coalesce_threshold;
 		if (dev->is_coalescing != 1 && ((inflight > max_threshold) || (completed > min_completed_threshold))) {
-			if (rq_data_dir(req) == READ && req_size <32768) { /* no coalesce for write op or huge op*/
+			if ((rq_data_dir(req) == READ && req_size <32768) ||
+				(rq_data_dir(req) == WRITE && req_size <= 8192)) { /* no coalesce for write op or huge op*/
 				if (++nvmeq->up_cnt > hit_count_before_change) {
 					if (schedule_task_set_coalesce(ctrl, coalesce_value)) {
 						pr_debug("set coalesce, name:%s, qid=%hu, with io size:%u, op:%s, up_cnt:%d, sq_tail:%u, sq_head:%u, inflight:%u, completed:%u\n",
@@ -1121,7 +1122,8 @@ static inline void adjust_coalesce(struct nvme_queue *nvmeq, struct request *req
 		}
 
 		/* queues not so full, close coalesce interrupt */
-		if (dev->is_coalescing == 1 && (((inflight < min_coalesce_threshold) && (completed < min_completed_threshold))|| rq_data_dir(req) == WRITE)) {
+		if (dev->is_coalescing == 1 && (((inflight < min_coalesce_threshold) && (completed < min_completed_threshold))||
+			(rq_data_dir(req) == WRITE && req_size > 8192))) {
 			if (++nvmeq->down_cnt > hit_count_before_change) {
 				if (schedule_task_set_coalesce(ctrl, 0)) {
 					pr_debug("clear coalesce, name:%s, qid=%hu, with io size:%u, op:%s, down_cnt:%d, sq_tail:%u, sq_head:%u, inflight:%u, completed:%u.\n",
