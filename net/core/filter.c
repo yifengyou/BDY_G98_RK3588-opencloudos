@@ -12024,6 +12024,26 @@ bpf_skops_get_ingress_dst(struct bpf_sock_ops *skops_ctx)
 
 	return dst;
 }
+
+__bpf_kfunc int bpf_xdp_set_ingress_dst(struct xdp_md *xdp_ctx, void *dst__ign)
+{
+	struct xdp_buff *xdp = (struct xdp_buff *)xdp_ctx;
+	struct hisock_xdp_buff *hxdp = (struct hisock_xdp_buff *)xdp;
+	struct dst_entry *_dst = (struct dst_entry *)dst__ign;
+
+	if (!hxdp->skb)
+		return -EOPNOTSUPP;
+
+	if (!_dst || !virt_addr_valid(_dst))
+		return -EFAULT;
+
+	/* same as skb_valid_dst */
+	if (_dst->flags & DST_METADATA)
+		return -EINVAL;
+
+	skb_dst_set_noref(hxdp->skb, _dst);
+	return 0;
+}
 #endif
 __diag_pop();
 
@@ -12047,6 +12067,9 @@ BTF_SET8_END(bpf_kfunc_check_set_skb)
 
 BTF_SET8_START(bpf_kfunc_check_set_xdp)
 BTF_ID_FLAGS(func, bpf_dynptr_from_xdp)
+#ifdef CONFIG_HISOCK
+BTF_ID_FLAGS(func, bpf_xdp_set_ingress_dst)
+#endif
 BTF_SET8_END(bpf_kfunc_check_set_xdp)
 
 BTF_SET8_START(bpf_kfunc_check_set_sock_addr)
