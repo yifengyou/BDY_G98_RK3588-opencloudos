@@ -12004,6 +12004,27 @@ __bpf_kfunc int bpf_sock_addr_set_sun_path(struct bpf_sock_addr_kern *sa_kern,
 
 	return 0;
 }
+
+#ifdef CONFIG_HISOCK
+__bpf_kfunc struct dst_entry *
+bpf_skops_get_ingress_dst(struct bpf_sock_ops *skops_ctx)
+{
+	struct bpf_sock_ops_kern *skops = (struct bpf_sock_ops_kern *)skops_ctx;
+	struct sock *sk = skops->sk;
+	struct dst_entry *dst;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	if (!sk || !sk_fullsock(sk))
+		return NULL;
+
+	dst = rcu_dereference(sk->sk_rx_dst);
+	if (dst)
+		dst = dst_check(dst, 0);
+
+	return dst;
+}
+#endif
 __diag_pop();
 
 int bpf_dynptr_from_skb_rdonly(struct sk_buff *skb, u64 flags,
@@ -12032,6 +12053,12 @@ BTF_SET8_START(bpf_kfunc_check_set_sock_addr)
 BTF_ID_FLAGS(func, bpf_sock_addr_set_sun_path)
 BTF_SET8_END(bpf_kfunc_check_set_sock_addr)
 
+#ifdef CONFIG_HISOCK
+BTF_SET8_START(bpf_kfunc_check_set_sock_ops)
+BTF_ID_FLAGS(func, bpf_skops_get_ingress_dst, KF_RET_NULL)
+BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
+#endif
+
 static const struct btf_kfunc_id_set bpf_kfunc_set_skb = {
 	.owner = THIS_MODULE,
 	.set = &bpf_kfunc_check_set_skb,
@@ -12046,6 +12073,13 @@ static const struct btf_kfunc_id_set bpf_kfunc_set_sock_addr = {
 	.owner = THIS_MODULE,
 	.set = &bpf_kfunc_check_set_sock_addr,
 };
+
+#ifdef CONFIG_HISOCK
+static const struct btf_kfunc_id_set bpf_kfunc_set_sock_ops = {
+	.owner = THIS_MODULE,
+	.set = &bpf_kfunc_check_set_sock_ops,
+};
+#endif
 
 static int __init bpf_kfunc_init(void)
 {
@@ -12062,6 +12096,9 @@ static int __init bpf_kfunc_init(void)
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_LWT_SEG6LOCAL, &bpf_kfunc_set_skb);
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_NETFILTER, &bpf_kfunc_set_skb);
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_kfunc_set_xdp);
+#ifdef CONFIG_HISOCK
+	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_SOCK_OPS, &bpf_kfunc_set_sock_ops);
+#endif
 	return ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_CGROUP_SOCK_ADDR,
 						&bpf_kfunc_set_sock_addr);
 }
