@@ -360,6 +360,16 @@ config BPF_STREAM_PARSER
 	  Enabling this allows a TCP stream parser to be used with
 	  BPF_MAP_TYPE_SOCKMAP.
 
+config HISOCK
+	bool "enable HiSock Redirect Framework"
+	depends on INET
+	depends on CGROUP_BPF
+	depends on BPF_SYSCALL
+	default n
+	help
+	  Enalbe HiSock, which bypasses net filter rules for specific
+	  connections selected by bpf prog on both TX and RX directions.
+
 config NET_FLOW_LIMIT
 	bool
 	depends on RPS
