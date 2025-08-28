@@ -144,6 +144,11 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 	xdp->data_meta = meta_valid ? data : data + 1;
 }
 
+struct hisock_xdp_buff {
+	struct xdp_buff xdp;
+	struct sk_buff *skb;
+};
+
 /* Reserve memory area at end-of data area.
  *
  * This macro reserves tailroom in the XDP buffer by limiting the
