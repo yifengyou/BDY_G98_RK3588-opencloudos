@@ -12044,6 +12044,40 @@ __bpf_kfunc int bpf_xdp_set_ingress_dst(struct xdp_md *xdp_ctx, void *dst__ign)
 	skb_dst_set_noref(hxdp->skb, _dst);
 	return 0;
 }
+
+__bpf_kfunc int bpf_xdp_change_dev(struct xdp_md *xdp_ctx, u32 ifindex)
+{
+	struct xdp_buff *xdp = (struct xdp_buff *)xdp_ctx;
+	struct hisock_xdp_buff *hxdp = (void *)xdp;
+	struct net_device *dev;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	if (!hxdp->skb)
+		return -EOPNOTSUPP;
+
+	dev = dev_get_by_index_rcu(&init_net, ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	hxdp->skb->dev = dev;
+	return 0;
+}
+
+__bpf_kfunc int bpf_skb_change_dev(struct __sk_buff *skb_ctx, u32 ifindex)
+{
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct net_device *dev;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	dev = dev_get_by_index_rcu(&init_net, ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	skb->dev = dev;
+	return 0;
+}
 #endif
 __diag_pop();
 
@@ -12069,6 +12103,7 @@ BTF_SET8_START(bpf_kfunc_check_set_xdp)
 BTF_ID_FLAGS(func, bpf_dynptr_from_xdp)
 #ifdef CONFIG_HISOCK
 BTF_ID_FLAGS(func, bpf_xdp_set_ingress_dst)
+BTF_ID_FLAGS(func, bpf_xdp_change_dev)
 #endif
 BTF_SET8_END(bpf_kfunc_check_set_xdp)
 
@@ -12080,6 +12115,10 @@ BTF_SET8_END(bpf_kfunc_check_set_sock_addr)
 BTF_SET8_START(bpf_kfunc_check_set_sock_ops)
 BTF_ID_FLAGS(func, bpf_skops_get_ingress_dst, KF_RET_NULL)
 BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
+
+BTF_SET8_START(bpf_kfunc_check_set_hisock)
+BTF_ID_FLAGS(func, bpf_skb_change_dev)
+BTF_SET8_END(bpf_kfunc_check_set_hisock)
 #endif
 
 static const struct btf_kfunc_id_set bpf_kfunc_set_skb = {
@@ -12102,6 +12141,11 @@ static const struct btf_kfunc_id_set bpf_kfunc_set_sock_ops = {
 	.owner = THIS_MODULE,
 	.set = &bpf_kfunc_check_set_sock_ops,
 };
+
+static const struct btf_kfunc_id_set bpf_kfunc_set_hisock = {
+	.owner = THIS_MODULE,
+	.set = &bpf_kfunc_check_set_hisock,
+};
 #endif
 
 static int __init bpf_kfunc_init(void)
@@ -12121,6 +12165,7 @@ static int __init bpf_kfunc_init(void)
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_kfunc_set_xdp);
 #ifdef CONFIG_HISOCK
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_SOCK_OPS, &bpf_kfunc_set_sock_ops);
+	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_HISOCK, &bpf_kfunc_set_hisock);
 #endif
 	return ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_CGROUP_SOCK_ADDR,
 						&bpf_kfunc_set_sock_addr);
