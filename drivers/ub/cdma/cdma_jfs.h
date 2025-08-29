@@ -9,9 +9,13 @@
 #include "cdma_segment.h"
 
 #define MAX_WQEBB_NUM 4
+#define CDMA_SQE_RMT_EID_SIZE 4
 #define CDMA_JFS_WQEBB_SIZE 64
+#define SQE_NORMAL_CTL_LEN 48
 #define CDMA_JFS_SGE_SIZE 16
 #define SQE_WRITE_NOTIFY_CTL_LEN 80
+#define SQE_CTL_RMA_ADDR_OFFSET 32
+#define SQE_CTL_RMA_ADDR_BIT GENMASK(31, 0)
 
 #define CDMA_TA_TIMEOUT_128MS 128
 #define CDMA_TA_TIMEOUT_1000MS 1000
@@ -19,6 +23,45 @@
 #define CDMA_TA_TIMEOUT_64000MS 64000
 
 #define CDMA_RCV_SEND_MAX_DIFF 512U
+
+struct cdma_jfs_wqebb {
+	u32 value[16];
+};
+
+struct cdma_sqe_ctl {
+	/* DW0 */
+	u32 sqe_bb_idx : 16;
+	u32 place_odr : 2;
+	u32 comp_order : 1;
+	u32 fence : 1;
+	u32 se : 1;
+	u32 cqe : 1;
+	u32 inline_en : 1;
+	u32 rsv : 5;
+	u32 token_en : 1;
+	u32 rmt_jetty_type : 2;
+	u32 owner : 1;
+	/* DW1 */
+	u32 target_hint : 8;
+	u32 opcode : 8;
+	u32 rsv1 : 6;
+	u32 inline_msg_len : 10;
+	/* DW2 */
+	u32 tpn : 24;
+	u32 sge_num : 8;
+	/* DW3 */
+	u32 toid : 20;
+	u32 rsv2 : 12;
+	/* DW4~7 */
+	u32 rmt_eid[CDMA_SQE_RMT_EID_SIZE];
+	/* DW8 */
+	u32 rmt_token_value;
+	/* DW9~11 */
+	u32 rsv3;
+	u32 rmt_addr_l_or_token_id;
+	u32 rmt_addr_h_or_token_value;
+};
+
 
 union cdma_jfs_wr_flag {
 	struct {
@@ -60,6 +103,12 @@ struct cdma_sge_info {
 	u64 addr;
 	u32 len;
 	struct dma_seg *seg;
+};
+
+struct cdma_normal_sge {
+	u32 length;
+	u32 token_id;
+	u64 va;
 };
 
 struct cdma_sg {

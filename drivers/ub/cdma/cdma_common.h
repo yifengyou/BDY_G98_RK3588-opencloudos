@@ -30,6 +30,12 @@
 
 #define SQE_PLD_TOKEN_ID_MASK GENMASK(19, 0)
 
+/* thanks to include/rdma/ib_verbs.h */
+enum cdma_sq_opcode {
+	CDMA_OPC_WRITE = 0x3,
+	CDMA_OPC_INVALID = 0x12,
+};
+
 enum cdma_jfsc_mode {
 	CDMA_JFS_MODE,
 	CDMA_JETTY_MODE,

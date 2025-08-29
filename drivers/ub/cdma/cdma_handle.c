@@ -53,6 +53,8 @@ int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
 {
 	struct cdma_jfs_wr wr = { .opcode = CDMA_WR_OPC_WRITE };
 	struct cdma_sge_info rmt_sge, local_sge;
+	struct cdma_jfs_wr *bad_wr = NULL;
+	int ret;
 
 	if (cdma_rw_check(cdev, rmt_seg, local_seg)) {
 		dev_err(cdev->dev, "write param check failed.\n");
@@ -68,5 +70,9 @@ int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
 	wr.rw.dst.num_sge = 1;
 	wr.rw.dst.sge = &rmt_sge;
 
-	return 0;
+	ret = cdma_post_jfs_wr((struct cdma_jfs *)queue->jfs, &wr, &bad_wr);
+	if (ret)
+		dev_err(cdev->dev, "post jfs for write failed, ret = %d.\n", ret);
+
+	return ret;
 }
