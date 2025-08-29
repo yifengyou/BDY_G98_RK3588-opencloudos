@@ -121,6 +121,11 @@ struct cdma_base_jfc {
 	struct cdma_jfc_event jfc_event;
 };
 
+struct cdma_mn {
+	struct mmu_notifier mn;
+	struct mm_struct *mm;
+};
+
 struct cdma_file {
 	struct cdma_dev *cdev;
 	struct list_head list;
@@ -128,6 +133,7 @@ struct cdma_file {
 	struct cdma_context *uctx;
 	struct idr idr;
 	spinlock_t idr_lock;
+	struct cdma_mn mn_notifier;
 	struct kref ref;
 };
 

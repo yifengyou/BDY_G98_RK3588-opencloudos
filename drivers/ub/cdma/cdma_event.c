@@ -409,6 +409,7 @@ struct cdma_jfce *cdma_alloc_jfce(struct cdma_file *cfile)
 	jfce->fd = new_fd;
 	jfce->file = file;
 	jfce->cfile = cfile;
+	kref_get(&cfile->ref);
 	fd_install(new_fd, file);
 
 	return jfce;
@@ -655,6 +656,7 @@ struct cdma_jfae *cdma_alloc_jfae(struct cdma_file *cfile)
 	jfae->fd = fd;
 	jfae->file = file;
 	jfae->cfile = cfile;
+	kref_get(&cfile->ref);
 	fd_install(fd, file);
 
 	return jfae;

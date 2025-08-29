@@ -6,6 +6,11 @@
 #include <linux/idr.h>
 #include <linux/ummu_core.h>
 #include "cdma.h"
+#include "cdma_queue.h"
+#include "cdma_jfc.h"
+#include "cdma_jfs.h"
+#include "cdma_tp.h"
+#include "cdma_segment.h"
 #include "cdma_context.h"
 
 static void cdma_ctx_handle_free(struct cdma_dev *cdev,
@@ -132,4 +137,45 @@ void cdma_free_context(struct cdma_dev *cdev, struct cdma_context *ctx)
 	cdma_ctx_handle_free(cdev, ctx);
 	mutex_destroy(&ctx->pgdir_mutex);
 	kfree(ctx);
+}
+
+static void cdma_cleanup_queue_res(struct cdma_dev *cdev, struct cdma_context *ctx)
+{
+	struct cdma_table *queue_tbl = &cdev->queue_table;
+	struct cdma_queue *queue, *next_queue;
+
+	list_for_each_entry_safe(queue, next_queue, &ctx->queue_list, list) {
+		list_del(&queue->list);
+
+		if (queue->jfs)
+			cdma_delete_jfs(cdev, queue->jfs->id);
+
+		if (queue->tp)
+			cdma_delete_ctp(cdev, queue->tp->tp_id);
+
+		if (queue->jfc)
+			cdma_delete_jfc(cdev, queue->jfc->id, NULL);
+
+		spin_lock(&queue_tbl->lock);
+		idr_remove(&queue_tbl->idr_tbl.idr, queue->id);
+		spin_unlock(&queue_tbl->lock);
+		kfree(queue);
+	}
+}
+
+static void cdma_cleanup_segment_res(struct cdma_dev *cdev, struct cdma_context *ctx)
+{
+	struct cdma_segment *segment, *next_segment;
+
+	list_for_each_entry_safe(segment, next_segment, &ctx->seg_list, list) {
+		list_del(&segment->list);
+		cdma_unregister_seg(cdev, segment);
+	}
+}
+
+void cdma_cleanup_context_res(struct cdma_context *ctx)
+{
+	cdma_cleanup_queue_res(ctx->cdev, ctx);
+	cdma_cleanup_segment_res(ctx->cdev, ctx);
+	cdma_free_context(ctx->cdev, ctx);
 }
