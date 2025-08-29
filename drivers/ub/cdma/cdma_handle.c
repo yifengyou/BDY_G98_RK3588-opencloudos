@@ -49,7 +49,8 @@ static inline void cdma_fill_sge(struct cdma_sge_info *rmt_sge,
 }
 
 int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
-	       struct dma_seg *local_seg, struct dma_seg *rmt_seg)
+	       struct dma_seg *local_seg, struct dma_seg *rmt_seg,
+	       struct dma_notify_data *data)
 {
 	struct cdma_jfs_wr wr = { .opcode = CDMA_WR_OPC_WRITE };
 	struct cdma_sge_info rmt_sge, local_sge;
@@ -59,6 +60,14 @@ int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
 	if (cdma_rw_check(cdev, rmt_seg, local_seg)) {
 		dev_err(cdev->dev, "write param check failed.\n");
 		return -EINVAL;
+	}
+
+	if (data) {
+		wr.opcode = CDMA_WR_OPC_WRITE_NOTIFY;
+		wr.rw.notify_addr = data->notify_seg->sva;
+		wr.rw.notify_data = data->notify_data;
+		wr.rw.notify_tokenid = data->notify_seg->tid;
+		wr.rw.notify_tokenvalue = data->notify_seg->token_value;
 	}
 
 	cdma_fill_comm_wr(&wr, queue);

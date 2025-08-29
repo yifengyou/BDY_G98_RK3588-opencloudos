@@ -77,6 +77,11 @@ enum dma_status {
 	DMA_STATUS_INVAL,
 };
 
+struct dma_notify_data {
+	struct dma_seg *notify_seg;
+	u64 notify_data;
+};
+
 struct dma_device *dma_get_device_list(u32 *num_devices);
 
 void dma_free_device_list(struct dma_device *dev_list, u32 num_devices);
@@ -103,6 +108,11 @@ void dma_unimport_seg(struct dma_seg *dma_seg);
 
 enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 			  struct dma_seg *local_seg, int queue_id);
+
+enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
+				      struct dma_seg *rmt_seg,
+				      struct dma_seg *local_seg, int queue_id,
+				      struct dma_notify_data *data);
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr);

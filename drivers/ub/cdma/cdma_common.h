@@ -33,6 +33,7 @@
 /* thanks to include/rdma/ib_verbs.h */
 enum cdma_sq_opcode {
 	CDMA_OPC_WRITE = 0x3,
+	CDMA_OPC_WRITE_WITH_NOTIFY = 0x5,
 	CDMA_OPC_INVALID = 0x12,
 };
 

@@ -9,6 +9,7 @@
 #include "cdma.h"
 
 int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
-	       struct dma_seg *local_seg, struct dma_seg *rmt_seg);
+	       struct dma_seg *local_seg, struct dma_seg *rmt_seg,
+	       struct dma_notify_data *data);
 
 #endif /* CDMA_HANDLE_H */

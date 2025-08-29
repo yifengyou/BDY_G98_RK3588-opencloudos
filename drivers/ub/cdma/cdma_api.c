@@ -491,13 +491,39 @@ enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	if (ret)
 		return DMA_STATUS_INVAL;
 
-	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg);
+	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, NULL);
 	if (ret)
 		return DMA_STATUS_INVAL;
 
 	return DMA_STATUS_OK;
 }
 EXPORT_SYMBOL_GPL(dma_write);
+
+enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
+				      struct dma_seg *rmt_seg,
+				      struct dma_seg *local_seg, int queue_id,
+				      struct dma_notify_data *data)
+{
+	struct cdma_queue *cdma_queue = NULL;
+	struct cdma_dev *cdev = NULL;
+	int ret;
+
+	if (!dma_dev || !rmt_seg || !local_seg || !data || !data->notify_seg) {
+		pr_err("write with notify input parameters error.\n");
+		return DMA_STATUS_INVAL;
+	}
+
+	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, data);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	return DMA_STATUS_OK;
+}
+EXPORT_SYMBOL_GPL(dma_write_with_notify);
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)

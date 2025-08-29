@@ -564,6 +564,8 @@ static u8 cdma_get_jfs_opcode(enum cdma_wr_opcode opcode)
 	switch (opcode) {
 	case CDMA_WR_OPC_WRITE:
 		return CDMA_OPC_WRITE;
+	case CDMA_WR_OPC_WRITE_NOTIFY:
+		return CDMA_OPC_WRITE_WITH_NOTIFY;
 	default:
 		return CDMA_OPC_INVALID;
 	}
@@ -577,7 +579,13 @@ static inline u32 cdma_get_normal_sge_num(u8 opcode, struct cdma_sqe_ctl *tmp_sq
 static bool cdma_k_check_sge_num(u8 opcode, struct cdma_jetty_queue *sq,
 				 struct cdma_jfs_wr *wr)
 {
-	return wr->rw.src.num_sge > sq->max_sge_num;
+	switch (opcode) {
+	case CDMA_OPC_WRITE_WITH_NOTIFY:
+		return wr->rw.src.num_sge > CDMA_JFS_MAX_SGE_NOTIFY ||
+		       wr->rw.src.num_sge > sq->max_sge_num;
+	default:
+		return wr->rw.src.num_sge > sq->max_sge_num;
+	}
 }
 
 static int cdma_fill_sw_sge(struct cdma_sqe_ctl *sqe_ctl,
@@ -591,6 +599,7 @@ static int cdma_fill_sw_sge(struct cdma_sqe_ctl *sqe_ctl,
 
 	switch (wr->opcode) {
 	case CDMA_WR_OPC_WRITE:
+	case CDMA_WR_OPC_WRITE_NOTIFY:
 		sge_info = wr->rw.src.sge;
 		num_sge = wr->rw.src.num_sge;
 		break;
@@ -614,6 +623,9 @@ static int cdma_fill_sw_sge(struct cdma_sqe_ctl *sqe_ctl,
 
 static inline u32 cdma_get_ctl_len(u8 opcode)
 {
+	if (opcode == CDMA_OPC_WRITE_WITH_NOTIFY)
+		return SQE_WRITE_NOTIFY_CTL_LEN;
+
 	return SQE_NORMAL_CTL_LEN;
 }
 
@@ -621,6 +633,7 @@ static int cdma_k_fill_write_sqe(struct cdma_dev *cdev,
 				 struct cdma_sqe_ctl *sqe_ctl,
 				 struct cdma_jfs_wr *wr)
 {
+	struct cdma_token_info *token_info;
 	struct cdma_sge_info *sge_info;
 	struct cdma_normal_sge *sge;
 	u32 ctrl_len;
@@ -643,6 +656,18 @@ static int cdma_k_fill_write_sqe(struct cdma_dev *cdev,
 		(sge_info[0].addr >> (u32)SQE_CTL_RMA_ADDR_OFFSET) &
 			(u32)SQE_CTL_RMA_ADDR_BIT;
 
+	if (sqe_ctl->opcode == CDMA_OPC_WRITE_WITH_NOTIFY) {
+		token_info = (struct cdma_token_info *)
+				((void *)sqe_ctl + SQE_NOTIFY_TOKEN_ID_FIELD);
+		token_info->token_id = wr->rw.notify_tokenid;
+		token_info->token_value = wr->rw.notify_tokenvalue;
+
+		memcpy((void *)sqe_ctl + SQE_NOTIFY_ADDR_FIELD,
+			&wr->rw.notify_addr, sizeof(u64));
+		memcpy((void *)sqe_ctl + SQE_ATOMIC_DATA_FIELD,
+			&wr->rw.notify_data, sizeof(u64));
+	}
+
 	return 0;
 }
 
@@ -652,6 +677,7 @@ static int cdma_fill_normal_sge(struct cdma_dev *cdev,
 {
 	switch (wr->opcode) {
 	case CDMA_WR_OPC_WRITE:
+	case CDMA_WR_OPC_WRITE_NOTIFY:
 		return cdma_k_fill_write_sqe(cdev, sqe_ctl, wr);
 	default:
 		dev_err(cdev->dev, "cdma wr opcode invalid, opcode = %u.\n",

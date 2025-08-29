@@ -12,10 +12,14 @@
 #define CDMA_SQE_RMT_EID_SIZE 4
 #define CDMA_JFS_WQEBB_SIZE 64
 #define SQE_NORMAL_CTL_LEN 48
+#define CDMA_JFS_MAX_SGE_NOTIFY 11
 #define CDMA_JFS_SGE_SIZE 16
 #define SQE_WRITE_NOTIFY_CTL_LEN 80
 #define SQE_CTL_RMA_ADDR_OFFSET 32
 #define SQE_CTL_RMA_ADDR_BIT GENMASK(31, 0)
+#define SQE_NOTIFY_TOKEN_ID_FIELD 48
+#define SQE_NOTIFY_ADDR_FIELD 56
+#define SQE_ATOMIC_DATA_FIELD 64
 
 #define CDMA_TA_TIMEOUT_128MS 128
 #define CDMA_TA_TIMEOUT_1000MS 1000
@@ -26,6 +30,12 @@
 
 struct cdma_jfs_wqebb {
 	u32 value[16];
+};
+
+struct cdma_token_info {
+	u32 token_id : 20;
+	u32 rsv : 12;
+	u32 token_value;
 };
 
 struct cdma_sqe_ctl {
@@ -61,7 +71,6 @@ struct cdma_sqe_ctl {
 	u32 rmt_addr_l_or_token_id;
 	u32 rmt_addr_h_or_token_value;
 };
-
 
 union cdma_jfs_wr_flag {
 	struct {
