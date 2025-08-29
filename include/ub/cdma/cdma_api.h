@@ -114,6 +114,9 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 				      struct dma_seg *local_seg, int queue_id,
 				      struct dma_notify_data *data);
 
+enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			 struct dma_seg *local_seg, int queue_id);
+
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr);
 

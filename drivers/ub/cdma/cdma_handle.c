@@ -85,3 +85,32 @@ int cdma_write(struct cdma_dev *cdev, struct cdma_queue *queue,
 
 	return ret;
 }
+
+int cdma_read(struct cdma_dev *cdev, struct cdma_queue *queue,
+	      struct dma_seg *local_seg, struct dma_seg *rmt_seg)
+{
+	struct cdma_jfs_wr wr = { .opcode = CDMA_WR_OPC_READ };
+	struct cdma_sge_info rmt_sge, local_sge;
+	struct cdma_jfs_wr *bad_wr = NULL;
+	int ret;
+
+	if (cdma_rw_check(cdev, rmt_seg, local_seg)) {
+		dev_err(cdev->dev, "read param check failed.\n");
+		return -EINVAL;
+	}
+
+	cdma_fill_comm_wr(&wr, queue);
+
+	cdma_fill_sge(&rmt_sge, &local_sge, rmt_seg, local_seg);
+
+	wr.rw.src.num_sge = 1;
+	wr.rw.src.sge = &rmt_sge;
+	wr.rw.dst.num_sge = 1;
+	wr.rw.dst.sge = &local_sge;
+
+	ret = cdma_post_jfs_wr((struct cdma_jfs *)queue->jfs, &wr, &bad_wr);
+	if (ret)
+		dev_err(cdev->dev, "post jfs for read failed, ret = %d.\n", ret);
+
+	return ret;
+}
