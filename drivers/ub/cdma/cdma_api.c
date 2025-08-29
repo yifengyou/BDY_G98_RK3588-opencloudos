@@ -11,6 +11,7 @@
 #include "cdma_queue.h"
 #include "cdma_jfc.h"
 #include "cdma.h"
+#include "cdma_handle.h"
 #include <ub/cdma/cdma_api.h>
 
 struct dma_device *dma_get_device_list(u32 *num_devices)
@@ -436,6 +437,67 @@ void dma_unimport_seg(struct dma_seg *dma_seg)
 	cdma_unimport_seg(dma_seg);
 }
 EXPORT_SYMBOL_GPL(dma_unimport_seg);
+
+static int cdma_param_transfer(struct dma_device *dma_dev, int queue_id,
+			       struct cdma_dev **cdev,
+			       struct cdma_queue **cdma_queue)
+{
+	struct cdma_queue *tmp_q;
+	struct cdma_dev *tmp_dev;
+	u32 eid;
+
+	eid = dma_dev->attr.eid.dw0;
+	tmp_dev = get_cdma_dev_by_eid(eid);
+	if (!tmp_dev) {
+		pr_err("get cdma dev failed, eid = 0x%x.\n", eid);
+		return -EINVAL;
+	}
+
+	if (tmp_dev->status == CDMA_SUSPEND) {
+		pr_warn("cdma device is not prepared, eid = 0x%x.\n", eid);
+		return -EINVAL;
+	}
+
+	tmp_q = cdma_find_queue(tmp_dev, queue_id);
+	if (!tmp_q) {
+		dev_err(tmp_dev->dev, "get resource failed.\n");
+		return -EINVAL;
+	}
+
+	if (!tmp_q->tp || !tmp_q->jfs || !tmp_q->jfc) {
+		dev_err(tmp_dev->dev, "get jetty parameters failed.\n");
+		return -EFAULT;
+	}
+
+	*cdev = tmp_dev;
+	*cdma_queue = tmp_q;
+
+	return 0;
+}
+
+enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			  struct dma_seg *local_seg, int queue_id)
+{
+	struct cdma_queue *cdma_queue = NULL;
+	struct cdma_dev *cdev = NULL;
+	int ret;
+
+	if (!dma_dev || !rmt_seg || !local_seg) {
+		pr_err("write input parameters error.\n");
+		return DMA_STATUS_INVAL;
+	}
+
+	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg);
+	if (ret)
+		return DMA_STATUS_INVAL;
+
+	return DMA_STATUS_OK;
+}
+EXPORT_SYMBOL_GPL(dma_write);
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)

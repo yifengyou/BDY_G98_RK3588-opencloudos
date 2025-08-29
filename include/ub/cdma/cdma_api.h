@@ -72,6 +72,11 @@ struct dma_context {
 	u32 tid; /* data valid only in bit 0-19 */
 };
 
+enum dma_status {
+	DMA_STATUS_OK,
+	DMA_STATUS_INVAL,
+};
+
 struct dma_device *dma_get_device_list(u32 *num_devices);
 
 void dma_free_device_list(struct dma_device *dev_list, u32 num_devices);
@@ -95,6 +100,9 @@ void dma_unregister_seg(struct dma_device *dma_dev, struct dma_seg *dma_seg);
 struct dma_seg *dma_import_seg(struct dma_seg_cfg *cfg);
 
 void dma_unimport_seg(struct dma_seg *dma_seg);
+
+enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
+			  struct dma_seg *local_seg, int queue_id);
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr);

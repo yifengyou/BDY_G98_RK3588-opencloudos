@@ -121,6 +121,15 @@ struct cdma_base_jfc {
 	struct cdma_jfc_event jfc_event;
 };
 
+enum cdma_wr_opcode {
+	CDMA_WR_OPC_WRITE = 0x00,
+	CDMA_WR_OPC_WRITE_NOTIFY = 0x02,
+	CDMA_WR_OPC_READ = 0x10,
+	CDMA_WR_OPC_CAS = 0x20,
+	CDMA_WR_OPC_FADD = 0x22,
+	CDMA_WR_OPC_LAST
+};
+
 struct cdma_mn {
 	struct mmu_notifier mn;
 	struct mm_struct *mm;

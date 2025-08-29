@@ -20,6 +20,74 @@
 
 #define CDMA_RCV_SEND_MAX_DIFF 512U
 
+union cdma_jfs_wr_flag {
+	struct {
+		/* 0: There is no order with other WR.
+		 * 1: relax order.
+		 * 2: strong order.
+		 * 3: reserve.
+		 */
+		u32 place_order : 2;
+		/* 0: There is no completion order with other WR
+		 * 1: Completion order with previous WR.
+		 */
+		u32 comp_order : 1;
+		/* 0: There is no fence.
+		 * 1: Fence with previous read and atomic WR
+		 */
+		u32 fence : 1;
+		/* 0: not solicited.
+		 * 1: solicited. It will trigger an event
+		 * on remote side
+		 */
+		u32 solicited_enable : 1;
+		/* 0: Do not notify local process
+		 * after the task is complete.
+		 * 1: Notify local process
+		 * after the task is completed.
+		 */
+		u32 complete_enable : 1;
+		/* 0: No inline.
+		 * 1: Inline data.
+		 */
+		u32 inline_flag : 1;
+		u32 reserved : 25;
+	} bs;
+	u32 value;
+};
+
+struct cdma_sge_info {
+	u64 addr;
+	u32 len;
+	struct dma_seg *seg;
+};
+
+struct cdma_sg {
+	struct cdma_sge_info *sge;
+	u32 num_sge;
+};
+
+struct cdma_rw_wr {
+	struct cdma_sg src;
+	struct cdma_sg dst;
+	u8 target_hint; /* hint of jetty in a target jetty group */
+	u64 notify_data; /* notify data or immeditate data in host byte order */
+	u64 notify_addr;
+	u32 notify_tokenid;
+	u32 notify_tokenvalue;
+};
+
+struct cdma_jfs_wr {
+	enum cdma_wr_opcode opcode;
+	union cdma_jfs_wr_flag flag;
+	u32 tpn;
+	u32 rmt_eid;
+	union {
+		struct cdma_rw_wr rw;
+	};
+	struct cdma_jfs_wr *next;
+};
+
 struct cdma_jfs {
 	struct cdma_base_jfs base_jfs;
 	struct cdma_dev *dev;
@@ -155,5 +223,7 @@ struct cdma_base_jfs *cdma_create_jfs(struct cdma_dev *cdev,
 				      struct cdma_jfs_cfg *cfg,
 				      struct cdma_udata *udata);
 int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id);
+int cdma_post_jfs_wr(struct cdma_jfs *jfs, struct cdma_jfs_wr *wr,
+		     struct cdma_jfs_wr **bad_wr);
 
 #endif
