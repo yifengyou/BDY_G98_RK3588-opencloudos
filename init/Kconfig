@@ -698,6 +698,17 @@ config PSI_DEFAULT_DISABLED
 
 	  Say N if unsure.
 
+config PSI_DYN_SWITCH
+	bool "PSI dynamic switches"
+	default y
+	depends on PSI
+	help
+	  Select this option to enable dynamic PSI switches, like
+	  different types of PSI information acquirement or default
+	  cgroup PSI enabled.
+
+	  If in doubt, say N here.
+
 endmenu # "CPU/Task time and stats accounting"
 
 config CPU_ISOLATION

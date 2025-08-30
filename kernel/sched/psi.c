@@ -141,6 +141,17 @@ static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
 static DEFINE_STATIC_KEY_TRUE(psi_cgroups_enabled);
+#ifdef CONFIG_PSI_DYN_SWITCH
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
+										  (1U << PSI_MEM) |
+										  (1U << PSI_IRQ);
+#else
+unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
+										  (1U << PSI_MEM);
+#endif
+unsigned int __percpu *percpu_psi_dyn_stat_types;
+#endif
 
 #ifdef CONFIG_PSI_DEFAULT_DISABLED
 static bool psi_enable;
@@ -213,6 +224,16 @@ void __init psi_init(void)
 
 	if (!cgroup_psi_enabled())
 		static_branch_disable(&psi_cgroups_enabled);
+
+#ifdef CONFIG_PSI_DYN_SWITCH
+	int cpu;
+	percpu_psi_dyn_stat_types = alloc_percpu(unsigned int);
+	if (!percpu_psi_dyn_stat_types)
+		panic("out of memory in psi_init!\n");
+	for_each_possible_cpu(cpu) {
+		*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) = sysctl_psi_dyn_stat_types;
+	}
+#endif
 
 	psi_period = jiffies_to_nsecs(PSI_FREQ);
 	group_init(&psi_system);
@@ -837,14 +858,16 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	 * the state mask. Clear, set, or carry the current state if
 	 * no changes are requested.
 	 */
-	if (unlikely(clear & TSK_ONCPU)) {
-		state_mask = 0;
-		clear &= ~TSK_ONCPU;
-	} else if (unlikely(set & TSK_ONCPU)) {
-		state_mask = PSI_ONCPU;
-		set &= ~TSK_ONCPU;
-	} else {
-		state_mask = groupc->state_mask & PSI_ONCPU;
+	if (unlikely(psi_dyn_stat_cpu(cpu))) {
+		if (unlikely(clear & TSK_ONCPU)) {
+			state_mask = 0;
+			clear &= ~TSK_ONCPU;
+		} else if (unlikely(set & TSK_ONCPU)) {
+			state_mask = PSI_ONCPU;
+			set &= ~TSK_ONCPU;
+		} else {
+			state_mask = groupc->state_mask & PSI_ONCPU;
+		}
 	}
 
 	/*
@@ -887,6 +910,9 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	}
 
 	for (s = 0; s < NR_PSI_STATES; s++) {
+		if (!psi_dyn_stat_cpu(cpu) && (s == PSI_CPU_SOME || s == PSI_CPU_FULL))
+			continue;
+
 		if (psi_use_legacy()) {
 			if (test_state_legacy(groupc->tasks, s))
 				state_mask |= (1 << s);
@@ -905,7 +931,7 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	 * task in a cgroup is in_memstall, the corresponding groupc
 	 * on that cpu is in PSI_MEM_FULL state.
 	 */
-	if (unlikely(task == cpu_curr(cpu) && task->in_memstall))
+	if (unlikely(task == cpu_curr(cpu) && (task->psi_flags & TSK_MEMSTALL_RUNNING)))
 		state_mask |= (1 << PSI_MEM_FULL);
 
 	record_times(groupc, now);
@@ -1036,8 +1062,9 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		return;
 	}
 
-	if (next->pid) {
-		psi_flags_change(next, 0, TSK_ONCPU);
+	if (next->pid && next->in_memstall) {
+		int set = psi_dyn_stat_cpu(cpu) ? TSK_ONCPU : 0;
+		psi_flags_change(next, 0, set);
 		/*
 		 * Set TSK_ONCPU on @next's cgroups. If @next shares any
 		 * ancestors with @prev, those will already have @prev's
@@ -1051,12 +1078,12 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				break;
 			}
 
-			psi_group_change(next, group, cpu, 0, TSK_ONCPU, true);
+			psi_group_change(next, group, cpu, 0, set, true);
 		} while ((group = group->parent));
 	}
 
 	if (prev->pid) {
-		int clear = TSK_ONCPU, set = 0;
+		int clear = psi_dyn_stat_cpu(cpu) ? TSK_ONCPU : 0, set = 0;
 		bool wake_clock = true;
 
 		/*
@@ -1083,7 +1110,18 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				wake_clock = false;
 		}
 
+		if (clear == set)
+			return;
+
 		psi_flags_change(prev, clear, set);
+
+		if (!psi_dyn_stat_cpu(cpu)) {
+			group = task_psi_group(prev);
+			do {
+				psi_group_change(prev, group, cpu, clear, set, wake_clock);
+			} while ((group = group->parent));
+			return;
+		}
 
 		group = task_psi_group(prev);
 		do {
@@ -1760,6 +1798,54 @@ static const struct proc_ops psi_irq_proc_ops = {
 	.proc_poll	= psi_fop_poll,
 	.proc_release	= psi_fop_release,
 };
+#endif
+
+#ifdef CONFIG_PSI_DYN_SWITCH
+static void rebuild_psi_cpu_data(bool set)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct rq *rq = cpu_rq(cpu);
+		struct rq_flags rf;
+
+		rq_lock_irq(rq, &rf);
+		if (set) {
+			*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) |= (1U << PSI_CPU);
+			psi_task_change(rq->curr, 0, TSK_ONCPU);
+		} else {
+			*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) &= ~(1U << PSI_CPU);
+			psi_task_change(rq->curr, TSK_ONCPU, 0);
+		}
+		rq_unlock_irq(rq, &rf);
+	}
+}
+
+int psi_dyn_stat_handler(struct ctl_table *table, int write, void *buffer,
+		size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table t;
+	unsigned int psi_stat, old_psi_stat;
+	int ret;
+
+	if (write) {
+		old_psi_stat = sysctl_psi_dyn_stat_types;
+		t = *table;
+		t.data = &psi_stat;
+		ret = proc_dointvec_minmax(&t, write, buffer, lenp, ppos);
+		if (ret)
+			return ret;
+		sysctl_psi_dyn_stat_types = psi_stat;
+		if (!((psi_stat ^ old_psi_stat) & (1 << PSI_CPU))) {
+			return 0;
+		}
+		rebuild_psi_cpu_data(!!(sysctl_psi_dyn_stat_types & (1 << PSI_CPU)));
+	} else {
+		ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	}
+
+	return ret;
+}
 #endif
 
 static int __init psi_proc_init(void)
