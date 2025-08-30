@@ -148,13 +148,80 @@ static int unic_register_crq_event(struct auxiliary_device *adev)
 	return 0;
 }
 
+static void unic_unregister_ae_event(struct auxiliary_device *adev,
+				     u8 asyn_event_num)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+	u8 i;
+
+	for (i = 0; i < asyn_event_num; i++)
+		ubase_event_unregister(adev, &unic_dev->ae_nbs[i]);
+}
+
+static int unic_ae_jetty_level_error(struct notifier_block *nb,
+				     unsigned long event, void *data)
+{
+	struct ubase_event_nb *ev_nb = container_of(nb,
+						    struct ubase_event_nb, nb);
+	struct auxiliary_device *adev = (struct auxiliary_device *)ev_nb->back;
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+	struct ubase_aeq_notify_info *info = data;
+	u32 queue_num;
+
+	/* Normally, UNIC does not report such abnormal events,
+	 * but in order to maintain its scalability,
+	 * unic reserves the reset processing of such events.
+	 */
+	queue_num = info->aeqe->event.queue_event.num;
+	unic_err(unic_dev,
+		 "recv jetty level error, event_type = 0x%x, sub_type = 0x%x, queue_num = %u.\n",
+		 info->event_type, info->sub_type, queue_num);
+
+	ubase_reset_event(adev, UBASE_UE_RESET);
+
+	return 0;
+}
+
+static int unic_register_ae_event(struct auxiliary_device *adev)
+{
+	struct ubase_event_nb unic_ae_nbs[UNIC_AE_LEVEL_NUM] = {
+		{
+			UBASE_DRV_UNIC,
+			UBASE_EVENT_TYPE_JETTY_LEVEL_ERROR,
+			{ unic_ae_jetty_level_error },
+			adev
+		},
+	};
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+	int ret;
+	u8 i;
+
+	for (i = 0; i < ARRAY_SIZE(unic_ae_nbs); i++) {
+		unic_dev->ae_nbs[i] = unic_ae_nbs[i];
+		ret = ubase_event_register(adev, &unic_dev->ae_nbs[i]);
+		if (ret) {
+			dev_err(adev->dev.parent,
+				"failed to register asyn event[%u], ret = %d.\n",
+				unic_dev->ae_nbs[i].event_type, ret);
+			unic_unregister_ae_event(adev, i);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 int unic_register_event(struct auxiliary_device *adev)
 {
 	int ret;
 
-	ret = unic_register_crq_event(adev);
+	ret = unic_register_ae_event(adev);
 	if (ret)
 		return ret;
+
+	ret = unic_register_crq_event(adev);
+	if (ret)
+		goto unregister_ae;
 
 	ret = unic_register_ctrlq_event(adev);
 	if (ret)
@@ -167,6 +234,9 @@ int unic_register_event(struct auxiliary_device *adev)
 
 unregister_crq:
 	unic_unregister_crq_event(adev, ARRAY_SIZE(unic_crq_events));
+unregister_ae:
+	unic_unregister_ae_event(adev, UNIC_AE_LEVEL_NUM);
+
 	return ret;
 }
 
@@ -176,4 +246,5 @@ void unic_unregister_event(struct auxiliary_device *adev)
 	ubase_port_unregister(adev);
 	unic_unregister_ctrlq_event(adev, ARRAY_SIZE(unic_ctrlq_events));
 	unic_unregister_crq_event(adev, ARRAY_SIZE(unic_crq_events));
+	unic_unregister_ae_event(adev, UNIC_AE_LEVEL_NUM);
 }
