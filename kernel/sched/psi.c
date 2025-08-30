@@ -835,7 +835,7 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	unsigned int t, m;
 	enum psi_states s;
 	u32 state_mask;
-	u64 now;
+	u64 now = 0;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
 	groupc = per_cpu_ptr(group->pcpu, cpu);
@@ -850,7 +850,6 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	 * SOME and FULL time these may have resulted in.
 	 */
 	write_seqcount_begin(&groupc->seq);
-	now = cpu_clock(cpu);
 
 	/*
 	 * Start with TSK_ONCPU, which doesn't have a corresponding
@@ -901,13 +900,15 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 		 * avoid a delta sample underflow when PSI is later re-enabled.
 		 */
 		if (unlikely(groupc->state_mask & (1 << PSI_NONIDLE)))
-			record_times(groupc, now);
+			record_times(groupc, cpu_clock(cpu));
 
 		groupc->state_mask = state_mask;
 
 		write_seqcount_end(&groupc->seq);
 		return;
 	}
+
+	now = cpu_clock(cpu);
 
 	for (s = 0; s < NR_PSI_STATES; s++) {
 		if (!psi_dyn_stat_cpu(cpu) && (s == PSI_CPU_SOME || s == PSI_CPU_FULL))
