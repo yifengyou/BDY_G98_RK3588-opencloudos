@@ -13,6 +13,7 @@
 #define unic_get_ubase_root_dentry(adev) ubase_diag_debugfs_root(adev)
 
 enum unic_dbg_dentry_type {
+	UNIC_DBG_DENTRY_CONTEXT,
 	/* must be the last entry. */
 	UNIC_DBG_DENTRY_ROOT
 };

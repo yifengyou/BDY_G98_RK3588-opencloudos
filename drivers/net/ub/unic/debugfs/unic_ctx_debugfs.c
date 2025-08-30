@@ -1,0 +1,365 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (c) 2025 HiSilicon Technologies Co., Ltd. All rights reserved.
+ *
+ */
+
+#include <linux/debugfs.h>
+#include <ub/ubase/ubase_comm_debugfs.h>
+#include <ub/ubase/ubase_comm_hw.h>
+#include <ub/ubase/ubase_comm_mbx.h>
+
+#include "unic_ctx_debugfs.h"
+#include "unic_debugfs.h"
+#include "unic_dev.h"
+
+static inline void unic_jfs_ctx_titles_print(struct seq_file *s)
+{
+	seq_puts(s, "SQ_ID  SQE_BB_SHIFT  STATE  JFS_MODE  TX_JFCN\n");
+}
+
+static void unic_dump_jfs_ctx_info_sw(struct unic_sq *sq, struct seq_file *s,
+				      u32 index)
+{
+	struct unic_jfs_ctx *ctx = &sq->jfs_ctx;
+
+	seq_printf(s, "%-7u", index);
+	seq_printf(s, "%-14u", ctx->sqe_bb_shift);
+	seq_printf(s, "%-7u", ctx->state);
+	seq_printf(s, "%-10u", ctx->jfs_mode);
+	seq_printf(s, "%-9u\n", ctx->tx_jfcn);
+}
+
+static inline void unic_jfr_ctx_titles_print(struct seq_file *s)
+{
+	seq_puts(s, "RQ_ID  STATE  RQE_SHIFT  RX_JFCN  PI     CI");
+	seq_puts(s, "RECORD_DB_EN\n");
+}
+
+static void unic_dump_jfr_ctx_info_sw(struct unic_rq *rq, struct seq_file *s,
+				      u32 index)
+{
+	struct unic_jfr_ctx *ctx = &rq->jfr_ctx;
+	u32 jfcn;
+
+	jfcn = ctx->jfcn_l | (ctx->jfcn_h << UNIC_JFR_JFCN_H_OFFSET);
+
+	seq_printf(s, "%-7u", index);
+	seq_printf(s, "%-7u", ctx->state);
+	seq_printf(s, "%-11u", ctx->rqe_shift);
+	seq_printf(s, "%-9u", jfcn);
+	seq_printf(s, "%-7u", ctx->pi);
+	seq_printf(s, "%-7u", ctx->ci);
+	seq_printf(s, "%-14u\n", ctx->record_db_en);
+}
+
+static inline void unic_jfc_ctx_titles_print(struct seq_file *s)
+{
+	seq_puts(s, "CQ_ID  ARM_ST  STATE  INLINE_EN  SHIFT  CQE_COAL_CNT");
+	seq_puts(s, "CEQN  RECORD_DB_EN  CQE_COAL_PEIRIOD\n");
+}
+
+static void unic_dump_jfc_ctx_info_sw(struct unic_cq *cq, struct seq_file *s,
+				      u32 index)
+{
+	struct unic_jfc_ctx *ctx = &cq->jfc_ctx;
+
+	seq_printf(s, "%-7u", index);
+	seq_printf(s, "%-8u", ctx->arm_st);
+	seq_printf(s, "%-7u", ctx->state);
+	seq_printf(s, "%-11u", ctx->inline_en);
+	seq_printf(s, "%-7u", ctx->shift);
+	seq_printf(s, "%-14u", ctx->cqe_coalesce_cnt);
+	seq_printf(s, "%-6u", ctx->ceqn);
+	seq_printf(s, "%-14u", ctx->record_db_en);
+	seq_printf(s, "%-18u\n", ctx->cqe_coalesce_period);
+}
+
+static void unic_get_jfs_ctx_sw(struct unic_channels *channels,
+				struct seq_file *s, u32 index)
+{
+	struct unic_channel *channel = &channels->c[index];
+
+	unic_dump_jfs_ctx_info_sw(channel->sq, s, index);
+}
+
+static void unic_get_jfr_ctx_sw(struct unic_channels *channels,
+				struct seq_file *s, u32 index)
+{
+	struct unic_channel *channel = &channels->c[index];
+
+	unic_dump_jfr_ctx_info_sw(channel->rq, s, index);
+}
+
+static void unic_get_sq_jfc_ctx_sw(struct unic_channels *channels,
+				   struct seq_file *s, u32 index)
+{
+	struct unic_channel *channel = &channels->c[index];
+
+	unic_dump_jfc_ctx_info_sw(channel->sq->cq, s, index);
+}
+
+static void unic_get_rq_jfc_ctx_sw(struct unic_channels *channels,
+				   struct seq_file *s, u32 index)
+{
+	struct unic_channel *channel = &channels->c[index];
+
+	unic_dump_jfc_ctx_info_sw(channel->rq->cq, s, index);
+}
+
+enum unic_dbg_ctx_type {
+	UNIC_DBG_JFS_CTX = 0,
+	UNIC_DBG_JFR_CTX,
+	UNIC_DBG_SQ_JFC_CTX,
+	UNIC_DBG_RQ_JFC_CTX,
+};
+
+static int unic_dbg_dump_ctx_sw(struct seq_file *s, void *data,
+				enum unic_dbg_ctx_type ctx_type)
+{
+	struct unic_dbg_context {
+		void (*print_ctx_titles)(struct seq_file *s);
+		void (*get_ctx)(struct unic_channels *channels, struct seq_file *s, u32 index);
+	} dbg_ctx[] = {
+		{unic_jfs_ctx_titles_print, unic_get_jfs_ctx_sw},
+		{unic_jfr_ctx_titles_print, unic_get_jfr_ctx_sw},
+		{unic_jfc_ctx_titles_print, unic_get_sq_jfc_ctx_sw},
+		{unic_jfc_ctx_titles_print, unic_get_rq_jfc_ctx_sw},
+	};
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	int ret = 0;
+	u32 i;
+
+	dbg_ctx[ctx_type].print_ctx_titles(s);
+
+	if (!mutex_trylock(&unic_dev->channels.mutex))
+		return -EBUSY;
+
+	if (__unic_resetting(unic_dev) || !unic_dev->channels.c) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	for (i = 0; i < unic_dev->channels.num; i++)
+		dbg_ctx[ctx_type].get_ctx(&unic_dev->channels, s, i);
+
+out:
+	mutex_unlock(&unic_dev->channels.mutex);
+
+	return ret;
+}
+
+int unic_dbg_dump_jfs_ctx_sw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_ctx_sw(s, data, UNIC_DBG_JFS_CTX);
+}
+
+int unic_dbg_dump_jfr_ctx_sw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_ctx_sw(s, data, UNIC_DBG_JFR_CTX);
+}
+
+int unic_dbg_dump_rq_jfc_ctx_sw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_ctx_sw(s, data, UNIC_DBG_RQ_JFC_CTX);
+}
+
+int unic_dbg_dump_sq_jfc_ctx_sw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_ctx_sw(s, data, UNIC_DBG_SQ_JFC_CTX);
+}
+
+struct unic_ctx_info {
+	u32 start_idx;
+	u32 ctx_size;
+	u8 op;
+	const char *ctx_name;
+};
+
+static int unic_get_ctx_info(struct unic_dev *unic_dev,
+			     enum unic_dbg_ctx_type ctx_type,
+			     struct unic_ctx_info *ctx_info)
+{
+	struct ubase_adev_caps *unic_caps = ubase_get_unic_caps(unic_dev->comdev.adev);
+
+	if (!unic_caps) {
+		unic_err(unic_dev, "failed to get unic caps.\n");
+		return -ENODATA;
+	}
+
+	switch (ctx_type) {
+	case UNIC_DBG_JFS_CTX:
+		ctx_info->start_idx = unic_caps->jfs.start_idx;
+		ctx_info->ctx_size = UBASE_JFS_CTX_SIZE;
+		ctx_info->op = UBASE_MB_QUERY_JFS_CONTEXT;
+		ctx_info->ctx_name = "jfs";
+		break;
+	case UNIC_DBG_JFR_CTX:
+		ctx_info->start_idx = unic_caps->jfr.start_idx;
+		ctx_info->ctx_size = UBASE_JFR_CTX_SIZE;
+		ctx_info->op = UBASE_MB_QUERY_JFR_CONTEXT;
+		ctx_info->ctx_name = "jfr";
+		break;
+	case UNIC_DBG_SQ_JFC_CTX:
+		ctx_info->start_idx = unic_caps->jfc.start_idx;
+		ctx_info->ctx_size = UBASE_JFC_CTX_SIZE;
+		ctx_info->op = UBASE_MB_QUERY_JFC_CONTEXT;
+		ctx_info->ctx_name = "sq_jfc";
+		break;
+	case UNIC_DBG_RQ_JFC_CTX:
+		ctx_info->start_idx = unic_caps->jfc.start_idx +
+				      unic_dev->channels.num;
+		ctx_info->ctx_size = UBASE_JFC_CTX_SIZE;
+		ctx_info->op = UBASE_MB_QUERY_JFC_CONTEXT;
+		ctx_info->ctx_name = "rq_jfc";
+		break;
+	default:
+		unic_err(unic_dev, "failed to get ctx info, ctx_type = %u.\n",
+			 ctx_type);
+		return -ENODATA;
+	}
+
+	return 0;
+}
+
+static void unic_mask_jfs_ctx_key_words(void *buf)
+{
+	struct unic_jfs_ctx *jfs = (struct unic_jfs_ctx *)buf;
+
+	jfs->sqe_token_id_l = 0;
+	jfs->sqe_token_id_h = 0;
+	jfs->sqe_base_addr_l = 0;
+	jfs->sqe_base_addr_h = 0;
+	jfs->sqe_pld_tokenid = 0;
+	jfs->rmt_tokenid = 0;
+	jfs->user_data_l = 0;
+	jfs->user_data_h = 0;
+}
+
+static void unic_mask_jfr_ctx_key_words(void *buf)
+{
+	struct unic_jfr_ctx *jfr = (struct unic_jfr_ctx *)buf;
+
+	jfr->rqe_token_id_l = 0;
+	jfr->rqe_token_id_h = 0;
+	jfr->rqe_base_addr_l = 0;
+	jfr->rqe_base_addr_h = 0;
+	jfr->pld_token_id = 0;
+	jfr->token_value = 0;
+	jfr->user_data_l = 0;
+	jfr->user_data_h = 0;
+	jfr->idx_que_addr_l = 0;
+	jfr->idx_que_addr_h = 0;
+	jfr->record_db_addr_l = 0;
+	jfr->record_db_addr_m = 0;
+	jfr->record_db_addr_h = 0;
+}
+
+static void unic_mask_jfc_ctx_key_words(void *buf)
+{
+	struct unic_jfc_ctx *jfc = (struct unic_jfc_ctx *)buf;
+
+	jfc->cqe_base_addr_l = 0;
+	jfc->cqe_base_addr_h = 0;
+	jfc->queue_token_id = 0;
+	jfc->record_db_addr_l = 0;
+	jfc->record_db_addr_h = 0;
+	jfc->rmt_token_id = 0;
+	jfc->remote_token_value = 0;
+}
+
+static void unic_mask_ctx_key_words(void *buf,
+				    enum unic_dbg_ctx_type ctx_type)
+{
+	switch (ctx_type) {
+	case UNIC_DBG_JFS_CTX:
+		unic_mask_jfs_ctx_key_words(buf);
+		break;
+	case UNIC_DBG_JFR_CTX:
+		unic_mask_jfr_ctx_key_words(buf);
+		break;
+	case UNIC_DBG_SQ_JFC_CTX:
+	case UNIC_DBG_RQ_JFC_CTX:
+		unic_mask_jfc_ctx_key_words(buf);
+		break;
+	default:
+		break;
+	}
+}
+
+static int unic_dbg_dump_context_hw(struct seq_file *s, void *data,
+				    enum unic_dbg_ctx_type ctx_type)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct unic_ctx_info ctx_info = {0};
+	struct ubase_cmd_mailbox *mailbox;
+	struct ubase_mbx_attr attr = {0};
+	int ret = 0;
+	u32 i;
+
+	if (!mutex_trylock(&unic_dev->channels.mutex))
+		return -EBUSY;
+
+	if (__unic_resetting(unic_dev) ||
+	    !unic_dev->channels.c) {
+		ret = -EBUSY;
+		goto channel_ready_err;
+	}
+
+	mailbox = ubase_alloc_cmd_mailbox(adev);
+	if (IS_ERR_OR_NULL(mailbox)) {
+		unic_err(unic_dev, "failed to alloc mailbox for dump context.\n");
+		ret = -ENOMEM;
+		goto channel_ready_err;
+	}
+
+	ret = unic_get_ctx_info(unic_dev, ctx_type, &ctx_info);
+	if (ret)
+		goto upgrade_ctx_err;
+
+	for (i = 0; i < unic_dev->channels.num; i++) {
+		ubase_fill_mbx_attr(&attr, i + ctx_info.start_idx, ctx_info.op,
+				    0);
+		ret = ubase_hw_upgrade_ctx_ex(adev, &attr, mailbox);
+		if (ret) {
+			unic_err(unic_dev,
+				 "failed to post query %s ctx mbx, ret = %d.\n",
+				 ctx_info.ctx_name, ret);
+			goto upgrade_ctx_err;
+		}
+
+		seq_printf(s, "offset\t%s", ctx_info.ctx_name);
+		seq_printf(s, "%u\n", i);
+		unic_mask_ctx_key_words(mailbox->buf, ctx_type);
+		ubase_print_context_hw(s, mailbox->buf, ctx_info.ctx_size);
+		seq_puts(s, "\n");
+	}
+
+upgrade_ctx_err:
+	ubase_free_cmd_mailbox(adev, mailbox);
+channel_ready_err:
+	mutex_unlock(&unic_dev->channels.mutex);
+
+	return ret;
+}
+
+int unic_dbg_dump_jfs_context_hw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_context_hw(s, data, UNIC_DBG_JFS_CTX);
+}
+
+int unic_dbg_dump_jfr_context_hw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_context_hw(s, data, UNIC_DBG_JFR_CTX);
+}
+
+int unic_dbg_dump_sq_jfc_context_hw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_context_hw(s, data, UNIC_DBG_SQ_JFC_CTX);
+}
+
+int unic_dbg_dump_rq_jfc_context_hw(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_context_hw(s, data, UNIC_DBG_RQ_JFC_CTX);
+}
