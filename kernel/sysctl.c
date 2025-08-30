@@ -2932,6 +2932,15 @@ static struct ctl_table kern_table[] = {
 		.mode			= 0644,
 		.proc_handler	= psi_dyn_stat_handler,
 	},
+#ifdef CONFIG_CGROUPS
+	{
+		.procname		= "psi_cgroup_default_enabled",
+		.data			= &sysctl_psi_cgroup_default_enabled,
+		.maxlen			= sizeof(unsigned int),
+		.mode			= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+	},
+#endif
 #endif
 	{ }
 };

@@ -150,6 +150,9 @@ unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
 unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
 										  (1U << PSI_MEM);
 #endif
+#ifdef CONFIG_CGROUPS
+unsigned int sysctl_psi_cgroup_default_enabled;
+#endif
 unsigned int __percpu *percpu_psi_dyn_stat_types;
 #endif
 
@@ -191,7 +194,11 @@ static void group_init(struct psi_group *group)
 {
 	int cpu;
 
+#ifdef CONFIG_PSI_DYN_SWITCH
+	group->enabled = sysctl_psi_cgroup_default_enabled;
+#else
 	group->enabled = true;
+#endif
 	for_each_possible_cpu(cpu)
 		seqcount_init(&per_cpu_ptr(group->pcpu, cpu)->seq);
 	group->avg_last_update = sched_clock();
@@ -1439,7 +1446,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	bool privileged;
 	u32 window_us;
 
-	if (static_branch_likely(&psi_disabled))
+	if (static_branch_likely(&psi_disabled) || !group->enabled)
 		return ERR_PTR(-EOPNOTSUPP);
 
 	/*

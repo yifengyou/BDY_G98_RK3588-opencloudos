@@ -18,6 +18,9 @@ extern struct static_key_false psi_disabled;
 extern struct psi_group psi_system;
 #ifdef CONFIG_PSI_DYN_SWITCH
 extern unsigned int sysctl_psi_dyn_stat_types;
+#ifdef CONFIG_CGROUPS
+extern unsigned int sysctl_psi_cgroup_default_enabled;
+#endif
 extern unsigned int __percpu *percpu_psi_dyn_stat_types;
 
 static inline bool psi_dyn_stat_cpu(int cpu)
