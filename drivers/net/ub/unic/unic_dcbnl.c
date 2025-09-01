@@ -388,11 +388,104 @@ static int unic_dcbnl_ieee_delapp(struct net_device *netdev,
 	return unic_del_app(netdev, app, unic_dev, vl);
 }
 
+static u8 unic_dcbnl_getdcbx(struct net_device *ndev)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+
+	return unic_dev->dcbx_cap;
+}
+
+static u8 unic_dcbnl_setdcbx(struct net_device *ndev, u8 mode)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+
+	if ((mode & DCB_CAP_DCBX_LLD_MANAGED) ||
+	    (mode & DCB_CAP_DCBX_VER_CEE) ||
+	    !(mode & DCB_CAP_DCBX_HOST))
+		return 1;
+
+	unic_info(unic_dev, "set dcbx mode = %u\n.", mode);
+
+	unic_dev->dcbx_cap = mode;
+
+	return 0;
+}
+
+static int unic_ieee_getmaxrate(struct net_device *ndev,
+				struct ieee_maxrate *maxrate)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+
+	if (!unic_dev_ets_supported(unic_dev) ||
+	    !unic_dev_tc_speed_limit_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	memcpy(maxrate->tc_maxrate, unic_dev->channels.vl.vl_maxrate,
+	       sizeof(maxrate->tc_maxrate));
+	return 0;
+}
+
+static int unic_check_maxrate(struct unic_dev *unic_dev,
+			      struct ieee_maxrate *maxrate)
+{
+	u32 max_speed = unic_dev->hw.mac.max_speed;
+	int i;
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		if (!maxrate->tc_maxrate[i])
+			continue;
+
+		if (maxrate->tc_maxrate[i] / UNIC_MBYTE_PER_SEND > max_speed ||
+		    maxrate->tc_maxrate[i] < UNIC_MBYTE_PER_SEND) {
+			unic_err(unic_dev,
+				 "invalid max_rate(%llubit), the range is [1Mbit, %uMbit].\n",
+				 maxrate->tc_maxrate[i] * BITS_PER_BYTE,
+				 max_speed);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int unic_ieee_setmaxrate(struct net_device *ndev,
+				struct ieee_maxrate *maxrate)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	struct unic_vl *vl = &unic_dev->channels.vl;
+	int ret;
+
+	if (!unic_dev_ets_supported(unic_dev) ||
+	    !unic_dev_tc_speed_limit_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (!(unic_dev->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
+		return -EINVAL;
+
+	ret = unic_check_maxrate(unic_dev, maxrate);
+	if (ret)
+		return ret;
+
+	ret = unic_config_vl_rate_limit(unic_dev, maxrate->tc_maxrate,
+					vl->vl_bitmap);
+	if (ret)
+		return ret;
+
+	memcpy(vl->vl_maxrate, maxrate->tc_maxrate,
+	       sizeof(maxrate->tc_maxrate));
+
+	return 0;
+}
+
 static const struct dcbnl_rtnl_ops unic_dcbnl_ops = {
 	.ieee_getets = unic_dcbnl_ieee_getets,
 	.ieee_setets = unic_dcbnl_ieee_setets,
+	.ieee_getmaxrate = unic_ieee_getmaxrate,
+	.ieee_setmaxrate = unic_ieee_setmaxrate,
 	.ieee_setapp = unic_dcbnl_ieee_setapp,
 	.ieee_delapp = unic_dcbnl_ieee_delapp,
+	.getdcbx     = unic_dcbnl_getdcbx,
+	.setdcbx     = unic_dcbnl_setdcbx,
 };
 
 void unic_set_dcbnl_ops(struct net_device *netdev)
