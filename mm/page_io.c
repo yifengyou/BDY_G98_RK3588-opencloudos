@@ -639,7 +639,7 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 		int ret = bdev_swapin_folio(sis->bdev, swap_folio_sector(folio), folio);
 		if (ret != -EOPNOTSUPP) {
 			if (!ret)
-				count_vm_event(PSWPIN);
+				count_vm_events(PSWPIN, folio_nr_pages(folio));
 			goto finish;
 		}
 		swap_read_folio_bdev_sync(folio, sis);
