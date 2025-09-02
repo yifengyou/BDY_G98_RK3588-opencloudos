@@ -12170,6 +12170,8 @@ static struct cftype cpu_legacy_files[] = {
 		.read_u64 = cpu_bt_shares_read_u64,
 		.write_u64 = cpu_bt_shares_write_u64,
 	},
+#endif
+#if defined(CONFIG_BT_GROUP_SCHED) || defined(CONFIG_EXT_GROUP_SCHED)
 	{
 		.name = "offline",
 		.read_u64 = cpu_offline_read_u64,
