@@ -2940,7 +2940,8 @@ out_unlock:
 	cpus_read_unlock();
 	kernfs_unbreak_active_protection(of->kn);
 	css_put(&cs->css);
-	flush_workqueue(cpuset_migrate_mm_wq);
+	if (of_cft(of)->private == FILE_MEMLIST)
+		flush_workqueue(cpuset_migrate_mm_wq);
 	return retval ?: nbytes;
 }
 
