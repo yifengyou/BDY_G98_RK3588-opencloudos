@@ -223,6 +223,7 @@ struct nvme_queue {
 	u8 up_cnt;   /* cnt for up condition */
 	u8 down_cnt; /* cnt for down condition */
 	u16 sq_head;
+	u16 last_sq_head;
 	ktime_t last_time; /* timestamp for last op */
 };
 
@@ -900,6 +901,7 @@ static int hit_count_before_change = HIT_COUNT_BEFORE_CHANGE_DEFAULT;
 static int coalesce_value = 0x10a;
 static int max_coalesce_threshold = MAX_COALESCE_THRESHOLD_DEFAULT;
 static int min_coalesce_threshold = MIN_COALESCE_THRESHOLD_DEFAULT;
+static int min_completed_threshold = CHECK_INTERVAL + 2;
 
 static ssize_t disable_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
 	return sprintf(buf, "%d\n", disable);
@@ -977,12 +979,25 @@ static ssize_t min_coalesce_threshold_store(struct kobject *kobj, struct kobj_at
 	return ret ?: count;
 }
 
+static ssize_t min_completed_threshold_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
+	return sprintf(buf, "%d\n", min_completed_threshold);
+}
+
+static ssize_t min_completed_threshold_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
+	int v = 0;
+	int ret = kstrtoint(buf, 10, &v);
+	if(0<=v && v<100000)
+		min_completed_threshold = v;
+	return ret ?: count;
+}
+
 static struct kobj_attribute disable_attr = __ATTR(disable, 0644, disable_show, disable_store);
 static struct kobj_attribute switch_cnt_attr = __ATTR(switch_cnt, 0644, switch_cnt_show, switch_cnt_store);
 static struct kobj_attribute coalesce_value_attr = __ATTR(coalesce_value, 0644, coalesce_value_show, coalesce_value_store);
 static struct kobj_attribute hit_count_before_change_attr = __ATTR(hit_count_before_change, 0644, hit_count_before_change_show, hit_count_before_change_store);
 static struct kobj_attribute max_coalesce_threshold_attr = __ATTR(max_coalesce_threshold, 0644, max_coalesce_threshold_show, max_coalesce_threshold_store);
 static struct kobj_attribute min_coalesce_threshold_attr = __ATTR(min_coalesce_threshold, 0644, min_coalesce_threshold_show, min_coalesce_threshold_store);
+static struct kobj_attribute min_completed_threshold_attr = __ATTR(min_completed_threshold, 0644, min_completed_threshold_show, min_completed_threshold_store);
 
 
 /* in 5.10, nvme_queue_rq is inside lock-unlock section, so cannot call nvme_set_irq_coalesce directly, do this in a dedicated thread */
@@ -1056,15 +1071,24 @@ static inline void adjust_coalesce(struct nvme_queue *nvmeq, struct request *req
 		if (duration_ns > 100000000 /* 100 ms */) {
 			if(nvmeq->down_cnt < hit_count_before_change - 1)
 				nvmeq->down_cnt = hit_count_before_change - 1;
-			pr_debug("idle for a while, qid=%hu, duration=%lld\n", nvmeq->qid, duration_ns);
+			pr_debug("idle for a while, name:%s, qid=%hu, duration=%lld, with io size:%u, op:%s, down_cnt:%d, sq_tail:%u, sq_head:%u\n",
+					req->q->disk->disk_name, nvmeq->qid, duration_ns, blk_rq_bytes(req),
+					rq_data_dir(req) == READ ? "read":"write", nvmeq->down_cnt, sq_tail, sq_head);
 		}
 		nvmeq->last_time = end;
 	}
 
 	while (0 == (sq_tail & CHECK_INTERVAL)) {
 		int inflight = sq_tail-sq_head;
+		int completed = sq_head - nvmeq->last_sq_head;
+
 		if (inflight < 0)
 			inflight += nvmeq->q_depth;
+
+		if (completed < 0)
+			completed += nvmeq->q_depth;
+
+		nvmeq->last_sq_head = sq_head;
 
 		if (0 == sq_tail) {
 			pr_debug("dev=%p, qid=%hu, sq_head=%hu, sq_tail=%hu, inflight=%d, switch_cnt=%d, is_coalescing=%d. up_cnt=%d, down_cnt=%d, online_queue_num=%u, q_depth=%u\n",
@@ -1075,13 +1099,18 @@ static inline void adjust_coalesce(struct nvme_queue *nvmeq, struct request *req
 		unsigned int req_size = blk_rq_bytes(req);
 		/* lower threshold for big op */
 		int max_threshold = (req_size >= 8192) ? (max_coalesce_threshold>>1) : max_coalesce_threshold;
-		if (dev->is_coalescing != 1 && inflight > max_threshold) {
-			if (rq_data_dir(req) == READ && req_size <32768) { /* no coalesce for write op or huge op*/
+		if (dev->is_coalescing != 1 && ((inflight > max_threshold) || (completed > min_completed_threshold))) {
+			if ((rq_data_dir(req) == READ && req_size <32768) ||
+				(rq_data_dir(req) == WRITE && req_size <= 8192)) { /* no coalesce for write op or huge op*/
 				if (++nvmeq->up_cnt > hit_count_before_change) {
 					if (schedule_task_set_coalesce(ctrl, coalesce_value)) {
+						pr_debug("set coalesce, name:%s, qid=%hu, with io size:%u, op:%s, up_cnt:%d, sq_tail:%u, sq_head:%u, inflight:%u, completed:%u\n",
+							req->q->disk->disk_name, nvmeq->qid, blk_rq_bytes(req),
+							rq_data_dir(req) == READ ? "read":"write", nvmeq->up_cnt, sq_tail, sq_head, inflight, completed);
 						dev->is_coalescing = 1;
 						switch_cnt++;
 						nvmeq->last_time = ktime_get();
+						nvmeq->up_cnt = 0;
 					}
 				}
 			}
@@ -1093,12 +1122,17 @@ static inline void adjust_coalesce(struct nvme_queue *nvmeq, struct request *req
 		}
 
 		/* queues not so full, close coalesce interrupt */
-		if (dev->is_coalescing == 1 && (inflight < min_coalesce_threshold || rq_data_dir(req) == WRITE)) {
+		if (dev->is_coalescing == 1 && (((inflight < min_coalesce_threshold) && (completed < min_completed_threshold))||
+			(rq_data_dir(req) == WRITE && req_size > 8192))) {
 			if (++nvmeq->down_cnt > hit_count_before_change) {
 				if (schedule_task_set_coalesce(ctrl, 0)) {
+					pr_debug("clear coalesce, name:%s, qid=%hu, with io size:%u, op:%s, down_cnt:%d, sq_tail:%u, sq_head:%u, inflight:%u, completed:%u.\n",
+						req->q->disk->disk_name, nvmeq->qid, blk_rq_bytes(req),
+						rq_data_dir(req) == READ ? "read":"write", nvmeq->down_cnt, sq_tail, sq_head, inflight, completed);
 					dev->is_coalescing = 0;
 					switch_cnt++;
 					pr_debug("dev=%p, qid=%hu, disable_coalesce.\n", dev, nvmeq->qid);
+					nvmeq->down_cnt = 0;
 				}
 			}
 		} else {
@@ -1155,6 +1189,7 @@ static void nvme_submit_cmds(struct nvme_queue *nvmeq, struct request **rqlist)
 	while ((req = rq_list_pop(rqlist))) {
 		struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 
+		adjust_coalesce(nvmeq, req, nvmeq->sq_head, nvmeq->sq_tail+1);
 		nvme_sq_copy_cmd(nvmeq, &iod->cmd);
 	}
 	nvme_write_sq_db(nvmeq, true);
@@ -1191,7 +1226,6 @@ static void nvme_queue_rqs(struct request **rqlist)
 
 		if (nvme_prep_rq_batch(nvmeq, req)) {
 			rq_list_add(&submit_list, req); /* reverse order */
-			adjust_coalesce(nvmeq, req, nvmeq->sq_head, nvmeq->sq_tail+1);
 		}
 		else
 			rq_list_add_tail(&requeue_lastp, req);
@@ -1812,6 +1846,8 @@ static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
 	nvmeq->qid = qid;
 	nvmeq->up_cnt = 0;
 	nvmeq->down_cnt = 0;
+	nvmeq->sq_head = 0;
+	nvmeq->last_sq_head = 0;
 	dev->ctrl.queue_count++;
 
 	return 0;
@@ -3893,6 +3929,9 @@ static int __init nvme_init(void)
 	ret = sysfs_create_file(nvme_kobj, &min_coalesce_threshold_attr.attr);
 	if (ret)
 		pr_err("Failed to create sysfs file: min_coalesce_threshold\n");
+	ret = sysfs_create_file(nvme_kobj, &min_completed_threshold_attr.attr);
+	if (ret)
+		pr_err("Failed to create sysfs file: min_completed_threshold\n");
 
 	coalesce_thread = kthread_run(coalesce_thread_function, NULL, "coalesce_thread");
 	if (IS_ERR(coalesce_thread)) {
@@ -3929,6 +3968,7 @@ static void __exit nvme_exit(void)
 	sysfs_remove_file(nvme_kobj, &hit_count_before_change_attr.attr);
 	sysfs_remove_file(nvme_kobj, &max_coalesce_threshold_attr.attr);
 	sysfs_remove_file(nvme_kobj, &min_coalesce_threshold_attr.attr);
+	sysfs_remove_file(nvme_kobj, &min_completed_threshold_attr.attr);
 	kobject_put(nvme_kobj);
 }
 
