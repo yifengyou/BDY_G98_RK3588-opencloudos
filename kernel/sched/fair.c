@@ -866,7 +866,7 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
  *
  * Which allows tree pruning through eligibility.
  */
-static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
+static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq, bool wakeup_preempt)
 {
 	struct rb_node *node = cfs_rq->tasks_timeline.rb_root.rb_node;
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
@@ -880,7 +880,23 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	if (cfs_rq->nr_running == 1)
 		return curr && curr->on_rq ? curr : se;
 
-	if (curr && (!curr->on_rq || !entity_eligible(cfs_rq, curr)))
+	if (curr && !curr->on_rq)
+		curr = NULL;
+
+	/*
+	 * When an entity with positive lag wakes up, it pushes the
+	 * avg_vruntime of the runqueue backwards. This may causes the
+	 * current entity to be ineligible soon into its run leading to
+	 * wakeup preemption.
+	 *
+	 * To prevent such aggressive preemption of the current running
+	 * entity during task wakeups, skip the eligibility check if the
+	 * slice promised to the entity since its selection has not yet
+	 * elapsed.
+	 */
+	if (curr &&
+	    !(sched_feat(RUN_TO_PARITY_WAKEUP) && wakeup_preempt && curr->vlag == curr->deadline) &&
+	    !entity_eligible(cfs_rq, curr))
 		curr = NULL;
 
 	/*
@@ -5446,7 +5462,7 @@ pick_next_entity(struct cfs_rq *cfs_rq)
 	    cfs_rq->next && entity_eligible(cfs_rq, cfs_rq->next))
 		return cfs_rq->next;
 
-	return pick_eevdf(cfs_rq);
+	return pick_eevdf(cfs_rq, false);
 }
 
 static bool check_cfs_rq_runtime(struct cfs_rq *cfs_rq);
@@ -8411,7 +8427,7 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	/*
 	 * XXX pick_eevdf(cfs_rq) != se ?
 	 */
-	if (pick_eevdf(cfs_rq) == pse)
+	if (pick_eevdf(cfs_rq, true) == pse)
 		goto preempt;
 
 	return;

@@ -61,6 +61,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/mc146818rtc.h>
 #include <linux/acpi.h>
+#include <linux/cpuset.h>
 
 #include <asm/acpi.h>
 #include <asm/cacheinfo.h>
@@ -143,6 +144,13 @@ int arch_update_cpu_topology(void)
 
 	x86_topology_update = false;
 	return retval;
+}
+
+void arch_rebuild_cpu_topology(void)
+{
+	x86_topology_update = true;
+	rebuild_sched_domains();
+	x86_topology_update = false;
 }
 
 static unsigned int smpboot_warm_reset_vector_count;
