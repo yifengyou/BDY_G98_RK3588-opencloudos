@@ -1070,24 +1070,26 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		return;
 	}
 
-	if (next->pid && next->in_memstall) {
+	if (next->pid) {
 		int set = psi_dyn_stat_cpu(cpu) ? TSK_ONCPU : 0;
-		psi_flags_change(next, 0, set);
-		/*
-		 * Set TSK_ONCPU on @next's cgroups. If @next shares any
-		 * ancestors with @prev, those will already have @prev's
-		 * TSK_ONCPU bit set, and we can stop the iteration there.
-		 */
-		group = task_psi_group(next);
-		do {
-			if (per_cpu_ptr(group->pcpu, cpu)->state_mask &
-			    PSI_ONCPU) {
-				common = group;
-				break;
-			}
+		if (set || next->in_memstall) {
+			psi_flags_change(next, 0, set);
+			/*
+			* Set TSK_ONCPU on @next's cgroups. If @next shares any
+			* ancestors with @prev, those will already have @prev's
+			* TSK_ONCPU bit set, and we can stop the iteration there.
+			*/
+			group = task_psi_group(next);
+			do {
+				if (per_cpu_ptr(group->pcpu, cpu)->state_mask &
+					PSI_ONCPU) {
+					common = group;
+					break;
+				}
 
-			psi_group_change(next, group, cpu, 0, set, true);
-		} while ((group = group->parent));
+				psi_group_change(next, group, cpu, 0, set, true);
+			} while ((group = group->parent));
+		}
 	}
 
 	if (prev->pid) {
