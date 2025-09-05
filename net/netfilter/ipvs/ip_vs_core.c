@@ -720,11 +720,15 @@ static inline int ip_vs_gather_frags(struct netns_ipvs *ipvs,
 static int ip_vs_route_me_harder(struct netns_ipvs *ipvs, int af,
 				 struct sk_buff *skb, unsigned int hooknum)
 {
+	struct net *net;
 	if (!sysctl_snat_reroute(ipvs))
 		return 0;
 	/* Reroute replies only to remote clients (FORWARD and LOCAL_OUT) */
 	if (NF_INET_LOCAL_IN == hooknum)
 		return 0;
+	net = ipvs->net;
+	if (share_ns)
+		net = ip_vs_skb_net(skb);
 #ifdef CONFIG_IP_VS_IPV6
 	if (af == AF_INET6) {
 		struct dst_entry *dst = skb_dst(skb);
@@ -735,7 +739,7 @@ static int ip_vs_route_me_harder(struct netns_ipvs *ipvs, int af,
 	} else
 #endif
 		if (!(skb_rtable(skb)->rt_flags & RTCF_LOCAL) &&
-		    ip_route_me_harder(ipvs->net, skb->sk, skb, RTN_LOCAL) != 0)
+		    ip_route_me_harder(net, skb->sk, skb, RTN_LOCAL) != 0)
 			return 1;
 
 	return 0;
@@ -1322,6 +1326,12 @@ drop:
 	return NF_STOLEN;
 }
 
+static void switch_netns(struct netns_ipvs **ipvs, struct sk_buff *skb)
+{
+	if (share_ns)
+		*ipvs = net_ipvs(&init_net);
+}
+
 /*
  *	Check if outgoing packet belongs to the established ip_vs_conn.
  */
@@ -1336,6 +1346,8 @@ ip_vs_out_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *stat
 	struct ip_vs_conn *cp;
 	int af = state->pf;
 	struct sock *sk;
+
+	switch_netns(&ipvs, skb);
 
 	/* Already marked as IPVS request or reply? */
 	if (skb->ipvs_property)
@@ -1588,6 +1600,8 @@ ip_vs_in_icmp(struct netns_ipvs *ipvs, struct sk_buff *skb, int *related,
 	bool tunnel, new_cp = false;
 	union nf_inet_addr *raddr;
 	char *outer_proto = "IPIP";
+
+	switch_netns(&ipvs, skb);
 
 	*related = 1;
 
@@ -1898,7 +1912,6 @@ out:
 }
 #endif
 
-
 /*
  *	Check if it's for virtual services, look it up,
  *	and send it on its way...
@@ -1915,6 +1928,8 @@ ip_vs_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state
 	int ret, pkts;
 	struct sock *sk;
 	int af = state->pf;
+
+	switch_netns(&ipvs, skb);
 
 	/* Already marked as IPVS request or reply? */
 	if (skb->ipvs_property)
@@ -2087,6 +2102,31 @@ ip_vs_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state
 	return ret;
 }
 
+static unsigned int
+ip_vs_lock_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
+{
+	/* Delete IPVS nf local_out hook to handle response packet.
+	 * Consider following steps:
+	 * 1. curl vip:vport on a vm. packet is (nodeip:tmport->vip:vport)
+	 * 2. Ipvs does DNAT and choose a POD on this vm.
+	 *    packet is (nodeip:tmpport->rsip:rsport)
+	 * 3. The POD replies. packet is (rsip:rsport -> nodeip:tmpport)
+	 *    In nf local-out, ipvs ip_vs_local_reply4
+	 *    does reverse DNAT, and modifies the packet to be
+	 *    (VIP:VPORT->nodeip:tmpport)
+	 * 4. The packet go out of the POD's ENI to the iaas switch.
+	 * 5. Iaas switch will drop the packet as it expects the source
+	 *    to be the ENI's ip.
+	 * Any side effect to delete the hook?
+	 * If a client out of the cluster accesses the service on a cvm,
+	 * and the cvm choose a process runs on default net ns as the target,
+	 * Break!. However, It doesn't matter as we haven't such case.
+	 */
+	if (share_ns)
+		return NF_ACCEPT;
+	return ip_vs_in_hook(priv, skb, state);
+}
+
 /*
  *	It is hooked at the NF_INET_FORWARD chain, in order to catch ICMP
  *      related packets destined for 0.0.0.0/0.
@@ -2145,7 +2185,7 @@ static const struct nf_hook_ops ip_vs_ops4[] = {
 	},
 	/* Before ip_vs_in, change source only for VS/NAT */
 	{
-		.hook		= ip_vs_out_hook,
+		.hook		= ip_vs_lock_in_hook,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_NAT_DST + 1,
@@ -2336,6 +2376,49 @@ estimator_fail:
 	return -ENOMEM;
 }
 
+static int __net_init __ip_vs_dev_init(struct net *net)
+{
+	int ret;
+	unsigned int afmask;
+	struct netns_ipvs *ipvs = NULL;
+
+	if (share_ns) {
+
+		ipvs = net_ipvs(net);
+
+		if (!ipvs) {
+			printk(KERN_WARNING "ipvs of net is NULL\n");
+			ret = -ENODATA;
+			goto hook_fail;
+		}
+
+		ret = nf_register_net_hooks(net, ip_vs_ops4, ARRAY_SIZE(ip_vs_ops4));
+		if (ret < 0)
+			goto hook_fail;
+
+		afmask = 1;
+		ipvs->hooks_afmask |= afmask;
+
+#ifdef CONFIG_IP_VS_IPV6
+		ret = nf_register_net_hooks(net, ip_vs_ops6, ARRAY_SIZE(ip_vs_ops6));
+		if (ret < 0)
+			goto hook_fail2;
+
+		afmask = 2;
+		ipvs->hooks_afmask |= afmask;
+#endif
+	}
+
+	return 0;
+
+hook_fail2:
+	afmask = 1;
+	nf_unregister_net_hooks(net, ip_vs_ops4, ARRAY_SIZE(ip_vs_ops4));
+	ipvs->hooks_afmask &= ~afmask;
+hook_fail:
+	return ret;
+}
+
 static void __net_exit __ip_vs_cleanup_batch(struct list_head *net_list)
 {
 	struct netns_ipvs *ipvs;
@@ -2377,6 +2460,7 @@ static struct pernet_operations ipvs_core_ops = {
 };
 
 static struct pernet_operations ipvs_core_dev_ops = {
+	.init = __ip_vs_dev_init,
 	.exit_batch = __ip_vs_dev_cleanup_batch,
 };
 
@@ -2416,6 +2500,7 @@ static int __init ip_vs_init(void)
 	}
 
 	pr_info("ipvs loaded.\n");
+	pr_info("share ns is %d.\n", share_ns);
 
 	return ret;
 

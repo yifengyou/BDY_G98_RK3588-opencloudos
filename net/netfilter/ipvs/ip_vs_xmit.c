@@ -307,8 +307,13 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 	struct rtable *rt;			/* Route to the other host */
 	int mtu;
 	int local, noref = 1;
+	if (share_ns)
+		net = ip_vs_skb_net(skb);
+	if (!net)
+		return -1;
 
-	if (dest) {
+	/* when share netns, the cache will error */
+	if (dest && !share_ns) {
 		dest_dst = __ip_vs_dst_check(dest);
 		if (likely(dest_dst))
 			rt = (struct rtable *) dest_dst->dst_cache;
@@ -356,7 +361,10 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 		goto err_put;
 	}
 
-	if (unlikely(local)) {
+	/* traffic to local address shall route to lo dev
+	 * so that traffic from a POD can choose itself as rs.
+	 */
+	if (!share_ns && unlikely(local)) {
 		/* skb to local stack, preserve old route */
 		if (!noref)
 			ip_rt_put(rt);
@@ -624,6 +632,11 @@ static inline int ip_vs_nat_send_or_cont(int pf, struct sk_buff *skb,
 					 struct ip_vs_conn *cp, int local)
 {
 	int ret = NF_STOLEN;
+	struct net *net;
+
+	net = cp->ipvs->net;
+	if (share_ns)
+		net = ip_vs_skb_net(skb);
 
 	skb->ipvs_property = 1;
 	if (likely(!(cp->flags & IP_VS_CONN_F_NFCT)))
@@ -642,7 +655,7 @@ static inline int ip_vs_nat_send_or_cont(int pf, struct sk_buff *skb,
 		skb_forward_csum(skb);
 		if (skb->dev)
 			skb_clear_tstamp(skb);
-		NF_HOOK(pf, NF_INET_LOCAL_OUT, cp->ipvs->net, NULL, skb,
+		NF_HOOK(pf, NF_INET_LOCAL_OUT, net, NULL, skb,
 			NULL, skb_dst(skb)->dev, dst_output);
 	} else
 		ret = NF_ACCEPT;
@@ -655,6 +668,11 @@ static inline int ip_vs_send_or_cont(int pf, struct sk_buff *skb,
 				     struct ip_vs_conn *cp, int local)
 {
 	int ret = NF_STOLEN;
+	struct net *net;
+
+	net = cp->ipvs->net;
+	if (share_ns)
+		net = ip_vs_skb_net(skb);
 
 	skb->ipvs_property = 1;
 	if (likely(!(cp->flags & IP_VS_CONN_F_NFCT)))
@@ -664,7 +682,7 @@ static inline int ip_vs_send_or_cont(int pf, struct sk_buff *skb,
 		skb_forward_csum(skb);
 		if (skb->dev)
 			skb_clear_tstamp(skb);
-		NF_HOOK(pf, NF_INET_LOCAL_OUT, cp->ipvs->net, NULL, skb,
+		NF_HOOK(pf, NF_INET_LOCAL_OUT, net, NULL, skb,
 			NULL, skb_dst(skb)->dev, dst_output);
 	} else
 		ret = NF_ACCEPT;
