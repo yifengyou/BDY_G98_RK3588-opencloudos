@@ -104,7 +104,7 @@ void arch__post_evsel_config(struct evsel *evsel, struct perf_event_attr *attr)
 
 int arch_evsel__open_strerror(struct evsel *evsel, char *msg, size_t size)
 {
-	if (!x86__is_amd_cpu())
+	if (!x86__is_amd_cpu() && !x86__is_hygon_cpu())
 		return 0;
 
 	if (!evsel->core.attr.precise_ip &&

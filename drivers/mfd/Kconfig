@@ -604,6 +604,22 @@ config LPC_SCH
 	  LPC bridge function of the Intel SCH provides support for
 	  System Management Bus and General Purpose I/O.
 
+config LPC_SUNWAY
+	tristate "SUNWAY LPC"
+	depends on SW64
+	select MFD_CORE
+	help
+	  LPC bridge function of the Sunway provides support for
+	  System Management Bus and General Purpose I/O.
+
+config SUNWAY_SUPERIO_AST2400
+	tristate "SUNWAY SUPERIO AST2400"
+	depends on SW64
+	select MFD_CORE
+	help
+	  Nuvoton AST2400 Super I/O chip platform driver written
+	  for SUNWAY LPC controller.
+
 config INTEL_SOC_PMIC
 	bool "Support for Crystal Cove PMIC"
 	depends on HAS_IOMEM && I2C=y && GPIOLIB && COMMON_CLK
@@ -2304,6 +2320,17 @@ config MFD_INTEL_M10_BMC_PMCI
 	  This driver provides common support for accessing the device,
 	  additional drivers must be enabled in order to use the functionality
 	  of the device.
+
+config MFD_LOONGSON_SE
+	tristate "Loongson Security Engine chip controller driver"
+	depends on LOONGARCH && ACPI
+	select MFD_CORE
+	help
+	  The Loongson Security Engine chip supports RNG, SM2, SM3 and
+	  SM4 accelerator engines. Each engine have its own DMA buffer
+	  provided by the controller. The kernel cannot directly send
+	  commands to the engine and must first send them to the controller,
+	  which will forward them to the corresponding engine.
 
 config MFD_RSMU_I2C
 	tristate "Renesas Synchronization Management Unit with I2C"
