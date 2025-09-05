@@ -1,3 +1,14 @@
+* Fri Sep  5 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-40.1
+- configs: update std-configs-list
+- rue/cpu/bt: fixed rq deadlock with enable sched_bt_ignore_cpubind
+- sched/topology: Prevent race condition in sched_domain topology
+- scheduler: Disable cluster scheduling by default
+- scheduler: Add boot time enabling/disabling of cluster scheduling
+- scheduler: Add runtime knob sysctl_sched_cluster
+- scheduler: Create SDTL_SKIP flag to skip topology level
+- sched/eevdf: Skip eligibility check for current entity during wakeup preemption
+- Revert "entry: Inline syscall_exit_to_user_mode()"
+
 * Fri Sep  5 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-40
 - Adaptive NVME SSD interrupt coalescing support write
 - Adaptive NVME SSD interrupt coalescing enhance
