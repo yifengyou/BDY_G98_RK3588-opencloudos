@@ -106,9 +106,18 @@ extern u64 local_clock(void);
  */
 extern void enable_sched_clock_irqtime(void);
 extern void disable_sched_clock_irqtime(void);
+extern int sched_clock_irqtime;
+static inline int irqtime_enabled(void)
+{
+	return sched_clock_irqtime;
+}
 #else
 static inline void enable_sched_clock_irqtime(void) {}
 static inline void disable_sched_clock_irqtime(void) {}
+static inline int irqtime_enabled(void)
+{
+	return 0;
+}
 #endif
 
 #endif /* _LINUX_SCHED_CLOCK_H */

@@ -26,10 +26,14 @@
  */
 DEFINE_PER_CPU(struct irqtime, cpu_irqtime);
 
-static int sched_clock_irqtime;
+static bool irqtime_enable;
+int sched_clock_irqtime;
 
 void enable_sched_clock_irqtime(void)
 {
+	if (!irqtime_enable)
+		return;
+
 	sched_clock_irqtime = 1;
 }
 
@@ -37,6 +41,12 @@ void disable_sched_clock_irqtime(void)
 {
 	sched_clock_irqtime = 0;
 }
+
+static int __init parse_irqtime_enable(char *str)
+{
+	return kstrtobool(str, &irqtime_enable);
+}
+early_param("irqtime", parse_irqtime_enable);
 
 static void irqtime_account_delta(struct irqtime *irqtime, u64 delta,
 				  enum cpu_usage_stat idx)
@@ -61,7 +71,7 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 	s64 delta;
 	int cpu;
 
-	if (!sched_clock_irqtime)
+	if (!irqtime_enabled())
 		return;
 
 	cpu = smp_processor_id();
@@ -93,8 +103,6 @@ static u64 irqtime_tick_accounted(u64 maxtime)
 }
 
 #else /* CONFIG_IRQ_TIME_ACCOUNTING */
-
-#define sched_clock_irqtime	(0)
 
 static u64 irqtime_tick_accounted(u64 dummy)
 {
@@ -513,7 +521,7 @@ void account_process_tick(struct task_struct *p, int user_tick)
 	if (vtime_accounting_enabled_this_cpu())
 		return;
 
-	if (sched_clock_irqtime) {
+	if (irqtime_enabled()) {
 		irqtime_account_process_tick(p, user_tick, 1);
 		return;
 	}
@@ -542,7 +550,7 @@ void account_idle_ticks(unsigned long ticks)
 {
 	u64 cputime, steal;
 
-	if (sched_clock_irqtime) {
+	if (irqtime_enabled()) {
 		irqtime_account_idle_ticks(ticks);
 		return;
 	}
