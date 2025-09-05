@@ -1,3 +1,77 @@
+* Fri Sep  5 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-40
+- Adaptive NVME SSD interrupt coalescing support write
+- Adaptive NVME SSD interrupt coalescing enhance
+- config: kfence: enable kfence for low-overhead sampling-based memory detector
+- psi: fix bug when doing TSK_ONCPU after adding dyn switch
+- psi: support cgroup psi default enabled switch
+- psi: move time getting in psi_group_change forward
+- psi: add dynamic switch for doing cpu psi
+- psi: change the way of setting PSI_MEM_FULL in psi_group_change
+- Merge branch 'release-cve' into release
+- ipvs: fixed subnet namespace lost ipvs hook when ipvs load
+- Introduce sharens switch to share ipvs service and connection between net namespace
+- x86: mm: accelerate pagefault when badaccess
+- sched/fair: Bump sd->max_newidle_lb_cost when newidle balance fails
+- rue/cpu/bt: enable cpu.offline support of scx
+- Merge branch 'leonylgao/performance_patches' into 'release' (merge request !660)
+- sched/fair: Optimize performance by inlining cpu_util_without() and cpu_util()
+- xarray: inline xas_descend to improve performance
+- locking/osq_lock: Avoid false sharing in optimistic_spin_node
+- entry: Inline syscall_exit_to_user_mode()
+- entry: Move syscall_enter_from_user_mode() to header file
+- entry: Move enter_from_user_mode() to header file
+- entry: Move exit to usermode functions to header file
+- fs: rearrange general fastpath check now that O_CREAT uses it
+- fs: remove audit dummy context check
+- fs: pull up trailing slashes check for O_CREAT
+- fs: move audit parent inode
+- fs: try an opportunistic lookup for O_CREAT opens too
+- fs/file.c: add fast path in find_next_fd()
+- fs/file.c: conditionally clear full_fds
+- fs/file.c: remove sanity_check and add likely/unlikely in alloc_fd()
+- Merge branch 'kasong/tk5/macos-build-support' into 'release' (merge request !650)
+- arm64: wrap all helpers for CONFIG_ALTRA_ERRATUM_82288
+- selinux: do not include <linux/*.h> headers from host programs
+- scripts: subarch.include: fix SUBARCH on macOS hosts
+- Merge branch 'leonylgao/dynamic_irqtime2' into 'release' (merge request !621)
+- watchdog/softlockup: Do not detect interrupt storm if irqtime is disabled
+- irqtime: move irqtime_enabled interface to <linux/sched/clock.h>
+- irqtime: disable sched_clock_irqtime by default
+- sched/clock: Don't define sched_clock_irqtime as static key
+- sched, psi: Don't account irq time if sched_clock_irqtime is disabled
+- sched: Don't account irq time if sched_clock_irqtime is disabled
+- sched: Define sched_clock_irqtime as static key
+- sched/psi: Bail out early from irq time accounting
+- Merge branch 'leonylgao/config_update' into 'release' (merge request !620)
+- config: use CONFIG_TICK_CPU_ACCOUNTING
+- config: disable CONFIG_NO_HZ_FULL
+- config: disable CONFIG_PREEMPT_VOLUNTARY
+- config: disable CONFIG_PREEMPT_DYNAMIC
+- Merge branch 'leonylgao/csd_lock_wait_debug' into 'release' (merge request !588)
+- config: enable CONFIG_CSD_LOCK_WAIT_DEBUG
+- locking/csd-lock: make CSD lock debug tunables writable in /sys
+- locking/csd-lock: Switch from sched_clock() to ktime_get_mono_fast_ns()
+- smp: print only local CPU info when sched_clock goes backward
+- locking/csd-lock: Use backoff for repeated reports of same incident
+- locking/csd_lock: Provide an indication of ongoing CSD-lock stall
+- locking/csd_lock: Print large numbers as negatives
+- smp: Change function signatures to use call_single_data_t
+- Merge branch 'bingfangguo/release/mglru-reclaim-aging-oom' into 'release' (merge request !609)
+- mm, mglru: avoid long tailing sleep on aging
+- mm, lru_gen: rework aging and reclaim control
+- Merge branch 'leonylgao/panic_sys_info' into 'release' (merge request !602)
+- panic: add note that panic_print sysctl interface is deprecated
+- panic: add 'panic_sys_info=' setup option for kernel cmdline
+- panic: add 'panic_sys_info' sysctl to take human readable string parameter
+- panic: generalize panic_print's function to show sys info
+- panic: clean up code for console replay
+- panic: add option to dump blocked tasks in panic_print
+- Merge branch 'leonylgao/hungtask_rwsem_owner' into 'release' (merge request !600)
+- samples: enhance hung_task detector test with read-write semaphore support
+- hung_task: extend hung task blocker tracking to rwsems
+- locking/rwsem: make owner helpers globally available
+- locking/rwsem: Move is_rwsem_reader_owned() and rwsem_owner() under CONFIG_DEBUG_RWSEMS
+
 * Mon Sep  1 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-39.2
 - config: enable low-speed bus for tcsos, fix mfd compile issue.
 
