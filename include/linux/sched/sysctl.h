@@ -28,6 +28,9 @@ enum sched_tunable_scaling {
 #define NUMA_BALANCING_MEMORY_TIERING	0x2
 
 #ifdef CONFIG_BT_SCHED
+int bt_ignore_cpubind_handler(struct ctl_table *table, int write,
+					  void *buffer, size_t *lenp,
+					  loff_t *ppos);
 extern unsigned int sysctl_sched_bt_nr_migrate;
 extern unsigned int sysctl_idle_balance_bt_cost;
 extern unsigned int sysctl_sched_bt_load_balance_interval_min_ms;

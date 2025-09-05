@@ -379,6 +379,13 @@ DEFINE_SCHED_CLASS(bt) = {
 #endif
 };
 
+int bt_ignore_cpubind_handler(struct ctl_table *table, int write,
+					  void *buffer, size_t *lenp,
+					  loff_t *ppos)
+{
+	return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+}
+
 void init_offline_cpu_control(void)
 {
 }

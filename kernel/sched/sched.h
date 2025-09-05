@@ -215,6 +215,7 @@ static inline int task_has_bt_policy(const struct task_struct *p)
 {
 	return bt_policy(p->policy);
 }
+void bt_ignore_cpubind(struct task_struct *p);
 
 #define RQ_CFS_NR_RUNNING(rq)	\
 	((rq)->nr_running - (rq)->bt_nr_running)
@@ -222,6 +223,9 @@ static inline int task_has_bt_policy(const struct task_struct *p)
 
 #define RQ_CFS_NR_RUNNING(rq)	\
 	((rq)->nr_running)
+
+static inline void bt_ignore_cpubind(struct task_struct *p) { }
+
 #endif
 
 static inline int idle_policy(int policy)
