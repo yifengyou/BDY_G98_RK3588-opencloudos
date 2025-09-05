@@ -1035,6 +1035,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	now = cpu_clock(cpu);
 	if (psi_use_legacy()) {
 		psi_group_change_legacy(task, cpu, clear, set, now, true);
+		psi_write_end(cpu);
 		return;
 	}
 	for_each_group(group, task_psi_group(task))
@@ -1074,7 +1075,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 			psi_flags_change(prev, clear, set);
 			psi_group_change_legacy(prev, cpu, clear, set, now, wake_clock);
 		}
-
+		psi_write_end(cpu);
 		return;
 	}
 
@@ -1127,8 +1128,10 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				wake_clock = false;
 		}
 
-		if (clear == set)
+		if (clear == set) {
+			psi_write_end(cpu);
 			return;
+		}
 
 		psi_flags_change(prev, clear, set);
 
@@ -1137,6 +1140,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 			do {
 				psi_group_change(prev, group, cpu, clear, set, now, wake_clock);
 			} while ((group = group->parent));
+			psi_write_end(cpu);
 			return;
 		}
 
