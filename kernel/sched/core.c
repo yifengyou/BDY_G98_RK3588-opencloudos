@@ -3182,7 +3182,6 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	bool kthread = p->flags & PF_KTHREAD;
 	unsigned int dest_cpu;
 	int ret = 0;
-	bool verbose_log = 0;
 
 	update_rq_clock(rq);
 
@@ -3230,15 +3229,8 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	}
 
 #ifdef CONFIG_BT_SCHED
-	if (sysctl_sched_bt_ignore_cpubind && bt_prio(p->prio)) {
-
-		if (p->cpus_ptr == &p->cpus_mask)
-			p->cpus_ptr = cpu_active_mask;
-
-		if (cpumask_any_and(cpu_valid_mask, ctx->new_mask) < nr_cpu_ids)
-			verbose_log = 1;
-
-	}
+	if (sysctl_sched_bt_ignore_cpubind && bt_prio(p->prio))
+		goto out;
 #endif
 
 	/*
@@ -3254,18 +3246,7 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 
 	__do_set_cpus_allowed(p, ctx);
 
-	ret = affine_move_task(rq, p, rf, dest_cpu, ctx->flags);
-
-	if (verbose_log)
-		pr_debug_ratelimited("task %s(%d) on cpu %d requests to bind BT task %s(%d) on cpu %d to %*pbl but being ignored\n",
-				current->comm,
-				current->pid,
-				smp_processor_id(),
-				p->comm,
-				p->pid,
-				cpu_of(rq),
-				cpumask_pr_args(ctx->new_mask));
-	return ret;
+	return affine_move_task(rq, p, rf, dest_cpu, ctx->flags);
 
 out:
 	task_rq_unlock(rq, p, rf);
@@ -4967,11 +4948,6 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_class = &fair_sched_class;
 	}
 
-#ifdef CONFIG_BT_SCHED
-	if (sysctl_sched_bt_ignore_cpubind && bt_prio(p->prio))
-		p->cpus_ptr = cpu_active_mask;
-#endif
-
 	init_entity_runnable_average(&p->se);
 
 
@@ -5007,11 +4983,6 @@ int sched_cgroup_fork(struct task_struct *p, struct kernel_clone_args *kargs)
 		tg = autogroup_task_group(p, tg);
 		p->sched_task_group = tg;
 	}
-#endif
-
-#ifdef CONFIG_BT_SCHED
-	if (sysctl_sched_bt_ignore_cpubind && bt_prio(p->prio))
-		p->cpus_ptr = cpu_active_mask;
 #endif
 
 	rseq_migrate(p);

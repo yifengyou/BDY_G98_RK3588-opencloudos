@@ -2825,7 +2825,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_bt_ignore_cpubind,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= bt_ignore_cpubind_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
