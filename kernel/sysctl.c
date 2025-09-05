@@ -65,6 +65,9 @@
 #include <linux/pid.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
+#ifdef CONFIG_PSI_DYN_SWITCH
+#include <linux/psi.h>
+#endif
 
 #ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 #include <linux/blk-cgroup.h>
@@ -2921,6 +2924,24 @@ static struct ctl_table kern_table[] = {
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE,
 	},
+#ifdef CONFIG_PSI_DYN_SWITCH
+	{
+		.procname		= "psi_dyn_stat_types",
+		.data			= &sysctl_psi_dyn_stat_types,
+		.maxlen			= sizeof(unsigned int),
+		.mode			= 0644,
+		.proc_handler	= psi_dyn_stat_handler,
+	},
+#ifdef CONFIG_CGROUPS
+	{
+		.procname		= "psi_cgroup_default_enabled",
+		.data			= &sysctl_psi_cgroup_default_enabled,
+		.maxlen			= sizeof(unsigned int),
+		.mode			= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+	},
+#endif
+#endif
 	{ }
 };
 
