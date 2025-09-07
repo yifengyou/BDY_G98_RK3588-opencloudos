@@ -826,30 +826,17 @@ static void poll_timer_fn(struct timer_list *t)
 static void record_times(struct psi_group_cpu *groupc, u64 now)
 {
 	u32 delta;
+	int bit;
+	u32 state_mask;
 
+	state_mask = groupc->state_mask & ~PSI_ONCPU;
 	delta = now - groupc->state_start;
 	groupc->state_start = now;
 
-	if (groupc->state_mask & (1 << PSI_IO_SOME)) {
-		groupc->times[PSI_IO_SOME] += delta;
-		if (groupc->state_mask & (1 << PSI_IO_FULL))
-			groupc->times[PSI_IO_FULL] += delta;
+	for (; state_mask; state_mask &= ~(1 << bit)) {
+		bit = __ffs(state_mask);
+		groupc->times[bit] += delta;
 	}
-
-	if (groupc->state_mask & (1 << PSI_MEM_SOME)) {
-		groupc->times[PSI_MEM_SOME] += delta;
-		if (groupc->state_mask & (1 << PSI_MEM_FULL))
-			groupc->times[PSI_MEM_FULL] += delta;
-	}
-
-	if (groupc->state_mask & (1 << PSI_CPU_SOME)) {
-		groupc->times[PSI_CPU_SOME] += delta;
-		if (groupc->state_mask & (1 << PSI_CPU_FULL))
-			groupc->times[PSI_CPU_FULL] += delta;
-	}
-
-	if (groupc->state_mask & (1 << PSI_NONIDLE))
-		groupc->times[PSI_NONIDLE] += delta;
 }
 
 #define for_each_group(iter, group) \
@@ -886,9 +873,9 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * The rest of the state mask is calculated based on the task
 	 * counts. Update those first, then construct the mask.
 	 */
-	for (t = 0, m = clear; m; m &= ~(1 << t), t++) {
-		if (!(m & (1 << t)))
-			continue;
+	for (m = clear; m; m &= ~(1 << t)) {
+		t = __ffs(m);
+
 		if (groupc->tasks[t]) {
 			groupc->tasks[t]--;
 		} else if (!psi_bug) {
@@ -900,9 +887,10 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		}
 	}
 
-	for (t = 0; set; set &= ~(1 << t), t++)
-		if (set & (1 << t))
-			groupc->tasks[t]++;
+	for (; set; set &= ~(1 << t)) {
+		t = __ffs(set);
+		groupc->tasks[t]++;
+	}
 
 	if (!group->enabled) {
 		/*
