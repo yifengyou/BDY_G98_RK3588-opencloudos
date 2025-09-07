@@ -336,13 +336,20 @@ static void get_recent_times(struct psi_group *group, int cpu,
 	/* Snapshot a coherent view of the CPU state */
 	do {
 		seq = psi_read_begin(cpu);
-		now = cpu_clock(cpu);
+		now = psi_gettime(cpu);
 		memcpy(times, groupc->times, sizeof(groupc->times));
 		state_mask = groupc->state_mask;
 		state_start = groupc->state_start;
 		if (cpu == current_cpu)
 			memcpy(tasks, groupc->tasks, sizeof(groupc->tasks));
 	} while (psi_read_retry(cpu, seq));
+
+#ifdef CONFIG_PSI_USE_JIFFIES
+	int i;
+	/* We transfter the jiffies value saved into nanoseconds here */
+	for (i = 0; i < NR_PSI_STATES; i++)
+		times[i] = jiffies_to_nsecs(times[i]);
+#endif
 
 	/* Calculate state time deltas against the previous snapshot */
 	for (s = 0; s < NR_PSI_STATES; s++) {
@@ -1017,7 +1024,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	psi_flags_change(task, clear, set);
 
 	psi_write_begin(cpu);
-	now = cpu_clock(cpu);
+	now = psi_gettime(cpu);
 	if (psi_use_legacy()) {
 		psi_group_change_legacy(task, cpu, clear, set, now, true);
 		psi_write_end(cpu);
@@ -1036,7 +1043,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	u64 now;
 
 	psi_write_begin(cpu);
-	now = cpu_clock(cpu);
+	now = psi_gettime(cpu);
 
 	/*
 	 * psi_dequeue() expects us to handle some flags here
@@ -1171,7 +1178,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	rq->psi_irq_time = irq;
 
 	psi_write_begin(cpu);
-	now = cpu_clock(cpu);
+	now = psi_gettime(cpu);
 
 	for_each_group(group, task_psi_group(curr)) {
 		if (!group->enabled)
@@ -1378,7 +1385,7 @@ void psi_cgroup_restart(struct psi_group *group)
 		guard(rq_lock_irq)(cpu_rq(cpu));
 
 		psi_write_begin(cpu);
-		now = cpu_clock(cpu);
+		now = psi_gettime(cpu);
 		psi_group_change(group, cpu, 0, 0, now, true);
 		psi_write_end(cpu);
 	}
