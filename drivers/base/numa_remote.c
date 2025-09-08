@@ -11,6 +11,7 @@
 #include <linux/page-isolation.h>
 #include <linux/memory.h>
 #include <linux/numa_remote.h>
+#include <linux/oom.h>
 #include "../../mm/hugetlb_vmemmap.h"
 #include "../../mm/internal.h"
 
@@ -637,6 +638,11 @@ int numa_remote_report_node_meminfo(char *buf, int len, int nid)
 static int __init numa_remote_init(void)
 {
 	int ret;
+
+	if (!numa_remote_enabled)
+		return 0;
+
+	sysctl_oom_kill_cpuless_numa_allocating_task = 1;
 
 	if (!numa_remote_preonline_mode)
 		return 0;
