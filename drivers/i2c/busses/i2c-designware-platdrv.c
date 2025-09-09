@@ -57,6 +57,7 @@ static const struct acpi_device_id dw_i2c_acpi_match[] = {
 	{ "HISI02A2", 0 },
 	{ "HISI02A3", 0 },
 	{ "HYGO0010", ACCESS_INTR_MASK },
+	{ "SUNW0005", MODEL_SUNWAY },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, dw_i2c_acpi_match);
@@ -150,9 +151,14 @@ static int dw_i2c_of_configure(struct platform_device *pdev)
 }
 
 static const struct of_device_id dw_i2c_of_match[] = {
+#ifdef CONFIG_SW64
+	{ .compatible = "snps,designware-i2c", .data = (void *)MODEL_SUNWAY },
+#else
 	{ .compatible = "snps,designware-i2c", },
+#endif
 	{ .compatible = "mscc,ocelot-i2c", .data = (void *)MODEL_MSCC_OCELOT },
 	{ .compatible = "baikal,bt1-sys-i2c", .data = (void *)MODEL_BAIKAL_BT1 },
+	{ .compatible = "sunway,suntai-i2c", .data = (void *)MODEL_SUNWAY },
 	{},
 };
 MODULE_DEVICE_TABLE(of, dw_i2c_of_match);

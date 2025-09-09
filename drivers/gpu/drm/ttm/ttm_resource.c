@@ -437,6 +437,9 @@ int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 	}
 	spin_unlock(&bdev->lru_lock);
 
+	if (ret && ret != -ENOENT)
+		return ret;
+
 	spin_lock(&man->move_lock);
 	fence = dma_fence_get(man->move);
 	spin_unlock(&man->move_lock);
@@ -665,7 +668,11 @@ ttm_kmap_iter_linear_io_init(struct ttm_kmap_iter_linear_io *iter_io,
 	}
 
 	if (mem->bus.addr) {
+#if IS_ENABLED(CONFIG_SW64)
+		iosys_map_set_vaddr_iomem(&iter_io->dmap, mem->bus.addr);
+#else
 		iosys_map_set_vaddr(&iter_io->dmap, mem->bus.addr);
+#endif
 		iter_io->needs_unmap = false;
 	} else {
 		iter_io->needs_unmap = true;

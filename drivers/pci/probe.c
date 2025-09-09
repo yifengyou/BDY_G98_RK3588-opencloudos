@@ -145,6 +145,7 @@ static inline unsigned long decode_bar(struct pci_dev *dev, u32 bar)
 
 	flags = bar & ~PCI_BASE_ADDRESS_MEM_MASK;
 	flags |= IORESOURCE_MEM;
+
 	if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH)
 		flags |= IORESOURCE_PREFETCH;
 
@@ -1597,7 +1598,7 @@ void set_pcie_hotplug_bridge(struct pci_dev *pdev)
 
 	pcie_capability_read_dword(pdev, PCI_EXP_SLTCAP, &reg32);
 	if (reg32 & PCI_EXP_SLTCAP_HPC)
-		pdev->is_hotplug_bridge = 1;
+		pdev->is_hotplug_bridge = pdev->is_pciehp = 1;
 }
 
 static void set_pcie_thunderbolt(struct pci_dev *dev)

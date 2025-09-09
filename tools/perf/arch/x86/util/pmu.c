@@ -174,7 +174,7 @@ const char *pmu_find_alias_name(const char *name)
 int perf_pmus__num_mem_pmus(void)
 {
 	/* AMD uses IBS OP pmu and not a core PMU for perf mem/c2c */
-	if (x86__is_amd_cpu())
+	if (x86__is_amd_cpu() || x86__is_hygon_cpu())
 		return 1;
 
 	/* Intel uses core pmus for perf mem/c2c */

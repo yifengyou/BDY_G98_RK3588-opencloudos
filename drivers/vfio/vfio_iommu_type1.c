@@ -539,11 +539,15 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
 
 	pte = ptep_get(ptep);
 
+#ifdef CONFIG_SW64
+	*pfn = pte_pfn(pte);
+#else
 	if (write_fault && !pte_write(pte))
 		ret = -EFAULT;
 	else
 		*pfn = pte_pfn(pte);
 
+#endif
 	pte_unmap_unlock(ptep, ptl);
 	return ret;
 }
@@ -623,6 +627,13 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 
 	while (npage) {
 		if (!batch->size) {
+			/*
+			 * Large mappings may take a while to repeatedly refill
+			 * the batch, so conditionally relinquish the CPU when
+			 * needed to avoid stalls.
+			 */
+			cond_resched();
+
 			/* Empty batch, so refill it. */
 			long req_pages = min_t(long, npage, batch->capacity);
 
