@@ -48,28 +48,20 @@ static int udma_verify_jfr_param(struct udma_dev *dev,
 
 static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 {
-	uint32_t rqe_buf_size;
 	uint32_t idx_buf_size;
-	uint32_t sge_per_wqe;
 	int ret;
 
-	sge_per_wqe = min(jfr->max_sge, dev->caps.jfr_sge);
-	jfr->rq.buf.entry_size = UDMA_SGE_SIZE * sge_per_wqe;
+	jfr->rq.buf.entry_size = UDMA_SGE_SIZE * min(jfr->max_sge, dev->caps.jfr_sge);
 	jfr->rq.buf.entry_cnt = jfr->wqe_cnt;
-	rqe_buf_size = jfr->rq.buf.entry_size * jfr->rq.buf.entry_cnt;
-
-	ret = udma_alloc_normal_buf(dev, rqe_buf_size, &jfr->rq.buf);
+	ret = udma_k_alloc_buf(dev, &jfr->rq.buf);
 	if (ret) {
-		dev_err(dev->dev,
-			"failed to alloc rq buffer for jfr when buffer size = %u.\n",
-			rqe_buf_size);
+		dev_err(dev->dev, "failed to alloc rq buffer, id=%u.\n", jfr->rq.id);
 		return ret;
 	}
 
 	jfr->idx_que.buf.entry_size = UDMA_IDX_QUE_ENTRY_SZ;
 	jfr->idx_que.buf.entry_cnt = jfr->wqe_cnt;
 	idx_buf_size = jfr->idx_que.buf.entry_size * jfr->idx_que.buf.entry_cnt;
-
 	ret = udma_alloc_normal_buf(dev, idx_buf_size, &jfr->idx_que.buf);
 	if (ret) {
 		dev_err(dev->dev,
@@ -100,24 +92,22 @@ err_alloc_db:
 err_wrid:
 	udma_free_normal_buf(dev, idx_buf_size, &jfr->idx_que.buf);
 err_idx_que:
-	udma_free_normal_buf(dev, rqe_buf_size, &jfr->rq.buf);
+	udma_k_free_buf(dev, &jfr->rq.buf);
 
 	return -ENOMEM;
 }
 
-static int udma_get_u_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
-			      struct ubcore_udata *udata,
+static int udma_jfr_get_u_cmd(struct udma_dev *dev, struct ubcore_udata *udata,
 			      struct udma_create_jetty_ucmd *ucmd)
 {
 	unsigned long byte;
-	int ret;
 
 	if (!udata->udrv_data) {
 		dev_err(dev->dev, "jfr udata udrv_data is null.\n");
 		return -EINVAL;
 	}
 
-	if (!udata->udrv_data->in_addr || udata->udrv_data->in_len < sizeof(*ucmd)) {
+	if (!udata->udrv_data->in_addr || udata->udrv_data->in_len != sizeof(*ucmd)) {
 		dev_err(dev->dev, "jfr in_len %u or addr is invalid.\n",
 			udata->udrv_data->in_len);
 		return -EINVAL;
@@ -131,14 +121,41 @@ static int udma_get_u_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
 		return -EFAULT;
 	}
 
-	if (!ucmd->non_pin) {
+	return 0;
+}
+
+static int udma_get_u_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
+			      struct ubcore_udata *udata,
+			      struct udma_create_jetty_ucmd *ucmd)
+{
+	int ret;
+
+	ret = udma_jfr_get_u_cmd(dev, udata, ucmd);
+	if (ret)
+		return ret;
+
+	jfr->udma_ctx = to_udma_context(udata->uctx);
+	if (ucmd->non_pin) {
+		jfr->rq.buf.addr = ucmd->buf_addr;
+	} else if (ucmd->is_hugepage) {
+		jfr->rq.buf.addr = ucmd->buf_addr;
+		if (udma_occupy_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr)) {
+			dev_err(dev->dev, "failed to create rq, va not map.\n");
+			return -EINVAL;
+		}
+		jfr->rq.buf.is_hugepage = true;
+	} else {
 		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &jfr->rq.buf);
 		if (ret) {
 			dev_err(dev->dev,
 				"failed to pin jfr rqe buf addr, ret = %d.\n", ret);
 			return ret;
 		}
+	}
 
+	if (ucmd->non_pin) {
+		jfr->idx_que.buf.addr = ucmd->idx_addr;
+	} else {
 		ret = pin_queue_addr(dev, ucmd->idx_addr, ucmd->idx_len,
 				&jfr->idx_que.buf);
 		if (ret) {
@@ -146,12 +163,8 @@ static int udma_get_u_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
 				"failed to pin jfr idx que addr, ret = %d.\n", ret);
 			goto err_pin_idx_buf;
 		}
-	} else {
-		jfr->rq.buf.addr = ucmd->buf_addr;
-		jfr->idx_que.buf.addr = ucmd->idx_addr;
 	}
 
-	jfr->udma_ctx = to_udma_context(udata->uctx);
 	jfr->sw_db.db_addr = ucmd->db_addr;
 	jfr->jfr_sleep_buf.db_addr = ucmd->jfr_sleep_buf;
 
@@ -181,7 +194,10 @@ err_pin_jfr_sleep_buf:
 err_pin_sw_db:
 	unpin_queue_addr(jfr->idx_que.buf.umem);
 err_pin_idx_buf:
-	unpin_queue_addr(jfr->rq.buf.umem);
+	if (ucmd->is_hugepage)
+		udma_return_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr);
+	else
+		unpin_queue_addr(jfr->rq.buf.umem);
 	return ret;
 }
 
@@ -205,13 +221,15 @@ static void udma_put_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 		udma_unpin_sw_db(jfr->udma_ctx, &jfr->jfr_sleep_buf);
 		udma_unpin_sw_db(jfr->udma_ctx, &jfr->sw_db);
 		unpin_queue_addr(jfr->idx_que.buf.umem);
-		unpin_queue_addr(jfr->rq.buf.umem);
+		if (jfr->rq.buf.is_hugepage)
+			udma_return_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr);
+		else
+			unpin_queue_addr(jfr->rq.buf.umem);
 		return;
 	}
 
 	if (jfr->rq.buf.kva) {
-		size = jfr->rq.buf.entry_cnt * jfr->rq.buf.entry_size;
-		udma_free_normal_buf(dev, size, &jfr->rq.buf);
+		udma_k_free_buf(dev, &jfr->rq.buf);
 		udma_free_sw_db(dev, &jfr->sw_db);
 	}
 

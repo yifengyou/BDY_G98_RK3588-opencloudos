@@ -63,6 +63,8 @@ struct udma_caps {
 	uint16_t rc_queue_num;
 	uint16_t rc_queue_depth;
 	uint8_t rc_entry_size;
+	uint64_t rc_dma_len;
+	dma_addr_t rc_dma_addr;
 	uint8_t ack_queue_num;
 	uint8_t port_num;
 	uint8_t cqe_size;

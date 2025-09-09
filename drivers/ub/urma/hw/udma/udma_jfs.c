@@ -21,7 +21,7 @@
 int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct udma_create_jetty_ucmd *ucmd)
 {
-	int ret;
+	int ret = 0;
 
 	if (ucmd->sqe_bb_cnt == 0 || ucmd->buf_len == 0) {
 		dev_err(dev->dev, "invalid param, sqe_bb_cnt=%u, buf_len=%u.\n",
@@ -33,17 +33,22 @@ int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 	sq->buf.entry_cnt = ucmd->buf_len >> WQE_BB_SIZE_SHIFT;
 	if (sq->non_pin) {
 		sq->buf.addr = ucmd->buf_addr;
+	} else if (ucmd->is_hugepage) {
+		sq->buf.addr = ucmd->buf_addr;
+		if (udma_occupy_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr)) {
+			dev_err(dev->dev, "failed to create sq, va not map.\n");
+			return -EINVAL;
+		}
+		sq->buf.is_hugepage = true;
 	} else {
 		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &sq->buf);
 		if (ret) {
-			dev_err(dev->dev,
-				"failed to pin jetty/jfs queue addr, ret = %d.\n",
-				ret);
+			dev_err(dev->dev, "failed to pin sq, ret = %d.\n", ret);
 			return ret;
 		}
 	}
 
-	return 0;
+	return ret;
 }
 
 int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
@@ -71,19 +76,18 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 	size = ALIGN(wqe_bb_depth * sq->buf.entry_size, UDMA_HW_PAGE_SIZE);
 	sq->buf.entry_cnt = size >> WQE_BB_SIZE_SHIFT;
 
-	ret = udma_alloc_normal_buf(dev, size, &sq->buf);
+	ret = udma_k_alloc_buf(dev, &sq->buf);
 	if (ret) {
-		dev_err(dev->dev,
-			"failed to alloc jetty (%u) sq buf when size = %u.\n", sq->id, size);
+		dev_err(dev->dev, "failed to alloc sq buffer, id=%u.\n", sq->id);
 		return ret;
 	}
 
 	sq->wrid = kcalloc(1, sq->buf.entry_cnt * sizeof(uint64_t), GFP_KERNEL);
 	if (!sq->wrid) {
-		udma_free_normal_buf(dev, size, &sq->buf);
 		dev_err(dev->dev,
 			"failed to alloc wrid for jfs id = %u when entry cnt = %u.\n",
 			sq->id, sq->buf.entry_cnt);
+		udma_k_free_buf(dev, &sq->buf);
 		return -ENOMEM;
 	}
 
@@ -95,18 +99,20 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 
 void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 {
-	uint32_t size;
-
 	if (sq->buf.kva) {
-		size = sq->buf.entry_cnt * sq->buf.entry_size;
-		udma_free_normal_buf(dev, size, &sq->buf);
+		udma_k_free_buf(dev, &sq->buf);
 		kfree(sq->wrid);
 		return;
 	}
+
 	if (sq->non_pin)
 		return;
 
-	unpin_queue_addr(sq->buf.umem);
+	if (sq->buf.is_hugepage) {
+		udma_return_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
+	} else {
+		unpin_queue_addr(sq->buf.umem);
+	}
 }
 
 void udma_init_jfsc(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
@@ -277,6 +283,7 @@ static int udma_get_user_jfs_cmd(struct udma_dev *dev, struct udma_jfs *jfs,
 		}
 
 		uctx = to_udma_context(udata->uctx);
+		jfs->sq.udma_ctx = uctx;
 		jfs->sq.tid = uctx->tid;
 		jfs->jfs_addr = ucmd->jetty_addr;
 		jfs->pi_type = ucmd->pi_type;
@@ -292,7 +299,7 @@ static int udma_get_user_jfs_cmd(struct udma_dev *dev, struct udma_jfs *jfs,
 }
 
 static int udma_alloc_jfs_sq(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
-			      struct udma_jfs *jfs, struct ubcore_udata *udata)
+			     struct udma_jfs *jfs, struct ubcore_udata *udata)
 {
 	struct udma_create_jetty_ucmd ucmd = {};
 	int ret;

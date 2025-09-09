@@ -487,7 +487,6 @@ static void udma_get_jetty_id_range(struct udma_dev *udma_dev,
 
 static int query_caps_from_firmware(struct udma_dev *udma_dev)
 {
-#define RC_QUEUE_ENTRY_SIZE 128
 	struct udma_cmd_ue_resource cmd = {};
 	int ret;
 
@@ -513,10 +512,6 @@ static int query_caps_from_firmware(struct udma_dev *udma_dev)
 	udma_dev->caps.atomic_feat = cmd.atomic_feat;
 
 	udma_get_jetty_id_range(udma_dev, &cmd);
-
-	udma_dev->caps.rc_queue_num = cmd.rc_queue_num;
-	udma_dev->caps.rc_queue_depth = cmd.rc_depth;
-	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
 
 	udma_dev->caps.feature = cmd.cap_info;
 	udma_dev->caps.ue_cnt = cmd.ue_cnt >= UDMA_DEV_UE_NUM ?
@@ -581,9 +576,24 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	return 0;
 }
 
+static void cal_max_2m_num(struct udma_dev *dev)
+{
+	uint32_t jfs_pg = ALIGN(dev->caps.jfs.depth * MAX_WQEBB_IN_SQE *
+				UDMA_JFS_WQEBB_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+	uint32_t jfr_pg = ALIGN(dev->caps.jfr.depth * dev->caps.jfr_sge *
+				UDMA_SGE_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+	uint32_t jfc_pg = ALIGN(dev->caps.jfc.depth * dev->caps.cqe_size,
+				UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+
+	dev->total_hugepage_num =
+		(dev->caps.jetty.start_idx + dev->caps.jetty.max_cnt) * jfs_pg +
+		dev->caps.jfr.max_cnt * jfr_pg + dev->caps.jfc.max_cnt * jfc_pg;
+}
+
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
+#define RC_QUEUE_ENTRY_SIZE 64
 	struct ubase_adev_caps *a_caps;
 	uint32_t jetty_grp_cnt;
 	int ret;
@@ -609,6 +619,14 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.jetty.start_idx = a_caps->jfs.start_idx;
 	udma_dev->caps.jetty.next_idx = udma_dev->caps.jetty.start_idx;
 	udma_dev->caps.cqe_size = UDMA_CQE_SIZE;
+	udma_dev->caps.rc_queue_num = a_caps->rc_max_cnt;
+	udma_dev->caps.rc_queue_depth = a_caps->rc_que_depth;
+	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
+	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
+	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
+
+	cal_max_2m_num(udma_dev);
+
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)
 		return ret;
@@ -657,11 +675,14 @@ static int udma_init_dev_param(struct udma_dev *udma_dev)
 	for (i = 0; i < UDMA_DB_TYPE_NUM; i++)
 		INIT_LIST_HEAD(&udma_dev->db_list[i]);
 
+	udma_init_hugepage(udma_dev);
+
 	return 0;
 }
 
 static void udma_uninit_dev_param(struct udma_dev *udma_dev)
 {
+	udma_destroy_hugepage(udma_dev);
 	mutex_destroy(&udma_dev->db_mutex);
 	dev_set_drvdata(&udma_dev->comdev.adev->dev, NULL);
 	udma_destroy_tables(udma_dev);

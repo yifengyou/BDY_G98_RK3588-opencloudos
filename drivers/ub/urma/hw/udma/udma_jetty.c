@@ -66,6 +66,7 @@ static int udma_get_user_jetty_cmd(struct udma_dev *dev, struct udma_jetty *jett
 	}
 
 	uctx = to_udma_context(udata->uctx);
+	jetty->sq.udma_ctx = uctx;
 	jetty->sq.tid = uctx->tid;
 	jetty->jetty_addr = ucmd->jetty_addr;
 	jetty->pi_type = ucmd->pi_type;

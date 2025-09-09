@@ -603,6 +603,153 @@ void udma_free_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 	buf->addr = 0;
 }
 
+static struct udma_hugepage_priv *
+udma_alloc_hugepage_priv(struct udma_dev *dev, uint32_t len)
+{
+	struct udma_hugepage_priv *priv;
+
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return NULL;
+
+	priv->va_len = ALIGN(len, UDMA_HUGEPAGE_SIZE);
+	if (priv->va_len >> UDMA_HUGEPAGE_SHIFT > dev->total_hugepage_num) {
+		dev_err(dev->dev, "insufficient resources for mmap.\n");
+		goto err_vmalloc_huge;
+	}
+
+	priv->left_va_len = priv->va_len;
+	priv->va_base = vmalloc_huge(priv->va_len, GFP_KERNEL);
+	if (!priv->va_base) {
+		dev_err(dev->dev, "failed to vmalloc_huge, size=%u.", priv->va_len);
+		goto err_vmalloc_huge;
+	}
+	memset(priv->va_base, 0, priv->va_len);
+
+	priv->umem = udma_pin_k_addr(&dev->ub_dev, (uint64_t)priv->va_base, priv->va_len);
+	if (IS_ERR(priv->umem)) {
+		dev_err(dev->dev, "pin kernel buf failed.\n");
+		goto err_pin;
+	}
+
+	refcount_set(&priv->refcnt, 1);
+	list_add(&priv->list, &dev->hugepage_list);
+	dev->total_hugepage_num -= priv->va_len >> UDMA_HUGEPAGE_SHIFT;
+
+	if (dfx_switch)
+		dev_info_ratelimited(dev->dev, "map_hugepage, 2m_page_num=%u.\n",
+				     priv->va_len >> UDMA_HUGEPAGE_SHIFT);
+	return priv;
+
+err_pin:
+	vfree(priv->va_base);
+err_vmalloc_huge:
+	kfree(priv);
+
+	return NULL;
+}
+
+static struct udma_hugepage *
+udma_alloc_hugepage(struct udma_dev *dev, uint32_t len)
+{
+	struct udma_hugepage_priv *priv = NULL;
+	struct udma_hugepage *hugepage;
+	bool b_reuse = false;
+
+	hugepage = kzalloc(sizeof(*hugepage), GFP_KERNEL);
+	if (!hugepage)
+		return NULL;
+
+	mutex_lock(&dev->hugepage_lock);
+	if (!list_empty(&dev->hugepage_list)) {
+		priv = list_first_entry(&dev->hugepage_list, struct udma_hugepage_priv, list);
+		b_reuse = len <= priv->left_va_len;
+	}
+
+	if (b_reuse) {
+		refcount_inc(&priv->refcnt);
+	} else {
+		priv = udma_alloc_hugepage_priv(dev, len);
+		if (!priv) {
+			mutex_unlock(&dev->hugepage_lock);
+			kfree(hugepage);
+			return NULL;
+		}
+	}
+
+	hugepage->va_start = priv->va_base + priv->left_va_offset;
+	hugepage->va_len = len;
+	hugepage->priv = priv;
+	priv->left_va_offset += len;
+	priv->left_va_len -= len;
+	mutex_unlock(&dev->hugepage_lock);
+
+	if (dfx_switch)
+		dev_info_ratelimited(dev->dev, "occupy_hugepage, 4k_page_num=%u.\n",
+				     hugepage->va_len >> UDMA_HW_PAGE_SHIFT);
+	return hugepage;
+}
+
+static void udma_free_hugepage(struct udma_dev *dev, struct udma_hugepage *hugepage)
+{
+	struct udma_hugepage_priv *priv = hugepage->priv;
+
+	if (dfx_switch)
+		dev_info_ratelimited(dev->dev, "return_hugepage, 4k_page_num=%u.\n",
+				     hugepage->va_len >> UDMA_HW_PAGE_SHIFT);
+	mutex_lock(&dev->hugepage_lock);
+	if (refcount_dec_and_test(&priv->refcnt)) {
+		if (dfx_switch)
+			dev_info_ratelimited(dev->dev, "unmap_hugepage, 2m_page_num=%u.\n",
+					     priv->va_len >> UDMA_HUGEPAGE_SHIFT);
+		list_del(&priv->list);
+		dev->total_hugepage_num += priv->va_len >> UDMA_HUGEPAGE_SHIFT;
+
+		udma_unpin_k_addr(priv->umem);
+		vfree(priv->va_base);
+		kfree(priv);
+	} else {
+		memset(hugepage->va_start, 0, hugepage->va_len);
+	}
+	mutex_unlock(&dev->hugepage_lock);
+	kfree(hugepage);
+}
+
+int udma_k_alloc_buf(struct udma_dev *dev, struct udma_buf *buf)
+{
+	uint32_t size = buf->entry_size * buf->entry_cnt;
+	uint32_t hugepage_size;
+	int ret = 0;
+
+	if (ubase_adev_prealloc_supported(dev->comdev.adev)) {
+		hugepage_size = ALIGN(size, UDMA_HW_PAGE_SIZE);
+		buf->hugepage = udma_alloc_hugepage(dev, hugepage_size);
+		if (buf->hugepage) {
+			buf->kva = buf->hugepage->va_start;
+			buf->addr = (uint64_t)buf->kva;
+			buf->is_hugepage = true;
+		} else {
+			dev_warn(dev->dev,
+				 "failed to alloc hugepage buf, switch to alloc normal buf.");
+			ret = udma_alloc_normal_buf(dev, size, buf);
+		}
+	} else {
+		ret = udma_alloc_normal_buf(dev, size, buf);
+	}
+
+	return ret;
+}
+
+void udma_k_free_buf(struct udma_dev *dev, struct udma_buf *buf)
+{
+	uint32_t size = buf->entry_cnt * buf->entry_size;
+
+	if (buf->is_hugepage)
+		udma_free_hugepage(dev, buf->hugepage);
+	else
+		udma_free_normal_buf(dev, size, buf);
+}
+
 void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t *addr)
 {
 	struct iova_slot *slot;

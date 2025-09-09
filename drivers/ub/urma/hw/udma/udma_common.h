@@ -46,6 +46,7 @@ struct udma_jetty_queue {
 	uint32_t lock_free; /* Support kernel mode lock-free mode */
 	uint32_t ta_timeout; /* ms */
 	enum ubcore_jetty_state state;
+	struct udma_context *udma_ctx;
 	bool non_pin;
 	struct udma_jetty_grp *jetty_grp;
 	enum udma_jetty_type jetty_type;
@@ -327,6 +328,8 @@ void udma_dfx_delete_id(struct udma_dev *udma_dev, struct udma_dfx_entity *entit
 			uint32_t id);
 int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
 void udma_free_normal_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
+int udma_k_alloc_buf(struct udma_dev *dev, struct udma_buf *buf);
+void udma_k_free_buf(struct udma_dev *dev, struct udma_buf *buf);
 void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t *addr);
 void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_slot,
 		    dma_addr_t addr);
