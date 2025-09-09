@@ -1,3 +1,588 @@
+* Tue Sep  9 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41
+- !472 [linux-6.6/devel][Bugfix]: dist: loongarch: Fix build failure from broken module deps
+- dist: loongarch: Fix build failure from broken module deps
+- !471 [linux-6.6/devel][Bugfix]: LoongArch: Fixing binutils compatibility issues
+- btf: Avoid weak external references
+- vmlinux: Avoid weak reference to notes section
+- kallsyms: Avoid weak references for kallsyms symbols
+- Merge linux 6.6.104 into release branch
+- Linux 6.6.104
+- Merge linux 6.6.103 into release branch
+- Linux 6.6.103
+- Merge branch 'lukabai/release-mr-stable' into 'release' (merge request !692)
+- psi: add unlock of seq after merging with upstream psi
+- Merge linux 6.6.102 into release branch
+- Linux 6.6.102
+- Merge linux 6.6.101 into release branch
+- Linux 6.6.101
+- Merge linux 6.6.100 into release branch
+- Linux 6.6.100
+- Merge linux 6.6.99 into release branch
+- Linux 6.6.99
+- Merge branch 'linux-6.6/devel' into release
+- !469 perf/x86: fix vendor check logic in arch_evsel__open_strerror
+- perf/x86: fix vendor check logic in arch_evsel__open_strerror
+- !468 [linux-6.6/devel][Bugfix]: LoongArch: Increase COMMAND_LINE_SIZE to 4096
+- LoongArch: Increase COMMAND_LINE_SIZE to 4096
+- !467 perf mem/c2c: Add load store event mapping for Hygon Merge pull request
+- perf mem/c2c: Add load store event mapping for Hygon
+- !451 LoongArch: KVM: fix extioi issue
+- LoongArch: KVM: Enhance the robustness of extioi
+- LoongArch: KVM: fix extioi issue
+- LoongArch: KVM: Solve the problem of starting up the upstream qemu
+- !449 drm/yhgch: Add yhgch drm driver Merge pull request
+- drm/yhgch: Add yhgch drm driver
+- !446 [linux-6.6/devel][Feature]：add sw64 architecture support
+- sw64: kvm: save the virtual address of irqs_pending in vcpucb
+- sw64: kvm: fix undefined error with ftrace disabled
+- sw64: kvm: enable dirty log gradually in small chunks for core4
+- sw64: fix guest kdump function
+- sw64: ftrace: add HAVE_DYNAMIC_FTRACE_WITH_ARGS support
+- sw64: use wait/complete for smp boot
+- sw64: fix sw64_rrk_store() wrap handling
+- sw64: perf unwind: Do not put libunwind-sw_64 in FEATURE_TESTS_BASIC
+- sw64: delete useless I/O access in VM and emulator
+- sw64: kvm: fix perf kvm support
+- sw64: Kconfig: enable HAS_IOPORT by default
+- sw64: pci: remove zx200 dma mask reset
+- sw64: fix for executing syscall(-1)
+- sw64: acpi: select HAVE_ACPI_APEI when ACPI is set
+- sw64: pci: add base address of devmn
+- sw64: adjust the notrace in the code
+- sw64: irqchip: update effective affinity for PINTC
+- sw64: irqchip: add support for PINTC on all NUMA nodes
+- sw64: cpufreq: optimize the granularity of cpufreq
+- sw64: ftrace: restore the register storing direct call address
+- sw64: kvm: fix undefined compile issues for kvm module
+- sw64: pintc: fix guest pintc init
+- sw64: set module region to the 2GB space below vmalloc area
+- sw64: sort arch/sw64/Kconfig
+- sw64: iommu: implement map_pages/unmap_pages API
+- sw64: disable EFFICIENT_UNALIGNED_ACCESS for C3B
+- sw64: optimize unaligned access
+- sw64: ftrace: Add direct call trampoline samples support
+- sw64: ftrace: Add direct call support
+- sw64: ftrace: No need to save original function's temporary registers
+- sw64: add support for function error injection
+- sw64: add sw64 rethook implementation
+- sw64: emit fixed-length instructions for BPF_PSEUDO_FUNC
+- sw64: ftrace: Enable HAVE_FUNCTION_GRAPH_RETVAL
+- sw64: mm: adjust userspace memory layout
+- sw64: cpufreq: fix the frequency returned by cpufreq_driver->get()
+- sw64: remove redundant qspinlock.h from Kbuild
+- sw64: ioremap: map some IO space with ioremap
+- sw64: ioremap: fix an overflow in pci_remap_cfgspace
+- sw64: ioremap: support generic ioremap for C4
+- sw64: kprobe on ftrace: fix bug in restoring regs
+- sw64: iommu: do real map on iova in 32bit mmio space
+- sw64: qspinlock: add CNA support for sw64
+- sw64: qspinlock: add PARAVIRT SPINLOCK support for sw64
+- sw64: move syscall handling to sys_sw64.c
+- sw64: improve sw64_rrk
+- sw64: fix printing issue when using kprobe on ftrace
+- sw64: add powercap driver
+- sw64: clocksource: fix the issue of clockevents not being notified
+- sw64: modify the interface for firmware to pass the running mode
+- sw64: fix shared_cpu_map of L3 Cache
+- sw64: fix SWVM_IRQS undeclared when enabling HIBERNATION
+- sw64: kvm: optimize the compatibility of guest interrupt
+- sw64: kvm: optimize the implementation of guest interrupt
+- sw64: fix some compile issues for cpuautoplug.c
+- sw64: cpufreq: fix for emulator that do not support cpufreq
+- sw64: cpufreq: refactor cpufreq related code
+- sw64: cpufreq: remove some meaningless code
+- sw64: cpufreq: move cpufreq notifier to its user
+- sw64: cpufreq: rename sw64_cpufreq.c to sunway-cpufreq.c
+- sw64: cpufreq: remove debugfs code
+- sw64: adapt to the upstream changes in huge_ptep_get_and_clear
+- sw64: adapt to the upstream changes in early_init_dt_(scan/verify)
+- sw64: adapt to the upstream changes in arch_static_branch*
+- sw64: vdso: adapt to the upstream changes in vdso_install
+- sw64: iommu: work around iova range check after resv_region
+- sw64: msi: clear residual vector irq mapping when free irqs
+- sw64: gpu: fix SIMD IO access issues
+- sw64: msi: fix guest msi interrupt handling
+- sw64: msi: modify msi migration strategy
+- sw64: msi: clear the residual vector_irq information of cpu
+- sw64: ftrace: add notrace attribute to memset&memcpy
+- sw64: ftrace: fix bug in restoring regs
+- sw64: pci: fix piu data allocation failure issue
+- sw64: fix an error in BPF exception handling
+- sw64: modify CPU autoplug initialization process
+- sw64: iommu: print more info for interrupts
+- sw64: msi: fix irq affinity setting during migration
+- sw64: use CONFIG_HZ_PERIODIC by default
+- sw64: fix specific performance counter error
+- sw64: enable all HW PMUs for max sampling period events
+- sw64: update exclusive counter handling
+- sw64: fix perf event L1I cache write support
+- sw64: locking/atomic: make atomic*_{cmp,}xchg optional
+- sw64: sound: fix compile error when CONFIG_SND_DUMMY=y
+- sw64: kexec: add support for crashkernel=size[KMG]
+- sw64: bpf: add ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE to Kconfig
+- sw64: ftrace: save&restore more stack frame in ftrace_caller
+- sw64: enable -fsw-unalign-byte for new subarchs
+- sw64: reduce jump instructions in entUna
+- sw64: simplify GP handling for entUna
+- sw64: fix secondary_cpu_start for CORE3B
+- sw64: reimplement cmpxchg and xchg
+- sw64: change condition of some cflags
+- sw64: put cpu_set_node() in init text
+- sw64: make sw64_(read/write)_csr always inline
+- sw64: compile divide.S for c3b only
+- sw64: vdso: add support for time namespaces
+- sw64: rename PT_REGS_SP to PT_REGS_R30
+- sw64: modify parameters of the exception functions
+- sw64: kvm: modify parameters of the exception functions
+- sw64/vdso: Support mremap() for vDSO
+- sw64/kvm: fix a bug for starting CORE3 VM
+- sw64: fix nmi_exit error in CORE3B
+- sw64: ftrace: fix atomicity bugs in ftrace
+- sw64: fix copy_oldmem_page according to upstream
+- sw64: fix nmi_enter error in CORE3B
+- sw64: add a 1ms delay before CPU offline
+- sw64: topology: discard topology information from PPTT
+- sw64: iommu: implement resv_region APIs
+- sw64: pci: fix secondary bus reset issue
+- sw64: sound: avoid pagefault in pcm driver's memset
+- sw64: flush TLB after modifying ptbr_sys
+- sw64: fix an error when running no main() program
+- sw64: cache: fix cache ID is not unique when ACPI disabled
+- sw64: ftrace: implement ftrace_modify_call
+- sw64: kvm: fix incorrect vm_flags in vmem_mmap()
+- sw64: cpu: give preference to CPU information from SMBIOS
+- sw64: irqchip: use sunway as vendor prefix in device tree
+- sw64: irqchip: use pr_fmt instead of prefix string macro
+- sw64: numa: decrease CONFIG_NODES_SHIFT to 3
+- sw64: acpi: suppress meaningless error log when acpi=off
+- sw64: emulator: refactor shutdown and restart functions
+- perf jitdump: Add SW64 support
+- sw64: emulator: add shutdown and restart functions
+- sw64: emulator: fix the multi-core boot issue
+- sw64: fix bad address error for vfio
+- sw64: acpi: add support for ACPI S3
+- sw64: iommu: restore iommu_map/unmap callbacks
+- sw64: iommu: work around lazy translation initialization
+- sw64: iommu: adjust def_domain_type
+- sw64: iommu: fix iommu_v1 capability
+- sw64: fix iommu commandline parameter
+- sw64: iommu: remove unnecessary locking in map/unmap_pages
+- sw64: fix no CONFIG_DYNAMIC_FTRACE_WITH_REGS error
+- sw64: fix kprobe function
+- sw64: perf: fix specific performance events can be sampled
+- sw64: bpf: optimize JIT for load imm
+- sw64: bpf: fix BPF_CALL JIT for multi-function programs
+- sw64: bpf: optimize some instructions
+- sw64: bpf: fix XADD32 and XADD64
+- sw64: iommu: mark hose->iommu_enable as true before probing on iommu_v1
+- sw64: kexec: fix a bug in menuconfig
+- sw64: kexec: fix a compilation error
+- sw64: iommu: mark hose->iommu_enable as true before probing
+- sw64: iommu: fix work around of iommu interrupt remapping capability
+- sw64: iommu: fix def_domain_type callback
+- sw64: iommu: introduce PCI device check before iommu probing
+- libbpf: add sw64 support
+- sw64: rename mmap protection_map
+- sw64: ptrace: add NT_SW64_SYSTEM_CALL regset
+- sw64 bpf: Add missing uapi header for BPF_PROG_TYPE_PERF_EVENT programs
+- sw64 bpf: add BPF_NOSPEC jit
+- sw64: rename _PFN_BITS to __PFN_BITS
+- sw64: update defconfig
+- sw64: kvm: declare KVM_CAP_SET_GUEST_DEBUG
+- sw64: implementing VDSO with generic code
+- sw64: irqchip: fix irq_enable/disable callback for MCU controller
+- sw64: kvm: remove unused argument 'addr' of apt_dissolve_pud/pmd()
+- sw64: acpi: support reset and S5
+- sw64: kvm: use vma_lookup() instead of find_vma_intersection()
+- sw64: refactor reset routines with new API
+- sw64: kvm: remove unused kvm_arch_flush_remote_tlbs_memslot()
+- sw64: kvm: optimize the calling and implementation of functions in mmu.c
+- sw64: irqchip: remove fallback after kzalloc_node()
+- sw64: irqchip: improve intx implementation
+- sw64: pci: remove function fix_jm585_reset()
+- sw64: fix mmap protection_map
+- sw64: show CPU feature UNA in /proc/cpuinfo
+- sw64: fix the error of cpufreq update
+- sw64: fix compilation issues on match.c
+- sw64: mm: fix PFN of PMDs for 512M hugepage
+- sw64: kvm: fix an error when unmapping 512M hugepages
+- sw64: modify sys_pfh_ops
+- sw64: fix set_huge_pte_at for C4
+- sw64: add the missed clear_flush()
+- sw64: fix compilation issues
+- sw64: add arch_hugetlb_valid_size for C4
+- sw64: kvm: adjust interrupt priority for guest
+- sw64: compatible with suspend implementation
+- sw64: add junzhang_v1/2/3_key
+- sw64: fix numa setup when acpi is disabled
+- sw64: fix setup_mem_size()
+- sw64: fix the register bug in do_entUna
+- sw64: add unaligned access handling code for SIMD in kernel mode (5.10)
+- sw64: select different MUX to read cpu frequency
+- sw64: lpc: fix ast2400 driver error for C4
+- sw64: improve lib performance for new archs
+- sw64: remove unnecessary parameter passing
+- sw64: add __vdso_getcpu support
+- sw64: kexec: fix kernel crashdump bugs
+- sw64: bpf: fix BPF_CALL address
+- sw64: fix irq work
+- sw64: reset the CSR:PTBR_USR
+- sw64: kvm: add KVM_CAP_READONLY_MEM support
+- sw64: pci: fix incorrect pointer of struct pci_controller
+- sw64: perf: add core4 pmu support
+- sw64: mm: support fdt memory reservation
+- sw64: provide a cleaner raw_smp_processor_id()
+- sw64: remove deprecated annotation in irq.h
+- sw64: introduce a fine-grained intx mask/unmask system
+- sw64: move handle_intx() into pci-intx handle
+- sw64: iommu: fix NULL hose check
+- sw64: fix judgements about legacy pci support
+- sw64: cacheinfo: give preference to cache information from PPTT table
+- sw64: cache: fix shared_cpu_map of cacheinfo
+- sw64: cpu: refactor cpuinfo related code
+- sw64: cache: refactor cacheinfo related code
+- sw64: cpu: move cpu related code to the newly created cpu.c
+- sw64: topology: support initializing topology via DT or ACPI
+- sw64: spi: convert SPI_MASTER_GPIO_SS to SPI_CONTROLLER_GPIO_SS
+- sw64: defconfig: fix SPI related configuration items
+- sw64: irqchip: add version 3 for PINTC
+- sw64: fix null pointer issue when CONFIG_BUILTIN_DTB=y
+- sw64: acpi: suppress log of function acpi_numa_x2apic_affinity_init()
+- sw64: clk: further fix the clock frequency of SPI and I2C
+- sw64: smp: fix function fdt_setup_smp()
+- Revert "sw64: fdt: map physical node ID to logical node ID"
+- sw64: pci: remove legacy io reservation
+- sw64: fix LPC legacy IO space on chip junzhang and junzhang_v2
+- sw64: fix compiler error of perf tests
+- sw64: fix compiler error when enabling CONFIG_RELOCATABLE
+- sw64: fix complier error when enabling CONFIG_DYNAMIC_FTARCE
+- sw64: fix compiler error when enabling CONFIG_DEBUG_MATCH
+- sw64: fix compiler error when enabling CONFIG_SW64_CPUAUTOPLUG
+- sw64: mm: remove legacy memory detection for JunZhang platform
+- sw64: iommu: improve iommu initialization
+- sw64: clk: fix the clock frequency of SPI and I2C
+- sw64: fix a bug in huge_pte_offset()
+- sw64: pci: rename some functions
+- sw64: pci: support PCIe controller driver based on device tree
+- sw64: remove sw64_io related functions
+- sw64: platform: add misc platform driver
+- sw64: add basic frequency scaling support for JunZhang
+- sw64: remove redundant link options
+- sw64: kvm: enable ring-based dirty page tracking
+- sw64: kvm: fix invalid memslot flags checking during dirty logging
+- sw64: pciehp: fix compile error when CONFIG_PCIE_DPC=y
+- sw64: kvm: don't retrieve memory slot again in page fault handler
+- sw64: kexec: remove code for compatibility with builtin DTB
+- sw64: smp: allow NR_CPUS less than the number detected by firmware
+- sw64: fix C4 INTx configuration
+- sw64: pci: fix compile error when CONFIG_PCI_MSI=n
+- sw64: pci: fix unable to get node ID when numa_off is set
+- sw64: add uapi reg.h
+- sw64: pciehp: remove useless code
+- sw64: dts: support online-capable property for cpu device node
+- sw64: kvm: resolve a compile warning
+- sw64: adapt the modifications from the upstream for pciehp
+- sw64: kvm: fix mmio GPA for C4
+- sw64: fix guest memory and cpu hotplug function
+- sw64: kvm: walk host page tables to find THP mapping size
+- sw64: kvm: convert to the gfn-based MMU notifier callbacks
+- sw64: kvm: rename mmu_notifier_* to mmu_invalidate_*
+- sw64: kvm: fix compiler errors caused by mismatched parameters
+- sw64: kvm: use get_page() instead of kvm_get_pfn()
+- sw64: kvm: fix the handling when the live migration fails
+- sw64: kvm: fix NULL poniter access in kvm_arch_prepare_memory_region
+- sw64: kvm: fix link error with CONFIG_KVM=m
+- sw64: kvm: fix build failure about KVM
+- sw64: add dependency for sunway-ged driver
+- sw64: fix compile error with CONFIG_SUNWAY_GED=m
+- sw64: remove unused sunway_memory_get_meminfo()
+- sw64: Kconfig: activate ARCH_KEEP_MEMBLOCK
+- sw64: add cpu hotplug support for C4 guest
+- sw64: kvm: support up to 256 vCPUs for C4
+- sw64: kvm: fix inconsistent vcpucb of C4
+- sw64: kvm: implement kvm_arch_set_irq_inatomic()
+- sw64: fix guest send ipi target
+- sw64: kvm: add numa support for memory hotplug
+- sw64: kvm: fix bug when vcpu disable irq
+- sw64: kvm: acpi: match sunway_ged by acpi method
+- sw64: kvm: use generic kvm mmu memory caches
+- sw64: kvm: remove some unused codes
+- sw64: kvm: fix pmd_trans_cont
+- sw64: kvm: fix size of struct kvm_regs for C3B
+- sw64: kvm: add the member of the vcpucb structure
+- sw64: kvm: fix the check for THP
+- sw64: kvm: fix page walk error of unmap_apt_range()
+- sw64: redesign struct kvm_regs for C4
+- sw64: kvm: fix live migration bug
+- sw64: kvm: fix APT fault handler
+- sw64: kvm: fix unmap_apt_{ptes, pmds}
+- sw64: kvm: fix clock sync of CORE4 live migration
+- sw64: kvm: delete memory hotplug codes for CORE3B
+- sw64: add missing c4 legacy power management code
+- sw64: add support for vmtop
+- sw64: kvm: scale up the range of target vcpu parsed by hypervisor
+- sw64: kvm: fix return value of vmem_mmap
+- sw64: kvm: add trace kvm function
+- sw64: fix rc resource setup
+- sw64: add virt_to_bus() and bus_to_virt()
+- sw64: adapt to the upstream changes in hotplug_slot_ops
+- sw64: adapt to the upstream changes in arch_remove_memory
+- sw64: bypass sunway pcie hotplug driver in non-physical scenario
+- sw64: defconfig: update defconfig for kata-containers
+- sw64: add HARDLOCKUP_DETECTOR support
+- sw64: fix bugs in decreasing frequency
+- sw64: add NMI support
+- sw64: add CSR_CAUSE into pt_regs
+- sw64: optimize the code in do_entInt()
+- sw64: seperate IRQ_MSI configs for sub-architectures
+- sw64: handle null MSI irq
+- sw64: fix a compilation warning
+- sw64: fix a base address of msiaddr register
+- sw64: fix some S3 CSRs problems for C4
+- sw64: fix io resource remapping
+- sw64: amdgpu/radeon: correct low-level mmio memset/memcpy direct calls
+- sw64: fix pci resource assignment bug
+- sw64: fix MSI compilation warnings
+- sw64: adapt IO interfaces for SW64 from upstream
+- sw64: adapt iommu for SW64 from upstream
+- sw64: fix msi interrupt for guest os
+- sw64: adapt irq-sunway-msi.c and irq-sunway-msi-v2.c to upstream
+- sw64: gpio: fix compile error of sunway_gpio_add_port
+- sw64: fdt: map physical node ID to logical node ID
+- sw64: fix regs.pc on single-step with ptrace
+- sw64: modify some interrupt target core to logic 0 core
+- sw64: fix sw64_is_fake_mcount() of recordmcount
+- sw64: remove some unused module init/exit/license
+- sw64: numa: support NUMA initialization based on device tree
+- sw64: smp: support SMP initialization based on device tree
+- sw64: dtb: disable built-in DTB for junzhang
+- sw64: ata: add ata_hrst_delay cmdline option
+- sw64: kconfig: add I2C and SPI defconfig for junzhang
+- sw64: kconfig: set default y for GPIO if ACPI enabled
+- sw64: fix a bug in gpio-sunway.c
+- sw64: pci: use readq/writeq to read/write RC and PIU IO registers
+- sw64: gpu: memset_io and memcpy_toio/fromio for iomem on AMD swsmu
+- sw64: pciehp: add pcie hotplug driver support for C4
+- sw64: remove redundant intx code
+- sw64: irq: support interrupt for virtual GPIO
+- sw64: acpi: enable ACPI by default
+- sw64: mm: fix mem=xxx command line invalid in some cases
+- sw64: use generic page_is_ram()
+- sw64: mm: take memory information from firmware
+- sw64: lpc: fix compile error with CONFIG_SUNWAY_SUPERIO_AST2400=y
+- sw64: fix typo in gpio-sunway
+- sw64: fix compile warning of handle_pci_msi_interrupt
+- sw64: fix usage of __add_memory() in sunway-ged driver
+- sw64: change FORCE_MAX_ZONEORDER default value
+- sw64: perf: fix event check order
+- sw64: wrap frequency workaround into standalone functions
+- sw64: remove redudant save_ktp
+- sw64: fix compile warning of smp_callin()
+- sw64: distribute intx interrupts by hose
+- sw64: acpi: remove constraint that cid of boot core must be zero
+- sw64: pci: get register base address from firmware
+- sw64: fix compile warning of do_entUna()
+- sw64: fix save_ktp compatibility for C3
+- sw64: fix PTBR save/restore for hibernation
+- sw64: add syscall pfh_ops
+- sw64: fix broken rdfpcr()
+- sw64: force kernel stack to be 16 bytes aligned
+- sw64: match platform device by acpi method
+- sw64: spi: update spi controller driver
+- sw64: add -fno-sw-unalign-byte to cflags for C4
+- sw64: define cpu_relax() as imb()
+- sw64: fix the .endm in hibernate_asm.S
+- sw64: fix compile error of efi.systab
+- sw64: pci: adjust the maximum number of RC per node
+- sw64: get mclk and external clk from firmware
+- sw64: fix compile error of MMSIZE
+- sw64: acpi: disable ACPI for xuelang
+- sw64: ahci: disable parallel bus scan
+- sw64: redesign run mode setup method
+- sw64: rename static key and related simd libraries
+- sw64: fix secondary cpu bring up bug
+- sw64: irq: fix compile error when PINTC or LPC-INTC is not set
+- sw64: improve the verification logic of DTB
+- sw64: apply new boot params from DTB chosen node
+- sw64: receive new boot params from firmware
+- sw64: setup stackframe at kernel entry point
+- sw64: save and restore CSR_WR_FREGS for SIMD libs
+- sw64: rename copy and set lib functions
+- sw64: rename copy and set lib files
+- sw64: choose lib at compile time
+- sw64: store topology and numa info by each cpu itself
+- sw64: work around suspend for C4
+- sw64: employ trick on regs.pc for specific exception
+- sw64: enable CONFIG_FRAME_POINTER by default for junzhang
+- sw64: fix syscall_fallback() for vdso gettimeofday
+- sw64: dts: add Junzhang
+- sw64: lpc: work around hardware flaws
+- sw64: improve cpu bring up method
+- sw64: introduce new entry framework for C4
+- sw64: irq: update the initial value of nr_irqs
+- sw64: dynamically switch between lib implementation
+- sw64: msi: remove redundant interrupt enables
+- sw64: add unaligned access support for C4 new instructions
+- sw64: acpi: fix missed upper bits of rcid for junzhang
+- sw64: pci: remove duplicate pcie operations
+- sw64: irq: remove unnecessary initialization
+- sw64: acpi: enable generic GSI
+- sw64: irqchip: support ACPI-based interrupt controller initialization
+- sw64: acpi: support MADT entry print for SW PINTC, MSIC and LPC-INTC
+- sw64: acpi: add ACPI-style structures for SW PINTC, MSIC and LPC-INTC
+- sw64: fix compilation warning
+- sw64: fix kconfig selections
+- sw64: use a new wrap_asid hmcall when asid wraps
+- sw64: rewrite fpcr and swcr conversion
+- sw64: enable hardware denorm by default
+- sw64: add four-socket system support
+- sw64: add a new kernel parameter to override mclk
+- sw64: improve sw64_printk()
+- sw64: msi: fix bugs in multi-msi interrupts allocation and release
+- sw64: pci: change pci transaction ordering rule settings
+- sw64: irqchip: fix virtual PINTC not working properly
+- sw64: dts: improve properties for PINTC
+- sw64: dts: improve properties for LPC-INTC
+- sw64: dts: fix interrupt related properties for GPIO
+- sw64: dts: add chosen node
+- sw64: dts: fix properties for spi controller device node
+- sw64: acpi: fix coding style and typos
+- sw64: fix rd_f compatibility issue for C4
+- sw64: refactor device interrupt domain
+- sw64: fix macro definition compilation error
+- USB: xHCI: fix resume issue of some ZHAOXIN hosts
+- sw64: pci: fix compile error when CONFIG_ACPI=n
+- sw64: smp: suppress function setup_smp() when ACPI enabled
+- sw64: acpi: parse SW CINTC for SMP initialization
+- sw64: acpi: support MADT entry print for SW CINTC
+- sw64: acpi: add ACPI-style structures for SW CINTC
+- sw64: smp: add new structure to record rcid information
+- sw64: smp: modify function smp_rcb_init() to receive base address
+- sw64: pci: synchronize the OEM table ID of MCFG with BIOS
+- sw64: iommu: fix the bug when vfio_iommu unpin pages
+- sw64: use rvpcr() to setup run mode
+- sw64: kgdb: add single-step debug support
+- sw64: fix lockdep error
+- sw64: perf: do all event checks in sw64_pmu_event_init()
+- sw64: numa: fix compile error when CONFIG_ACPI_NUMA=n
+- sw64: pci: export some pci functions
+- sw64: uapi: fix a compile error for headers_install
+- sw64: perf: hide hardware performance events in guest os
+- sw64: fix hugepage support
+- sw64: extern vdso_start and vdso_end as char[]
+- sw64: remove useless current_policy
+- sw64: add arch-specific SYM_END definition
+- drivers: vfio: add sw64 support
+- drivers: usb: add sw64 support
+- drivers: tty: add sw64 support
+- drivers: spi: add sw64 support
+- drivers: scsi: add sw64 support
+- drivers: rtc: add sw64 rtc support
+- drivers: qemu_fw_cfg: add sw64 support
+- drivers: platform: add sw64 support
+- drivers: pci: add sw64 support
+- drivers: misc: add sw64 support
+- drivers: mfd: add sw64 support
+- drivers: irqchip: add sw64 support
+- drivers: iommu: add sw64 support
+- drivers: i2c: add sw64 support
+- drivers: hwmon: add sw64 support
+- drivers: gpio: add sw64 support
+- drivers: efi: add sw64 support
+- drivers: cpufreq: add sw64 support
+- drivers: clocksource: add sw64 support
+- drivers: acpi: add sw64 support
+- selftests: fix sw64 support
+- perf: fix sw64 support
+- perf: add sw64 support
+- tools: fix basic sw64 support
+- tools: add basic sw64 support
+- sw64: fix ftrace support
+- sw64: fix audit support
+- sw64: fix kexec support
+- sw64: fix PCI support
+- sw64: fix KVM support
+- sw64: fix module support
+- sw64: fix ACPI support
+- sw64: fix rrk support
+- sw64: fix ELF support
+- sw64: fix build support
+- sw64: add dynamic turning on/off cores support
+- sw64: add dynamic frequency scaling support
+- sw64: add kgdb support
+- sw64: add jump_label support
+- sw64: add uprobe support
+- sw64: add kprobe support
+- sw64: add kernel relocation support
+- sw64: add ftrace support
+- sw64: add hibernation support
+- sw64: add suspend support
+- sw64: add eBPF JIT support
+- sw64: add kdump support
+- sw64: add kexec support
+- sw64: add perf events support
+- sw64: add qspinlock support
+- sw64: add stacktrace support
+- sw64: add KVM support
+- sw64: add EFI support
+- sw64: add DMA support
+- sw64: add ACPI support
+- sw64: add device trees
+- sw64: add MSI support
+- sw64: add PCI support
+- sw64: add default configs
+- sw64: add NUMA support
+- sw64: add SMP support
+- sw64: add VDSO support
+- sw64: add some library functions
+- sw64: add some other routines
+- sw64: add some common routines
+- sw64: add module support
+- sw64: add basic IO support
+- sw64: add FPU support
+- sw64: add signal handling support
+- sw64: add system call support
+- sw64: add hugetlb support
+- sw64: add memory management
+- sw64: add hardware match support
+- sw64: add process management
+- sw64: add exception handling support
+- sw64: add irq handling support
+- sw64: add timer support
+- sw64: add topology setup routine
+- sw64: add boot and setup routines
+- sw64: add some other headers
+- sw64: add ELF support
+- sw64: add common headers
+- sw64: add atomic/locking headers
+- sw64: add CPU definition headers
+- sw64: add build infrastructure
+- !447 Fix the sleep condition check logic for psp_mutex_lock_timeout
+- crypto: ccp: use time_after() instead of time_before() to checks schedule condition
+- !445 [linux-6.6/devel][Feature]:LoongArch:Add features for EDAC, crypto, and memory management.
+- EDAC: Add EDAC driver for loongson memory controller
+- crypto: loongson: add loongson sm3 and ecb(sm4) support
+- LoongArch: Support mem=<size> kernel parameter
+- LoongArch: Add debugfs entries to switch SFB/TSO state
+- !444 [linux-6.6/devel][Bugfix]:LoongArch:Various bug fixes
+- LoongArch: Reserve the EFI memory map region
+- drivers/iommu: Fix the initialization failure issue of the iommu module
+- LoongArch: fix access mode of 7A2000 acpi gpio.
+- LoongArch: KVM: Fix the extioi simulation error
+- !443 [linux-6.6/devel][Bugfix]:LoongArch:configs:Enable zstd firmware and built-in EFI RTC.
+- configs: LoongArch: enable zstd compressed firmware support
+- Loongarch: configs: Make EFI RTC built-in for correct vmcore timestamps
+- !442 Update HCT driver to version 0.6 and support running without NUMA
+- hct: support run with CONFIG_NUMA disabled
+- hct: remove the unused variables from hct shared structure.
+- hct: add write support for node use of MDEV devices.
+- hct: fix vm_start issue caused by pre allocated vma changes.
+- hct: compatible with hct.ko modules in versions 0.5 and earlier.
+- hct: update pasid type from int to long.
+- hct: sharing CCP resources between host and virtual machines.
+- hct: adding node to identifies hct mdev device usage status.
+- hct: fix fork issue when use hct in virtual machine
+
 * Fri Sep  5 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.98-40.1
 - configs: update std-configs-list
 - rue/cpu/bt: fixed rq deadlock with enable sched_bt_ignore_cpubind
