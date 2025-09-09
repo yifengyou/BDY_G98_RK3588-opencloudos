@@ -147,6 +147,7 @@ config SW64
 	select SW64_TIMER
 	select SWIOTLB
 	select THREAD_INFO_IN_TASK
+	select CRYPTO_CRC32_SW64 if !SUBARCH_C3B
 
 config LOCKDEP_SUPPORT
 	def_bool y
@@ -534,9 +535,7 @@ config RANDOMIZE_BASE_MAX_OFFSET
 
 	  This is limited by the size of KTEXT space, 512Mb. The default is 256MB.
 
-config HZ
-	int "HZ of the short timer"
-	default 500
+source "kernel/Kconfig.hz"
 
 source "drivers/eisa/Kconfig"
 
