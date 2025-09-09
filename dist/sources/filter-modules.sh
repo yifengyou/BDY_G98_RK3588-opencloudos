@@ -140,6 +140,7 @@ case $ARCH in
 	riscv64 )
 		;;
 	loongarch64 )
+		overrides="$overrides loongson-se"
 		;;
 	x86_64 )
 		;;
