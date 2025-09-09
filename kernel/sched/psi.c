@@ -150,10 +150,10 @@ unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
 unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
 										  (1U << PSI_MEM);
 #endif
+DEFINE_STATIC_KEY_FALSE(dyn_cpu_enabled);
 #ifdef CONFIG_CGROUPS
 unsigned int sysctl_psi_cgroup_default_enabled;
 #endif
-unsigned int __percpu *percpu_psi_dyn_stat_types;
 #endif
 
 #ifdef CONFIG_PSI_DEFAULT_DISABLED
@@ -249,16 +249,6 @@ void __init psi_init(void)
 
 	if (!cgroup_psi_enabled())
 		static_branch_disable(&psi_cgroups_enabled);
-
-#ifdef CONFIG_PSI_DYN_SWITCH
-	int cpu;
-	percpu_psi_dyn_stat_types = alloc_percpu(unsigned int);
-	if (!percpu_psi_dyn_stat_types)
-		panic("out of memory in psi_init!\n");
-	for_each_possible_cpu(cpu) {
-		*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) = sysctl_psi_dyn_stat_types;
-	}
-#endif
 
 	psi_period = jiffies_to_nsecs(PSI_FREQ);
 	group_init(&psi_system);
@@ -916,7 +906,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	}
 
 	for (s = 0; s < NR_PSI_STATES; s++) {
-		if (!psi_dyn_stat_cpu(cpu) && (s == PSI_CPU_SOME || s == PSI_CPU_FULL))
+		if (!psi_dyn_stat_cpu() && (s == PSI_CPU_SOME || s == PSI_CPU_FULL))
 			continue;
 
 		if (psi_use_legacy()) {
@@ -1073,7 +1063,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 
 	if (next->pid) {
 		psi_flags_change(next, 0, TSK_ONCPU);
-		if (unlikely(psi_dyn_stat_cpu(cpu) || next->in_memstall)) {
+		if (unlikely(psi_dyn_stat_cpu() || next->in_memstall)) {
 			/*
 			* Set TSK_ONCPU on @next's cgroups. If @next shares any
 			* ancestors with @prev, those will already have @prev's
@@ -1815,19 +1805,17 @@ static const struct proc_ops psi_irq_proc_ops = {
 #endif
 
 #ifdef CONFIG_PSI_DYN_SWITCH
-static void rebuild_psi_cpu_data(bool set)
+static void rebuild_psi_cpu_data(void)
 {
 	int cpu;
+
+	static_branch_enable(&dyn_cpu_enabled);
 
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
 		struct rq_flags rf;
 
 		rq_lock_irq(rq, &rf);
-		if (set)
-			*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) |= (1U << PSI_CPU);
-		else
-			*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) &= ~(1U << PSI_CPU);
 		psi_task_change(rq->curr, 0, 0);
 		rq_unlock_irq(rq, &rf);
 	}
@@ -1847,11 +1835,11 @@ int psi_dyn_stat_handler(struct ctl_table *table, int write, void *buffer,
 		ret = proc_dointvec_minmax(&t, write, buffer, lenp, ppos);
 		if (ret)
 			return ret;
-		sysctl_psi_dyn_stat_types = psi_stat;
-		if (!((psi_stat ^ old_psi_stat) & (1 << PSI_CPU))) {
+		if ((old_psi_stat & (1 << PSI_CPU)) && !(psi_stat & (1 << PSI_CPU))) {
 			return 0;
 		}
-		rebuild_psi_cpu_data(!!(sysctl_psi_dyn_stat_types & (1 << PSI_CPU)));
+		sysctl_psi_dyn_stat_types = psi_stat;
+		rebuild_psi_cpu_data();
 	} else {
 		ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	}

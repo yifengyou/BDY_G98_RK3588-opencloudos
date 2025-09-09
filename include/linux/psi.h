@@ -22,16 +22,16 @@ extern unsigned int sysctl_psi_dyn_stat_types;
 #ifdef CONFIG_CGROUPS
 extern unsigned int sysctl_psi_cgroup_default_enabled;
 #endif
-extern unsigned int __percpu *percpu_psi_dyn_stat_types;
+extern struct static_key_false dyn_cpu_enabled;
 
-static inline bool psi_dyn_stat_cpu(int cpu)
+static inline bool psi_dyn_stat_cpu(void)
 {
-	return !!(*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) & (1 << PSI_CPU));
+	return static_branch_unlikely(&dyn_cpu_enabled);
 }
 int psi_dyn_stat_handler(struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
 #else
-static inline bool psi_dyn_stat_cpu(int cpu)
+static inline bool psi_dyn_stat_cpu(void)
 {
 	return true;
 }
