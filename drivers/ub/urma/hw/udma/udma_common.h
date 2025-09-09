@@ -5,6 +5,7 @@
 #define __UDMA_COMM_H__
 
 #include <linux/jhash.h>
+#include <linux/vmalloc.h>
 #include <ub/urma/ubcore_api.h>
 #include "udma_ctx.h"
 #include "udma_dev.h"
@@ -324,8 +325,8 @@ void udma_dfx_store_id(struct udma_dev *udma_dev, struct udma_dfx_entity *entity
 		       uint32_t id, const char *name);
 void udma_dfx_delete_id(struct udma_dev *udma_dev, struct udma_dfx_entity *entity,
 			uint32_t id);
-int udma_k_alloc_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
-void udma_k_free_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
+int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
+void udma_free_normal_buf(struct udma_dev *udma_dev, size_t memory_size, struct udma_buf *buf);
 void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t *addr);
 void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_slot,
 		    dma_addr_t addr);
@@ -367,5 +368,8 @@ int udma_query_ue_idx(struct ubcore_device *ub_dev, struct ubcore_devid *devid,
 void udma_dfx_ctx_print(struct udma_dev *udev, const char *name, uint32_t id, uint32_t len,
 			uint32_t *ctx);
 void udma_swap_endian(uint8_t arr[], uint8_t res[], uint32_t res_size);
+
+void udma_init_hugepage(struct udma_dev *dev);
+void udma_destroy_hugepage(struct udma_dev *dev);
 
 #endif /* __UDMA_COMM_H__ */

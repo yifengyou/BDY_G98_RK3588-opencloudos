@@ -561,7 +561,7 @@ static void udma_unpin_k_addr(struct ubcore_umem *umem)
 	udma_umem_release(umem, true);
 }
 
-int udma_k_alloc_buf(struct udma_dev *udma_dev, size_t memory_size,
+int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 			  struct udma_buf *buf)
 {
 	size_t aligned_memory_size;
@@ -593,7 +593,7 @@ int udma_k_alloc_buf(struct udma_dev *udma_dev, size_t memory_size,
 	return 0;
 }
 
-void udma_k_free_buf(struct udma_dev *udma_dev, size_t memory_size,
+void udma_free_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 		     struct udma_buf *buf)
 {
 	udma_unpin_k_addr(buf->umem);
@@ -700,4 +700,26 @@ void udma_swap_endian(uint8_t arr[], uint8_t res[], uint32_t res_size)
 
 	for (i = 0; i < res_size; i++)
 		res[i] = arr[res_size - i - 1];
+}
+
+void udma_init_hugepage(struct udma_dev *dev)
+{
+	INIT_LIST_HEAD(&dev->hugepage_list);
+	mutex_init(&dev->hugepage_lock);
+}
+
+void udma_destroy_hugepage(struct udma_dev *dev)
+{
+	struct udma_hugepage_priv *priv;
+
+	mutex_lock(&dev->hugepage_lock);
+	list_for_each_entry(priv, &dev->hugepage_list, list) {
+		dev_info(dev->dev, "unmap_hugepage, 2m_page_num=%u.\n",
+			 priv->va_len >> UDMA_HUGEPAGE_SHIFT);
+		udma_unpin_k_addr(priv->umem);
+		vfree(priv->va_base);
+		kfree(priv);
+	}
+	mutex_unlock(&dev->hugepage_lock);
+	mutex_destroy(&dev->hugepage_lock);
 }

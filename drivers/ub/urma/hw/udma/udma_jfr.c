@@ -58,7 +58,7 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 	jfr->rq.buf.entry_cnt = jfr->wqe_cnt;
 	rqe_buf_size = jfr->rq.buf.entry_size * jfr->rq.buf.entry_cnt;
 
-	ret = udma_k_alloc_buf(dev, rqe_buf_size, &jfr->rq.buf);
+	ret = udma_alloc_normal_buf(dev, rqe_buf_size, &jfr->rq.buf);
 	if (ret) {
 		dev_err(dev->dev,
 			"failed to alloc rq buffer for jfr when buffer size = %u.\n",
@@ -70,7 +70,7 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 	jfr->idx_que.buf.entry_cnt = jfr->wqe_cnt;
 	idx_buf_size = jfr->idx_que.buf.entry_size * jfr->idx_que.buf.entry_cnt;
 
-	ret = udma_k_alloc_buf(dev, idx_buf_size, &jfr->idx_que.buf);
+	ret = udma_alloc_normal_buf(dev, idx_buf_size, &jfr->idx_que.buf);
 	if (ret) {
 		dev_err(dev->dev,
 			"failed to alloc idx que buffer for jfr when buffer size = %u.\n",
@@ -98,9 +98,9 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 err_alloc_db:
 	kfree(jfr->rq.wrid);
 err_wrid:
-	udma_k_free_buf(dev, idx_buf_size, &jfr->idx_que.buf);
+	udma_free_normal_buf(dev, idx_buf_size, &jfr->idx_que.buf);
 err_idx_que:
-	udma_k_free_buf(dev, rqe_buf_size, &jfr->rq.buf);
+	udma_free_normal_buf(dev, rqe_buf_size, &jfr->rq.buf);
 
 	return -ENOMEM;
 }
@@ -211,13 +211,13 @@ static void udma_put_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 
 	if (jfr->rq.buf.kva) {
 		size = jfr->rq.buf.entry_cnt * jfr->rq.buf.entry_size;
-		udma_k_free_buf(dev, size, &jfr->rq.buf);
+		udma_free_normal_buf(dev, size, &jfr->rq.buf);
 		udma_free_sw_db(dev, &jfr->sw_db);
 	}
 
 	if (jfr->idx_que.buf.kva) {
 		size = jfr->idx_que.buf.entry_cnt * jfr->idx_que.buf.entry_size;
-		udma_k_free_buf(dev, size, &jfr->idx_que.buf);
+		udma_free_normal_buf(dev, size, &jfr->idx_que.buf);
 		udma_destroy_udma_table(dev, &jfr->idx_que.jfr_idx_table, "JFR_IDX");
 	}
 

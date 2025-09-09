@@ -71,7 +71,7 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 	size = ALIGN(wqe_bb_depth * sq->buf.entry_size, UDMA_HW_PAGE_SIZE);
 	sq->buf.entry_cnt = size >> WQE_BB_SIZE_SHIFT;
 
-	ret = udma_k_alloc_buf(dev, size, &sq->buf);
+	ret = udma_alloc_normal_buf(dev, size, &sq->buf);
 	if (ret) {
 		dev_err(dev->dev,
 			"failed to alloc jetty (%u) sq buf when size = %u.\n", sq->id, size);
@@ -80,7 +80,7 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 
 	sq->wrid = kcalloc(1, sq->buf.entry_cnt * sizeof(uint64_t), GFP_KERNEL);
 	if (!sq->wrid) {
-		udma_k_free_buf(dev, size, &sq->buf);
+		udma_free_normal_buf(dev, size, &sq->buf);
 		dev_err(dev->dev,
 			"failed to alloc wrid for jfs id = %u when entry cnt = %u.\n",
 			sq->id, sq->buf.entry_cnt);
@@ -99,7 +99,7 @@ void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 
 	if (sq->buf.kva) {
 		size = sq->buf.entry_cnt * sq->buf.entry_size;
-		udma_k_free_buf(dev, size, &sq->buf);
+		udma_free_normal_buf(dev, size, &sq->buf);
 		kfree(sq->wrid);
 		return;
 	}

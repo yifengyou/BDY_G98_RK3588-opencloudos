@@ -35,6 +35,8 @@ extern bool dump_aux_info;
 
 #define UDMA_HW_PAGE_SHIFT 12
 #define UDMA_HW_PAGE_SIZE (1 << UDMA_HW_PAGE_SHIFT)
+#define UDMA_HUGEPAGE_SHIFT 21
+#define UDMA_HUGEPAGE_SIZE (1 << UDMA_HUGEPAGE_SHIFT)
 
 #define UDMA_DEV_UE_NUM 47
 
@@ -147,6 +149,9 @@ struct udma_dev {
 	u8 udma_sl[UDMA_MAX_SL_NUM];
 	int disable_ue_rx_count;
 	struct mutex disable_ue_rx_mutex;
+	struct mutex hugepage_lock;
+	struct list_head hugepage_list;
+	uint32_t total_hugepage_num;
 };
 
 #define UDMA_ERR_MSG_LEN	128

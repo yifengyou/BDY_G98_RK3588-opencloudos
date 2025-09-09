@@ -176,3 +176,153 @@ int udma_mmap(struct ubcore_ucontext *uctx, struct vm_area_struct *vma)
 
 	return 0;
 }
+
+int udma_alloc_u_hugepage(struct udma_context *ctx, struct vm_area_struct *vma)
+{
+	uint32_t page_num = (vma->vm_end - vma->vm_start) >> UDMA_HUGEPAGE_SHIFT;
+	struct udma_hugepage_priv *priv;
+	int ret = -ENOMEM;
+	int i;
+
+	mutex_lock(&ctx->dev->hugepage_lock);
+	if (page_num > ctx->dev->total_hugepage_num) {
+		dev_err(ctx->dev->dev, "insufficient resources for mmap.\n");
+		mutex_unlock(&ctx->dev->hugepage_lock);
+		return -EINVAL;
+	}
+	ctx->dev->total_hugepage_num -= page_num;
+	mutex_unlock(&ctx->dev->hugepage_lock);
+
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		goto err_alloc_priv;
+
+	priv->page_num = page_num;
+	priv->pages = kcalloc(priv->page_num, sizeof(*priv->pages), GFP_KERNEL);
+	if (!priv->pages)
+		goto err_alloc_arr;
+
+	for (i = 0; i < priv->page_num; i++) {
+		priv->pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO,
+					     get_order(UDMA_HUGEPAGE_SIZE));
+		if (!priv->pages[i]) {
+			dev_err(ctx->dev->dev, "failed to alloc 2M pages.\n");
+			goto err_alloc_pages;
+		}
+		ret = remap_pfn_range(vma, vma->vm_start + i * UDMA_HUGEPAGE_SIZE,
+				      page_to_pfn(priv->pages[i]), UDMA_HUGEPAGE_SIZE,
+				      vma->vm_page_prot);
+		if (ret) {
+			dev_err(ctx->dev->dev, "failed to remap_pfn_range, ret=%d.\n", ret);
+			goto err_remap_pfn_range;
+		}
+	}
+
+	priv->va_base = (void *)vma->vm_start;
+	priv->va_len = priv->page_num << UDMA_HUGEPAGE_SHIFT;
+	priv->left_va_len = priv->va_len;
+	refcount_set(&priv->refcnt, 1);
+
+	mutex_lock(&ctx->hugepage_lock);
+	list_add(&priv->list, &ctx->hugepage_list);
+	mutex_unlock(&ctx->hugepage_lock);
+
+	if (dfx_switch)
+		dev_info_ratelimited(ctx->dev->dev, "map_hugepage, 2m_page_num=%u.\n",
+				     priv->page_num);
+	return 0;
+
+err_remap_pfn_range:
+err_alloc_pages:
+	for (i = 0; i < priv->page_num; i++) {
+		if (priv->pages[i])
+			__free_pages(priv->pages[i], get_order(UDMA_HUGEPAGE_SIZE));
+		else
+			break;
+	}
+	kfree(priv->pages);
+err_alloc_arr:
+	kfree(priv);
+err_alloc_priv:
+	mutex_lock(&ctx->dev->hugepage_lock);
+	ctx->dev->total_hugepage_num += page_num;
+	mutex_unlock(&ctx->dev->hugepage_lock);
+
+	return ret;
+}
+
+static struct udma_hugepage_priv *udma_list_find_before(struct udma_context *ctx, void *va)
+{
+	struct udma_hugepage_priv *priv;
+
+	list_for_each_entry(priv, &ctx->hugepage_list, list) {
+		if (va >= priv->va_base && va < priv->va_base + priv->va_len)
+			return priv;
+	}
+
+	return NULL;
+}
+
+int udma_occupy_u_hugepage(struct udma_context *ctx, void *va)
+{
+	struct udma_hugepage_priv *priv;
+
+	mutex_lock(&ctx->hugepage_lock);
+	priv = udma_list_find_before(ctx, va);
+	if (priv) {
+		if (dfx_switch)
+			dev_info_ratelimited(ctx->dev->dev, "occupy_hugepage.\n");
+		refcount_inc(&priv->refcnt);
+	}
+	mutex_unlock(&ctx->hugepage_lock);
+
+	return priv ? 0 : -EFAULT;
+}
+
+void udma_return_u_hugepage(struct udma_context *ctx, void *va)
+{
+	struct udma_hugepage_priv *priv;
+	struct vm_area_struct *vma;
+	uint32_t i;
+
+	mutex_lock(&ctx->hugepage_lock);
+	priv = udma_list_find_before(ctx, va);
+	if (!priv) {
+		mutex_unlock(&ctx->hugepage_lock);
+		dev_warn(ctx->dev->dev, "va is invalid addr.\n");
+		return;
+	}
+
+	if (dfx_switch)
+		dev_info_ratelimited(ctx->dev->dev, "return_hugepage.\n");
+	refcount_dec(&priv->refcnt);
+	if (!refcount_dec_if_one(&priv->refcnt)) {
+		mutex_unlock(&ctx->hugepage_lock);
+		return;
+	}
+
+	list_del(&priv->list);
+	mutex_unlock(&ctx->hugepage_lock);
+
+	if (current->mm) {
+		mmap_write_lock(current->mm);
+		vma = find_vma(current->mm, (unsigned long)priv->va_base);
+		if (vma != NULL && vma->vm_start <= (unsigned long)priv->va_base &&
+		    vma->vm_end >= (unsigned long)(priv->va_base + priv->va_len))
+			zap_vma_ptes(vma, (unsigned long)priv->va_base, priv->va_len);
+		mmap_write_unlock(current->mm);
+	} else {
+		dev_warn(ctx->dev->dev, "current mm released.\n");
+	}
+
+	if (dfx_switch)
+		dev_info_ratelimited(ctx->dev->dev, "unmap_hugepage, 2m_page_num=%u.\n",
+				     priv->page_num);
+	mutex_lock(&ctx->dev->hugepage_lock);
+	for (i = 0; i < priv->page_num; i++)
+		__free_pages(priv->pages[i], get_order(UDMA_HUGEPAGE_SIZE));
+	ctx->dev->total_hugepage_num += priv->page_num;
+	mutex_unlock(&ctx->dev->hugepage_lock);
+	kfree(priv->pages);
+	kfree(priv);
+}

@@ -150,7 +150,7 @@ static int udma_get_jfc_buf(struct udma_dev *dev, struct udma_create_jfc_ucmd *u
 	jfc->tid = dev->tid;
 	size = jfc->buf.entry_size * jfc->buf.entry_cnt;
 
-	ret = udma_k_alloc_buf(dev, size, &jfc->buf);
+	ret = udma_alloc_normal_buf(dev, size, &jfc->buf);
 	if (ret) {
 		dev_err(dev->dev, "failed to alloc buffer for jfc.\n");
 		return ret;
@@ -159,7 +159,7 @@ static int udma_get_jfc_buf(struct udma_dev *dev, struct udma_create_jfc_ucmd *u
 	ret = udma_alloc_sw_db(dev, &jfc->db, UDMA_JFC_TYPE_DB);
 	if (ret) {
 		dev_err(dev->dev, "failed to alloc sw db for jfc(%u).\n", jfc->jfcn);
-		udma_k_free_buf(dev, size, &jfc->buf);
+		udma_free_normal_buf(dev, size, &jfc->buf);
 		return -ENOMEM;
 	}
 
@@ -173,7 +173,7 @@ static void udma_free_jfc_buf(struct udma_dev *dev, struct udma_jfc *jfc)
 
 	if (jfc->buf.kva) {
 		size = jfc->buf.entry_size * jfc->buf.entry_cnt;
-		udma_k_free_buf(dev, size, &jfc->buf);
+		udma_free_normal_buf(dev, size, &jfc->buf);
 	} else if (jfc->buf.umem) {
 		uctx = to_udma_context(jfc->base.uctx);
 		unpin_queue_addr(jfc->buf.umem);
