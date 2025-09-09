@@ -36,9 +36,6 @@
 #include <linux/suspend.h>
 #endif
 #include "pci.h"
-#ifdef CONFIG_PSWIOTLB
-#include <linux/pswiotlb.h>
-#endif
 
 DEFINE_MUTEX(pci_slot_mutex);
 

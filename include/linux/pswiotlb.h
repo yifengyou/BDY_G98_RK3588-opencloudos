@@ -26,7 +26,7 @@ struct p_io_tlb_pool;
 #define PSWIOTLB_FORCEOFF	(1 << 1) /* force phytium bounce buffering off*/
 #define PSWIOTLB_ANY	(1 << 2) /* allow any memory for the buffer */
 #define PSWIOTLB_FREE_THRESHOLD 30
-static bool is_ps_socs;
+static bool __read_mostly is_ps_socs;
 
 /*
  * Maximum allowable number of contiguous slabs to map,
