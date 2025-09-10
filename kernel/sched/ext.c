@@ -6,6 +6,8 @@
  * Copyright (c) 2022 Tejun Heo <tj@kernel.org>
  * Copyright (c) 2022 David Vernet <dvernet@meta.com>
  */
+#include <linux/verification.h>
+
 #define SCX_OP_IDX(op)		(offsetof(struct sched_ext_ops, op) / sizeof(void (*)(void)))
 
 enum scx_consts {
@@ -5053,6 +5055,19 @@ static int validate_ops(const struct sched_ext_ops *ops)
 	return 0;
 }
 
+static inline int scx_ops_sig_verify(const void *key, size_t key_len,
+			   const void *sig, size_t sig_len)
+{
+#ifdef CONFIG_SYSTEM_DATA_VERIFICATION
+	return verify_pkcs7_signature(key, key_len, sig, sig_len,
+				      VERIFY_USE_SECONDARY_KEYRING,
+				      VERIFYING_UNSPECIFIED_SIGNATURE,
+				      NULL, NULL);
+#else
+	return 0;
+#endif
+}
+
 static int scx_ops_enable(struct sched_ext_ops *ops)
 {
 	struct scx_task_iter sti;
@@ -5070,6 +5085,11 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 	}
 
 	mutex_lock(&scx_ops_enable_mutex);
+
+	if (scx_ops_sig_verify(ops->key, ops->key_len, ops->sig, ops->sig_len)) {
+		ret = -EPERM;
+		goto err_unlock;
+	}
 
 	if (!scx_ops_helper) {
 		WRITE_ONCE(scx_ops_helper,
@@ -5457,6 +5477,22 @@ static int bpf_scx_init_member(const struct btf_type *t,
 		if (*(u64 *)(udata + moff) & ~SCX_OPS_ALL_FLAGS)
 			return -EINVAL;
 		ops->flags = *(u64 *)(udata + moff);
+		return 1;
+	case offsetof(struct sched_ext_ops, key):
+		memcpy(ops->key, uops->key, SCX_OPS_KEY_LEN);
+		return 1;
+	case offsetof(struct sched_ext_ops, key_len):
+		if (*(u32 *)(udata + moff) > SCX_OPS_KEY_LEN)
+			return -E2BIG;
+		ops->key_len = *(u32 *)(udata + moff);
+		return 1;
+	case offsetof(struct sched_ext_ops, sig):
+		memcpy(ops->sig, uops->sig, SCX_OPS_SIG_LEN);
+		return 1;
+	case offsetof(struct sched_ext_ops, sig_len):
+		if (*(u32 *)(udata + moff) > SCX_OPS_SIG_LEN)
+			return -E2BIG;
+		ops->sig_len = *(u32 *)(udata + moff);
 		return 1;
 	case offsetof(struct sched_ext_ops, name):
 		ret = bpf_obj_name_cpy(ops->name, uops->name,

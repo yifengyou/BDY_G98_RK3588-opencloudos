@@ -16,6 +16,8 @@
 
 enum scx_public_consts {
 	SCX_OPS_NAME_LEN	= 128,
+	SCX_OPS_KEY_LEN	        = 64,
+	SCX_OPS_SIG_LEN	        = 4096,
 
 	SCX_SLICE_DFL		= 20 * 1000000,	/* 20ms */
 	SCX_SLICE_INF		= U64_MAX,	/* infinite, implies nohz */
@@ -740,6 +742,14 @@ struct sched_ext_ops {
 	 * enable path.
 	 */
 	u64 hotplug_seq;
+
+	char key[SCX_OPS_KEY_LEN];
+
+	u32 key_len;
+
+	char sig[SCX_OPS_SIG_LEN];
+
+	u32 sig_len;
 
 	/**
 	 * name - BPF scheduler's name
