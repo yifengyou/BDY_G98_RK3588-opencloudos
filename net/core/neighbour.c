@@ -50,6 +50,8 @@ do {						\
 
 #define PNEIGH_HASHMASK		0xF
 
+int sysctl_neigh_gc_staletime_update;
+
 static void neigh_timer_handler(struct timer_list *t);
 static void __neigh_notify(struct neighbour *n, int type, int flags,
 			   u32 pid);
@@ -1117,6 +1119,8 @@ static void neigh_timer_handler(struct timer_list *t)
 			neigh_dbg(2, "neigh %p is suspected\n", neigh);
 			WRITE_ONCE(neigh->nud_state, NUD_STALE);
 			neigh->updated = jiffies;
+			if (neigh->tbl && sysctl_neigh_gc_staletime_update)
+				neigh->used = jiffies;
 			neigh_suspect(neigh);
 			notify = 1;
 		}
