@@ -1512,6 +1512,7 @@ struct bpf_prog_aux {
 		struct work_struct work;
 		struct rcu_head	rcu;
 	};
+	u32 orig_len;
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

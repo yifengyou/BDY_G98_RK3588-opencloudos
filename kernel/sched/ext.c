@@ -6,6 +6,7 @@
  * Copyright (c) 2022 Tejun Heo <tj@kernel.org>
  * Copyright (c) 2022 David Vernet <dvernet@meta.com>
  */
+#include <crypto/hash.h>
 #include <linux/verification.h>
 
 #define SCX_OP_IDX(op)		(offsetof(struct sched_ext_ops, op) / sizeof(void (*)(void)))
@@ -5055,6 +5056,60 @@ static int validate_ops(const struct sched_ext_ops *ops)
 	return 0;
 }
 
+enum scx_ops_hash_idx {
+	SCX_HASH_IDX_SELECT_CPU = 0,
+	SCX_HASH_IDX_ENQUEUE,
+	SCX_HASH_IDX_DEQUEUE,
+	SCX_HASH_IDX_DISPATCH,
+	SCX_HASH_IDX_INIT_TASK,
+	SCX_HASH_IDX_INIT,
+	SCX_HASH_IDX_EXIT,
+	NR_SCX_HASH_IDX
+};
+
+static u8 bpf_scx_ops_digest[32];
+
+static int bpf_scx_compute_ops_digest(struct sched_ext_ops *ops)
+{
+	struct crypto_shash *tfm;
+	SHASH_DESC_ON_STACK(desc, tfm);
+	int ret, i;
+
+	if (!ops->priv)
+		return -EINVAL;
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("sched_ext: BPF scheduler \"%s\" crypto_alloc_shash failed: %ld\n",
+				ops->name, PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	desc->tfm = tfm;
+
+	ret = crypto_shash_init(desc);
+	if (ret)
+		goto out;
+
+	ret = crypto_shash_update(desc, (const u8 *)ops->priv, sizeof(int) * NR_SCX_HASH_IDX);
+	if (ret)
+		goto out;
+
+	ret = crypto_shash_final(desc, bpf_scx_ops_digest);
+	if (ret)
+		goto out;
+
+	pr_info("sched_ext: BPF scheduler \"%s\" SHA256: ", ops->name);
+	for (i = 0; i < 32; i++)
+		pr_cont("%02x", bpf_scx_ops_digest[i]);
+	pr_cont("\n");
+
+out:
+	crypto_free_shash(tfm);
+	return ret;
+
+}
+
 static inline int scx_ops_sig_verify(const void *key, size_t key_len,
 			   const void *sig, size_t sig_len)
 {
@@ -5086,7 +5141,8 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 
 	mutex_lock(&scx_ops_enable_mutex);
 
-	if (scx_ops_sig_verify(ops->key, ops->key_len, ops->sig, ops->sig_len)) {
+	bpf_scx_compute_ops_digest(ops);
+	if (scx_ops_sig_verify(bpf_scx_ops_digest, 32, ops->sig, ops->sig_len)) {
 		ret = -EPERM;
 		goto err_unlock;
 	}
@@ -5458,6 +5514,8 @@ static const struct bpf_verifier_ops bpf_scx_verifier_ops = {
 	.btf_struct_access = bpf_scx_btf_struct_access,
 };
 
+extern struct btf *btf_vmlinux;
+
 static int bpf_scx_init_member(const struct btf_type *t,
 			       const struct btf_member *member,
 			       void *kdata, const void *udata)
@@ -5465,6 +5523,10 @@ static int bpf_scx_init_member(const struct btf_type *t,
 	const struct sched_ext_ops *uops = udata;
 	struct sched_ext_ops *ops = kdata;
 	u32 moff = __btf_member_bit_offset(t, member) / 8;
+	const struct btf_type *ptype;
+	struct bpf_prog *prog;
+	int prog_fd;
+	s32 idx;
 	int ret;
 
 	switch (moff) {
@@ -5477,14 +5539,6 @@ static int bpf_scx_init_member(const struct btf_type *t,
 		if (*(u64 *)(udata + moff) & ~SCX_OPS_ALL_FLAGS)
 			return -EINVAL;
 		ops->flags = *(u64 *)(udata + moff);
-		return 1;
-	case offsetof(struct sched_ext_ops, key):
-		memcpy(ops->key, uops->key, SCX_OPS_KEY_LEN);
-		return 1;
-	case offsetof(struct sched_ext_ops, key_len):
-		if (*(u32 *)(udata + moff) > SCX_OPS_KEY_LEN)
-			return -E2BIG;
-		ops->key_len = *(u32 *)(udata + moff);
 		return 1;
 	case offsetof(struct sched_ext_ops, sig):
 		memcpy(ops->sig, uops->sig, SCX_OPS_SIG_LEN);
@@ -5517,6 +5571,53 @@ static int bpf_scx_init_member(const struct btf_type *t,
 		return 1;
 	}
 
+	ptype = btf_type_resolve_ptr(btf_vmlinux, member->type, NULL);
+	if (!ptype || !btf_type_is_func_proto(ptype))
+		goto out;
+	prog_fd = (int)(*(unsigned long *)(udata + moff));
+	if (!prog_fd)
+		goto out;
+	prog = bpf_prog_get(prog_fd);
+	if (IS_ERR(prog))
+		goto out;
+	if (prog->type != BPF_PROG_TYPE_STRUCT_OPS)
+		goto out;
+
+	switch (moff) {
+	case offsetof(struct sched_ext_ops, select_cpu):
+		idx = SCX_HASH_IDX_SELECT_CPU;
+		break;
+	case offsetof(struct sched_ext_ops, enqueue):
+		idx = SCX_HASH_IDX_ENQUEUE;
+		break;
+	case offsetof(struct sched_ext_ops, dequeue):
+		idx = SCX_HASH_IDX_DEQUEUE;
+		break;
+	case offsetof(struct sched_ext_ops, dispatch):
+		idx = SCX_HASH_IDX_DISPATCH;
+		break;
+	case offsetof(struct sched_ext_ops, init_task):
+		idx = SCX_HASH_IDX_INIT_TASK;
+		break;
+	case offsetof(struct sched_ext_ops, init):
+		idx = SCX_HASH_IDX_INIT;
+		break;
+	case offsetof(struct sched_ext_ops, exit):
+		idx = SCX_HASH_IDX_EXIT;
+		break;
+	default:
+		idx = -1;
+	}
+
+	if (!ops->priv) {
+		ops->priv = kcalloc(NR_SCX_HASH_IDX, sizeof(int), GFP_KERNEL);
+		if (!ops->priv)
+			return -ENOMEM;
+	}
+	if (idx != -1)
+		((int *)ops->priv)[idx] = prog->aux->orig_len;
+	bpf_prog_put(prog);
+out:
 	return 0;
 }
 
@@ -5553,6 +5654,9 @@ static int bpf_scx_reg(void *kdata)
 
 static void bpf_scx_unreg(void *kdata)
 {
+	struct sched_ext_ops *ops = kdata;
+
+	kfree(ops->priv);
 	scx_ops_disable(SCX_EXIT_UNREG);
 	kthread_flush_work(&scx_ops_disable_work);
 }
