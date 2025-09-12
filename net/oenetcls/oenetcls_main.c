@@ -1040,9 +1040,12 @@ static __init int oecls_init(void)
 #endif
 
 	if (mode == 0)
-		oecls_ntuple_res_init();
+		err = oecls_ntuple_res_init();
 	else
-		oecls_flow_res_init();
+		err = oecls_flow_res_init();
+
+	if (err)
+		goto clean_rxq;
 
 	return 0;
 

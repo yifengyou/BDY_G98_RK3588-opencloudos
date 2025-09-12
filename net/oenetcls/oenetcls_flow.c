@@ -391,11 +391,22 @@ static const struct oecls_hook_ops oecls_flow_ops = {
 	.oecls_cfg_rxcls = NULL,
 };
 
-void oecls_flow_res_init(void)
+int oecls_flow_res_init(void)
 {
-	oecls_sock_flow_table_init();
-	oecls_dev_flow_table_init();
+	int err;
+
+	err = oecls_sock_flow_table_init();
+	if (err)
+		return err;
+
+	err = oecls_dev_flow_table_init();
+	if (err) {
+		oecls_sock_flow_table_release();
+		return err;
+	}
+
 	RCU_INIT_POINTER(oecls_ops, &oecls_flow_ops);
+	return 0;
 }
 
 void oecls_flow_res_clean(void)

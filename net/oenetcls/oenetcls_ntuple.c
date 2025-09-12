@@ -571,16 +571,17 @@ static const struct oecls_hook_ops oecls_ntuple_ops = {
 	.oecls_cfg_rxcls = ethtool_cfg_rxcls,
 };
 
-void oecls_ntuple_res_init(void)
+int oecls_ntuple_res_init(void)
 {
 	do_cfg_workqueue = alloc_ordered_workqueue("oecls_cfg", 0);
 	if (!do_cfg_workqueue) {
 		oecls_debug("alloc_ordered_workqueue fails\n");
-		return;
+		return -ENOMEM;
 	}
 
 	init_oecls_sk_rules();
 	RCU_INIT_POINTER(oecls_ops, &oecls_ntuple_ops);
+	return 0;
 }
 
 void oecls_ntuple_res_clean(void)
