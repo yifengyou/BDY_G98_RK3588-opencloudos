@@ -121,6 +121,16 @@ struct rmgr_ctrl {
 	__u32				size;
 };
 
+struct cfg_param {
+	struct work_struct work;
+	struct cmd_context ctx;
+	struct oecls_sk_rule *rule;
+	struct sock *sk;
+	bool is_del;
+	int devid;
+	int nid;
+};
+
 extern int match_ip_flag;
 extern int oecls_debug_lvl;
 extern int oecls_netdev_num;
