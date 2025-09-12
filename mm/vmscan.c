@@ -1872,6 +1872,9 @@ retry:
 		if (!sc->may_unmap && folio_mapped(folio))
 			goto keep_locked;
 
+		if (folio_test_anon(folio) && sc->is_rue)
+			goto keep_locked;
+
 		/* folio_update_gen() tried to promote this page? */
 		if (lru_gen_enabled() && !ignore_references &&
 		    folio_mapped(folio) && folio_test_referenced(folio))
@@ -7852,6 +7855,10 @@ static unsigned long __shrink_page_cache(gfp_t mask, struct mem_cgroup *memcg,
 
 	if (lru_gen_enabled())
 		sc.nr_to_reclaim = nr_pages;
+	if (lru_gen_enabled() && !root_reclaim(&sc)) {
+		sc.may_unmap = 1;
+		sc.may_writepage = 1;
+	}
 	/* We might sleep during direct reclaim so make atomic context
 	 * is certainly a bug.
 	 */
