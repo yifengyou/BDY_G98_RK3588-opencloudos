@@ -1198,6 +1198,12 @@ out_free_interp:
 				if (alignment)
 					load_bias &= ~(alignment - 1);
 				elf_flags |= MAP_FIXED_NOREPLACE;
+#ifdef CONFIG_HUGETEXT
+				/* Align the first PT_LOAD */
+				if (hugetext_file_enabled() &&
+				    total_size >= HPAGE_PMD_SIZE)
+					load_bias &= HPAGE_PMD_MASK;
+#endif
 			} else {
 				/*
 				 * For ET_DYN without PT_INTERP, we rely on
@@ -1297,11 +1303,6 @@ out_free_interp:
 				             ELF_PAGESTART(load_bias + vaddr);
 				reloc_func_desc = load_bias;
 			}
-#ifdef CONFIG_HUGETEXT
-			if (hugetext_file_enabled() && interpreter &&
-			    total_size >= HPAGE_PMD_SIZE)
-				load_bias &= HPAGE_PMD_MASK;
-#endif
 		}
 
 		/*
