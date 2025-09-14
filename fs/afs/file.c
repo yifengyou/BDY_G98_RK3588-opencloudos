@@ -490,7 +490,7 @@ static bool afs_release_folio(struct folio *folio, gfp_t gfp)
 	struct afs_vnode *vnode = AFS_FS_I(folio_inode(folio));
 
 	_enter("{{%llx:%llu}[%lu],%lx},%x",
-	       vnode->fid.vid, vnode->fid.vnode, folio_index(folio), folio->flags,
+	       vnode->fid.vid, vnode->fid.vnode, folio->index, folio->flags,
 	       gfp);
 
 	/* deny if folio is being written to the cache and the caller hasn't

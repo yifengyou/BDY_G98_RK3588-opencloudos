@@ -861,7 +861,7 @@ TRACE_EVENT(afs_folio_dirty,
 		    unsigned long priv = (unsigned long)folio_get_private(folio);
 		    __entry->vnode = vnode;
 		    __entry->where = where;
-		    __entry->index = folio_index(folio);
+		    __entry->index = folio->index;
 		    __entry->from  = afs_folio_dirty_from(folio, priv);
 		    __entry->to    = afs_folio_dirty_to(folio, priv);
 		    __entry->to   |= (afs_is_folio_dirty_mmapped(priv) ?
