@@ -3944,7 +3944,7 @@ static bool can_swapin_thp(struct vm_fault *vmf, pte_t *ptep, int nr_pages)
 	idx = (vmf->address - addr) / PAGE_SIZE;
 	pte = ptep_get(ptep);
 
-	if (!pte_same(pte, pte_move_swp_offset(vmf->orig_pte, -idx)))
+	if (!pte_same(pte, pte_move_swp_offset(vmf->orig_pte, -idx)) || pte_none(pte))
 		return false;
 	entry = pte_to_swp_entry(pte);
 	if (swap_pte_batch(ptep, nr_pages, pte) != nr_pages)
