@@ -7809,6 +7809,7 @@ static struct page *mc_handle_file_pte(struct vm_area_struct *vma,
 {
 	unsigned long index;
 	struct folio *folio;
+	struct address_space *mapping;
 
 	if (!vma->vm_file) /* anonymous vma */
 		return NULL;
@@ -7817,10 +7818,28 @@ static struct page *mc_handle_file_pte(struct vm_area_struct *vma,
 
 	/* folio is moved even if it's not RSS of this task(page-faulted). */
 	/* shmem/tmpfs may report page out on swap: account for that too. */
+	mapping = vma->vm_file->f_mapping;
 	index = linear_page_index(vma, addr);
-	folio = filemap_get_incore_folio(vma->vm_file->f_mapping, index);
-	if (IS_ERR(folio))
+	folio = filemap_get_entry(mapping, index);
+	if (!folio)
 		return NULL;
+	if (xa_is_value(folio)) {
+		swp_entry_t entry = radix_to_swp_entry(folio);
+		struct swap_info_struct *si;
+		folio = NULL;
+
+		if (IS_ENABLED(CONFIG_SWAP) && shmem_mapping(mapping)) {
+			si = get_swap_device(entry);
+			if (si) {
+				folio = filemap_get_folio(swap_address_space(entry),
+			      swap_cache_index(entry));
+				put_swap_device(si);
+			}
+		}
+
+		if (!folio)
+			return NULL;
+	}
 	return folio_file_page(folio, index);
 }
 
