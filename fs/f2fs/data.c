@@ -73,7 +73,7 @@ bool f2fs_is_cp_guaranteed(struct page *page)
 
 static enum count_type __read_io_type(struct page *page)
 {
-	struct address_space *mapping = page_file_mapping(page);
+	struct address_space *mapping = page->mapping;
 
 	if (mapping) {
 		struct inode *inode = mapping->host;
@@ -2427,7 +2427,7 @@ next_page:
 static int f2fs_read_data_folio(struct file *file, struct folio *folio)
 {
 	struct page *page = &folio->page;
-	struct inode *inode = page_file_mapping(page)->host;
+	struct inode *inode = page->mapping->host;
 	int ret = -EAGAIN;
 
 	trace_f2fs_readpage(page, DATA);
