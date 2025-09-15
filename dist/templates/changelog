@@ -1,3 +1,8 @@
+* Mon Sep 15 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41.1
+- net/neighbor: add sysctl_neigh_gc_staletime_update to staletime
+- rue/mm: fix pagecache limit reclaim warning by adjusting scan control parameters
+- tk: mm: hugetext: fix first PT_LOAD handling
+
 * Tue Sep  9 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41
 - !472 [linux-6.6/devel][Bugfix]: dist: loongarch: Fix build failure from broken module deps
 - dist: loongarch: Fix build failure from broken module deps
