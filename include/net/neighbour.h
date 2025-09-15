@@ -40,6 +40,7 @@
 #define NUD_CONNECTED	(NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE)
 
 struct neighbour;
+extern int sysctl_neigh_gc_staletime_update;
 
 enum {
 	NEIGH_VAR_MCAST_PROBES,
