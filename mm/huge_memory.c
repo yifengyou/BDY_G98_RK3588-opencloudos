@@ -3072,8 +3072,7 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 			__xa_store(&folio->mapping->i_pages, tail->index,
 					tail, 0);
 		} else if (swap_cache) {
-			__xa_store(&swap_cache->i_pages, offset + i,
-					tail, 0);
+			__swap_cache_replace_folio(folio, tail);
 		}
 	}
 
