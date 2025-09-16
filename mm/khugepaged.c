@@ -2574,7 +2574,7 @@ static unsigned int khugepaged_scan_exec_mm_slot(unsigned int pages, int *result
 		}
 
 		vma = find_vma(mm, slot->exec_vma[i]);
-		if (!vma && !thp_vma_allowable_order(vma, vma->vm_flags, false, false, true, PMD_ORDER)) {
+		if (!vma && !thp_vma_allowable_order(vma, vma->vm_flags, TVA_ENFORCE_SYSFS, PMD_ORDER)) {
 skip:
 			progress++;
 			continue;
