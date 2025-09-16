@@ -24,6 +24,8 @@ struct iova_slot;
 #error "UBASE_MAX_VL_NUM can't less than IEEE_8021QAZ_MAX_TCS"
 #endif
 
+#define UBASE_NIC_MAX_VL_NUM	(2)
+
 #define UBASE_SUP_UBL		BIT(0)
 #define UBASE_SUP_ETH		BIT(1)
 #define UBASE_SUP_UNIC		BIT(2)

@@ -5,10 +5,252 @@
  */
 
 #include <linux/dcbnl.h>
+#include <ub/ubase/ubase_comm_qos.h>
 
 #include "unic_hw.h"
 #include "unic_netdev.h"
 #include "unic_dcbnl.h"
+
+#define UNIC_PRIO_VL_MAP_CHANGED	BIT(0)
+#define UNIC_TC_TSA_CHANGED		BIT(1)
+#define UNIC_TC_BW_CHANGED		BIT(2)
+
+static int unic_ets_prio_tc_validate(struct unic_dev *unic_dev,
+				     struct ieee_ets *ets, u8 *changed,
+				     u8 *vl_num)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	u32 max_queue = unic_channels_max_num(adev);
+	u8 i, max_vl = 0;
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		if (ets->prio_tc[i] != unic_dev->channels.vl.prio_vl[i])
+			*changed |= UNIC_PRIO_VL_MAP_CHANGED;
+
+		max_vl = max(max_vl, ets->prio_tc[i] + 1);
+	}
+
+	if (max_vl > caps->vl_num) {
+		unic_err(unic_dev, "tc num(%u) can't exceed max tc(%u).\n",
+			 max_vl, caps->vl_num);
+		return -EINVAL;
+	}
+
+	if (unic_get_rss_vl_num(unic_dev, max_vl) > max_queue) {
+		unic_err(unic_dev,
+			 "tc num can't exceed queue num(%u).\n", max_queue);
+		return -EINVAL;
+	}
+
+	*vl_num = max_vl;
+
+	return 0;
+}
+
+static int unic_ets_tc_bw_validate(struct unic_dev *unic_dev,
+				   struct ieee_ets *ets, u8 *changed)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	struct unic_vl *vl = &unic_dev->channels.vl;
+	/* continuous bitmap configured by the dcb tool */
+	u16 tc_bitmap = (1 << caps->vl_num) - 1;
+	int ret;
+	u8 i;
+
+	ret = ubase_check_qos_sch_param(adev, tc_bitmap, ets->tc_tx_bw,
+					ets->tc_tsa, false);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < caps->vl_num; i++) {
+		if (vl->vl_tsa[i] != ets->tc_tsa[i])
+			*changed |= UNIC_TC_TSA_CHANGED;
+
+		if (vl->vl_bw[i] != ets->tc_tx_bw[i])
+			*changed |= UNIC_TC_BW_CHANGED;
+	}
+
+	return 0;
+}
+
+static int unic_setets_params_validate(struct unic_dev *unic_dev,
+				       struct ieee_ets *ets, u8 *changed,
+				       u8 *vl_num)
+{
+	int ret;
+
+	ret = unic_ets_prio_tc_validate(unic_dev, ets, changed, vl_num);
+	if (ret)
+		return ret;
+
+	return unic_ets_tc_bw_validate(unic_dev, ets, changed);
+}
+
+static int unic_dcbnl_ieee_getets(struct net_device *ndev, struct ieee_ets *ets)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	struct unic_vl *vl = &unic_dev->channels.vl;
+
+	if (unic_resetting(ndev))
+		return -EBUSY;
+
+	if (!unic_dev_ets_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	memset(ets, 0, sizeof(*ets));
+	ets->willing = 1;
+	ets->ets_cap = caps->vl_num;
+
+	memcpy(ets->prio_tc, vl->prio_vl, sizeof(ets->prio_tc));
+	memcpy(ets->tc_tx_bw, vl->vl_bw, sizeof(ets->tc_tx_bw));
+	memcpy(ets->tc_tsa, vl->vl_tsa, sizeof(ets->tc_tsa));
+
+	return 0;
+}
+
+static int unic_setets_preconditions(struct net_device *net_dev)
+{
+	struct unic_dev *unic_dev = netdev_priv(net_dev);
+
+	if (!unic_dev_ets_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (netif_running(net_dev)) {
+		unic_err(unic_dev,
+			 "failed to set ets, due to network interface is up, pls down it first and try again.\n");
+		return -EBUSY;
+	}
+
+	if (!(unic_dev->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
+		return -EINVAL;
+
+	if (unic_resetting(net_dev))
+		return -EBUSY;
+
+	return 0;
+}
+
+static int unic_handle_prio_vl_change(struct unic_dev *unic_dev,
+				      struct ieee_ets *ets, u8 changed)
+{
+	struct unic_vl *vl = &unic_dev->channels.vl;
+	u8 map_type;
+	int ret;
+
+	if (!(changed & UNIC_PRIO_VL_MAP_CHANGED))
+		return 0;
+
+	map_type = vl->dscp_app_cnt ? UNIC_DSCP_VL_MAP : UNIC_PRIO_VL_MAP;
+	ret = unic_set_vl_map(unic_dev, vl->dscp_prio, ets->prio_tc,
+			      map_type);
+	if (ret)
+		return ret;
+
+	memcpy(vl->prio_vl, ets->prio_tc, sizeof(ets->prio_tc));
+
+	return 0;
+}
+
+static inline void unic_convert_vl_sch_bw(struct ubase_caps *caps, u8 *vl_bw,
+					  struct ieee_ets *ets)
+{
+	u8 i;
+
+	for (i = 0; i < caps->vl_num; i++) {
+		vl_bw[caps->req_vl[i]] = ets->tc_tx_bw[i];
+		vl_bw[caps->resp_vl[i]] = ets->tc_tx_bw[i];
+	}
+}
+
+static int unic_handle_tm_vl_sch_change(struct unic_dev *unic_dev,
+					struct ubase_caps *caps,
+					struct ieee_ets *ets)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct unic_vl *vl = &unic_dev->channels.vl;
+	u8 vl_tsa[UBASE_MAX_VL_NUM] = {0};
+	u8 vl_bw[UBASE_MAX_VL_NUM] = {0};
+	u32 i;
+
+	unic_convert_vl_sch_bw(caps, vl_bw, ets);
+
+	for (i = 0; i < caps->vl_num; i++) {
+		if (ets->tc_tsa[i]) {
+			vl_tsa[caps->req_vl[i]] = ets->tc_tsa[i];
+			vl_tsa[caps->resp_vl[i]] = ets->tc_tsa[i];
+		}
+	}
+
+	return ubase_config_tm_vl_sch(adev, vl->vl_bitmap, vl_bw, vl_tsa);
+}
+
+static int unic_handle_vl_tsa_bw_change(struct unic_dev *unic_dev,
+					struct ieee_ets *ets, u8 changed)
+{
+	u8 *vl_tsa = unic_dev->channels.vl.vl_tsa;
+	u8 *vl_bw = unic_dev->channels.vl.vl_bw;
+	int ret;
+
+	struct ubase_caps *caps = ubase_get_dev_caps(unic_dev->comdev.adev);
+
+	if (!(changed & UNIC_TC_TSA_CHANGED || changed & UNIC_TC_BW_CHANGED))
+		return 0;
+
+	ret = unic_handle_tm_vl_sch_change(unic_dev, caps, ets);
+	if (ret)
+		return ret;
+
+	memcpy(vl_tsa, ets->tc_tsa, sizeof(ets->tc_tsa));
+	memcpy(vl_bw, ets->tc_tx_bw, sizeof(ets->tc_tx_bw));
+
+	return 0;
+}
+
+static int unic_setets_config(struct net_device *ndev, struct ieee_ets *ets,
+			      u8 changed, u8 vl_num)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	int ret;
+
+	ret = unic_handle_prio_vl_change(unic_dev, ets, changed);
+	if (ret)
+		return ret;
+
+	ret = unic_handle_vl_tsa_bw_change(unic_dev, ets, changed);
+	if (ret)
+		return ret;
+
+	unic_dev->channels.vl.vl_num = vl_num;
+	if (unic_rss_vl_num_changed(unic_dev, vl_num))
+		return unic_update_channels(unic_dev, vl_num);
+
+	return 0;
+}
+
+static int unic_dcbnl_ieee_setets(struct net_device *ndev, struct ieee_ets *ets)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	u8 changed = 0;
+	u8 vl_num = 0;
+	int ret;
+
+	ret = unic_setets_preconditions(ndev);
+	if (ret)
+		return ret;
+
+	ret = unic_setets_params_validate(unic_dev, ets, &changed, &vl_num);
+	if (ret)
+		return ret;
+
+	if (!changed)
+		return 0;
+
+	return unic_setets_config(ndev, ets, changed, vl_num);
+}
 
 static int unic_dscp_prio_check(struct net_device *netdev, struct dcb_app *app)
 {
@@ -147,6 +389,8 @@ static int unic_dcbnl_ieee_delapp(struct net_device *netdev,
 }
 
 static const struct dcbnl_rtnl_ops unic_dcbnl_ops = {
+	.ieee_getets = unic_dcbnl_ieee_getets,
+	.ieee_setets = unic_dcbnl_ieee_setets,
 	.ieee_setapp = unic_dcbnl_ieee_setapp,
 	.ieee_delapp = unic_dcbnl_ieee_delapp,
 };

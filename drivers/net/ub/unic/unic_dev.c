@@ -905,6 +905,13 @@ void unic_remove_period_task(struct unic_dev *unic_dev)
 		cancel_delayed_work_sync(&unic_dev->service_task);
 }
 
+bool unic_rss_vl_num_changed(struct unic_dev *unic_dev, u8 vl_num)
+{
+	struct unic_channels *channels = &unic_dev->channels;
+
+	return channels->rss_vl_num != unic_get_rss_vl_num(unic_dev, vl_num);
+}
+
 int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 			 u32 org_rss_size)
 {
@@ -930,6 +937,21 @@ int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 	mutex_unlock(&channels->mutex);
 
 	return ret;
+}
+
+int unic_update_channels(struct unic_dev *unic_dev, u8 vl_num)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct unic_channels *channels = &unic_dev->channels;
+	u32 new_rss_size, old_rss_size = channels->rss_size;
+
+	channels->rss_vl_num = unic_get_rss_vl_num(unic_dev, vl_num);
+	if (old_rss_size * channels->rss_vl_num > unic_channels_max_num(adev))
+		new_rss_size = unic_get_max_rss_size(unic_dev);
+	else
+		new_rss_size = old_rss_size;
+
+	return unic_change_rss_size(unic_dev, new_rss_size, old_rss_size);
 }
 
 static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)

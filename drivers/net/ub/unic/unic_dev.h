@@ -257,6 +257,7 @@ int unic_init_channels(struct unic_dev *unic_dev, u32 channels_num);
 void unic_uninit_channels(struct unic_dev *unic_dev);
 void unic_start_period_task(struct net_device *netdev);
 void unic_remove_period_task(struct unic_dev *unic_dev);
+void unic_update_queue_info(struct unic_dev *unic_dev);
 int unic_init_wq(void);
 void unic_destroy_wq(void);
 u16 unic_cqe_period_round_down(u16 cqe_period);
@@ -264,8 +265,10 @@ int unic_init_rx(struct unic_dev *unic_dev, u32 num);
 int unic_init_tx(struct unic_dev *unic_dev, u32 num);
 void unic_destroy_rx(struct unic_dev *unic_dev, u32 num);
 void unic_destroy_tx(struct unic_dev *unic_dev, u32 num);
+bool unic_rss_vl_num_changed(struct unic_dev *unic_dev, u8 vl_num);
 int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 			 u32 org_rss_size);
+int unic_update_channels(struct unic_dev *unic_dev, u8 vl_num);
 int unic_set_vl_map(struct unic_dev *unic_dev, u8 *dscp_prio, u8 *prio_vl,
 		    u8 map_type);
 int unic_dbg_log(void);
@@ -355,6 +358,15 @@ static inline u32 unic_read_reg(struct unic_dev *unic_dev, u32 reg)
 
 	reg_addr = READ_ONCE(io_base->addr);
 	return readl(reg_addr + reg);
+}
+
+static inline u8 unic_get_rss_vl_num(struct unic_dev *unic_dev, u8 max_vl)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_adev_qos *qos = ubase_get_adev_qos(adev);
+	u8 vl_num = min(UNIC_RSS_MAX_VL_NUM, qos->nic_vl_num);
+
+	return max_vl < vl_num ? max_vl : vl_num;
 }
 
 static inline u32 unic_get_sq_cqe_mask(struct unic_dev *unic_dev)
