@@ -7786,11 +7786,7 @@ static struct page *mc_handle_swap_pte(struct vm_area_struct *vma,
 	if (non_swap_entry(ent))
 		return NULL;
 
-	/*
-	 * Because swap_cache_get_folio() updates some statistics counter,
-	 * we call find_get_page() with swapper_space directly.
-	 */
-	page = find_get_page(swap_address_space(ent), swap_cache_index(ent));
+	page = folio_file_page(swap_cache_get_folio(ent), swp_offset(ent));
 	entry->val = ent.val;
 
 	return page;
@@ -7830,8 +7826,7 @@ static struct page *mc_handle_file_pte(struct vm_area_struct *vma,
 		if (IS_ENABLED(CONFIG_SWAP) && shmem_mapping(mapping)) {
 			si = get_swap_device(entry);
 			if (si) {
-				folio = filemap_get_folio(swap_address_space(entry),
-			      swap_cache_index(entry));
+				folio = swap_cache_get_folio(entry);
 				put_swap_device(si);
 			}
 		}
