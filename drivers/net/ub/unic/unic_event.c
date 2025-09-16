@@ -53,6 +53,105 @@ int unic_comp_handler(struct notifier_block *nb, unsigned long jfcn, void *data)
 	return 0;
 }
 
+static void unic_activate_event_process(struct unic_dev *unic_dev)
+{
+	struct unic_act_info *act_info = &unic_dev->act_info;
+	struct net_device *netdev = unic_dev->comdev.netdev;
+	int ret;
+
+	if (test_bit(UNIC_STATE_DISABLED, &unic_dev->state)) {
+		unic_err(unic_dev,
+			 "failed to process activate event, device is not ready.\n");
+		return;
+	}
+
+	rtnl_lock();
+
+	if (!test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state))
+		goto unlock;
+
+	/* if network interface has already been stopped,
+	 * no need to open by activate event
+	 */
+	if (test_bit(UNIC_STATE_DOWN, &unic_dev->state))
+		goto out;
+
+	ret = unic_net_open_no_link_change(netdev);
+	if (ret)
+		unic_warn(unic_dev, "failed to open net, ret = %d.\n", ret);
+
+	ret = unic_activate_promisc_mode(unic_dev, true);
+	if (ret)
+		unic_warn(unic_dev, "failed to open promisc, ret = %d.\n", ret);
+	else
+		clear_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &unic_dev->vport.state);
+
+out:
+	mutex_lock(&act_info->mutex);
+	act_info->deactivate = false;
+	mutex_unlock(&act_info->mutex);
+	clear_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state);
+unlock:
+	rtnl_unlock();
+}
+
+static void unic_deactivate_event_process(struct unic_dev *unic_dev)
+{
+	struct unic_act_info *act_info = &unic_dev->act_info;
+	struct net_device *netdev = unic_dev->comdev.netdev;
+	int ret;
+
+	if (test_bit(UNIC_STATE_DISABLED, &unic_dev->state)) {
+		unic_err(unic_dev,
+			 "failed to process deactivate event, device is not ready.\n");
+		return;
+	}
+
+	rtnl_lock();
+
+	if (test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state))
+		goto unlock;
+
+	/* when deactivate event occurs, set flag to true to prevent
+	 * periodic tasks changing promisc
+	 */
+	mutex_lock(&act_info->mutex);
+	act_info->deactivate = true;
+	mutex_unlock(&act_info->mutex);
+
+	ret = unic_activate_promisc_mode(unic_dev, false);
+	if (ret)
+		unic_warn(unic_dev, "failed to close promisc, ret = %d.\n", ret);
+	else
+		set_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &unic_dev->vport.state);
+
+	/* if network interface has already been stopped,
+	 * no need to stop again by deactivate event
+	 */
+	if (test_bit(UNIC_STATE_DOWN, &unic_dev->state))
+		goto out;
+
+	unic_net_stop_no_link_change(netdev);
+
+out:
+	set_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state);
+unlock:
+	rtnl_unlock();
+}
+
+static void unic_activate_handler(struct auxiliary_device *adev, bool activate)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+
+	unic_info(unic_dev, "receive %s event callback.\n",
+		  activate ? "activate" : "deactivate");
+
+	if (activate)
+		unic_activate_event_process(unic_dev);
+	else
+		unic_deactivate_event_process(unic_dev);
+}
+
 static void unic_rack_port_reset(struct unic_dev *unic_dev, bool link_up)
 {
 	if (link_up)
@@ -229,6 +328,7 @@ int unic_register_event(struct auxiliary_device *adev)
 
 	ubase_port_register(adev, unic_port_handler);
 	ubase_reset_register(adev, unic_reset_handler);
+	ubase_activate_register(adev, unic_activate_handler);
 
 	return 0;
 
@@ -242,6 +342,7 @@ unregister_ae:
 
 void unic_unregister_event(struct auxiliary_device *adev)
 {
+	ubase_activate_unregister(adev);
 	ubase_reset_unregister(adev);
 	ubase_port_unregister(adev);
 	unic_unregister_ctrlq_event(adev, ARRAY_SIZE(unic_ctrlq_events));
