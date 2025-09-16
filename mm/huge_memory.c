@@ -3034,7 +3034,7 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	struct folio *folio = page_folio(page);
 	struct page *head = &folio->page;
 	struct lruvec *lruvec;
-	struct address_space *swap_cache = NULL;
+	struct swap_cluster_info *ci = NULL;
 	unsigned long offset = 0;
 	int i, nr_dropped = 0;
 	unsigned int new_nr = 1 << new_order;
@@ -3044,11 +3044,8 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	/* complete memcg works before add pages to LRU */
 	split_page_memcg(head, order, new_order);
 
-	if (folio_test_anon(folio) && folio_test_swapcache(folio)) {
-		offset = swap_cache_index(folio->swap);
-		swap_cache = swap_address_space(folio->swap);
-		xa_lock(&swap_cache->i_pages);
-	}
+	if (folio_test_anon(folio) && folio_test_swapcache(folio))
+		ci = swap_cluster_get_and_lock(folio);
 
 	/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
 	lruvec = folio_lruvec_lock(folio);
@@ -3071,8 +3068,8 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 		} else if (!folio_test_anon(folio)) {
 			__xa_store(&folio->mapping->i_pages, tail->index,
 					tail, 0);
-		} else if (swap_cache) {
-			__swap_cache_replace_folio(folio, tail);
+		} else if (ci) {
+			__swap_cache_replace_folio(ci, folio, tail);
 		}
 	}
 
@@ -3093,7 +3090,7 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 		/* Additional pin to swap cache */
 		if (folio_test_swapcache(folio)) {
 			folio_ref_add(folio, 1 + new_nr);
-			xa_unlock(&swap_cache->i_pages);
+			swap_cluster_unlock(ci);
 		} else {
 			folio_ref_inc(folio);
 		}
