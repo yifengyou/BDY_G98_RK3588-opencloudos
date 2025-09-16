@@ -23,6 +23,7 @@
 #include "unic_netdev.h"
 #include "unic_qos_hw.h"
 #include "unic_rack_ip.h"
+#include "unic_reset.h"
 #include "unic_event.h"
 
 int unic_comp_handler(struct notifier_block *nb, unsigned long jfcn, void *data)
@@ -50,6 +51,25 @@ int unic_comp_handler(struct notifier_block *nb, unsigned long jfcn, void *data)
 	napi_schedule(&channels->c[index].napi);
 
 	return 0;
+}
+
+static void unic_rack_port_reset(struct unic_dev *unic_dev, bool link_up)
+{
+	if (link_up)
+		unic_dev->hw.mac.link_status = UNIC_LINK_STATUS_UP;
+	else
+		unic_dev->hw.mac.link_status = UNIC_LINK_STATUS_DOWN;
+}
+
+static void unic_port_handler(struct auxiliary_device *adev, bool link_up)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+	struct net_device *netdev = unic_dev->comdev.netdev;
+
+	if (!netif_running(netdev))
+		return;
+
+	unic_rack_port_reset(unic_dev, link_up);
 }
 
 static struct ubase_ctrlq_event_nb unic_ctrlq_events[] = {
@@ -140,6 +160,9 @@ int unic_register_event(struct auxiliary_device *adev)
 	if (ret)
 		goto unregister_crq;
 
+	ubase_port_register(adev, unic_port_handler);
+	ubase_reset_register(adev, unic_reset_handler);
+
 	return 0;
 
 unregister_crq:
@@ -149,6 +172,8 @@ unregister_crq:
 
 void unic_unregister_event(struct auxiliary_device *adev)
 {
+	ubase_reset_unregister(adev);
+	ubase_port_unregister(adev);
 	unic_unregister_ctrlq_event(adev, ARRAY_SIZE(unic_ctrlq_events));
 	unic_unregister_crq_event(adev, ARRAY_SIZE(unic_crq_events));
 }

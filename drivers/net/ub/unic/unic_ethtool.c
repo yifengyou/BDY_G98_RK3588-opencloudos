@@ -278,6 +278,42 @@ static int unic_set_coalesce(struct net_device *netdev,
 	return ret;
 }
 
+static const struct unic_reset_type_map unic_ethtool_reset_map[] = {
+	{ETH_RESET_DEDICATED, UBASE_UE_RESET},
+};
+
+static int unic_reset(struct net_device *ndev, u32 *flags)
+{
+	enum ubase_reset_type reset_type = UBASE_NO_RESET;
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	enum ethtool_reset_flags reset_flags;
+	u32 i;
+
+	if (unic_resetting(ndev)) {
+		unic_err(unic_dev, "failed to reset, due to dev resetting.\n");
+		return -EBUSY;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(unic_ethtool_reset_map); i++) {
+		if (unic_ethtool_reset_map[i].reset_flags == *flags) {
+			reset_type = unic_ethtool_reset_map[i].reset_type;
+			reset_flags = unic_ethtool_reset_map[i].reset_flags;
+			break;
+		}
+	}
+
+	if (reset_type == UBASE_NO_RESET)
+		return -EOPNOTSUPP;
+
+	unic_info(unic_dev,
+		  "ethtool setting reset type, type = %u.\n", reset_type);
+
+	ubase_reset_event(unic_dev->comdev.adev, reset_type);
+	*flags &= ~reset_flags;
+
+	return 0;
+}
+
 #define UNIC_ETHTOOL_RING	(ETHTOOL_RING_USE_RX_BUF_LEN | \
 				 ETHTOOL_RING_USE_TX_PUSH)
 #define UNIC_ETHTOOL_COALESCE	(ETHTOOL_COALESCE_USECS | \
@@ -302,6 +338,7 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.get_fec_stats = unic_get_fec_stats,
 	.get_coalesce = unic_get_coalesce,
 	.set_coalesce = unic_set_coalesce,
+	.reset = unic_reset,
 };
 
 void unic_set_ethtool_ops(struct net_device *netdev)
