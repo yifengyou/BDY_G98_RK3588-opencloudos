@@ -5290,7 +5290,7 @@ static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct sca
 }
 
 static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
-		       int type, int tier, struct list_head *list)
+		       int type, int tier, struct list_head *list, int *isolatedp)
 {
 	int i;
 	int gen;
@@ -5360,11 +5360,9 @@ static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 
 	if (type == LRU_GEN_FILE)
 		sc->nr.file_taken += isolated;
-	/*
-	 * There might not be eligible folios due to reclaim_idx. Check the
-	 * remaining to prevent livelock if it's not making progress.
-	 */
-	return isolated || !remaining ? scanned : 0;
+
+	*isolatedp = isolated;
+	return scanned;
 }
 
 static int get_tier_idx(struct lruvec *lruvec, int type)
@@ -5422,6 +5420,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	int type;
 	int scanned;
 	int tier = -1;
+	int isolated;
 	DEFINE_MIN_SEQ(lruvec);
 
 #ifdef CONFIG_EMM_RECLAIM
@@ -5435,7 +5434,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	 */
 	if (sc->emm_running && sc->emm_swappiness == 201) {
 		*type_scanned = LRU_GEN_ANON;
-		return scan_folios(lruvec, sc, LRU_GEN_ANON, MAX_NR_TIERS, list);
+		return scan_folios(lruvec, sc, LRU_GEN_ANON, MAX_NR_TIERS, list, &isolated);
 	}
 #endif
 
@@ -5459,8 +5458,8 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 		if (tier < 0)
 			tier = get_tier_idx(lruvec, type);
 
-		scanned = scan_folios(lruvec, sc, type, tier, list);
-		if (scanned)
+		scanned = scan_folios(lruvec, sc, type, tier, list, &isolated);
+		if (isolated)
 			break;
 
 		type = !type;
