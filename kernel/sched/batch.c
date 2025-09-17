@@ -386,6 +386,11 @@ int bt_ignore_cpubind_handler(struct ctl_table *table, int write,
 	return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 }
 
+void sched_bt_killall(void)
+{
+
+}
+
 void init_offline_cpu_control(void)
 {
 }
