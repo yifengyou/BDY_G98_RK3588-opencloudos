@@ -1517,6 +1517,11 @@ if (( $tk_private_val == 0 )); then
 fi
 set -e
 
+if [ -f /etc/dracut.conf ]; then
+	cp -a /etc/dracut.conf /etc/dracut.conf.kernelinstall.backup
+	sed -i 's/ virtio_blk / /g' /etc/dracut.conf
+fi
+
 if (( $tk_private_val == 1 )); then echo "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" >> /etc/dracut.conf ; fi
 
 %post modules
@@ -1534,6 +1539,11 @@ if (( $rm_public_ko == 1 )); then
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/drivers/gpu/drm/nouveau/*
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/net/wireless/*
 fi
+
+if [ -f /etc/dracut.conf.kernelinstall.backup ]; then
+	mv /etc/dracut.conf.kernelinstall.backup /etc/dracut.conf
+fi
+
 cat > /etc/modules-load.d/disk.conf << EOF
 # Load disk ko at boot
 # Due to the disordered disk names, sd_mod must be loaded before the ahci module
