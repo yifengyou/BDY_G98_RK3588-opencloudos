@@ -1524,6 +1524,8 @@ fi
 
 if (( $tk_private_val == 1 )); then echo "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" >> /etc/dracut.conf ; fi
 
+# End %pre modules
+
 %post modules
 depmod -a %{kernel_unamer}
 if [ ! -f %{_localstatedir}/lib/rpm-state/%{name}-%{version}-%{version}%{?dist}.installing_core ]; then
@@ -1534,7 +1536,6 @@ fi
 rm_public_ko=1
 grep -q "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" /etc/dracut.conf 2>/dev/null || rm_public_ko=0
 if (( $rm_public_ko == 1 )); then
-	sed -i '/omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"/d' /etc/dracut.conf
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/drivers/usb/storage/*
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/drivers/gpu/drm/nouveau/*
 	rm -f /usr/lib/modules/%{kernel_unamer}/kernel/net/wireless/*
@@ -1542,6 +1543,9 @@ fi
 
 if [ -f /etc/dracut.conf.kernelinstall.backup ]; then
 	mv /etc/dracut.conf.kernelinstall.backup /etc/dracut.conf
+else
+	# No /etc/dracut.conf.kernelinstall.backup means no /etc/dracut.conf at before
+	rm -f /etc/dracut.conf
 fi
 
 cat > /etc/modules-load.d/disk.conf << EOF
@@ -1552,6 +1556,8 @@ ahci
 nvme-core
 nvme
 EOF
+
+# End %post modules
 
 %posttrans modules
 if [ -f %{_localstatedir}/lib/rpm-state/%{name}-%{version}-%{version}%{?dist}.need_to_run_dracut ]; then\
