@@ -1,3 +1,11 @@
+* Wed Sep 17 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41.3
+- bpf: Use GFP_KERNEL in bpf_event_entry_gen()
+- bpf: Reduce the scope of rcu_read_lock when updating fd map
+- bpf: Only call maybe_wait_bpf_programs() when map operation succeeds
+- bpf: Add missed maybe_wait_bpf_programs() for htab of maps
+- bpf: Call maybe_wait_bpf_programs() only once for generic_map_update_batch()
+- bpf: Remove unnecessary wait from bpf_map_copy_value()
+
 * Tue Sep 16 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41.2
 - PCI/DOE: Support discovery version 2
 
