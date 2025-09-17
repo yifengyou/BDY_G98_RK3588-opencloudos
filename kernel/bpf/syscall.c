@@ -179,15 +179,11 @@ static int bpf_map_update_value(struct bpf_map *map, struct file *map_file,
 		err = bpf_percpu_cgroup_storage_update(map, key, value,
 						       flags);
 	} else if (IS_FD_ARRAY(map)) {
-		rcu_read_lock();
 		err = bpf_fd_array_map_update_elem(map, map_file, key, value,
 						   flags);
-		rcu_read_unlock();
 	} else if (map->map_type == BPF_MAP_TYPE_HASH_OF_MAPS) {
-		rcu_read_lock();
 		err = bpf_fd_htab_map_update_elem(map, map_file, key, value,
 						  flags);
-		rcu_read_unlock();
 	} else if (map->map_type == BPF_MAP_TYPE_REUSEPORT_SOCKARRAY) {
 		/* rcu_read_lock() is not needed */
 		err = bpf_fd_reuseport_array_update_elem(map, key, value,
@@ -202,7 +198,6 @@ static int bpf_map_update_value(struct bpf_map *map, struct file *map_file,
 		rcu_read_unlock();
 	}
 	bpf_enable_instrumentation();
-	maybe_wait_bpf_programs(map);
 
 	return err;
 }
@@ -263,7 +258,6 @@ static int bpf_map_copy_value(struct bpf_map *map, void *key, void *value,
 	}
 
 	bpf_enable_instrumentation();
-	maybe_wait_bpf_programs(map);
 
 	return err;
 }
@@ -1559,6 +1553,8 @@ static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 	}
 
 	err = bpf_map_update_value(map, f.file, key, value, attr->flags);
+	if (!err)
+		maybe_wait_bpf_programs(map);
 
 	kvfree(value);
 free_key:
@@ -1614,7 +1610,8 @@ static int map_delete_elem(union bpf_attr *attr, bpfptr_t uattr)
 	err = map->ops->map_delete_elem(map, key);
 	rcu_read_unlock();
 	bpf_enable_instrumentation();
-	maybe_wait_bpf_programs(map);
+	if (!err)
+		maybe_wait_bpf_programs(map);
 out:
 	kvfree(key);
 err_put:
@@ -1743,7 +1740,6 @@ int generic_map_delete_batch(struct bpf_map *map,
 
 	kvfree(key);
 
-	maybe_wait_bpf_programs(map);
 	return err;
 }
 
@@ -1804,6 +1800,7 @@ int generic_map_update_batch(struct bpf_map *map, struct file *map_file,
 
 	kvfree(value);
 	kvfree(key);
+
 	return err;
 }
 
@@ -5002,8 +4999,10 @@ static int bpf_map_do_batch(const union bpf_attr *attr,
 	else
 		BPF_DO_BATCH(map->ops->map_delete_batch, map, attr, uattr);
 err_put:
-	if (has_write)
+	if (has_write) {
+		maybe_wait_bpf_programs(map);
 		bpf_map_write_active_dec(map);
+	}
 	fdput(f);
 	return err;
 }
