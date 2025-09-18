@@ -4580,8 +4580,8 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 
 			scx_task_iter_unlock(&sti);
 			do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
-			pr_err("scx: Unexpected scheduler unplug found, killed scx task %d (%s)\n",
-					task_pid_nr(p), p->comm);
+			pr_err("sched_ext: BPF scheduler \"%s\" unplugged, kill scx task %s[%d]\n",
+					scx_ops.name, p->comm, task_pid_nr(p));
 			scx_task_iter_relock(&sti);
 		}
 	}
