@@ -862,7 +862,7 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	struct psi_group_cpu *groupc;
 	unsigned int t, m;
 	enum psi_states s;
-	u32 state_mask;
+	u32 state_mask = 0;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
 	groupc = per_cpu_ptr(group->pcpu, cpu);
@@ -875,7 +875,6 @@ static void psi_group_change(struct task_struct *task, struct psi_group *group, 
 	 */
 	if (unlikely(psi_dyn_stat_cpu(cpu))) {
 		if (unlikely(clear & TSK_ONCPU)) {
-			state_mask = 0;
 			clear &= ~TSK_ONCPU;
 		} else if (unlikely(set & TSK_ONCPU)) {
 			state_mask = PSI_ONCPU;
