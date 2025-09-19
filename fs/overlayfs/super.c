@@ -100,6 +100,14 @@ static int ovl_revalidate_real(struct dentry *d, unsigned int flags, bool weak)
 			ret =  d->d_op->d_weak_revalidate(d, flags);
 	} else if (d->d_flags & DCACHE_OP_REVALIDATE) {
 		ret = d->d_op->d_revalidate(d, flags);
+		if (fuse_alive_ignore_lower && ret <= 0) {
+			if (!(flags & LOOKUP_RCU)) {
+				pr_debug("Ovl d_revalidate may 0, invalidate and return.\n");
+				d_invalidate(d);
+			}
+			return ret;
+		}
+
 		if (!ret) {
 			if (!(flags & LOOKUP_RCU))
 				d_invalidate(d);
@@ -1514,9 +1522,19 @@ static int __init ovl_init(void)
 		return -ENOMEM;
 
 	err = register_filesystem(&ovl_fs_type);
-	if (!err)
-		return 0;
+	if (err)
+		goto out;
 
+	err = ovl_sysctl_register();
+	if (err)
+		goto out_reg;
+
+	return 0;
+
+out_reg:
+	unregister_filesystem(&ovl_fs_type);
+
+out:
 	kmem_cache_destroy(ovl_inode_cachep);
 
 	return err;
@@ -1524,6 +1542,7 @@ static int __init ovl_init(void)
 
 static void __exit ovl_exit(void)
 {
+	ovl_sysctl_unregister();
 	unregister_filesystem(&ovl_fs_type);
 
 	/*
