@@ -513,10 +513,10 @@ ID	CONFIG	Advice(x86_64)	Advice(aarch64)	Advice(loongarch64)	Recommend(x86_64)	R
 514	CONFIG_CIFS	Could	Could	Could	m	m	m
 515	CONFIG_BTRFS_FS	Could	Could	Could	m	m	y
 516	CONFIG_SPARSEMEM_VMEMMAP	Could	Could	Could	y	y	y
-517	CONFIG_VIRTIO_BLK	Could	Could	Could	m	m	m
+517	CONFIG_VIRTIO_BLK	Could	Could	Could	y	m	m
 518	CONFIG_EXT3_FS	Could	Could	Could	m	m	y
-519	CONFIG_EXT4_FS	Could	Could	Could	m	m	y
-520	CONFIG_JBD2	Could	Could	Could	m	m	y
+519	CONFIG_EXT4_FS	Could	Could	Could	y	m	y
+520	CONFIG_JBD2	Could	Could	Could	y	m	y
 521	CONFIG_LOG_BUF_SHIFT	Could	Could	Could	20	20	18
 522	CONFIG_LOG_CPU_MAX_BUF_SHIFT	Could	Could	Could	12	12	12
 523	CONFIG_RTC_SYSTOHC	Could	Could	Should	y	y	y
