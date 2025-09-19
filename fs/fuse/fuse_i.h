@@ -1212,6 +1212,7 @@ void fuse_wait_aborted(struct fuse_conn *fc);
 void fuse_invalidate_attr(struct inode *inode);
 void fuse_invalidate_attr_mask(struct inode *inode, u32 mask);
 
+void fuse_invalidate_entry(struct dentry *entry);
 void fuse_invalidate_entry_cache(struct dentry *entry);
 
 void fuse_invalidate_atime(struct inode *inode);

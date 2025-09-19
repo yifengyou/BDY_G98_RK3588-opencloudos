@@ -162,7 +162,7 @@ void fuse_invalidate_entry_cache(struct dentry *entry)
  * Same as fuse_invalidate_entry_cache(), but also try to remove the
  * dentry from the hash
  */
-static void fuse_invalidate_entry(struct dentry *entry)
+void fuse_invalidate_entry(struct dentry *entry)
 {
 	d_invalidate(entry);
 	fuse_invalidate_entry_cache(entry);
@@ -275,6 +275,7 @@ out:
 	return ret;
 
 invalid:
+	fuse_invalidate_entry(entry);
 	ret = 0;
 	goto out;
 }

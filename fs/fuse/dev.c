@@ -2457,6 +2457,8 @@ static long fuse_dev_ioctl_recovery(struct file *file, __u32 __user *argp)
 	up_read(&fc->killsb);
 
 	if (atomic_dec_and_test(&fc->need_recovery)) {
+		pr_debug("Fuse recovery and send INIT to server.\n");
+		fuse_invalidate_entry(fm->sb->s_root);
 		fuse_conn_reinit(fc);
 		fuse_send_init(fm);
 	}
