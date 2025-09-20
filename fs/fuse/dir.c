@@ -251,7 +251,8 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 		if (ret == -ENOMEM || ret == -EINTR)
 			goto out;
 		if (ret || fuse_invalid_attr(&outarg.attr) ||
-		    fuse_stale_inode(inode, outarg.generation, &outarg.attr))
+		    fuse_stale_inode(inode, outarg.generation, &outarg.attr) ||
+			fuse_stale_inode_epoch(inode, fm->fc))
 			goto invalid;
 
 		forget_all_cached_acls(inode);

@@ -2421,6 +2421,9 @@ static void fuse_conn_reinit(struct fuse_conn *fc)
 		atomic_set(&fc->need_resend, 1);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->connected = 1;
+	atomic_inc(&fc->connection_epoch);
+	pr_debug("Inc fc->connection_epoch to %u after reinit\n",
+			atomic_read(&fc->connection_epoch));
 	spin_unlock(&fc->lock);
 }
 

@@ -136,6 +136,9 @@ struct fuse_inode {
 	/** Version of last attribute change */
 	u64 attr_version;
 
+	/* epoch of fuse connection */
+	int connection_epoch;
+
 	union {
 		/* read/write io cache (regular file only) */
 		struct {
@@ -941,6 +944,9 @@ struct fuse_conn {
 	/* connection need resend */
 	atomic_t need_resend;
 
+	/* epoch of fuse connection */
+	atomic_t connection_epoch;
+
 	/* Name of the process allocating the fuse_conn, used for re-attach. */
 	char comm[FUSE_TASK_COMM_LEN];
 
@@ -998,9 +1004,19 @@ static inline struct fuse_inode *get_fuse_inode(struct inode *inode)
 	return container_of(inode, struct fuse_inode, inode);
 }
 
+static inline int get_fuse_inode_epoch(struct inode *inode)
+{
+	return get_fuse_inode(inode)->connection_epoch;
+}
+
 static inline u64 get_node_id(struct inode *inode)
 {
 	return get_fuse_inode(inode)->nodeid;
+}
+
+static inline int fuse_stale_inode_epoch(struct inode *inode, struct fuse_conn *fc)
+{
+	return unlikely(atomic_read(&fc->connection_epoch) != get_fuse_inode_epoch(inode));
 }
 
 static inline int invalid_nodeid(u64 nodeid)
@@ -1027,6 +1043,15 @@ static inline void fuse_make_bad(struct inode *inode)
 
 static inline bool fuse_is_bad(struct inode *inode)
 {
+	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
+}
+
+static inline bool fuse_is_bad_strict(struct inode *inode)
+{
+	if (fuse_auto_recovery)
+		return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state)) ||
+			fuse_stale_inode_epoch(inode, get_fuse_conn(inode));
+
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
 }
 

@@ -99,6 +99,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->orig_ino = 0;
 	fi->state = 0;
 	fi->submount_lookup = NULL;
+	fi->connection_epoch = 0;
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
 	fi->forget = fuse_alloc_forget();
@@ -381,6 +382,8 @@ static void fuse_init_submount_lookup(struct fuse_submount_lookup *sl,
 static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 			    struct fuse_conn *fc)
 {
+	struct fuse_inode *fi = get_fuse_inode(inode);
+
 	inode->i_mode = attr->mode & S_IFMT;
 	inode->i_size = attr->size;
 	inode->i_mtime.tv_sec  = attr->mtime;
@@ -400,6 +403,8 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 				   new_decode_dev(attr->rdev));
 	} else
 		BUG();
+
+	fi->connection_epoch = atomic_read(&fc->connection_epoch);
 	/*
 	 * Ensure that we don't cache acls for daemons without FUSE_POSIX_ACL
 	 * so they see the exact same behavior as before.
@@ -473,7 +478,8 @@ retry:
 		inode->i_generation = generation;
 		fuse_init_inode(inode, attr, fc);
 		unlock_new_inode(inode);
-	} else if (fuse_stale_inode(inode, generation, attr)) {
+	} else if (fuse_stale_inode(inode, generation, attr) ||
+			fuse_stale_inode_epoch(inode, fc)) {
 		/* nodeid was reused, any I/O on the old inode should fail */
 		fuse_make_bad(inode);
 		if (inode != d_inode(sb->s_root)) {
@@ -964,6 +970,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	atomic_set(&fc->num_waiting, 0);
 	atomic_set(&fc->need_recovery, 0);
 	atomic_set(&fc->need_resend, 0);
+	atomic_set(&fc->connection_epoch, 0);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
@@ -1075,7 +1082,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 			goto out_iput;
 	}
 	err = -ESTALE;
-	if (inode->i_generation != handle->generation)
+	if (inode->i_generation != handle->generation || fuse_stale_inode_epoch(inode, fc))
 		goto out_iput;
 
 	entry = d_obtain_alias(inode);
