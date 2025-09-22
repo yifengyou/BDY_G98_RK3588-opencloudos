@@ -23,11 +23,11 @@ static int mode;
 module_param(mode, int, 0444);
 MODULE_PARM_DESC(mode, "mode, default 0");
 
-static char ifname[64] = { 0 };
+static char ifname[128] = { 0 };
 module_param_string(ifname, ifname, sizeof(ifname), 0444);
 MODULE_PARM_DESC(ifname, "ifname");
 
-static char appname[64] = "redis-server";
+static char appname[256] = "redis-server";
 module_param_string(appname, appname, sizeof(appname), 0644);
 MODULE_PARM_DESC(appname, "appname, default redis-server");
 
@@ -38,6 +38,10 @@ MODULE_PARM_DESC(match_ip_flag, "match ip flag");
 static int strategy;
 module_param(strategy, int, 0444);
 MODULE_PARM_DESC(strategy, "strategy, default 0");
+
+static int check_cap = 1;
+module_param(check_cap, int, 0444);
+MODULE_PARM_DESC(check_cap, "check_cap, default 1");
 
 static bool check_params(void)
 {
@@ -218,20 +222,6 @@ err_out:
 	return ret;
 }
 
-static noinline_for_stack int ethtool_get_channels(struct net_device *dev,
-						   void *useraddr)
-{
-	struct ethtool_channels channels = { .cmd = ETHTOOL_GCHANNELS };
-
-	if (!dev->ethtool_ops->get_channels)
-		return -EOPNOTSUPP;
-
-	dev->ethtool_ops->get_channels(dev, &channels);
-
-	memcpy_r(useraddr, &channels, sizeof(channels));
-	return 0;
-}
-
 static int ethtool_get_value(struct net_device *dev, char *useraddr,
 			     u32 cmd, u32 (*actor)(struct net_device *))
 {
@@ -285,10 +275,9 @@ static int dev_ethtool_kern(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_GRXCLSRLCNT:
 	case ETHTOOL_GRXCLSRULE:
 	case ETHTOOL_GRXCLSRLALL:
-	case ETHTOOL_GCHANNELS:
 		break;
 	default:
-		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		if (check_cap && !ns_capable(net->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 	}
 
@@ -318,9 +307,6 @@ static int dev_ethtool_kern(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SRXCLSRLDEL:
 	case ETHTOOL_SRXCLSRLINS:
 		rc = ethtool_set_rxnfc(dev, ethcmd, useraddr);
-		break;
-	case ETHTOOL_GCHANNELS:
-		rc = ethtool_get_channels(dev, useraddr);
 		break;
 	default:
 		rc = -EOPNOTSUPP;
@@ -400,7 +386,7 @@ static void get_netdev_queue_info(struct oecls_netdev_info *oecls_dev)
 		cpu = cpumask_first(irq_data_get_effective_affinity_mask(&desc->irq_data));
 		rxq_info->affinity_cpu = cpu;
 		oecls_debug("irq=%d, [%s], rxq_id=%d affinity_cpu:%d\n",
-			    irq, desc->action->name, oecls_dev->rxq_num, cpu);
+			    irq, desc->action->name, oecls_dev->rxq_num - 1, cpu);
 	}
 }
 
@@ -669,9 +655,8 @@ out:
 	return ret;
 }
 
-static int get_cluster_rxq(struct oecls_numa_bound_dev_info *bound_dev)
+static int get_cluster_rxq(int cpu, struct oecls_numa_bound_dev_info *bound_dev)
 {
-	int cpu = raw_smp_processor_id();
 	int cluster_id = cpu / oecls_cluster_cpu_num;
 	int i, j, rxq_id;
 
@@ -710,10 +695,11 @@ static int put_cluster_rxq(struct oecls_numa_bound_dev_info *bound_dev, int rxq_
 	return -1;
 }
 
-int alloc_rxq_id(int nid, int devid)
+int alloc_rxq_id(int cpu, int devid)
 {
 	struct oecls_numa_bound_dev_info *bound_dev;
 	struct oecls_numa_info *numa_info;
+	int nid = cpu_to_node(cpu);
 	int rxq_id;
 
 	numa_info = get_oecls_numa_info(nid);
@@ -729,7 +715,7 @@ int alloc_rxq_id(int nid, int devid)
 	bound_dev = &numa_info->bound_dev[devid];
 
 	if (strategy == 1) {
-		rxq_id = get_cluster_rxq(bound_dev);
+		rxq_id = get_cluster_rxq(cpu, bound_dev);
 		if (rxq_id < 0 || rxq_id >= OECLS_MAX_RXQ_NUM_PER_DEV)
 			pr_info("failed to get rxq_id:%d in cluster, try numa\n", rxq_id);
 		else
@@ -744,14 +730,15 @@ int alloc_rxq_id(int nid, int devid)
 
 found:
 	clear_bit(rxq_id, bound_dev->bitmap_rxq);
-	oecls_debug("alloc nid:%d, dev_id:%d, rxq_id:%d\n", nid, devid, rxq_id);
+	oecls_debug("alloc cpu:%d, nid:%d, devid:%d, rxq_id:%d\n", cpu, nid, devid, rxq_id);
 	return rxq_id;
 }
 
-void free_rxq_id(int nid, int devid, int rxq_id)
+void free_rxq_id(int cpu, int devid, int rxq_id)
 {
 	struct oecls_numa_bound_dev_info *bound_dev;
 	struct oecls_numa_info *numa_info;
+	int nid = cpu_to_node(cpu);
 
 	numa_info = get_oecls_numa_info(nid);
 	if (!numa_info) {

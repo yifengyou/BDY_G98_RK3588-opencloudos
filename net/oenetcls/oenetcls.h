@@ -74,7 +74,7 @@ struct oecls_sk_rule {
 	int dport;
 	int action;
 	int ruleid;
-	int nid;
+	int cpu;
 };
 
 struct oecls_sk_entry {
@@ -124,11 +124,9 @@ struct rmgr_ctrl {
 struct cfg_param {
 	struct work_struct work;
 	struct cmd_context ctx;
-	struct oecls_sk_rule *rule;
 	struct sock *sk;
 	bool is_del;
-	int devid;
-	int nid;
+	int cpu;
 };
 
 extern int match_ip_flag;

@@ -13,6 +13,7 @@
 
 struct oecls_sk_rule_list oecls_sk_rules, oecls_sk_list;
 static struct workqueue_struct *do_cfg_workqueue;
+static atomic_t oecls_worker_count = ATOMIC_INIT(0);
 
 static void init_oecls_sk_rules(void)
 {
@@ -33,8 +34,7 @@ static inline struct hlist_head *get_sk_hashlist(void *sk)
 	return oecls_sk_list.hash + (jhash(sk, sizeof(sk), 0) & OECLS_SK_RULE_HASHMASK);
 }
 
-static void add_sk_rule(int devid, u32 dip4, u16 dport, void *sk, int action,
-			int ruleid, int nid)
+static void add_sk_rule(int devid, u32 dip4, u16 dport, void *sk, int action, int ruleid, int cpu)
 {
 	struct hlist_head *hlist = get_rule_hashlist(dip4, dport);
 	struct hlist_head *sk_hlist = get_sk_hashlist(sk);
@@ -52,7 +52,7 @@ static void add_sk_rule(int devid, u32 dip4, u16 dport, void *sk, int action,
 	rule->devid = devid;
 	rule->action = action;
 	rule->ruleid = ruleid;
-	rule->nid = nid;
+	rule->cpu = cpu;
 	hlist_add_head(&rule->node, hlist);
 
 	entry->sk = sk;
@@ -442,7 +442,7 @@ static void cfg_work(struct work_struct *work)
 			}
 
 			// Calculate the bound queue
-			rxq_id = alloc_rxq_id(ctx_p->nid, devid);
+			rxq_id = alloc_rxq_id(ctx_p->cpu, devid);
 			if (rxq_id < 0)
 				continue;
 
@@ -451,37 +451,54 @@ static void cfg_work(struct work_struct *work)
 			err = cfg_ethtool_rule(&ctx_p->ctx, ctx_p->is_del);
 			// Add sk rule only on success
 			if (err) {
-				free_rxq_id(ctx_p->nid, devid, rxq_id);
+				free_rxq_id(ctx_p->cpu, devid, rxq_id);
 				continue;
 			}
-			add_sk_rule(ctx_p->devid, ctx_p->ctx.dip4, ctx_p->ctx.dport, ctx_p->sk,
-				    ctx_p->ctx.action, ctx_p->ctx.ret_loc, ctx_p->nid);
+			add_sk_rule(devid, ctx_p->ctx.dip4, ctx_p->ctx.dport, ctx_p->sk,
+				    ctx_p->ctx.action, ctx_p->ctx.ret_loc, ctx_p->cpu);
 		} else {
-			rule = get_rule_from_sk(ctx_p->devid, ctx_p->sk);
+			rule = get_rule_from_sk(devid, ctx_p->sk);
 			if (!rule) {
 				oecls_debug("rule not found! sk:%p, devid:%d, dip4:%pI4, dport:%d\n",
-					    ctx_p->sk, ctx_p->devid, &ctx_p->ctx.dip4,
+					    ctx_p->sk, devid, &ctx_p->ctx.dip4,
 					    ntohs(ctx_p->ctx.dport));
 				continue;
 			}
 
 			// Config Ntuple rule to dev
 			ctx_p->ctx.del_ruleid = rule->ruleid;
-			ctx_p->rule = rule;
 			err = cfg_ethtool_rule(&ctx_p->ctx, ctx_p->is_del);
 			// Free the bound queue
-			free_rxq_id(ctx_p->rule->nid, ctx_p->devid, ctx_p->rule->action);
+			free_rxq_id(rule->cpu, devid, rule->action);
 			// Delete sk rule
-			del_sk_rule(ctx_p->rule);
+			del_sk_rule(rule);
 		}
 	}
 	mutex_unlock(&oecls_sk_rules.mutex);
 	kfree(ctx_p);
+	atomic_dec(&oecls_worker_count);
+}
+
+static bool has_sock_rule(struct sock *sk)
+{
+	struct oecls_netdev_info *oecls_dev;
+	struct oecls_sk_rule *rule;
+	int devid;
+
+	for_each_oecls_netdev(devid, oecls_dev) {
+		rule = get_rule_from_sk(devid, sk);
+		if (rule)
+			return true;
+	}
+	return false;
 }
 
 static void del_ntuple_rule(struct sock *sk)
 {
 	struct cfg_param *ctx_p;
+
+	if (!has_sock_rule(sk))
+		return;
 
 	ctx_p = kzalloc(sizeof(*ctx_p), GFP_ATOMIC);
 	if (!ctx_p)
@@ -492,13 +509,12 @@ static void del_ntuple_rule(struct sock *sk)
 	ctx_p->sk = sk;
 	INIT_WORK(&ctx_p->work, cfg_work);
 	queue_work(do_cfg_workqueue, &ctx_p->work);
+	atomic_inc(&oecls_worker_count);
 }
 
 static void add_ntuple_rule(struct sock *sk)
 {
 	struct cfg_param *ctx_p;
-	int cpu = raw_smp_processor_id();
-	int nid = cpu_to_node(cpu);
 
 	if (check_appname(current->comm))
 		return;
@@ -510,9 +526,10 @@ static void add_ntuple_rule(struct sock *sk)
 
 	ctx_p->is_del = false;
 	ctx_p->sk = sk;
-	ctx_p->nid = nid;
+	ctx_p->cpu = raw_smp_processor_id();
 	INIT_WORK(&ctx_p->work, cfg_work);
 	queue_work(do_cfg_workqueue, &ctx_p->work);
+	atomic_inc(&oecls_worker_count);
 }
 
 static void ethtool_cfg_rxcls(struct sock *sk, int is_del)
@@ -581,11 +598,19 @@ int oecls_ntuple_res_init(void)
 
 	init_oecls_sk_rules();
 	RCU_INIT_POINTER(oecls_ops, &oecls_ntuple_ops);
+	synchronize_rcu();
 	return 0;
 }
 
 void oecls_ntuple_res_clean(void)
 {
-	RCU_INIT_POINTER(oecls_ops, NULL);
+	rcu_assign_pointer(oecls_ops, NULL);
+	synchronize_rcu();
+
+	oecls_debug("oecls_worker_count:%d\n", atomic_read(&oecls_worker_count));
+	while (atomic_read(&oecls_worker_count) != 0)
+		mdelay(1);
+
+	destroy_workqueue(do_cfg_workqueue);
 	clean_oecls_sk_rules();
 }

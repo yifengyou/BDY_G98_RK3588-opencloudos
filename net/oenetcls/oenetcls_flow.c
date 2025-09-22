@@ -406,12 +406,15 @@ int oecls_flow_res_init(void)
 	}
 
 	RCU_INIT_POINTER(oecls_ops, &oecls_flow_ops);
+	synchronize_rcu();
 	return 0;
 }
 
 void oecls_flow_res_clean(void)
 {
-	RCU_INIT_POINTER(oecls_ops, NULL);
+	rcu_assign_pointer(oecls_ops, NULL);
+	synchronize_rcu();
+
 	oecls_sock_flow_table_release();
 	oecls_dev_flow_table_release();
 }
