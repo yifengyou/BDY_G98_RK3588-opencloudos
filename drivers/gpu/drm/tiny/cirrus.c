@@ -689,8 +689,13 @@ static int cirrus_pci_probe(struct pci_dev *pdev,
 
 	dev = &cirrus->dev;
 
+#ifdef CONFIG_X86
+	cirrus->vram = devm_ioremap_wc(&pdev->dev, pci_resource_start(pdev, 0),
+				    pci_resource_len(pdev, 0));
+#else
 	cirrus->vram = devm_ioremap(&pdev->dev, pci_resource_start(pdev, 0),
 				    pci_resource_len(pdev, 0));
+#endif
 	if (cirrus->vram == NULL)
 		return -ENOMEM;
 
