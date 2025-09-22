@@ -94,6 +94,20 @@ int ubrt_register_gsi(u32 hwirq, int trigger, int polarity, const char *name,
 		      struct resource *res);
 
 /**
+ * ub_update_msi_domain() - Update the MSI domain of UBC
+ * @dev: device with ub msi domain
+ * @bus_token: DOMAIN_BUS_UB_MSI
+ *
+ * Used when booting via ACPI. The MSI domain of the UB is reported by a
+ * platform device to the driver, and this function passes the MSI domain of the
+ * platform device to the UBC.
+ *
+ * Return: 0 if success or other if failed
+ */
+int ub_update_msi_domain(struct device *dev,
+			 enum irq_domain_bus_token bus_token);
+
+/**
  * ubrt_unregister_gsi() - Unregistering UBC's interrupt into the kernel via ACPI
  * @hwirq: GSI IRQ number reported by BIOS
  */
