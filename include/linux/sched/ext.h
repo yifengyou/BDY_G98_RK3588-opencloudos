@@ -16,6 +16,7 @@
 
 enum scx_public_consts {
 	SCX_OPS_NAME_LEN	= 128,
+	SCX_OPS_SIG_LEN	        = 2048,
 
 	SCX_SLICE_DFL		= 20 * 1000000,	/* 20ms */
 	SCX_SLICE_INF		= U64_MAX,	/* infinite, implies nohz */
@@ -167,12 +168,16 @@ enum scx_ops_flags {
 	SCX_OPS_HAS_CGROUP_WEIGHT = 1LLU << 16, /* cpu.weight */
 
 
+	SCX_OPS_ENQ_NOLOAD = 1LLU << 32,
+
+
 	SCX_OPS_ALL_FLAGS	= SCX_OPS_KEEP_BUILTIN_IDLE |
 				  SCX_OPS_ENQ_LAST |
 				  SCX_OPS_ENQ_EXITING |
 				  SCX_OPS_SWITCH_PARTIAL |
 				  SCX_OPS_ENQ_MIGRATION_DISABLED |
-				  SCX_OPS_HAS_CGROUP_WEIGHT,
+				  SCX_OPS_HAS_CGROUP_WEIGHT |
+				  SCX_OPS_ENQ_NOLOAD,
 };
 
 /* argument container for ops.init_task() */
@@ -334,7 +339,7 @@ struct sched_ext_ops {
 	 * ops.dispatch() returns. To keep executing @prev, return without
 	 * dispatching or consuming any tasks. Also see %SCX_OPS_ENQ_LAST.
 	 */
-	s32 (*dispatch)(s32 cpu, struct task_struct *prev);
+	void (*dispatch)(s32 cpu, struct task_struct *prev);
 
 	/**
 	 * tick - Periodic tick
@@ -737,6 +742,10 @@ struct sched_ext_ops {
 	 */
 	u64 hotplug_seq;
 
+	char sig[SCX_OPS_SIG_LEN];
+
+	u32 sig_len;
+
 	/**
 	 * name - BPF scheduler's name
 	 *
@@ -745,6 +754,8 @@ struct sched_ext_ops {
 	 * BPF scheduler is enabled.
 	 */
 	char name[SCX_OPS_NAME_LEN];
+
+	void *priv;
 };
 
 

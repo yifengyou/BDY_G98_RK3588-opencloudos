@@ -2659,11 +2659,29 @@ static struct ctl_table kern_table[] = {
 #endif
 #ifdef CONFIG_SCHED_CLASS_EXT
 	{
+		.procname	= "debug_scx_stall",
+		.data		= &sysctl_debug_scx_stall,
+		.maxlen		= sizeof(sysctl_debug_scx_stall),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
 		.procname	= "panic_on_scx_stall",
 		.data		= &sysctl_panic_on_scx_stall,
 		.maxlen		= sizeof(sysctl_panic_on_scx_stall),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "scx_ignore_cpubind",
+		.data		= &sysctl_scx_ignore_cpubind,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= scx_ignore_cpubind_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},

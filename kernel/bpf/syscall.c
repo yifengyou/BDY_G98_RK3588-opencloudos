@@ -2698,6 +2698,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 
 	prog->aux->user = get_current_user();
 	prog->len = attr->insn_cnt;
+	prog->aux->orig_len = attr->insn_cnt;
 
 	err = -EFAULT;
 	if (copy_from_bpfptr(prog->insns,

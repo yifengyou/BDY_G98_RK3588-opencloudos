@@ -3228,6 +3228,11 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 		goto out;
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (sysctl_scx_ignore_cpubind && p->sched_class == &ext_sched_class)
+		goto out;
+#endif
+
 	/*
 	 * Picking a ~random cpu helps in cases where we are changing affinity
 	 * for groups of tasks (ie. cpuset), so that load balancing is not
@@ -3242,7 +3247,6 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	__do_set_cpus_allowed(p, ctx);
 
 	return affine_move_task(rq, p, rf, dest_cpu, ctx->flags);
-
 out:
 	task_rq_unlock(rq, p, rf);
 
@@ -4937,6 +4941,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_SCHED_CLASS_EXT
 	} else if (task_should_scx(p)) {
 		p->sched_class = &ext_sched_class;
+		scx_ignore_cpubind(p);
 #endif
 	} else {
 #ifdef CONFIG_BT_SCHED
@@ -6295,7 +6300,10 @@ restart:
 			if (p)
 				return p;
 		} else {
-			p = class->pick_task(rq);
+			if (class->pick_task_balance)
+				p = class->pick_task_balance(rq, prev, rf);
+			else
+				p = class->pick_task(rq);
 			if (p) {
 				put_prev_set_next_task(rq, prev, p);
 				return p;
@@ -6914,6 +6922,9 @@ static void __sched notrace __schedule(int sched_mode)
 				!(prev_state & TASK_NOLOAD) &&
 				!(prev_state & TASK_FROZEN);
 
+			if (task_on_scx(prev) && !scx_contrib_load())
+				prev->sched_contributes_to_load = false;
+
 			if (prev->sched_contributes_to_load) {
 				rq->nr_uninterruptible++;
 #ifdef CONFIG_BT_SCHED
@@ -7347,6 +7358,10 @@ void __setscheduler_prio(struct task_struct *p, int prio)
 		p->sched_class = &fair_sched_class;
 
 	p->prio = prio;
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+	scx_ignore_cpubind(p);
+#endif
 }
 
 #ifdef CONFIG_RT_MUTEXES
@@ -7750,6 +7765,19 @@ int sched_core_idle_cpu(int cpu)
 		return 1;
 
 	return idle_cpu(cpu);
+}
+
+#endif
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+int scx_idle_cpu(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if (scx_enabled() && rq->curr == rq->idle)
+		return 1;
+
+	return sched_core_idle_cpu(cpu);
 }
 
 #endif

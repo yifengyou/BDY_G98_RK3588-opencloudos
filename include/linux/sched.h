@@ -2604,6 +2604,12 @@ static inline void sched_core_fork(struct task_struct *p) { }
 static inline int sched_core_idle_cpu(int cpu) { return idle_cpu(cpu); }
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+extern int scx_idle_cpu(int cpu);
+#else
+static inline int scx_idle_cpu(int cpu) { return sched_core_idle_cpu(cpu); }
+#endif
+
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
 #endif
