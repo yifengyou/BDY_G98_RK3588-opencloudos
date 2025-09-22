@@ -1553,7 +1553,8 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 		swap_writepage(&folio->page, wbc);
 		return 0;
 	}
-
+	if (!info->swapped)
+		list_del_init(&info->swaplist);
 	mutex_unlock(&shmem_swaplist_mutex);
 redirty:
 	folio_mark_dirty(folio);

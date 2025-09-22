@@ -541,8 +541,8 @@ static struct p_io_tlb_pool *pswiotlb_alloc_pool(struct device *dev,
 	size_t pool_size;
 	size_t tlb_size;
 
-	if (nslabs > SLABS_PER_PAGE << MAX_ORDER) {
-		nslabs = SLABS_PER_PAGE << MAX_ORDER;
+	if (nslabs > SLABS_PER_PAGE << MAX_PAGE_ORDER) {
+		nslabs = SLABS_PER_PAGE << MAX_PAGE_ORDER;
 		nareas = limit_nareas(nareas, nslabs);
 	}
 
@@ -1203,8 +1203,8 @@ static int pswiotlb_find_slots(struct device *dev, int nid, phys_addr_t orig_add
 	}
 #endif
 	rcu_read_unlock();
-	if (nslabs_per_pool > SLABS_PER_PAGE << MAX_ORDER)
-		nslabs_per_pool = SLABS_PER_PAGE << MAX_ORDER;
+	if (nslabs_per_pool > SLABS_PER_PAGE << MAX_PAGE_ORDER)
+		nslabs_per_pool = SLABS_PER_PAGE << MAX_PAGE_ORDER;
 
 	nslabs_per_pool = ALIGN(nslabs_per_pool >> 1, P_IO_TLB_SEGSIZE);
 	pswiotlb_mem = P_IO_TLB_DEFAULT_SIZE +

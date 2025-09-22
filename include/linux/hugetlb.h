@@ -837,7 +837,7 @@ static inline unsigned huge_page_shift(struct hstate *h)
 
 static inline bool hstate_is_gigantic(struct hstate *h)
 {
-	return huge_page_order(h) > MAX_ORDER;
+	return huge_page_order(h) > MAX_PAGE_ORDER;
 }
 
 static inline unsigned int pages_per_huge_page(const struct hstate *h)
@@ -848,6 +848,12 @@ static inline unsigned int pages_per_huge_page(const struct hstate *h)
 static inline unsigned int blocks_per_huge_page(struct hstate *h)
 {
 	return huge_page_size(h) / 512;
+}
+
+static inline struct folio *filemap_lock_hugetlb_folio(struct hstate *h,
+				struct address_space *mapping, pgoff_t idx)
+{
+	return filemap_lock_folio(mapping, idx << huge_page_order(h));
 }
 
 #include <asm/hugetlb.h>
@@ -1044,6 +1050,12 @@ bool is_raw_hwpoison_page_in_hugepage(struct page *page);
 struct hstate {};
 
 static inline struct hugepage_subpool *hugetlb_folio_subpool(struct folio *folio)
+{
+	return NULL;
+}
+
+static inline struct folio *filemap_lock_hugetlb_folio(struct hstate *h,
+				struct address_space *mapping, pgoff_t idx)
 {
 	return NULL;
 }
