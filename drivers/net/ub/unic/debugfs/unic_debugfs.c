@@ -10,9 +10,10 @@
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
-#include "unic_dev.h"
 #include "unic_ctx_debugfs.h"
+#include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_qos_debugfs.h"
 #include "unic_debugfs.h"
 
 static int unic_dbg_dump_dev_info(struct seq_file *s, void *data)
@@ -260,6 +261,10 @@ static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 		.name = "context",
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
+	}, {
+		.name = "qos",
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
 	},
 	/* keep unic at the bottom and add new directory above */
 	{
@@ -348,6 +353,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_rq_jfc_context_hw,
 	}, {
+		.name = "vl_queue",
+		.dentry_index = UNIC_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_vl_queue,
+	}, {
 		.name = "rss_cfg_hw",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
@@ -361,6 +373,27 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.support = unic_dbg_dentry_support,
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_promisc_cfg_hw,
+	}, {
+		.name = "dscp_vl_map",
+		.dentry_index = UNIC_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_dscp_vl_map,
+	}, {
+		.name = "prio_vl_map",
+		.dentry_index = UNIC_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_prio_vl_map,
+	}, {
+		.name = "dscp_prio",
+		.dentry_index = UNIC_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_dscp_prio,
 	}, {
 		.name = "link_status_record",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,

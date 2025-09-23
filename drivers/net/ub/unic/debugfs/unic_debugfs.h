@@ -14,6 +14,7 @@
 
 enum unic_dbg_dentry_type {
 	UNIC_DBG_DENTRY_CONTEXT,
+	UNIC_DBG_DENTRY_QOS,
 	/* must be the last entry. */
 	UNIC_DBG_DENTRY_ROOT
 };

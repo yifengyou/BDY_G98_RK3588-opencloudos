@@ -29,6 +29,24 @@ int unic_set_hw_vl_map(struct unic_dev *unic_dev, u8 *dscp_vl, u8 *prio_vl,
 	return ret;
 }
 
+int unic_query_vl_map(struct unic_dev *unic_dev,
+		      struct unic_config_vl_map_cmd *resp)
+{
+	struct unic_config_vl_map_cmd req = {0};
+	struct ubase_cmd_buf in, out;
+	int ret;
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_VL_MAP, true, sizeof(req),
+			     &req);
+	ubase_fill_inout_buf(&out, UBASE_OPC_CFG_VL_MAP, false, sizeof(*resp),
+			     resp);
+	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
+	if (ret)
+		unic_err(unic_dev, "failed to query vl map, ret = %d.\n", ret);
+
+	return ret;
+}
+
 /* vl_maxrate: byte per second */
 int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 			      u16 vl_bitmap)

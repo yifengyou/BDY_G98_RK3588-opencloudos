@@ -11,6 +11,7 @@
 #include <ub/ubase/ubase_comm_cmd.h>
 
 #include "unic_dev.h"
+#include "unic_qos_hw.h"
 
 #define UNIC_DL_CONFIG_MODE_TX_EN_B	0
 #define UNIC_DL_CONFIG_MODE_RX_EN_B	1
