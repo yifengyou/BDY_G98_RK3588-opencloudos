@@ -155,9 +155,9 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 #ifdef CONFIG_HUGETEXT
 	/* Enable hugetext does not require THP settings */
 	if (hugetext_anon_enabled() && vma_is_hugetext_anon(vma, vm_flags))
-		return true;
+		return orders;
 	if (!in_pf && hugetext_vma_enabled(vma, vm_flags))
-		return true;
+		return orders;
 #endif
 
 	if (!vma_is_anonymous(vma)) {
