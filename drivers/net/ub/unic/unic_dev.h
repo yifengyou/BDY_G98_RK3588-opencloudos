@@ -262,6 +262,11 @@ static inline bool unic_dev_ubl_supported(struct unic_dev *unic_dev)
 	return ubase_adev_ubl_supported(unic_dev->comdev.adev);
 }
 
+static inline bool unic_dev_eth_mac_supported(struct unic_dev *unic_dev)
+{
+	return ubase_adev_eth_mac_supported(unic_dev->comdev.adev);
+}
+
 static inline bool unic_dev_ets_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_ETS_B);
@@ -325,6 +330,18 @@ static inline bool unic_initing(struct net_device *netdev)
 static inline bool unic_is_initing_or_resetting(struct unic_dev *unic_dev)
 {
 	return __unic_resetting(unic_dev) || __unic_initing(unic_dev);
+}
+
+static inline u32 unic_read_reg(struct unic_dev *unic_dev, u32 reg)
+{
+	struct ubase_resource_space *io_base = ubase_get_io_base(unic_dev->comdev.adev);
+	u8 __iomem *reg_addr;
+
+	if (!io_base)
+		return 0;
+
+	reg_addr = READ_ONCE(io_base->addr);
+	return readl(reg_addr + reg);
 }
 
 static inline u32 unic_get_sq_cqe_mask(struct unic_dev *unic_dev)
