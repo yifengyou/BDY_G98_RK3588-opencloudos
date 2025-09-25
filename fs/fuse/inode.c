@@ -1395,7 +1395,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 	fuse_set_initialized(fc);
 	wake_up_all(&fc->blocked_waitq);
 
-	if (fuse_auto_recovery && atomic_read(&fc->need_resend))
+	if ((fuse_auto_recovery & FUSE_RECOVERY_RESEND) && atomic_read(&fc->need_resend))
 		fuse_resend(fc);
 }
 

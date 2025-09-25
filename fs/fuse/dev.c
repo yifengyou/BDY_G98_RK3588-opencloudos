@@ -2397,7 +2397,8 @@ static void fuse_conn_reinit(struct fuse_conn *fc)
 	fiq->connected = 1;
 	spin_unlock(&fiq->lock);
 
-	atomic_set(&fc->need_resend, 1);
+	if (fuse_auto_recovery & FUSE_RECOVERY_RESEND)
+		atomic_set(&fc->need_resend, 1);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->connected = 1;
 	spin_unlock(&fc->lock);

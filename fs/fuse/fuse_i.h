@@ -1507,6 +1507,16 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
 #ifdef CONFIG_SYSCTL
 extern int fuse_sysctl_register(void);
 extern void fuse_sysctl_unregister(void);
+/*
+ * Flags for sysctl fuse_auto_recovery. valid field: 0/1/2
+ *
+ * FUSE_RECOVERY_ENABLED:   Enabled fuse recovery
+ * FUSE_RECOVERY_RESEND:    Resend pending requests after recovery
+ *                          Implicit include FUSE_RECOVERY_ENABLED
+ */
+#define FUSE_RECOVERY_ENABLED		(1 << 0)
+#define FUSE_RECOVERY_RESEND		(1 << 1)
+
 #else
 #define fuse_sysctl_register()		(0)
 #define fuse_sysctl_unregister()	do { } while (0)
