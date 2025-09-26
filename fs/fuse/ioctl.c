@@ -357,7 +357,7 @@ long fuse_ioctl_common(struct file *file, unsigned int cmd,
 	if (!fuse_allow_current_process(fc))
 		return -EACCES;
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	return fuse_do_ioctl(file, cmd, arg, flags);
@@ -427,7 +427,7 @@ static struct fuse_file *fuse_priv_ioctl_prepare(struct inode *inode)
 	if (!fuse_allow_current_process(fm->fc))
 		return ERR_PTR(-EACCES);
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return ERR_PTR(-EIO);
 
 	if (!S_ISREG(inode->i_mode) && !isdir)
