@@ -1400,7 +1400,8 @@ void __init mem_init(void)
 	 * The upper region becomes the IEE linear mapping area.
 	 * Note that the IEE mapping region is mapped with read-only permissions.
 	 */
-	iee_init();
+	if (haoc_enabled)
+		iee_init();
 	#endif
 	preallocate_vmalloc_pages();
 }
