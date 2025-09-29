@@ -55,15 +55,18 @@ static int cdma_add_device_to_list(struct cdma_dev *cdev)
 		return -EINVAL;
 	}
 
+	down_write(&g_device_rwsem);
 	ret = xa_err(xa_store(&cdma_devs_tbl, adev->id, cdev, GFP_KERNEL));
 	if (ret) {
 		dev_err(cdev->dev,
 			"store cdma device to table failed, adev id = %u.\n",
 			adev->id);
+		up_write(&g_device_rwsem);
 		return ret;
 	}
 
 	atomic_inc(&cdma_devs_num);
+	up_write(&g_device_rwsem);
 
 	return 0;
 }
@@ -77,8 +80,10 @@ static void cdma_del_device_from_list(struct cdma_dev *cdev)
 		return;
 	}
 
+	down_write(&g_device_rwsem);
 	atomic_dec(&cdma_devs_num);
 	xa_erase(&cdma_devs_tbl, adev->id);
+	up_write(&g_device_rwsem);
 }
 
 static void cdma_tbl_init(struct cdma_table *table, u32 max, u32 min)
@@ -393,6 +398,8 @@ struct cdma_dev *cdma_create_dev(struct auxiliary_device *adev)
 
 	idr_init(&cdev->ctx_idr);
 	spin_lock_init(&cdev->ctx_lock);
+	atomic_set(&cdev->cmdcnt, 1);
+	init_completion(&cdev->cmddone);
 
 	dev_dbg(&adev->dev, "cdma.%u init succeeded.\n", adev->id);
 
@@ -411,7 +418,7 @@ free:
 	return NULL;
 }
 
-void cdma_destroy_dev(struct cdma_dev *cdev)
+void cdma_destroy_dev(struct cdma_dev *cdev, bool is_remove)
 {
 	struct cdma_context *tmp;
 	int id;
@@ -421,21 +428,26 @@ void cdma_destroy_dev(struct cdma_dev *cdev)
 
 	ubase_virt_unregister(cdev->adev);
 
-	cdma_release_table_res(cdev);
+	if (is_remove) {
+		cdma_release_table_res(cdev);
 
-	idr_for_each_entry(&cdev->ctx_idr, tmp, id)
-		cdma_free_context(cdev, tmp);
-	idr_destroy(&cdev->ctx_idr);
+		idr_for_each_entry(&cdev->ctx_idr, tmp, id)
+			cdma_free_context(cdev, tmp);
+		idr_destroy(&cdev->ctx_idr);
+	}
 
 	cdma_destroy_arm_db_page(cdev);
 	ubase_ctrlq_unregister_crq_event(cdev->adev,
 					 UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
 					 CDMA_CTRLQ_EU_UPDATE);
-	cdma_free_dev_tid(cdev);
 
-	cdma_del_device_from_list(cdev);
-	cdma_uninit_dev_param(cdev);
-	kfree(cdev);
+	if (is_remove) {
+		cdma_free_dev_tid(cdev);
+
+		cdma_del_device_from_list(cdev);
+		cdma_uninit_dev_param(cdev);
+		kfree(cdev);
+	}
 }
 
 bool cdma_find_seid_in_eus(struct eu_info *eus, u8 eu_num, struct dev_eid *eid,

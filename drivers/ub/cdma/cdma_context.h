@@ -24,6 +24,7 @@ struct cdma_context {
 	atomic_t ref_cnt;
 	struct list_head queue_list;
 	struct list_head seg_list;
+	bool invalid;
 };
 
 struct cdma_ctx_res {

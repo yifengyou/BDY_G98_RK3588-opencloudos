@@ -76,4 +76,7 @@ struct eu_query_out {
 
 int cdma_init_dev_caps(struct cdma_dev *cdev);
 int cdma_ctrlq_query_eu(struct cdma_dev *cdev);
+void cdma_cmd_inc(struct cdma_dev *cdev);
+void cdma_cmd_dec(struct cdma_dev *cdev);
+void cdma_cmd_flush(struct cdma_dev *cdev);
 #endif

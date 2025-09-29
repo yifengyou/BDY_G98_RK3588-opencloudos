@@ -87,6 +87,14 @@ struct dma_notify_data {
 	u64 notify_data;
 };
 
+struct dma_client {
+	struct list_head list_node;
+	char *client_name;
+	int (*add)(u32 eid);
+	void (*remove)(u32 eid);
+	void (*stop)(u32 eid);
+};
+
 struct dma_device *dma_get_device_list(u32 *num_devices);
 
 void dma_free_device_list(struct dma_device *dev_list, u32 num_devices);
@@ -131,5 +139,9 @@ enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 
 int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr);
+
+int dma_register_client(struct dma_client *client);
+
+void dma_unregister_client(struct dma_client *client);
 
 #endif

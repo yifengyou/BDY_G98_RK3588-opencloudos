@@ -538,9 +538,11 @@ int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id)
 		return -EINVAL;
 	}
 
-	ret = cdma_modify_and_destroy_jfs(cdev, &jfs->sq);
-	if (ret)
-		dev_err(cdev->dev, "jfs delete failed, id = %u.\n", jfs->id);
+	if (!(jfs->base_jfs.ctx && jfs->base_jfs.ctx->invalid)) {
+		ret = cdma_modify_and_destroy_jfs(cdev, &jfs->sq);
+		if (ret)
+			dev_err(cdev->dev, "jfs delete failed, id = %u.\n", jfs->id);
+	}
 
 	if (refcount_dec_and_test(&jfs->ae_ref_cnt))
 		complete(&jfs->ae_comp);

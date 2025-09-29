@@ -520,27 +520,39 @@ static int cdma_get_async_event(struct cdma_jfae *jfae, struct file *filp,
 		return -EINVAL;
 	}
 
-	INIT_LIST_HEAD(&event_list);
-	ret = cdma_wait_event(&jfae->jfe, filp->f_flags & O_NONBLOCK, 1,
-			      &event_cnt, &event_list);
-	if (ret < 0) {
-		pr_err("wait event failed, ret = %d.\n", ret);
-		return ret;
-	}
-	event = list_first_entry(&event_list, struct cdma_jfe_event, node);
-	if (event == NULL)
-		return -EIO;
-
-	cdma_set_async_event(&async_event, event);
-	list_del(&event->node);
-	kfree(event);
-
-	if (event_cnt > 0) {
+	if (!jfae->cfile->cdev || jfae->cfile->cdev->status == CDMA_SUSPEND) {
+		pr_info("wait dev invalid event success.\n");
+		async_event.event_data = 0;
+		async_event.event_type = CDMA_EVENT_DEV_INVALID;
 		ret = (int)copy_to_user((void *)arg, &async_event,
 					sizeof(async_event));
 		if (ret) {
 			pr_err("dev copy to user failed, ret = %d\n", ret);
 			return -EFAULT;
+		}
+	} else {
+		INIT_LIST_HEAD(&event_list);
+		ret = cdma_wait_event(&jfae->jfe, filp->f_flags & O_NONBLOCK, 1,
+				&event_cnt, &event_list);
+		if (ret < 0) {
+			pr_err("wait event failed, ret = %d.\n", ret);
+			return ret;
+		}
+		event = list_first_entry(&event_list, struct cdma_jfe_event, node);
+		if (event == NULL)
+			return -EIO;
+
+		cdma_set_async_event(&async_event, event);
+		list_del(&event->node);
+		kfree(event);
+
+		if (event_cnt > 0) {
+			ret = (int)copy_to_user((void *)arg, &async_event,
+						sizeof(async_event));
+			if (ret) {
+				pr_err("dev copy to user failed, ret = %d\n", ret);
+				return -EFAULT;
+			}
 		}
 	}
 
@@ -553,6 +565,9 @@ static __poll_t cdma_jfae_poll(struct file *filp, struct poll_table_struct *wait
 
 	if (!jfae || !jfae->cfile || !jfae->cfile->cdev)
 		return POLLERR;
+
+	if (jfae->cfile->cdev->status == CDMA_SUSPEND)
+		return POLLIN | POLLRDNORM;
 
 	return cdma_jfe_poll(&jfae->jfe, filp, wait);
 }

@@ -12,6 +12,14 @@
 enum cdma_event_type {
 	CDMA_EVENT_JFC_ERR,
 	CDMA_EVENT_JFS_ERR,
+	CDMA_EVENT_DEV_INVALID,
+};
+
+enum cdma_remove_reason {
+	/* Context deletion. This call should delete the actual object itself */
+	CDMA_REMOVE_CLOSE,
+	/* Driver is being hot-unplugged. This call should delete the actual object itself */
+	CDMA_REMOVE_DRIVER_REMOVE,
 };
 
 struct cdma_ucontext {
@@ -142,8 +150,16 @@ struct cdma_file {
 	struct cdma_context *uctx;
 	struct idr idr;
 	spinlock_t idr_lock;
+	struct mutex umap_mutex;
+	struct list_head umaps_list;
+	struct page *fault_page;
 	struct cdma_mn mn_notifier;
 	struct kref ref;
+};
+
+struct cdma_umap_priv {
+	struct vm_area_struct *vma;
+	struct list_head node;
 };
 
 #endif

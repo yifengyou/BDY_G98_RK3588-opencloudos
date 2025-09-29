@@ -13,6 +13,14 @@
 #include "cdma_eq.h"
 #include "cdma_debugfs.h"
 #include "cdma_cmd.h"
+#include "cdma_types.h"
+#include "cdma_mmap.h"
+#include "cdma_context.h"
+#include "cdma_uobj.h"
+#include "cdma_event.h"
+
+static bool is_rmmod;
+DEFINE_MUTEX(g_cdma_reset_mutex);
 
 /* Enabling jfc_arm_mode will cause jfc to report cqe; otherwise, it will not. */
 uint jfc_arm_mode;
@@ -52,6 +60,47 @@ static inline void cdma_unregister_event(struct auxiliary_device *adev)
 	cdma_unreg_ae_event(adev);
 }
 
+static void cdma_reset_unmap_vma_pages(struct cdma_dev *cdev, bool is_reset)
+{
+	struct cdma_file *cfile;
+
+	mutex_lock(&cdev->file_mutex);
+	list_for_each_entry(cfile, &cdev->file_list, list) {
+		mutex_lock(&cfile->ctx_mutex);
+		cdma_unmap_vma_pages(cfile);
+		if (is_reset && cfile->uctx != NULL)
+			cfile->uctx->invalid = true;
+		mutex_unlock(&cfile->ctx_mutex);
+	}
+	mutex_unlock(&cdev->file_mutex);
+}
+
+static void cdma_client_handler(struct cdma_dev *cdev,
+				enum cdma_client_ops client_ops)
+{
+	struct dma_client *client;
+
+	down_write(&g_clients_rwsem);
+	list_for_each_entry(client, &g_client_list, list_node) {
+		switch (client_ops) {
+		case CDMA_CLIENT_STOP:
+			if (client->stop)
+				client->stop(cdev->eid);
+			break;
+		case CDMA_CLIENT_REMOVE:
+			if (client->remove)
+				client->remove(cdev->eid);
+			break;
+		case CDMA_CLIENT_ADD:
+			if (client->add && client->add(cdev->eid))
+				dev_warn(&cdev->adev->dev, "add eid:0x%x, cdev for client:%s failed.\n",
+						cdev->eid, client->client_name);
+			break;
+		}
+	}
+	up_write(&g_clients_rwsem);
+}
+
 static int cdma_init_dev_info(struct auxiliary_device *auxdev, struct cdma_dev *cdev)
 {
 	int ret;
@@ -73,9 +122,33 @@ static int cdma_init_dev_info(struct auxiliary_device *auxdev, struct cdma_dev *
 	return 0;
 }
 
+static void cdma_free_cfile_uobj(struct cdma_dev *cdev)
+{
+	struct cdma_file *cfile, *next_cfile;
+	struct cdma_jfae *jfae;
+
+	mutex_lock(&cdev->file_mutex);
+	list_for_each_entry_safe(cfile, next_cfile, &cdev->file_list, list) {
+		list_del(&cfile->list);
+		mutex_lock(&cfile->ctx_mutex);
+		cdma_cleanup_context_uobj(cfile, CDMA_REMOVE_DRIVER_REMOVE);
+		cfile->cdev = NULL;
+		if (cfile->uctx) {
+			jfae = (struct cdma_jfae *)cfile->uctx->jfae;
+			if (jfae)
+				wake_up_interruptible(&jfae->jfe.poll_wait);
+			cdma_cleanup_context_res(cfile->uctx);
+		}
+		cfile->uctx = NULL;
+		mutex_unlock(&cfile->ctx_mutex);
+	}
+	mutex_unlock(&cdev->file_mutex);
+}
+
 static int cdma_init_dev(struct auxiliary_device *auxdev)
 {
 	struct cdma_dev *cdev;
+	bool is_remove = true;
 	int ret;
 
 	dev_dbg(&auxdev->dev, "%s called, matched aux dev(%s.%u).\n",
@@ -87,37 +160,56 @@ static int cdma_init_dev(struct auxiliary_device *auxdev)
 
 	ret = cdma_create_chardev(cdev);
 	if (ret) {
-		cdma_destroy_dev(cdev);
+		cdma_destroy_dev(cdev, is_remove);
 		return ret;
 	}
 
 	ret = cdma_init_dev_info(auxdev, cdev);
 	if (ret) {
 		cdma_destroy_chardev(cdev);
-		cdma_destroy_dev(cdev);
+		cdma_destroy_dev(cdev, is_remove);
 		return ret;
 	}
 
+	cdma_client_handler(cdev, CDMA_CLIENT_ADD);
 	return ret;
 }
 
 static void cdma_uninit_dev(struct auxiliary_device *auxdev)
 {
 	struct cdma_dev *cdev;
+	int ret;
 
 	dev_dbg(&auxdev->dev, "%s called, matched aux dev(%s.%u).\n",
 		 __func__, auxdev->name, auxdev->id);
 
+	mutex_lock(&g_cdma_reset_mutex);
 	cdev = dev_get_drvdata(&auxdev->dev);
 	if (!cdev) {
 		dev_err(&auxdev->dev, "get drvdata from ubase failed.\n");
+		ubase_reset_unregister(auxdev);
+		mutex_unlock(&g_cdma_reset_mutex);
 		return;
 	}
 
+	cdev->status = CDMA_SUSPEND;
+	cdma_cmd_flush(cdev);
+	cdma_client_handler(cdev, CDMA_CLIENT_STOP);
+	cdma_client_handler(cdev, CDMA_CLIENT_REMOVE);
+	cdma_reset_unmap_vma_pages(cdev, false);
+
+	if (!is_rmmod) {
+		ret = ubase_deactivate_dev(auxdev);
+		dev_info(&auxdev->dev, "ubase deactivate dev ret = %d.\n", ret);
+	}
+
+	ubase_reset_unregister(auxdev);
 	cdma_dbg_uninit(auxdev);
 	cdma_unregister_event(auxdev);
 	cdma_destroy_chardev(cdev);
-	cdma_destroy_dev(cdev);
+	cdma_free_cfile_uobj(cdev);
+	cdma_destroy_dev(cdev, true);
+	mutex_unlock(&g_cdma_reset_mutex);
 }
 
 static int cdma_probe(struct auxiliary_device *auxdev,
@@ -135,6 +227,7 @@ static int cdma_probe(struct auxiliary_device *auxdev,
 static void cdma_remove(struct auxiliary_device *auxdev)
 {
 	cdma_uninit_dev(auxdev);
+	pr_info("cdma device remove success.\n");
 }
 
 static const struct auxiliary_device_id cdma_id_table[] = {
@@ -178,6 +271,7 @@ free_class:
 
 static void __exit cdma_exit(void)
 {
+	is_rmmod = true;
 	auxiliary_driver_unregister(&cdma_driver);
 	class_destroy(cdma_cdev_class);
 }

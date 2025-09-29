@@ -555,9 +555,11 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		return -EINVAL;
 	}
 
-	ret = cdma_destroy_and_flush_jfc(cdev, jfc->jfcn);
-	if (ret)
-		dev_err(cdev->dev, "jfc delete failed, jfcn = %u.\n", jfcn);
+	if (!(jfc->base.ctx && jfc->base.ctx->invalid)) {
+		ret = cdma_destroy_and_flush_jfc(cdev, jfc->jfcn);
+		if (ret)
+			dev_err(cdev->dev, "jfc delete failed, jfcn = %u.\n", jfcn);
+	}
 
 	if (refcount_dec_and_test(&jfc->event_refcount))
 		complete(&jfc->event_comp);

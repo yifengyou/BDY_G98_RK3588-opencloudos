@@ -4,6 +4,8 @@
 #define pr_fmt(fmt) "CDMA: " fmt
 #define dev_fmt pr_fmt
 
+#include <linux/list.h>
+#include <linux/rwsem.h>
 #include "cdma_segment.h"
 #include "cdma_dev.h"
 #include "cdma_cmd.h"
@@ -13,6 +15,10 @@
 #include "cdma.h"
 #include "cdma_handle.h"
 #include <ub/cdma/cdma_api.h>
+
+LIST_HEAD(g_client_list);
+DECLARE_RWSEM(g_clients_rwsem);
+DECLARE_RWSEM(g_device_rwsem);
 
 struct dma_device *dma_get_device_list(u32 *num_devices)
 {
@@ -632,3 +638,79 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 	return cdma_poll_jfc(cdma_queue->jfc, cr_cnt, cr);
 }
 EXPORT_SYMBOL_GPL(dma_poll_queue);
+
+int dma_register_client(struct dma_client *client)
+{
+	struct cdma_dev *cdev = NULL;
+	struct xarray *cdma_devs_tbl;
+	unsigned long index = 0;
+	u32 devs_num;
+
+	if (client == NULL || client->client_name == NULL ||
+		client->add == NULL || client->remove == NULL ||
+		client->stop == NULL) {
+		pr_err("invalid parameter.\n");
+		return -EINVAL;
+	}
+
+	if (strnlen(client->client_name, DMA_MAX_DEV_NAME) >= DMA_MAX_DEV_NAME) {
+		pr_err("invalid parameter, client name.\n");
+		return -EINVAL;
+	}
+
+	down_write(&g_device_rwsem);
+
+	cdma_devs_tbl = get_cdma_dev_tbl(&devs_num);
+
+	xa_for_each(cdma_devs_tbl, index, cdev) {
+		if (client->add && client->add(cdev->eid))
+			pr_info("dma client: %s add failed.\n",
+				client->client_name);
+	}
+	down_write(&g_clients_rwsem);
+	list_add_tail(&client->list_node, &g_client_list);
+	up_write(&g_clients_rwsem);
+	up_write(&g_device_rwsem);
+
+	pr_info("dma client: %s register success.\n", client->client_name);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_register_client);
+
+void dma_unregister_client(struct dma_client *client)
+{
+	struct cdma_dev *cdev = NULL;
+	struct xarray *cdma_devs_tbl;
+	unsigned long index = 0;
+	u32 devs_num;
+
+	if (client == NULL || client->client_name == NULL ||
+		client->add == NULL || client->remove == NULL ||
+		client->stop == NULL) {
+		pr_err("Invalid parameter.\n");
+		return;
+	}
+
+	if (strnlen(client->client_name, DMA_MAX_DEV_NAME) >= DMA_MAX_DEV_NAME) {
+		pr_err("invalid parameter, client name.\n");
+		return;
+	}
+
+	down_write(&g_device_rwsem);
+	cdma_devs_tbl = get_cdma_dev_tbl(&devs_num);
+
+	xa_for_each(cdma_devs_tbl, index, cdev) {
+		if (client->stop && client->remove) {
+			client->stop(cdev->eid);
+			client->remove(cdev->eid);
+		}
+	}
+
+	down_write(&g_clients_rwsem);
+	list_del(&client->list_node);
+	up_write(&g_clients_rwsem);
+	up_write(&g_device_rwsem);
+
+	pr_info("dma client: %s unregister success.\n", client->client_name);
+}
+EXPORT_SYMBOL_GPL(dma_unregister_client);

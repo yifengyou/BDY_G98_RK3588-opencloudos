@@ -214,3 +214,21 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev)
 
 	return 0;
 }
+
+void cdma_cmd_inc(struct cdma_dev *cdev)
+{
+	atomic_inc(&cdev->cmdcnt);
+}
+
+void cdma_cmd_dec(struct cdma_dev *cdev)
+{
+	if (atomic_dec_and_test(&cdev->cmdcnt))
+		complete(&cdev->cmddone);
+}
+
+void cdma_cmd_flush(struct cdma_dev *cdev)
+{
+	cdma_cmd_dec(cdev);
+	pr_info("cmd flush cmdcnt is %d\n", atomic_read(&cdev->cmdcnt));
+	wait_for_completion(&cdev->cmddone);
+}
