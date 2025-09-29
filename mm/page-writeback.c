@@ -1938,6 +1938,11 @@ blkcg_bps:
 					 task_ratelimit, dirty_ratelimit,
 					 &nr_dirtied_pause);
 
+#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+		if (blkcg && blkcg_buffered_write_bps_enabled(blkcg) && max_pause == 1)
+			max_pause = MAX_PAUSE;
+#endif
+
 		if (unlikely(task_ratelimit == 0)) {
 			period = max_pause;
 			pause = max_pause;
@@ -2720,7 +2725,7 @@ static void folio_account_dirtied(struct folio *folio,
 
 #ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 		if (blkcg)
-			percpu_counter_add_batch(&blkcg->nr_dirtied, 1, WB_STAT_BATCH);
+			percpu_counter_add_batch(&blkcg->nr_dirtied, nr, WB_STAT_BATCH);
 #endif
 
 		__lruvec_stat_mod_folio(folio, NR_FILE_DIRTY, nr);
