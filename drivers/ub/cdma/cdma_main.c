@@ -101,6 +101,48 @@ static void cdma_client_handler(struct cdma_dev *cdev,
 	up_write(&g_clients_rwsem);
 }
 
+static void cdma_reset_down(struct auxiliary_device *adev)
+{
+	struct cdma_dev *cdev;
+
+	mutex_lock(&g_cdma_reset_mutex);
+	cdev = get_cdma_dev(adev);
+	if (!cdev || cdev->status == CDMA_SUSPEND) {
+		dev_warn(&adev->dev, "cdma device is not ready.\n");
+		mutex_unlock(&g_cdma_reset_mutex);
+		return;
+	}
+
+	cdev->status = CDMA_SUSPEND;
+	cdma_cmd_flush(cdev);
+	cdma_reset_unmap_vma_pages(cdev, true);
+	cdma_client_handler(cdev, CDMA_CLIENT_STOP);
+	cdma_unregister_event(adev);
+	cdma_dbg_uninit(adev);
+	mutex_unlock(&g_cdma_reset_mutex);
+}
+
+static void cdma_reset_uninit(struct auxiliary_device *adev)
+{
+	enum ubase_reset_stage stage;
+	struct cdma_dev *cdev;
+
+	mutex_lock(&g_cdma_reset_mutex);
+	cdev = get_cdma_dev(adev);
+	if (!cdev) {
+		dev_info(&adev->dev, "cdma device is not exist.\n");
+		mutex_unlock(&g_cdma_reset_mutex);
+		return;
+	}
+
+	stage = ubase_get_reset_stage(adev);
+	if (stage == UBASE_RESET_STAGE_UNINIT && cdev->status == CDMA_SUSPEND) {
+		cdma_client_handler(cdev, CDMA_CLIENT_REMOVE);
+		cdma_destroy_dev(cdev, is_rmmod);
+	}
+	mutex_unlock(&g_cdma_reset_mutex);
+}
+
 static int cdma_init_dev_info(struct auxiliary_device *auxdev, struct cdma_dev *cdev)
 {
 	int ret;
@@ -212,6 +254,66 @@ static void cdma_uninit_dev(struct auxiliary_device *auxdev)
 	mutex_unlock(&g_cdma_reset_mutex);
 }
 
+static void cdma_reset_init(struct auxiliary_device *adev)
+{
+	struct cdma_dev *cdev;
+
+	mutex_lock(&g_cdma_reset_mutex);
+	cdev = get_cdma_dev(adev);
+	if (!cdev) {
+		dev_err(&adev->dev, "cdma device is not exist.\n");
+		mutex_unlock(&g_cdma_reset_mutex);
+		return;
+	}
+
+	if (cdma_register_crq_event(adev)) {
+		mutex_unlock(&g_cdma_reset_mutex);
+		return;
+	}
+
+	if (cdma_create_arm_db_page(cdev))
+		goto unregister_crq;
+
+	if (cdma_init_dev_info(adev, cdev))
+		goto destory_arm_db_page;
+
+	idr_init(&cdev->ctx_idr);
+	spin_lock_init(&cdev->ctx_lock);
+	atomic_set(&cdev->cmdcnt, 1);
+	cdev->status = CDMA_NORMAL;
+	cdma_client_handler(cdev, CDMA_CLIENT_ADD);
+	mutex_unlock(&g_cdma_reset_mutex);
+	return;
+
+destory_arm_db_page:
+	cdma_destroy_arm_db_page(cdev);
+unregister_crq:
+	cdma_unregister_crq_event(adev);
+	mutex_unlock(&g_cdma_reset_mutex);
+}
+
+static void cdma_reset_handler(struct auxiliary_device *adev,
+			enum ubase_reset_stage stage)
+{
+	if (!adev)
+		return;
+
+	switch (stage) {
+	case UBASE_RESET_STAGE_DOWN:
+		cdma_reset_down(adev);
+		break;
+	case UBASE_RESET_STAGE_UNINIT:
+		cdma_reset_uninit(adev);
+		break;
+	case UBASE_RESET_STAGE_INIT:
+		if (!is_rmmod)
+			cdma_reset_init(adev);
+		break;
+	default:
+		break;
+	}
+}
+
 static int cdma_probe(struct auxiliary_device *auxdev,
 		      const struct auxiliary_device_id *auxdev_id)
 {
@@ -220,6 +322,8 @@ static int cdma_probe(struct auxiliary_device *auxdev,
 	ret = cdma_init_dev(auxdev);
 	if (ret)
 		return ret;
+
+	ubase_reset_register(auxdev, cdma_reset_handler);
 
 	return 0;
 }
