@@ -17,6 +17,7 @@
 #include <asm/early_ioremap.h>
 #include <asm/alternative.h>
 #include <asm/cpufeature.h>
+#include <asm/rsi.h>
 
 /*
  * Generic IO read/write.  These perform native-endian accesses.
@@ -139,6 +140,10 @@ extern void __memset_io(volatile void __iomem *, int, size_t);
  * I/O memory mapping functions.
  */
 
+typedef int (*ioremap_prot_hook_t)(phys_addr_t phys_addr, size_t size,
+				   pgprot_t *prot);
+int arm64_ioremap_prot_hook_register(const ioremap_prot_hook_t hook);
+
 #define ioremap_prot ioremap_prot
 
 #define _PAGE_IOREMAP PROT_DEVICE_nGnRE
@@ -181,5 +186,12 @@ extern int valid_mmap_phys_addr_range(unsigned long pfn, size_t size);
 extern bool arch_memremap_can_ram_remap(resource_size_t offset, size_t size,
 					unsigned long flags);
 #define arch_memremap_can_ram_remap arch_memremap_can_ram_remap
+
+static inline bool arm64_is_protected_mmio(phys_addr_t phys_addr, size_t size)
+{
+	if (unlikely(is_realm_world()))
+		return arm64_rsi_is_protected(phys_addr, size);
+	return false;
+}
 
 #endif	/* __ASM_IO_H */
