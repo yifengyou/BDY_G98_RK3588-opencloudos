@@ -1028,7 +1028,7 @@ static int defrag_one_locked_target(struct btrfs_inode *inode,
 	const u64 len = target->len;
 	unsigned long last_index = (start + len - 1) >> PAGE_SHIFT;
 	unsigned long start_index = start >> PAGE_SHIFT;
-	unsigned long first_index = page_index(pages[0]);
+	unsigned long first_index = pages[0]->index;
 	int ret = 0;
 	int i;
 

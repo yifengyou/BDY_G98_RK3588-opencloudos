@@ -45,21 +45,19 @@ config ZSWAP_DEFAULT_ON
 	  The selection made here can be overridden by using the kernel
 	  command line 'zswap.enabled=' option.
 
-config ZSWAP_EXCLUSIVE_LOADS_DEFAULT_ON
-	bool "Invalidate zswap entries when pages are loaded"
+config ZSWAP_SHRINKER_DEFAULT_ON
+	bool "Shrink the zswap pool on memory pressure"
 	depends on ZSWAP
+	default n
 	help
-	  If selected, exclusive loads for zswap will be enabled at boot,
-	  otherwise it will be disabled.
+	  If selected, the zswap shrinker will be enabled, and the pages
+	  stored in the zswap pool will become available for reclaim (i.e
+	  written back to the backing swap device) on memory pressure.
 
-	  If exclusive loads are enabled, when a page is loaded from zswap,
-	  the zswap entry is invalidated at once, as opposed to leaving it
-	  in zswap until the swap entry is freed.
-
-	  This avoids having two copies of the same page in memory
-	  (compressed and uncompressed) after faulting in a page from zswap.
-	  The cost is that if the page was never dirtied and needs to be
-	  swapped out again, it will be re-compressed.
+	  This means that zswap writeback could happen even if the pool is
+	  not yet full, or the cgroup zswap limit has not been reached,
+	  reducing the chance that cold pages will reside in the zswap pool
+	  and consume memory indefinitely.
 
 choice
 	prompt "Default compressor"
@@ -895,6 +893,12 @@ config READ_ONLY_THP_FOR_FS
 	  cycles.
 
 endif # TRANSPARENT_HUGEPAGE
+
+#
+# The architecture supports pgtable leaves that is larger than PAGE_SIZE
+#
+config PGTABLE_HAS_HUGE_LEAVES
+	def_bool TRANSPARENT_HUGEPAGE || HUGETLB_PAGE
 
 #
 # UP and nommu archs use km based percpu allocator

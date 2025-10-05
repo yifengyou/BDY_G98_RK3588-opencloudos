@@ -160,7 +160,7 @@ void nilfs_btnode_delete(struct buffer_head *bh)
 {
 	struct address_space *mapping;
 	struct page *page = bh->b_page;
-	pgoff_t index = page_index(page);
+	pgoff_t index = page->index;
 	int still_dirty;
 
 	get_page(page);

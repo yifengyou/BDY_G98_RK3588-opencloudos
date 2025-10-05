@@ -127,9 +127,9 @@ static void netfs_rreq_unmark_after_write(struct netfs_io_request *rreq,
 			/* We might have multiple writes from the same huge
 			 * folio, but we mustn't unlock a folio more than once.
 			 */
-			if (have_unlocked && folio_index(folio) <= unlocked)
+			if (have_unlocked && folio->index <= unlocked)
 				continue;
-			unlocked = folio_index(folio);
+			unlocked = folio->index;
 			folio_end_fscache(folio);
 			have_unlocked = true;
 		}

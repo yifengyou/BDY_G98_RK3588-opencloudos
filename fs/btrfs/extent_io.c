@@ -3918,7 +3918,7 @@ static void btree_clear_page_dirty(struct page *page)
 	xa_lock_irq(&page->mapping->i_pages);
 	if (!PageDirty(page))
 		__xa_clear_mark(&page->mapping->i_pages,
-				page_index(page), PAGECACHE_TAG_DIRTY);
+				page->index, PAGECACHE_TAG_DIRTY);
 	xa_unlock_irq(&page->mapping->i_pages);
 }
 

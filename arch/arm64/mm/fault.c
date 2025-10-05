@@ -609,6 +609,8 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 		goto done;
 	}
 	count_vm_vma_lock_event(VMA_LOCK_RETRY);
+	if (fault & VM_FAULT_MAJOR)
+		mm_flags |= FAULT_FLAG_TRIED;
 
 	/* Quick path to respond to signals */
 	if (fault_signal_pending(fault, regs)) {
@@ -715,6 +717,7 @@ static int __kprobes do_translation_fault(unsigned long far,
 	return 0;
 }
 
+#ifdef CONFIG_ALTRA_ERRATUM_82288
 static int copy_from_user_io(void *to, const void __user *from, unsigned long n)
 {
 	const u8 __user *src = from;
@@ -1665,6 +1668,7 @@ static int fixup_alignment(unsigned long addr, unsigned int esr,
 	}
 	return res;
 }
+#endif
 
 static int do_alignment_fault(unsigned long far, unsigned long esr,
 			      struct pt_regs *regs)
@@ -1926,7 +1930,7 @@ struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
 	if (vma->vm_flags & VM_MTE)
 		flags |= __GFP_ZEROTAGS;
 
-	return vma_alloc_folio(flags, 0, vma, vaddr, false);
+	return vma_alloc_folio(flags, 0, vma, vaddr);
 }
 
 void tag_clear_highpage(struct page *page)

@@ -116,7 +116,7 @@ int mfill_atomic_install_pte(pmd_t *dst_pmd,
 			folio_add_lru(folio);
 		folio_add_file_rmap_pte(folio, page, dst_vma);
 	} else {
-		folio_add_new_anon_rmap(folio, dst_vma, dst_addr);
+		folio_add_new_anon_rmap(folio, dst_vma, dst_addr, RMAP_EXCLUSIVE);
 		folio_add_lru_vma(folio, dst_vma);
 	}
 
@@ -151,7 +151,7 @@ static int mfill_atomic_pte_copy(pmd_t *dst_pmd,
 	if (!*foliop) {
 		ret = -ENOMEM;
 		folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0, dst_vma,
-					dst_addr, false);
+					dst_addr);
 		if (!folio)
 			goto out;
 

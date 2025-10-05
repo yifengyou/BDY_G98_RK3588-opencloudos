@@ -22,6 +22,7 @@
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
 #include <linux/local_lock.h>
+#include <linux/zswap.h>
 #include <linux/kabi.h>
 #include <asm/page.h>
 
@@ -652,7 +653,7 @@ struct lruvec {
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
 #endif
-
+	struct zswap_lruvec_state zswap_lruvec_state;
 #ifdef CONFIG_EMM_WORKINGSET_TRACKING
 	/* Non-resident file age, driven by LRU movement */
 	atomic_long_t			evicted_file;
@@ -865,6 +866,7 @@ struct zone {
 	unsigned long watermark_boost;
 
 	unsigned long nr_reserved_highatomic;
+	unsigned long nr_free_highatomic;
 
 	/*
 	 * We don't know if the memory that we're going to allocate will be
