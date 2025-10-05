@@ -96,6 +96,9 @@ struct writeback_control {
 	 */
 	struct swap_iocb **swap_plug;
 
+	/* Target list for splitting a large folio */
+	struct list_head *list;
+
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct bdi_writeback *wb;	/* wb this writeback is issued under */
 	struct inode *inode;		/* inode being written out */

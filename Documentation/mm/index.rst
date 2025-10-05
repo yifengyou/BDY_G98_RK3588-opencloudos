@@ -23,6 +23,7 @@ see the :doc:`admin guide <../admin-guide/mm/index>`.
    highmem
    page_reclaim
    swap
+   swap-table
    page_cache
    shmfs
    oom

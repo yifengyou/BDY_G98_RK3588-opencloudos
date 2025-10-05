@@ -2415,6 +2415,8 @@ static const struct x86_cpu_id intel_pstate_cpu_ids[] = {
 	X86_MATCH(TIGERLAKE,		core_funcs),
 	X86_MATCH(SAPPHIRERAPIDS_X,	core_funcs),
 	X86_MATCH(EMERALDRAPIDS_X,      core_funcs),
+	X86_MATCH(GRANITERAPIDS_D,	core_funcs),
+	X86_MATCH(GRANITERAPIDS_X,	core_funcs),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, intel_pstate_cpu_ids);
@@ -2426,6 +2428,12 @@ static const struct x86_cpu_id intel_pstate_cpu_oob_ids[] __initconst = {
 	X86_MATCH(SKYLAKE_X,		core_funcs),
 	X86_MATCH(ICELAKE_X,		core_funcs),
 	X86_MATCH(SAPPHIRERAPIDS_X,	core_funcs),
+	X86_MATCH(EMERALDRAPIDS_X,	core_funcs),
+	X86_MATCH(GRANITERAPIDS_D,	core_funcs),
+	X86_MATCH(GRANITERAPIDS_X,	core_funcs),
+	X86_MATCH(ATOM_CRESTMONT,	core_funcs),
+	X86_MATCH(ATOM_CRESTMONT_X,	core_funcs),
+	X86_MATCH(ATOM_DARKMONT_X,	core_funcs),
 	{}
 };
 #endif
@@ -3410,6 +3418,8 @@ static const struct x86_cpu_id intel_epp_default[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(ALDERLAKE_L, HWP_SET_DEF_BALANCE_PERF_EPP(102)),
 	X86_MATCH_INTEL_FAM6_MODEL(SAPPHIRERAPIDS_X, HWP_SET_DEF_BALANCE_PERF_EPP(32)),
 	X86_MATCH_INTEL_FAM6_MODEL(EMERALDRAPIDS_X, HWP_SET_DEF_BALANCE_PERF_EPP(32)),
+	X86_MATCH_INTEL_FAM6_MODEL(GRANITERAPIDS_X, HWP_SET_DEF_BALANCE_PERF_EPP(32)),
+	X86_MATCH_INTEL_FAM6_MODEL(GRANITERAPIDS_D, HWP_SET_DEF_BALANCE_PERF_EPP(32)),
 	{}
 };
 

@@ -114,8 +114,16 @@ get_dist_makefile_var() {
 	cat_repo_file "dist/Makefile" "$_gitref" | get_makefile_var "$1"
 }
 
-# This lib must stay in dist/scripts/
-[ "$TOPDIR" ] || TOPDIR="$(realpath "$(dirname "$(realpath "$0")")/../..")"
+# All callers must stay in dist/
+[ "$TOPDIR" ] || {
+	TOPDIR="$(dirname "$(realpath "$0")")"
+	while [ ! -e "$TOPDIR/Kbuild" ]; do
+		TOPDIR=$(dirname "$TOPDIR")
+	done
+	while [ -e "$TOPDIR/../Kbuild" ]; do
+		TOPDIR=$(dirname "$TOPDIR")
+	done
+}
 [ "$DISTPATH" ] || DISTPATH=$(get_dist_makefile_var DISTPATH)
 
 [ -s "$DISTPATH/.distenv" ] && source "$DISTPATH/.distenv"
