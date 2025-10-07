@@ -1091,7 +1091,7 @@ static int __fragmentation_index(unsigned int order, struct contig_page_info *in
 {
 	unsigned long requested = 1UL << order;
 
-	if (WARN_ON_ONCE(order > MAX_ORDER))
+	if (WARN_ON_ONCE(order > MAX_PAGE_ORDER))
 		return 0;
 
 	if (!info->free_blocks_total)
@@ -1391,6 +1391,8 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_SWAP
 	"swap_ra",
 	"swap_ra_hit",
+	"swpin_zero",
+	"swpout_zero",
 #ifdef CONFIG_KSM
 	"ksm_swpin_copy",
 #endif
@@ -1401,6 +1403,7 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_ZSWAP
 	"zswpin",
 	"zswpout",
+	"zswpwb",
 #endif
 #ifdef CONFIG_X86
 	"direct_map_level2_splits",

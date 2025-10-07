@@ -88,7 +88,7 @@ int afs_write_begin(struct file *file, struct address_space *mapping,
 	if (ret < 0)
 		return ret;
 
-	index = folio_index(folio);
+	index = folio->index;
 	from = pos - index * PAGE_SIZE;
 	to = from + len;
 
@@ -162,7 +162,7 @@ int afs_write_end(struct file *file, struct address_space *mapping,
 	loff_t i_size, write_end_pos;
 
 	_enter("{%llx:%llu},{%lx}",
-	       vnode->fid.vid, vnode->fid.vnode, folio_index(folio));
+	       vnode->fid.vid, vnode->fid.vnode, folio->index);
 
 	if (!folio_test_uptodate(folio)) {
 		if (copied < len) {
@@ -206,7 +206,7 @@ int afs_write_end(struct file *file, struct address_space *mapping,
 	}
 
 	if (folio_mark_dirty(folio))
-		_debug("dirtied %lx", folio_index(folio));
+		_debug("dirtied %lx", folio->index);
 
 out:
 	folio_unlock(folio);
@@ -304,7 +304,7 @@ static void afs_pages_written_back(struct afs_vnode *vnode, loff_t start, unsign
 	xas_for_each(&xas, folio, end) {
 		if (!folio_test_writeback(folio)) {
 			kdebug("bad %x @%llx page %lx %lx",
-			       len, start, folio_index(folio), end);
+			       len, start, folio->index, end);
 			ASSERT(folio_test_writeback(folio));
 		}
 
@@ -493,7 +493,7 @@ static void afs_extend_writeback(struct address_space *mapping,
 				continue;
 			if (xa_is_value(folio))
 				break;
-			if (folio_index(folio) != index)
+			if (folio->index != index)
 				break;
 
 			if (!folio_try_get(folio)) {
@@ -593,7 +593,7 @@ static ssize_t afs_write_back_from_locked_folio(struct address_space *mapping,
 	long count = wbc->nr_to_write;
 	int ret;
 
-	_enter(",%lx,%llx-%llx", folio_index(folio), start, end);
+	_enter(",%lx,%llx-%llx", folio->index, start, end);
 
 	if (folio_start_writeback(folio))
 		BUG();
@@ -726,7 +726,7 @@ static int afs_writepages_region(struct address_space *mapping,
 			folio = fbatch.folios[i];
 			start = folio_pos(folio); /* May regress with THPs */
 
-			_debug("wback %lx", folio_index(folio));
+			_debug("wback %lx", folio->index);
 
 			/* At this point we hold neither the i_pages lock nor the
 			 * page lock: the page may be truncated or invalidated
@@ -917,7 +917,7 @@ vm_fault_t afs_page_mkwrite(struct vm_fault *vmf)
 	unsigned long priv;
 	vm_fault_t ret = VM_FAULT_RETRY;
 
-	_enter("{{%llx:%llu}},{%lx}", vnode->fid.vid, vnode->fid.vnode, folio_index(folio));
+	_enter("{{%llx:%llu}},{%lx}", vnode->fid.vid, vnode->fid.vnode, folio->index);
 
 	afs_validate(vnode, af->key);
 

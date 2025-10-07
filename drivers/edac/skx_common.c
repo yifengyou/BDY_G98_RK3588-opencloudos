@@ -19,6 +19,7 @@
 #include <linux/adxl.h>
 #include <acpi/nfit.h>
 #include <asm/mce.h>
+#include <asm/uv/uv.h>
 #include "edac_module.h"
 #include "skx_common.h"
 
@@ -253,9 +254,41 @@ void skx_set_decode(skx_decode_f decode, skx_show_retry_log_f show_retry_log)
 }
 EXPORT_SYMBOL_GPL(skx_set_decode);
 
+static int skx_get_pkg_id(struct skx_dev *d, u8 *id)
+{
+	int node;
+	int cpu;
+
+	node = pcibus_to_node(d->util_all->bus);
+	if (numa_valid_node(node)) {
+		for_each_cpu(cpu, cpumask_of_pcibus(d->util_all->bus)) {
+			struct cpuinfo_x86 *c = &cpu_data(cpu);
+
+			if (c->initialized && cpu_to_node(cpu) == node) {
+				*id = topology_physical_package_id(cpu);
+				return 0;
+			}
+		}
+	}
+
+	skx_printk(KERN_ERR, "Failed to get package ID from NUMA information\n");
+	return -ENODEV;
+}
+
 int skx_get_src_id(struct skx_dev *d, int off, u8 *id)
 {
 	u32 reg;
+
+	/*
+	 * The 3-bit source IDs in PCI configuration space registers are limited
+	 * to 8 unique IDs, and each ID is local to a UPI/QPI domain.
+	 *
+	 * Source IDs cannot be used to map devices to sockets on UV systems
+	 * because they can exceed 8 sockets and have multiple UPI/QPI domains
+	 * with identical, repeating source IDs.
+	 */
+	if (is_uv_system())
+		return skx_get_pkg_id(d, id);
 
 	if (pci_read_config_dword(d->util_all, off, &reg)) {
 		skx_printk(KERN_ERR, "Failed to read src id\n");
@@ -266,20 +299,6 @@ int skx_get_src_id(struct skx_dev *d, int off, u8 *id)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(skx_get_src_id);
-
-int skx_get_node_id(struct skx_dev *d, u8 *id)
-{
-	u32 reg;
-
-	if (pci_read_config_dword(d->util_all, 0xf4, &reg)) {
-		skx_printk(KERN_ERR, "Failed to read node id\n");
-		return -ENODEV;
-	}
-
-	*id = GET_BITFIELD(reg, 0, 2);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(skx_get_node_id);
 
 static int get_width(u32 mtr)
 {
@@ -420,7 +439,7 @@ int skx_get_dimm_info(u32 mtr, u32 mcmtr, u32 amap, struct dimm_info *dimm,
 	if (imc->hbm_mc) {
 		banks = 32;
 		mtype = MEM_HBM2;
-	} else if (cfg->support_ddr5 && (amap & 0x8)) {
+	} else if (cfg->support_ddr5) {
 		banks = 32;
 		mtype = MEM_DDR5;
 	} else {
@@ -541,7 +560,7 @@ int skx_register_mci(struct skx_imc *imc, struct pci_dev *pdev,
 	pvt->imc = imc;
 
 	mci->ctl_name = kasprintf(GFP_KERNEL, "%s#%d IMC#%d", ctl_name,
-				  imc->node_id, imc->lmc);
+				  imc->src_id, imc->lmc);
 	if (!mci->ctl_name) {
 		rc = -ENOMEM;
 		goto fail0;
@@ -651,12 +670,12 @@ static void skx_mce_output_error(struct mem_ctl_info *mci,
 	}
 
 	if (res->decoded_by_adxl) {
-		len = snprintf(skx_msg, MSG_SIZE, "%s%s err_code:0x%04x:0x%04x %s",
+		len = scnprintf(skx_msg, MSG_SIZE, "%s%s err_code:0x%04x:0x%04x %s",
 			 overflow ? " OVERFLOW" : "",
 			 (uncorrected_error && recoverable) ? " recoverable" : "",
 			 mscod, errcode, adxl_msg);
 	} else {
-		len = snprintf(skx_msg, MSG_SIZE,
+		len = scnprintf(skx_msg, MSG_SIZE,
 			 "%s%s err_code:0x%04x:0x%04x ProcessorSocketId:0x%x MemoryControllerId:0x%x PhysicalRankId:0x%x Row:0x%x Column:0x%x Bank:0x%x BankGroup:0x%x",
 			 overflow ? " OVERFLOW" : "",
 			 (uncorrected_error && recoverable) ? " recoverable" : "",
@@ -793,6 +812,53 @@ void skx_remove(void)
 	}
 }
 EXPORT_SYMBOL_GPL(skx_remove);
+
+#ifdef CONFIG_EDAC_DEBUG
+/*
+ * Debug feature.
+ * Exercise the address decode logic by writing an address to
+ * /sys/kernel/debug/edac/{skx,i10nm}_test/addr.
+ */
+static struct dentry *skx_test;
+
+static int debugfs_u64_set(void *data, u64 val)
+{
+	struct mce m;
+
+	pr_warn_once("Fake error to 0x%llx injected via debugfs\n", val);
+
+	memset(&m, 0, sizeof(m));
+	/* ADDRV + MemRd + Unknown channel */
+	m.status = MCI_STATUS_ADDRV + 0x90;
+	/* One corrected error */
+	m.status |= BIT_ULL(MCI_STATUS_CEC_SHIFT);
+	m.addr = val;
+	skx_mce_check_error(NULL, 0, &m);
+
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(fops_u64_wo, NULL, debugfs_u64_set, "%llu\n");
+
+void skx_setup_debug(const char *name)
+{
+	skx_test = edac_debugfs_create_dir(name);
+	if (!skx_test)
+		return;
+
+	if (!edac_debugfs_create_file("addr", 0200, skx_test,
+				      NULL, &fops_u64_wo)) {
+		debugfs_remove(skx_test);
+		skx_test = NULL;
+	}
+}
+EXPORT_SYMBOL_GPL(skx_setup_debug);
+
+void skx_teardown_debug(void)
+{
+	debugfs_remove_recursive(skx_test);
+}
+EXPORT_SYMBOL_GPL(skx_teardown_debug);
+#endif /*CONFIG_EDAC_DEBUG*/
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Tony Luck");

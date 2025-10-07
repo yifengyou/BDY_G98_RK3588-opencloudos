@@ -33,12 +33,12 @@ static void __init init_kvm_cma_reserved_pageblock(struct page *page)
 
 	set_pageblock_migratetype(page, MIGRATE_ISOLATE);
 
-	if (pageblock_order >= MAX_ORDER) {
+	if (pageblock_order > MAX_PAGE_ORDER) {
 		i = pageblock_nr_pages;
 		p = page;
 		do {
 			set_page_refcounted(p);
-			__free_pages(p, MAX_ORDER - 1);
+			__free_pages(p, MAX_PAGE_ORDER);
 			p += MAX_ORDER_NR_PAGES;
 		} while (i -= MAX_ORDER_NR_PAGES);
 	} else {
@@ -126,7 +126,7 @@ int __init kvm_cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 
 	/* ensure minimal alignment required by mm core */
 	alignment = PAGE_SIZE <<
-			max_t(unsigned long, MAX_ORDER - 1, pageblock_order);
+			max_t(unsigned long, MAX_PAGE_ORDER, pageblock_order);
 
 	/* alignment should be aligned with order_per_bit */
 	if (!IS_ALIGNED(alignment >> PAGE_SHIFT, 1 << order_per_bit))
@@ -201,7 +201,7 @@ int __init kvm_cma_declare_contiguous(phys_addr_t base,
 	 * you couldn't get a contiguous memory, which is not what we want.
 	 */
 	alignment = max(alignment,  (phys_addr_t)PAGE_SIZE <<
-			  max_t(unsigned long, MAX_ORDER - 1, pageblock_order));
+			  max_t(unsigned long, MAX_PAGE_ORDER, pageblock_order));
 	if (base & (alignment - 1)) {
 		ret = -EINVAL;
 		pr_err("Region at %pa must be aligned to %pa bytes\n",

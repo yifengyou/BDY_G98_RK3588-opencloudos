@@ -1001,7 +1001,7 @@ static bool has_extra_refcount(struct page_state *ps, struct page *p,
 	int count = page_count(p) - 1;
 
 	if (extra_pins)
-		count -= 1;
+		count -= folio_nr_pages(page_folio(p));
 
 	if (count > 0) {
 		pr_err("%#lx: %s still referenced by %d users\n",
@@ -1187,7 +1187,7 @@ static int me_swapcache_clean(struct page_state *ps, struct page *p)
 	struct folio *folio = page_folio(p);
 	int ret;
 
-	delete_from_swap_cache(folio);
+	swap_cache_del_folio(folio);
 
 	ret = delete_from_lru_cache(p) ? MF_FAILED : MF_RECOVERED;
 	folio_unlock(folio);
@@ -2341,8 +2341,8 @@ try_again:
 	 * We use page flags to determine what action should be taken, but
 	 * the flags can be modified by the error containment action.  One
 	 * example is an mlocked page, where PG_mlocked is cleared by
-	 * page_remove_rmap() in try_to_unmap_one(). So to determine page status
-	 * correctly, we save a copy of the page flags at this time.
+	 * folio_remove_rmap_*() in try_to_unmap_one(). So to determine page
+	 * status correctly, we save a copy of the page flags at this time.
 	 */
 	page_flags = p->flags;
 
@@ -2535,10 +2535,9 @@ int unpoison_memory(unsigned long pfn)
 	static DEFINE_RATELIMIT_STATE(unpoison_rs, DEFAULT_RATELIMIT_INTERVAL,
 					DEFAULT_RATELIMIT_BURST);
 
-	if (!pfn_valid(pfn))
-		return -ENXIO;
-
-	p = pfn_to_page(pfn);
+	p = pfn_to_online_page(pfn);
+	if (!p)
+		return -EIO;
 	folio = page_folio(p);
 
 	mutex_lock(&mf_mutex);

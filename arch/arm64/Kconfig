@@ -20,6 +20,7 @@ config ARM64
 	select ARCH_ENABLE_SPLIT_PMD_PTLOCK if PGTABLE_LEVELS > 2
 	select ARCH_ENABLE_THP_MIGRATION if TRANSPARENT_HUGEPAGE
 	select ARCH_HAS_CACHE_LINE_SIZE
+	select ARCH_HAS_CC_PLATFORM
 	select ARCH_HAS_CURRENT_STACK_POINTER
 	select ARCH_HAS_DEBUG_VIRTUAL
 	select ARCH_HAS_DEBUG_VM_PGTABLE
@@ -32,6 +33,7 @@ config ARM64
 	select ARCH_HAS_KCOV
 	select ARCH_HAS_KEEPINITRD
 	select ARCH_HAS_MEMBARRIER_SYNC_CORE
+	select ARCH_HAS_MEM_ENCRYPT
 	select ARCH_HAS_NMI_SAFE_THIS_CPU_OPS
 	select ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE
 	select ARCH_HAS_PTE_DEVMAP
@@ -39,6 +41,8 @@ config ARM64
 	select ARCH_HAS_SETUP_DMA_OPS
 	select ARCH_HAS_SET_DIRECT_MAP
 	select ARCH_HAS_SET_MEMORY
+	select ARCH_HAS_MEM_ENCRYPT
+	select ARCH_HAS_FORCE_DMA_UNENCRYPTED
 	select ARCH_STACKWALK
 	select ARCH_HAS_STRICT_KERNEL_RWX
 	select ARCH_HAS_STRICT_MODULE_RWX
@@ -1309,6 +1313,16 @@ config SOCIONEXT_SYNQUACER_PREITS
 
 	  If unsure, say Y.
 
+config PHYTIUM_ERRATUM_FT3386
+	bool "FT3386: enable Phytium FT3386 pswiotlb can improve dma performance"
+	depends on PSWIOTLB
+	default y
+	help
+	  Phytium FT3386 pswiotlb can improve D2H dma performance and
+	  should be enabled by default.
+
+	  If unsure, say Y.
+
 endmenu # "ARM errata workarounds via the alternatives framework"
 
 choice
@@ -1596,15 +1610,15 @@ config XEN
 
 # include/linux/mmzone.h requires the following to be true:
 #
-#   MAX_ORDER + PAGE_SHIFT <= SECTION_SIZE_BITS
+#   MAX_PAGE_ORDER + PAGE_SHIFT <= SECTION_SIZE_BITS
 #
-# so the maximum value of MAX_ORDER is SECTION_SIZE_BITS - PAGE_SHIFT:
+# so the maximum value of MAX_PAGE_ORDER is SECTION_SIZE_BITS - PAGE_SHIFT:
 #
-#     | SECTION_SIZE_BITS |  PAGE_SHIFT  |  max MAX_ORDER  |  default MAX_ORDER |
-# ----+-------------------+--------------+-----------------+--------------------+
-# 4K  |       27          |      12      |       15        |         10         |
-# 16K |       27          |      14      |       13        |         11         |
-# 64K |       29          |      16      |       13        |         13         |
+#     | SECTION_SIZE_BITS |  PAGE_SHIFT  |  max MAX_PAGE_ORDER  |  default MAX_PAGE_ORDER |
+# ----+-------------------+--------------+----------------------+-------------------------+
+# 4K  |       27          |      12      |       15             |         10              |
+# 16K |       27          |      14      |       13             |         11              |
+# 64K |       29          |      16      |       13             |         13              |
 config ARCH_FORCE_MAX_ORDER
 	int
 	default "13" if ARM64_64K_PAGES
@@ -1612,16 +1626,16 @@ config ARCH_FORCE_MAX_ORDER
 	default "10"
 	help
 	  The kernel page allocator limits the size of maximal physically
-	  contiguous allocations. The limit is called MAX_ORDER and it
+	  contiguous allocations. The limit is called MAX_PAGE_ORDER and it
 	  defines the maximal power of two of number of pages that can be
 	  allocated as a single contiguous block. This option allows
 	  overriding the default setting when ability to allocate very
 	  large blocks of physically contiguous memory is required.
 
 	  The maximal size of allocation cannot exceed the size of the
-	  section, so the value of MAX_ORDER should satisfy
+	  section, so the value of MAX_PAGE_ORDER should satisfy
 
-	    MAX_ORDER + PAGE_SHIFT <= SECTION_SIZE_BITS
+	    MAX_PAGE_ORDER + PAGE_SHIFT <= SECTION_SIZE_BITS
 
 	  Don't change if unsure.
 
@@ -2286,6 +2300,15 @@ config UNWIND_PATCH_PAC_INTO_SCS
 	depends on SHADOW_CALL_STACK
 	select UNWIND_TABLES
 	select DYNAMIC_SCS
+
+config ARM64_CONTPTE
+	bool "Contiguous PTE mappings for user memory" if EXPERT
+	depends on TRANSPARENT_HUGEPAGE
+	default y
+	help
+	  When enabled, user mappings are configured using the PTE contiguous
+	  bit, for any mappings that meet the size and alignment requirements.
+	  This reduces TLB pressure and improves performance.
 
 endmenu # "Kernel Features"
 
