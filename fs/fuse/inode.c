@@ -36,7 +36,9 @@ DEFINE_MUTEX(fuse_mutex);
 static int set_global_limit(const char *val, const struct kernel_param *kp);
 
 unsigned int fuse_max_pages_limit = 256;
+#ifdef CONFIG_FUSE_CONN_ALIVE
 unsigned int fuse_auto_recovery __read_mostly;
+#endif
 
 unsigned max_user_bgreq;
 module_param_call(max_user_bgreq, set_global_limit, param_get_uint,
@@ -99,7 +101,9 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->orig_ino = 0;
 	fi->state = 0;
 	fi->submount_lookup = NULL;
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	fi->connection_epoch = 0;
+#endif
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
 	fi->forget = fuse_alloc_forget();
@@ -382,7 +386,9 @@ static void fuse_init_submount_lookup(struct fuse_submount_lookup *sl,
 static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 			    struct fuse_conn *fc)
 {
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	struct fuse_inode *fi = get_fuse_inode(inode);
+#endif
 
 	inode->i_mode = attr->mode & S_IFMT;
 	inode->i_size = attr->size;
@@ -404,7 +410,9 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 	} else
 		BUG();
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	fi->connection_epoch = atomic_read(&fc->connection_epoch);
+#endif
 	/*
 	 * Ensure that we don't cache acls for daemons without FUSE_POSIX_ACL
 	 * so they see the exact same behavior as before.
@@ -520,6 +528,7 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 	return NULL;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc)
 {
 	struct fuse_mount *fm_iter;
@@ -535,7 +544,7 @@ struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc)
 
 	return NULL;
 }
-
+#endif
 
 int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 			     loff_t offset, loff_t len)
@@ -756,7 +765,9 @@ enum {
 	OPT_ALLOW_OTHER,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	OPT_MOUNTPOINT,
+#endif
 	OPT_ERR
 };
 
@@ -771,7 +782,9 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("max_read",		OPT_MAX_READ),
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	fsparam_string	("mountpoint",		OPT_MOUNTPOINT),
+#endif
 	{}
 };
 
@@ -871,12 +884,14 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		ctx->blksize = result.uint_32;
 		break;
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	case OPT_MOUNTPOINT:
 		if (ctx->mountpoint)
 			return invalfc(fsc, "Multiple mountpoint specified");
 		ctx->mountpoint = param->string;
 		param->string = NULL;
 		break;
+#endif
 
 	default:
 		return -EINVAL;
@@ -968,9 +983,11 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
 	atomic_set(&fc->num_waiting, 0);
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	atomic_set(&fc->need_recovery, 0);
 	atomic_set(&fc->need_resend, 0);
 	atomic_set(&fc->connection_epoch, 0);
+#endif
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
@@ -984,8 +1001,10 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->user_ns = get_user_ns(user_ns);
 	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
 	fc->max_pages_limit = fuse_max_pages_limit;
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	memcpy(fc->comm, current->comm, FUSE_TASK_COMM_LEN);
 	get_cmdline_args(current, fc->cmdline, TASK_COMM_ARGS_LEN);
+#endif
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
@@ -1411,8 +1430,10 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 	fuse_set_initialized(fc);
 	wake_up_all(&fc->blocked_waitq);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	if ((fuse_auto_recovery & FUSE_RECOVERY_RESEND) && atomic_read(&fc->need_resend))
 		fuse_resend(fc);
+#endif
 }
 
 void fuse_send_init(struct fuse_mount *fm)
@@ -1888,8 +1909,10 @@ static int fuse_get_tree(struct fs_context *fsc)
 
 	fuse_conn_init(fc, fm, fsc->user_ns, &fuse_dev_fiq_ops, NULL);
 	fc->release = fuse_free_conn;
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	if (ctx->mountpoint)
 		memcpy(fc->mountp, ctx->mountpoint, FUSE_MOUNTP_MAX);
+#endif
 
 	fsc->s_fs_info = fm;
 

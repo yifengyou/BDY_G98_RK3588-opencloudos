@@ -347,3 +347,4 @@ requests in FUSE.
 setting/getting the fuse keep alive function state of allowing
 new processes to reconnect to existing FUSE mounts using
 connection characteristic values for identity verification.
+Enable CONFIG_FUSE_CONN_ALIVE to make it works, by default is n.

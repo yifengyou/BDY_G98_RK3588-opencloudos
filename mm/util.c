@@ -1041,6 +1041,7 @@ out:
 	return res;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 /**
  * get_cmdline_args() - copy the cmdline and args value to a buffer.
  * @task:     the task whose cmdline value to copy.
@@ -1090,6 +1091,7 @@ out:
 	return res;
 }
 EXPORT_SYMBOL_GPL(get_cmdline_args);
+#endif
 
 int __weak memcmp_pages(struct page *page1, struct page *page2)
 {

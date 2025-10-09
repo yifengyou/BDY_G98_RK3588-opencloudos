@@ -23,6 +23,7 @@ static struct ctl_table fuse_sysctl_table[] = {
 		.extra1		= SYSCTL_ONE,
 		.extra2		= &sysctl_fuse_max_pages_limit,
 	},
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	{
 		.procname	= "auto_recovery",
 		.data		= &fuse_auto_recovery,
@@ -32,6 +33,7 @@ static struct ctl_table fuse_sysctl_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_TWO,
 	},
+#endif
 };
 
 int fuse_sysctl_register(void)

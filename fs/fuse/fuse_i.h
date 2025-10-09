@@ -43,6 +43,9 @@
 #define FUSE_NAME_MAX 1024
 
 /** Number of dentries for each connection in the control filesystem */
+#ifndef CONFIG_FUSE_CONN_ALIVE
+#define FUSE_CTL_NUM_DENTRIES 5
+#else
 #define FUSE_CTL_NUM_DENTRIES 8
 
 /** FUSE task comm name max */
@@ -50,6 +53,7 @@
 
 /** FUSE mount point path max */
 #define FUSE_MOUNTP_MAX 256
+#endif
 
 /** Maximum number of outstanding background requests */
 #define FUSE_DEFAULT_MAX_BACKGROUND 12
@@ -60,8 +64,10 @@
 /** Maximum of max_pages received in init_out */
 extern unsigned int fuse_max_pages_limit;
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 /** Enable/disable fuse auto recovery function */
 extern unsigned int fuse_auto_recovery;
+#endif
 
 /** List of active connections */
 extern struct list_head fuse_conn_list;
@@ -136,8 +142,10 @@ struct fuse_inode {
 	/** Version of last attribute change */
 	u64 attr_version;
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	/* epoch of fuse connection */
 	int connection_epoch;
+#endif
 
 	union {
 		/* read/write io cache (regular file only) */
@@ -594,8 +602,10 @@ struct fuse_fs_context {
 	unsigned int blksize;
 	const char *subtype;
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	/* FUSE mountpoint in ns */
 	char *mountpoint;
+#endif
 
 	/* DAX device, may be NULL */
 	struct dax_device *dax_dev;
@@ -938,6 +948,8 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	/* connection need recovery */
 	atomic_t need_recovery;
 
@@ -955,6 +967,7 @@ struct fuse_conn {
 
 	/* mount point of allocating the fuse_conn, used for re-attach. */
 	char mountp[FUSE_MOUNTP_MAX];
+#endif
 };
 
 /*
@@ -1004,20 +1017,29 @@ static inline struct fuse_inode *get_fuse_inode(struct inode *inode)
 	return container_of(inode, struct fuse_inode, inode);
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static inline int get_fuse_inode_epoch(struct inode *inode)
 {
 	return get_fuse_inode(inode)->connection_epoch;
 }
+#endif
 
 static inline u64 get_node_id(struct inode *inode)
 {
 	return get_fuse_inode(inode)->nodeid;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static inline int fuse_stale_inode_epoch(struct inode *inode, struct fuse_conn *fc)
 {
 	return unlikely(atomic_read(&fc->connection_epoch) != get_fuse_inode_epoch(inode));
 }
+#else
+static inline int fuse_stale_inode_epoch(struct inode *inode, struct fuse_conn *fc)
+{
+	return 0;
+}
+#endif
 
 static inline int invalid_nodeid(u64 nodeid)
 {
@@ -1048,9 +1070,11 @@ static inline bool fuse_is_bad(struct inode *inode)
 
 static inline bool fuse_is_bad_strict(struct inode *inode)
 {
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	if (fuse_auto_recovery)
 		return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state)) ||
 			fuse_stale_inode_epoch(inode, get_fuse_conn(inode));
+#endif
 
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
 }
@@ -1342,6 +1366,7 @@ void fuse_release_nowrite(struct inode *inode);
 struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 			   struct fuse_mount **fm);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 /**
  * Scan all fuse_mounts belonging to fc to find the first where
  * fuse_mount returns a result.
@@ -1349,6 +1374,7 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
  * The caller must hold fc->killsb.
  */
 struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc);
+#endif
 
 /**
  * File-system tells the kernel to invalidate cache for the given node id.
@@ -1542,6 +1568,7 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
 #ifdef CONFIG_SYSCTL
 extern int fuse_sysctl_register(void);
 extern void fuse_sysctl_unregister(void);
+#ifdef CONFIG_FUSE_CONN_ALIVE
 /*
  * Flags for sysctl fuse_auto_recovery. valid field: 0/1/2
  *
@@ -1551,6 +1578,7 @@ extern void fuse_sysctl_unregister(void);
  */
 #define FUSE_RECOVERY_ENABLED		(1 << 0)
 #define FUSE_RECOVERY_RESEND		(1 << 1)
+#endif
 
 #else
 #define fuse_sysctl_register()		(0)

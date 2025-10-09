@@ -1804,7 +1804,9 @@ void fuse_resend(struct fuse_conn *fc)
 	pr_debug("Start to fuse resend pending request.\n");
 
 	spin_lock(&fc->lock);
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	atomic_set(&fc->need_resend, 0);
+#endif
 	if (!fc->connected) {
 		spin_unlock(&fc->lock);
 		return;
@@ -2288,10 +2290,12 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 
 		/* Are we the last open device? */
 		if (atomic_dec_and_test(&fc->dev_count)) {
+#ifdef CONFIG_FUSE_CONN_ALIVE
 			if (fuse_auto_recovery) {
 				pr_debug("Last open device of fc closed\n");
 				atomic_set(&fc->need_recovery, 1);
 			}
+#endif
 
 			WARN_ON(fc->iq.fasync != NULL);
 			fuse_abort_conn(fc);
@@ -2362,6 +2366,7 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	return res;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static inline bool fuse_conn_cmd_mp_match(struct fuse_conn *fc,
 		struct fuse_ioctl_recovery *data)
 {
@@ -2467,6 +2472,7 @@ static long fuse_dev_ioctl_recovery(struct file *file, __u32 __user *argp)
 	}
 	return 0;
 }
+#endif
 
 static long fuse_dev_ioctl_backing_open(struct file *file,
 					struct fuse_backing_map __user *argp)
@@ -2512,8 +2518,10 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	case FUSE_DEV_IOC_CLONE:
 		return fuse_dev_ioctl_clone(file, argp);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	case FUSE_DEV_IOC_RECOVERY:
 		return fuse_dev_ioctl_recovery(file, argp);
+#endif
 
 	case FUSE_DEV_IOC_BACKING_OPEN:
 		return fuse_dev_ioctl_backing_open(file, argp);

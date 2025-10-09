@@ -64,6 +64,7 @@ static ssize_t fuse_conn_waiting_read(struct file *file, char __user *buf,
 	return simple_read_from_buffer(buf, len, ppos, tmp, size);
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static ssize_t fuse_conn_mountp_read(struct file *file, char __user *buf,
 				      size_t len, loff_t *ppos)
 {
@@ -123,6 +124,7 @@ static ssize_t fuse_conn_cmdline_read(struct file *file, char __user *buf,
 
 	return simple_read_from_buffer(buf, len, ppos, tmp, size);
 }
+#endif
 
 static ssize_t fuse_conn_limit_read(struct file *file, char __user *buf,
 				    size_t len, loff_t *ppos, unsigned val)
@@ -270,6 +272,7 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.llseek = no_llseek,
 };
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static const struct file_operations fuse_ctl_mountp_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_mountp_read,
@@ -287,6 +290,7 @@ static const struct file_operations fuse_ctl_cmdline_ops = {
 	.read = fuse_conn_cmdline_read,
 	.llseek = no_llseek,
 };
+#endif
 
 static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
 					  struct fuse_conn *fc,
@@ -348,6 +352,17 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 	if (!parent)
 		goto err;
 
+#ifndef CONFIG_FUSE_CONN_ALIVE
+	if (!fuse_ctl_add_dentry(parent, fc, "waiting", S_IFREG | 0400, 1,
+				 NULL, &fuse_ctl_waiting_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "abort", S_IFREG | 0200, 1,
+				 NULL, &fuse_ctl_abort_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "max_background", S_IFREG | 0600,
+				 1, NULL, &fuse_conn_max_background_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
+				 S_IFREG | 0600, 1, NULL,
+				 &fuse_conn_congestion_threshold_ops))
+#else
 	if (!fuse_ctl_add_dentry(parent, fc, "waiting", S_IFREG | 0400, 1,
 				 NULL, &fuse_ctl_waiting_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "abort", S_IFREG | 0200, 1,
@@ -363,6 +378,7 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 				 NULL, &fuse_ctl_comm_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "cmdline", S_IFREG | 0400, 1,
 				 NULL, &fuse_ctl_cmdline_ops))
+#endif
 		goto err;
 
 	return 0;

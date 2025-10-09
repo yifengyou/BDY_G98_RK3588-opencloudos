@@ -3325,6 +3325,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 	return error;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
 static int parse_fuse_data(struct fs_context *fc, struct path *path)
 {
 	int err = 0;
@@ -3345,6 +3346,7 @@ static int parse_fuse_data(struct fs_context *fc, struct path *path)
 
 	return err;
 }
+#endif
 
 /*
  * create a new mount for userspace and request it to be added into the
@@ -3390,8 +3392,10 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (subtype)
 		err = vfs_parse_fs_string(fc, "subtype",
 					  subtype, strlen(subtype));
+#ifdef CONFIG_FUSE_CONN_ALIVE
 	if (!err && !strcmp(type->name, "fuse"))
 		err = parse_fuse_data(fc, path);
+#endif
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
 	if (!err)

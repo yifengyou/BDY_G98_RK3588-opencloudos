@@ -63,3 +63,15 @@ config FUSE_PASSTHROUGH
 	  to be performed directly on a backing file.
 
 	  If you want to allow passthrough operations, answer Y.
+
+config FUSE_CONN_ALIVE
+	bool "FUSE alive auto recovery support"
+	default n
+	depends on FUSE_FS
+	help
+	  This allows enable fuse alive auto recovery function. Still need to
+	  enable the sysctl to trigger the action. With fuse alive function
+	  enabled, the disconnected connection may resume automatically after
+	  resume.
+
+	  If you may use fuse alive funcution operations, answer Y.
