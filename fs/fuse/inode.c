@@ -1001,10 +1001,6 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->user_ns = get_user_ns(user_ns);
 	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
 	fc->max_pages_limit = fuse_max_pages_limit;
-#ifdef CONFIG_FUSE_CONN_ALIVE
-	memcpy(fc->comm, current->comm, FUSE_TASK_COMM_LEN);
-	get_cmdline_args(current, fc->cmdline, TASK_COMM_ARGS_LEN);
-#endif
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
@@ -1028,6 +1024,10 @@ void fuse_conn_put(struct fuse_conn *fc)
 	if (refcount_dec_and_test(&fc->count)) {
 		struct fuse_iqueue *fiq = &fc->iq;
 		struct fuse_sync_bucket *bucket;
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+		fuse_conn_alive_free(fc);
+#endif
 
 		if (IS_ENABLED(CONFIG_FUSE_DAX))
 			fuse_dax_conn_free(fc);
@@ -1601,6 +1601,62 @@ void fuse_dev_free(struct fuse_dev *fud)
 }
 EXPORT_SYMBOL_GPL(fuse_dev_free);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+int fuse_conn_alive_alloc(struct fuse_conn *fc)
+{
+	char *tmp;
+
+	tmp = kzalloc(FUSE_TASK_COMM_LEN, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+	fc->comm = tmp;
+
+	tmp = kzalloc(TASK_COMM_ARGS_LEN, GFP_KERNEL);
+	if (!tmp)
+		goto err_cmdline;
+	fc->cmdline = tmp;
+
+	tmp = kzalloc(FUSE_MOUNTP_MAX, GFP_KERNEL);
+	if (!tmp)
+		goto err_mountp;
+	fc->mountp = tmp;
+
+	return 0;
+
+err_mountp:
+	kfree(fc->cmdline);
+	fc->cmdline = NULL;
+
+err_cmdline:
+	kfree(fc->comm);
+	fc->comm = NULL;
+
+	return -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(fuse_conn_alive_alloc);
+
+static void fuse_conn_alive_init(struct fuse_conn *fc, struct fuse_fs_context *ctx)
+{
+	memcpy(fc->comm, current->comm, FUSE_TASK_COMM_LEN);
+	get_cmdline_args(current, fc->cmdline, TASK_COMM_ARGS_LEN);
+
+	if (ctx->mountpoint)
+		memcpy(fc->mountp, ctx->mountpoint, FUSE_MOUNTP_MAX);
+}
+
+void fuse_conn_alive_free(struct fuse_conn *fc)
+{
+	kfree(fc->comm);
+	kfree(fc->cmdline);
+	kfree(fc->mountp);
+
+	fc->comm = NULL;
+	fc->cmdline = NULL;
+	fc->mountp = NULL;
+}
+EXPORT_SYMBOL_GPL(fuse_conn_alive_free);
+#endif
+
 static void fuse_fill_attr_from_inode(struct fuse_attr *attr,
 				      const struct fuse_inode *fi)
 {
@@ -1760,6 +1816,14 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	rcu_assign_pointer(fc->curr_bucket, fuse_sync_bucket_alloc());
 	fuse_sb_defaults(sb);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	err = fuse_conn_alive_alloc(fc);
+	if (err)
+		goto err;
+
+	fuse_conn_alive_init(fc, ctx);
+#endif
+
 	if (ctx->is_bdev) {
 #ifdef CONFIG_BLOCK
 		err = -EINVAL;
@@ -1909,10 +1973,6 @@ static int fuse_get_tree(struct fs_context *fsc)
 
 	fuse_conn_init(fc, fm, fsc->user_ns, &fuse_dev_fiq_ops, NULL);
 	fc->release = fuse_free_conn;
-#ifdef CONFIG_FUSE_CONN_ALIVE
-	if (ctx->mountpoint)
-		memcpy(fc->mountp, ctx->mountpoint, FUSE_MOUNTP_MAX);
-#endif
 
 	fsc->s_fs_info = fm;
 

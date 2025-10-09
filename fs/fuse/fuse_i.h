@@ -960,13 +960,13 @@ struct fuse_conn {
 	atomic_t connection_epoch;
 
 	/* Name of the process allocating the fuse_conn, used for re-attach. */
-	char comm[FUSE_TASK_COMM_LEN];
+	char *comm;
 
 	/* Pid of the process allocating the fuse_conn, used for re-attach. */
-	char cmdline[TASK_COMM_ARGS_LEN];
+	char *cmdline;
 
 	/* mount point of allocating the fuse_conn, used for re-attach. */
-	char mountp[FUSE_MOUNTP_MAX];
+	char *mountp;
 #endif
 };
 
@@ -1564,6 +1564,11 @@ ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
 				      struct file *out, loff_t *ppos,
 				      size_t len, unsigned int flags);
 ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+int fuse_conn_alive_alloc(struct fuse_conn *fc);
+void fuse_conn_alive_free(struct fuse_conn *fc);
+#endif
 
 #ifdef CONFIG_SYSCTL
 extern int fuse_sysctl_register(void);
