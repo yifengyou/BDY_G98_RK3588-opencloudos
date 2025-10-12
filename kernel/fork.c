@@ -114,6 +114,9 @@
 #include <trace/events/task.h>
 
 #include <linux/hook_frame.h>
+#ifdef CONFIG_IEE_PTRP
+#include <asm/haoc/iee-token.h>
+#endif
 
 /*
  * Minimum number of threads to boot the kernel
@@ -181,7 +184,11 @@ void __weak arch_release_task_struct(struct task_struct *tsk)
 }
 
 #ifndef CONFIG_ARCH_TASK_STRUCT_ALLOCATOR
+#ifdef CONFIG_IEE_PTRP
+struct kmem_cache *task_struct_cachep;
+#else
 static struct kmem_cache *task_struct_cachep;
+#endif
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
@@ -639,6 +646,10 @@ void free_task(struct task_struct *tsk)
 	if (tsk->flags & PF_KTHREAD)
 		free_kthread_struct(tsk);
 	bpf_task_storage_free(tsk);
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_invalidate_token(tsk);
+#endif
 	free_task_struct(tsk);
 }
 EXPORT_SYMBOL(free_task);
@@ -1739,6 +1750,10 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 #endif
 
 	tsk->mm = NULL;
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_set_token_pgd(tsk, NULL);
+#endif
 	tsk->active_mm = NULL;
 
 	/*
@@ -1760,6 +1775,10 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	}
 
 	tsk->mm = mm;
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_set_token_pgd(tsk, mm->pgd);
+#endif
 	tsk->active_mm = mm;
 	sched_mm_cid_fork(tsk);
 	return 0;
@@ -2347,6 +2366,10 @@ __latent_entropy struct task_struct *copy_process(
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_validate_token(p);
+#endif
 	p->flags &= ~PF_KTHREAD;
 	if (args->kthread)
 		p->flags |= PF_KTHREAD;
