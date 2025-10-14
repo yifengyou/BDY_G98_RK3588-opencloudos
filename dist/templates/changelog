@@ -1,3 +1,96 @@
+* Tue Oct 14 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.110-42
+- rue/scx: Allow to verify a bigger sched_ext_ops signature
+- Merge linux 6.6.110 into TK5 release branch
+- Linux 6.6.110
+- Merge linux 6.6.109 into TK5 release branch
+- Linux 6.6.109
+- Merge linux 6.6.108 into TK5 release branch
+- Linux 6.6.108
+- Merge linux 6.6.107 into TK5 release
+- Linux 6.6.107
+- Merge OCK linux-6.6/devel into TK5 release
+- !495 Swap Table feature and optimization of mTHP allocation and management
+- mm, swap: fix warn for thp split
+- ......
+- mm/swap: Convert to use bdev_open_by_dev()
+- Revert "mm: refactor folio_undo_large_rmappable()"
+- Revert "mm/thp: fix deferred split unqueue naming and locking"
+- arm64: wrap all helpers for CONFIG_ALTRA_ERRATUM_82288
+- selinux: do not include <linux/*.h> headers from host programs
+- scripts: subarch.include: fix SUBARCH on macOS hosts
+- LoongArch: Fix a build error due to __tlb_remove_tlb_entry()
+- !496 Add IFS support for ClearWater Forest
+- platform/x86/intel/ifs: Add Clearwater Forest to CPU support list
+- !494 [Intel-SIG] GNR PMU fixes and new platform Clearwater Forest PMU support
+- perf/x86: Optimize the is_x86_event
+- ......
+- perf/x86/intel/uncore: Clean up func_id
+- !492 SCSI: SSSRAID: Support 3SNIC 3S5XX serial RAID/HBA controllers
+- SCSI: SSSRAID: Support 3SNIC 3S5XX serial RAID/HBA
+- !491 [Intel-SIG] KVM: x86: Advertise AVX10.1 CPUID to userspace
+- KVM: x86: Advertise AVX10.1 CPUID to userspace
+- !489 kernel add arm64 CCA support Merge pull request !489 from Xu Raoqing/cca
+- arm64: RME: handle RIPAS changes before kvm_rec_enter
+- ......
+- arm64: mm: Add top-level dispatcher for internal mem_encrypt API
+- !488 Add EDAC basic support and RRL enhancement for CWF/SRF/GNR/GNR-D
+- EDAC/{skx_common,i10nm}: Use scnprintf() for safer buffer handling
+- EDAC/i10nm: Add Intel Granite Rapids-D support
+- EDAC/i10nm: Fix the bitwise operation between variables of different sizes
+- EDAC/{skx_common,i10nm}: Add RRL support for Intel Granite Rapids server
+- EDAC/{skx_common,i10nm}: Refactor show_retry_rd_err_log()
+- EDAC/{skx_common,i10nm}: Refactor enable_retry_rd_err_log()
+- EDAC/{skx_common,i10nm}: Structure the per-channel RRL registers
+- EDAC/i10nm: Explicitly set the modes of the RRL register sets
+- EDAC/{i10nm,skx,skx_common}: Support UV systems
+- EDAC/i10nm: Add Intel Clearwater Forest server support
+- EDAC/{skx_common,i10nm}: Remove the AMAP register for determing DDR5
+- EDAC/{skx_common,skx,i10nm}: Move the common debug code to skx_common
+- EDAC/i10nm: Add Intel Grand Ridge micro-server support
+- !476 phytium: pswiotlb: Move pswiotlb dma functions behind dma_map_ops
+- pswiotlb: Fix a issue of member variable force not being initialized
+- pswiotlb: Adjust the location of the platform-identification process
+- pswiotlb: Move platform-identification to cpu errata
+- pswiotlb: Move PCI-related changes to the PCI quirks
+- pswiotlb: Optimized variable types and removed unused header files
+- pswiotlb: Move pswiotlb dma functions behind dma_map_ops
+- !485 mTHP: support anonymous pages and swap
+- mm: madvise: avoid split during MADV_PAGEOUT and MADV_COLD
+- ......
+- mm/shmem, swap: fix missing inode list removal
+- dist: improve TOPDIR detection
+- !483 Support legacy/noHWP CPU frequency control for GNR/GNR-D
+- cpufreq: intel_pstate: Add Granite Rapids support in no-HWP mode
+- !482 Support OOB CPU frequency control for EMR/GNR/SRF/GRR/CWF
+- cpufreq: intel_pstate: Support Clearwater Forest OOB mode
+- cpufreq: intel_pstate: Support Granite Rapids and Sierra Forest OOB mode
+- cpufreq: intel_pstate: Support Emerald Rapids OOB mode
+- !481 Update Balance-performance EPP for Granite Rapids
+- cpufreq: intel_pstate: Update Balance-performance EPP for Granite Rapids
+- !480 Add SST support for Clearwater Forest
+- platform/x86: ISST: Add Clearwater Forest to support list
+- !475 [linux-6.6/devel][Feature]：update patches for sw64 architecture
+- sw64: fix for userspace asking for syscall(-1)
+- sw64: update junzhang default config file
+- sw64: kvm: introduce pmd_thp_or_huge for PMD hugepage checking
+- sw64: add cross-page check in software unaligned write handling
+- sw64: ptrace: fail system calls on invalid address access in PEEKUSR
+- sw64: perf: add support for get_cpuid_str function
+- sw64: kvm: use read/write spin lock for KVM MMU
+- sw64: rethook: fix a bug in rethook_trampoline
+- sw64: ptrace: return -EIO in invalid PEEKUSR/POKEUSR requests
+- sw64: kvm: fix missing kvm_unregister_perf_callbacks
+- sw64: kvm: fix compile error of kvm.ko
+- sw64: kvm: remove the duplicated Kconfig selection of KVM
+- sw64: cpuidle: add dedicated driver
+- sw64: fix missing characters for sw64_rrk
+- sw64: selftests/net: add sw64 support for io_uring_zerocopy_tx
+- sw64: crypto: implement crc32 assembly optimization
+- sw64: efi: remove meaningless code from asm/efi.h
+- sw64: fix incorrect macro definitions for sw64 in bpf_tracing.h
+- sw64: cpufreq: using PLL0 to provide clock for idle cores
+- rue/io: fix buffered write bps not working on tk5 xfs
+
 * Wed Sep 17 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.104-41.3
 - bpf: Use GFP_KERNEL in bpf_event_entry_gen()
 - bpf: Reduce the scope of rcu_read_lock when updating fd map
