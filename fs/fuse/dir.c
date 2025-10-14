@@ -162,7 +162,7 @@ void fuse_invalidate_entry_cache(struct dentry *entry)
  * Same as fuse_invalidate_entry_cache(), but also try to remove the
  * dentry from the hash
  */
-static void fuse_invalidate_entry(struct dentry *entry)
+void fuse_invalidate_entry(struct dentry *entry)
 {
 	d_invalidate(entry);
 	fuse_invalidate_entry_cache(entry);
@@ -251,7 +251,8 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 		if (ret == -ENOMEM || ret == -EINTR)
 			goto out;
 		if (ret || fuse_invalid_attr(&outarg.attr) ||
-		    fuse_stale_inode(inode, outarg.generation, &outarg.attr))
+		    fuse_stale_inode(inode, outarg.generation, &outarg.attr) ||
+			fuse_stale_inode_epoch(inode, fm->fc))
 			goto invalid;
 
 		forget_all_cached_acls(inode);
@@ -275,6 +276,7 @@ out:
 	return ret;
 
 invalid:
+	fuse_invalidate_entry(entry);
 	ret = 0;
 	goto out;
 }
@@ -1610,7 +1612,7 @@ static const char *fuse_get_link(struct dentry *dentry, struct inode *inode,
 	int err;
 
 	err = -EIO;
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		goto out_err;
 
 	if (fc->cache_symlinks)
@@ -2059,7 +2061,7 @@ static int fuse_setattr(struct mnt_idmap *idmap, struct dentry *entry,
 	struct file *file = (attr->ia_valid & ATTR_FILE) ? attr->ia_file : NULL;
 	int ret;
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	if (!fuse_allow_current_process(get_fuse_conn(inode)))
@@ -2121,7 +2123,7 @@ static int fuse_getattr(struct mnt_idmap *idmap,
 	struct inode *inode = d_inode(path->dentry);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	if (!fuse_allow_current_process(fc)) {

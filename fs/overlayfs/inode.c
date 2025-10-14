@@ -18,6 +18,7 @@
 #include <linux/posix_acl_xattr.h>
 #include "overlayfs.h"
 
+unsigned int fuse_alive_ignore_lower __read_mostly;
 
 int ovl_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		struct iattr *attr)
@@ -1192,6 +1193,10 @@ static bool ovl_hash_bylower(struct super_block *sb, struct dentry *upper,
 
 	/* No, if non-indexed upper with NFS export */
 	if (ofs->config.nfs_export && upper)
+		return false;
+
+	/* Fuse alive function on, truse lower change */
+	if (fuse_alive_ignore_lower)
 		return false;
 
 	/* Otherwise, hash by lower inode for fsnotify */

@@ -23,7 +23,7 @@ static struct posix_acl *__fuse_get_acl(struct fuse_conn *fc,
 	if (rcu)
 		return ERR_PTR(-ECHILD);
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return ERR_PTR(-EIO);
 
 	if (fc->no_getxattr)
@@ -102,7 +102,7 @@ int fuse_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 	const char *name;
 	int ret;
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	if (fc->no_setxattr || fuse_no_acl(fc, inode))

@@ -891,3 +891,10 @@ int ovl_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 		struct kstat *stat, u32 request_mask, unsigned int flags);
 ssize_t ovl_listxattr(struct dentry *dentry, char *list, size_t size);
+
+/* sysctl.c */
+/* Ignore lower hash for Fuse alive */
+extern unsigned int fuse_alive_ignore_lower;
+
+extern int ovl_sysctl_register(void);
+extern void ovl_sysctl_unregister(void);

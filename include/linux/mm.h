@@ -2581,6 +2581,11 @@ int set_page_dirty_lock(struct page *page);
 
 int get_cmdline(struct task_struct *task, char *buffer, int buflen);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+#define TASK_COMM_ARGS_LEN 256
+int get_cmdline_args(struct task_struct *task, char *buffer, int buflen);
+#endif
+
 extern unsigned long move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
 		unsigned long new_addr, unsigned long len,

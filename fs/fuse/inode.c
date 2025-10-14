@@ -35,6 +35,11 @@ DEFINE_MUTEX(fuse_mutex);
 
 static int set_global_limit(const char *val, const struct kernel_param *kp);
 
+unsigned int fuse_max_pages_limit = 256;
+#ifdef CONFIG_FUSE_CONN_ALIVE
+unsigned int fuse_auto_recovery __read_mostly;
+#endif
+
 unsigned max_user_bgreq;
 module_param_call(max_user_bgreq, set_global_limit, param_get_uint,
 		  &max_user_bgreq, 0644);
@@ -52,12 +57,6 @@ MODULE_PARM_DESC(max_user_congthresh,
  "unprivileged user can set");
 
 #define FUSE_DEFAULT_BLKSIZE 512
-
-/** Maximum number of outstanding background requests */
-#define FUSE_DEFAULT_MAX_BACKGROUND 12
-
-/** Congestion starts at 75% of maximum */
-#define FUSE_DEFAULT_CONGESTION_THRESHOLD (FUSE_DEFAULT_MAX_BACKGROUND * 3 / 4)
 
 #ifdef CONFIG_BLOCK
 static struct file_system_type fuseblk_fs_type;
@@ -102,6 +101,9 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->orig_ino = 0;
 	fi->state = 0;
 	fi->submount_lookup = NULL;
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	fi->connection_epoch = 0;
+#endif
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
 	fi->forget = fuse_alloc_forget();
@@ -384,6 +386,10 @@ static void fuse_init_submount_lookup(struct fuse_submount_lookup *sl,
 static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 			    struct fuse_conn *fc)
 {
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	struct fuse_inode *fi = get_fuse_inode(inode);
+#endif
+
 	inode->i_mode = attr->mode & S_IFMT;
 	inode->i_size = attr->size;
 	inode->i_mtime.tv_sec  = attr->mtime;
@@ -403,6 +409,10 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 				   new_decode_dev(attr->rdev));
 	} else
 		BUG();
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	fi->connection_epoch = atomic_read(&fc->connection_epoch);
+#endif
 	/*
 	 * Ensure that we don't cache acls for daemons without FUSE_POSIX_ACL
 	 * so they see the exact same behavior as before.
@@ -476,7 +486,8 @@ retry:
 		inode->i_generation = generation;
 		fuse_init_inode(inode, attr, fc);
 		unlock_new_inode(inode);
-	} else if (fuse_stale_inode(inode, generation, attr)) {
+	} else if (fuse_stale_inode(inode, generation, attr) ||
+			fuse_stale_inode_epoch(inode, fc)) {
 		/* nodeid was reused, any I/O on the old inode should fail */
 		fuse_make_bad(inode);
 		if (inode != d_inode(sb->s_root)) {
@@ -516,6 +527,24 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 
 	return NULL;
 }
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+struct fuse_mount *fuse_mo_lookup(struct fuse_conn *fc)
+{
+	struct fuse_mount *fm_iter;
+
+	WARN_ON(!rwsem_is_locked(&fc->killsb));
+	list_for_each_entry(fm_iter, &fc->mounts, fc_entry) {
+		if (!fm_iter->sb)
+			continue;
+
+		return fm_iter;
+
+	}
+
+	return NULL;
+}
+#endif
 
 int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 			     loff_t offset, loff_t len)
@@ -736,6 +765,9 @@ enum {
 	OPT_ALLOW_OTHER,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	OPT_MOUNTPOINT,
+#endif
 	OPT_ERR
 };
 
@@ -750,6 +782,9 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("max_read",		OPT_MAX_READ),
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	fsparam_string	("mountpoint",		OPT_MOUNTPOINT),
+#endif
 	{}
 };
 
@@ -849,6 +884,15 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		ctx->blksize = result.uint_32;
 		break;
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	case OPT_MOUNTPOINT:
+		if (ctx->mountpoint)
+			return invalfc(fsc, "Multiple mountpoint specified");
+		ctx->mountpoint = param->string;
+		param->string = NULL;
+		break;
+#endif
+
 	default:
 		return -EINVAL;
 	}
@@ -939,6 +983,11 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
 	atomic_set(&fc->num_waiting, 0);
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	atomic_set(&fc->need_recovery, 0);
+	atomic_set(&fc->need_resend, 0);
+	atomic_set(&fc->connection_epoch, 0);
+#endif
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
@@ -951,7 +1000,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->pid_ns = get_pid_ns(task_active_pid_ns(current));
 	fc->user_ns = get_user_ns(user_ns);
 	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
-	fc->max_pages_limit = FUSE_MAX_MAX_PAGES;
+	fc->max_pages_limit = fuse_max_pages_limit;
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
@@ -975,6 +1024,10 @@ void fuse_conn_put(struct fuse_conn *fc)
 	if (refcount_dec_and_test(&fc->count)) {
 		struct fuse_iqueue *fiq = &fc->iq;
 		struct fuse_sync_bucket *bucket;
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+		fuse_conn_alive_free(fc);
+#endif
 
 		if (IS_ENABLED(CONFIG_FUSE_DAX))
 			fuse_dax_conn_free(fc);
@@ -1048,7 +1101,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 			goto out_iput;
 	}
 	err = -ESTALE;
-	if (inode->i_generation != handle->generation)
+	if (inode->i_generation != handle->generation || fuse_stale_inode_epoch(inode, fc))
 		goto out_iput;
 
 	entry = d_obtain_alias(inode);
@@ -1149,6 +1202,11 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 
 	return parent;
 }
+
+/* only for fid encoding; no support for file handle */
+static const struct export_operations fuse_export_fid_operations = {
+	.encode_fh	= fuse_encode_fh,
+};
 
 static const struct export_operations fuse_export_operations = {
 	.fh_to_dentry	= fuse_fh_to_dentry,
@@ -1347,6 +1405,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				fc->max_stack_depth = arg->max_stack_depth;
 				fm->sb->s_stack_depth = arg->max_stack_depth;
 			}
+			if (flags & FUSE_NO_EXPORT_SUPPORT)
+				fm->sb->s_export_op = &fuse_export_fid_operations;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1369,6 +1429,11 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 
 	fuse_set_initialized(fc);
 	wake_up_all(&fc->blocked_waitq);
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	if ((fuse_auto_recovery & FUSE_RECOVERY_RESEND) && atomic_read(&fc->need_resend))
+		fuse_resend(fc);
+#endif
 }
 
 void fuse_send_init(struct fuse_mount *fm)
@@ -1393,7 +1458,8 @@ void fuse_send_init(struct fuse_mount *fm)
 		FUSE_NO_OPENDIR_SUPPORT | FUSE_EXPLICIT_INVAL_DATA |
 		FUSE_HANDLE_KILLPRIV_V2 | FUSE_SETXATTR_EXT | FUSE_INIT_EXT |
 		FUSE_SECURITY_CTX | FUSE_CREATE_SUPP_GROUP |
-		FUSE_HAS_EXPIRE_ONLY | FUSE_DIRECT_IO_ALLOW_MMAP;
+		FUSE_HAS_EXPIRE_ONLY | FUSE_DIRECT_IO_ALLOW_MMAP |
+		FUSE_NO_EXPORT_SUPPORT | FUSE_HAS_RESEND;
 #ifdef CONFIG_FUSE_DAX
 	if (fm->fc->dax)
 		flags |= FUSE_MAP_ALIGNMENT;
@@ -1535,6 +1601,62 @@ void fuse_dev_free(struct fuse_dev *fud)
 }
 EXPORT_SYMBOL_GPL(fuse_dev_free);
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+int fuse_conn_alive_alloc(struct fuse_conn *fc)
+{
+	char *tmp;
+
+	tmp = kzalloc(FUSE_TASK_COMM_LEN, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+	fc->comm = tmp;
+
+	tmp = kzalloc(TASK_COMM_ARGS_LEN, GFP_KERNEL);
+	if (!tmp)
+		goto err_cmdline;
+	fc->cmdline = tmp;
+
+	tmp = kzalloc(FUSE_MOUNTP_MAX, GFP_KERNEL);
+	if (!tmp)
+		goto err_mountp;
+	fc->mountp = tmp;
+
+	return 0;
+
+err_mountp:
+	kfree(fc->cmdline);
+	fc->cmdline = NULL;
+
+err_cmdline:
+	kfree(fc->comm);
+	fc->comm = NULL;
+
+	return -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(fuse_conn_alive_alloc);
+
+static void fuse_conn_alive_init(struct fuse_conn *fc, struct fuse_fs_context *ctx)
+{
+	memcpy(fc->comm, current->comm, FUSE_TASK_COMM_LEN);
+	get_cmdline_args(current, fc->cmdline, TASK_COMM_ARGS_LEN);
+
+	if (ctx->mountpoint)
+		memcpy(fc->mountp, ctx->mountpoint, FUSE_MOUNTP_MAX);
+}
+
+void fuse_conn_alive_free(struct fuse_conn *fc)
+{
+	kfree(fc->comm);
+	kfree(fc->cmdline);
+	kfree(fc->mountp);
+
+	fc->comm = NULL;
+	fc->cmdline = NULL;
+	fc->mountp = NULL;
+}
+EXPORT_SYMBOL_GPL(fuse_conn_alive_free);
+#endif
+
 static void fuse_fill_attr_from_inode(struct fuse_attr *attr,
 				      const struct fuse_inode *fi)
 {
@@ -1590,6 +1712,7 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	sb->s_bdi = bdi_get(parent_sb->s_bdi);
 
 	sb->s_xattr = parent_sb->s_xattr;
+	sb->s_export_op = parent_sb->s_export_op;
 	sb->s_time_gran = parent_sb->s_time_gran;
 	sb->s_blocksize = parent_sb->s_blocksize;
 	sb->s_blocksize_bits = parent_sb->s_blocksize_bits;
@@ -1692,6 +1815,14 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 
 	rcu_assign_pointer(fc->curr_bucket, fuse_sync_bucket_alloc());
 	fuse_sb_defaults(sb);
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	err = fuse_conn_alive_alloc(fc);
+	if (err)
+		goto err;
+
+	fuse_conn_alive_init(fc, ctx);
+#endif
 
 	if (ctx->is_bdev) {
 #ifdef CONFIG_BLOCK
@@ -2051,8 +2182,14 @@ static int __init fuse_fs_init(void)
 	if (err)
 		goto out3;
 
+	err = fuse_sysctl_register();
+	if (err)
+		goto out4;
+
 	return 0;
 
+ out4:
+	unregister_filesystem(&fuse_fs_type);
  out3:
 	unregister_fuseblk();
  out2:
@@ -2063,6 +2200,7 @@ static int __init fuse_fs_init(void)
 
 static void fuse_fs_cleanup(void)
 {
+	fuse_sysctl_unregister();
 	unregister_filesystem(&fuse_fs_type);
 	unregister_fuseblk();
 

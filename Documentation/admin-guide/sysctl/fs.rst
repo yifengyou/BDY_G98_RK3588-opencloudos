@@ -332,3 +332,19 @@ Each "watch" costs roughly 90 bytes on a 32-bit kernel, and roughly 160 bytes
 on a 64-bit one.
 The current default value for ``max_user_watches`` is 4% of the
 available low memory, divided by the "watch" cost in bytes.
+
+5. /proc/sys/fs/fuse - Configuration options for FUSE filesystems
+=====================================================================
+
+This directory contains the following configuration options for FUSE
+filesystems:
+
+``/proc/sys/fs/fuse/max_pages_limit`` is a read/write file for
+setting/getting the maximum number of pages that can be used for servicing
+requests in FUSE.
+
+``/proc/sys/fs/fuse/auto_recovery`` is a read/write file for
+setting/getting the fuse keep alive function state of allowing
+new processes to reconnect to existing FUSE mounts using
+connection characteristic values for identity verification.
+Enable CONFIG_FUSE_CONN_ALIVE to make it works, by default is n.

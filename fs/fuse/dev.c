@@ -31,6 +31,8 @@ MODULE_ALIAS("devname:fuse");
 
 static struct kmem_cache *fuse_req_cachep;
 
+static void end_requests(struct list_head *head);
+
 static struct fuse_dev *fuse_get_dev(struct file *file)
 {
 	/*
@@ -422,6 +424,7 @@ static void __fuse_request_send(struct fuse_req *req)
 		   after fuse_request_end() */
 		__fuse_get_request(req);
 		queue_request_and_unlock(fiq, req);
+		pr_debug("opcode %u unique %#llx\n", req->in.h.opcode, req->in.h.unique);
 
 		request_wait_answer(req);
 		/* Pairs with smp_wmb() in fuse_request_end() */
@@ -1777,6 +1780,74 @@ copy_finish:
 	return err;
 }
 
+/*
+ * Resending all processing queue requests.
+ *
+ * During a FUSE daemon panics and failover, it is possible for some inflight
+ * requests to be lost and never returned. As a result, applications awaiting
+ * replies would become stuck forever. To address this, we can use notification
+ * to trigger resending of these pending requests to the FUSE daemon, ensuring
+ * they are properly processed again.
+ *
+ * Please note that this strategy is applicable only to idempotent requests or
+ * if the FUSE daemon takes careful measures to avoid processing duplicated
+ * non-idempotent requests.
+ */
+void fuse_resend(struct fuse_conn *fc)
+{
+	struct fuse_dev *fud;
+	struct fuse_req *req, *next;
+	struct fuse_iqueue *fiq = &fc->iq;
+	LIST_HEAD(to_queue);
+	unsigned int i;
+
+	pr_debug("Start to fuse resend pending request.\n");
+
+	spin_lock(&fc->lock);
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	atomic_set(&fc->need_resend, 0);
+#endif
+	if (!fc->connected) {
+		spin_unlock(&fc->lock);
+		return;
+	}
+
+	list_for_each_entry(fud, &fc->devices, entry) {
+		struct fuse_pqueue *fpq = &fud->pq;
+
+		spin_lock(&fpq->lock);
+		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++)
+			list_splice_tail_init(&fpq->processing[i], &to_queue);
+		spin_unlock(&fpq->lock);
+	}
+	spin_unlock(&fc->lock);
+
+	list_for_each_entry_safe(req, next, &to_queue, list) {
+		set_bit(FR_PENDING, &req->flags);
+		clear_bit(FR_SENT, &req->flags);
+		/* mark the request as resend request */
+		req->in.h.unique |= FUSE_UNIQUE_RESEND;
+	}
+
+	spin_lock(&fiq->lock);
+	if (!fiq->connected) {
+		spin_unlock(&fiq->lock);
+		list_for_each_entry(req, &to_queue, list)
+			clear_bit(FR_PENDING, &req->flags);
+		end_requests(&to_queue);
+		return;
+	}
+	/* iq and pq requests are both oldest to newest */
+	list_splice(&to_queue, &fiq->pending);
+	fiq->ops->wake_pending_and_unlock(fiq);
+}
+
+static int fuse_notify_resend(struct fuse_conn *fc)
+{
+	fuse_resend(fc);
+	return 0;
+}
+
 static int fuse_notify(struct fuse_conn *fc, enum fuse_notify_code code,
 		       unsigned int size, struct fuse_copy_state *cs)
 {
@@ -1801,6 +1872,9 @@ static int fuse_notify(struct fuse_conn *fc, enum fuse_notify_code code,
 
 	case FUSE_NOTIFY_DELETE:
 		return fuse_notify_delete(fc, size, cs);
+
+	case FUSE_NOTIFY_RESEND:
+		return fuse_notify_resend(fc);
 
 	default:
 		fuse_copy_finish(cs);
@@ -2216,6 +2290,13 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 
 		/* Are we the last open device? */
 		if (atomic_dec_and_test(&fc->dev_count)) {
+#ifdef CONFIG_FUSE_CONN_ALIVE
+			if (fuse_auto_recovery) {
+				pr_debug("Last open device of fc closed\n");
+				atomic_set(&fc->need_recovery, 1);
+			}
+#endif
+
 			WARN_ON(fc->iq.fasync != NULL);
 			fuse_abort_conn(fc);
 		}
@@ -2285,6 +2366,114 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 	return res;
 }
 
+#ifdef CONFIG_FUSE_CONN_ALIVE
+static inline bool fuse_conn_cmd_mp_match(struct fuse_conn *fc,
+		struct fuse_ioctl_recovery *data)
+{
+	if (!fuse_auto_recovery)
+		return false;
+
+	return !strncmp(fc->cmdline, data->cmdline, TASK_COMM_ARGS_LEN) &&
+		!strncmp(fc->mountp, data->mountp, FUSE_MOUNTP_MAX);
+}
+
+static int fuse_device_attach_find(struct file *file,
+		struct fuse_ioctl_recovery *data)
+{
+	unsigned int match_cnt = 0;
+	struct fuse_conn *fc;
+	struct fuse_conn *match_fc;
+
+	list_for_each_entry(fc, &fuse_conn_list, entry) {
+		if (!fuse_conn_cmd_mp_match(fc, data) || !atomic_read(&fc->need_recovery))
+			continue;
+
+		pr_debug("Found valid fuse connection to attach. cmd/mountp: (%s)/(%s),\n",
+				data->cmdline, data->mountp);
+
+		match_cnt += 1;
+		match_fc = fc;
+	}
+
+	if (match_cnt > 1) {
+		pr_info("Too many (%u) valid connections found.\n", match_cnt);
+		return -EINVAL;
+	}
+
+	if (match_cnt == 1) {
+		pr_debug("Found only one valid fuse connection, try attach to recovery\n");
+		WARN_ON(!list_empty(&match_fc->devices));
+		return fuse_device_clone(match_fc, file);
+	}
+
+	pr_debug("No fuse connection to attach. cmd/mountp: (%s)/(%s)\n",
+			data->cmdline, data->mountp);
+	return -ENOTTY;
+}
+
+static void fuse_conn_reinit(struct fuse_conn *fc)
+{
+	struct fuse_iqueue *fiq;
+
+	spin_lock(&fc->lock);
+	fiq = &fc->iq;
+
+	spin_lock(&fiq->lock);
+	fiq->connected = 1;
+	spin_unlock(&fiq->lock);
+
+	if (fuse_auto_recovery & FUSE_RECOVERY_RESEND)
+		atomic_set(&fc->need_resend, 1);
+	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
+	fc->connected = 1;
+	atomic_inc(&fc->connection_epoch);
+	pr_debug("Inc fc->connection_epoch to %u after reinit\n",
+			atomic_read(&fc->connection_epoch));
+	spin_unlock(&fc->lock);
+}
+
+static long fuse_dev_ioctl_recovery(struct file *file, __u32 __user *argp)
+{
+	int res;
+	struct fuse_conn *fc;
+	struct fuse_dev *fud;
+	struct fuse_mount *fm;
+	struct fuse_ioctl_recovery fc_recovery;
+
+	if (copy_from_user(&fc_recovery, argp, sizeof(fc_recovery)))
+		return -EFAULT;
+
+	if (!fuse_auto_recovery)
+		return -EPERM;
+
+	mutex_lock(&fuse_mutex);
+	res = fuse_device_attach_find(file, &fc_recovery);
+	mutex_unlock(&fuse_mutex);
+
+	if (res)
+		return res;
+
+	fud = file->private_data;
+	fc = fud->fc;
+	down_read(&fc->killsb);
+	fm = fuse_mo_lookup(fc);
+	if (!fm) {
+		up_read(&fc->killsb);
+		fuse_dev_free(fud);
+		return -EINVAL;
+	}
+	up_read(&fc->killsb);
+
+	if (atomic_dec_and_test(&fc->need_recovery)) {
+		pr_debug("Fuse recovery and send INIT to server.\n");
+		fuse_invalidate_entry(fm->sb->s_root);
+		fuse_conn_reinit(fc);
+		fuse_send_init(fm);
+	}
+	return 0;
+}
+#endif
+
 static long fuse_dev_ioctl_backing_open(struct file *file,
 					struct fuse_backing_map __user *argp)
 {
@@ -2328,6 +2517,11 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case FUSE_DEV_IOC_CLONE:
 		return fuse_dev_ioctl_clone(file, argp);
+
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	case FUSE_DEV_IOC_RECOVERY:
+		return fuse_dev_ioctl_recovery(file, argp);
+#endif
 
 	case FUSE_DEV_IOC_BACKING_OPEN:
 		return fuse_dev_ioctl_backing_open(file, argp);
