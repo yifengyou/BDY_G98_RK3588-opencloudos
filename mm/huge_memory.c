@@ -3035,7 +3035,6 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	struct page *head = &folio->page;
 	struct lruvec *lruvec;
 	struct swap_cluster_info *ci = NULL;
-	unsigned long offset = 0;
 	int i, nr_dropped = 0;
 	unsigned int new_nr = 1 << new_order;
 	int order = folio_order(folio);
