@@ -3,6 +3,9 @@
 # Makefile for the BeiZhongWangXin network device drivers.
 #
 
+# Set frame-larger-than 2048 + 64 = 2112
+KBUILD_CFLAGS += -Wframe-larger-than=2112
+
 subdir-ccflags-y += -I$(src)/comm
 subdir-ccflags-y += -I$(src)/ne6x
 subdir-ccflags-y += -I$(src)/ne6x_vf
