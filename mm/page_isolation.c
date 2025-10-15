@@ -402,7 +402,6 @@ static int isolate_single_pageblock(unsigned long boundary_pfn, int flags,
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 			if (PageHuge(page)) {
-				int page_mt = get_pageblock_migratetype(page);
 				struct compact_control cc = {
 					.nr_migratepages = 0,
 					.order = -1,
