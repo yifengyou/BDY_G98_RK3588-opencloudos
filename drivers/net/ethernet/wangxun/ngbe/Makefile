@@ -1,3 +1,6 @@
+# Set frame-larger-than 2048 + 128 = 2176
+KBUILD_CFLAGS += -Wframe-larger-than=2176
+
 obj-$(CONFIG_NGBE) += ngbe.o
 
 ngbe-objs := ngbe_main.o \
