@@ -48,7 +48,7 @@ union { \
 #define KABI_UNIQUE_ID			__PASTE(kabi_hidden_, __LINE__)
 
 #ifdef CONFIG_KABI_RESERVE
-#define _KABI_RESERVE(n)		union {unsigned long kabi_reserved##n; }
+#define _KABI_RESERVE(n)		unsigned long kabi_reserved##n;
 #else
 #define _KABI_RESERVE(n)
 #endif
