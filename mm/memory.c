@@ -1223,6 +1223,7 @@ int copy_pte_range_atom(struct vm_area_struct *dst_vma,
 	int ret = 0;
 	int rss[NR_MM_COUNTERS];
 	swp_entry_t entry = (swp_entry_t){0};
+	int nr, max_nr;
 
 again:
 	init_rss_vec(rss);
@@ -1242,6 +1243,8 @@ again:
 	arch_enter_lazy_mmu_mode();
 
 	do {
+		nr = 1;
+
 		ptent = ptep_get(src_pte);
 		if (pte_none(ptent))
 			continue;
@@ -1258,12 +1261,15 @@ again:
 			} else if (!ret) {
 				continue;
 			}
+			ptent = ptep_get(src_pte);
+			VM_WARN_ON_ONCE(!pte_present(ptent));
 
 			WARN_ON_ONCE(ret != -ENOENT);
 		}
 
-		ret = copy_present_pte(dst_vma, src_vma, dst_pte, src_pte,
-				       addr, rss, prealloc);
+		max_nr = (end - addr) / PAGE_SIZE;
+		ret = copy_present_ptes(dst_vma, src_vma, dst_pte, src_pte,
+					ptent, addr, max_nr, rss, prealloc);
 
 		if (unlikely(ret == -EAGAIN))
 			break;
@@ -1271,7 +1277,9 @@ again:
 			folio_put(*prealloc);
 			*prealloc = NULL;
 		}
-	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
+		nr = ret;
+	} while (dst_pte += nr, src_pte += nr, addr += PAGE_SIZE * nr,
+		 addr != end);
 
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(orig_src_pte, src_ptl);
