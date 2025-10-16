@@ -13,6 +13,7 @@
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
 #include <asm/mte.h>
+#include <trace/events/kmem.h>
 
 void copy_highpage(struct page *to, struct page *from)
 {
@@ -40,3 +41,12 @@ void copy_user_highpage(struct page *to, struct page *from,
 	flush_dcache_page(to);
 }
 EXPORT_SYMBOL_GPL(copy_user_highpage);
+
+DEFINE_STATIC_KEY_FALSE(fast_copy_page_enabled);
+EXPORT_SYMBOL_GPL(fast_copy_page_enabled);
+void fast_copy_page_switched(const void *from, void *to)
+{
+	trace_mm_fast_copy_page_switched((unsigned long)from,
+					(unsigned long)to);
+}
+EXPORT_SYMBOL_GPL(fast_copy_page_switched);

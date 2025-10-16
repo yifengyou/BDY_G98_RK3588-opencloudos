@@ -76,5 +76,5 @@ alternative_else_nop_endif
 
 	ret
 SYM_FUNC_END(__pi_copy_page)
-SYM_FUNC_ALIAS(copy_page, __pi_copy_page)
-EXPORT_SYMBOL(copy_page)
+SYM_FUNC_ALIAS(slow_copy_page, __pi_copy_page)
+EXPORT_SYMBOL(slow_copy_page)

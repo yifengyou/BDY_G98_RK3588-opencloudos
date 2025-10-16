@@ -371,6 +371,30 @@ TRACE_EVENT(rss_stat,
 		__print_symbolic(__entry->member, TRACE_MM_PAGES),
 		__entry->size)
 	);
+
+TRACE_EVENT(mm_fast_copy_page_switched,
+
+	TP_PROTO(unsigned long from,
+		unsigned long to),
+
+	TP_ARGS(from,
+		to),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, from)
+		__field(unsigned long, to)
+	),
+
+	TP_fast_assign(
+		__entry->from = from;
+		__entry->to = to;
+	),
+
+	TP_printk("from=%lx to=%lx",
+		__entry->from,
+		__entry->to)
+);
+
 #endif /* _TRACE_KMEM_H */
 
 /* This part must be outside protection */
