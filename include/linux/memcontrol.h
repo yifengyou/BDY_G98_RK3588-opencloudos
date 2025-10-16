@@ -33,6 +33,9 @@ struct mm_struct;
 struct kmem_cache;
 struct oom_control;
 
+#ifdef CONFIG_MEMCG
+extern int sysctl_memory_max_reclaim_first;
+#endif
 extern int sysctl_vm_use_priority_oom;
 extern int kclean_dying_memcg_run(void);
 extern unsigned int sysctl_clean_dying_memcg_threshold;

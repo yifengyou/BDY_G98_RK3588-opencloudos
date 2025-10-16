@@ -3402,6 +3402,17 @@ static struct ctl_table vm_table[] = {
 	},
 #endif
 #endif
+#ifdef CONFIG_MEMCG
+	{
+		.procname   = "memory_max_reclaim_first",
+		.data       = &sysctl_memory_max_reclaim_first,
+		.maxlen     = sizeof(int),
+		.mode       = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1     = SYSCTL_ZERO,
+		.extra2     = SYSCTL_ONE,
+	},
+#endif
 	{ }
 };
 

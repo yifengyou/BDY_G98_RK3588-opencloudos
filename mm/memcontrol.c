@@ -120,6 +120,8 @@ static DECLARE_WAIT_QUEUE_HEAD(memcg_cgwb_frn_waitq);
 #define PAGECACHE_MAX_RATIO_MIN		5
 #define PAGECACHE_MAX_RATIO_MAX		100
 
+int sysctl_memory_max_reclaim_first;
+
 int sysctl_vm_memory_qos;
 int sysctl_vm_use_priority_oom;
 /* default has none reclaim priority */
@@ -8681,6 +8683,15 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	err = page_counter_memparse(buf, "max", &max);
 	if (err)
 		return err;
+
+	if (sysctl_memory_max_reclaim_first) {
+		err = mem_cgroup_resize_max(memcg, max, false);
+		if (err)
+			return err;
+
+		memcg_wb_domain_size_changed(memcg);
+		return nbytes;
+	}
 
 	xchg(&memcg->memory.max, max);
 
