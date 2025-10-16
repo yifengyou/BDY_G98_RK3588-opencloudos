@@ -206,7 +206,7 @@ retry:
 			inode = NULL;
 		if (!inode ||
 		    fuse_stale_inode(inode, o->generation, &o->attr) ||
-			fuse_stale_inode_epoch(inode, fc)) {
+			fuse_stale_inode_epoch(inode)) {
 			if (inode)
 				fuse_make_bad(inode);
 			d_invalidate(dentry);

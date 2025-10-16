@@ -1030,12 +1030,13 @@ static inline u64 get_node_id(struct inode *inode)
 }
 
 #ifdef CONFIG_FUSE_CONN_ALIVE
-static inline int fuse_stale_inode_epoch(struct inode *inode, struct fuse_conn *fc)
+static inline int fuse_stale_inode_epoch(struct inode *inode)
 {
-	return unlikely(atomic_read(&fc->connection_epoch) != get_fuse_inode_epoch(inode));
+	return unlikely(atomic_read(&get_fuse_conn(inode)->connection_epoch) !=
+			get_fuse_inode_epoch(inode));
 }
 #else
-static inline int fuse_stale_inode_epoch(struct inode *inode, struct fuse_conn *fc)
+static inline int fuse_stale_inode_epoch(struct inode *inode)
 {
 	return 0;
 }
@@ -1073,7 +1074,7 @@ static inline bool fuse_is_bad_strict(struct inode *inode)
 #ifdef CONFIG_FUSE_CONN_ALIVE
 	if (fuse_auto_recovery)
 		return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state)) ||
-			fuse_stale_inode_epoch(inode, get_fuse_conn(inode));
+			fuse_stale_inode_epoch(inode);
 #endif
 
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
