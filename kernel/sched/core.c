@@ -3874,6 +3874,10 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		delayacct_blkio_end(p);
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
+#ifdef CONFIG_BT_SCHED
+	if (p->in_iowait_bt)
+		atomic_dec(&task_rq(p)->nr_iowait_bt);
+#endif
 
 	activate_task(rq, p, en_flags);
 	wakeup_preempt(rq, p, wake_flags);
@@ -4461,10 +4465,6 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 */
 		smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-#ifdef CONFIG_BT_SCHED
-	if (p->in_iowait_bt)
-		atomic_dec(&task_rq(p)->nr_iowait_bt);
-#endif
 
 		cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
 		if (task_cpu(p) != cpu) {
@@ -4473,17 +4473,17 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 				atomic_dec(&task_rq(p)->nr_iowait);
 			}
 
+#ifdef CONFIG_BT_SCHED
+			if (p->in_iowait_bt)
+				atomic_dec(&task_rq(p)->nr_iowait_bt);
+#endif
+
 			wake_flags |= WF_MIGRATED;
 			psi_ttwu_dequeue(p);
 			set_task_cpu(p, cpu);
 		}
 #else
 		cpu = task_cpu(p);
-
-#ifdef CONFIG_BT_SCHED
-	if (p->in_iowait_bt)
-		atomic_dec(&task_rq(p)->nr_iowait_bt);
-#endif
 
 #endif /* CONFIG_SMP */
 
@@ -6952,6 +6952,7 @@ static void __sched notrace __schedule(int sched_mode)
 				atomic_inc(&rq->nr_iowait);
 				delayacct_blkio_start();
 			}
+
 #ifdef CONFIG_BT_SCHED
 			if (prev->in_iowait_bt)
 				atomic_inc(&rq->nr_iowait_bt);

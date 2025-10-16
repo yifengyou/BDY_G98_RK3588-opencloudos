@@ -1709,6 +1709,31 @@ static int io_cgroup_sli_show(struct seq_file *m, void *v)
 }
 #endif
 
+#if defined(CONFIG_BT_SCHED) && defined(CONFIG_CGROUP_WRITEBACK)
+static u64 io_cgroup_rue_bt_offline_read(struct cgroup_subsys_state *css,
+		struct cftype *cft)
+{
+	struct blkcg *blkcg = css_to_blkcg(css);
+
+	return blkcg->rue_bt_offline;
+}
+
+static int io_cgroup_rue_bt_offline_write(struct cgroup_subsys_state *css,
+		struct cftype *cft, u64 val)
+{
+	struct blkcg *blkcg = css_to_blkcg(css);
+
+	if (!sysctl_io_qos_enabled && val != 0)
+		return -EPERM;
+
+	if (val > 1)
+		return -EINVAL;
+
+	blkcg->rue_bt_offline = val;
+	return 0;
+}
+#endif
+
 static struct cftype blkcg_files[] = {
 	{
 		.name = "stat",
@@ -1771,6 +1796,14 @@ static struct cftype blkcg_legacy_files[] = {
 		.seq_next = cgroup_sli_monitor_next,
 		.seq_stop = cgroup_sli_monitor_stop,
 		.poll = cgroup_sli_monitor_poll,
+	},
+#endif
+#if defined(CONFIG_BT_SCHED) && defined(CONFIG_CGROUP_WRITEBACK)
+	{
+		.name = "offline",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.write_u64 = io_cgroup_rue_bt_offline_write,
+		.read_u64 = io_cgroup_rue_bt_offline_read,
 	},
 #endif
 	{ }	/* terminate */
@@ -1949,6 +1982,10 @@ blkcg_css_alloc(struct cgroup_subsys_state *parent_css)
 		blkcg = kzalloc(sizeof(*blkcg), GFP_KERNEL);
 		if (!blkcg)
 			goto unlock;
+
+#if defined(CONFIG_BT_SCHED) && defined(CONFIG_CGROUP_WRITEBACK)
+	    blkcg->rue_bt_offline = css_to_blkcg(parent_css)->rue_bt_offline;
+#endif
 	}
 
 	if (init_blkcg_llists(blkcg))
