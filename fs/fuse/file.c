@@ -505,7 +505,7 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	FUSE_ARGS(args);
 	int err;
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	if (ff->open_flags & FOPEN_NOFLUSH && !fm->fc->writeback_cache)
@@ -580,7 +580,7 @@ static int fuse_fsync(struct file *file, loff_t start, loff_t end,
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	int err;
 
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad_strict(inode))
 		return -EIO;
 
 	inode_lock(inode);
