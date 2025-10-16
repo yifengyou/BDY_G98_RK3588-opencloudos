@@ -137,6 +137,23 @@ static void __init fpu__init_system_generic(void)
 	defined(CONFIG_X86_HYGON_LMC_AVX2_ON)
 unsigned int fpu_kernel_nonatomic_xstate_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_nonatomic_xstate_size);
+
+static int __init hygon_fpu_parse_cmdline(char *arg)
+{
+	if (!strcmp(arg, "off"))
+		fpu_kernel_nonatomic_xstate_size = 0;
+	else if ((!strcmp(arg, "on")) && (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)) {
+		if (arch_task_struct_size) {
+			pr_crit("Unsupported hygon_memcpy_opt duto arch_task_struct_size non inited\n");
+			return 0;
+		}
+		fpu_kernel_nonatomic_xstate_size = KERNEL_FPU_NONATOMIC_SIZE;
+	} else
+		pr_crit("Unsupported hygon_fpu param=%s, hygon_memcpy_opt may still be disabled\n", arg);
+
+	return 0;
+}
+early_param("hygon_fpu", hygon_fpu_parse_cmdline);
 #endif
 
 /*
