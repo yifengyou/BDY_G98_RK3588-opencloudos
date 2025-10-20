@@ -12,3 +12,4 @@ The UB Networking documentation
    :maxdepth: 1
 
    UB Link Layer <ubl>
+   UNIC Driver <unic>
