@@ -56,7 +56,7 @@ check_env() {
         echo "kernel-devel(redhat) or linux-headers(debian),"
         echo "for building kernel modules and try again"
         exit 1
-    elif [ ${KSRC}="/lib/modules/${BUILD_KERNEL}/source" ]; then
+    elif [ ${KSRC} = "/lib/modules/${BUILD_KERNEL}/source" ]; then
         KOBJ="/lib/modules/${BUILD_KERNEL}/build"
     else
         KOBJ=${KSRC}
