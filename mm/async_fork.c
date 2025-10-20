@@ -62,3 +62,4 @@ EXPORT_SYMBOL_GPL(copy_hugetlb_page_range);
 EXPORT_SYMBOL_GPL(__mmu_notifier_invalidate_range_start);
 EXPORT_SYMBOL_GPL(__mmu_notifier_invalidate_range_end);
 EXPORT_SYMBOL_GPL(track_pfn_copy);
+EXPORT_SYMBOL_GPL(untrack_pfn_copy);

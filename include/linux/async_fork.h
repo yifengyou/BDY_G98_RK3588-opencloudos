@@ -4,6 +4,11 @@
 
 #ifdef CONFIG_ASYNC_FORK
 
+extern int track_pfn_copy(struct vm_area_struct *dst_vma,
+	struct vm_area_struct *src_vma, unsigned long *pfn);
+extern void untrack_pfn_copy(struct vm_area_struct *dst_vma,
+	unsigned long pfn);
+
 #define ASYNC_FORK_CANDIDATE	0
 #define ASYNC_FORK_PENDING	1
 #define ASYNC_FORK_FALLBACK	2
