@@ -4357,7 +4357,7 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 			retry_times = 0;
 
 		if (retry_times > limit_retry_times) {
-			pr_warn("Attempts to recycle many times have not recovered enough pages.\n");
+			pr_warn_ratelimited("Attempts to recycle many times have not recovered enough pages.\n");
 			break;
 		}
 
