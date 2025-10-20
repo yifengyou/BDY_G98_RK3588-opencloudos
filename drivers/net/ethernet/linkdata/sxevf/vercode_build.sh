@@ -75,7 +75,7 @@ function main(){
     local build_kernel=$(getKernelVersion $kernel_path)
     local row=0
     for OS_TYPE in ${KERNEL_LIST[*]}; do
-        kernel_tmp=$OS_TYPE[*]
+        kernel_tmp=${OS_TYPE}[*]
         macro_tmp=${MACRO_LIST[row]}[*]
         KERNELS=(${!kernel_tmp})
         MACROS=(${!macro_tmp})
