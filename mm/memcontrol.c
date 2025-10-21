@@ -4403,7 +4403,6 @@ static ssize_t pagecache_reclaim_ratio_write(struct kernfs_open_file *of,
 
 	if ((reclaim_ratio > 0) && (reclaim_ratio < 100)) {
 		memcg->pagecache_reclaim_ratio = reclaim_ratio;
-		mem_cgroup_shrink_pagecache(memcg, GFP_KERNEL);
 		return nbytes;
 	} else if (reclaim_ratio == 100) {
 		nr_pages = page_counter_read(&memcg->pagecache);
