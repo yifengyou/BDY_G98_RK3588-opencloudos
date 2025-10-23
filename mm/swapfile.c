@@ -1389,11 +1389,10 @@ start_over:
 }
 
 /*
- * Discard pending clusters in a synchronized way when under high
- * pressure to avoid OOM.
+ * Discard pending clusters in a synchronized way when under high pressure.
  * Return: true if any cluster is discarded.
  */
-bool swap_sync_discard(void)
+static bool swap_sync_discard(void)
 {
 	bool ret = false;
 	int nid = numa_node_id();
@@ -1408,12 +1407,12 @@ bool swap_sync_discard(void)
 			put_swap_device(si);
 		}
 		if (ret)
-			break;
+			return true;
 		spin_lock(&swap_avail_lock);
 	}
 	spin_unlock(&swap_avail_lock);
 
-	return ret;
+	return false;
 }
 
 /**
