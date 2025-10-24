@@ -168,6 +168,12 @@ extern int cgroupfs_stat_show_cpuacct_info;
 int cgroupfs_mounted;
 #endif
 
+#ifdef CONFIG_MEMCG
+extern int sysctl_memcg_async;
+extern int memcg_async_sysctl_handler(struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos);
+#endif
+
 #ifdef CONFIG_EMM_FORCE_SWAPPINESS
 extern int sysctl_vm_force_swappiness;
 #endif
@@ -3093,6 +3099,17 @@ static struct ctl_table vm_table[] = {
 		.proc_handler   = proc_dointvec_minmax,
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE,
+	},
+#endif
+#ifdef CONFIG_MEMCG
+	{
+		.procname		= "memcg_async",
+		.data			= &sysctl_memcg_async,
+		.maxlen			= sizeof(int),
+		.mode			= 0644,
+		.proc_handler	= memcg_async_sysctl_handler,
+		.extra1			= SYSCTL_ZERO,
+		.extra2			= SYSCTL_ONE,
 	},
 #endif
 #ifdef CONFIG_NUMA
