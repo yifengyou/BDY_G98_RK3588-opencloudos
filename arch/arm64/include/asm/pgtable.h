@@ -606,11 +606,16 @@ extern bool range_is_pci(phys_addr_t, size_t);
 static inline pte_t pte_mkspecial(pte_t pte)
 {
 #ifdef CONFIG_ALTRA_ERRATUM_82288
-	phys_addr_t phys = __pte_to_phys(pte);
-	pgprot_t prot = __pgprot(pte_val(pte) & ~PTE_ADDR_MASK);
+	phys_addr_t phys;
+	pgprot_t prot;
 
-	if (range_is_pci(phys, PAGE_SIZE)) {
-		pte = __pte(__phys_to_pte_val(phys) | pgprot_val(pgprot_device(prot)));
+	if (have_altra_erratum_82288) {
+		phys = __pte_to_phys(pte);
+		prot = __pgprot(pte_val(pte) & ~PTE_ADDR_MASK);
+
+		if (range_is_pci(phys, PAGE_SIZE)) {
+			pte = __pte(__phys_to_pte_val(phys) | pgprot_val(pgprot_device(prot)));
+		}
 	}
 #endif
 

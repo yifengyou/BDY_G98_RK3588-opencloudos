@@ -46,9 +46,11 @@ void __iomem *generic_ioremap_prot(phys_addr_t phys_addr, size_t size,
 	vaddr = (unsigned long)area->addr;
 	area->phys_addr = phys_addr;
 #ifdef CONFIG_ALTRA_ERRATUM_82288
-	if ((pgprot_val(prot) != pgprot_val(pgprot_device(prot))) &&
-			range_is_pci(phys_addr, size)) {
-		prot = pgprot_device(prot);
+	if (have_altra_erratum_82288) {
+		if ((pgprot_val(prot) != pgprot_val(pgprot_device(prot))) &&
+				range_is_pci(phys_addr, size)) {
+			prot = pgprot_device(prot);
+		}
 	}
 #endif
 	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot)) {
