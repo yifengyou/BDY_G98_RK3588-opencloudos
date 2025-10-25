@@ -97,6 +97,9 @@
 # We may patch `crash` to fix that or find a better way, since this stops the unique
 # debug file renaming for userspace packages too.
 %undefine _unique_debug_names
+# Build id
+%undefine _unique_build_ids
+%global _no_recompute_build_ids 1
 # Pass --reloc-debug-sections to eu-strip, .ko files are ET_REL files. So they have relocation
 # sections for debug sections. Those sections will not be relinked. This help create .debug files
 # that has cross debug section relocations resolved.
