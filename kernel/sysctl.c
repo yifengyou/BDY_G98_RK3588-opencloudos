@@ -168,7 +168,7 @@ extern int cgroupfs_stat_show_cpuacct_info;
 int cgroupfs_mounted;
 #endif
 
-#ifdef CONFIG_MEMCG
+#if defined(CONFIG_MEMCG) && defined(CONFIG_TKERNEL)
 extern int sysctl_memcg_async;
 extern int memcg_async_sysctl_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
@@ -3101,7 +3101,7 @@ static struct ctl_table vm_table[] = {
 		.extra2         = SYSCTL_ONE,
 	},
 #endif
-#ifdef CONFIG_MEMCG
+#if defined(CONFIG_MEMCG) && defined(CONFIG_TKERNEL)
 	{
 		.procname		= "memcg_async",
 		.data			= &sysctl_memcg_async,
