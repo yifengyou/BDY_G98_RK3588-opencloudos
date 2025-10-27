@@ -220,6 +220,11 @@ unsigned int sysctl_vm_force_swappiness __read_mostly;
 #else
 #define sysctl_vm_force_swappiness 0
 #endif
+#ifdef CONFIG_EMM_BATCH_DIRTY_TLB_FLUSH
+unsigned int sysctl_vm_batch_dirty_tlb_flush __read_mostly;
+#else
+#define sysctl_vm_batch_dirty_tlb_flush 0
+#endif
 
 #ifdef CONFIG_EMM_RAMDISK_SWAP
 unsigned int sysctl_vm_ramdisk_swaptune __read_mostly;

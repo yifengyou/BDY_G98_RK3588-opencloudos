@@ -1376,6 +1376,19 @@ config EMM_ZRAM_CONF
 	help
 	  A place holder to Ensure required ZRAM configures are enabled.
 
+config EMM_BATCH_DIRTY_TLB_FLUSH
+	bool "Batch flush TLB for dirty pages on pageout"
+	depends on EMM
+	default y
+	help
+	  Kernel by default flush pages one by one for dirty pages on page
+	  out, which may cause heavy IPI cost.
+
+	  This introduce a sysctl_vm_batch_dirty_tlb_flush config to
+	  enable batch TLB flushing, experimental.
+
+	  If unsure say N.
+
 config TEXT_UNEVICTABLE
 	bool "Enable memcg granularity code section unevictable"
 	depends on MEMCG
