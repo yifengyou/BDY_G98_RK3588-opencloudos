@@ -1292,6 +1292,47 @@ keepit:
 			folio);
 }
 
+static void pageout_batch(struct folio_batch *fbatch,
+			  struct list_head *ret_folios,
+			  struct folio_batch *free_folios,
+			  struct scan_control *sc, struct reclaim_stat *stat,
+			  struct swap_iocb **plug, struct list_head *folio_list)
+{
+	int i = 0, count = folio_batch_count(fbatch);
+	struct folio *folio;
+
+	folio_batch_reinit(fbatch);
+	do {
+		folio = fbatch->folios[i];
+		if (!folio_trylock(folio)) {
+			list_add(&folio->lru, ret_folios);
+			continue;
+		}
+
+		if (folio_test_writeback(folio) || folio_test_lru(folio) ||
+		    folio_mapped(folio))
+			goto next;
+		folio_batch_add(fbatch, folio);
+		continue;
+next:
+		folio_unlock(folio);
+		list_add(&folio->lru, ret_folios);
+	} while (++i != count);
+
+	i = 0;
+	count = folio_batch_count(fbatch);
+	if (!count)
+		return;
+	/* One TLB flush for the batch */
+	try_to_unmap_flush_dirty();
+	do {
+		folio = fbatch->folios[i];
+		pageout_one(folio, ret_folios, free_folios, sc, stat, plug,
+			    folio_list);
+	} while (++i != count);
+	folio_batch_reinit(fbatch);
+}
+
 /*
  * shrink_folio_list() returns the number of reclaimed pages
  */
@@ -1300,6 +1341,7 @@ static void shrink_folio_list(struct list_head *folio_list,
 		struct reclaim_stat *stat, bool ignore_references)
 {
 	struct folio_batch free_folios;
+	struct folio_batch batch_out_folios;
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
 	unsigned int pgactivate = 0;
@@ -1307,6 +1349,7 @@ static void shrink_folio_list(struct list_head *folio_list,
 	struct swap_iocb *plug = NULL;
 
 	folio_batch_init(&free_folios);
+	folio_batch_init(&batch_out_folios);
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc);
@@ -1600,16 +1643,30 @@ retry:
 
 				goto activate_locked;
 			}
-
-
 			/*
-			 * Folio is dirty. Flush the TLB if a writable entry
-			 * potentially exists to avoid CPU writes after I/O
-			 * starts and then write it out here.
+			 * For anon, we should only see swap cache (anon) and
+			 * the list pinning the page. For file page, the filemap
+			 * and the list pins it. Combined with the page_ref_freeze
+			 * in pageout_batch ensure nothing else touches the page
+			 * during lock unlocked.
 			 */
-			try_to_unmap_flush_dirty();
-			pageout_one(folio, &ret_folios, &free_folios, sc, stat,
-				    &plug, folio_list);
+			if (sysctl_vm_batch_dirty_tlb_flush) {
+				folio_unlock(folio);
+				if (!folio_batch_add(&batch_out_folios, folio))
+					pageout_batch(&batch_out_folios,
+						      &ret_folios, &free_folios,
+						      sc, stat, &plug,
+						      folio_list);
+			} else {
+				/*
+				 * Folio is dirty. Flush the TLB if a writable entry
+				 * potentially exists to avoid CPU writes after I/O
+				 * starts and then write it out here.
+				 */
+				try_to_unmap_flush_dirty();
+				pageout_one(folio, &ret_folios, &free_folios,
+					    sc, stat, &plug, folio_list);
+			}
 			goto next;
 		}
 
@@ -1630,6 +1687,11 @@ keep:
 next:
 		/* Account the number of base pages even though THP */
 		sc->nr_scanned += nr_pages;
+	}
+
+	if (folio_batch_count(&batch_out_folios)) {
+		pageout_batch(&batch_out_folios, &ret_folios, &free_folios, sc,
+			      stat, &plug, folio_list);
 	}
 	/* 'folio_list' is always empty here */
 
