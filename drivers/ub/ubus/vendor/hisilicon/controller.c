@@ -17,6 +17,8 @@ static struct ub_bus_controller_ops hi_ubc_ops = {
 	.eu_table_init = hi_eu_table_init,
 	.eu_table_uninit = hi_eu_table_uninit,
 	.eu_cfg = hi_eu_cfg,
+	.mem_decoder_create = hi_mem_decoder_create,
+	.mem_decoder_remove = hi_mem_decoder_remove,
 	.register_decoder_base_addr = hi_register_decoder_base_addr,
 	.entity_enable = hi_send_entity_enable_msg,
 };
