@@ -9,11 +9,21 @@
 #include <ub/ubus/ub-mem-decoder.h>
 
 #include "../../ubus.h"
+#include "../../msg.h"
 #include "../../memory.h"
+#include "hisi-msg.h"
 #include "hisi-ubus.h"
+#define CREATE_TRACE_POINTS
+#include "memory_trace.h"
 
 #define DRAIN_ENABLE_REG_OFFSET		0x24
 #define DRAIN_STATE_REG_OFFSET		0x28
+
+#define HI_GET_UBMEM_EVENT_REQ_SIZE 4
+#define HI_GET_UBMEM_EVENT_RSP_SIZE 772
+#define MEM_EVENT_MAX_NUM 16
+#define MAR_ERR_ADDR_COUNT 10
+#define MAR_ERR_ADDR_SIZE 2
 
 #define hpa_gen(addr_h, addr_l) (((u64)(addr_h) << 32) | (addr_l))
 
@@ -21,6 +31,28 @@ struct ub_mem_decoder {
 	struct device *dev;
 	struct ub_entity *uent;
 	void *base_reg;
+};
+
+struct hi_ubmem_event {
+	u32 device_ras_status3;
+	u32 device_ras_status4;
+	u32 err_addr[MAR_ERR_ADDR_COUNT];
+};
+
+struct hi_get_ubmem_event_rsp {
+	u32 event_num;
+	struct hi_ubmem_event event_info[MEM_EVENT_MAX_NUM];
+};
+
+struct hi_get_ubmem_event_req {
+	u32 rsv0;
+};
+
+struct hi_get_ubmem_event_pld {
+	union {
+		struct hi_get_ubmem_event_req req;
+		struct hi_get_ubmem_event_rsp rsp;
+	};
 };
 
 static bool hi_mem_validate_pa(struct ub_bus_controller *ubc,
@@ -69,6 +101,150 @@ static const struct ub_mem_device_ops device_ops = {
 	.mem_drain_state = hi_mem_drain_state,
 	.mem_validate_pa = hi_mem_validate_pa,
 };
+
+static int save_ras_err_info(struct ub_mem_device *mem_device,
+			     enum ras_err_type type, u64 hpa)
+{
+	struct ub_mem_ras_err_info err_info = {
+		.type = type,
+		.hpa = hpa,
+	};
+
+	if (!kfifo_put(&mem_device->ras_ctx.ras_fifo, err_info)) {
+		dev_err(mem_device->dev, "kfifo put failed!\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static irqreturn_t hi_mem_ras_isr(int irq, void *context)
+{
+	struct ub_bus_controller *ubc = (struct ub_bus_controller *)context;
+	struct ub_mem_ras_ctx *ras_ctx = &ubc->mem_device->ras_ctx;
+	struct ub_mem_ras_err_info err_info;
+	ubmem_ras_handler handler;
+	int ret;
+
+	handler = ub_mem_ras_handler_get();
+	while (kfifo_get(&ras_ctx->ras_fifo, &err_info)) {
+		trace_mem_ras_event(ubc->mem_device, &err_info);
+		pr_info("ras: type=%u\n", err_info.type);
+		if (handler) {
+			ret = handler(err_info.hpa, err_info.type);
+			WARN_ON(ret);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int err_type_bitmap[] = {
+	/* DEVICE_RAS_STATUS_3 */
+	[UB_MEM_ATOMIC_DATA_ERR] = 31,
+	[UB_MEM_READ_DATA_ERR] = 28,
+	[UB_MEM_FLOW_POISON] = 27,
+	[UB_MEM_FLOW_READ_AUTH_POISON] = 23,
+	[UB_MEM_FLOW_READ_AUTH_RESPERR] = 22,
+	[UB_MEM_TIMEOUT_POISON] = 21,
+	[UB_MEM_TIMEOUT_RESPERR] = 20,
+	[UB_MEM_READ_DATA_POISON] = 19,
+	[UB_MEM_READ_DATA_RESPERR] = 18,
+	/* DEVICE_RAS_STATUS_4 */
+	[MAR_NOPORT_VLD_INT_ERR] = 26,
+	[MAR_FLUX_INT_ERR] = 25,
+	[MAR_WITHOUT_CXT_ERR] = 24,
+	[RSP_BKPRE_OVER_TIMEOUT_ERR] = 10,
+	/* DEVICE_RAS_STATUS_4 need save addr */
+	[MAR_NEAR_AUTH_FAIL_ERR] = 21,
+	[MAR_FAR_AUTH_FAIL_ERR] = 22,
+	[MAR_TIMEOUT_ERR] = 23,
+	[MAR_ILLEGAL_ACCESS_ERR] = 9,
+	[REMOTE_READ_DATA_ERR_OR_WRITE_RESPONSE_ERR] = 11,
+};
+
+static int save_ras_err_info_all(struct ub_bus_controller *ubc, struct hi_ubmem_event *info)
+{
+	unsigned long status3_bitmap = (unsigned long)info->device_ras_status3;
+	unsigned long status4_bitmap = (unsigned long)info->device_ras_status4;
+	u32 addr_h, addr_l;
+	int ret = -EINVAL;
+	u64 hpa = 0;
+	int index;
+	int i;
+
+	for (i = UB_MEM_ATOMIC_DATA_ERR; i <= UB_MEM_READ_DATA_RESPERR; i++) {
+		if (test_bit(err_type_bitmap[i], &status3_bitmap)) {
+			ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, hpa);
+			if (ret)
+				return ret;
+		}
+	}
+
+	for (i = MAR_FLUX_INT_ERR; i <= RSP_BKPRE_OVER_TIMEOUT_ERR; i++) {
+		if (test_bit(err_type_bitmap[i], &status4_bitmap)) {
+			ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, hpa);
+			if (ret)
+				return ret;
+		}
+	}
+
+	for (i = MAR_NEAR_AUTH_FAIL_ERR; i <= REMOTE_READ_DATA_ERR_OR_WRITE_RESPONSE_ERR; i++) {
+		if (test_bit(err_type_bitmap[i], &status4_bitmap)) {
+			index = MAR_ERR_ADDR_SIZE * (i - MAR_NEAR_AUTH_FAIL_ERR);
+			addr_h = info->err_addr[index + 1];
+			addr_l = info->err_addr[index];
+			hpa = hpa_gen(addr_h, addr_l);
+			ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, hpa);
+			if (ret)
+				return ret;
+		}
+	}
+
+	/* if no_port_vld and near_auth_fail report at the same time, ignore no_port_vld */
+	if (test_bit(err_type_bitmap[MAR_NOPORT_VLD_INT_ERR], &status4_bitmap) &&
+	    !test_bit(err_type_bitmap[MAR_NEAR_AUTH_FAIL_ERR], &status4_bitmap)) {
+		i = MAR_NOPORT_VLD_INT_ERR;
+		ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, hpa);
+	}
+
+	return ret;
+}
+
+static irqreturn_t hi_mem_ras_irq(int irq, void *context)
+{
+	struct ub_bus_controller *ubc = (struct ub_bus_controller *)context;
+	struct hi_get_ubmem_event_pld pld = {};
+	struct msg_info info = {};
+	u32 event_cnt;
+	int ret;
+
+	message_info_init(&info, ubc->uent, &pld, &pld,
+			  (HI_GET_UBMEM_EVENT_REQ_SIZE << MSG_REQ_SIZE_OFFSET) |
+			  HI_GET_UBMEM_EVENT_RSP_SIZE);
+	ret = hi_message_private(ubc->mdev, &info, GET_UBMEM_EVENT_CMD);
+	if (ret) {
+		dev_err(&ubc->dev, "get ubmem event failed, ret=%d\n",
+			ret);
+		return IRQ_HANDLED;
+	}
+
+	event_cnt = pld.rsp.event_num;
+	if (event_cnt == 0 || event_cnt > MEM_EVENT_MAX_NUM) {
+		dev_err(&ubc->dev, "event_cnt [%u] is invalid\n", event_cnt);
+		return IRQ_HANDLED;
+	}
+
+	for (u32 i = 0; i < event_cnt; i++) {
+		ret = save_ras_err_info_all(ubc, &pld.rsp.event_info[i]);
+		if (ret == -EINVAL) {
+			dev_err(&ubc->dev, "save_ras_err_info failed, ret=%d\n", ret);
+			return IRQ_HANDLED;
+		}
+	}
+
+	return IRQ_WAKE_THREAD;
+}
 
 static int hi_mem_decoder_create_one(struct ub_bus_controller *ubc, int mar_id)
 {
@@ -148,6 +324,58 @@ void hi_mem_decoder_remove(struct ub_bus_controller *ubc)
 	kfree(ubc->mem_device->priv_data);
 	kfree(ubc->mem_device);
 	ubc->mem_device = NULL;
+}
+
+void hi_register_ubmem_irq(struct ub_bus_controller *ubc)
+{
+	struct ub_entity *uent = ubc->uent;
+	int irq_num, ret;
+	u32 usi_idx;
+
+	if (!ubc->mem_device) {
+		pr_err("mem device is NULL!\n");
+		return;
+	}
+
+	ret = ub_cfg_read_dword(uent, UB_MEM_USI_IDX, &usi_idx);
+	if (ret) {
+		ub_err(uent, "get ubmem usi idx failed, ret=%d\n", ret);
+		return;
+	}
+
+	irq_num = ub_irq_vector(uent, usi_idx);
+	if (irq_num < 0) {
+		ub_err(uent, "ub get irq vector failed, irq num=%d\n", irq_num);
+		return;
+	}
+
+	INIT_KFIFO(ubc->mem_device->ras_ctx.ras_fifo);
+
+	ret = request_threaded_irq(irq_num, hi_mem_ras_irq,
+					   hi_mem_ras_isr, IRQF_SHARED,
+					   "ub_mem_event", ubc);
+	if (ret) {
+		ub_err(uent, "ubmem request_irq failed, ret=%d\n", ret);
+		return;
+	}
+
+	ubc->mem_device->ubmem_irq_num = irq_num;
+}
+
+void hi_unregister_ubmem_irq(struct ub_bus_controller *ubc)
+{
+	int irq_num;
+
+	if (!ubc->mem_device) {
+		dev_err(&ubc->dev, "mem device is NULL!\n");
+		return;
+	}
+
+	irq_num = ubc->mem_device->ubmem_irq_num;
+	if (irq_num < 0)
+		return;
+
+	free_irq((unsigned int)irq_num, (void *)ubc);
 }
 
 #define MB_SIZE_OFFSET 20
