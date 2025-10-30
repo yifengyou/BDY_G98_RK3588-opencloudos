@@ -16,6 +16,7 @@ if UB
 source "drivers/ub/ubus/Kconfig"
 source "drivers/ub/ubfi/Kconfig"
 source "drivers/ub/ubase/Kconfig"
+source "drivers/ub/cdma/Kconfig"
 source "drivers/ub/obmm/Kconfig"
 source "drivers/ub/sentry/Kconfig"
 config UB_URMA
