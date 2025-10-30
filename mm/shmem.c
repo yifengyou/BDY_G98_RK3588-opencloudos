@@ -283,7 +283,7 @@ bool vma_is_shmem(struct vm_area_struct *vma)
 }
 
 static LIST_HEAD(shmem_swaplist);
-static DEFINE_MUTEX(shmem_swaplist_mutex);
+static DEFINE_SPINLOCK(shmem_swaplist_lock);
 
 #ifdef CONFIG_TMPFS_QUOTA
 
@@ -423,10 +423,13 @@ static void shmem_free_inode(struct super_block *sb, size_t freed_ispace)
  *
  * But normally   info->alloced == inode->i_mapping->nrpages + info->swapped
  * So mm freed is info->alloced - (inode->i_mapping->nrpages + info->swapped)
+ *
+ * Return: true if swapped was incremented from 0, for shmem_writeout().
  */
-static void shmem_recalc_inode(struct inode *inode, long alloced, long swapped)
+static bool shmem_recalc_inode(struct inode *inode, long alloced, long swapped)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	bool first_swapped = false;
 	long freed;
 
 	spin_lock(&info->lock);
@@ -441,8 +444,11 @@ static void shmem_recalc_inode(struct inode *inode, long alloced, long swapped)
 	 * to stop a racing shmem_recalc_inode() from thinking that a page has
 	 * been freed.  Compensate here, to avoid the need for a followup call.
 	 */
-	if (swapped > 0)
+	if (swapped > 0) {
+		if (info->swapped == swapped)
+			first_swapped = true;
 		freed += swapped;
+	}
 	if (freed > 0)
 		info->alloced -= freed;
 	spin_unlock(&info->lock);
@@ -450,6 +456,7 @@ static void shmem_recalc_inode(struct inode *inode, long alloced, long swapped)
 	/* The quota case may block */
 	if (freed > 0)
 		shmem_inode_unacct_blocks(inode, freed);
+	return first_swapped;
 }
 
 bool shmem_charge(struct inode *inode, long pages)
@@ -893,7 +900,7 @@ static long shmem_free_swap(struct address_space *mapping,
 	old = xa_cmpxchg_irq(&mapping->i_pages, index, radswap, NULL, 0);
 	if (old != radswap)
 		return 0;
-	free_swap_and_cache_nr(radix_to_swp_entry(radswap), 1 << order);
+	swap_put_entries_direct(radix_to_swp_entry(radswap), 1 << order);
 
 	return 1 << order;
 }
@@ -1310,11 +1317,11 @@ static void shmem_evict_inode(struct inode *inode)
 			/* Wait while shmem_unuse() is scanning this inode... */
 			wait_var_event(&info->stop_eviction,
 				       !atomic_read(&info->stop_eviction));
-			mutex_lock(&shmem_swaplist_mutex);
+			spin_lock(&shmem_swaplist_lock);
 			/* ...but beware of the race if we peeked too early */
 			if (!atomic_read(&info->stop_eviction))
 				list_del_init(&info->swaplist);
-			mutex_unlock(&shmem_swaplist_mutex);
+			spin_unlock(&shmem_swaplist_lock);
 		}
 	}
 
@@ -1448,7 +1455,7 @@ int shmem_unuse(unsigned int type)
 	if (pagecache_limit_should_shrink())
 		shrink_page_cache(GFP_KERNEL, NULL);
 
-	mutex_lock(&shmem_swaplist_mutex);
+	spin_lock(&shmem_swaplist_lock);
 start_over:
 	list_for_each_entry_safe(info, next, &shmem_swaplist, swaplist) {
 		if (!info->swapped) {
@@ -1462,12 +1469,12 @@ start_over:
 		 * (igrab() would protect from unlink, but not from unmount).
 		 */
 		atomic_inc(&info->stop_eviction);
-		mutex_unlock(&shmem_swaplist_mutex);
+		spin_unlock(&shmem_swaplist_lock);
 
 		error = shmem_unuse_inode(&info->vfs_inode, type);
 		cond_resched();
 
-		mutex_lock(&shmem_swaplist_mutex);
+		spin_lock(&shmem_swaplist_lock);
 		if (atomic_dec_and_test(&info->stop_eviction))
 			wake_up_var(&info->stop_eviction);
 		if (error)
@@ -1478,7 +1485,7 @@ start_over:
 		if (!info->swapped)
 			list_del_init(&info->swaplist);
 	}
-	mutex_unlock(&shmem_swaplist_mutex);
+	spin_unlock(&shmem_swaplist_lock);
 
 	if (!error && pagecache_limit_should_shrink())
 		shrink_page_cache(GFP_KERNEL, NULL);
@@ -1577,30 +1584,59 @@ try_split:
 		folio_mark_uptodate(folio);
 	}
 
-	/*
-	 * Add inode to shmem_unuse()'s list of swapped-out inodes,
-	 * if it's not already there.  Do it now before the folio is
-	 * moved to swap cache, when its pagelock no longer protects
-	 * the inode from eviction.  But don't unlock the mutex until
-	 * we've incremented swapped, because shmem_unuse_inode() will
-	 * prune a !swapped inode from the swaplist under this mutex.
-	 */
-	mutex_lock(&shmem_swaplist_mutex);
-	if (list_empty(&info->swaplist))
-		list_add(&info->swaplist, &shmem_swaplist);
+	if (!folio_alloc_swap(folio)) {
+		bool first_swapped = shmem_recalc_inode(inode, 0, nr_pages);
+		int error;
 
-	if (!folio_alloc_swap(folio, __GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN)) {
-		shmem_recalc_inode(inode, 0, nr_pages);
-		swap_shmem_alloc(folio->swap, nr_pages);
+		/*
+		 * Add inode to shmem_unuse()'s list of swapped-out inodes,
+		 * if it's not already there.  Do it now before the folio is
+		 * removed from page cache, when its pagelock no longer
+		 * protects the inode from eviction.  And do it now, after
+		 * we've incremented swapped, because shmem_unuse() will
+		 * prune a !swapped inode from the swaplist.
+		 */
+		if (first_swapped) {
+			spin_lock(&shmem_swaplist_lock);
+			if (list_empty(&info->swaplist))
+				list_add(&info->swaplist, &shmem_swaplist);
+			spin_unlock(&shmem_swaplist_lock);
+		}
+
+		folio_dup_swap(folio, NULL);
 		shmem_delete_from_page_cache(folio, swp_to_radix_entry(folio->swap));
 
-		mutex_unlock(&shmem_swaplist_mutex);
 		BUG_ON(folio_mapped(folio));
-		return swap_writepage(&folio->page, wbc);
+		error = swap_writepage(&folio->page, wbc);
+		if (error != AOP_WRITEPAGE_ACTIVATE) {
+			/* folio has been unlocked */
+			return error;
+		}
+
+		/*
+		 * The intention here is to avoid holding on to the swap when
+		 * zswap was unable to compress and unable to writeback; but
+		 * it will be appropriate if other reactivate cases are added.
+		 */
+		error = shmem_add_to_page_cache(folio, mapping, index,
+				swp_to_radix_entry(folio->swap),
+				__GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN);
+		/* Swap entry might be erased by racing shmem_free_swap() */
+		if (!error) {
+			shmem_recalc_inode(inode, 0, -nr_pages);
+			folio_put_swap(folio, NULL);
+		}
+
+		/*
+		 * The delete_from_swap_cache() below could be left for
+		 * shrink_folio_list()'s folio_free_swap() to dispose of;
+		 * but I'm a little nervous about letting this folio out of
+		 * shmem_writeout() in a hybrid half-tmpfs-half-swap state
+		 * e.g. folio_mapping(folio) might give an unexpected answer.
+		 */
+		swap_cache_del_folio(folio);
+		goto redirty;
 	}
-	if (!info->swapped)
-		list_del_init(&info->swaplist);
-	mutex_unlock(&shmem_swaplist_mutex);
 	if (nr_pages > 1)
 		goto try_split;
 redirty:
@@ -1820,6 +1856,7 @@ static struct folio *shmem_alloc_and_add_folio(struct vm_fault *vmf,
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	unsigned long suitable_orders = 0;
 	struct folio *folio = NULL;
+	pgoff_t aligned_index;
 	long pages;
 	int error, order;
 
@@ -1833,10 +1870,12 @@ static struct folio *shmem_alloc_and_add_folio(struct vm_fault *vmf,
 		order = highest_order(suitable_orders);
 		while (suitable_orders) {
 			pages = 1UL << order;
-			index = round_down(index, pages);
-			folio = shmem_alloc_folio(gfp, order, info, index);
-			if (folio)
+			aligned_index = round_down(index, pages);
+			folio = shmem_alloc_folio(gfp, order, info, aligned_index);
+			if (folio) {
+				index = aligned_index;
 				goto allocated;
+			}
 
 			if (pages == HPAGE_PMD_NR)
 				count_vm_event(THP_FILE_FALLBACK);
@@ -1918,10 +1957,9 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 		swp_entry_t entry, int order, gfp_t gfp)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	struct folio *new, *swapcache;
 	int nr_pages = 1 << order;
-	struct folio *new;
 	gfp_t alloc_gfp;
-	void *shadow;
 
 	/*
 	 * We have arrived here because our zones are constrained, so don't
@@ -1961,34 +1999,19 @@ retry:
 		goto fallback;
 	}
 
-	/*
-	 * Prevent parallel swapin from proceeding with the swap cache flag.
-	 *
-	 * Of course there is another possible concurrent scenario as well,
-	 * that is to say, the swap cache flag of a large folio has already
-	 * been set by swapcache_prepare(), while another thread may have
-	 * already split the large swap entry stored in the shmem mapping.
-	 * In this case, shmem_add_to_page_cache() will help identify the
-	 * concurrent swapin and return -EEXIST.
-	 */
-	if (swapcache_prepare(entry, nr_pages)) {
+	swapcache = swapin_folio(entry, new);
+	if (swapcache != new) {
 		folio_put(new);
-		new = ERR_PTR(-EEXIST);
-		/* Try smaller folio to avoid cache conflict */
-		goto fallback;
+		if (!swapcache) {
+			/*
+			 * The new folio is charged already, swapin can
+			 * only fail due to another raced swapin.
+			 */
+			new = ERR_PTR(-EEXIST);
+			goto fallback;
+		}
 	}
-
-	__folio_set_locked(new);
-	__folio_set_swapbacked(new);
-	new->swap = entry;
-
-	mem_cgroup_swapin_uncharge_swap(entry, nr_pages);
-	shadow = swap_cache_get_shadow(entry);
-	if (shadow)
-		workingset_refault(new, shadow);
-	folio_add_lru(new);
-	swap_read_folio(new, NULL);
-	return new;
+	return swapcache;
 fallback:
 	/* Order 0 swapin failed, nothing to fallback to, abort */
 	if (!order)
@@ -2078,8 +2101,7 @@ static int shmem_replace_folio(struct folio **foliop, gfp_t gfp,
 }
 
 static void shmem_set_folio_swapin_error(struct inode *inode, pgoff_t index,
-					 struct folio *folio, swp_entry_t swap,
-					 bool skip_swapcache)
+					 struct folio *folio, swp_entry_t swap)
 {
 	struct address_space *mapping = inode->i_mapping;
 	swp_entry_t swapin_error;
@@ -2095,15 +2117,14 @@ static void shmem_set_folio_swapin_error(struct inode *inode, pgoff_t index,
 
 	nr_pages = folio_nr_pages(folio);
 	folio_wait_writeback(folio);
-	if (!skip_swapcache)
-		swap_cache_del_folio(folio);
+	folio_put_swap(folio, NULL);
+	swap_cache_del_folio(folio);
 	/*
 	 * Don't treat swapin error folio as alloced. Otherwise inode->i_blocks
 	 * won't be 0 when inode is released and thus trigger WARN_ON(i_blocks)
 	 * in shmem_evict_inode().
 	 */
 	shmem_recalc_inode(inode, -nr_pages, -nr_pages);
-	swap_free_nr(swap, nr_pages);
 }
 
 static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
@@ -2201,7 +2222,6 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	swp_entry_t swap, index_entry;
 	struct swap_info_struct *si;
 	struct folio *folio = NULL;
-	bool skip_swapcache = false;
 	int error, nr_pages, order;
 	pgoff_t offset;
 #ifdef CONFIG_CGROUP_SLI
@@ -2247,7 +2267,6 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 				folio = NULL;
 				goto failed;
 			}
-			skip_swapcache = true;
 		} else {
 #ifdef CONFIG_CGROUP_SLI
 			sli_memlat_stat_start(&start);
@@ -2309,9 +2328,8 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	 * and swap cache folios are never partially freed.
 	 */
 	folio_lock(folio);
-	if ((!skip_swapcache && !folio_test_swapcache(folio)) ||
-	    shmem_confirm_swap(mapping, index, swap) < 0 ||
-	    folio->swap.val != swap.val) {
+	if (!folio_matches_swap_entry(folio, swap) ||
+	    shmem_confirm_swap(mapping, index, swap) < 0) {
 		error = -EEXIST;
 		goto unlock;
 	}
@@ -2344,14 +2362,9 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (sgp == SGP_WRITE)
 		folio_mark_accessed(folio);
 
-	if (skip_swapcache) {
-		folio->swap.val = 0;
-		swapcache_clear(si, swap, nr_pages);
-	} else {
-		swap_cache_del_folio(folio);
-	}
+	folio_put_swap(folio, NULL);
+	swap_cache_del_folio(folio);
 	folio_mark_dirty(folio);
-	swap_free_nr(swap, nr_pages);
 	put_swap_device(si);
 
 	*foliop = folio;
@@ -2360,14 +2373,11 @@ failed:
 	if (shmem_confirm_swap(mapping, index, swap) < 0)
 		error = -EEXIST;
 	if (error == -EIO)
-		shmem_set_folio_swapin_error(inode, index, folio, swap,
-					     skip_swapcache);
+		shmem_set_folio_swapin_error(inode, index, folio, swap);
 unlock:
 	if (folio)
 		folio_unlock(folio);
 failed_nolock:
-	if (skip_swapcache)
-		swapcache_clear(si, folio->swap, folio_nr_pages(folio));
 	if (folio)
 		folio_put(folio);
 	put_swap_device(si);
