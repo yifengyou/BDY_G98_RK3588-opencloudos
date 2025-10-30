@@ -492,6 +492,9 @@ This package provides debug information for the bpftool package.
 # with_bpftool
 %endif
 
+%if %{with_ofed}
+%define with_ofed %(%{SOURCE3000} url_reachable 1>/dev/null 2>&1 && echo 1 || echo 0)
+
 # To avoid compile error, do not integrate mlnx commercial quality drivers if not tencentos release.
 # Users could compile and install MLNX_OFED_LINUX-* manually.
 #
@@ -502,10 +505,10 @@ This package provides debug information for the bpftool package.
 %endif
 
 # If the arch is riscv64 or loongarch64, don't compile mlnx commercial-grade quality driver.
-%ifnarch x86_64
-%ifnarch aarch64
+%ifnarch x86_64 aarch64
 %define with_ofed 0
 %endif
+
 %endif
 
 %if %{with_ofed}

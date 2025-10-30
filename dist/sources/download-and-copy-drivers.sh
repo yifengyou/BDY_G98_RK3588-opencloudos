@@ -55,10 +55,17 @@ thirdparty_mlnx(){
 
 for attempt in {1..3}; do
 	check_url_reachable ${attempt}
-	thirdparty_mlnx
 
 	if (( $? == 0 )); then
-		echo "Having downloaded thirdparty drivers."
+		if [[ $1 == "url_reachable" ]]; then
+			# Only check whether the url is reachable.
+			exit 0
+		fi
+
+		thirdparty_mlnx
+		if (( $? == 0 )); then
+			echo "Having downloaded thirdparty drivers."
+		fi
 		break
 	fi
 done
