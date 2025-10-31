@@ -320,6 +320,7 @@ static void get_recent_times(struct psi_group *group, int cpu,
 	enum psi_states s;
 	unsigned int seq;
 	u32 state_mask;
+	int i;
 
 	*pchanged_states = 0;
 
@@ -334,8 +335,20 @@ static void get_recent_times(struct psi_group *group, int cpu,
 			memcpy(tasks, groupc->tasks, sizeof(groupc->tasks));
 	} while (psi_read_retry(cpu, seq));
 
+	/* Put psi underflow bug detection for each cgroup here */
+	if (cpu == current_cpu) {
+		for (i = 0; i < NR_PSI_TASK_COUNTS; i++) {
+			if (unlikely((int)tasks[i] < 0) && !psi_bug) {
+				printk_deferred(KERN_ERR "psi: task underflow! cpu=%d type=%d tasks=[%u %u %u %u]\n",
+							cpu, i, tasks[0],
+							tasks[1], tasks[2],
+							tasks[3]);
+				psi_bug = 1;
+			}
+		}
+	}
+
 #ifdef CONFIG_PSI_USE_JIFFIES
-	int i;
 	/* We transfter the jiffies value saved into nanoseconds here */
 	for (i = 0; i < NR_PSI_STATES; i++)
 		times[i] = jiffies_to_nsecs(times[i]);
@@ -844,7 +857,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 			     u64 now, bool wake_clock)
 {
 	struct psi_group_cpu *groupc;
-	unsigned int t, m;
+	unsigned int t;
 	enum psi_states s;
 	u32 state_mask = 0;
 
@@ -870,18 +883,9 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * The rest of the state mask is calculated based on the task
 	 * counts. Update those first, then construct the mask.
 	 */
-	for (m = clear; m; m &= ~(1 << t)) {
-		t = __ffs(m);
-
-		if (groupc->tasks[t]) {
-			groupc->tasks[t]--;
-		} else if (!psi_bug) {
-			printk_deferred(KERN_ERR "psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
-					cpu, t, groupc->tasks[0],
-					groupc->tasks[1], groupc->tasks[2],
-					groupc->tasks[3], clear, set);
-			psi_bug = 1;
-		}
+	for (; clear; clear &= ~(1 << t)) {
+		t = __ffs(clear);
+		groupc->tasks[t]--;
 	}
 
 	for (; set; set &= ~(1 << t)) {
