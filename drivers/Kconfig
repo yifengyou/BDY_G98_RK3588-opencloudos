@@ -248,4 +248,5 @@ source "drivers/cpuinspect/Kconfig"
 
 source "drivers/thirdparty/Kconfig"
 
+source "drivers/ubios_uvb/Kconfig"
 endmenu
