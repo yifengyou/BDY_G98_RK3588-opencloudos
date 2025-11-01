@@ -216,6 +216,7 @@ Source2001: cpupower.config
 Source3000: download-and-copy-drivers.sh
 Source3001: MLNX_OFED_LINUX-23.10-3.2.2.0-rhel9.4-x86_64.tgz
 Source3002: install.sh
+Source3003: get_mlnx_info.sh
 
 ###### Kernel package definations ##############################################
 ### Main meta package
@@ -493,7 +494,7 @@ This package provides debug information for the bpftool package.
 %endif
 
 %if %{with_ofed}
-%define with_ofed %(%{SOURCE3000} url_reachable 1>/dev/null 2>&1 && echo 1 || echo 0)
+%define with_ofed %(pushd $(dirname %{SOURCE3000}) 1>/dev/null 2>&1 ; %{SOURCE3000} url_reachable 1>/dev/null 2>&1 && echo 1 || echo 0 ; popd 1>/dev/null 2>&1 )
 
 # To avoid compile error, do not integrate mlnx commercial quality drivers if not tencentos release.
 # Users could compile and install MLNX_OFED_LINUX-* manually.
@@ -682,8 +683,9 @@ BuildConfig() {
 	# Copy mlnx drivers to drivers/thirdparty/release-drivers/mlnx/ dir
 	pushd ${_KernSrc}/drivers/thirdparty
 	%if %{with_ofed}
-		rm -f download-and-copy-drivers.sh; cp -a %{SOURCE3000} ./
-		mlnx_tgz_sha256=$(release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_sha256)
+		rm -f download-and-copy-drivers.sh ; cp -a %{SOURCE3000} ./
+		rm -f get_mlnx_info.sh ; cp -a %{SOURCE3003} ./
+		mlnx_tgz_sha256=$(./get_mlnx_info.sh mlnx_tgz_sha256)
 		sha256_tmp=$(sha256sum %{SOURCE3001} | awk '{printf $1}')
 		if [[ $sha256_tmp == $mlnx_tgz_sha256 ]]; then
 			cp -a %{SOURCE3001} release-drivers/mlnx/

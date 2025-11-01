@@ -1,0 +1,1 @@
+../../dist/sources/get_mlnx_info.sh

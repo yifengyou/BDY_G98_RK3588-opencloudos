@@ -6,24 +6,24 @@
 # "make dist-rpm" will run BuildConfig in dist/templates/kernel.template.spec, which will cd
 # to drivers/thirdparty/ dir to run download-and-copy-drivers.sh.
 mlnx_tgz_url=""
-mlnx_tgz_name=$(../../drivers/thirdparty/release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_name)
-mlnx_tgz_sha256=$(../../drivers/thirdparty/release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_sha256)
+mlnx_tgz_name=$(./get_mlnx_info.sh mlnx_tgz_name)
+mlnx_tgz_sha256=$(./get_mlnx_info.sh mlnx_tgz_sha256)
 
 check_url_reachable()
 {
 	round_val=$(( $1 % 2 ))
 	mlnx_url=$(echo "mlnx_url$round_val")
 
-	mlnx_tgz_url=$(../../drivers/thirdparty/release-drivers/mlnx/get_mlnx_info.sh $mlnx_url)
+	mlnx_tgz_url=$(./get_mlnx_info.sh $mlnx_url)
 
-	curl -I $mlnx_tgz_url 1>/dev/null 2>&1 && return 0
+	curl --silent --head --fail $mlnx_tgz_url 1>/dev/null 2>&1 && return 0
 
 	echo "Try to download ${mlnx_tgz_name} from backup_url."
 	round_val=$(( $round_val + 1 )) ; round_val=$(( $round_val % 2 ))
 	mlnx_url=$(echo "mlnx_url$round_val")
-	mlnx_tgz_url=$(../../drivers/thirdparty/release-drivers/mlnx/get_mlnx_info.sh $mlnx_url)
+	mlnx_tgz_url=$(./get_mlnx_info.sh $mlnx_url)
 
-	curl -I $mlnx_tgz_url 1>/dev/null 2>&1
+	curl --silent --head --fail $mlnx_tgz_url 1>/dev/null 2>&1
 	if (( $? != 0 )); then
 		echo "Could not download ${mlnx_tgz_name} ! URL can't reachable!"
 		exit 1

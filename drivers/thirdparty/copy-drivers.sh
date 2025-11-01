@@ -1,8 +1,8 @@
 #!/bin/bash
 
 thirdparty_mlnx(){
-	mlnx_tgz_name=$(release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_name)
-	mlnx_tgz_sha256=$(release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_sha256)
+	mlnx_tgz_name=$(./get_mlnx_info.sh mlnx_tgz_name)
+	mlnx_tgz_sha256=$(./get_mlnx_info.sh mlnx_tgz_sha256)
 
 	if [ ! -e release-drivers/mlnx/${mlnx_tgz_name} ] ; then
 		./download-and-copy-drivers.sh
