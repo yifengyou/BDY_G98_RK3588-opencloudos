@@ -5195,6 +5195,39 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 	return 0;
 }
 
+#ifdef CONFIG_ASYNC_FORK
+static DEFINE_MUTEX(async_fork_write_lock);
+static u64 mem_cgroup_async_fork_read(struct cgroup_subsys_state *css,
+				      struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg->async_fork;
+}
+
+static int mem_cgroup_async_fork_write(struct cgroup_subsys_state *css,
+				       struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+	u64 enable = !!val;
+
+	mutex_lock(&async_fork_write_lock);
+	if (memcg->async_fork == enable) {
+		mutex_unlock(&async_fork_write_lock);
+		return 0;
+	}
+
+	if (enable)
+		static_branch_inc(&async_fork_enabled_key);
+	else
+		static_branch_dec(&async_fork_enabled_key);
+
+	memcg->async_fork = enable;
+	mutex_unlock(&async_fork_write_lock);
+	return 0;
+}
+#endif
+
 static void __mem_cgroup_threshold(struct mem_cgroup *memcg, bool swap)
 {
 	struct mem_cgroup_threshold_ary *t;
@@ -7057,6 +7090,13 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.seq_show = memory_reparent_file_show,
 		.write = memory_reparent_file_write,
 	},
+#ifdef CONFIG_ASYNC_FORK
+	{
+		.name = "async_fork",
+		.read_u64 = mem_cgroup_async_fork_read,
+		.write_u64 = mem_cgroup_async_fork_write,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -7379,6 +7419,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		memcg->zram_prio = parent->zram_prio;
 		memcg->emm_manager = parent->emm_manager;
 		memcg->emm_oversell = parent->emm_oversell;
+#endif
+#ifdef CONFIG_ASYNC_FORK
+		memcg->async_fork = parent->async_fork;
 #endif
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);
@@ -9130,6 +9173,13 @@ static struct cftype memory_files[] = {
 		.seq_show = memory_reparent_file_show,
 		.write = memory_reparent_file_write,
 	},
+#ifdef CONFIG_ASYNC_FORK
+	{
+		.name = "async_fork",
+		.read_u64 = mem_cgroup_async_fork_read,
+		.write_u64 = mem_cgroup_async_fork_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 

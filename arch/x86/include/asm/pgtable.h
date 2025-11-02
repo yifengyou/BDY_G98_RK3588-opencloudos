@@ -1043,8 +1043,13 @@ static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 
 static inline int pmd_bad(pmd_t pmd)
 {
+#ifdef CONFIG_ASYNC_FORK
+	return (pmd_flags(pmd) & ~(_PAGE_USER | _PAGE_ACCESSED | _PAGE_RW)) !=
+	       (_KERNPG_TABLE & ~(_PAGE_ACCESSED | _PAGE_RW));
+#else
 	return (pmd_flags(pmd) & ~(_PAGE_USER | _PAGE_ACCESSED)) !=
 	       (_KERNPG_TABLE & ~_PAGE_ACCESSED);
+#endif
 }
 
 static inline unsigned long pages_to_mb(unsigned long npg)

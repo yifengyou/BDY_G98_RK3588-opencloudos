@@ -504,6 +504,7 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 			 (FOLL_PIN | FOLL_GET)))
 		return ERR_PTR(-EINVAL);
 
+	async_fork_fixup_pmd(vma, pmd, address);
 	ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
 	if (!ptep)
 		return no_page_table(vma, flags);
@@ -2584,6 +2585,9 @@ static int gup_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 	struct dev_pagemap *pgmap = NULL;
 	int nr_start = *nr, ret = 0;
 	pte_t *ptep, *ptem;
+
+	if (is_pmd_async_fork(pmd))
+		return 0;
 
 	ptem = ptep = pte_offset_map(&pmd, addr);
 	if (!ptep)

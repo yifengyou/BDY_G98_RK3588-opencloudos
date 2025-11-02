@@ -430,6 +430,10 @@ struct mem_cgroup {
 	struct cgroup_subsys_state *bind_blkio;
 	char *bind_blkio_path;
 
+#ifdef CONFIG_ASYNC_FORK
+	unsigned long async_fork;
+#endif
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);

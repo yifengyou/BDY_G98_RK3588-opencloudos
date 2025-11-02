@@ -659,6 +659,10 @@ static inline void vma_numab_state_init(struct vm_area_struct *vma) {}
 static inline void vma_numab_state_free(struct vm_area_struct *vma) {}
 #endif /* CONFIG_NUMA_BALANCING */
 
+static inline bool is_async_fork_candidate(struct mm_struct *);
+static inline bool is_async_fork_pending(struct mm_struct *);
+static inline bool is_async_fork_fallback(struct mm_struct *);
+
 #ifdef CONFIG_PER_VMA_LOCK
 /*
  * Try to read-lock a vma. The function is allowed to occasionally yield false
@@ -667,6 +671,14 @@ static inline void vma_numab_state_free(struct vm_area_struct *vma) {}
  */
 static inline bool vma_start_read(struct vm_area_struct *vma)
 {
+	struct mm_struct *mm = vma->vm_mm;
+	/*
+	 * For async fork, we don't allow per vma lock.
+	 */
+	if (is_async_fork_candidate(mm) || is_async_fork_pending(mm) ||
+		is_async_fork_fallback(mm))
+		return false;
+
 	/*
 	 * Check before locking. A race might cause false locked result.
 	 * We can use READ_ONCE() for the mm_lock_seq here, and don't need
@@ -824,6 +836,9 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma_mark_detached(vma, false);
 	vma_numab_state_init(vma);
+#ifdef CONFIG_ASYNC_FORK
+	mutex_init(&vma->async_fork_lock);
+#endif
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */
@@ -2433,6 +2448,8 @@ struct folio *vm_normal_folio_pmd(struct vm_area_struct *vma,
 				  unsigned long addr, pmd_t pmd);
 struct page *vm_normal_page_pmd(struct vm_area_struct *vma, unsigned long addr,
 				pmd_t pmd);
+struct folio *folio_prealloc(struct mm_struct *, struct vm_area_struct *,
+			unsigned long addr, bool need_zero);
 
 void zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
 		  unsigned long size);
@@ -2470,6 +2487,8 @@ int generic_error_remove_page(struct address_space *mapping, struct page *page);
 
 struct vm_area_struct *lock_mm_and_find_vma(struct mm_struct *mm,
 		unsigned long address, struct pt_regs *regs);
+
+#include <linux/async_fork.h>
 
 #ifdef CONFIG_MMU
 extern vm_fault_t handle_mm_fault(struct vm_area_struct *vma,

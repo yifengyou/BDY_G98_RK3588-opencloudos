@@ -752,6 +752,8 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 			break;
 		}
 
+		async_fork_fixup_vma(vma);
+
 		/* Does the application expect PROT_READ to imply PROT_EXEC */
 		if (rier && (vma->vm_flags & VM_MAYEXEC))
 			prot |= PROT_EXEC;

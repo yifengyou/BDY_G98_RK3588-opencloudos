@@ -781,6 +781,11 @@ struct vm_area_struct {
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
 
+#ifdef CONFIG_ASYNC_FORK
+	struct vm_area_struct *async_fork_vma;
+	struct mutex async_fork_lock;
+#endif
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
@@ -1048,6 +1053,10 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN */
+#ifdef CONFIG_ASYNC_FORK
+		struct mm_struct *async_fork_mm;
+		unsigned long async_fork_flags;
+#endif
 	} __randomize_layout;
 
 	KABI_RESERVE(1);
