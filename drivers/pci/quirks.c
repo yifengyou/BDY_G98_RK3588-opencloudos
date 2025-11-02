@@ -412,6 +412,7 @@ static void loongson_pcie_msi_quirk(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, 0x7a59, loongson_pcie_msi_quirk);
 
+#ifdef CONFIG_LOONGARCH
 #define DEV_PCIE_PORT_4	0x7a39
 #define DEV_PCIE_PORT_5	0x7a49
 #define DEV_PCIE_PORT_6	0x7a59
@@ -441,6 +442,7 @@ static void loongson_d3_and_link_quirk(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_ENABLE(PCI_ANY_ID, PCI_ANY_ID, loongson_d3_and_link_quirk);
+#endif
 
 /* Chipsets where PCI->PCI transfers vanish or hang */
 static void quirk_nopcipci(struct pci_dev *dev)
