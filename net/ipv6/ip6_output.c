@@ -199,7 +199,17 @@ ip6_finish_output_gso_slowpath_drop(struct net *net, struct sock *sk,
 
 static int __ip6_finish_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	int err;
 	unsigned int mtu;
+
+	/*
+	 * added security hook for output
+	 */
+	err = security_sock_snd_skb(sk, skb);
+	if(unlikely(err)) {
+		kfree_skb(skb);
+		return err;
+	}
 
 #if defined(CONFIG_NETFILTER) && defined(CONFIG_XFRM)
 	/* Policy lookup after SNAT yielded a new policy */

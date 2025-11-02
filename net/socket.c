@@ -637,6 +637,9 @@ struct socket *sock_alloc(void)
 		return NULL;
 
 	sock = SOCKET_I(inode);
+#ifdef CONFIG_SECURITY_NETWORK
+	sock->task = current;
+#endif
 
 	inode->i_ino = get_next_ino();
 	inode->i_mode = S_IFSOCK | S_IRWXUGO;

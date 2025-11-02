@@ -24,6 +24,7 @@
 #include <linux/mm.h>
 #include <linux/sockptr.h>
 
+#include <linux/cred.h>
 #include <uapi/linux/net.h>
 
 struct poll_table_struct;
@@ -126,6 +127,9 @@ struct socket {
 	const struct proto_ops	*ops; /* Might change with IPV6_ADDRFORM or MPTCP. */
 
 	struct socket_wq	wq;
+#ifdef CONFIG_SECURITY_NETWORK
+	struct task_struct *task;
+#endif
 };
 
 /*

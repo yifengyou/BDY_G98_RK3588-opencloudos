@@ -1,0 +1,29 @@
+#
+config SECURITY_BIBA
+	bool "BIBA Support"
+	select SECURITY
+	select SECURITY_NETWORK
+	default y
+	help
+	  This selects BIBA.
+
+config SECURITY_BIBA_STATUS
+	bool "BIBA Runtime Status"
+	depends on SECURITY_BIBA
+	default y
+	help
+	  This selects BIBA runtime status.
+
+config SECURITY_BIBA_AUDIT
+	bool "BIBA Audit Support"
+	depends on SECURITY_BIBA && AUDIT
+	default y
+	help
+	  This selects BIBA audit.
+
+config SECURITY_BIBA_PARSER_DEBUG
+	bool "BIBA Parser Debug Support"
+	depends on SECURITY_BIBA
+	default n
+	help
+	  This selects BIBA Parser Debug.

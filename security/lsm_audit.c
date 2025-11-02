@@ -294,6 +294,14 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 		rcu_read_unlock();
 		break;
 	}
+	case LSM_AUDIT_DATA_SB: {
+		struct super_block *sb;
+
+		sb = a->u.sb;
+		audit_log_format(ab, " dev=");
+		audit_log_untrustedstring(ab, sb->s_id);
+		break;
+	}
 	case LSM_AUDIT_DATA_TASK: {
 		struct task_struct *tsk = a->u.tsk;
 		if (tsk) {
@@ -448,6 +456,32 @@ void common_lsm_audit(struct common_audit_data *a,
 	/* we use GFP_ATOMIC so we won't sleep */
 	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
 			     AUDIT_AVC);
+
+	if (ab == NULL)
+		return;
+
+	if (pre_audit)
+		pre_audit(ab, a);
+
+	dump_common_audit_data(ab, a);
+
+	if (post_audit)
+		post_audit(ab, a);
+
+	audit_log_end(ab);
+}
+
+void common_kernel_audit(struct common_audit_data *a,
+	void (*pre_audit)(struct audit_buffer *, void *),
+	void (*post_audit)(struct audit_buffer *, void *))
+{
+	struct audit_buffer *ab;
+
+	if (a == NULL)
+		return;
+
+	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
+			     AUDIT_KERNEL);
 
 	if (ab == NULL)
 		return;

@@ -2454,6 +2454,9 @@ struct net_device {
 	struct rtnl_hw_stats64	*offload_xstats_l3;
 
 	struct devlink_port	*devlink_port;
+#ifdef CONFIG_SECURITY_NETWORK
+	void *security;
+#endif
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

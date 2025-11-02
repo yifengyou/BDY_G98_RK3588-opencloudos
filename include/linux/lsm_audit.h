@@ -77,10 +77,12 @@ struct common_audit_data {
 #define LSM_AUDIT_DATA_LOCKDOWN 15
 #define LSM_AUDIT_DATA_NOTIFICATION 16
 #define LSM_AUDIT_DATA_ANONINODE	17
+#define LSM_AUDIT_DATA_SB		18
 	union 	{
 		struct path path;
 		struct dentry *dentry;
 		struct inode *inode;
+		struct super_block *sb;
 		struct lsm_network_audit *net;
 		int cap;
 		int ipc_id;
@@ -110,6 +112,9 @@ struct common_audit_data {
 #ifdef CONFIG_SECURITY_APPARMOR
 		struct apparmor_audit_data *apparmor_audit_data;
 #endif
+#ifdef CONFIG_SECURITY_BIBA
+		struct biba_audit_data *biba_audit_data;
+#endif
 	}; /* per LSM data pointer union */
 };
 
@@ -123,6 +128,10 @@ int ipv6_skb_to_auditdata(struct sk_buff *skb,
 		struct common_audit_data *ad, u8 *proto);
 
 void common_lsm_audit(struct common_audit_data *a,
+	void (*pre_audit)(struct audit_buffer *, void *),
+	void (*post_audit)(struct audit_buffer *, void *));
+
+void common_kernel_audit(struct common_audit_data *a,
 	void (*pre_audit)(struct audit_buffer *, void *),
 	void (*post_audit)(struct audit_buffer *, void *));
 
