@@ -236,7 +236,7 @@ __releases(fiq->lock)
 }
 
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup)
+		       u64 nodeid, u64 nlookup, bool stale_connection)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
 
@@ -244,7 +244,11 @@ void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
 	forget->forget_one.nlookup = nlookup;
 
 	spin_lock(&fiq->lock);
+#ifdef CONFIG_FUSE_CONN_ALIVE
+	if (fiq->connected && likely(!fuse_auto_recovery || !stale_connection)) {
+#else
 	if (fiq->connected) {
+#endif
 		fiq->forget_list_tail->next = forget;
 		fiq->forget_list_tail = forget;
 		fiq->ops->wake_forget_and_unlock(fiq);

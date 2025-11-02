@@ -146,7 +146,7 @@ static void fuse_cleanup_submount_lookup(struct fuse_conn *fc,
 	if (!refcount_dec_and_test(&sl->count))
 		return;
 
-	fuse_queue_forget(fc, sl->forget, sl->nodeid, 1);
+	fuse_queue_forget(fc, sl->forget, sl->nodeid, 1, false);
 	sl->forget = NULL;
 	kfree(sl);
 }
@@ -166,8 +166,8 @@ static void fuse_evict_inode(struct inode *inode)
 		if (FUSE_IS_DAX(inode))
 			fuse_dax_inode_cleanup(inode);
 		if (fi->nlookup) {
-			fuse_queue_forget(fc, fi->forget, fi->nodeid,
-					  fi->nlookup);
+			fuse_queue_forget(fc, fi->forget, fi->nodeid, fi->nlookup,
+					fuse_stale_inode_epoch(inode));
 			fi->forget = NULL;
 		}
 
@@ -487,7 +487,7 @@ retry:
 		fuse_init_inode(inode, attr, fc);
 		unlock_new_inode(inode);
 	} else if (fuse_stale_inode(inode, generation, attr) ||
-			fuse_stale_inode_epoch(inode, fc)) {
+			fuse_stale_inode_epoch(inode)) {
 		/* nodeid was reused, any I/O on the old inode should fail */
 		fuse_make_bad(inode);
 		if (inode != d_inode(sb->s_root)) {
@@ -1101,7 +1101,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 			goto out_iput;
 	}
 	err = -ESTALE;
-	if (inode->i_generation != handle->generation || fuse_stale_inode_epoch(inode, fc))
+	if (inode->i_generation != handle->generation || fuse_stale_inode_epoch(inode))
 		goto out_iput;
 
 	entry = d_obtain_alias(inode);
