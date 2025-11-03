@@ -1613,7 +1613,7 @@ static const char *fuse_get_link(struct dentry *dentry, struct inode *inode,
 	int err;
 
 	err = -EIO;
-	if (fuse_is_bad_strict(inode))
+	if (fuse_is_bad(inode))
 		goto out_err;
 
 	if (fc->cache_symlinks)
@@ -2124,7 +2124,7 @@ static int fuse_getattr(struct mnt_idmap *idmap,
 	struct inode *inode = d_inode(path->dentry);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
-	if (fuse_is_bad_strict(inode))
+	if (fuse_is_bad(inode))
 		return -EIO;
 
 	if (!fuse_allow_current_process(fc)) {

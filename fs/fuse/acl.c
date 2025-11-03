@@ -23,7 +23,7 @@ static struct posix_acl *__fuse_get_acl(struct fuse_conn *fc,
 	if (rcu)
 		return ERR_PTR(-ECHILD);
 
-	if (fuse_is_bad_strict(inode))
+	if (fuse_is_bad(inode))
 		return ERR_PTR(-EIO);
 
 	if (fc->no_getxattr)
