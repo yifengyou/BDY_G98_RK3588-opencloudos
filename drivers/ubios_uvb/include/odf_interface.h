@@ -91,4 +91,6 @@ struct ubios_ubrt_table {
 	struct ubrt_sub_tables sub_tables[];
 };
 
+int odf_get_fdt_ubiostbl(u64 *phys_addr, char *tbl);
+
 #endif

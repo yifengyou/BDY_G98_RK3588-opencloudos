@@ -399,6 +399,11 @@ static int create_odf_info(void)
 		pr_info(LOG_PRE "Success fully get UBRT table\n");
 		return 0;
 	}
+	ret = odf_get_fdt_ubiostbl(&od_root_phys, "linux,ubiostbl");
+	if (ret) {
+		pr_err(ERR_PRE "from fdt get ubiostbl failed\n");
+		goto fail;
+	}
 
 	od_root_origin = (struct ubios_od_root *)
 		memremap(od_root_phys, sizeof(struct ubios_od_header), MEMREMAP_WB);
