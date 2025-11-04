@@ -4342,7 +4342,8 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 			break;
 
 		pages_reclaimed = shrink_page_cache_memcg(gfp_mask, memcg,
-						pages_used - goal_pages_used);
+				min_t(unsigned long, pages_max - goal_pages_used,
+						pages_used - goal_pages_used));
 
 		if (pages_reclaimed == -EINVAL)
 			return;
@@ -4468,7 +4469,7 @@ static unsigned long mem_cgroup_pagecache_get_reclaim_pages(struct mem_cgroup *m
 				goal_pages_used);
 	pages_used = page_counter_read(&memcg->pagecache);
 
-	return pages_used > pages_max ? pages_used - goal_pages_used : 0;
+	return pages_used > pages_max ? pages_max - goal_pages_used : 0;
 }
 
 static void pagecache_set_limit(struct mem_cgroup *memcg)
