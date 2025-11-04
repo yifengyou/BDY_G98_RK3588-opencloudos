@@ -267,6 +267,7 @@ static struct delayed_work scx_watchdog_work;
 
 int sysctl_panic_on_scx_stall __read_mostly;
 int sysctl_debug_scx_stall __read_mostly;
+int sysctl_scx_print_exit_kill __read_mostly;
 unsigned int sysctl_scx_ignore_cpubind;
 
 /* idle tracking */
@@ -4580,8 +4581,14 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 
 			scx_task_iter_unlock(&sti);
 			do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
-			pr_err("sched_ext: BPF scheduler \"%s\" unplugged, kill scx task %s[%d]\n",
-					scx_ops.name, p->comm, task_pid_nr(p));
+			if (sysctl_scx_print_exit_kill) {
+				if (sysctl_scx_print_exit_kill != 2)
+					pr_err_ratelimited("sched_ext: BPF scheduler \"%s\" unplugged, kill scx task %s[%d]\n",
+							scx_ops.name, p->comm, task_pid_nr(p));
+				else
+					pr_err("sched_ext: BPF scheduler \"%s\" unplugged, kill scx task %s[%d]\n",
+							scx_ops.name, p->comm, task_pid_nr(p));
+			}
 			scx_task_iter_relock(&sti);
 		}
 	}
