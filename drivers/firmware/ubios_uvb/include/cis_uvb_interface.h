@@ -8,11 +8,8 @@
 
 #ifndef CIS_UVB_INTERFACE_H
 #define CIS_UVB_INTERFACE_H
-#include <ubios/cis.h>
-#include "odf_interface.h"
+#include <linux/firmware/ubios/cis.h>
 
-#define LOG_PRE "[UVB]:"
-#define ERR_PRE "[UVB]ERR:"
 /**
  * struct cis_group - call id service group
  * @owner_user_id:    user id that indicates which component owns the cia[] array

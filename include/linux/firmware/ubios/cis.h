@@ -41,13 +41,11 @@ struct cis_message {
 // cis call
 int cis_call_by_uvb(u32 call_id, u32 sender_id,
 					u32 receiver_id, struct cis_message *msg, bool is_sync);
+int uvb_polling_sync(void *data);
 
 // cis register
 typedef int (*msg_handler)(struct cis_message *msg);
 int register_local_cis_func(u32 call_id, u32 receiver_id, msg_handler func);
-int register_my_cis_func(u32 call_id, msg_handler func);
 int unregister_local_cis_func(u32 call_id, u32 receiver_id);
-int unregister_my_cis_func(u32 call_id);
-int cis_module_lock_func(int lock);
 
 #endif

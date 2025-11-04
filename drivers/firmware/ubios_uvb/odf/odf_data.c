@@ -5,9 +5,12 @@
  * Author: zhangrui
  * Create: 2025-04-18
  */
+#define pr_fmt(fmt) "[UVB]: " fmt
+
 #include <linux/string.h>
-#include "include/libodf.h"
-#include "include/libodf_handle.h"
+#include "odf_interface.h"
+#include "odf_handle.h"
+#include "cis_uvb_interface.h"
 
 /**
 @brief Search and match one value name, return the pointer of value structrue if matched.
@@ -92,7 +95,7 @@ static int odf_get_vs_from_file(u8 *file, char *path, struct ubios_od_value_stru
 	bool is_got_vs = false;
 
 	if (!is_od_file_valid(file)) {
-		pr_err(ERR_PRE "odf: file[%llx] invalid\n", (u64)file);
+		pr_err("odf: file[%llx] invalid\n", (u64)file);
 		return -EINVAL;
 	}
 
@@ -103,14 +106,14 @@ static int odf_get_vs_from_file(u8 *file, char *path, struct ubios_od_value_stru
 	while (odf_separate_name(&path, name, UBIOS_OD_NAME_LEN_MAX, &index) == 0) {
 		status = odf_get_vs_by_name(vs->data, vs->data + vs->data_length, name, vs);
 		if (status) {
-			pr_err(ERR_PRE "odf: can not find name[%s]'s value\n", name);
+			pr_err("odf: can not find name[%s]'s value\n", name);
 			return status;
 		}
 		is_got_vs = true;
 		if (index != UBIOS_OD_INVALID_INDEX) {
 			status = odf_change_vs_by_index(vs, index);
 			if (status) {
-				pr_err(ERR_PRE "odf: get value by index failed, name[%s], type[%#x], index[%#x]\n",
+				pr_err("odf: get value by index failed, name[%s], type[%#x], index[%#x]\n",
 						name, vs->type, index);
 				return status;
 			}
@@ -119,7 +122,7 @@ static int odf_get_vs_from_file(u8 *file, char *path, struct ubios_od_value_stru
 	if ((is_got_vs) && !path)
 		return 0;
 
-	pr_err(ERR_PRE "odf: failed, left path[%s]\n", path);
+	pr_err("odf: failed, left path[%s]\n", path);
 
 	return -EOPNOTSUPP;
 }
@@ -137,13 +140,13 @@ static int odf_get_vs_from_root(struct ubios_od_root *root, char *path,
 
 	status = odf_separate_name(&path, name, UBIOS_OD_NAME_LEN_MAX, NULL);
 	if (status) {
-		pr_err(ERR_PRE "odf: get od file name failed, %d\n", status);
+		pr_err("odf: get od file name failed, %d\n", status);
 		return status;
 	}
 
 	od_file = odf_get_od_file(root, name);
 	if (!od_file) {
-		pr_err(ERR_PRE "odf: can not find od file[%s]\n", name);
+		pr_err("odf: can not find od file[%s]\n", name);
 		return -ENOENT;
 	}
 
@@ -159,7 +162,7 @@ static bool is_root_and_path_valid(struct ubios_od_root *root, char *path)
 		return false;
 
 	if (!path) {
-		pr_err(ERR_PRE "odf: path is NULL\n");
+		pr_err("odf: path is NULL\n");
 		return false;
 	}
 
@@ -213,7 +216,7 @@ int odf_vs_to_table(struct ubios_od_value_struct *vs, struct ubios_od_table_info
 			table_info->length_per_row += sizeof(u64);
 			break;
 		default:
-			pr_err(ERR_PRE "odf: get table[%s] info, invalid type[%d] of column[%llu]\n",
+			pr_err("odf: get table[%s] info, invalid type[%d] of column[%llu]\n",
 				table_info->table_name, type, i);
 			return -EOPNOTSUPP;
 		}
@@ -273,7 +276,7 @@ int odf_get_offset_in_table(const struct ubios_od_table_info *table,
 			temp_offset += sizeof(u64);
 			break;
 		default:
-			pr_err(ERR_PRE "odf: get table info, invalid type[%d] of column[%llu]\n",
+			pr_err("odf: get table info, invalid type[%d] of column[%llu]\n",
 				data_type, i);
 			return -EOPNOTSUPP;
 		}
@@ -346,7 +349,7 @@ int odf_get_data_from_table(const struct ubios_od_table_info *table,
 		*(s64 *)value = (s64)odf_read64(p);
 		break;
 	default:
-		pr_err(ERR_PRE "odf: get table data failed, invalid type[%#x]\n", type);
+		pr_err("odf: get table data failed, invalid type[%#x]\n", type);
 		return -EOPNOTSUPP;
 	}
 
@@ -392,7 +395,7 @@ int odf_get_list_from_table(u8 *table, char *path, struct ubios_od_list_info *li
 		return status;
 
 	if ((vs.type & UBIOS_OD_TYPE_LIST) != UBIOS_OD_TYPE_LIST) {
-		pr_err(ERR_PRE "odf:the type[%#x] is not a list\n", vs.type);
+		pr_err("odf:the type[%#x] is not a list\n", vs.type);
 		return -EFAULT;
 	}
 
@@ -444,7 +447,7 @@ int odf_get_list(struct ubios_od_root *root, char *path, struct ubios_od_list_in
 		return status;
 
 	if ((vs.type & UBIOS_OD_TYPE_LIST) != UBIOS_OD_TYPE_LIST) {
-		pr_err(ERR_PRE "the type[%#x] is not a list\n", vs.type);
+		pr_err("the type[%#x] is not a list\n", vs.type);
 		return -EFAULT;
 	}
 
@@ -532,7 +535,7 @@ int odf_get_data_from_list(const struct ubios_od_list_info *list,
 		vs->data_length = odf_read32(p);
 		break;
 	default:
-		pr_err(ERR_PRE "odf: invalid type[%#x], not support\n", vs->type);
+		pr_err("odf: invalid type[%#x], not support\n", vs->type);
 		return -EOPNOTSUPP;
 	}
 
@@ -578,7 +581,7 @@ int odf_next_in_list(const struct ubios_od_list_info *list, struct ubios_od_valu
 		vs->data = p + sizeof(u32);
 		break;
 	default:
-		pr_err(ERR_PRE "odf: invalid type[%#x], not support\n", vs->type);
+		pr_err("odf: invalid type[%#x], not support\n", vs->type);
 		return -EOPNOTSUPP;
 	}
 	if (vs->data >= list->end)
@@ -715,7 +718,7 @@ int odf_get_list_from_struct(const struct ubios_od_value_struct *vs,
 		return status;
 
 	if ((temp_vs.type & UBIOS_OD_TYPE_LIST) != UBIOS_OD_TYPE_LIST) {
-		pr_err(ERR_PRE "the type[%#x] is not a list\n", temp_vs.type);
+		pr_err("the type[%#x] is not a list\n", temp_vs.type);
 		return -EFAULT;
 	}
 
@@ -723,3 +726,4 @@ int odf_get_list_from_struct(const struct ubios_od_value_struct *vs,
 
 	return 0;
 }
+

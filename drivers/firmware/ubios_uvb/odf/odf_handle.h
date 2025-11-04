@@ -5,8 +5,8 @@
  * Author: zhangrui
  * Create: 2025-04-18
  */
-#ifndef LIBODF_HANDLE_H
-#define LIBODF_HANDLE_H
+#ifndef ODF_HANDLE_H
+#define ODF_HANDLE_H
 #include <linux/types.h>
 
 extern struct ubios_od_root *od_root;

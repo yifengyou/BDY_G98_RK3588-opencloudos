@@ -5,10 +5,13 @@
  * Author: zhangrui
  * Create: 2025-04-18
  */
+#define pr_fmt(fmt) "[UVB]: " fmt
+
 #include <linux/string.h>
 #include <linux/printk.h>
 #include <linux/kstrtox.h>
-#include "include/libodf.h"
+#include "odf_interface.h"
+#include "cis_uvb_interface.h"
 
 #define UBIOS_OD_INDEX_STRING_MAX       7
 #define DECIMAL                         10
@@ -125,7 +128,7 @@ int odf_separate_name(char **path, char *name, u64 max_len, u16 *index)
 		return -EOPNOTSUPP;
 
 	c = *path;
-	pr_debug(LOG_PRE "odf separate name: path[%s]\n", *path);
+	pr_debug("odf separate name: path[%s]\n", *path);
 
 	/* if the first character is a separator, skip it */
 	if (*c == UBIOS_OD_PATH_SEPARATOR)
@@ -141,7 +144,7 @@ int odf_separate_name(char **path, char *name, u64 max_len, u16 *index)
 				if (ret)
 					*index = UBIOS_OD_INVALID_INDEX;
 			}
-			pr_debug(LOG_PRE "odf separate name: got name[%s]\n", name);
+			pr_debug("odf separate name: got name[%s]\n", name);
 			break;
 		} else if (*c == '[') {
 			is_index = true;
@@ -214,4 +217,70 @@ void odf_get_vs_by_pointer(u8 *data, struct ubios_od_value_struct *vs)
 		vs->data = type_pointer + sizeof(u8) + sizeof_length;
 		break;
 	}
+}
+
+bool is_od_root_valid(struct ubios_od_root *root)
+{
+	if (!root) {
+		pr_err("odf: root is NULL\n");
+		return false;
+	}
+
+	if (!odf_is_checksum_ok(&(root->header))) {
+		pr_err("odf: root checksum error.\n");
+		return false;
+	}
+
+	if (strcmp(root->header.name, UBIOS_OD_ROOT_NAME)) {
+		pr_err("odf: root name[%s] mismatch\n", root->header.name);
+		return false;
+	}
+
+	return true;
+}
+
+bool is_od_file_valid(u8 *file)
+{
+	struct ubios_od_header *header = (struct ubios_od_header *)file;
+
+	if (!header) {
+		pr_err("odf: file is NULL\n");
+		return false;
+	}
+
+	if (!odf_is_checksum_ok(header)) {
+		pr_err("odf: file checksum error.\n");
+		return false;
+	}
+
+	return true;
+}
+
+/**
+@brief Search all pointer in od root, return the specific od file matched the input name.
+@param[in] root         start of od root
+@param[in] name         name of od
+@return
+@retval = NULL, not found.
+@retval != NULL, found.
+*/
+u8 *odf_get_od_file(struct ubios_od_root *root, char *name)
+{
+	u64 i;
+
+	if (!is_od_root_valid(root))
+		return NULL;
+
+	if (!name)
+		return NULL;
+
+	for (i = 0; i < root->count; i++) {
+		if (!root->odfs[i])
+			continue;
+
+		if (strcmp(name, (char *)(u64)root->odfs[i]) == 0)
+			return (u8 *)(u64)root->odfs[i];
+	}
+
+	return NULL;
 }
