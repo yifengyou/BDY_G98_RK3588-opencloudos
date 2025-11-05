@@ -214,7 +214,7 @@ Source2001: cpupower.config
 ### Used for download thirdparty drivers
 # Start from Source3000 to Source3099, for thirdparty release drivers
 Source3000: download-and-copy-drivers.sh
-Source3001: MLNX_OFED_LINUX-23.10-3.2.2.0-rhel9.4-x86_64.tgz
+Source3001: MLNX_OFED_LINUX-24.10-3.2.5.0-rhel9.4-x86_64.tgz
 Source3002: install.sh
 Source3003: get_mlnx_info.sh
 
@@ -1759,9 +1759,9 @@ fi
 %ifarch x86_64
 %files -n mlnx-ofed-dist
 %if "%{?dist}" != ".tl3"
-/mlnx/MLNX_OFED_LINUX-23.10-3.2.2.0-rhel9.4-x86_64-ext.%{kernel_unamer}.tgz
+/mlnx/MLNX_OFED_LINUX-24.10-3.2.5.0-rhel9.4-x86_64-ext.%{kernel_unamer}.tgz
 %else
-/mlnx/MLNX_OFED_LINUX-23.10-3.2.2.0-tencent-x86_64-ext.%{kernel_unamer}.tgz
+/mlnx/MLNX_OFED_LINUX-24.10-3.2.5.0-tencent-x86_64-ext.%{kernel_unamer}.tgz
 %endif
 %endif
 %endif
