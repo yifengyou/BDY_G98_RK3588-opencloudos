@@ -2100,7 +2100,7 @@ ip_vs_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state
 }
 
 static unsigned int
-ip_vs_lock_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
+ip_vs_local_out_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
 	/* Delete IPVS nf local_out hook to handle response packet.
 	 * Consider following steps:
@@ -2121,7 +2121,7 @@ ip_vs_lock_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *
 	 */
 	if (share_ns)
 		return NF_ACCEPT;
-	return ip_vs_in_hook(priv, skb, state);
+	return ip_vs_out_hook(priv, skb, state);
 }
 
 /*
@@ -2182,7 +2182,7 @@ static const struct nf_hook_ops ip_vs_ops4[] = {
 	},
 	/* Before ip_vs_in, change source only for VS/NAT */
 	{
-		.hook		= ip_vs_lock_in_hook,
+		.hook		= ip_vs_local_out_hook,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_NAT_DST + 1,
