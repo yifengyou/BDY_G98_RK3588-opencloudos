@@ -112,6 +112,7 @@ struct obmm_region {
 	/* number of mmap */
 	unsigned long mmap_count;
 
+	struct obmm_ownership_info *ownership_info;
 	/* protect ownership_info and serialize concurrent page table change requests */
 	struct mutex state_mutex;
 

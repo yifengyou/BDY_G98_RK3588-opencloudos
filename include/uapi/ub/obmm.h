@@ -150,6 +150,16 @@ struct obmm_cmd_unimport {
  */
 #define OBMM_SHM_CACHE_INFER            0x4
 
+struct obmm_cmd_update_range {
+	/* address range to manipulate: [start, end) */
+	__u64 start;
+	__u64 end;
+	__u8  mem_state;
+	__u8  cache_ops;
+} __attribute__((aligned(8)));
+
+#define OBMM_SHMDEV_UPDATE_RANGE	_IOW('X', 0, struct obmm_cmd_update_range)
+
 struct obmm_cmd_preimport {
 	__u64 pa;
 	__u64 length;

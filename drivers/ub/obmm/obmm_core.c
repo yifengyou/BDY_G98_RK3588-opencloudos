@@ -25,6 +25,7 @@
 #include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
 #include "obmm_import.h"
+#include "obmm_ownership.h"
 #include "obmm_preimport.h"
 #include "obmm_addr_check.h"
 #include "obmm_export.h"
@@ -297,6 +298,8 @@ static void remove_obmm_region(struct obmm_region *reg)
 
 void uninit_obmm_region(struct obmm_region *region)
 {
+	if (region->ownership_info)
+		release_ownership_info(region);
 	ida_free(&g_obmm_region_ida, region->regionid);
 	mutex_destroy(&region->state_mutex);
 }
