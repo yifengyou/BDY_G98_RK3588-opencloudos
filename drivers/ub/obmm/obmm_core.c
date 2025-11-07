@@ -29,6 +29,7 @@
 #include "obmm_lowmem.h"
 #include "obmm_preimport.h"
 #include "obmm_addr_check.h"
+#include "obmm_sysfs.h"
 #include "obmm_export.h"
 #include "obmm_core.h"
 

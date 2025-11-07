@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 
 #include "obmm_cache.h"
+#include "obmm_sysfs.h"
 #include "obmm_export_region_ops.h"
 #include "obmm_import.h"
 #include "obmm_ownership.h"
@@ -897,6 +898,7 @@ int obmm_shm_dev_add(struct obmm_region *reg)
 	reg->cdevice.owner = THIS_MODULE;
 	reg->device.devt = devt;
 	reg->device.release = obmm_shm_dev_release;
+	reg->device.groups = obmm_region_get_attr_groups(reg);
 	reg->device.parent = obmm_shm_rootdev;
 	device_initialize(&reg->device);
 
