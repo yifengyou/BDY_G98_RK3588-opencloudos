@@ -23,6 +23,7 @@
 #include "obmm_cache.h"
 #include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
+#include "obmm_import.h"
 #include "obmm_addr_check.h"
 #include "obmm_export.h"
 #include "obmm_core.h"
@@ -149,12 +150,15 @@ int obmm_query_by_offset(struct obmm_region *reg, unsigned long offset,
 {
 	int ret;
 	struct obmm_export_region *e_reg;
+	struct obmm_import_region *i_reg;
 
 	if (reg->type == OBMM_EXPORT_REGION) {
 		e_reg = container_of(reg, struct obmm_export_region, region);
 		ret = get_offset_detail_export_region(e_reg, offset, ext_addr);
+	} else {
+		i_reg = container_of(reg, struct obmm_import_region, region);
+		ret = get_offset_detail_import(i_reg, offset, ext_addr);
 	}
-
 	return ret;
 }
 
@@ -169,6 +173,12 @@ int obmm_query_by_pa(unsigned long pa, struct obmm_ext_addr *ext_addr)
 
 	spin_lock_irqsave(lock, flags);
 	list_for_each_entry(region, &g_obmm_ctx_info.regions, node) {
+		if (region->type == OBMM_IMPORT_REGION) {
+			struct obmm_import_region *i_reg;
+
+			i_reg = container_of(region, struct obmm_import_region, region);
+			ret = get_pa_detail_import(i_reg, pa, ext_addr);
+		}
 		if (region->type == OBMM_EXPORT_REGION) {
 			struct obmm_export_region *e_reg;
 
@@ -391,7 +401,9 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 	int ret;
 	union {
 		struct obmm_cmd_export create;
+		struct obmm_cmd_import import;
 		struct obmm_cmd_unexport unexport;
+		struct obmm_cmd_unimport unimport;
 		struct obmm_cmd_addr_query query;
 		struct obmm_cmd_export_pid export_pid;
 	} cmd_param;
@@ -416,6 +428,25 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 			return -EFAULT;
 		}
 	} break;
+	case OBMM_CMD_IMPORT: {
+		ret = (int)copy_from_user(&cmd_param.import, (void __user *)arg,
+					  sizeof(struct obmm_cmd_import));
+		if (ret) {
+			pr_err("failed to load import argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_import(&cmd_param.import);
+		if (ret)
+			return ret;
+
+		ret = (int)copy_to_user((void __user *)arg, &cmd_param.import,
+					sizeof(struct obmm_cmd_import));
+		if (ret) {
+			pr_err("failed to write import result");
+			return -EFAULT;
+		}
+	} break;
 	case OBMM_CMD_UNEXPORT: {
 		ret = (int)copy_from_user(&cmd_param.unexport, (void __user *)arg,
 					  sizeof(struct obmm_cmd_unexport));
@@ -425,6 +456,16 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		}
 
 		ret = obmm_unexport(&cmd_param.unexport);
+	} break;
+	case OBMM_CMD_UNIMPORT: {
+		ret = (int)copy_from_user(&cmd_param.unimport, (void __user *)arg,
+					  sizeof(struct obmm_cmd_unimport));
+		if (ret) {
+			pr_err("failed to load unimport argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_unimport(&cmd_param.unimport);
 	} break;
 	case OBMM_CMD_ADDR_QUERY: {
 		ret = (int)copy_from_user(&cmd_param.query, (void __user *)arg,

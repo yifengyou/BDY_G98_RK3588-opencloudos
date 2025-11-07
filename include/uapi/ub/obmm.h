@@ -81,9 +81,40 @@ struct obmm_cmd_addr_query {
 	__u64 pa;
 } __attribute__((aligned(8)));
 
+#define OBMM_IMPORT_FLAG_ALLOW_MMAP	0x1UL
+#define OBMM_IMPORT_FLAG_NUMA_REMOTE	0x4UL
+#define OBMM_IMPORT_FLAG_MASK		(OBMM_IMPORT_FLAG_ALLOW_MMAP | \
+					 OBMM_IMPORT_FLAG_NUMA_REMOTE)
+
+
+struct obmm_cmd_import {
+	__u64 flags;
+	__u64 mem_id;
+	__u64 addr;
+	__u64 length;
+	__u32 tokenid;
+	__u32 scna;
+	__u32 dcna;
+	__s32 numa_id;
+	__u16 priv_len;
+	__u8 base_dist;
+	__u8 deid[16];
+	__u8 seid[16];
+	const void *priv;
+} __attribute__((aligned(8)));
+
+#define OBMM_UNIMPORT_FLAG_MASK	(0UL)
+
+struct obmm_cmd_unimport {
+	__u64 mem_id;
+	__u64 flags;
+} __attribute__((aligned(8)));
+
 
 #define OBMM_CMD_EXPORT      _IOWR('x', 0, struct obmm_cmd_export)
+#define OBMM_CMD_IMPORT      _IOWR('x', 1, struct obmm_cmd_import)
 #define OBMM_CMD_UNEXPORT    _IOW('x', 2, struct obmm_cmd_unexport)
+#define OBMM_CMD_UNIMPORT    _IOW('x', 3, struct obmm_cmd_unimport)
 #define OBMM_CMD_ADDR_QUERY  _IOWR('x', 4, struct obmm_cmd_addr_query)
 #define OBMM_CMD_EXPORT_PID  _IOWR('x', 5, struct obmm_cmd_export_pid)
 

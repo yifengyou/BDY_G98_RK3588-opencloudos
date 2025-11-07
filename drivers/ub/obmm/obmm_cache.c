@@ -14,6 +14,7 @@
 
 #include "obmm_core.h"
 #include "obmm_export_region_ops.h"
+#include "obmm_import.h"
 #include "obmm_cache.h"
 
 static bool skip_cache_maintain;
@@ -122,6 +123,7 @@ int obmm_region_flush_range(struct obmm_region *reg, unsigned long offset, unsig
 			    uint8_t cache_ops)
 {
 	int ret;
+	struct obmm_import_region *i_reg;
 	struct obmm_export_region *e_reg;
 
 	/* validation */
@@ -141,8 +143,13 @@ int obmm_region_flush_range(struct obmm_region *reg, unsigned long offset, unsig
 	pr_debug("flush cache: region=%d, offset=0x%lx, length=0x%lx, cache_ops=%u\n",
 		 reg->regionid, offset, length, cache_ops);
 	/* clear cache and ubus queue */
-	e_reg = container_of(reg, struct obmm_export_region, region);
-	ret = flush_export_region(e_reg, offset, length, cache_ops);
+	if (reg->type == OBMM_IMPORT_REGION) {
+		i_reg = container_of(reg, struct obmm_import_region, region);
+		ret = flush_import_region(i_reg, offset, length, cache_ops);
+	} else {
+		e_reg = container_of(reg, struct obmm_export_region, region);
+		ret = flush_export_region(e_reg, offset, length, cache_ops);
+	}
 
 	if (ret)
 		pr_err("flush failed: region=%d, offset=0x%lx, length=0x%lx, cache_ops=%u\n",

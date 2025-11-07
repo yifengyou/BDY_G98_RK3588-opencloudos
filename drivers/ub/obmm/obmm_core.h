@@ -42,6 +42,7 @@ extern size_t __obmm_memseg_size;
 
 enum obmm_region_type {
 	OBMM_EXPORT_REGION,
+	OBMM_IMPORT_REGION
 };
 
 enum obmm_mmap_granu {
@@ -69,6 +70,7 @@ struct obmm_region {
 	/* unique within host -- can be used as an access handle */
 	int regionid;
 
+	/* import or export */
 	enum obmm_region_type type;
 
 	unsigned long flags;
@@ -96,6 +98,10 @@ struct obmm_region {
 	unsigned char priv[OBMM_MAX_PRIV_LEN];
 };
 
+static inline bool region_numa_remote(const struct obmm_region *reg)
+{
+	return reg->flags & OBMM_REGION_FLAG_NUMA_REMOTE;
+}
 static inline bool region_allow_mmap(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_ALLOW_MMAP;
@@ -108,6 +114,25 @@ static inline bool region_fast_alloc(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_FAST_ALLOC;
 }
+
+struct obmm_import_region {
+	struct obmm_region region;
+
+	u32 dcna;
+	u32 scna;
+
+	u64 pa;
+
+	/* imported NUMA node */
+	int numa_id;
+	/* the base_dist passed in import, which in some scenario might be an ignored value. It is
+	 * stored here make error rollback feasible.
+	 */
+	u8 base_dist;
+
+	u8 deid[16];
+	u8 seid[16];
+};
 
 struct mem_description_pid {
 	int pid;
@@ -146,6 +171,13 @@ struct obmm_export_region {
 	void *vendor_info;
 	int affinity;
 	u8 deid[16];
+};
+
+struct obmm_datapath {
+	u32 scna;
+	u32 dcna;
+	const u8 *seid;
+	const u8 *deid;
 };
 
 struct obmm_ctx_info {
