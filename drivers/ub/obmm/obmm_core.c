@@ -26,6 +26,7 @@
 #include "ubmempool_allocator.h"
 #include "obmm_import.h"
 #include "obmm_ownership.h"
+#include "obmm_lowmem.h"
 #include "obmm_preimport.h"
 #include "obmm_addr_check.h"
 #include "obmm_export.h"
@@ -602,9 +603,17 @@ static int __init obmm_init(void)
 		goto out_addr_check_exit;
 	}
 
+	ret = lowmem_notify_init();
+	if (ret) {
+		pr_err("failed to initialize lowmem handler. ret=%pe\n", ERR_PTR(ret));
+		goto out_module_import_exit;
+	}
+
 	pr_info("obmm_module: init completed\n");
 	return ret;
 
+out_module_import_exit:
+	module_preimport_exit();
 out_addr_check_exit:
 	module_addr_check_exit();
 	obmm_shm_dev_exit();
@@ -619,6 +628,7 @@ static void __exit obmm_exit(void)
 {
 	pr_info("obmm_module: exit started\n");
 
+	lowmem_notify_exit();
 	module_preimport_exit();
 	module_addr_check_exit();
 	obmm_shm_dev_exit();
