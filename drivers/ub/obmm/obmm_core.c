@@ -21,6 +21,7 @@
 #include <ub/ubus/ub-mem-decoder.h>
 
 #include "obmm_cache.h"
+#include "ubmempool_allocator.h"
 #include "obmm_core.h"
 
 size_t __obmm_memseg_size;
@@ -400,6 +401,12 @@ static int __init obmm_init(void)
 
 	pr_info("obmm_module: init started\n");
 
+	ret = ubmempool_allocator_init();
+	if (ret) {
+		pr_err("Failed to init allocator. ret=%pe\n", ERR_PTR(ret));
+		return ret;
+	}
+
 	ret = misc_register(&obmm_dev_handle);
 	if (ret) {
 		pr_err("Failed to register root device. ret=%pe\n", ERR_PTR(ret));
@@ -413,6 +420,7 @@ static int __init obmm_init(void)
 	return ret;
 
 out_allocator_exit:
+	ubmempool_allocator_exit();
 	return ret;
 }
 
@@ -421,6 +429,7 @@ static void __exit obmm_exit(void)
 	pr_info("obmm_module: exit started\n");
 
 	misc_deregister(&obmm_dev_handle);
+	ubmempool_allocator_exit();
 
 	pr_info("obmm_module: exit completed\n");
 }

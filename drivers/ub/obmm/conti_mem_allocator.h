@@ -103,8 +103,7 @@ static inline size_t conti_get_avail(struct conti_mem_allocator *a)
 }
 
 int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, size_t granu,
-			     const struct conti_mempool_ops *ops, const char *fmt, ...)
-			     __printf(5, 6);
+			     const struct conti_mempool_ops *ops, const char *fmt, ...);
 void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator);
 
 void conti_free_memory(struct conti_mem_allocator *allocator, struct list_head *head);

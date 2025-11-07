@@ -76,6 +76,10 @@ struct obmm_region {
 	unsigned char priv[OBMM_MAX_PRIV_LEN];
 };
 
+struct mem_description_pool {
+	struct list_head head[OBMM_MAX_LOCAL_NUMA_NODES];
+};
+
 struct obmm_ctx_info {
 	/* active */
 	struct list_head regions;
