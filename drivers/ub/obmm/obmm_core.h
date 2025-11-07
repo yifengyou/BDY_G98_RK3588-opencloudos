@@ -90,6 +90,8 @@ struct obmm_region *search_get_obmm_region(int regionid);
 struct obmm_region *search_deactivate_obmm_region(int regionid);
 void put_obmm_region(struct obmm_region *region);
 
+void obmm_region_flush(struct obmm_region *reg, unsigned long cache_ops);
+
 /* Extended information of a byte address */
 struct obmm_ext_addr {
 	/* OBMM related */

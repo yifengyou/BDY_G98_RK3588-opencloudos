@@ -20,6 +20,7 @@
 
 #include <ub/ubus/ub-mem-decoder.h>
 
+#include "obmm_cache.h"
 #include "obmm_core.h"
 
 size_t __obmm_memseg_size;

@@ -34,6 +34,21 @@ struct obmm_cmd_addr_query {
 
 #define OBMM_CMD_ADDR_QUERY  _IOWR('x', 4, struct obmm_cmd_addr_query)
 
+/* cache maintenance operations (not states) */
+/* no cache maintenance (nops) */
+#define OBMM_SHM_CACHE_NONE             0x0
+/* invalidate only (in-cache modifications may not be written back to DRAM) */
+#define OBMM_SHM_CACHE_INVAL            0x1
+/* write back and invalidate */
+#define OBMM_SHM_CACHE_WB_INVAL         0x2
+/* write back only */
+#define OBMM_SHM_CACHE_WB_ONLY         0x3
+/* Automatically choose the cache maintenance action depending on the memory
+ * state. The resulting choice always make sure no data would be lost, and might
+ * be more conservative than necessary.
+ */
+#define OBMM_SHM_CACHE_INFER            0x4
+
 #if defined(__cplusplus)
 }
 #endif
