@@ -82,8 +82,10 @@ struct obmm_cmd_addr_query {
 } __attribute__((aligned(8)));
 
 #define OBMM_IMPORT_FLAG_ALLOW_MMAP	0x1UL
+#define OBMM_IMPORT_FLAG_PREIMPORT	0x2UL
 #define OBMM_IMPORT_FLAG_NUMA_REMOTE	0x4UL
 #define OBMM_IMPORT_FLAG_MASK		(OBMM_IMPORT_FLAG_ALLOW_MMAP | \
+					 OBMM_IMPORT_FLAG_PREIMPORT |  \
 					 OBMM_IMPORT_FLAG_NUMA_REMOTE)
 
 
@@ -117,6 +119,8 @@ struct obmm_cmd_unimport {
 #define OBMM_CMD_UNIMPORT    _IOW('x', 3, struct obmm_cmd_unimport)
 #define OBMM_CMD_ADDR_QUERY  _IOWR('x', 4, struct obmm_cmd_addr_query)
 #define OBMM_CMD_EXPORT_PID  _IOWR('x', 5, struct obmm_cmd_export_pid)
+#define OBMM_CMD_DECLARE_PREIMPORT   _IOWR('x', 6, struct obmm_cmd_preimport)
+#define OBMM_CMD_UNDECLARE_PREIMPORT _IOW('x', 7, struct obmm_cmd_preimport)
 
 /* cache maintenance operations (not states) */
 /* no cache maintenance (nops) */
@@ -132,6 +136,23 @@ struct obmm_cmd_unimport {
  * be more conservative than necessary.
  */
 #define OBMM_SHM_CACHE_INFER            0x4
+
+struct obmm_cmd_preimport {
+	__u64 pa;
+	__u64 length;
+	__u64 flags;
+	__u32 scna;
+	__u32 dcna;
+	__s32 numa_id;
+	__u16 priv_len;
+	__u8 base_dist;
+	__u8 deid[16];
+	__u8 seid[16];
+	const void *priv;
+} __attribute__((aligned(16), packed));
+
+#define OBMM_PREIMPORT_FLAG_MASK	(0UL)
+#define OBMM_UNPREIMPORT_FLAG_MASK	(0UL)
 
 #if defined(__cplusplus)
 }

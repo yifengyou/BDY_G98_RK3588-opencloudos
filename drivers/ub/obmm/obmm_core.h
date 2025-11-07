@@ -25,6 +25,7 @@
 #endif
 #define pr_fmt(fmt) "OBMM: " fmt
 
+#define EID_BYTES 16
 #define EID_FMT64 "%#llx:%#llx"
 #define EID_ALIGNED_FMT64 "%#0*llx:%#0*llx"
 
@@ -55,6 +56,7 @@ enum obmm_mmap_granu {
 #define OBMM_REGION_FLAG_ALLOW_MMAP		0x2
 #define OBMM_REGION_FLAG_MEMORY_FROM_USER	0x4
 #define OBMM_REGION_FLAG_FAST_ALLOC		0x8
+#define OBMM_REGION_FLAG_PREIMPORT		0x10
 
 #define OBMM_INVALID_REGIONID	0
 #define OBMM_MIN_VALID_REGIONID 1
@@ -110,6 +112,10 @@ static inline bool region_memory_from_user(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_MEMORY_FROM_USER;
 }
+static inline bool region_preimport(const struct obmm_region *reg)
+{
+	return reg->flags & OBMM_REGION_FLAG_PREIMPORT;
+}
 static inline bool region_fast_alloc(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_FAST_ALLOC;
@@ -130,6 +136,8 @@ struct obmm_import_region {
 	 */
 	u8 base_dist;
 
+	/* handle to manage associated preimport range */
+	void *preimport_handle;
 	u8 deid[16];
 	u8 seid[16];
 };

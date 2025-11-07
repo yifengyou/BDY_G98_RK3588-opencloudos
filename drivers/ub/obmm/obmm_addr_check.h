@@ -9,6 +9,7 @@
 
 enum obmm_addr_user {
 	OBMM_ADDR_USER_DIRECT_IMPORT,
+	OBMM_ADDR_USER_PREIMPORT,
 };
 struct obmm_addr_info {
 	enum obmm_addr_user user;

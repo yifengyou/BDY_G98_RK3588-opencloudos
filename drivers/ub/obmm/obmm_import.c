@@ -13,7 +13,18 @@
 #include "obmm_core.h"
 #include "obmm_cache.h"
 #include "obmm_import.h"
+#include "obmm_preimport.h"
 #include "obmm_addr_check.h"
+
+static void set_import_region_datapath(const struct obmm_import_region *i_reg,
+				       struct obmm_datapath *datapath)
+{
+	datapath->scna = i_reg->scna;
+	datapath->dcna = i_reg->dcna;
+	/* shallow copy */
+	datapath->seid = i_reg->seid;
+	datapath->deid = i_reg->deid;
+}
 
 static unsigned long get_pa_range_mem_cap(u32 scna, phys_addr_t pa, size_t size)
 {
@@ -34,23 +45,40 @@ static unsigned long get_pa_range_mem_cap(u32 scna, phys_addr_t pa, size_t size)
 
 static int setup_pa(struct obmm_import_region *i_reg)
 {
+	phys_addr_t start, end;
+	struct obmm_datapath datapath;
+
 	i_reg->region.mem_cap =
 		get_pa_range_mem_cap(i_reg->scna, i_reg->pa, i_reg->region.mem_size);
 	if (i_reg->region.mem_cap == 0)
 		return -EINVAL;
 
-	return 0;
+	if (!region_preimport(&i_reg->region))
+		return 0;
+
+	start = i_reg->pa;
+	end = i_reg->pa + i_reg->region.mem_size - 1;
+	set_import_region_datapath(i_reg, &datapath);
+
+	return preimport_commit_prefilled(start, end, &datapath, &i_reg->numa_id,
+					  &i_reg->preimport_handle);
 }
 
 /* NOTE: do not clear PA in the teardown process. Error rollback procedure may rely on it. */
 static int teardown_pa(struct obmm_import_region *i_reg)
 {
-	return 0;
+	bool preimport = region_preimport(&i_reg->region);
+
+	if (!preimport)
+		return 0;
+	/* prefilled and preimport */
+	return preimport_uncommit_prefilled(i_reg->preimport_handle, i_reg->pa,
+					    i_reg->pa + i_reg->region.mem_size - 1);
 }
 
 static int teardown_remote_numa(struct obmm_import_region *i_reg, bool force)
 {
-	int ret;
+	int ret, this_ret;
 
 	pr_info("call external: remove_memory_remote(nid=%d, pa=%#llx, size=%#llx)\n",
 		i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
@@ -60,63 +88,36 @@ static int teardown_remote_numa(struct obmm_import_region *i_reg, bool force)
 	if (ret != 0 && !force)
 		return ret;
 
+	if (region_preimport(&i_reg->region)) {
+		pr_info("call external: add_memory_remote(nid=%d, start=0x%llx, size=0x%llx, flags=MEMORY_KEEP_ISOLATED)\n",
+			i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
+		this_ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size,
+					     MEMORY_KEEP_ISOLATED);
+		pr_debug("external called: add_memory_remote() returned %d\n", this_ret);
+		if (this_ret == NUMA_NO_NODE) {
+			pr_err("failed to reset preimport memory.\n");
+			ret = -ENOTRECOVERABLE;
+		}
+	}
+
 	return ret;
-}
-
-static bool is_numa_base_dist_valid(uint8_t base_dist)
-{
-	if (base_dist > MAX_NUMA_DIST) {
-		pr_err("invalid numa base distance %d: out of valid range.\n", base_dist);
-		return false;
-	}
-	if (base_dist != 0 && base_dist <= LOCAL_DISTANCE) {
-		pr_err("invalid numa base distance %d: reserved values used.\n", base_dist);
-		return false;
-	}
-	return true;
-}
-
-static int obmm_set_numa_distance(unsigned int cna, int nid_remote, uint8_t base_dist)
-{
-	int nid_local, nid, min_dist, i = 0;
-	int node_distances[OBMM_MAX_LOCAL_NUMA_NODES];
-	int nids[OBMM_MAX_LOCAL_NUMA_NODES];
-
-	if (!is_numa_base_dist_valid(base_dist))
-		return -EINVAL;
-
-	nid_local = ub_mem_get_numa_id(cna);
-	pr_debug("for cna = %#x, get local node = %d\n", cna, nid_local);
-	if (nid_local < 0) {
-		pr_err("failed to set numa distance: bus controller with CNA=%u has nid=%d.", cna,
-		       nid_local);
-		return -ENODEV;
-	}
-
-	if (base_dist == 0)
-		return 0;
-
-	min_dist = __node_distance(nid_local, nid_local);
-
-	for_each_online_local_node(nid) {
-		nids[i] = nid;
-		node_distances[i++] =
-			min(MAX_NUMA_DIST, base_dist + __node_distance(nid_local, nid) - min_dist);
-	}
-
-	return numa_remote_set_distance(nid_remote, nids, node_distances, i);
 }
 
 static int setup_remote_numa(struct obmm_import_region *i_reg)
 {
 	int ret, flags;
 
-	flags = MEMORY_DIRECT_ONLINE;
+	if (region_preimport(&i_reg->region))
+		flags = 0;
+	else
+		flags = MEMORY_DIRECT_ONLINE;
+
 	if (!(i_reg->region.mem_cap & OBMM_MEM_ALLOW_CACHEABLE_MMAP)) {
 		pr_err("PA range invalid. Cacheable memory cannot be managed with numa.remote: pa=%pa, size=%#llx\n",
 		       &i_reg->pa, i_reg->region.mem_size);
 		return -EINVAL;
 	}
+
 	pr_info("call external: add_memory_remote(nid=%d, start=0x%llx, size=0x%llx, flags=%d)\n",
 		i_reg->numa_id, i_reg->pa, i_reg->region.mem_size, flags);
 	ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size, flags);
@@ -128,10 +129,12 @@ static int setup_remote_numa(struct obmm_import_region *i_reg)
 	WARN_ON(i_reg->numa_id != NUMA_NO_NODE && i_reg->numa_id != ret);
 	i_reg->numa_id = ret;
 
-	ret = obmm_set_numa_distance(i_reg->scna, i_reg->numa_id, i_reg->base_dist);
-	if (ret < 0) {
-		pr_err("Failed to set remote numa distance: %pe\n", ERR_PTR(ret));
-		goto out_teardown_remote_numa;
+	if (!region_preimport(&i_reg->region)) {
+		ret = obmm_set_numa_distance(i_reg->scna, i_reg->numa_id, i_reg->base_dist);
+		if (ret < 0) {
+			pr_err("Failed to set remote numa distance: %pe\n", ERR_PTR(ret));
+			goto out_teardown_remote_numa;
+		}
 	}
 
 	return 0;
@@ -144,22 +147,30 @@ static inline int occupy_addr_range(const struct obmm_import_region *i_reg)
 {
 	struct obmm_pa_range pa;
 
-	pa.start = i_reg->pa;
-	pa.end = i_reg->pa + i_reg->region.mem_size - 1;
-	pa.info.user = OBMM_ADDR_USER_DIRECT_IMPORT;
-	pa.info.data = (void *)i_reg;
+	if (!region_preimport(&i_reg->region)) {
+		pa.start = i_reg->pa;
+		pa.end = i_reg->pa + i_reg->region.mem_size - 1;
+		pa.info.user = OBMM_ADDR_USER_DIRECT_IMPORT;
+		pa.info.data = (void *)i_reg;
+		return occupy_pa_range(&pa);
+	}
 
-	return occupy_pa_range(&pa);
+	/* preimport + decoder_prefilled: address conflicts managed by its perimport range */
+	return 0;
 }
 
 static int free_addr_range(const struct obmm_import_region *i_reg)
 {
 	struct obmm_pa_range pa;
 
-	pa.start = i_reg->pa;
-	pa.end = i_reg->pa + i_reg->region.mem_size - 1;
+	if (!region_preimport(&i_reg->region)) {
+		pa.start = i_reg->pa;
+		pa.end = i_reg->pa + i_reg->region.mem_size - 1;
+		return free_pa_range(&pa);
+	}
 
-	return free_pa_range(&pa);
+	/* preimport + decoder_prefilled: address conflicts managed by its perimport range */
+	return 0;
 }
 
 static int prepare_import_memory(struct obmm_import_region *i_reg)
@@ -281,12 +292,15 @@ static bool validate_pa_range(phys_addr_t pa, size_t size)
 
 static bool validate_import_region(const struct obmm_import_region *i_reg)
 {
+	bool preimport;
+
 	/* size and alignment check */
 	if (i_reg->region.mem_size == 0) {
 		pr_err("Zero memory segment size is invalid\n");
 		return false;
 	}
 
+	preimport = region_preimport(&i_reg->region);
 	/* PA as parameter */
 	if (!validate_pa_range(i_reg->pa, i_reg->region.mem_size))
 		return false;
@@ -307,9 +321,16 @@ static int import_to_region_flags(unsigned long *region_flags, unsigned long imp
 		pr_err("Exactly one of {ALLOW_MMAP, NUMA_REMOTE} must be specified as import flag.\n");
 		return -EINVAL;
 	}
+	if ((import_flags & OBMM_IMPORT_FLAG_PREIMPORT) &&
+	    !(import_flags & OBMM_IMPORT_FLAG_NUMA_REMOTE)) {
+		pr_err("Preimport must be used with NUMA_REMOTE.\n");
+		return -EINVAL;
+	}
 
 	if (import_flags & OBMM_IMPORT_FLAG_ALLOW_MMAP)
 		*region_flags |= OBMM_REGION_FLAG_ALLOW_MMAP;
+	if (import_flags & OBMM_IMPORT_FLAG_PREIMPORT)
+		*region_flags |= OBMM_REGION_FLAG_PREIMPORT;
 	if (import_flags & OBMM_IMPORT_FLAG_NUMA_REMOTE)
 		*region_flags |= OBMM_REGION_FLAG_NUMA_REMOTE;
 
@@ -345,7 +366,7 @@ static int init_import_region_from_cmd(const struct obmm_cmd_import *param,
 	if (!validate_import_region(i_reg))
 		return -EINVAL;
 
-	config_numa_dist = region_numa_remote(&i_reg->region);
+	config_numa_dist = region_numa_remote(&i_reg->region) && !region_preimport(&i_reg->region);
 	if (config_numa_dist && !is_numa_base_dist_valid(param->base_dist))
 		return -EINVAL;
 	i_reg->base_dist = param->base_dist;

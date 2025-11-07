@@ -51,7 +51,9 @@ int occupy_pa_range(const struct obmm_pa_range *pa_range)
 		return ret;
 	}
 	pr_debug("pa_check: add [%pa,%pa]->{user=%s,data=%p}\n", &pa_range->start, &pa_range->end,
-		 "direct_import", pa_range->info.data);
+		 pa_range->info.user == OBMM_ADDR_USER_DIRECT_IMPORT ?
+			"direct_import" : "preimport",
+		 pa_range->info.data);
 	return 0;
 }
 
@@ -75,7 +77,8 @@ int free_pa_range(const struct obmm_pa_range *pa_range)
 		pr_err("BUG: PA range does not fully match.\n");
 		ret = -ENOTRECOVERABLE;
 	}
-	user = "import";
+	user = ((struct obmm_pa_range *)entry)->info.user == OBMM_ADDR_USER_DIRECT_IMPORT ?
+		       "import" : "preimport";
 	pr_debug("pa_check: del [%pa,?]->{user=%s,data=%p}\n", &pa_range->start, user,
 		 ((struct obmm_pa_range *)entry)->info.data);
 	kfree(entry);
@@ -123,7 +126,8 @@ int update_pa_range(phys_addr_t addr, const struct obmm_addr_info *info)
 
 	if (!retrieved)
 		return -EFAULT;
-	pr_debug("pa_check: update [%pa,?]->{user=%s,data=%p}\n", &addr, "direct_import",
+	pr_debug("pa_check: update [%pa,?]->{user=%s,data=%p}\n", &addr,
+		 info->user == OBMM_ADDR_USER_DIRECT_IMPORT ? "direct_import" : "preimport",
 		 info->data);
 	return 0;
 }

@@ -24,6 +24,7 @@
 #include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
 #include "obmm_import.h"
+#include "obmm_preimport.h"
 #include "obmm_addr_check.h"
 #include "obmm_export.h"
 #include "obmm_core.h"
@@ -406,6 +407,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		struct obmm_cmd_unimport unimport;
 		struct obmm_cmd_addr_query query;
 		struct obmm_cmd_export_pid export_pid;
+		struct obmm_cmd_preimport preimport;
 	} cmd_param;
 
 	switch (cmd) {
@@ -505,6 +507,35 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 			return -EFAULT;
 		}
 	} break;
+	case OBMM_CMD_DECLARE_PREIMPORT: {
+		ret = (int)copy_from_user(&cmd_param.preimport, (void __user *)arg,
+					  sizeof(struct obmm_cmd_preimport));
+		if (ret) {
+			pr_err("failed to load preimport argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_preimport(&cmd_param.preimport);
+		if (ret)
+			return ret;
+
+		ret = (int)copy_to_user((void __user *)arg, &cmd_param.preimport,
+					sizeof(struct obmm_cmd_preimport));
+		if (ret) {
+			pr_err("failed to write preimport result");
+			return -EFAULT;
+		}
+	} break;
+	case OBMM_CMD_UNDECLARE_PREIMPORT: {
+		ret = (int)copy_from_user(&cmd_param.preimport, (void __user *)arg,
+					  sizeof(struct obmm_cmd_preimport));
+		if (ret) {
+			pr_err("failed to load preimport argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_unpreimport(&cmd_param.preimport);
+	} break;
 	default:
 		ret = -ENOTTY;
 	}
@@ -544,9 +575,18 @@ static int __init obmm_init(void)
 
 	module_addr_check_init();
 
+	ret = module_preimport_init();
+	if (ret) {
+		pr_err("failed to initialize preimport range manager. ret=%pe.\n", ERR_PTR(ret));
+		goto out_addr_check_exit;
+	}
+
 	pr_info("obmm_module: init completed\n");
 	return ret;
 
+out_addr_check_exit:
+	module_addr_check_exit();
+	misc_deregister(&obmm_dev_handle);
 out_allocator_exit:
 	ubmempool_allocator_exit();
 	return ret;
@@ -556,6 +596,7 @@ static void __exit obmm_exit(void)
 {
 	pr_info("obmm_module: exit started\n");
 
+	module_preimport_exit();
 	module_addr_check_exit();
 	misc_deregister(&obmm_dev_handle);
 	ubmempool_allocator_exit();
