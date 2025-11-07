@@ -23,6 +23,7 @@
 #include "obmm_cache.h"
 #include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
+#include "obmm_addr_check.h"
 #include "obmm_export.h"
 #include "obmm_core.h"
 
@@ -500,6 +501,8 @@ static int __init obmm_init(void)
 	spin_lock_init(&g_obmm_ctx_info.lock);
 	INIT_LIST_HEAD(&g_obmm_ctx_info.regions);
 
+	module_addr_check_init();
+
 	pr_info("obmm_module: init completed\n");
 	return ret;
 
@@ -512,6 +515,7 @@ static void __exit obmm_exit(void)
 {
 	pr_info("obmm_module: exit started\n");
 
+	module_addr_check_exit();
 	misc_deregister(&obmm_dev_handle);
 	ubmempool_allocator_exit();
 
