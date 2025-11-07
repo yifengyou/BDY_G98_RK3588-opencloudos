@@ -20,6 +20,7 @@
 
 #include <ub/ubus/ub-mem-decoder.h>
 
+#include "obmm_shm_dev.h"
 #include "obmm_cache.h"
 #include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
@@ -321,11 +322,19 @@ int register_obmm_region(struct obmm_region *region)
 {
 	int retval;
 
+	/* create device */
+	retval = obmm_shm_dev_add(region);
+	if (retval) {
+		pr_err("Failed to create device %d. ret=%pe\n", region->regionid, ERR_PTR(retval));
+		return retval;
+	}
+
 	/* insert OBMM_region */
 	retval = insert_obmm_region(region);
 	if (retval < 0) {
 		pr_err("Failed to insert obmm region %d on creation. ret=%pe\n", region->regionid,
 		       ERR_PTR(retval));
+		obmm_shm_dev_del(region);
 		return retval;
 	}
 
@@ -335,6 +344,7 @@ int register_obmm_region(struct obmm_region *region)
 void deregister_obmm_region(struct obmm_region *region)
 {
 	remove_obmm_region(region);
+	obmm_shm_dev_del(region);
 }
 
 int set_obmm_region_priv(struct obmm_region *region, unsigned int priv_len, const void __user *priv)
@@ -573,6 +583,12 @@ static int __init obmm_init(void)
 	spin_lock_init(&g_obmm_ctx_info.lock);
 	INIT_LIST_HEAD(&g_obmm_ctx_info.regions);
 
+	ret = obmm_shm_dev_init();
+	if (ret) {
+		pr_err("failed to initialize obmm_shm_dev. ret=%pe\n", ERR_PTR(ret));
+		goto out_misc_deregister;
+	}
+
 	module_addr_check_init();
 
 	ret = module_preimport_init();
@@ -586,6 +602,8 @@ static int __init obmm_init(void)
 
 out_addr_check_exit:
 	module_addr_check_exit();
+	obmm_shm_dev_exit();
+out_misc_deregister:
 	misc_deregister(&obmm_dev_handle);
 out_allocator_exit:
 	ubmempool_allocator_exit();
@@ -598,6 +616,7 @@ static void __exit obmm_exit(void)
 
 	module_preimport_exit();
 	module_addr_check_exit();
+	obmm_shm_dev_exit();
 	misc_deregister(&obmm_dev_handle);
 	ubmempool_allocator_exit();
 

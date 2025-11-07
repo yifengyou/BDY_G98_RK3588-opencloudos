@@ -77,6 +77,9 @@ struct obmm_region {
 
 	unsigned long flags;
 
+	struct cdev cdevice;
+	struct device device;
+
 	refcount_t refcnt;
 
 	/* the total size of all memory segments included in meminfo */
