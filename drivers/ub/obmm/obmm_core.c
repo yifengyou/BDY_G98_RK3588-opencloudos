@@ -151,8 +151,7 @@ int obmm_query_by_offset(struct obmm_region *reg, unsigned long offset,
 
 	if (reg->type == OBMM_EXPORT_REGION) {
 		e_reg = container_of(reg, struct obmm_export_region, region);
-		ret = get_offset_detail_export_region(e_reg,
-			offset, ext_addr);
+		ret = get_offset_detail_export_region(e_reg, offset, ext_addr);
 	}
 
 	return ret;
@@ -172,8 +171,7 @@ int obmm_query_by_pa(unsigned long pa, struct obmm_ext_addr *ext_addr)
 		if (region->type == OBMM_EXPORT_REGION) {
 			struct obmm_export_region *e_reg;
 
-			e_reg = container_of(region, struct obmm_export_region,
-				region);
+			e_reg = container_of(region, struct obmm_export_region, region);
 			ret = get_pa_detail_export_region(e_reg, pa, ext_addr);
 		}
 
@@ -394,12 +392,13 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		struct obmm_cmd_export create;
 		struct obmm_cmd_unexport unexport;
 		struct obmm_cmd_addr_query query;
+		struct obmm_cmd_export_pid export_pid;
 	} cmd_param;
 
 	switch (cmd) {
 	case OBMM_CMD_EXPORT: {
 		ret = (int)copy_from_user(&cmd_param.create, (void __user *)arg,
-					sizeof(struct obmm_cmd_export));
+					  sizeof(struct obmm_cmd_export));
 		if (ret) {
 			pr_err("failed to load export argument");
 			return -EFAULT;
@@ -410,7 +409,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 			return ret;
 
 		ret = (int)copy_to_user((void __user *)arg, &cmd_param.create,
-				   sizeof(struct obmm_cmd_export));
+					sizeof(struct obmm_cmd_export));
 		if (ret) {
 			pr_err("failed to write export result");
 			return -EFAULT;
@@ -418,7 +417,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 	} break;
 	case OBMM_CMD_UNEXPORT: {
 		ret = (int)copy_from_user(&cmd_param.unexport, (void __user *)arg,
-					sizeof(struct obmm_cmd_unexport));
+					  sizeof(struct obmm_cmd_unexport));
 		if (ret) {
 			pr_err("failed to load unexport argument");
 			return -EFAULT;
@@ -442,6 +441,25 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 					sizeof(struct obmm_cmd_addr_query));
 		if (ret) {
 			pr_err("failed to write obmm_query result");
+			return -EFAULT;
+		}
+	} break;
+	case OBMM_CMD_EXPORT_PID: {
+		ret = (int)copy_from_user(&cmd_param.export_pid, (void __user *)arg,
+					  sizeof(struct obmm_cmd_export_pid));
+		if (ret) {
+			pr_err("Failed to load export_pid param.\n");
+			return -EFAULT;
+		}
+
+		ret = obmm_export_pid(&cmd_param.export_pid);
+		if (ret)
+			return ret;
+
+		ret = (int)copy_to_user((void __user *)arg, &cmd_param.export_pid,
+					sizeof(struct obmm_cmd_export_pid));
+		if (ret) {
+			pr_err("failed to write export_pid result.\n");
 			return -EFAULT;
 		}
 	} break;

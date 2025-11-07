@@ -137,7 +137,10 @@ err_free_tdev:
  */
 static int alloc_export_memory(struct obmm_export_region *e_reg)
 {
-	return alloc_export_memory_pool(e_reg);
+	if (region_memory_from_user(&e_reg->region))
+		return alloc_export_memory_pid(e_reg);
+	else
+		return alloc_export_memory_pool(e_reg);
 }
 
 static void free_export_memory_pool(struct obmm_export_region *e_reg)
@@ -148,7 +151,10 @@ static void free_export_memory_pool(struct obmm_export_region *e_reg)
 
 static void free_export_memory(struct obmm_export_region *e_reg)
 {
-	free_export_memory_pool(e_reg);
+	if (region_memory_from_user(&e_reg->region))
+		free_export_memory_pid(e_reg);
+	else
+		free_export_memory_pool(e_reg);
 }
 
 /* Ensure all user inputs are properly converted and filled into the region. */

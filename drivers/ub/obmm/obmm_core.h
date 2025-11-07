@@ -100,11 +100,21 @@ static inline bool region_allow_mmap(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_ALLOW_MMAP;
 }
+static inline bool region_memory_from_user(const struct obmm_region *reg)
+{
+	return reg->flags & OBMM_REGION_FLAG_MEMORY_FROM_USER;
+}
 static inline bool region_fast_alloc(const struct obmm_region *reg)
 {
 	return reg->flags & OBMM_REGION_FLAG_FAST_ALLOC;
 }
 
+struct mem_description_pid {
+	int pid;
+	void __user *user_va;
+	int pinned;
+	u64 start_time;
+};
 struct mem_description_pool {
 	struct list_head head[OBMM_MAX_LOCAL_NUMA_NODES];
 };
@@ -118,6 +128,7 @@ struct obmm_export_region {
 
 	/* physical pages */
 	union {
+		struct mem_description_pid mem_desc_pid;
 		struct mem_description_pool mem_desc;
 	};
 
