@@ -18,6 +18,39 @@ extern "C" {
 #define OBMM_MAX_PRIV_LEN           512
 #define OBMM_MAX_VENDOR_LEN         128
 
+
+#define OBMM_EXPORT_FLAG_ALLOW_MMAP 0x1UL
+#define OBMM_EXPORT_FLAG_FAST       0x2UL
+#define OBMM_EXPORT_FLAG_MASK       (OBMM_EXPORT_FLAG_ALLOW_MMAP | OBMM_EXPORT_FLAG_FAST)
+
+/* For ordinary register requests, @length and @flags are input arguments while
+ * @tokenid, @uba and @mem_id are values set by obmm kernel module. For
+ * register request, @length, @flags, @tokenid and @uba are input to obmm
+ * kernel module. @mem_id is the only output.
+ */
+struct obmm_cmd_export {
+	__u64 size[OBMM_MAX_LOCAL_NUMA_NODES];
+	__u64 length;
+	__u64 flags;
+	__u64 uba;
+	__u64 mem_id;
+	__u32 tokenid;
+	__s32 pxm_numa;
+	__u16 priv_len;
+	__u16 vendor_len;
+	__u8 deid[16];
+	__u8 seid[16];
+	const void *vendor_info;
+	const void *priv;
+} __attribute__((aligned(8)));
+
+#define OBMM_UNEXPORT_FLAG_MASK	(0UL)
+
+struct obmm_cmd_unexport {
+	__u64 mem_id;
+	__u64 flags;
+} __attribute__((aligned(8)));
+
 enum obmm_query_key_type {
 	OBMM_QUERY_BY_PA,
 	OBMM_QUERY_BY_ID_OFFSET
@@ -32,6 +65,8 @@ struct obmm_cmd_addr_query {
 } __attribute__((aligned(8)));
 
 
+#define OBMM_CMD_EXPORT      _IOWR('x', 0, struct obmm_cmd_export)
+#define OBMM_CMD_UNEXPORT    _IOW('x', 2, struct obmm_cmd_unexport)
 #define OBMM_CMD_ADDR_QUERY  _IOWR('x', 4, struct obmm_cmd_addr_query)
 
 /* cache maintenance operations (not states) */

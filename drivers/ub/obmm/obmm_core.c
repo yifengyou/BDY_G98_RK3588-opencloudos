@@ -21,7 +21,9 @@
 #include <ub/ubus/ub-mem-decoder.h>
 
 #include "obmm_cache.h"
+#include "obmm_export_region_ops.h"
 #include "ubmempool_allocator.h"
+#include "obmm_export.h"
 #include "obmm_core.h"
 
 size_t __obmm_memseg_size;
@@ -144,12 +146,45 @@ struct obmm_region *search_deactivate_obmm_region(int regionid)
 int obmm_query_by_offset(struct obmm_region *reg, unsigned long offset,
 			 struct obmm_ext_addr *ext_addr)
 {
-	return -ENOTTY;
+	int ret;
+	struct obmm_export_region *e_reg;
+
+	if (reg->type == OBMM_EXPORT_REGION) {
+		e_reg = container_of(reg, struct obmm_export_region, region);
+		ret = get_offset_detail_export_region(e_reg,
+			offset, ext_addr);
+	}
+
+	return ret;
 }
 
 int obmm_query_by_pa(unsigned long pa, struct obmm_ext_addr *ext_addr)
 {
-	return -ENOTTY;
+	int ret = -ENOENT;
+	struct obmm_region *region;
+	unsigned long flags;
+	spinlock_t *lock;
+
+	lock = &g_obmm_ctx_info.lock;
+
+	spin_lock_irqsave(lock, flags);
+	list_for_each_entry(region, &g_obmm_ctx_info.regions, node) {
+		if (region->type == OBMM_EXPORT_REGION) {
+			struct obmm_export_region *e_reg;
+
+			e_reg = container_of(region, struct obmm_export_region,
+				region);
+			ret = get_pa_detail_export_region(e_reg, pa, ext_addr);
+		}
+
+		if (ret == 0)
+			break;
+	}
+	spin_unlock_irqrestore(lock, flags);
+
+	if (ret)
+		return -ENOENT;
+	return 0;
 }
 
 static int nid_to_package_id(int nid)
@@ -356,10 +391,41 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 {
 	int ret;
 	union {
+		struct obmm_cmd_export create;
+		struct obmm_cmd_unexport unexport;
 		struct obmm_cmd_addr_query query;
 	} cmd_param;
 
 	switch (cmd) {
+	case OBMM_CMD_EXPORT: {
+		ret = (int)copy_from_user(&cmd_param.create, (void __user *)arg,
+					sizeof(struct obmm_cmd_export));
+		if (ret) {
+			pr_err("failed to load export argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_export_from_pool(&cmd_param.create);
+		if (ret)
+			return ret;
+
+		ret = (int)copy_to_user((void __user *)arg, &cmd_param.create,
+				   sizeof(struct obmm_cmd_export));
+		if (ret) {
+			pr_err("failed to write export result");
+			return -EFAULT;
+		}
+	} break;
+	case OBMM_CMD_UNEXPORT: {
+		ret = (int)copy_from_user(&cmd_param.unexport, (void __user *)arg,
+					sizeof(struct obmm_cmd_unexport));
+		if (ret) {
+			pr_err("failed to load unexport argument");
+			return -EFAULT;
+		}
+
+		ret = obmm_unexport(&cmd_param.unexport);
+	} break;
 	case OBMM_CMD_ADDR_QUERY: {
 		ret = (int)copy_from_user(&cmd_param.query, (void __user *)arg,
 					  sizeof(struct obmm_cmd_addr_query));

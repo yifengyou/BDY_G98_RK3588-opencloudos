@@ -44,6 +44,12 @@ enum obmm_region_type {
 	OBMM_EXPORT_REGION,
 };
 
+enum obmm_mmap_granu {
+	OBMM_MMAP_GRANU_NONE,
+	OBMM_MMAP_GRANU_PAGE,
+	OBMM_MMAP_GRANU_PMD
+};
+
 #define OBMM_REGION_FLAG_NUMA_REMOTE		0x1
 #define OBMM_REGION_FLAG_ALLOW_MMAP		0x2
 #define OBMM_REGION_FLAG_MEMORY_FROM_USER	0x4
@@ -53,6 +59,9 @@ enum obmm_region_type {
 #define OBMM_MIN_VALID_REGIONID 1
 #define OBMM_MAX_VALID_REGIONID MINORMASK
 #define OBMM_REGIONID_MAX_COUNT (OBMM_MAX_VALID_REGIONID - OBMM_MIN_VALID_REGIONID + 1)
+
+#define OBMM_MEM_ALLOW_CACHEABLE_MMAP 0x1
+#define OBMM_MEM_ALLOW_NONCACHEABLE_MMAP 0x2
 
 /* invalidate cache **on start-up** */
 /* region models a set of memory to share across hosts: a unit of sharing. */
@@ -68,7 +77,18 @@ struct obmm_region {
 
 	/* the total size of all memory segments included in meminfo */
 	u64 mem_size;
-
+	/*
+	 * the granularity of memory mapping, initially OBMM_MMAP_GRANU_NONE.
+	 * When users call mmap, the mmap granularity is determined based on
+	 * the mmap flags and OBMM_REGION_FLAG_ALLOW_MMAP.
+	 */
+	enum obmm_mmap_granu mmap_granu;
+	/*
+	 * Determines what mode the memory can be mapped with.
+	 * OBMM_MEM_ALLOW_CACHEABLE_MMAP: Supports cacheable mapping
+	 * OBMM_MEM_ALLOW_NONCACHEABLE_MMAP: Supports non-cacheable mapping
+	 */
+	unsigned long mem_cap;
 	/* regions are chained into a list for management */
 	struct list_head node;
 
@@ -76,8 +96,45 @@ struct obmm_region {
 	unsigned char priv[OBMM_MAX_PRIV_LEN];
 };
 
+static inline bool region_allow_mmap(const struct obmm_region *reg)
+{
+	return reg->flags & OBMM_REGION_FLAG_ALLOW_MMAP;
+}
+static inline bool region_fast_alloc(const struct obmm_region *reg)
+{
+	return reg->flags & OBMM_REGION_FLAG_FAST_ALLOC;
+}
+
 struct mem_description_pool {
 	struct list_head head[OBMM_MAX_LOCAL_NUMA_NODES];
+};
+
+struct obmm_export_region {
+	struct obmm_region region;
+
+	/* export region may use physical memory from NUMA node[0] to node[node_count-1] */
+	unsigned int node_count;
+	uint64_t node_mem_size[OBMM_MAX_LOCAL_NUMA_NODES];
+
+	/* physical pages */
+	union {
+		struct mem_description_pool mem_desc;
+	};
+
+	/* DMA mapping */
+	struct sg_table sgt;
+
+	/* UMMU device for the tokenid */
+	struct device *ummu_dev;
+	/* UMMU RAS event notifier */
+	struct ummu_event_block *ummu_event_block;
+
+	unsigned int tokenid;
+	u64 uba;
+	unsigned int vendor_len;
+	void *vendor_info;
+	int affinity;
+	u8 deid[16];
 };
 
 struct obmm_ctx_info {
