@@ -298,6 +298,7 @@ static void remove_obmm_region(struct obmm_region *reg)
 void uninit_obmm_region(struct obmm_region *region)
 {
 	ida_free(&g_obmm_region_ida, region->regionid);
+	mutex_destroy(&region->state_mutex);
 }
 
 int init_obmm_region(struct obmm_region *region)
@@ -305,6 +306,7 @@ int init_obmm_region(struct obmm_region *region)
 	int retval;
 
 	refcount_set(&region->refcnt, 0);
+	mutex_init(&region->state_mutex);
 	INIT_LIST_HEAD(&region->node);
 
 	retval = ida_alloc_range(&g_obmm_region_ida, OBMM_MIN_VALID_REGIONID,

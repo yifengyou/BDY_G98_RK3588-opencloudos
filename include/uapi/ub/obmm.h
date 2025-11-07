@@ -122,6 +122,19 @@ struct obmm_cmd_unimport {
 #define OBMM_CMD_DECLARE_PREIMPORT   _IOWR('x', 6, struct obmm_cmd_preimport)
 #define OBMM_CMD_UNDECLARE_PREIMPORT _IOW('x', 7, struct obmm_cmd_preimport)
 
+/* 2bits */
+#define OBMM_SHM_MEM_CACHE_RESV     0x0
+#define OBMM_SHM_MEM_NORMAL         0x1
+#define OBMM_SHM_MEM_NORMAL_NC      0x2
+#define OBMM_SHM_MEM_DEVICE         0x3
+#define OBMM_SHM_MEM_CACHE_MASK     0b11
+/* 2bits */
+#define OBMM_SHM_MEM_READONLY       0x0
+#define OBMM_SHM_MEM_READEXEC       0x4
+#define OBMM_SHM_MEM_READWRITE      0x8
+#define OBMM_SHM_MEM_NO_ACCESS      0xc
+#define OBMM_SHM_MEM_ACCESS_MASK    0b1100
+
 /* cache maintenance operations (not states) */
 /* no cache maintenance (nops) */
 #define OBMM_SHM_CACHE_NONE             0x0
@@ -153,6 +166,8 @@ struct obmm_cmd_preimport {
 
 #define OBMM_PREIMPORT_FLAG_MASK	(0UL)
 #define OBMM_UNPREIMPORT_FLAG_MASK	(0UL)
+
+#define OBMM_MMAP_FLAG_HUGETLB_PMD (1UL << 63)
 
 #if defined(__cplusplus)
 }

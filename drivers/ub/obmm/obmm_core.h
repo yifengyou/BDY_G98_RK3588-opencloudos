@@ -46,6 +46,12 @@ enum obmm_region_type {
 	OBMM_IMPORT_REGION
 };
 
+enum obmm_mmap_mode {
+	OBMM_MMAP_INIT,
+	OBMM_MMAP_NORMAL,
+	OBMM_MMAP_OSYNC
+};
+
 enum obmm_mmap_granu {
 	OBMM_MMAP_GRANU_NONE,
 	OBMM_MMAP_GRANU_PAGE,
@@ -85,6 +91,13 @@ struct obmm_region {
 	/* the total size of all memory segments included in meminfo */
 	u64 mem_size;
 	/*
+	 * current mapping mode.
+	 * init: mmap_mode = OBMM_MMAP_INIT
+	 * cc-mmap: mmap_mode = OBMM_MMAP_NORMAL
+	 * nc-mmap: mmap_mode = OBMM_MMAP_OSYNC
+	 */
+	enum obmm_mmap_mode mmap_mode;
+	/*
 	 * the granularity of memory mapping, initially OBMM_MMAP_GRANU_NONE.
 	 * When users call mmap, the mmap granularity is determined based on
 	 * the mmap flags and OBMM_REGION_FLAG_ALLOW_MMAP.
@@ -96,6 +109,12 @@ struct obmm_region {
 	 * OBMM_MEM_ALLOW_NONCACHEABLE_MMAP: Supports non-cacheable mapping
 	 */
 	unsigned long mem_cap;
+	/* number of mmap */
+	unsigned long mmap_count;
+
+	/* protect ownership_info and serialize concurrent page table change requests */
+	struct mutex state_mutex;
+
 	/* regions are chained into a list for management */
 	struct list_head node;
 
