@@ -1,3 +1,179 @@
+* Fri Nov  7 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.114-43
+- Merge branch 'olice/release' into 'release' (merge request !801)
+- netfilter/ipvs: fix local_out hook function name and logic
+- Merge branch 'paul/fix-pagecachelimit-overshrink-v2' into 'release' (merge request !798)
+- rue/mm: limit each pagecache reclaim size
+- Merge branch 'leonylgao/rt_group_sched_switch' into 'release' (merge request !797)
+- sched: Add annotations to RT_GROUP_SCHED fields
+- sched: Add RT_GROUP WARN checks for non-root task_groups
+- sched: Do not construct nor expose RT_GROUP_SCHED structures if disabled
+- sched: Bypass bandwitdh checks with runtime disabled RT_GROUP_SCHED
+- sched: Skip non-root task_groups with disabled RT_GROUP_SCHED
+- sched: Add commadline option for RT_GROUP_SCHED toggling
+- sched: Always initialize rt_rq's task_group
+- sched: Remove unneeed macro wrap
+- sched: Convert CONFIG_RT_GROUP_SCHED macros to code conditions
+- Merge branch 'olice/MR' into 'release' (merge request !799)
+- dist: update mlnx-ofed version to OFED_LINUX-24.10-3.2.5.0
+- mm,damon: fix compile error when using allyesconfig
+- Merge branch 'haisu/release-fuse-alive-polish-code-mr' into 'release' (merge request !795)
+- fuse: skip checking connection epoch in get actions
+- Merge branch 'zegao/feat/scx-fix-configs' into 'release' (merge request !777)
+- rue/scx: Remove config SCHED_QOS_RUE
+- Merge branch 'haisu/release-fuse-alive-polish-code-mr' into 'release' (merge request !760)
+- fuse: skip sending forget if stale connection
+- fuse: polish fuse_stale_inode_epoch 's parameter
+- Merge branch 'aurelianliu/release_1030_25' into 'release' (merge request !794)
+- loong quirk: add CONFIG_LOONGARCH
+- dist,sources: move get_mlnx_info.sh into sources
+- dist,spec: define with_ofed to 1 only when url is reachable
+- Merge branch 'leonylgao/arm64-config-update' into 'release' (merge request !787)
+- config: disable CONFIG_PREEMPT_VOLUNTARY
+- Merge branch 'frankjpliu/release' into 'release' (merge request !782)
+- Merge linux-6.6.114 into TK5 release-cve-auto
+- Linux 6.6.114
+- Merge linux 6.6.113 into TK5 release-cve-auto
+- Linux 6.6.113
+- Merge linux 6.6.112 into TK5 release-cve-auto
+- Linux 6.6.112
+- Merge branch 'leonylgao/fix-build-id' into 'release' (merge request !781)
+- dist: do not recompute build id
+- kernel/sysctl: fix ld error when using notk.config
+- Merge OCK linux-6.6/devel branch into TK5 release
+- !508 PCI: Add ACS quirk for phytium root ports
+- PCI: Add ACS quirk for phytium root ports
+- !511 [linux-6.6/devel][Feature]：update patches for sw64 architecture
+- sw64: add SO_TVPC_INFO definition to fix compile error
+- sw64: fix the condition for enabling hw_una_enabled
+- sw64: efi: fix compile error when CONFIG_EFI=n
+- sw64: powercap: fix misuse of an uninitialized temporary variable
+- sw64: powercap: increase the interval of polling mode
+- sw64: powercap: fix Kconfig dependency for SW64_POWERCAP
+- sw64: powercap: avoid checking meaningless target freq
+- sw64: smp: fix unaligned access before trap_init()
+- sw64: irqchip: update effective affinity for INTx
+- sw64: msi: fix affinity change of managed irq
+- sw64: use orig_r0 as syscall nr
+- sw64: revert ioremap() to __va() in ioport_map()
+- sw64: fix unresolved reference error when close pci
+- sw64: kvm: add the C4 kvm_regs structure to uapi kvm.h
+- pgtable,ioremap: optimize performance impact from ALTRA_ERRATUM_82288
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- Merge branch 'cunhuang/numa_emu' into 'release' (merge request !778)
+- config: numa: Enable NUMA emulation for large memory single-node systems
+- Merge branch 'olice/MR' into 'release' (merge request !776)
+- mm: memcg: add sysctl memcg_async to control memory async reclaim
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !507 net/sxe: Resolve pipeline check errors
+- net/sxe: Resolve pipeline check errors
+- !506 [linux-6.6/devel][Bugfix]: LoongArch: Re-remove asm/shmparam.h to fix SHMLBA regression
+- LoongArch: Re-remove asm/shmparam.h to fix SHMLBA regression
+- Merge branch 'paul/fix-pagecache-limit-pr-warn' into 'release' (merge request !772)
+- rue/mm: use rate-limited pr_warn for pagecache reclaim retry failures
+- Merge branch 'paul/fix-pagecache-limit-overshrink' into 'release' (merge request !771)
+- rue/mm: remove immediate reclaim on pagecache max_ratio write to avoid double reclaim
+- Merge branch 'cunhuang/kvm.spinlock2' into 'release' (merge request !774)
+- locking/qspinlock/x86: Make usage of qspinlock depends on X86_FEATURE_MWAIT
+- Merge branch 'cunhuang/kvm.spinlock' into 'release' (merge request !763)
+- ck: locking/qspinlock/x86: Fix performance regression caused by virt_spin_lock
+- Merge branch 'frankjpliu/release' into 'release' (merge request !761)
+- config: enable CONFIG_SECURITY_LANDLOCK
+- Merge branch 'leonylgao/nvme-fix-2' into 'release' (merge request !757)
+- block: fix batch completion by checking ioerror for non-zero
+- Merge branch 'leonylgao/release-pid_list_lock' into 'release' (merge request !750)
+- trace/pid_list: optimize pid_list->lock contention
+- Merge branch 'caelli/release/update_config' into 'release' (merge request !755)
+- config: disable CONTEXT_TRACKING_USER
+- Merge branch 'keray/release-fast-copy' into 'release' (merge request !748)
+- arm64: bugfix fast_copy_page use may_use_simd()
+- arm64: Improve memory copy performance by adding software prefetch in fast_copy_page
+- arm64: remove fixup section in fast_copy_page.S
+- arm64: adapt exception table in fast_copy_page() to tkernel5
+- arm64: rename slow_copy_page.S back to copy_page.S
+- arm64: fix compliation error introduced by include hardirq.h
+- arm64: fix NEON/VFP reentrant in fast_copy_page
+- arm64: implemented a fast copy_page version while NEON/VFP is met
+- Merge branch 'olice/developer' into 'release' (merge request !745)
+- rue/cpu/bt: fixed io_wait_bt refcount leak
+- rue/sched: Support counting batch tasks iowait of buffer IO
+- Merge branch 'bruzzhang/backport/per-vma-madvise' into 'release' (merge request !709)
+- mm: fix the race between collapse and PT_RECLAIM under per-vma lock
+- mm: madvise: use per_vma lock for MADV_FREE
+- mm: use per_vma lock for MADV_DONTNEED
+- mm: madvise: use walk_page_range_vma() instead of walk_page_range()
+- mm/madvise: handle madvise_lock() failure during race unwinding
+- mm/memory: split non-tlb flushing part from zap_page_range_single()
+- mm/madvise: batch tlb flushes for MADV_FREE
+- mm/madvise: define and use madvise_behavior struct for madvise_do_behavior()
+- mm/madvise: remove len parameter of madvise_do_behavior()
+- mm/madvise: deduplicate madvise_do_behavior() skip case handlings
+- mm/madvise: split out populate behavior check logic
+- mm/madvise: use is_memory_failure() from madvise_do_behavior()
+- mm/madvise: remove redundant mmap_lock operations from process_madvise()
+- mm/madvise: split out madvise() behavior execution
+- mm/madvise: split out madvise input validity check
+- mm/madvise: split out mmap locking operations for madvise()
+- mm/madvise: unrestrict process_madvise() for current process
+- mm/madvise: don't perform madvise VMA walk for MADV_POPULATE_(READ|WRITE)
+- Merge branch 'yilingjin/release' into 'release' (merge request !747)
+- 9p/trans_fd: p9_fd_request: kick rx thread if EPOLLIN
+- fs/pipe: remove buggy and unused 'helper' function
+- fs/pipe: fix pipe buffer index use in FUSE
+- fs/pipe: do not open-code pipe head/tail logic in FIONREAD
+- include/linux/pipe_fs_i: Add htmldoc annotation for "head_tail" member
+- fs/pipe: Fix pipe_occupancy() with 16-bit indexes
+- fs/pipe: Read pipe->{head,tail} atomically outside pipe->mutex
+- pipe: drop an always true check in anon_pipe_write()
+- pipe: cache 2 pages instead of 1
+- pipe: change pipe_write() to never add a zero-sized buffer
+- pipe_read: don't wake up the writer if the pipe is still full
+- fs/pipe: Convert to lockdep_cmp_fn
+- fs/pipe: use spinlock in pipe_read() only if there is a watch_queue
+- fs/pipe: remove unnecessary spinlock from pipe_write()
+- pipe: don't update {a,c,m}time for anonymous pipes
+- pipe: introduce struct file_operations pipeanon_fops
+- arm64: change config for performance
+- arm64: cpufeature: disable lse on kunpeng920
+- timekeeping: Avoiding false sharing in field access of tk_core
+- Merge branch 'leonylgao/release-memory_max' into 'release' (merge request !749)
+- mm/memcontrol: introduce memory_max_reclaim_first interface
+- Merge branch 'keray/release-hygon-copy-switch' into 'release' (merge request !751)
+- config: enable HYGON_LMC_SSE2
+- add hygon_fpu early_param
+- drivers,io-pgtable-arm: fix compile error when using allmodconfig or allyesconfig
+- drivers,ngbe: fix compile error when using allmodconfig or allyesconfig
+- Merge branch 'leonylgao/fix-kabi-reserve' into 'release' (merge request !744)
+- kabi: remove the union structure from the KABI_RESERVE macro
+- drivers,bzwx: fix compile error when using allmodconfig or allyesconfig
+- mm/page_isolation: remove unused variable
+- mm/huge_memory: remove unused variable
+- Merge linux 6.6.111 into TK5 release branch
+- Linux 6.6.111
+- Merge branch 'hugoolli/cirrus_wc' into 'release' (merge request !726)
+- drivers:set cirrus' cache strategy to WC
+- Merge branch 'haisu/release-fuse-alive-polish-code-mr' into 'release' (merge request !739)
+- fuse: dynamic alloc and free fuse alive struct
+- fuse: add config to guard fuse alive function
+- fuse: strictly check connection_epoch of getattr/setattr
+- fuse: introduce epoch number for fuse alive
+- fuse: invalid the dentry cache when fuse recovery
+- ovl: add sysctl to allow ignore lower change
+- fuse: end processing queue's requests when dev release
+- fuse: check mount point in FUSE_DEV_IOC_RECOVERY
+- fuse: support mountpoint in fuse connection
+- fuse: no fuse resend by default after recovery
+- fuse: implement the fuse connection recovery procedure
+- fuse: add fuse ioctl FUSE_DEV_IOC_RECOVERY to recovery fc
+- fuse: export comm and cmdline with arg info of fuse connection
+- fuse: add fuse.auto_recovery sysctl
+- fuse: check aborted connection before adding requests to pending list for resending
+- fuse: enable dynamic configuration of fuse max pages limit (FUSE_MAX_MAX_PAGES)
+- fuse: clear FR_SENT when re-adding requests into pending list
+- fuse: set FR_PENDING atomically in fuse_resend()
+- fuse: Use the high bit of request ID for indicating resend requests
+- fuse: Introduce a new notification type for resend pending requests
+- fuse: add support for explicit export disabling
+
 * Tue Oct 14 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.110-42
 - rue/scx: Allow to verify a bigger sched_ext_ops signature
 - Merge linux 6.6.110 into TK5 release branch
