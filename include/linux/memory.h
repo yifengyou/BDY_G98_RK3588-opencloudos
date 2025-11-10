@@ -155,6 +155,7 @@ bool check_memory_block_pre_online(unsigned long start, unsigned long size,
 				   bool pre_online);
 void set_memory_block_pre_online(unsigned long start, unsigned long size,
 				   bool pre_online);
+bool check_memory_block_online(unsigned long start, unsigned long size);
 static inline bool memory_block_is_pre_online(struct memory_block *mem)
 {
 	return mem->pre_online;

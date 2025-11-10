@@ -300,6 +300,11 @@ static int __ref numa_remote_undo_fake_online(u64 start, u64 size)
 		goto out;
 	}
 
+	if (!check_memory_block_online(start, size)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	zone = page_zone(phys_to_page(start));
 	nid = zone_to_nid(zone);
 	if (!check_memory_block_nid(start, size, nid)) {
@@ -317,12 +322,12 @@ static int __ref numa_remote_undo_fake_online(u64 start, u64 size)
 	atomic_long_add(-nr_pages, &pre_online_pages_node[nid]);
 	atomic_long_add(-nr_pages, &pre_online_pages);
 	numa_remote_online_pages(start_pfn, end_pfn);
-	atomic_long_add(-nr_pages, &undo_fake_online_pages_node[nid]);
 
 	init_per_zone_wmark_min();
 	writeback_set_ratelimit();
 
 out:
+	atomic_long_add(-nr_pages, &undo_fake_online_pages_node[nid]);
 	mem_hotplug_done();
 	return ret;
 }

@@ -936,6 +936,7 @@ void remove_memory_block_devices(unsigned long start, unsigned long size)
 enum check_state_type {
 	CHECK_NID,
 	CHECK_PREONLINE,
+	CHECK_ONLINE,
 };
 
 static inline bool check_memory_block_state(unsigned long start, unsigned long size,
@@ -956,6 +957,8 @@ static inline bool check_memory_block_state(unsigned long start, unsigned long s
 			check_res = (mem->nid == check_val);
 		else if (type == CHECK_PREONLINE)
 			check_res = (mem->pre_online == check_val);
+		else if (type == CHECK_ONLINE)
+			check_res = (mem->state == check_val);
 		put_device(&mem->dev);
 		if (!check_res)
 			return false;
@@ -972,6 +975,11 @@ bool check_memory_block_pre_online(unsigned long start, unsigned long size,
 				   bool pre_online)
 {
 	return check_memory_block_state(start, size, CHECK_PREONLINE, pre_online);
+}
+
+bool check_memory_block_online(unsigned long start, unsigned long size)
+{
+	return check_memory_block_state(start, size, CHECK_ONLINE, MEM_ONLINE);
 }
 
 void set_memory_block_pre_online(unsigned long start, unsigned long size,
