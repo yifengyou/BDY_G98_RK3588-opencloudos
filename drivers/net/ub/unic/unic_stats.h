@@ -12,6 +12,13 @@
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 
+#define UNIC_SQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_sq, stats) + \
+				      offsetof(struct unic_sq_stats, fld))
+#define UNIC_RQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_rq, stats) + \
+				      offsetof(struct unic_rq_stats, fld))
+
+#define UNIC_STATS_READ(p, offset) (*(u64 *)((u8 *)(p) + (offset)))
+
 #define UNIC_FEC_CORR_BLOCKS	BIT(0)
 #define UNIC_FEC_UNCORR_BLOCKS	BIT(1)
 #define UNIC_FEC_CORR_BITS	BIT(2)
@@ -58,6 +65,11 @@ enum unic_reg_tag {
 	UNIC_TAG_MAX,
 };
 
+enum unic_queue_type {
+	UNIC_QUEUE_TYPE_SQ = 0,
+	UNIC_QUEUE_TYPE_RQ,
+};
+
 struct unic_res_regs_group {
 	u16 tag;
 	u32 *regs_addr;
@@ -83,9 +95,18 @@ struct unic_dfx_regs_group {
 	bool (*is_supported)(struct unic_dev *unic_dev, u32 property);
 };
 
+struct unic_stats_desc {
+	char desc[ETH_GSTRING_LEN];
+	u16 offset;
+};
+
 int unic_get_regs_len(struct net_device *netdev);
 void unic_get_regs(struct net_device *netdev, struct ethtool_regs *cmd,
 		   void *data);
+void unic_get_stats_strings(struct net_device *netdev, u32 stringset, u8 *data);
+int unic_get_sset_count(struct net_device *netdev, int stringset);
+void unic_get_stats(struct net_device *netdev,
+		    struct ethtool_stats *stats, u64 *data);
 void unic_get_fec_stats(struct net_device *ndev,
 			struct ethtool_fec_stats *fec_stats);
 

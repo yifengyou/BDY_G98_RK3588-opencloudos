@@ -78,6 +78,36 @@ static struct unic_dfx_regs_group unic_dfx_reg_arr[] = {
 	},
 };
 
+static const struct unic_stats_desc unic_sq_stats_str[] = {
+	{"pad_err", UNIC_SQ_STATS_FIELD_OFF(pad_err)},
+	{"packets", UNIC_SQ_STATS_FIELD_OFF(packets)},
+	{"bytes", UNIC_SQ_STATS_FIELD_OFF(bytes)},
+	{"busy", UNIC_SQ_STATS_FIELD_OFF(busy)},
+	{"more", UNIC_SQ_STATS_FIELD_OFF(more)},
+	{"restart_queue", UNIC_SQ_STATS_FIELD_OFF(restart_queue)},
+	{"over_max_sge_num", UNIC_SQ_STATS_FIELD_OFF(over_max_sge_num)},
+	{"csum_err", UNIC_SQ_STATS_FIELD_OFF(csum_err)},
+	{"ci_mismatch", UNIC_SQ_STATS_FIELD_OFF(ci_mismatch)},
+	{"vlan_err", UNIC_SQ_STATS_FIELD_OFF(vlan_err)},
+	{"fd_cnt", UNIC_SQ_STATS_FIELD_OFF(fd_cnt)},
+	{"drop_cnt", UNIC_SQ_STATS_FIELD_OFF(drop_cnt)},
+	{"cfg5_drop_cnt", UNIC_SQ_STATS_FIELD_OFF(cfg5_drop_cnt)}
+};
+
+static const struct unic_stats_desc unic_rq_stats_str[] = {
+	{"alloc_skb_err", UNIC_RQ_STATS_FIELD_OFF(alloc_skb_err)},
+	{"packets", UNIC_RQ_STATS_FIELD_OFF(packets)},
+	{"bytes", UNIC_RQ_STATS_FIELD_OFF(bytes)},
+	{"err_pkt_len_cnt", UNIC_RQ_STATS_FIELD_OFF(err_pkt_len_cnt)},
+	{"doi_cnt", UNIC_RQ_STATS_FIELD_OFF(doi_cnt)},
+	{"trunc_cnt", UNIC_RQ_STATS_FIELD_OFF(trunc_cnt)},
+	{"multicast", UNIC_RQ_STATS_FIELD_OFF(multicast)},
+	{"l2_err", UNIC_RQ_STATS_FIELD_OFF(l2_err)},
+	{"l3_l4_csum_err", UNIC_RQ_STATS_FIELD_OFF(l3_l4_csum_err)},
+	{"alloc_frag_err", UNIC_RQ_STATS_FIELD_OFF(alloc_frag_err)},
+	{"csum_complete", UNIC_RQ_STATS_FIELD_OFF(csum_complete)},
+};
+
 static int unic_get_dfx_reg_num(struct unic_dev *unic_dev, u32 *reg_num,
 				u32 reg_arr_size)
 {
@@ -293,6 +323,118 @@ void unic_get_regs(struct net_device *netdev, struct ethtool_regs *cmd,
 		unic_err(unic_dev, "failed to get dfx regs, ret = %d.\n", ret);
 
 	kfree(reg_num);
+}
+
+static u64 *unic_get_queues_stats(struct unic_dev *unic_dev,
+				  const struct unic_stats_desc *stats,
+				  u32 stats_size, enum unic_queue_type type,
+				  u64 *data)
+{
+	struct unic_channel *c;
+	u32 i, j;
+	u8 *q;
+
+	for (i = 0; i < unic_dev->channels.num; i++) {
+		c = &unic_dev->channels.c[i];
+		q = (type == UNIC_QUEUE_TYPE_SQ) ? (u8 *)c->sq : (u8 *)c->rq;
+		for (j = 0; j < stats_size; j++) {
+			*data = UNIC_STATS_READ(q, stats[j].offset);
+			data++;
+		}
+	}
+
+	return data;
+}
+
+void unic_get_stats(struct net_device *netdev,
+		    struct ethtool_stats *stats, u64 *data)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	u64 *p = data;
+
+	if (unic_resetting(netdev) || !unic_dev->channels.c) {
+		unic_err(unic_dev,
+			 "dev resetting or channel is null, could not get stats.\n");
+		return;
+	}
+
+	p = unic_get_queues_stats(unic_dev, unic_sq_stats_str,
+				  ARRAY_SIZE(unic_sq_stats_str),
+				  UNIC_QUEUE_TYPE_SQ, p);
+
+	p = unic_get_queues_stats(unic_dev, unic_rq_stats_str,
+				  ARRAY_SIZE(unic_rq_stats_str),
+				  UNIC_QUEUE_TYPE_RQ, p);
+}
+
+static u8 *unic_get_strings(u8 *data, const char *prefix, u32 num,
+			    const struct unic_stats_desc *strs, u32 stats_size)
+{
+	u32 i, j;
+
+	for (i = 0; i < num; i++) {
+		for (j = 0; j < stats_size; j++) {
+			data[ETH_GSTRING_LEN - 1] = '\0';
+
+			if (prefix)
+				scnprintf(data, ETH_GSTRING_LEN - 1, "%s%u_%s",
+					  prefix, i, strs[j].desc);
+			else
+				scnprintf(data, ETH_GSTRING_LEN - 1, "%s",
+					  strs[j].desc);
+
+			data += ETH_GSTRING_LEN;
+		}
+	}
+
+	return data;
+}
+
+static u8 *unic_get_queues_strings(struct unic_dev *unic_dev, u8 *data)
+{
+	u32 channel_num = unic_dev->channels.num;
+
+	/* get desc for Tx */
+	data = unic_get_strings(data, "txq", channel_num, unic_sq_stats_str,
+				ARRAY_SIZE(unic_sq_stats_str));
+
+	/* get desc for Rx */
+	data = unic_get_strings(data, "rxq", channel_num, unic_rq_stats_str,
+				ARRAY_SIZE(unic_rq_stats_str));
+
+	return data;
+}
+
+void unic_get_stats_strings(struct net_device *netdev, u32 stringset, u8 *data)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	u8 *p = data;
+
+	switch (stringset) {
+	case ETH_SS_STATS:
+		p = unic_get_queues_strings(unic_dev, p);
+		break;
+	default:
+		break;
+	}
+}
+
+int unic_get_sset_count(struct net_device *netdev, int stringset)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	u32 channel_num = unic_dev->channels.num;
+	int count;
+
+	switch (stringset) {
+	case ETH_SS_STATS:
+		count = ARRAY_SIZE(unic_sq_stats_str) * channel_num;
+		count += ARRAY_SIZE(unic_rq_stats_str) * channel_num;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return count;
 }
 
 static void unic_get_fec_stats_total(struct unic_dev *unic_dev, u8 stats_flags,

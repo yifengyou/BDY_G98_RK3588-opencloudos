@@ -24,6 +24,46 @@ static u32 unic_get_link_status(struct net_device *netdev)
 	return unic_dev->sw_link_status;
 }
 
+static void unic_get_port_type(struct unic_dev *unic_dev,
+			       struct ethtool_link_ksettings *cmd)
+{
+	u8 module_type = unic_dev->hw.mac.module_type;
+	u8 media_type = unic_dev->hw.mac.media_type;
+
+	switch (media_type) {
+	case UNIC_MEDIA_TYPE_NONE:
+	case UNIC_MEDIA_TYPE_BACKPLANE:
+		cmd->base.port = PORT_NONE;
+		break;
+	case UNIC_MEDIA_TYPE_FIBER:
+		if (module_type == UNIC_MODULE_TYPE_CR)
+			cmd->base.port = PORT_DA;
+		else
+			cmd->base.port = PORT_FIBRE;
+		break;
+	default:
+		cmd->base.port = PORT_NONE;
+		break;
+	}
+}
+
+static void unic_get_ksettings(struct unic_dev *unic_dev,
+			       struct ethtool_link_ksettings *cmd)
+{
+	struct unic_mac *mac = &unic_dev->hw.mac;
+
+	unic_get_port_type(unic_dev, cmd);
+
+	cmd->base.speed = mac->speed;
+	cmd->base.duplex = mac->duplex;
+	cmd->base.autoneg = mac->autoneg;
+
+	linkmode_copy(cmd->link_modes.supported, mac->supported);
+	linkmode_copy(cmd->link_modes.advertising, mac->advertising);
+
+	cmd->lanes = mac->lanes;
+}
+
 static int unic_get_link_ksettings(struct net_device *netdev,
 				   struct ethtool_link_ksettings *cmd)
 {
@@ -31,6 +71,13 @@ static int unic_get_link_ksettings(struct net_device *netdev,
 
 	/* Ensure that the latest information is obtained. */
 	unic_update_port_info(unic_dev);
+
+	unic_get_ksettings(unic_dev, cmd);
+
+	if (!unic_get_link_status(netdev)) {
+		cmd->base.speed = SPEED_UNKNOWN;
+		cmd->base.duplex = DUPLEX_UNKNOWN;
+	}
 
 	return 0;
 }
@@ -326,6 +373,9 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.get_drvinfo = unic_get_driver_info,
 	.get_regs_len = unic_get_regs_len,
 	.get_regs = unic_get_regs,
+	.get_ethtool_stats = unic_get_stats,
+	.get_strings = unic_get_stats_strings,
+	.get_sset_count = unic_get_sset_count,
 	.get_channels = unic_get_channels,
 	.set_channels = unic_set_channels,
 	.get_ringparam = unic_get_channels_param,
