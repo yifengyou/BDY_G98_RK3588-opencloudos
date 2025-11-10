@@ -427,9 +427,9 @@ static int ubase_config_jfs_ctx_buf_by_pmem(struct ubase_dev *udev,
 	return ret;
 }
 
-int ubase_cmd_ctx_buf_alloc(struct ubase_dev *udev,
-			    struct ubase_ctx_buf_cap *ctx_buf,
-			    struct ubase_mbx_attr *attr)
+static int ubase_cmd_ctx_buf_alloc(struct ubase_dev *udev,
+				   struct ubase_ctx_buf_cap *ctx_buf,
+				   struct ubase_mbx_attr *attr)
 {
 	size_t size = ctx_buf->entry_cnt * ctx_buf->entry_size;
 	int ret;

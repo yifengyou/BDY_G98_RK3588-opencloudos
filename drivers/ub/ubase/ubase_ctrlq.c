@@ -905,7 +905,7 @@ static inline void ubase_ctrlq_reset_crq_ci(struct ubase_dev *udev)
 	ubase_write_dev(&udev->hw, UBASE_CTRLQ_CRQ_HEAD_REG, crq->ci);
 }
 
-void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
+static void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
 {
 	struct ubase_ctrlq_ring *crq = &udev->ctrlq.crq;
 	struct ub_entity *ue = to_ub_entity(udev->dev);
