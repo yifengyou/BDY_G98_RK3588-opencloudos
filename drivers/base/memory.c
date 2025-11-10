@@ -932,57 +932,63 @@ void remove_memory_block_devices(unsigned long start, unsigned long size)
 }
 
 #ifdef CONFIG_NUMA_REMOTE
-bool check_memory_block_nid(unsigned long start, unsigned long size, int nid)
+
+enum check_state_type {
+	CHECK_NID,
+	CHECK_PREONLINE,
+};
+
+static inline bool check_memory_block_state(unsigned long start, unsigned long size,
+						enum check_state_type type, int check_val)
 {
 	unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
-	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size));
+	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size - 1));
 	unsigned long block_id;
 	struct memory_block *mem;
+	bool check_res = true;
 
-	for (block_id = start_block_id; block_id != end_block_id; block_id++) {
+	for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
 		mem = find_memory_block_by_id(block_id);
 		if (!mem)
 			return false;
 
-		if (mem->nid != nid)
+		if (type == CHECK_NID)
+			check_res = (mem->nid == check_val);
+		else if (type == CHECK_PREONLINE)
+			check_res = (mem->pre_online == check_val);
+		put_device(&mem->dev);
+		if (!check_res)
 			return false;
 	}
 	return true;
 }
 
+bool check_memory_block_nid(unsigned long start, unsigned long size, int nid)
+{
+	return check_memory_block_state(start, size, CHECK_NID, nid);
+}
+
 bool check_memory_block_pre_online(unsigned long start, unsigned long size,
 				   bool pre_online)
 {
-	unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
-	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size));
-	unsigned long block_id;
-	struct memory_block *mem;
-
-	for (block_id = start_block_id; block_id != end_block_id; block_id++) {
-		mem = find_memory_block_by_id(block_id);
-		if (!mem)
-			return false;
-
-		if (mem->pre_online != pre_online)
-			return false;
-	}
-	return true;
+	return check_memory_block_state(start, size, CHECK_PREONLINE, pre_online);
 }
 
 void set_memory_block_pre_online(unsigned long start, unsigned long size,
 				   bool pre_online)
 {
 	unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
-	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size));
+	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size - 1));
 	unsigned long block_id;
 	struct memory_block *mem;
 
-	for (block_id = start_block_id; block_id != end_block_id; block_id++) {
+	for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
 		mem = find_memory_block_by_id(block_id);
 		if (!mem)
 			continue;
 
 		mem->pre_online = pre_online;
+		put_device(&mem->dev);
 	}
 }
 #endif
