@@ -213,6 +213,7 @@ static int numa_remote_memory_notifier_cb(struct notifier_block *nb,
 	struct memory_notify *mhp = arg;
 	const unsigned long start = PFN_PHYS(mhp->start_pfn);
 	const unsigned long size = PFN_PHYS(mhp->nr_pages);
+	int nid = pfn_to_nid(mhp->start_pfn);
 
 	if (!check_memory_block_pre_online(start, size, true))
 		return NOTIFY_DONE;
@@ -223,6 +224,10 @@ static int numa_remote_memory_notifier_cb(struct notifier_block *nb,
 		break;
 	case MEM_CANCEL_OFFLINE:
 		numa_remote_preonline_cancel_offline(mhp->start_pfn, mhp->nr_pages);
+		break;
+	case MEM_OFFLINE:
+		atomic_long_add(-mhp->nr_pages, &pre_online_pages_node[nid]);
+		atomic_long_add(-mhp->nr_pages, &pre_online_pages);
 		break;
 	default:
 		break;
@@ -235,7 +240,7 @@ struct notifier_block numa_remote_memory_notifier = {
 	.notifier_call = numa_remote_memory_notifier_cb,
 };
 
-static void numa_remote_preonline_pages(struct page *page, unsigned int order)
+static void numa_remote_online_pages_cb(struct page *page, unsigned int order)
 {
 	unsigned long start_pfn, end_pfn, pfn, nr_pages;
 	int nid = page_to_nid(page);
@@ -244,6 +249,12 @@ static void numa_remote_preonline_pages(struct page *page, unsigned int order)
 	start_pfn = page_to_pfn(page);
 	nr_pages = 1 << order;
 	end_pfn = start_pfn + nr_pages;
+
+	if (!check_memory_block_pre_online(PFN_PHYS(start_pfn), nr_pages * PAGE_SIZE, true)) {
+		generic_online_page(page, order);
+		return;
+	}
+
 	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
 		p = pfn_to_page(pfn);
 		__SetPageOffline(p);
@@ -320,9 +331,6 @@ static int __ref numa_remote_restore_isolation(u64 start, u64 size)
 {
 	unsigned long start_pfn = PFN_DOWN(start);
 	unsigned long end_pfn = PFN_DOWN(start + size);
-	unsigned long nr_pages = end_pfn - start_pfn;
-	struct zone *zone = page_zone(phys_to_page(start));
-	int nid = zone_to_nid(zone);
 	int ret = 0;
 
 	mem_hotplug_begin();
@@ -333,8 +341,6 @@ static int __ref numa_remote_restore_isolation(u64 start, u64 size)
 		goto out;
 	}
 
-	atomic_long_add(-nr_pages, &pre_online_pages_node[nid]);
-	atomic_long_add(-nr_pages, &pre_online_pages);
 out:
 	mem_hotplug_done();
 	return ret;
@@ -487,22 +493,12 @@ int add_memory_remote(int nid, u64 start, u64 size, int flags)
 	if (real_nid == NUMA_NO_NODE)
 		goto unlock;
 
-	if (flags & MEMORY_KEEP_ISOLATED) {
-		int rc;
-
-		rc = set_online_page_callback(&numa_remote_preonline_pages);
-		if (rc) {
-			real_nid = NUMA_NO_NODE;
-			goto unlock;
-		}
+	if (flags & MEMORY_KEEP_ISOLATED)
 		mhp_flags |= MHP_PREONLINE;
-	}
 
 	if (__add_memory(real_nid, start, size, mhp_flags))
 		real_nid = NUMA_NO_NODE;
 
-	if (flags & MEMORY_KEEP_ISOLATED)
-		restore_online_page_callback(&numa_remote_preonline_pages);
 unlock:
 	unlock_device_hotplug();
 out:
@@ -661,12 +657,21 @@ static int __init numa_remote_init(void)
 	if (!numa_remote_preonline_mode)
 		return 0;
 
-	ret = register_memory_notifier(&numa_remote_memory_notifier);
-	if (ret) {
-		numa_remote_preonline_mode = false;
-		pr_err("fail to enanble preonline mode\n");
-	}
+	ret = set_online_page_callback(&numa_remote_online_pages_cb);
+	if (ret)
+		goto err_online_callback;
 
+	ret = register_memory_notifier(&numa_remote_memory_notifier);
+	if (ret)
+		goto err_register_notifier;
+
+	return 0;
+
+err_register_notifier:
+	restore_online_page_callback(&numa_remote_online_pages_cb);
+err_online_callback:
+	numa_remote_preonline_mode = false;
+	pr_err("fail to enanble preonline mode\n");
 	return ret;
 }
 late_initcall(numa_remote_init);
