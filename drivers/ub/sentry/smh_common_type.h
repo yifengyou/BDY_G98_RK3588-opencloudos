@@ -9,6 +9,7 @@
 #ifndef SMH_COMMON_TYPE_H
 #define SMH_COMMON_TYPE_H
 
+#include <linux/firmware/ubios/cis.h>
 #include <ub/ubus/ub-mem-decoder.h>
 #include <linux/types.h>
 #include <linux/ktime.h>
@@ -23,6 +24,8 @@
 #define REPORT_COMM_TIME  5000
 #define URMA_SEND_DATA_MAX_LEN (2 + EID_MAX_LEN * 2 + 10 + 1 + 4) // type_cna_eid_randomID_res
 #define MILLISECONDS_OF_EACH_MDELAY 1000
+#define CNA_MAX_VALUE 0xffffff
+#define INTEGER_TO_STR_MAX_LEN 22
 #define COMM_PARM_NOT_SET (-2)
 #define HEARTBEAT "heartbeat"
 #define HEARTBEAT_ACK "heartbeat_ack"
@@ -70,6 +73,11 @@ struct sentry_msg_helper_msg {
     } helper_msg_info;
     unsigned long res;
 };
+
+extern uint32_t g_local_cna;
+#define UVB_SENDER_ID_SYSSENTRY_INDEX (g_local_cna)
+#define UVB_SENDER_ID_SYSSENTRY (UBIOS_USER_ID_RICH_OS | UVB_SENDER_ID_SYSSENTRY_INDEX)
+#define UVB_RECEIVER_ID_SYSSENTRY(cna) (UBIOS_USER_ID_UB_DEVICE | (cna))
 
 static inline int sentry_create_proc_file(const char *name, struct proc_dir_entry *parent,
 					  const struct proc_ops *proc_ops)
