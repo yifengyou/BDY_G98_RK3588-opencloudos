@@ -517,8 +517,7 @@ int __ubase_hw_upgrade_ctx_ex(struct ubase_dev *udev,
 	}
 
 	ret = __ubase_hw_upgrade_ctx(udev, attr, mailbox);
-	if ((ret && type == UBASE_MB_CREATE) ||
-	    (!ret && type == UBASE_MB_DESTROY))
+	if (ret && type == UBASE_MB_CREATE)
 		ubase_free_buf_ctx_page(udev, ctx_buf, attr->tag);
 
 	return ret;
