@@ -4,6 +4,7 @@
 #
 
 obj-$(CONFIG_UB_URMA)	+= ubcore/
+obj-$(CONFIG_UB_URMA)	+= ubagg/
 
 obj-$(CONFIG_UB_URMA)	+= uburma/
 
