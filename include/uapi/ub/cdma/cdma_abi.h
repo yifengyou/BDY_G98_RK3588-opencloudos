@@ -142,6 +142,8 @@ struct cdma_cmd_create_jfs_args {
 		__u32 tpn;
 		__u64 dma_jfs; /* dma jfs pointer */
 		__u32 trans_mode;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		__u32 id;
@@ -149,6 +151,8 @@ struct cdma_cmd_create_jfs_args {
 		__u8 max_sge;
 		__u8 max_rsge;
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 	struct cdma_cmd_udrv_priv udata;
 };
@@ -163,8 +167,12 @@ struct cdma_cmd_delete_jfs_args {
 		__u32 jfs_id;
 		__u64 handle;
 		__u32 queue_id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -178,10 +186,14 @@ struct cdma_cmd_create_ctp_args {
 		__u32 seid;
 		__u32 deid;
 		__u32 queue_id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		__u32 tpn;
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -190,15 +202,25 @@ struct cdma_cmd_delete_ctp_args {
 		__u32 tpn;
 		__u64 handle;
 		__u32 queue_id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
 struct cdma_cmd_create_jfce_args {
 	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
+	} in;
+	struct {
 		int fd;
 		int id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -209,11 +231,15 @@ struct cdma_cmd_create_jfc_args {
 		int jfce_id;
 		__u32 ceqn;
 		__u32 queue_id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		__u32 id;
 		__u32 depth;
 		__u64 handle; /* handle of the allocated jfc obj in kernel */
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 	struct cdma_cmd_udrv_priv udata;
 };
@@ -223,10 +249,14 @@ struct cdma_cmd_delete_jfc_args {
 		__u32 jfcn;
 		__u64 handle; /* handle of jfc */
 		__u32 queue_id;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		__u32 comp_events_reported;
 		__u32 async_events_reported;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -234,16 +264,26 @@ struct cdma_cmd_register_seg_args {
 	struct {
 		__u64 addr;
 		__u64 len;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
 struct cdma_cmd_unregister_seg_args {
 	struct {
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
+	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
+	} out;
 };
 
 struct dev_eid {
@@ -286,15 +326,27 @@ struct cdma_device_attr {
 
 struct cdma_cmd_query_device_attr_args {
 	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
+	} in;
+	struct {
 		struct cdma_device_attr attr;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
 struct cdma_create_context_args {
 	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
+	} in;
+	struct {
 		__u8 cqe_size;
 		__u8 dwqe_enable;
 		int async_fd;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -324,10 +376,14 @@ struct cdma_cmd_create_queue_args {
 		__u8  priority;
 		__u64 user_ctx;
 		__u32 trans_mode;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
 	struct {
 		int queue_id;
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} out;
 };
 
@@ -335,7 +391,13 @@ struct cdma_cmd_delete_queue_args {
 	struct {
 		__u32 queue_id;
 		__u64 handle;
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
 	} in;
+	struct {
+		__u32 rsv_bitmap;
+		__u32 rsvd[4];
+	} out;
 };
 
 struct cdma_cmd_jfce_wait_args {
