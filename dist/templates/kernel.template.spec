@@ -632,7 +632,7 @@ case $KernUnameR in
 
 %if %{with_source}
 # take tarball of source code
-tar acvf %{name}-%{version}-%{release}.tar.xz *
+tar acf %{name}-%{version}-%{release}.tar.xz *
 %endif
 
 ###### Rpmbuild Build Stage ####################################################
