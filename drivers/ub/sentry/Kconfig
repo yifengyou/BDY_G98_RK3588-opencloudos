@@ -8,3 +8,10 @@ config UB_SENTRY
       Listens to kernel event(eg. oom) and send sentry msg to userspace
       Provides device for userspace to read kernel message and reply ack
       Provides kernel api to send message to userspace and wait for result
+
+config UB_SENTRY_REMOTE
+    tristate "sentry remote event reporter module"
+    depends on UB_SENTRY && UB_URMA
+    default m
+    help
+      report panic/reboot event msg

@@ -16,9 +16,16 @@
 #include <linux/proc_fs.h>
 
 #define SMH_TYPE ('}')
+#define MAX_DIE_NUM 2
 #define OOM_EVENT_MAX_NUMA_NODES 8
+#define MAX_NODE_NUM 32
+#define EID_MAX_LEN 40 // eid str len 39 + '\0'
 #define REPORT_COMM_TIME  5000
+#define URMA_SEND_DATA_MAX_LEN (2 + EID_MAX_LEN * 2 + 10 + 1 + 4) // type_cna_eid_randomID_res
 #define MILLISECONDS_OF_EACH_MDELAY 1000
+#define COMM_PARM_NOT_SET (-2)
+#define HEARTBEAT "heartbeat"
+#define HEARTBEAT_ACK "heartbeat_ack"
 #define ENABLE_VALUE_MAX_LEN 4 // 'off' + '\0'
 
 #define URMA_REBUILD_THRESHOLD 3
