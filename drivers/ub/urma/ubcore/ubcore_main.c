@@ -19,6 +19,7 @@
 #include "ubcore_connect_adapter.h"
 #include "ubcore_connect_bonding.h"
 #include "ubcore_genl.h"
+#include "ubcm/ub_cm.h"
 
 static int __init ubcore_init(void)
 {
