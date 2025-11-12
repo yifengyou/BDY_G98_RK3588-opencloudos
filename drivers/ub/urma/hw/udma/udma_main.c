@@ -1124,8 +1124,8 @@ void udma_remove(struct auxiliary_device *adev)
 {
 	struct udma_dev *udma_dev;
 
-	mutex_lock(&udma_reset_mutex);
 	ubase_reset_unregister(adev);
+	mutex_lock(&udma_reset_mutex);
 	udma_dev = get_udma_dev(adev);
 	if (!udma_dev) {
 		mutex_unlock(&udma_reset_mutex);

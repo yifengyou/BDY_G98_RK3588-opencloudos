@@ -83,6 +83,7 @@ struct ubcore_ucontext *udma_alloc_ucontext(struct ubcore_device *ub_dev,
 	return &ctx->base;
 
 err_init_ctx_resp:
+	mutex_destroy(&ctx->hugepage_lock);
 	mutex_destroy(&ctx->pgdir_mutex);
 err_unbind_dev:
 	ummu_sva_unbind_device(ctx->sva);
