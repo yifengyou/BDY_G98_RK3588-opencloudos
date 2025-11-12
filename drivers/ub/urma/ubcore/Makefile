@@ -4,12 +4,13 @@
 #
 ccflags-y += -I$(src)
 
-ubcore-objs := ubcore_tp_table.o \
+ubcore-objs := \
 net/ubcore_sock.o \
 ubcore_workqueue.o \
 ubcore_main.o \
 ubcore_hash_table.o \
-ubcore_priv.o \
+ubcore_tp.o \
+ubcore_tp_table.o \
 ubcore_cgroup.o \
 net/ubcore_net.o \
 ubcore_cdev_file.o \
@@ -28,6 +29,13 @@ ubcore_genl_admin.o \
 ubcore_vtp.o \
 ubcore_msg.o \
 ubcore_netlink.o \
-ubcore_segment.o
+ubcore_dp.o \
+ubcore_segment.o \
+ubcm/ubcm_log.o \
+ubcm/ub_mad.o \
+ubcm/ubcm_genl.o \
+ubcm/ub_cm.o \
+ubcm/ubmad_datapath.o \
+ubcore_umem.o
 
 obj-$(CONFIG_UB_URMA) += ubcore.o

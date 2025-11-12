@@ -1,38 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2022-2025. All rights reserved.
  *
- * Description: ubcore device add and remove ops file
- * Author: Qian Guoxin
- * Create: 2021-08-03
+ * Description: ubcore tp implementation
+ * Author: Yan Fangfang
+ * Create: 2022-08-25
  * Note:
- * History: 2021-08-03: create file
+ * History: 2022-08-25: Create file
  */
 
 #include <linux/list.h>
 #include "ubcore_priv.h"
-
-#define UBCORE_DEVICE_NAME "ubcore"
-
-static LIST_HEAD(g_mue_cdev_list);
-static DECLARE_RWSEM(g_mue_cdev_rwsem);
-
-static LIST_HEAD(g_client_list);
-static LIST_HEAD(g_device_list);
-
-/*
- * g_device_rwsem and g_lists_rwsem protect both g_device_list and g_client_list.
- * g_device_rwsem protects writer access by device and client
- * g_lists_rwsem protects reader access to these lists.
- * Iterators of these lists must lock it for read, while updates
- * to the lists must be done with a write lock.
- */
-static DECLARE_RWSEM(g_device_rwsem);
-
-/*
- * g_clients_rwsem protect g_client_list.
- */
-static DECLARE_RWSEM(g_clients_rwsem);
+#include "ubcore_log.h"
 
 int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
 		       uint32_t *tp_cnt, struct ubcore_tp_info *tp_list,
@@ -59,3 +38,4 @@ int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_get_tp_list);
+
