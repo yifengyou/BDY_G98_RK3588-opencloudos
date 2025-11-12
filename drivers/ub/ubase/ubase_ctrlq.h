@@ -87,6 +87,26 @@ struct ubase_ctrlq_reset_ctrl_req {
 	u8 rsv[3];
 };
 
+static inline bool ubase_ctrlq_msg_is_sync_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && !msg->is_async && msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_async_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && msg->is_async && msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_notify_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && !msg->is_async && !msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_resp(struct ubase_ctrlq_msg *msg)
+{
+	return msg->is_resp && !msg->is_async && !msg->need_resp;
+}
+
 int ubase_ctrlq_init(struct ubase_dev *udev);
 void ubase_ctrlq_uninit(struct ubase_dev *udev);
 void ubase_ctrlq_disable(struct ubase_dev *udev);

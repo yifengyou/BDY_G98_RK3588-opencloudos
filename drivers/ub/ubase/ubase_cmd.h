@@ -83,7 +83,8 @@ struct ubase_ue2ue_ctrlq_head {
 	u16 out_size;
 	u8 need_resp : 1;
 	u8 is_resp : 1;
-	u8 rsv : 6;
+	u8 is_async : 1;
+	u8 rsv : 5;
 };
 
 struct ubase_start_perf_stats_cmd {

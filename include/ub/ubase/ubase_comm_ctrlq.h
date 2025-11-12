@@ -61,7 +61,8 @@ struct ubase_ctrlq_msg {
 	u8	opcode;
 	u8	need_resp : 1;
 	u8	is_resp : 1;
-	u8	resv : 6;
+	u8	is_async : 1;
+	u8	resv : 5;
 	u8	resp_ret; /* must set when the is_resp field is true. */
 	u16	resp_seq; /* must set when the is_resp field is true. */
 	u16	in_size;

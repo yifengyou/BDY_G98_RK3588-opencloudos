@@ -459,11 +459,14 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 	msg.opcode = head->opcode;
 	msg.need_resp = cmd->need_resp;
 	msg.is_resp = cmd->is_resp;
+	msg.is_async = cmd->is_async;
 	msg.resp_seq = cmd->seq;
 	msg.in = (u8 *)head + UBASE_CTRLQ_HDR_LEN;
 	msg.in_size = cmd->in_size;
 	msg.out = NULL;
 	msg.out_size = 0;
+	if (ubase_ctrlq_msg_is_sync_req(&msg))
+		msg.is_async = 1;
 
 	ue_info.bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
 	ue_info.seq = cmd->seq;

@@ -369,11 +369,13 @@ static void ubase_ctrlq_fill_first_bb(struct ubase_dev *udev,
 	head->service_type = msg->service_type;
 	head->opcode = msg->opcode;
 	head->mbx_ue_id = ue_info ? ue_info->mbx_ue_id : 0;
-	head->ret = msg->is_resp ? msg->resp_ret : 0;
+	head->ret = ubase_ctrlq_msg_is_resp(msg) ? msg->resp_ret : 0;
 	head->bus_ue_id = cpu_to_le16(ue_info ?
 				      ue_info->bus_ue_id :
 				      ue->entity_idx);
-	memcpy(head->data, msg->in, min(msg->in_size, UBASE_CTRLQ_DATA_LEN));
+	if (msg->in)
+		memcpy(head->data, msg->in,
+		       min(msg->in_size, UBASE_CTRLQ_DATA_LEN));
 }
 
 static inline void ubase_ctrlq_csq_report_irq(struct ubase_dev *udev)
@@ -408,10 +410,12 @@ static int ubase_ctrlq_send_to_cmdq(struct ubase_dev *udev,
 	ue2ue_head.out_size = msg->out_size;
 	ue2ue_head.need_resp = msg->need_resp;
 	ue2ue_head.is_resp = msg->is_resp;
+	ue2ue_head.is_async = msg->is_async;
 	memcpy(req, &ue2ue_head, sizeof(ue2ue_head));
 	memcpy((u8 *)req + sizeof(ue2ue_head), head, UBASE_CTRLQ_HDR_LEN);
-	memcpy((u8 *)req + sizeof(ue2ue_head) + UBASE_CTRLQ_HDR_LEN, msg->in,
-	       msg->in_size);
+	if (msg->in)
+		memcpy((u8 *)req + sizeof(ue2ue_head) + UBASE_CTRLQ_HDR_LEN,
+		       msg->in, msg->in_size);
 
 	__ubase_fill_inout_buf(&in, UBASE_OPC_UE2UE_UBASE, false, req_len, req);
 	ret = __ubase_cmd_send_in(udev, &in);
@@ -541,18 +545,17 @@ static void ubase_ctrlq_addto_msg_queue(struct ubase_dev *udev, u16 seq,
 {
 	struct ubase_ctrlq_msg_ctx *ctx;
 
-	if (!msg->need_resp)
+	if (!(ubase_ctrlq_msg_is_sync_req(msg) ||
+	      ubase_ctrlq_msg_is_async_req(msg)))
 		return;
 
 	ctx = &udev->ctrlq.msg_queue[seq];
 	ctx->valid = 1;
-	ctx->is_sync = msg->need_resp && msg->out && msg->out_size ? 1 : 0;
+	ctx->is_sync = ubase_ctrlq_msg_is_sync_req(msg) ? 1 : 0;
 	ctx->result = ETIME;
 	ctx->dead_jiffies = jiffies + msecs_to_jiffies(UBASE_CTRLQ_DEAD_TIME);
-	if (ctx->is_sync) {
-		ctx->out = msg->out;
-		ctx->out_size = msg->out_size;
-	}
+	ctx->out = msg->out;
+	ctx->out_size = msg->out_size;
 
 	if (ue_info) {
 		ctx->ue_seq = ue_info->seq;
@@ -564,30 +567,58 @@ static void ubase_ctrlq_addto_msg_queue(struct ubase_dev *udev, u16 seq,
 static int ubase_ctrlq_msg_check(struct ubase_dev *udev,
 				 struct ubase_ctrlq_msg *msg)
 {
-	if (!msg || !msg->in || !msg->in_size) {
-		ubase_err(udev, "ctrlq input buf is invalid.\n");
+	if ((!msg->in && msg->in_size) || (msg->in && !msg->in_size)) {
+		ubase_err(udev, "ctrlq msg in param error.\n");
 		return -EINVAL;
 	}
 
-	if (msg->is_resp && msg->need_resp) {
-		ubase_err(udev, "ctrlq input resp type is invalid.\n");
-		return -EINVAL;
-	}
-
-	if (msg->is_resp && !(msg->resp_seq & UBASE_CTRLQ_SEQ_MASK)) {
-		ubase_err(udev, "ctrlq input resp_seq(%u) is invalid.\n",
-			  msg->resp_seq);
+	if ((!msg->out && msg->out_size) || (msg->out && !msg->out_size)) {
+		ubase_err(udev, "ctrlq msg out param error.\n");
 		return -EINVAL;
 	}
 
 	if (msg->in_size > UBASE_CTRLQ_MAX_DATA_SIZE) {
 		ubase_err(udev,
-			  "requested ctrlq space(%u) exceeds the maximum(%u).\n",
+			   "ctrlq msg in_size(%u) exceeds the maximum(%u).\n",
 			  msg->in_size, UBASE_CTRLQ_MAX_DATA_SIZE);
 		return -EINVAL;
 	}
 
-	return 0;
+	if (ubase_ctrlq_msg_is_sync_req(msg))
+		return 0;
+
+	if (ubase_ctrlq_msg_is_async_req(msg)) {
+		if (msg->out) {
+			ubase_err(udev, "ctrlq msg out is not NULL in async req.\n");
+			return -EINVAL;
+		}
+		return 0;
+	}
+
+	if (ubase_ctrlq_msg_is_notify_req(msg)) {
+		if (msg->out) {
+			ubase_err(udev, "ctrlq msg out is not NULL in notify req.\n");
+			return -EINVAL;
+		}
+		return 0;
+	}
+
+	if (ubase_ctrlq_msg_is_resp(msg)) {
+		if (msg->out) {
+			ubase_err(udev, "ctrlq msg out is not NULL in resp.\n");
+			return -EINVAL;
+		}
+		if (!(msg->resp_seq & UBASE_CTRLQ_SEQ_MASK)) {
+			ubase_err(udev, "ctrlq msg resp_seq error, resp_seq=%u.\n",
+				  msg->resp_seq);
+			return -EINVAL;
+		}
+		return 0;
+	}
+
+	ubase_err(udev, "ctrlq msg param error, is_resp=%u, is_async=%u, need_resp=%u.\n",
+		  msg->is_resp, msg->is_async, msg->need_resp);
+	return -EINVAL;
 }
 
 static int ubase_ctrlq_check_csq_enough(struct ubase_dev *udev, u16 num)
@@ -612,8 +643,6 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 				 struct ubase_ctrlq_msg *msg,
 				 struct ubase_ctrlq_ue_info *ue_info)
 {
-	bool sync_req = msg->out && msg->out_size && msg->need_resp;
-	bool no_resp = !msg->is_resp && !msg->need_resp;
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
 	struct ubase_ctrlq_base_block head = {0};
 	u16 seq, num;
@@ -627,7 +656,7 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 	if (ret)
 		goto unlock;
 
-	if (!msg->is_resp) {
+	if (!ubase_ctrlq_msg_is_resp(msg)) {
 		ret = ubase_ctrlq_alloc_seq(udev, msg, &seq);
 		if (ret) {
 			ubase_warn(udev, "no enough seq in ctrlq.\n");
@@ -645,20 +674,22 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 	ret = ubase_ctrlq_send_msg_to_sq(udev, &head, msg, num);
 	if (ret) {
 		spin_unlock_bh(&csq->lock);
-		goto free_seq;
+		if (!ubase_ctrlq_msg_is_resp(msg))
+			ubase_ctrlq_free_seq(udev, seq);
+		return ret;
 	}
 
 	spin_unlock_bh(&csq->lock);
 
-	if (sync_req)
+	if (ubase_ctrlq_msg_is_sync_req(msg))
 		ret = ubase_ctrlq_wait_completed(udev, seq, msg);
 
-free_seq:
-	/* Only the seqs in synchronous requests and no response requests need to be released. */
-	/* The seqs are released in periodic tasks of asynchronous requests. */
-	if (sync_req || no_resp)
+	if (ubase_ctrlq_msg_is_sync_req(msg) ||
+	    ubase_ctrlq_msg_is_notify_req(msg))
 		ubase_ctrlq_free_seq(udev, seq);
+
 	return ret;
+
 unlock:
 	spin_unlock_bh(&csq->lock);
 	return ret;
@@ -809,7 +840,8 @@ static void ubase_ctrlq_notify_completed(struct ubase_dev *udev,
 
 	ctx = &udev->ctrlq.msg_queue[seq];
 	ctx->result = head->ret;
-	memcpy(ctx->out, msg, min(msg_len, ctx->out_size));
+	if (ctx->out)
+		memcpy(ctx->out, msg, min(msg_len, ctx->out_size));
 
 	complete(&ctx->done);
 }
