@@ -8,7 +8,7 @@
 
 #define UDMA_EID_SIZE		16
 #define UDMA_CNA_SIZE		16
-#define UDMA_PID_MASK		24
+#define UDMA_PID_MASK		0xFFFFFF
 #define UDMA_DEFAULT_PID	1
 #define UDMA_UE_NUM		64
 #define UDMA_MAX_UE_IDX		256

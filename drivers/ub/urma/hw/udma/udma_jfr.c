@@ -894,11 +894,12 @@ int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
 {
 	struct udma_dev *dev = to_udma_dev(ubcore_jfr->ub_dev);
 	struct udma_jfr *jfr = to_udma_jfr(ubcore_jfr);
+	unsigned long flags;
 	uint32_t nreq;
 	int ret = 0;
 
 	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
-		spin_lock(&jfr->lock);
+		spin_lock_irqsave(&jfr->lock, flags);
 
 	for (nreq = 0; wr; ++nreq, wr = wr->next) {
 		ret = post_recv_one(dev, jfr, wr);
@@ -919,7 +920,7 @@ int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
 	}
 
 	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
-		spin_unlock(&jfr->lock);
+		spin_unlock_irqrestore(&jfr->lock, flags);
 
 	return ret;
 }

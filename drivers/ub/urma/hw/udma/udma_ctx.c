@@ -381,7 +381,7 @@ void udma_return_u_hugepage(struct udma_context *ctx, void *va)
 			zap_vma_ptes(vma, (unsigned long)priv->va_base, priv->va_len);
 		mmap_write_unlock(current->mm);
 	} else {
-		dev_warn(ctx->dev->dev, "current mm released.\n");
+		dev_warn_ratelimited(ctx->dev->dev, "current mm released.\n");
 	}
 
 	if (dfx_switch)

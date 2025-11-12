@@ -1067,12 +1067,6 @@ void udma_reset_down(struct auxiliary_device *adev)
 	}
 
 	ubcore_stop_requests(&udma_dev->ub_dev);
-	if (udma_close_ue_rx(udma_dev, false, false, true, 0)) {
-		mutex_unlock(&udma_reset_mutex);
-		dev_err(&adev->dev, "udma close ue rx failed in reset down process.\n");
-		return;
-	}
-
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_dev->status = UDMA_SUSPEND;
 	mutex_unlock(&udma_reset_mutex);
@@ -1096,11 +1090,18 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 		return;
 	}
 
+	if (udma_close_ue_rx(udma_dev, false, false, true, 0)) {
+		mutex_unlock(&udma_reset_mutex);
+		dev_err(&adev->dev, "udma close ue rx failed in reset process.\n");
+		return;
+	}
+
+	/* Event should unregister before unset ubcore dev. */
+	udma_unregister_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
-	udma_unregister_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
 }
@@ -1143,14 +1144,16 @@ void udma_remove(struct auxiliary_device *adev)
 	udma_dev->status = UDMA_SUSPEND;
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 
+	/* Event should unregister before unset ubcore dev. */
+	udma_unregister_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
 	(void)ubase_activate_dev(adev);
-	udma_unregister_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
+	dev_info(&adev->dev, "udma device remove success.\n");
 }
 
 static struct auxiliary_driver udma_drv = {

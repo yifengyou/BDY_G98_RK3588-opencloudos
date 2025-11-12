@@ -1240,11 +1240,12 @@ int udma_post_sq_wr(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
 	struct udma_sqe_ctl *wqe_addr;
 	bool dwqe_enable = false;
 	struct ubcore_jfs_wr *it;
+	unsigned long flags;
 	int wr_cnt = 0;
 	int ret = 0;
 
 	if (!sq->lock_free)
-		spin_lock(&sq->lock);
+		spin_lock_irqsave(&sq->lock, flags);
 
 	for (it = wr; it != NULL; it = (struct ubcore_jfs_wr *)(void *)it->next) {
 		ret = udma_post_one_wr(sq, it, udma_dev, &wqe_addr, &dwqe_enable);
@@ -1265,7 +1266,7 @@ err_post_wr:
 	}
 
 	if (!sq->lock_free)
-		spin_unlock(&sq->lock);
+		spin_unlock_irqrestore(&sq->lock, flags);
 
 	return ret;
 }
