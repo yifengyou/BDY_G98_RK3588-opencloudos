@@ -953,12 +953,19 @@ static int tx_dump(struct seq_file *sf, void *v)
 	return 0;
 }
 
-static int bps_limit_dump(struct seq_file *sf, void *v)
+static int rx_limit_dump(struct seq_file *sf, void *v)
 {
 	struct cgroup_subsys_state *css = seq_css(sf);
 
-	RUE_CALL_VOID(NET, dump_rx_bps_limit_tb, css, sf);
-	RUE_CALL_VOID(NET, dump_tx_bps_limit_tb, css, sf);
+	RUE_CALL_VOID(NET, dump_rx_limit_tb, css, sf);
+	return 0;
+}
+
+static int tx_limit_dump(struct seq_file *sf, void *v)
+{
+	struct cgroup_subsys_state *css = seq_css(sf);
+
+	RUE_CALL_VOID(NET, dump_tx_limit_tb, css, sf);
 	return 0;
 }
 
@@ -1008,9 +1015,14 @@ static struct cftype ss_files[] = {
 		.seq_show	= tx_dump,
 	},
 	{
-		.name		= "limit_dump",
+		.name		= "rx_limit_dump",
 		.flags		= CFTYPE_NOT_ON_ROOT,
-		.seq_show	= bps_limit_dump,
+		.seq_show	= rx_limit_dump,
+	},
+	{
+		.name		= "tx_limit_dump",
+		.flags		= CFTYPE_NOT_ON_ROOT,
+		.seq_show	= tx_limit_dump,
 	},
 	{
 		.name		= "limit",
