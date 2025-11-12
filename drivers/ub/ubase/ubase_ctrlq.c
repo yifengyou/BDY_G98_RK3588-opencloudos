@@ -569,6 +569,11 @@ static int ubase_ctrlq_msg_check(struct ubase_dev *udev,
 		return -EINVAL;
 	}
 
+	if (msg->is_resp && msg->need_resp) {
+		ubase_err(udev, "ctrlq input resp type is invalid.\n");
+		return -EINVAL;
+	}
+
 	if (msg->is_resp && !(msg->resp_seq & UBASE_CTRLQ_SEQ_MASK)) {
 		ubase_err(udev, "ctrlq input resp_seq(%u) is invalid.\n",
 			  msg->resp_seq);
@@ -759,13 +764,13 @@ static void ubase_ctrlq_send_unsupported_resp(struct ubase_dev *udev,
 	msg.resp_seq = seq;
 	msg.resp_ret = EOPNOTSUPP;
 
-	ubase_info(udev, "ctrlq received unsupported req. seq=%u, ser_type=%d, ser_ver=%d, opc=%u.",
+	ubase_info(udev, "ctrlq received unsupported req. seq=%u, ser_type=%d, ser_ver=%d, opc=0x%x.",
 		   seq, head->service_type, head->service_ver, head->opcode);
 
 	ret = __ubase_ctrlq_send(udev, &msg, NULL);
 	if (ret)
-		ubase_warn(udev, "failed to send ctrlq unsupported resp. seq=%u, ser_type=%d, ser_ver=%d, opc=%u.",
-			   seq, head->service_type, head->service_ver, head->opcode);
+		ubase_warn(udev, "failed to send ctrlq unsupported resp. seq=%u, ser_type=%d, ser_ver=%d, opc=0x%x, ret=%d.",
+			   seq, head->service_type, head->service_ver, head->opcode, ret);
 }
 
 static void ubase_ctrlq_crq_event_callback(struct ubase_dev *udev,
@@ -809,7 +814,7 @@ static void ubase_ctrlq_notify_completed(struct ubase_dev *udev,
 	complete(&ctx->done);
 }
 
-static bool ubase_ctrlq_check_seq(struct ubase_dev *udev, u16 seq)
+bool ubase_ctrlq_check_seq(struct ubase_dev *udev, u16 seq)
 {
 	bool is_pushed = !!(seq & UBASE_CTRLQ_SEQ_MASK);
 	u16 max_seq = ubase_ctrlq_max_seq(udev);

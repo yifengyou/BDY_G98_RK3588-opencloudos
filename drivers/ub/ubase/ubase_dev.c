@@ -492,6 +492,11 @@ static int ubase_handle_ue2ue_ctrlq_event(struct ubase_dev *udev, void *data,
 	if (ubase_dev_ctrlq_supported(udev))
 		return ubase_handle_ue2ue_ctrlq_req(udev, cmd, len);
 
+	if (!ubase_ctrlq_check_seq(udev, cmd->seq)) {
+		ubase_err(udev, "invalid ue2ue ctrlq seq(%u).\n", cmd->seq);
+		return -EINVAL;
+	}
+
 	head = (struct ubase_ctrlq_base_block *)(cmd + 1);
 	data_len = len - sizeof(*cmd) - UBASE_CTRLQ_HDR_LEN;
 	ubase_ctrlq_handle_crq_msg(udev, head, cmd->seq,
