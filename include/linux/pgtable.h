@@ -920,7 +920,7 @@ extern pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
 #endif
 
 #ifndef arch_needs_pgtable_deposit
-#define arch_needs_pgtable_deposit() (false)
+#define arch_needs_pgtable_deposit(vma) (false)
 #endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE

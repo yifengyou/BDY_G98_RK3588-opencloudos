@@ -536,6 +536,11 @@ static inline pmd_t pmd_mkspecial(pmd_t pmd)
 {
 	return set_pmd_bit(pmd, __pgprot(PTE_SPECIAL));
 }
+
+extern bool nohugepfnmap;
+#define arch_needs_pgtable_deposit(vma) \
+	(nohugepfnmap ? false : (!vma_is_dax(vma) && vma_is_special_huge(vma)))
+
 #endif
 
 #define __pmd_to_phys(pmd)	__pte_to_phys(pmd_pte(pmd))
