@@ -674,6 +674,29 @@ int unic_cfg_vport_buf(struct unic_dev *unic_dev, bool init)
 	return ret;
 }
 
+int unic_query_vport_ctx(struct unic_dev *unic_dev, u16 offset,
+			 struct unic_vport_ctx_cmd *resp)
+{
+	struct unic_vport_ctx_cmd req;
+	struct ubase_cmd_buf in, out;
+	int ret;
+
+	memset(&req, 0, sizeof(req));
+	req.offset = cpu_to_le16(offset);
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_VPORT_CTX, true,
+			     sizeof(req), &req);
+	ubase_fill_inout_buf(&out, UBASE_OPC_VPORT_CTX, true,
+			     sizeof(*resp), resp);
+
+	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
+	if (ret)
+		unic_err(unic_dev,
+			 "failed to query vport ctx, offset = %u, ret = %d.\n",
+			 offset, ret);
+	return ret;
+}
+
 int unic_set_fec_mode(struct unic_dev *unic_dev, u32 fec_mode)
 {
 	struct unic_cfg_fec_cmd req = {0};

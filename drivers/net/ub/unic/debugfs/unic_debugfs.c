@@ -39,6 +39,61 @@ static int unic_dbg_dump_dev_info(struct seq_file *s, void *data)
 	return 0;
 }
 
+static int unic_dbg_dump_vport_buf(struct seq_file *s, void *data)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+
+	seq_printf(s, "vport buffer num: %u\n", unic_dev->caps.vport_buf_num);
+	seq_printf(s, "vport buffer size: %u\n", unic_dev->caps.vport_buf_size);
+	return 0;
+}
+
+static void unic_dbg_fill_vport_ctx_content(struct unic_vport_ctx_cmd *resp,
+					    struct seq_file *s)
+{
+	u32 i, j;
+
+	for (i = 0; i < UNIC_VORT_CTX_DATA_NUM; i += UNIC_VORT_CTX_DATA_ALIGN) {
+		seq_printf(s, "%08X: ", i * UNIC_VORT_CTX_DATA_ALIGN);
+		for (j = 0; j < UNIC_VORT_CTX_DATA_ALIGN; j++) {
+			if ((i + j) == UNIC_VORT_CTX_DATA_NUM)
+				break;
+			seq_printf(s, "%08X ", resp->data[i + j]);
+		}
+		seq_puts(s, "\n");
+	}
+}
+
+static int unic_dbg_query_vport_ctx(struct seq_file *s)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct unic_vport_ctx_cmd resp;
+	u16 offset = 0;
+	int ret;
+
+	do {
+		memset(&resp, 0, sizeof(resp));
+		ret = unic_query_vport_ctx(unic_dev, offset, &resp);
+		if (ret)
+			return ret;
+		offset = resp.offset;
+
+		unic_dbg_fill_vport_ctx_content(&resp, s);
+	} while (resp.offset);
+
+	return 0;
+}
+
+static int unic_dbg_dump_vport_ctx(struct seq_file *s, void *data)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+
+	if (__unic_resetting(unic_dev))
+		return -EBUSY;
+
+	return unic_dbg_query_vport_ctx(s);
+}
+
 static const struct unic_dbg_cap_bit_info {
 	const char *format;
 	bool (*get_bit)(struct unic_dev *dev);
@@ -266,6 +321,10 @@ static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
 	}, {
+		.name = "vport",
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
+		.support = unic_dbg_dentry_support,
+	}, {
 		.name = "qos",
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
@@ -328,6 +387,20 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.support = unic_dbg_dentry_support,
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_dev_info,
+	}, {
+		.name = "vport_buf",
+		.dentry_index = UNIC_DBG_DENTRY_VPORT,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_vport_buf,
+	}, {
+		.name = "vport_ctx",
+		.dentry_index = UNIC_DBG_DENTRY_VPORT,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_vport_ctx,
 	}, {
 		.name = "caps_info",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,
