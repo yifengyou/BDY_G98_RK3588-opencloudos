@@ -631,6 +631,12 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 }
 #endif
 
+#ifndef CONFIG_ARCH_SUPPORTS_HUGE_PFNMAP
+#ifndef pte_clrhuge
+#define pte_clrhuge(pte) (pte)
+#endif
+#endif
+
 #ifndef get_and_clear_full_ptes
 /**
  * get_and_clear_full_ptes - Clear present PTEs that map consecutive pages of
