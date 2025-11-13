@@ -222,7 +222,7 @@ static int unic_dbg_query_link_record(struct seq_file *s, void *data)
 		total--;
 		idx = total % LINK_STAT_MAX_IDX;
 		seq_printf(s, "\t%-2d\t", cnt);
-		ubase_dbg_format_time(ktime_get_real_seconds(), s);
+		ubase_dbg_format_time(record->stats[idx].link_tv_sec, s);
 		seq_printf(s, "\t%s\n",
 			   record->stats[idx].link_status ? "LINK UP" : "LINK DOWN");
 		cnt++;
