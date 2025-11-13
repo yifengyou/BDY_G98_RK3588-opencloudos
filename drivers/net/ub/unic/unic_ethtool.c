@@ -276,12 +276,6 @@ static int unic_set_coalesce(struct net_device *netdev,
 	struct unic_coalesce old_tx_coal, old_rx_coal;
 	int ret, ret1;
 
-	if (test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state)) {
-		unic_err(unic_dev,
-			 "failed to set coalesce, due to dev deacitve.\n");
-		return -EBUSY;
-	}
-
 	if (unic_resetting(netdev))
 		return -EBUSY;
 
@@ -298,7 +292,6 @@ static int unic_set_coalesce(struct net_device *netdev,
 	tx_coal->int_ql = cmd->tx_max_coalesced_frames;
 	rx_coal->int_ql = cmd->rx_max_coalesced_frames;
 
-	unic_net_stop_no_link_change(netdev);
 	unic_uninit_channels(unic_dev);
 
 	ret = unic_init_channels(unic_dev, unic_dev->channels.num);
@@ -307,17 +300,11 @@ static int unic_set_coalesce(struct net_device *netdev,
 		memcpy(tx_coal, &old_tx_coal, sizeof(struct unic_coalesce));
 		memcpy(rx_coal, &old_rx_coal, sizeof(struct unic_coalesce));
 		ret1 = unic_init_channels(unic_dev, unic_dev->channels.num);
-		if (ret1) {
+		if (ret1)
 			unic_err(unic_dev,
 				 "failed to recover old channels, ret = %d.\n",
 				 ret1);
-			return ret;
-		}
 	}
-
-	ret1 = unic_net_open_no_link_change(netdev);
-	if (ret1)
-		unic_err(unic_dev, "failed to set net open, ret = %d.\n", ret1);
 
 	return ret;
 }
