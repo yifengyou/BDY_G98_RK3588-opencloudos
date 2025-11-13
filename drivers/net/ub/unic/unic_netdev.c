@@ -403,7 +403,6 @@ static void unic_fetch_stats_tx(struct rtnl_link_stats64 *stats,
 		stats->tx_bytes += channel->sq->stats.bytes;
 		stats->tx_packets += channel->sq->stats.packets;
 		stats->tx_errors += channel->sq->stats.pad_err;
-		stats->tx_errors += channel->sq->stats.map_err;
 		stats->tx_errors += channel->sq->stats.over_max_sge_num;
 		stats->tx_errors += channel->sq->stats.csum_err;
 		stats->tx_errors += channel->sq->stats.vlan_err;
@@ -412,7 +411,6 @@ static void unic_fetch_stats_tx(struct rtnl_link_stats64 *stats,
 		stats->tx_errors += channel->sq->stats.cfg5_drop_cnt;
 
 		stats->tx_dropped += channel->sq->stats.pad_err;
-		stats->tx_dropped += channel->sq->stats.map_err;
 		stats->tx_dropped += channel->sq->stats.over_max_sge_num;
 		stats->tx_dropped += channel->sq->stats.csum_err;
 		stats->tx_dropped += channel->sq->stats.vlan_err;

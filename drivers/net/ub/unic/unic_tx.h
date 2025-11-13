@@ -273,6 +273,19 @@ struct unic_jfs_db {
 	__le16 rsv;
 };
 
+struct unic_tx_page_info {
+	struct page	*p;
+	void		*sge_va_addr;
+	dma_addr_t	sge_dma_addr;
+};
+
+struct unic_tx_buff {
+	struct unic_tx_page_info	*page_info;
+	u16				num;
+	u16				pi;
+	u16				ci;
+};
+
 struct unic_sq {
 	void __iomem		*db_addr;
 	struct device		*parent_dev;
@@ -290,6 +303,7 @@ struct unic_sq {
 	bool			check_ci_late;
 	u16			queue_index;
 	struct net_device	*netdev;
+	struct unic_tx_buff	*tx_buff;
 };
 
 void unic_poll_tx(struct unic_sq *sq, int budget);

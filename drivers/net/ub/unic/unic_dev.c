@@ -269,7 +269,7 @@ static int unic_init_channels_attr(struct unic_dev *unic_dev)
 
 	channels->vl.vl_num = 1;
 	channels->rss_vl_num = 1;
-	channels->rss_size = unic_channels_max_num(unic_dev->comdev.adev);
+	channels->rss_size = 1;
 	channels->num = channels->rss_size * channels->rss_vl_num;
 	channels->sqebb_depth = unic_caps->jfs.depth;
 	channels->rqe_depth = unic_caps->jfr.depth;
