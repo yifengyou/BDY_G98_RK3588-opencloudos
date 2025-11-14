@@ -310,6 +310,11 @@ static inline bool unic_dev_rx_csum_offload_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_RX_CSUM_OFFLOAD_B);
 }
 
+static inline bool unic_dev_app_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_APP_LB_B);
+}
+
 static inline bool unic_dev_fec_stats_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_STATS_B);

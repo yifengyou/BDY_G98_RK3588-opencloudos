@@ -104,6 +104,7 @@ static const struct unic_dbg_cap_bit_info {
 	{"\tsupport_tc_speed_limit: %u\n", &unic_dev_tc_speed_limit_supported},
 	{"\tsupport_tx_csum_offload: %u\n", &unic_dev_tx_csum_offload_supported},
 	{"\tsupport_rx_csum_offload: %u\n", &unic_dev_rx_csum_offload_supported},
+	{"\tsupport_app_lb: %u\n", &unic_dev_app_lb_supported},
 	{"\tsupport_fec_stats: %u\n", &unic_dev_fec_stats_supported},
 	{"\tsupport_cfg_mac: %u\n", &unic_dev_cfg_mac_supported},
 };

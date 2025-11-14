@@ -164,4 +164,20 @@ struct unic_config_vl_speed_cmd {
 	u8 resv1[20];
 };
 
+enum unic_lb_en_sub_cmd {
+	UNIC_LB_APP = 0,
+	UNIC_LB_SERIAL_SERDES,
+	UNIC_LB_PARALLEL_SERDES,
+	UNIC_LB_EXTERNAL,
+	UNIC_LB_MAX,
+};
+
+struct unic_lb_en_cfg {
+	u8 sub_cmd;
+	u8 lb_en : 1;
+	u8 rsvd : 7;
+	u8 result;
+	u8 rsv[21];
+};
+
 #endif

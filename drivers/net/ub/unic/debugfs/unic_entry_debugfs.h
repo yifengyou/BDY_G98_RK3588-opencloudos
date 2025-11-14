@@ -8,9 +8,12 @@
 #define __UNIC_ENTRY_DEBUGFS_H__
 
 #include <linux/in6.h>
+#include <linux/if_ether.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
 
-#include "unic_comm_addr.h"
+#ifndef UBL_ALEN
+#define UBL_ALEN 16
+#endif
 
 #define UNIC_BITMAP_LEN		8
 #define UNIC_DBG_MAC_NUM	16
@@ -35,7 +38,7 @@ struct unic_dbg_comm_addr_node {
 	u32			ue_bitmap[UNIC_BITMAP_LEN];
 	u32			port_bitmap;
 	union {
-		u8		guid[UNIC_ADDR_LEN];
+		u8		guid[UBL_ALEN];
 		struct {
 			struct	in6_addr ip_addr;
 			u32	extend_info;

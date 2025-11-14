@@ -87,7 +87,6 @@ struct unic_sq_stats {
 	u64 pad_err;
 	u64 bytes;
 	u64 packets;
-	u64 map_err;
 	u64 busy;
 	u64 more;
 	u64 restart_queue;

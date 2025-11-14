@@ -11,6 +11,7 @@
 #include "unic.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_lb.h"
 #include "unic_netdev.h"
 #include "unic_stats.h"
 
@@ -429,6 +430,9 @@ int unic_get_sset_count(struct net_device *netdev, int stringset)
 	case ETH_SS_STATS:
 		count = ARRAY_SIZE(unic_sq_stats_str) * channel_num;
 		count += ARRAY_SIZE(unic_rq_stats_str) * channel_num;
+		break;
+	case ETH_SS_TEST:
+		count = unic_get_selftest_count(unic_dev);
 		break;
 	default:
 		return -EOPNOTSUPP;

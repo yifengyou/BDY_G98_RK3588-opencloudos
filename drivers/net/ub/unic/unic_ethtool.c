@@ -8,11 +8,12 @@
 #include <ub/ubase/ubase_comm_cmd.h>
 
 #include "unic.h"
+#include "unic_channel.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_lb.h"
 #include "unic_netdev.h"
 #include "unic_stats.h"
-#include "unic_channel.h"
 #include "unic_ethtool.h"
 
 static u32 unic_get_link_status(struct net_device *netdev)
@@ -447,6 +448,7 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.set_channels = unic_set_channels,
 	.get_ringparam = unic_get_channels_param,
 	.set_ringparam = unic_set_channels_param,
+	.self_test = unic_self_test,
 	.get_fecparam = unic_get_fecparam,
 	.set_fecparam = unic_set_fecparam,
 	.get_fec_stats = unic_get_fec_stats,
