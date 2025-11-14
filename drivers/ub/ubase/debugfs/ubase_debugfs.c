@@ -24,6 +24,7 @@ static int ubase_dbg_dump_rst_info(struct seq_file *s, void *data)
 
 	seq_printf(s, "ELR reset count: %u\n", udev->reset_stat.elr_reset_cnt);
 	seq_printf(s, "port reset count: %u\n", udev->reset_stat.port_reset_cnt);
+	seq_printf(s, "himac reset count: %u\n", udev->reset_stat.himac_reset_cnt);
 	seq_printf(s, "reset done count: %u\n", udev->reset_stat.reset_done_cnt);
 	seq_printf(s, "HW reset done count: %u\n", udev->reset_stat.hw_reset_done_cnt);
 	seq_printf(s, "reset fail count: %u\n", udev->reset_stat.reset_fail_cnt);
