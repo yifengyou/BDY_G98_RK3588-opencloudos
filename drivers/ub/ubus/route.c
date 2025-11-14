@@ -12,6 +12,7 @@
 #include "enum.h"
 #include "port.h"
 #include "ubus_driver.h"
+#include "route.h"
 
 #define UB_ROUTE_TABLE_ENTRY_START (UB_ROUTE_TABLE_SLICE_START + (0x10 << 2))
 #define EBW(port_nums) ((((port_nums) - 1) >> 5) + 1) /* Entry Bit Width */

@@ -134,7 +134,7 @@ ub_match_one_device(const struct ub_device_id *id, const struct ub_entity *dev)
 	return NULL;
 }
 
-const struct ub_device_id *ub_match_id(const struct ub_device_id *ids,
+static const struct ub_device_id *ub_match_id(const struct ub_device_id *ids,
 				       struct ub_entity *dev)
 {
 	if (ids && dev) {
@@ -567,7 +567,7 @@ static int ub_bus_num_ue(struct device *dev)
 	return ub_num_ue(to_ub_entity(dev));
 }
 
-void ub_bus_type_init(void)
+static void ub_bus_type_init(void)
 {
 	ub_bus_type.match = ub_bus_match;
 	ub_bus_type.uevent = ub_uevent;
@@ -580,7 +580,7 @@ void ub_bus_type_init(void)
 	ub_bus_type.num_vf = ub_bus_num_ue;
 }
 
-void ub_bus_type_uninit(void)
+static void ub_bus_type_uninit(void)
 {
 	ub_bus_type.match = NULL;
 	ub_bus_type.uevent = NULL;

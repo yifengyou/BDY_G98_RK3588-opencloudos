@@ -12,6 +12,7 @@
 #include "route.h"
 #include "ubus_controller.h"
 #include "ubus_config.h"
+#include "reset.h"
 
 enum elr_type {
 	ELR_PREPARE = 0,
@@ -30,7 +31,7 @@ static u32 saved_cfg_offset[] = {
  * ub_elr - Initiate an UB entity level reset
  * @dev: UB entity to reset
  */
-int ub_elr(struct ub_entity *dev)
+static int ub_elr(struct ub_entity *dev)
 {
 	u8 command;
 	u8 val = 0;

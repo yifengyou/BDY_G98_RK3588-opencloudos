@@ -146,7 +146,7 @@ static int its_ub_of_msi_init(void)
 	return 0;
 }
 
-int __init its_ub_msi_init(void)
+static int __init its_ub_msi_init(void)
 {
 	its_ub_of_msi_init();
 	its_ub_acpi_msi_init();

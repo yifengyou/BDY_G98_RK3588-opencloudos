@@ -28,7 +28,7 @@
 
 #define to_ub_ubc(n) container_of(n, struct ub_bus_controller, dev)
 
-struct list_head ubc_list;
+LIST_HEAD(ubc_list);
 EXPORT_SYMBOL_GPL(ubc_list);
 
 u32 ubc_eid_start;
@@ -592,8 +592,6 @@ int handle_ubc_table(u64 pointer)
 
 	if (!info_node)
 		return -EINVAL;
-
-	INIT_LIST_HEAD(&ubc_list);
 
 	ret = parse_ubc_table(info_node);
 	if (ret)

@@ -63,7 +63,7 @@ struct ub_entity *ub_alloc_ent(void)
 EXPORT_SYMBOL_GPL(ub_alloc_ent);
 
 static DEFINE_IDA(uent_num_ida);
-void ub_entity_num_free(struct ub_entity *uent)
+static void ub_entity_num_free(struct ub_entity *uent)
 {
 	ida_free(&uent_num_ida, uent->uent_num);
 }
