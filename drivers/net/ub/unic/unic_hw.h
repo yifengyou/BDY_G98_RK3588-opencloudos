@@ -71,11 +71,15 @@ static inline bool unic_is_port_down(struct unic_dev *unic_dev)
 	return unic_dev->hw.mac.link_status == UNIC_LINK_STATUS_DOWN;
 }
 
+int unic_get_speed_bit(u32 speed, u32 lanes, u32 *speed_bit);
+
 int unic_update_port_info(struct unic_dev *unic_dev);
 
 int unic_set_mac_speed_duplex(struct unic_dev *unic_dev, u32 speed, u8 duplex,
 			      u8 lanes);
 int unic_set_mac_autoneg(struct unic_dev *unic_dev, u8 autoneg);
+int unic_set_mac_link_ksettings(struct unic_dev *unic_dev,
+				const struct ethtool_link_ksettings *cmd);
 
 int unic_query_dev_res(struct unic_dev *unic_dev);
 

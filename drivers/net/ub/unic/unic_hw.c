@@ -31,6 +31,21 @@ static const struct unic_speed_bit_map speed_bit_map[] = {
 	{UNIC_MAC_SPEED_10G, UNIC_LANES_1, UNIC_SUPPORT_10G_X1_BIT},
 };
 
+int unic_get_speed_bit(u32 speed, u32 lanes, u32 *speed_bit)
+{
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(speed_bit_map); i++) {
+		if (speed == speed_bit_map[i].speed &&
+		    lanes == speed_bit_map[i].lanes) {
+			*speed_bit = speed_bit_map[i].speed_bit;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static int unic_get_port_info(struct unic_dev *unic_dev)
 {
 	struct unic_query_port_info_resp resp = {0};
@@ -111,6 +126,36 @@ int unic_set_mac_speed_duplex(struct unic_dev *unic_dev, u32 speed, u8 duplex,
 			speed, ret);
 
 	return ret;
+}
+
+int unic_set_mac_link_ksettings(struct unic_dev *unic_dev,
+				const struct ethtool_link_ksettings *cmd)
+{
+	/* if user not specify lanes, use current lanes */
+	u32 lanes = cmd->lanes ? cmd->lanes : unic_dev->hw.mac.lanes;
+	int ret;
+
+	ret = unic_set_mac_autoneg(unic_dev, cmd->base.autoneg);
+	if (ret)
+		return ret;
+
+	/* when autoneg is on, hw not support specified speed params. */
+	if (cmd->base.autoneg) {
+		unic_info(unic_dev,
+			  "autoneg is on, ignore other speed params.\n");
+		return 0;
+	}
+
+	ret = unic_set_mac_speed_duplex(unic_dev, cmd->base.speed,
+					cmd->base.duplex, lanes);
+	if (ret)
+		return ret;
+
+	unic_dev->hw.mac.speed = cmd->base.speed;
+	unic_dev->hw.mac.duplex = cmd->base.duplex;
+	unic_dev->hw.mac.lanes = lanes;
+
+	return 0;
 }
 
 static void unic_set_fec_ability(struct unic_mac *mac)

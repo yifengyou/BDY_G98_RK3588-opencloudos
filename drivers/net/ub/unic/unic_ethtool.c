@@ -82,6 +82,85 @@ static int unic_get_link_ksettings(struct net_device *netdev,
 	return 0;
 }
 
+static bool unic_speed_supported(struct unic_dev *unic_dev, u32 speed, u32 lanes)
+{
+	u32 speed_bit = 0;
+
+	if (unic_get_speed_bit(speed, lanes, &speed_bit))
+		return false;
+
+	return !!(speed_bit & unic_dev->hw.mac.speed_ability);
+}
+
+static int unic_check_ksettings_param(struct net_device *netdev,
+				      const struct ethtool_link_ksettings *cmd)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct unic_mac *mac = &unic_dev->hw.mac;
+	u32 lanes;
+
+	if (cmd->base.autoneg && !mac->support_autoneg) {
+		unic_err(unic_dev, "hw not support autoneg.\n");
+		return -EINVAL;
+	}
+
+	/* when autoneg is on, hw not support specified speed params,
+	 * unnecessary to check them.
+	 */
+	if (cmd->base.autoneg)
+		return 0;
+
+	/* if user not specify lanes, use current lanes */
+	lanes = cmd->lanes ? cmd->lanes : mac->lanes;
+	if (!unic_speed_supported(unic_dev, cmd->base.speed, lanes)) {
+		unic_err(unic_dev, "speed(%u) and lanes(%u) is not supported.\n",
+			 cmd->base.speed, lanes);
+		return -EINVAL;
+	}
+
+	if (cmd->base.duplex != DUPLEX_FULL) {
+		unic_err(unic_dev, "only support full duplex.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static bool unic_link_ksettings_changed(struct unic_mac *mac,
+					const struct ethtool_link_ksettings *cmd)
+{
+	/* when autoneg is disabled and lanes not specified, lanes is 0. */
+	if (cmd->base.autoneg == mac->autoneg &&
+	    cmd->base.duplex == mac->duplex &&
+	    cmd->base.speed == mac->speed &&
+	    (cmd->lanes == mac->lanes || (!cmd->lanes && !cmd->base.autoneg)))
+		return false;
+
+	return true;
+}
+
+static int unic_set_link_ksettings(struct net_device *netdev,
+				   const struct ethtool_link_ksettings *cmd)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct unic_mac *mac = &unic_dev->hw.mac;
+	int ret;
+
+	if (!unic_link_ksettings_changed(mac, cmd))
+		return 0;
+
+	ret = unic_check_ksettings_param(netdev, cmd);
+	if (ret)
+		return ret;
+
+	unic_info(unic_dev,
+		  "set link: autoneg = %u, speed = %u, duplex = %u, lanes = %u.\n",
+		  cmd->base.autoneg, cmd->base.speed,
+		  cmd->base.duplex, cmd->lanes);
+
+	return unic_set_mac_link_ksettings(unic_dev, cmd);
+}
+
 static void unic_get_driver_info(struct net_device *netdev,
 				 struct ethtool_drvinfo *drvinfo)
 {
@@ -357,6 +436,7 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.supported_coalesce_params = UNIC_ETHTOOL_COALESCE,
 	.get_link = unic_get_link_status,
 	.get_link_ksettings = unic_get_link_ksettings,
+	.set_link_ksettings = unic_set_link_ksettings,
 	.get_drvinfo = unic_get_driver_info,
 	.get_regs_len = unic_get_regs_len,
 	.get_regs = unic_get_regs,

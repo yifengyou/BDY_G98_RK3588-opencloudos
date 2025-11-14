@@ -969,6 +969,11 @@ static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)
 		dev_warn(adev->dev.parent,
 			 "failed to alloc netdev because of ubl macro is not enabled.\n");
 #endif
+	} else {
+		snprintf(name, IFNAMSIZ, "ethc%ud%ue%u", caps->chip_id,
+			 caps->die_id, caps->ue_id);
+		netdev = alloc_netdev_mq(sizeof(struct unic_dev), name,
+					 NET_NAME_USER, ether_setup, channel_num);
 	}
 
 	return netdev;
