@@ -161,7 +161,9 @@ struct unic_channels {
 struct unic_caps {
 	u16	rx_buff_len;
 	u16	total_ip_tbl_size;
-	u32	rsvd0[5];
+	u32	uc_mac_tbl_size;
+	u32	mc_mac_tbl_size;
+	u32	rsvd0[2];
 	u16	max_trans_unit;
 	u16	min_trans_unit;
 	u32	vport_buf_size; /* unit: byte */
@@ -311,6 +313,11 @@ static inline bool unic_dev_rx_csum_offload_supported(struct unic_dev *unic_dev)
 static inline bool unic_dev_fec_stats_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_STATS_B);
+}
+
+static inline bool unic_dev_cfg_mac_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_CFG_MAC_B);
 }
 
 static inline bool __unic_removing(struct unic_dev *unic_dev)

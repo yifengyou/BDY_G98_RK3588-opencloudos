@@ -105,6 +105,7 @@ static const struct unic_dbg_cap_bit_info {
 	{"\tsupport_tx_csum_offload: %u\n", &unic_dev_tx_csum_offload_supported},
 	{"\tsupport_rx_csum_offload: %u\n", &unic_dev_rx_csum_offload_supported},
 	{"\tsupport_fec_stats: %u\n", &unic_dev_fec_stats_supported},
+	{"\tsupport_cfg_mac: %u\n", &unic_dev_cfg_mac_supported},
 };
 
 static void unic_dbg_dump_caps_bits(struct unic_dev *unic_dev,
@@ -328,6 +329,10 @@ static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 		.name = "qos",
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
+	}, {
+		.name = "mac_tbl",
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
 	},
 	/* keep unic at the bottom and add new directory above */
 	{
@@ -408,6 +413,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.support = unic_dbg_dentry_support,
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_caps_info,
+	}, {
+		.name = "mac_tbl_list_hw",
+		.dentry_index = UNIC_DBG_DENTRY_MAC,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_mac_tbl_list_hw,
 	}, {
 		.name = "page_pool_info",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,
