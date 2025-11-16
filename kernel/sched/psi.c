@@ -860,7 +860,7 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 
 static void psi_group_change(struct psi_group *group, int cpu,
 			     unsigned int clear, unsigned int set,
-			     u64 now, bool wake_clock)
+			     u64 now, bool wake_clock, bool curr_in_memstall)
 {
 	struct psi_group_cpu *groupc;
 	unsigned int t;
@@ -927,7 +927,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * task in a cgroup is in_memstall, the corresponding groupc
 	 * on that cpu is in PSI_MEM_FULL state.
 	 */
-	if (unlikely((state_mask & PSI_ONCPU) && cpu_curr(cpu)->in_memstall))
+	if (unlikely((state_mask & PSI_ONCPU) && curr_in_memstall))
 		state_mask |= (1 << PSI_MEM_FULL);
 
 	record_times(groupc, now);
@@ -960,21 +960,21 @@ static inline void psi_group_change_legacy(struct task_struct *task, int cpu,
 	if ((clear | set) & TSK_IOWAIT) {
 		group = cgroup_psi(task_cgroup(task, io_cgrp_subsys.id));
 		do {
-			psi_group_change(group, cpu, clear & TSK_IOWAIT, set & TSK_IOWAIT, now, wake);
+			psi_group_change(group, cpu, clear & TSK_IOWAIT, set & TSK_IOWAIT, now, wake, 0);
 		} while ((group = group->parent));
 	}
 #ifdef CONFIG_MEMCG
 	if ((clear | set) & TSK_MEMSTALL) {
 		group = cgroup_psi(task_cgroup(task, memory_cgrp_subsys.id));
 		do {
-			psi_group_change(group, cpu, clear & TSK_MEMSTALL, set & TSK_MEMSTALL, now, wake);
+			psi_group_change(group, cpu, clear & TSK_MEMSTALL, set & TSK_MEMSTALL, now, wake, 0);
 		} while ((group = group->parent));
 	}
 #endif
 	if ((clear | set) & TSK_RUNNING) {
 		group = cgroup_psi(task_cgroup(task, cpu_cgrp_subsys.id));
 		do {
-			psi_group_change(group, cpu, clear & TSK_RUNNING, set & TSK_RUNNING, now, wake);
+			psi_group_change(group, cpu, clear & TSK_RUNNING, set & TSK_RUNNING, now, wake, 0);
 		} while ((group = group->parent));
 	}
 }
@@ -1020,8 +1020,9 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 		psi_write_end(cpu);
 		return;
 	}
+	bool curr_in_memstall = cpu_curr(cpu)->in_memstall;
 	for_each_group(group, task_psi_group(task))
-		psi_group_change(group, cpu, clear, set, now, true);
+		psi_group_change(group, cpu, clear, set, now, true, curr_in_memstall);
 	psi_write_end(cpu);
 }
 
@@ -1031,6 +1032,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	struct psi_group *common = NULL;
 	int cpu = task_cpu(prev);
 	u64 now;
+	bool curr_in_memstall = false;
 
 	psi_write_begin(cpu);
 	now = psi_gettime(cpu);
@@ -1061,9 +1063,10 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		return;
 	}
 
+	curr_in_memstall = next->in_memstall;
 	if (next->pid) {
 		psi_flags_change(next, 0, TSK_ONCPU);
-		if (unlikely(psi_dyn_stat_cpu() || next->in_memstall)) {
+		if (unlikely(psi_dyn_stat_cpu() || curr_in_memstall)) {
 			/*
 			* Set TSK_ONCPU on @next's cgroups. If @next shares any
 			* ancestors with @prev, those will already have @prev's
@@ -1076,7 +1079,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 					common = group;
 					break;
 				}
-				psi_group_change(group, cpu, 0, TSK_ONCPU, now, true);
+				psi_group_change(group, cpu, 0, TSK_ONCPU, now, true, curr_in_memstall);
 			}
 		} else {
 			/* only need to set PSI_ONCPU */
@@ -1124,7 +1127,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		for_each_group(group, task_psi_group(prev)) {
 			if (group == common)
 				break;
-			psi_group_change(group, cpu, clear, set, now, wake_clock);
+			psi_group_change(group, cpu, clear, set, now, wake_clock, curr_in_memstall);
 		}
 
 		/*
@@ -1136,7 +1139,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		if ((prev->psi_flags ^ next->psi_flags) & ~TSK_ONCPU) {
 			clear &= ~TSK_ONCPU;
 			for_each_group(group, common)
-				psi_group_change(group, cpu, clear, set, now, wake_clock);
+				psi_group_change(group, cpu, clear, set, now, wake_clock, curr_in_memstall);
 		}
 	}
 	psi_write_end(cpu);
@@ -1376,7 +1379,7 @@ void psi_cgroup_restart(struct psi_group *group)
 
 		psi_write_begin(cpu);
 		now = psi_gettime(cpu);
-		psi_group_change(group, cpu, 0, 0, now, true);
+		psi_group_change(group, cpu, 0, 0, now, true, cpu_curr(cpu)->in_memstall);
 		psi_write_end(cpu);
 	}
 }
