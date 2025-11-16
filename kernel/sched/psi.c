@@ -256,8 +256,6 @@ void __init psi_init(void)
 
 static u32 test_states(unsigned int *tasks, u32 state_mask)
 {
-	const bool oncpu = state_mask & PSI_ONCPU;
-
 	if (tasks[NR_IOWAIT]) {
 		state_mask |= BIT(PSI_IO_SOME);
 		if (!tasks[NR_RUNNING])
@@ -271,6 +269,7 @@ static u32 test_states(unsigned int *tasks, u32 state_mask)
 	}
 
 	if (psi_dyn_stat_cpu()) {
+		const bool oncpu = state_mask & PSI_ONCPU;
 		if (tasks[NR_RUNNING] > oncpu)
 			state_mask |= BIT(PSI_CPU_SOME);
 
@@ -278,7 +277,7 @@ static u32 test_states(unsigned int *tasks, u32 state_mask)
 			state_mask |= BIT(PSI_CPU_FULL);
 	}
 
-	if (tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] || tasks[NR_RUNNING])
+	if (tasks[NR_RUNNING] || tasks[NR_IOWAIT] || tasks[NR_MEMSTALL])
 		state_mask |= BIT(PSI_NONIDLE);
 
 	return state_mask;
@@ -858,6 +857,14 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 #define for_each_group(iter, group) \
 	for (typeof(group) iter = group; iter; iter = iter->parent)
 
+static inline struct psi_group_cpu *prefetch_and_get_groupc(struct psi_group *group, int cpu)
+{
+	struct psi_group_cpu *groupc = per_cpu_ptr(group->pcpu, cpu);
+	if (group->parent)
+			prefetchw(per_cpu_ptr(group->parent->pcpu, cpu));
+	return groupc;
+}
+
 static void psi_group_change(struct psi_group *group, int cpu,
 			     unsigned int clear, unsigned int set,
 			     u64 now, bool wake_clock, bool curr_in_memstall)
@@ -867,7 +874,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	u32 state_mask = 0;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
-	groupc = per_cpu_ptr(group->pcpu, cpu);
+	groupc = prefetch_and_get_groupc(group, cpu);
 
 	/*
 	 * Start with TSK_ONCPU, which doesn't have a corresponding

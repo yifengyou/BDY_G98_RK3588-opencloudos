@@ -85,18 +85,19 @@ enum psi_aggregators {
 struct psi_group_cpu {
 	/* 1st cacheline updated by the scheduler */
 
-	/* States of the tasks belonging to this group */
-	unsigned int tasks[NR_PSI_TASK_COUNTS]
-			____cacheline_aligned_in_smp;
+	struct {
+		/* States of the tasks belonging to this group */
+		unsigned int tasks[NR_PSI_TASK_COUNTS];
 
-	/* Aggregate pressure state derived from the tasks */
-	u32 state_mask;
+		/* Aggregate pressure state derived from the tasks */
+		u32 state_mask;
 
-	/* Period time sampling buckets for each state of interest (ns) */
-	u32 times[NR_PSI_STATES];
+		/* Period time sampling buckets for each state of interest (ns) */
+		u32 times[NR_PSI_STATES];
 
-	/* Time of last task change in this group (rq_clock) */
-	u64 state_start;
+		/* Time of last task change in this group (rq_clock) */
+		u64 state_start;
+	} ____cacheline_aligned_in_smp;
 
 	/* 2nd cacheline updated by the aggregator */
 
@@ -161,12 +162,11 @@ struct psi_trigger {
 struct psi_group {
 	struct psi_group *parent;
 	bool enabled;
+	/* Per-cpu task state & time tracking */
+	struct psi_group_cpu __percpu *pcpu;
 
 	/* Protects data used by the aggregator */
 	struct mutex avgs_lock;
-
-	/* Per-cpu task state & time tracking */
-	struct psi_group_cpu __percpu *pcpu;
 
 	/* Running pressure averages */
 	u64 avg_total[NR_PSI_STATES - 1];
