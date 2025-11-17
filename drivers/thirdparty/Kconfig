@@ -5,24 +5,4 @@ config THIRDPARTY_BNXT
 	bool
 	default y
 
-config THIRDPARTY_I40E
-	bool
-	default y
-
-config THIRDPARTY_ICE
-	bool
-	default y
-
-config THIRDPARTY_IAVF
-	bool
-	default y
-
-config THIRDPARTY_IXGBE
-	bool
-	default y
-
-config THIRDPARTY_IXGBEVF
-	bool
-	default y
-
 endmenu
