@@ -252,6 +252,108 @@ static int unic_dcbnl_ieee_setets(struct net_device *ndev, struct ieee_ets *ets)
 	return unic_setets_config(ndev, ets, changed, vl_num);
 }
 
+static int unic_check_pfc_preconditions(struct net_device *net_dev)
+{
+	struct unic_dev *unic_dev = netdev_priv(net_dev);
+
+	if (!unic_dev_pfc_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (unic_resetting(net_dev))
+		return -EBUSY;
+
+	if (!(unic_dev->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int unic_pfc_down(struct unic_dev *unic_dev, struct ieee_pfc *pfc)
+{
+	struct unic_pfc_info *pfc_info = &unic_dev->channels.vl.pfc_info;
+	u8 tx_pause, rx_pause;
+	int ret;
+
+	ret = unic_pfc_pause_cfg(unic_dev, pfc->pfc_en);
+	if (ret)
+		return ret;
+
+	pfc_info->fc_mode &= ~(UNIC_FC_PFC_EN);
+	pfc_info->pfc_en = pfc->pfc_en;
+
+	tx_pause = pfc_info->fc_mode & UNIC_TX_PAUSE_EN ? 1 : 0;
+	rx_pause = pfc_info->fc_mode & UNIC_RX_PAUSE_EN ? 1 : 0;
+
+	return unic_mac_pause_en_cfg(unic_dev, tx_pause, rx_pause);
+}
+
+static int unic_dcbnl_ieee_getpfc(struct net_device *ndev, struct ieee_pfc *pfc)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	struct ubase_eth_mac_stats eth_stats = {0};
+	int i, ret;
+
+	ret = unic_check_pfc_preconditions(ndev);
+	if (ret)
+		return ret;
+
+	ret = ubase_get_eth_port_stats(unic_dev->comdev.adev, &eth_stats);
+	if (ret)
+		return ret;
+
+	memset(pfc, 0, sizeof(*pfc));
+	pfc->pfc_en = unic_dev->channels.vl.pfc_info.pfc_en;
+	pfc->pfc_cap = UNIC_MAX_PRIO_NUM;
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		pfc->requests[i] = unic_get_pfc_tx_pkts(&eth_stats, i);
+		pfc->indications[i] = unic_get_pfc_rx_pkts(&eth_stats, i);
+	}
+
+	return 0;
+}
+
+static int unic_dcbnl_ieee_setpfc(struct net_device *ndev, struct ieee_pfc *pfc)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	struct unic_pfc_info *pfc_info;
+	int ret;
+
+	pfc_info = &unic_dev->channels.vl.pfc_info;
+
+	ret = unic_check_pfc_preconditions(ndev);
+	if (ret)
+		return ret;
+
+	if (pfc->pfc_en == pfc_info->pfc_en)
+		return 0;
+
+	if (!pfc->pfc_en)
+		return unic_pfc_down(unic_dev, pfc);
+
+	if (!(pfc_info->fc_mode & UNIC_FC_PFC_EN)) {
+		ret = unic_mac_pause_en_cfg(unic_dev, false, false);
+		if (ret) {
+			unic_info(unic_dev, "failed to disable pause, ret = %d.\n",
+				  ret);
+			return ret;
+		}
+	}
+
+	ret = unic_pfc_pause_cfg(unic_dev, pfc->pfc_en);
+	if (ret) {
+		unic_info(unic_dev,
+			  "failed to set pfc tx rx enable or priority, ret = %d.\n",
+			  ret);
+		return ret;
+	}
+
+	pfc_info->fc_mode |= UNIC_FC_PFC_EN;
+	pfc_info->pfc_en = pfc->pfc_en;
+
+	return ret;
+}
+
 static int unic_dscp_prio_check(struct net_device *netdev, struct dcb_app *app)
 {
 	struct unic_dev *unic_dev = netdev_priv(netdev);
@@ -481,6 +583,8 @@ static const struct dcbnl_rtnl_ops unic_dcbnl_ops = {
 	.ieee_setets = unic_dcbnl_ieee_setets,
 	.ieee_getmaxrate = unic_ieee_getmaxrate,
 	.ieee_setmaxrate = unic_ieee_setmaxrate,
+	.ieee_getpfc = unic_dcbnl_ieee_getpfc,
+	.ieee_setpfc = unic_dcbnl_ieee_setpfc,
 	.ieee_setapp = unic_dcbnl_ieee_setapp,
 	.ieee_delapp = unic_dcbnl_ieee_delapp,
 	.getdcbx     = unic_dcbnl_getdcbx,
@@ -491,7 +595,8 @@ void unic_set_dcbnl_ops(struct net_device *netdev)
 {
 	struct unic_dev *unic_dev = netdev_priv(netdev);
 
-	if (!unic_dev_ets_supported(unic_dev))
+	if (!unic_dev_ets_supported(unic_dev) &&
+	    !unic_dev_pfc_supported(unic_dev))
 		return;
 
 	netdev->dcbnl_ops = &unic_dcbnl_ops;

@@ -234,6 +234,8 @@ struct ubase_perf_stats_result {
 
 int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 			    struct ubase_ub_dl_stats *data);
+int ubase_get_eth_port_stats(struct auxiliary_device *adev,
+			     struct ubase_eth_mac_stats *data);
 int ubase_perf_stats(struct auxiliary_device *adev, u64 port_bitmap, u32 period,
 		     struct ubase_perf_stats_result *data, u32 data_size);
 

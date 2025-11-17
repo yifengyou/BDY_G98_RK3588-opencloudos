@@ -6,6 +6,9 @@
 
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
+#include <ub/ubase/ubase_comm_cmd.h>
+
+#include "unic_cmd.h"
 #include "unic_hw.h"
 #include "unic_qos_hw.h"
 
@@ -74,6 +77,55 @@ int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 	if (ret && ret != -EPERM)
 		dev_err(adev->dev.parent,
 			"failed to config vl rate limit, ret = %d.\n", ret);
+
+	return ret;
+}
+
+int unic_mac_pause_en_cfg(struct unic_dev *unic_dev, u32 tx_pause, u32 rx_pause)
+{
+	struct unic_cfg_mac_pause_cmd req = {0};
+	struct ubase_cmd_buf in;
+	int ret;
+
+	req.tx_en = cpu_to_le32(tx_pause);
+	req.rx_en = cpu_to_le32(rx_pause);
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_MAC_PAUSE_EN, false, sizeof(req), &req);
+
+	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
+	if (ret)
+		dev_err(unic_dev->comdev.adev->dev.parent,
+			"failed to config pause on|off, ret = %d.\n", ret);
+
+	return ret;
+}
+
+int unic_pfc_pause_cfg(struct unic_dev *unic_dev, u8 pfc_en)
+{
+#define	UNIC_PFC_TX_RX_ON	1
+#define	UNIC_PFC_TX_RX_OFF	0
+
+	struct unic_cfg_pfc_pause_cmd req = {0};
+	struct ubase_cmd_buf in;
+	int ret;
+
+	req.pri_bitmap = pfc_en;
+
+	if (pfc_en) {
+		req.tx_enable = UNIC_PFC_TX_RX_ON;
+		req.rx_enable = UNIC_PFC_TX_RX_ON;
+	} else {
+		req.tx_enable = UNIC_PFC_TX_RX_OFF;
+		req.rx_enable = UNIC_PFC_TX_RX_OFF;
+	}
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_PFC_PAUSE_EN, false, sizeof(req),
+			     &req);
+
+	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
+	if (ret)
+		dev_err(unic_dev->comdev.adev->dev.parent,
+			"failed to config pfc enable, ret = %d.\n", ret);
 
 	return ret;
 }

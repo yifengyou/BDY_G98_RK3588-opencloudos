@@ -12,6 +12,13 @@
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 
+struct unic_dev;
+
+#define UNIC_ETH_MAC_STATS_CAP_1	95
+
+#define UNIC_ETH_MAC_STATS_FIELD_OFF(fld) offsetof(struct ubase_eth_mac_stats, fld)
+#define UNIC_ETH_MAC_STATS_FLD_CAP_1(fld) {#fld, UNIC_ETH_MAC_STATS_CAP_1, \
+					   UNIC_ETH_MAC_STATS_FIELD_OFF(fld)}
 #define UNIC_SQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_sq, stats) + \
 				      offsetof(struct unic_sq_stats, fld))
 #define UNIC_RQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_rq, stats) + \
@@ -97,6 +104,12 @@ struct unic_dfx_regs_group {
 
 struct unic_stats_desc {
 	char desc[ETH_GSTRING_LEN];
+	u16 offset;
+};
+
+struct unic_mac_stats_desc {
+	char desc[ETH_GSTRING_LEN];
+	u32 stats_num;
 	u16 offset;
 };
 

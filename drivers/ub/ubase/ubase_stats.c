@@ -77,6 +77,41 @@ int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 }
 EXPORT_SYMBOL(ubase_get_ub_port_stats);
 
+int __ubase_get_eth_port_stats(struct ubase_dev *udev,
+			       struct ubase_eth_mac_stats *data)
+{
+	struct ubase_eth_mac_stats *eth_stats = &udev->stats.eth_stats;
+	u32 stats_num = sizeof(*eth_stats) / sizeof(u64);
+	int ret;
+
+	mutex_lock(&udev->stats.stats_lock);
+	ret = ubase_update_mac_stats(udev, udev->caps.dev_caps.io_port_logic_id,
+				     (u64 *)eth_stats, stats_num, true);
+	if (ret) {
+		mutex_unlock(&udev->stats.stats_lock);
+		return ret;
+	}
+
+	memcpy(data, &udev->stats.eth_stats, sizeof(*data));
+	mutex_unlock(&udev->stats.stats_lock);
+
+	return 0;
+}
+
+int ubase_get_eth_port_stats(struct auxiliary_device *adev,
+			     struct ubase_eth_mac_stats *data)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !data)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+
+	return __ubase_get_eth_port_stats(udev, data);
+}
+EXPORT_SYMBOL(ubase_get_eth_port_stats);
+
 void ubase_update_activate_stats(struct ubase_dev *udev, bool activate,
 				 int result)
 {

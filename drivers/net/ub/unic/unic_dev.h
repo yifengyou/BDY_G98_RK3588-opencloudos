@@ -126,6 +126,11 @@ struct unic_coal_txrx {
 	struct unic_coalesce	rx_coal;
 };
 
+struct unic_pfc_info {
+	u8	fc_mode;
+	u8	pfc_en;
+};
+
 struct unic_vl {
 	u8	vl_num;
 	u8	dscp_app_cnt;
@@ -138,6 +143,7 @@ struct unic_vl {
 	u8	vl_sl[UBASE_MAX_VL_NUM];
 	u64	vl_maxrate[UBASE_MAX_VL_NUM];
 	u16	vl_bitmap;
+	struct	unic_pfc_info	pfc_info;
 };
 
 struct unic_channels {
@@ -303,6 +309,11 @@ static inline bool unic_dev_ubl_supported(struct unic_dev *unic_dev)
 static inline bool unic_dev_eth_mac_supported(struct unic_dev *unic_dev)
 {
 	return ubase_adev_eth_mac_supported(unic_dev->comdev.adev);
+}
+
+static inline bool unic_dev_pfc_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PFC_B);
 }
 
 static inline bool unic_dev_ets_supported(struct unic_dev *unic_dev)

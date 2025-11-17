@@ -17,5 +17,8 @@ int unic_query_vl_map(struct unic_dev *unic_dev,
 		      struct unic_config_vl_map_cmd *resp);
 int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 			      u16 vl_bitmap);
+int unic_mac_pause_en_cfg(struct unic_dev *unic_dev, u32 tx_pause,
+			  u32 rx_pause);
+int unic_pfc_pause_cfg(struct unic_dev *unic_dev, u8 pfc_en);
 
 #endif

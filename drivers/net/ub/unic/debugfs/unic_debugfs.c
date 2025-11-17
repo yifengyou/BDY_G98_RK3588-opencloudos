@@ -530,6 +530,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_prio_vl_map,
 	}, {
+		.name = "pfc_info",
+		.dentry_index = UNIC_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_pfc_param,
+	}, {
 		.name = "dscp_prio",
 		.dentry_index = UNIC_DBG_DENTRY_QOS,
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL_ETH,

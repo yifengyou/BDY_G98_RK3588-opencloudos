@@ -213,6 +213,20 @@ struct unic_lb_en_cfg {
 	u8 rsv[21];
 };
 
+struct unic_cfg_mac_pause_cmd {
+	__le32 tx_en;
+	__le32 rx_en;
+	u8 rsv[16];
+};
+
+struct unic_cfg_pfc_pause_cmd {
+	u8 tx_enable : 1;
+	u8 rx_enable : 1;
+	u8 rsvd0 : 6;
+	u8 pri_bitmap;
+	u8 rsv1[22];
+};
+
 struct unic_query_link_diagnosis_resp {
 	__le32 status_code;
 	u8 rsv[20];

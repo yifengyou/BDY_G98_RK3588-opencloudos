@@ -9,8 +9,13 @@
 
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
+#include <ub/ubase/ubase_comm_dev.h>
 
 #define UNIC_TXRX_MIN_DEPTH	64
+
+#define UNIC_TX_PAUSE_EN	BIT(0)
+#define UNIC_RX_PAUSE_EN	BIT(1)
+#define UNIC_FC_PFC_EN		BIT(2)
 
 struct unic_reset_type_map {
 	enum ethtool_reset_flags reset_flags;

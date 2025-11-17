@@ -234,6 +234,19 @@ static int unic_init_vl_maxrate(struct unic_dev *unic_dev)
 					 unic_dev->channels.vl.vl_bitmap);
 }
 
+static int unic_init_pfc(struct unic_dev *unic_dev)
+{
+	if (!unic_dev_pfc_supported(unic_dev))
+		return 0;
+
+	return unic_pfc_pause_cfg(unic_dev, 0);
+}
+
+static int unic_init_fc_mode(struct unic_dev *unic_dev)
+{
+	return unic_init_pfc(unic_dev);
+}
+
 static int unic_init_vl_info(struct unic_dev *unic_dev)
 {
 	int ret;
@@ -608,6 +621,10 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 			"failed to set initial mtu, ret = %d.\n", ret);
 		return ret;
 	}
+
+	ret = unic_init_fc_mode(unic_dev);
+	if (ret)
+		return ret;
 
 	mutex_init(&record->lock);
 	return 0;

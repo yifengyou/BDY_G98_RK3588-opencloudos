@@ -146,3 +146,47 @@ int unic_dbg_dump_dscp_prio(struct seq_file *s, void *data)
 
 	return 0;
 }
+
+int unic_dbg_dump_pfc_param(struct seq_file *s, void *data)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct ubase_eth_mac_stats eth_stats = {0};
+	u64 stats_tx[IEEE_8021QAZ_MAX_TCS];
+	u64 stats_rx[IEEE_8021QAZ_MAX_TCS];
+	u8 pfc_cap, pfc_en;
+	int i, ret;
+
+	if (!unic_dev_pfc_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (__unic_resetting(unic_dev))
+		return -EBUSY;
+
+	ret = ubase_get_eth_port_stats(unic_dev->comdev.adev, &eth_stats);
+	if (ret)
+		return ret;
+
+	pfc_en = unic_dev->channels.vl.pfc_info.pfc_en;
+	pfc_cap = UNIC_MAX_PRIO_NUM;
+
+	seq_printf(s, "mac_pfc_capacity: %d\n", pfc_cap);
+	seq_puts(s, "mac_pfc_enable: ");
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		seq_printf(s, "%d",
+			   (pfc_en >> (IEEE_8021QAZ_MAX_TCS - i - 1)) & 1);
+
+	seq_puts(s, "\n");
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		stats_tx[i] = unic_get_pfc_tx_pkts(&eth_stats, i);
+		seq_printf(s, "mac_tx_pri%d_pfc_pkts: %llu\n", i, stats_tx[i]);
+	}
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		stats_rx[i] = unic_get_pfc_rx_pkts(&eth_stats, i);
+		seq_printf(s, "mac_rx_pri%d_pfc_pkts: %llu\n", i, stats_rx[i]);
+	}
+
+	return 0;
+}
