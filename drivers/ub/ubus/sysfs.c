@@ -325,6 +325,15 @@ static ssize_t primary_cna_show(struct device *dev,
 }
 DEVICE_ATTR_RO(primary_cna);
 
+static ssize_t ummu_map_show(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct ub_entity *uent = to_ub_entity(dev);
+
+	return sysfs_emit(buf, "%#04x\n", uent->ubc->attr.ummu_map);
+}
+DEVICE_ATTR_RO(ummu_map);
+
 static ssize_t instance_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
@@ -393,6 +402,7 @@ static struct attribute *ub_entity_attrs[] = {
 	&dev_attr_tid.attr,
 	&dev_attr_primary_entity.attr,
 	&dev_attr_kref.attr,
+	&dev_attr_ummu_map.attr,
 	NULL
 };
 
