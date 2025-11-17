@@ -17,8 +17,11 @@
 
 #define UNIC_BITMAP_LEN		8
 #define UNIC_DBG_MAC_NUM	16
+#define UNIC_DBG_VLAN_NUM	250
 #define UNIC_QUERY_MAC_LEN	(sizeof(struct unic_dbg_mac_head) + \
 				 sizeof(struct unic_dbg_mac_entry) * UNIC_DBG_MAC_NUM)
+#define UNIC_QUERY_VLAN_LEN	(sizeof(struct unic_dbg_vlan_head) + \
+				 sizeof(struct unic_dbg_vlan_entry) * UNIC_DBG_VLAN_NUM)
 
 struct unic_dbg_mac_entry {
 	u8 mac_addr[ETH_ALEN];
@@ -30,6 +33,23 @@ struct unic_dbg_mac_head {
 	u8 cur_mac_cnt;
 	u8 rsv[3];
 	struct unic_dbg_mac_entry mac_entry[];
+};
+
+struct unic_dbg_vlan_entry {
+	__le16 ue_id;
+	__le16 vlan_id;
+};
+
+struct unic_dbg_vlan_head {
+	__le16 idx;
+	__le16 vlan_cnt;
+	struct unic_dbg_vlan_entry vlan_entry[];
+};
+
+struct unic_dbg_vlan_node {
+	struct list_head node;
+	u16 ue_id;
+	u16 vlan_id;
 };
 
 struct unic_dbg_comm_addr_node {
@@ -52,6 +72,7 @@ struct unic_dbg_comm_addr_node {
 
 int unic_dbg_dump_ip_tbl_spec(struct seq_file *s, void *data);
 int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data);
+int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_mac_tbl_list_hw(struct seq_file *s, void *data);
 
 #endif /* _UNIC_ENTRY_DEBUGFS_H */

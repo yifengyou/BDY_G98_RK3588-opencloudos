@@ -195,3 +195,94 @@ release_list:
 
 	return ret;
 }
+
+static int unic_query_vlan_list_hw(struct unic_dev *unic_dev, u32 *idx,
+				   struct list_head *list, bool *complete)
+{
+	struct unic_dbg_vlan_entry *vlan_entry;
+	struct unic_dbg_vlan_node *vlan_node;
+	struct unic_dbg_vlan_head req = {0};
+	struct unic_dbg_vlan_head *resp;
+	struct ubase_cmd_buf in, out;
+	u16 vlan_cnt, i;
+	int ret;
+
+	resp = kzalloc(UNIC_QUERY_VLAN_LEN, GFP_ATOMIC);
+	if (!resp)
+		return -ENOMEM;
+
+	vlan_entry = resp->vlan_entry;
+	req.idx = cpu_to_le16((u16)*idx);
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_QUERY_VLAN_TBL, true,
+			     sizeof(req), &req);
+	ubase_fill_inout_buf(&out, UBASE_OPC_QUERY_VLAN_TBL, true,
+			     UNIC_QUERY_VLAN_LEN, resp);
+	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
+	if (ret && ret != -EPERM) {
+		unic_err(unic_dev, "failed to query vlan hw tbl, ret = %d.\n",
+			 ret);
+		goto err_out;
+	}
+
+	vlan_cnt = le16_to_cpu(resp->vlan_cnt);
+	if (vlan_cnt > UNIC_DBG_VLAN_NUM) {
+		ret = -EINVAL;
+		unic_err(unic_dev, "invalid vlan_cnt(%u).\n", vlan_cnt);
+		goto err_out;
+	}
+
+	for (i = 0; i < vlan_cnt; i++) {
+		vlan_node = kzalloc(sizeof(*vlan_node), GFP_ATOMIC);
+		if (!vlan_node) {
+			ret = -ENOMEM;
+			goto err_out;
+		}
+		vlan_node->ue_id = le16_to_cpu(vlan_entry[i].ue_id);
+		vlan_node->vlan_id = le16_to_cpu(vlan_entry[i].vlan_id);
+		list_add_tail(&vlan_node->node, list);
+	}
+
+	*idx = le16_to_cpu(resp->idx);
+
+err_out:
+	kfree(resp);
+
+	return ret;
+}
+
+int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct unic_dbg_vlan_node *vlan_node, *tmp_node;
+	struct list_head list;
+	int ret, cnt = 0;
+	u32 size;
+
+	ret = unic_dbg_check_dev_state(unic_dev);
+	if (ret)
+		return ret;
+
+	INIT_LIST_HEAD(&list);
+	size = unic_dev->caps.vlan_tbl_size;
+	ret = unic_common_query_addr_list(unic_dev, size, UNIC_DBG_VLAN_NUM,
+					  &list, unic_query_vlan_list_hw);
+	if (ret)
+		goto release_list;
+
+	seq_puts(s, "No     UE_ID    VLAN_ID\n");
+
+	list_for_each_entry(vlan_node, &list, node) {
+		seq_printf(s, "%-7d", cnt++);
+		seq_printf(s, "%-13u", vlan_node->ue_id);
+		seq_printf(s, "%-12u\n", vlan_node->vlan_id);
+	}
+
+release_list:
+	list_for_each_entry_safe(vlan_node, tmp_node, &list, node) {
+		list_del(&vlan_node->node);
+		kfree(vlan_node);
+	}
+
+	return ret;
+}

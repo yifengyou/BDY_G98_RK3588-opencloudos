@@ -129,6 +129,7 @@ static void unic_dbg_dump_caps(struct unic_dev *unic_dev, struct seq_file *s)
 		u32 caps_info;
 	} unic_caps_info[] = {
 		{"\ttotal_ip_tbl_size: %hu\n", unic_caps->total_ip_tbl_size},
+		{"\tvlan_tbl_size: %u\n", unic_caps->vlan_tbl_size},
 		{"\tmax_trans_unit: %hu\n", unic_caps->max_trans_unit},
 		{"\tmin_trans_unit: %hu\n", unic_caps->min_trans_unit},
 		{"\tvport_buf_size: %u\n", unic_caps->vport_buf_size},
@@ -333,6 +334,10 @@ static struct ubase_dbg_dentry_info unic_dbg_dentry[] = {
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL,
 		.support = unic_dbg_dentry_support,
 	}, {
+		.name = "vlan_tbl",
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
+	}, {
 		.name = "mac_tbl",
 		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
 		.support = unic_dbg_dentry_support,
@@ -423,6 +428,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.support = unic_dbg_dentry_support,
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_mac_tbl_list_hw,
+	}, {
+		.name = "vlan_tbl_list_hw",
+		.dentry_index = UNIC_DBG_DENTRY_VLAN,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_vlan_tbl_list_hw,
 	}, {
 		.name = "page_pool_info",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,

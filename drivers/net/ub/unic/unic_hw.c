@@ -527,6 +527,7 @@ static void unic_parse_dev_caps(struct unic_dev *unic_dev,
 	caps->total_ip_tbl_size = le16_to_cpu(resp->total_ip_tbl_size);
 	caps->uc_mac_tbl_size = le32_to_cpu(resp->uc_mac_tbl_size);
 	caps->mc_mac_tbl_size = le32_to_cpu(resp->mc_mac_tbl_size);
+	caps->vlan_tbl_size = le32_to_cpu(resp->vlan_tbl_size);
 	caps->max_trans_unit = le16_to_cpu(resp->max_trans_unit);
 	caps->min_trans_unit = le16_to_cpu(resp->min_trans_unit);
 	caps->vport_buf_size = le16_to_cpu(resp->vport_buf_size) * KB;
