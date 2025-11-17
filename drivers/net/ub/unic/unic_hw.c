@@ -827,6 +827,51 @@ err_send_cmd:
 	return ret;
 }
 
+int unic_set_vlan_filter_hw(struct unic_dev *unic_dev, bool filter_en)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct unic_vlan_filter_ctrl_cmd req = {0};
+	struct ubase_cmd_buf in;
+	u32 time_out;
+	int ret;
+
+	req.filter_en = filter_en ? 1 : 0;
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_VLAN_FILTER_CTRL, false,
+			     sizeof(req), &req);
+
+	time_out = unic_cmd_timeout(unic_dev);
+	ret = ubase_cmd_send_in_ex(unic_dev->comdev.adev, &in, time_out);
+	if (ret)
+		dev_err(adev->dev.parent,
+			"failed to set vlan filter, ret = %d.\n", ret);
+
+	return ret;
+}
+
+int unic_set_port_vlan_hw(struct unic_dev *unic_dev, u16 vlan_id, bool is_add)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct unic_vlan_filter_cfg_cmd req = {0};
+	struct ubase_cmd_buf in;
+	u32 time_out;
+	int ret;
+
+	req.vlan_id = cpu_to_le16(vlan_id);
+	req.is_add = is_add ? 1 : 0;
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_VLAN_FILTER_CFG, false, sizeof(req),
+			     &req);
+
+	time_out = unic_cmd_timeout(unic_dev);
+	ret = ubase_cmd_send_in_ex(unic_dev->comdev.adev, &in, time_out);
+	if (ret)
+		dev_err(adev->dev.parent,
+			"failed to send port vlan command, ret = %d.\n", ret);
+
+	return ret;
+}
+
 static void unic_set_rss_tc0_param(struct unic_channels *channels,
 				   u16 jfr_cnt, __le16 *jfr_idx)
 {

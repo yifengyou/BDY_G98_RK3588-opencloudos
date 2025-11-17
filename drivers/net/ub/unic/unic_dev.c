@@ -26,6 +26,7 @@
 #include "unic_qos_hw.h"
 #include "unic_netdev.h"
 #include "unic_rack_ip.h"
+#include "unic_vlan.h"
 #include "unic_dev.h"
 
 #define UNIC_WATCHDOG_TIMEOUT (5 * HZ)
@@ -543,6 +544,14 @@ static void unic_set_netdev_attr(struct net_device *netdev)
 	if (unic_dev_ubl_supported(unic_dev)) {
 		netdev->features |= NETIF_F_VLAN_CHALLENGED;
 		netdev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
+	} else {
+		netdev->flags |= IFF_BROADCAST | IFF_MULTICAST;
+		netdev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
+	}
+
+	if (!unic_dev_cfg_vlan_filter_supported(unic_dev)) {
+		netdev->features |= NETIF_F_VLAN_CHALLENGED;
+		netdev->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 	}
 
 	if (unic_dev_tx_csum_offload_supported(unic_dev))
@@ -656,6 +665,7 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 	unic_update_port_info(unic_dev);
 	unic_sync_rack_ip_table(unic_dev);
 	unic_sync_promisc_mode(unic_dev);
+	unic_sync_vlan_filter(unic_dev);
 
 	if (!(unic_dev->serv_processed_cnt % UNIC_UPDATE_STATS_TIMER_INTERVAL))
 		unic_update_stats_for_all(unic_dev);
@@ -764,12 +774,20 @@ static int unic_init_vport(struct unic_dev *unic_dev)
 
 	unic_init_vport_info(unic_dev);
 
+	ret = unic_init_vlan_config(unic_dev);
+	if (ret)
+		unic_uninit_vport_buf(unic_dev);
+
 	return ret;
 }
 
 static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
 	unic_uninit_rack_ip_table(unic_dev);
+
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_uninit_vlan_config(unic_dev);
+
 	unic_uninit_vport_buf(unic_dev);
 }
 

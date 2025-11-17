@@ -152,6 +152,17 @@ struct unic_query_flush_status_resp {
 	u8 rsv[23];
 };
 
+struct unic_vlan_filter_cfg_cmd {
+	u16 vlan_id;
+	u8 is_add;
+	u8 rsv[21];
+};
+
+struct unic_vlan_filter_ctrl_cmd {
+	u8 filter_en;
+	u8 rsv[23];
+};
+
 enum unic_vl_map_type {
 	UNIC_PRIO_VL_MAP,
 	UNIC_DSCP_VL_MAP,

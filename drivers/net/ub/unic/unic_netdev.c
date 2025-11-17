@@ -27,6 +27,7 @@
 #include "unic_rx.h"
 #include "unic_tx.h"
 #include "unic_txrx.h"
+#include "unic_vlan.h"
 #include "unic_netdev.h"
 #include "unic_rack_ip.h"
 

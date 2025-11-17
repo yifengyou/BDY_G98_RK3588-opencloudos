@@ -43,6 +43,7 @@ enum unic_vport_state {
 	UNIC_VPORT_STATE_ALIVE,
 	UNIC_VPORT_STATE_PROMISC_CHANGE,
 	UNIC_VPORT_STATE_IP_TBL_CHANGE,
+	UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
 	UNIC_VPORT_STATE_IP_QUERYING,
 };
 
@@ -163,7 +164,8 @@ struct unic_caps {
 	u16	total_ip_tbl_size;
 	u32	uc_mac_tbl_size;
 	u32	mc_mac_tbl_size;
-	u32	rsvd0[2];
+	u32	vlan_tbl_size;
+	u32	rsvd0[1];
 	u16	max_trans_unit;
 	u16	min_trans_unit;
 	u32	vport_buf_size; /* unit: byte */
@@ -208,6 +210,18 @@ struct unic_addr_tbl {
 	struct list_head	tmp_ip_list; /* Store temprary ip table */
 };
 
+struct unic_vlan_tbl {
+	bool			cur_vlan_fltr_en;
+	unsigned long		vlan_del_fail_bmap[BITS_TO_LONGS(VLAN_N_VID)];
+	struct list_head	vlan_list; /* Store vlan table */
+	spinlock_t		vlan_lock; /* protect vlan list */
+};
+
+struct unic_vlan_cfg {
+	struct list_head	node;
+	u16			vlan_id;
+};
+
 struct unic_vport_buf {
 	void		*buf;
 	dma_addr_t	dma_addr;
@@ -216,6 +230,7 @@ struct unic_vport_buf {
 struct unic_vport {
 	struct unic_dev		*back;
 	struct unic_addr_tbl	addr_tbl;
+	struct unic_vlan_tbl	vlan_tbl;
 	u8			overflow_promisc_flags;
 	u8			last_promisc_flags;
 	unsigned long		state;
@@ -333,6 +348,11 @@ static inline bool unic_dev_external_lb_supported(struct unic_dev *unic_dev)
 static inline bool unic_dev_parallel_serdes_lb_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PARALLEL_SERDES_LB_B);
+}
+
+static inline bool unic_dev_cfg_vlan_filter_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_CFG_VLAN_FILTER_B);
 }
 
 static inline bool unic_dev_cfg_mac_supported(struct unic_dev *unic_dev)

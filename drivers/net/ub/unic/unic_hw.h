@@ -103,6 +103,8 @@ int unic_query_vport_ctx(struct unic_dev *unic_dev, u16 offset,
 			 struct unic_vport_ctx_cmd *resp);
 int unic_set_fec_mode(struct unic_dev *unic_dev, u32 fec_mode);
 int unic_update_fec_stats(struct unic_dev *unic_dev);
+int unic_set_vlan_filter_hw(struct unic_dev *unic_dev, bool filter_en);
+int unic_set_port_vlan_hw(struct unic_dev *unic_dev, u16 vlan_id, bool is_kill);
 int unic_set_rss_tc_mode(struct unic_dev *unic_dev, u8 tc_vaild);
 int unic_query_rss_cfg(struct unic_dev *unic_dev,
 		       struct unic_cfg_rss_cmd *resp);
