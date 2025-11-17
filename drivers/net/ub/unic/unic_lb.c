@@ -27,6 +27,31 @@ static void unic_set_selftest_param(struct unic_dev *unic_dev, int *st_param)
 {
 	st_param[UNIC_LB_APP] =
 			unic_dev->loopback_flags & UNIC_SUPPORT_APP_LB;
+	st_param[UNIC_LB_SERIAL_SERDES] =
+			unic_dev->loopback_flags & UNIC_SUPPORT_SERIAL_SERDES_LB;
+	st_param[UNIC_LB_PARALLEL_SERDES] =
+			unic_dev->loopback_flags & UNIC_SUPPORT_PARALLEL_SERDES_LB;
+}
+
+static int unic_set_lb_mode(struct unic_dev *unic_dev, bool en, int loop_type)
+{
+	struct unic_lb_en_cfg req = {0};
+	struct ubase_cmd_buf in;
+	int ret;
+
+	req.lb_en = en ? 1 : 0;
+	req.sub_cmd = loop_type;
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_DL_CONFIG_LB, false, sizeof(req),
+			&req);
+
+	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
+	if (ret)
+		unic_err(unic_dev,
+			"failed to config loopback mode, ret = %d, loop_type = %d.\n",
+			ret, loop_type);
+
+	return ret;
 }
 
 static int unic_lb_link_status_wait(struct unic_dev *unic_dev, bool en)
@@ -55,6 +80,45 @@ static int unic_lb_link_status_wait(struct unic_dev *unic_dev, bool en)
 	return -EBUSY;
 }
 
+static int unic_enable_serdes_lb(struct unic_dev *unic_dev, int loop_type)
+{
+	int ret;
+
+	ret = unic_mac_cfg(unic_dev, true);
+	if (ret)
+		return ret;
+
+	ret = unic_set_lb_mode(unic_dev, true, loop_type);
+	if (ret)
+		return ret;
+
+	return unic_lb_link_status_wait(unic_dev, true);
+}
+
+static int unic_disable_serdes_lb(struct unic_dev *unic_dev, int loop_type)
+{
+	int ret;
+
+	ret = unic_set_lb_mode(unic_dev, false, loop_type);
+	if (ret)
+		return ret;
+
+	ret = unic_mac_cfg(unic_dev, false);
+	if (ret)
+		return ret;
+
+	return unic_lb_link_status_wait(unic_dev, false);
+}
+
+static int unic_set_serdes_lb(struct unic_dev *unic_dev, bool en, int loop_type)
+{
+	if (!unic_dev_parallel_serdes_lb_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	return en ? unic_enable_serdes_lb(unic_dev, loop_type) :
+		    unic_disable_serdes_lb(unic_dev, loop_type);
+}
+
 static int unic_set_app_lb(struct unic_dev *unic_dev, bool en)
 {
 	int ret;
@@ -81,6 +145,8 @@ static int unic_lb_config(struct net_device *ndev, int loop_type, bool en,
 		break;
 	case UNIC_LB_SERIAL_SERDES:
 	case UNIC_LB_PARALLEL_SERDES:
+		ret = unic_set_serdes_lb(unic_dev, en, loop_type);
+		break;
 	case UNIC_LB_EXTERNAL:
 		break;
 	default:
@@ -478,6 +544,16 @@ int unic_get_selftest_count(struct unic_dev *unic_dev)
 
 	if (unic_dev_app_lb_supported(unic_dev)) {
 		unic_dev->loopback_flags |= UNIC_SUPPORT_APP_LB;
+		count++;
+	}
+
+	if (unic_dev_serial_serdes_lb_supported(unic_dev)) {
+		unic_dev->loopback_flags |= UNIC_SUPPORT_SERIAL_SERDES_LB;
+		count++;
+	}
+
+	if (unic_dev_parallel_serdes_lb_supported(unic_dev)) {
+		unic_dev->loopback_flags |= UNIC_SUPPORT_PARALLEL_SERDES_LB;
 		count++;
 	}
 

@@ -295,6 +295,11 @@ static inline bool unic_dev_fec_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_B);
 }
 
+static inline bool unic_dev_serial_serdes_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_SERIAL_SERDES_LB_B);
+}
+
 static inline bool unic_dev_tc_speed_limit_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_TC_SPEED_LIMIT_B);
@@ -318,6 +323,11 @@ static inline bool unic_dev_app_lb_supported(struct unic_dev *unic_dev)
 static inline bool unic_dev_fec_stats_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_STATS_B);
+}
+
+static inline bool unic_dev_parallel_serdes_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PARALLEL_SERDES_LB_B);
 }
 
 static inline bool unic_dev_cfg_mac_supported(struct unic_dev *unic_dev)
