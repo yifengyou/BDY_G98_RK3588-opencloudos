@@ -69,6 +69,64 @@ static int unic_common_query_addr_list(struct unic_dev *unic_dev, u32 total_size
 	return ret == -EPERM ? -EOPNOTSUPP : ret;
 }
 
+static int unic_dbg_dump_mac_tbl_list(struct seq_file *s, void *data,
+				      bool is_unicast)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct unic_vport *vport = &unic_dev->vport;
+	struct unic_comm_addr_node *mac_node, *tmp;
+	struct list_head *list;
+	int i = 0;
+
+	if (!unic_dev_cfg_mac_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	seq_printf(s, "%s mac_list:\n", is_unicast ? "unicast" : "multicast");
+	seq_printf(s, "No.     %-28sSTATE\n", "MAC_ADDR");
+
+	list = is_unicast ?
+	       &vport->addr_tbl.uc_mac_list : &vport->addr_tbl.mc_mac_list;
+
+	spin_lock_bh(&vport->addr_tbl.mac_list_lock);
+	list_for_each_entry_safe(mac_node, tmp, list, node) {
+		seq_printf(s, "%-8d", i++);
+		seq_printf(s, "%-28pM", mac_node->mac_addr);
+		seq_printf(s, "%s\n", unic_entry_state_str[mac_node->state]);
+	}
+
+	spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
+	return 0;
+}
+
+int unic_dbg_dump_uc_mac_tbl_list(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_mac_tbl_list(s, data, true);
+}
+
+int unic_dbg_dump_mc_mac_tbl_list(struct seq_file *s, void *data)
+{
+	return unic_dbg_dump_mac_tbl_list(s, data, false);
+}
+
+int unic_dbg_dump_mac_tbl_spec(struct seq_file *s, void *data)
+{
+	u32 mac_tbl_size, priv_uc_mac_tbl_size, priv_mc_mac_tbl_size;
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+
+	if (!unic_dev_cfg_mac_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	priv_mc_mac_tbl_size = unic_dev->caps.mc_mac_tbl_size;
+	priv_uc_mac_tbl_size = unic_dev->caps.uc_mac_tbl_size;
+	mac_tbl_size = priv_mc_mac_tbl_size + priv_uc_mac_tbl_size;
+
+	seq_printf(s, "mac_tbl_size\t: %u\n", mac_tbl_size);
+	seq_printf(s, "priv_uc_mac_tbl_size\t: %u\n", priv_uc_mac_tbl_size);
+	seq_printf(s, "priv_mc_mac_tbl_size\t: %u\n", priv_mc_mac_tbl_size);
+
+	return 0;
+}
+
 int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data)
 {
 	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
@@ -83,7 +141,7 @@ int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data)
 	list = &ip_tbl->ip_list;
 	spin_lock_bh(&ip_tbl->ip_list_lock);
 	list_for_each_entry(ip_node, list, node) {
-		seq_printf(s, "%-4d", i++);
+		seq_printf(s, "%-4u", i++);
 		seq_printf(s, "%-43pI6c", &ip_node->ip_addr.s6_addr);
 		seq_printf(s, "%-9s", unic_entry_state_str[ip_node->state]);
 		seq_printf(s, "%-3u", ip_node->node_mask);

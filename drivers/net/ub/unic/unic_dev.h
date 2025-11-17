@@ -166,7 +166,7 @@ struct unic_caps {
 	u32	uc_mac_tbl_size;
 	u32	mc_mac_tbl_size;
 	u32	vlan_tbl_size;
-	u32	rsvd0[1];
+	u32	mng_tbl_size;
 	u16	max_trans_unit;
 	u16	min_trans_unit;
 	u32	vport_buf_size; /* unit: byte */
