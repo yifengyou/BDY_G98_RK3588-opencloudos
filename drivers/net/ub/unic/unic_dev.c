@@ -234,6 +234,24 @@ static int unic_init_vl_maxrate(struct unic_dev *unic_dev)
 					 unic_dev->channels.vl.vl_bitmap);
 }
 
+static int unic_init_pause(struct unic_dev *unic_dev)
+{
+	struct unic_pfc_info *pfc_info = &unic_dev->channels.vl.pfc_info;
+	int ret;
+
+	if (!unic_dev_pause_supported(unic_dev))
+		return 0;
+
+	ret = unic_mac_pause_en_cfg(unic_dev, UNIC_RX_TX_PAUSE_ON,
+				    UNIC_RX_TX_PAUSE_ON);
+	if (ret)
+		return ret;
+
+	pfc_info->fc_mode = UNIC_TX_PAUSE_EN | UNIC_RX_PAUSE_EN;
+
+	return ret;
+}
+
 static int unic_init_pfc(struct unic_dev *unic_dev)
 {
 	if (!unic_dev_pfc_supported(unic_dev))
@@ -244,6 +262,12 @@ static int unic_init_pfc(struct unic_dev *unic_dev)
 
 static int unic_init_fc_mode(struct unic_dev *unic_dev)
 {
+	int ret;
+
+	ret = unic_init_pause(unic_dev);
+	if (ret)
+		return ret;
+
 	return unic_init_pfc(unic_dev);
 }
 

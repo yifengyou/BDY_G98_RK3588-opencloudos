@@ -13,6 +13,9 @@
 
 #define UNIC_TXRX_MIN_DEPTH	64
 
+#define UNIC_RX_TX_PAUSE_ON	1
+#define UNIC_RX_TX_PAUSE_OFF	0
+
 #define UNIC_TX_PAUSE_EN	BIT(0)
 #define UNIC_RX_PAUSE_EN	BIT(1)
 #define UNIC_FC_PFC_EN		BIT(2)

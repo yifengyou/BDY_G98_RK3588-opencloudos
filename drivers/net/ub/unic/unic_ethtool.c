@@ -188,6 +188,88 @@ static void unic_get_driver_info(struct net_device *netdev,
 		 u32_get_bits(fw_version, UBASE_FW_VERSION_BYTE0_MASK));
 }
 
+static void unic_update_pause_state(u8 pause_mode,
+				    struct ethtool_pauseparam *eth_pauseparam)
+{
+	eth_pauseparam->rx_pause = UNIC_RX_TX_PAUSE_OFF;
+	eth_pauseparam->tx_pause = UNIC_RX_TX_PAUSE_OFF;
+
+	if (pause_mode & UNIC_TX_PAUSE_EN)
+		eth_pauseparam->tx_pause = UNIC_RX_TX_PAUSE_ON;
+
+	if (pause_mode & UNIC_RX_PAUSE_EN)
+		eth_pauseparam->rx_pause = UNIC_RX_TX_PAUSE_ON;
+}
+
+static void unic_record_user_pauseparam(struct unic_dev *unic_dev,
+					struct ethtool_pauseparam *eth_pauseparam)
+{
+	struct	unic_pfc_info *pfc_info = &unic_dev->channels.vl.pfc_info;
+	u32 rx_en = eth_pauseparam->rx_pause;
+	u32 tx_en = eth_pauseparam->tx_pause;
+
+	pfc_info->fc_mode = 0;
+
+	if (tx_en)
+		pfc_info->fc_mode = UNIC_TX_PAUSE_EN;
+
+	if (rx_en)
+		pfc_info->fc_mode |= UNIC_RX_PAUSE_EN;
+}
+
+static void unic_get_pauseparam(struct net_device *ndev,
+				struct ethtool_pauseparam *eth_pauseparam)
+{
+#define PAUSE_AUTONEG_OFF 0
+
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+
+	if (!unic_dev_pause_supported(unic_dev))
+		return;
+
+	eth_pauseparam->autoneg = PAUSE_AUTONEG_OFF;
+
+	if (unic_dev->channels.vl.pfc_info.fc_mode & UNIC_FC_PFC_EN) {
+		eth_pauseparam->rx_pause = UNIC_RX_TX_PAUSE_OFF;
+		eth_pauseparam->tx_pause = UNIC_RX_TX_PAUSE_OFF;
+		return;
+	}
+
+	unic_update_pause_state(unic_dev->channels.vl.pfc_info.fc_mode,
+				eth_pauseparam);
+}
+
+static int unic_set_pauseparam(struct net_device *ndev,
+			       struct ethtool_pauseparam *eth_pauseparam)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+	int ret;
+
+	if (!unic_dev_pause_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (eth_pauseparam->autoneg) {
+		unic_warn(unic_dev,
+			  "failed to set pause, set autoneg not supported.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (unic_dev->channels.vl.pfc_info.fc_mode & UNIC_FC_PFC_EN) {
+		unic_warn(unic_dev,
+			  "failed to set pause, priority flow control enabled.\n");
+		return -EOPNOTSUPP;
+	}
+
+	ret = unic_mac_pause_en_cfg(unic_dev, eth_pauseparam->tx_pause,
+				    eth_pauseparam->rx_pause);
+	if (ret)
+		return ret;
+
+	unic_record_user_pauseparam(unic_dev, eth_pauseparam);
+
+	return ret;
+}
+
 static int unic_get_fecparam(struct net_device *ndev,
 			     struct ethtool_fecparam *fec)
 {
@@ -509,6 +591,8 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.get_link_ksettings = unic_get_link_ksettings,
 	.set_link_ksettings = unic_set_link_ksettings,
 	.get_drvinfo = unic_get_driver_info,
+	.get_pauseparam = unic_get_pauseparam,
+	.set_pauseparam = unic_set_pauseparam,
 	.get_regs_len = unic_get_regs_len,
 	.get_regs = unic_get_regs,
 	.get_ethtool_stats = unic_get_stats,
