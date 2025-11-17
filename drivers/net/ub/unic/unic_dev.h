@@ -325,6 +325,11 @@ static inline bool unic_dev_fec_stats_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_STATS_B);
 }
 
+static inline bool unic_dev_external_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_EXTERNAL_LB_B);
+}
+
 static inline bool unic_dev_parallel_serdes_lb_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PARALLEL_SERDES_LB_B);

@@ -31,6 +31,8 @@ static void unic_set_selftest_param(struct unic_dev *unic_dev, int *st_param)
 			unic_dev->loopback_flags & UNIC_SUPPORT_SERIAL_SERDES_LB;
 	st_param[UNIC_LB_PARALLEL_SERDES] =
 			unic_dev->loopback_flags & UNIC_SUPPORT_PARALLEL_SERDES_LB;
+	st_param[UNIC_LB_EXTERNAL] =
+			unic_dev->loopback_flags & UNIC_SUPPORT_EXTERNAL_LB;
 }
 
 static int unic_set_lb_mode(struct unic_dev *unic_dev, bool en, int loop_type)
@@ -554,6 +556,11 @@ int unic_get_selftest_count(struct unic_dev *unic_dev)
 
 	if (unic_dev_parallel_serdes_lb_supported(unic_dev)) {
 		unic_dev->loopback_flags |= UNIC_SUPPORT_PARALLEL_SERDES_LB;
+		count++;
+	}
+
+	if (unic_dev_external_lb_supported(unic_dev)) {
+		unic_dev->loopback_flags |= UNIC_SUPPORT_EXTERNAL_LB;
 		count++;
 	}
 
