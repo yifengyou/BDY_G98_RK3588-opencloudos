@@ -8,6 +8,7 @@
 #include <linux/poll.h>
 #include <linux/cgroup-defs.h>
 #include <linux/cgroup.h>
+#include <linux/sched/clock.h>
 
 struct seq_file;
 struct css_set;
@@ -21,20 +22,40 @@ extern unsigned int sysctl_psi_dyn_stat_types;
 #ifdef CONFIG_CGROUPS
 extern unsigned int sysctl_psi_cgroup_default_enabled;
 #endif
-extern unsigned int __percpu *percpu_psi_dyn_stat_types;
+extern struct static_key_false dyn_cpu_enabled;
 
-static inline bool psi_dyn_stat_cpu(int cpu)
+static inline bool psi_dyn_stat_cpu(void)
 {
-	return !!(*per_cpu_ptr(percpu_psi_dyn_stat_types, cpu) & (1 << PSI_CPU));
+	return static_branch_unlikely(&dyn_cpu_enabled);
 }
 int psi_dyn_stat_handler(struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
 #else
-static inline bool psi_dyn_stat_cpu(int cpu)
+static inline bool psi_dyn_stat_cpu(void)
 {
 	return true;
 }
 #endif
+
+/*
+ * There is no need to use sched_clock() that is very expensive to
+ * record time for psi, because of two reasons: First, psi only needs to
+ * record the time interval between two events, which makes the usage of
+ * INITIAL_JIFFIES meaning less. Second, if only we use same units for
+ * all the values we recorded, we can do the time interval calculation
+ * without any conversion. And we can convert the jiffies to nanoseconds
+ * when we are about to print out the time in nanosecond. This approach
+ * minimizes the overhead of time conversion in the critical path of psi
+ * accounting.
+ */
+static inline unsigned long psi_gettime(int cpu)
+{
+#ifdef CONFIG_PSI_USE_JIFFIES
+	return jiffies;
+#else
+	return cpu_clock(cpu);
+#endif
+}
 
 void psi_init(void);
 

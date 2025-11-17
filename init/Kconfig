@@ -709,6 +709,17 @@ config PSI_DYN_SWITCH
 
 	  If in doubt, say N here.
 
+config PSI_USE_JIFFIES
+	bool "Use jiffies for PSI"
+	default y
+	depends on PSI
+	help
+	  Select this option to make PSI use jiffies to record time, since
+	  PSI only needs a relative time to do statistics, so there is no
+	  need to get actual nanoseconds which may compromise performance.
+
+	  If in doubt, say N here.
+
 endmenu # "CPU/Task time and stats accounting"
 
 config CPU_ISOLATION
