@@ -52,6 +52,14 @@ struct unic_ld_config_mode_cmd {
 	u8 rsv[20];
 };
 
+enum unic_link_fail_code {
+	UNIC_LF_NORMAL,
+	UNIC_LF_REF_CLOCK_LOST,
+	UNIC_LF_XSFP_TX_DISABLE,
+	UNIC_LF_XSFP_ABSENT,
+	UNIC_LF_REF_MAX
+};
+
 struct unic_link_status_cmd_resp {
 	u8	status;
 	u8	link_fail_code;
@@ -178,6 +186,11 @@ struct unic_lb_en_cfg {
 	u8 rsvd : 7;
 	u8 result;
 	u8 rsv[21];
+};
+
+struct unic_query_link_diagnosis_resp {
+	__le32 status_code;
+	u8 rsv[20];
 };
 
 #endif

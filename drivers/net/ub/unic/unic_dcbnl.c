@@ -121,7 +121,7 @@ static int unic_setets_preconditions(struct net_device *net_dev)
 
 	if (netif_running(net_dev)) {
 		unic_err(unic_dev,
-			 "failed to set ets, due to network interface is up, pls down it first and try again.\n");
+			 "failed to set ets, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 
@@ -260,8 +260,7 @@ static int unic_dscp_prio_check(struct net_device *netdev, struct dcb_app *app)
 		return -EOPNOTSUPP;
 
 	if (netif_running(netdev)) {
-		unic_err(unic_dev,
-			 "failed to set dscp-prio, due to network interface is up, pls down it first and try again.\n");
+		unic_err(unic_dev, "failed to set dscp-prio, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 

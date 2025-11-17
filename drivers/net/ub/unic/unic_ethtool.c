@@ -356,6 +356,12 @@ static int unic_set_coalesce(struct net_device *netdev,
 	struct unic_coalesce old_tx_coal, old_rx_coal;
 	int ret, ret1;
 
+	if (netif_running(netdev)) {
+		unic_err(unic_dev,
+			 "failed to set coalesce param, due to network interface is up, please down it first and try again.\n");
+		return -EBUSY;
+	}
+
 	if (unic_resetting(netdev))
 		return -EBUSY;
 
@@ -425,6 +431,70 @@ static int unic_reset(struct net_device *ndev, u32 *flags)
 	return 0;
 }
 
+struct unic_ethtool_link_ext_state_mapping {
+	u32 status_code;
+	enum ethtool_link_ext_state link_ext_state;
+	u8 link_ext_substate;
+};
+
+static const struct unic_ethtool_link_ext_state_mapping
+unic_link_ext_state_map[] = {
+	{516, ETHTOOL_LINK_EXT_STATE_LINK_LOGICAL_MISMATCH,
+		ETHTOOL_LINK_EXT_SUBSTATE_LLM_PCS_DID_NOT_ACQUIRE_AM_LOCK},
+	{768, ETHTOOL_LINK_EXT_STATE_BAD_SIGNAL_INTEGRITY,
+		ETHTOOL_LINK_EXT_SUBSTATE_BSI_LARGE_NUMBER_OF_PHYSICAL_ERRORS},
+	{770, ETHTOOL_LINK_EXT_STATE_BAD_SIGNAL_INTEGRITY,
+		ETHTOOL_LINK_EXT_SUBSTATE_BSI_SERDES_ALOS},
+	{1024, ETHTOOL_LINK_EXT_STATE_NO_CABLE, 0},
+};
+
+static int unic_get_link_ext_state(struct net_device *netdev,
+				   struct ethtool_link_ext_state_info *info)
+{
+	const struct unic_ethtool_link_ext_state_mapping *map;
+	struct unic_query_link_diagnosis_resp resp = {0};
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	struct ubase_cmd_buf in, out;
+	u32 status_code;
+	int ret;
+	u8 i;
+
+	if (netif_carrier_ok(netdev))
+		return -ENODATA;
+
+	if (unic_dev_ubl_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_QUERY_LINK_DIAGNOSIS, true, 0, NULL);
+	ubase_fill_inout_buf(&out, UBASE_OPC_QUERY_LINK_DIAGNOSIS, false,
+			     sizeof(resp), &resp);
+
+	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
+	if (ret) {
+		unic_err(unic_dev, "failed to query link diagnosis, ret = %d.\n",
+			 ret);
+		return ret;
+	}
+
+	status_code = le32_to_cpu(resp.status_code);
+	if (!status_code)
+		return -ENODATA;
+
+	for (i = 0; i < ARRAY_SIZE(unic_link_ext_state_map); i++) {
+		map = &unic_link_ext_state_map[i];
+		if (map->status_code == status_code) {
+			info->link_ext_state = map->link_ext_state;
+			info->__link_ext_substate = map->link_ext_substate;
+			return 0;
+		}
+	}
+
+	unic_warn(unic_dev, "unknown link failure status_code = %u.\n",
+		  status_code);
+
+	return -ENODATA;
+}
+
 #define UNIC_ETHTOOL_RING	(ETHTOOL_RING_USE_RX_BUF_LEN | \
 				 ETHTOOL_RING_USE_TX_PUSH)
 #define UNIC_ETHTOOL_COALESCE	(ETHTOOL_COALESCE_USECS | \
@@ -455,6 +525,7 @@ static const struct ethtool_ops unic_ethtool_ops = {
 	.get_coalesce = unic_get_coalesce,
 	.set_coalesce = unic_set_coalesce,
 	.reset = unic_reset,
+	.get_link_ext_state = unic_get_link_ext_state,
 };
 
 void unic_set_ethtool_ops(struct net_device *netdev)
