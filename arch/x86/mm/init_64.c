@@ -1372,6 +1372,16 @@ failed:
 
 void __init mem_init(void)
 {
+#ifdef CONFIG_PTP
+if (haoc_enabled){
+	ptp_pg_cache_init(&pgd_cache, PGD_ALLOCATION_ORDER, 1, "pgd_cache");
+	#ifdef CONFIG_X86_5LEVEL
+	ptp_pg_cache_init(&pg_cache, 0, 4, "pg_cache");
+	#else
+	ptp_pg_cache_init(&pg_cache, 0, 3, "pg_cache");
+	#endif
+}
+#endif
 	pci_iommu_alloc();
 
 	/* clear_bss() already clear the empty_zero_page */
@@ -1402,6 +1412,14 @@ void __init mem_init(void)
 	 */
 	if (haoc_enabled)
 		iee_init();
+	#endif
+	#ifdef CONFIG_PTP
+	if(haoc_enabled){
+		ptp_set_iee_reserved(&pg_cache);
+		ptp_set_iee_reserved(&pgd_cache);
+		ptp_mark_all_pgtable_ro();
+		ptp_iee_disable_init();
+	}
 	#endif
 	preallocate_vmalloc_pages();
 }

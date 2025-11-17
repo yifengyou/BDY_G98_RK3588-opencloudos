@@ -134,4 +134,7 @@ static void __used common(void)
 	/* Offset for fields in iee_stack */
 	OFFSET(IEE_STACK, iee_stack, stack);
 #endif
+#ifdef CONFIG_PTP
+	OFFSET(IEE_DISABLE, iee_disable_t, disabled_cnt);
+#endif
 }

@@ -34,6 +34,14 @@ static inline void __tlb_remove_table(void *table)
 	free_page_and_swap_cache(table);
 }
 
+#ifdef CONFIG_PTP
+#include <linux/ptp-cache.h>
+static inline void __ptp_tlb_remove_table(void *table)
+{
+	ptp_pg_free(&pg_cache, page_to_virt((struct page *)table));
+}
+#endif
+
 static inline void invlpg(unsigned long addr)
 {
 	asm volatile("invlpg (%0)" ::"r" (addr) : "memory");

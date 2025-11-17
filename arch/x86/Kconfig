@@ -1575,6 +1575,18 @@ config IEE_SIP
 		such as writing system control registers. These instructions would
 		be executated inside IEE.
 
+config PTP
+	bool "Page Table Protection (PTP)"
+	depends on IEE
+	help
+		Enable Page Table Protection feature for IEE.
+
+config PTP_RESERVE_ORDER
+	depends on PTP
+	int "maximum allowable 2^PTP_RESERVE_ORDER pages for one level page table"
+	range 9 15
+	default 12
+
 config CREDP
 	bool "Struct cred protection(CREDP)"
 	depends on IEE

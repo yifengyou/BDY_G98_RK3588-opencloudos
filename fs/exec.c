@@ -80,6 +80,9 @@
 #ifdef CONFIG_IEE_PTRP
 #include <asm/haoc/iee-token.h>
 #endif
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+#include <asm/haoc/ptp.h>
+#endif
 #ifdef CONFIG_CREDP
 #include <asm/haoc/iee-cred.h>
 #endif
@@ -742,7 +745,14 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		free_pgd_range(&tlb, old_start, old_end, new_end,
 			next ? next->vm_start : USER_PGTABLES_CEILING);
 	}
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_tlb_finish_mmu(&tlb);
+	else
+		tlb_finish_mmu(&tlb);
+	#else
 	tlb_finish_mmu(&tlb);
+	#endif
 
 	vma_prev(&vmi);
 	/* Shrink the vma to just the new range */
@@ -1947,9 +1957,17 @@ static int do_execveat_common(int fd, struct filename *filename,
 {
 	struct linux_binprm *bprm;
 	int retval;
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	unsigned long reg;
+#endif
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+if (haoc_enabled)
+	ptp_disable_iee(&reg);
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -2026,6 +2044,10 @@ out_free:
 
 out_ret:
 	putname(filename);
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+if (haoc_enabled)
+	ptp_enable_iee(reg);
+#endif
 	return retval;
 }
 

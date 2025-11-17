@@ -107,6 +107,9 @@
 #ifdef CONFIG_IEE_PTRP
 #include <asm/haoc/iee-token.h>
 #endif
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+#include <asm/haoc/ptp.h>
+#endif
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpu);
 EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpumask);
@@ -5586,9 +5589,20 @@ context_switch(struct rq *rq, struct task_struct *prev,
 
 	prepare_lock_switch(rq, next, rf);
 
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+		int disabled_cnt = 0;
+		unsigned long reg = 0;
+	if (haoc_enabled){
+		ptp_context_enable_iee(&disabled_cnt, &reg);
+	}
+	#endif
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_context_restore_iee(disabled_cnt, reg);
+	#endif
 
 	return finish_task_switch(prev);
 }
