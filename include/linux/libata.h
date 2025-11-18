@@ -1929,6 +1929,9 @@ extern void sata_pmp_error_handler(struct ata_port *ap);
 
 #endif /* CONFIG_SATA_PMP */
 
+typedef int (*ata_power_reset_func_t)(unsigned int);
+extern int reg_ata_ssd_power_reset(ata_power_reset_func_t power_reset_handle);
+extern int unreg_ata_ssd_power_reset(void);
 
 /**************************************************************************
  * SFF - drivers/ata/libata-sff.c
