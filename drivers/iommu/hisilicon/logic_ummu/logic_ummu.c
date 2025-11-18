@@ -1003,6 +1003,7 @@ logic_ummu_viommu_alloc_domain_nested(struct iommufd_viommu *viommu,
 		if (!domain->pgsize_bitmap)
 			domain->pgsize_bitmap = drv_ops->pgsize_bitmap;
 		nested_base_domain = to_ummu_base_domain(domain);
+		nested_base_domain->core_dev = &ummu->core_dev;
 		nested_base_domain->parent = logic_vummu->parent;
 		if (!domain->ops) {
 			ret = -EOPNOTSUPP;

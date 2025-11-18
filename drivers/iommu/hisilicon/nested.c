@@ -210,7 +210,7 @@ int ummu_viommu_cache_invalidate_user(struct iommu_domain *domain,
 	nested_domain = to_nested_domain(domain);
 	tecte_tag = nested_domain->s2_parent->cfgs.tecte_tag;
 
-	ummu = core_to_ummu_device(nested_domain->s2_parent->base_domain.core_dev);
+	ummu = core_to_ummu_device(nested_domain->base_domain.core_dev);
 
 	cmds = kcalloc(array->entry_num, sizeof(*cmds), GFP_KERNEL);
 	if (!cmds)
