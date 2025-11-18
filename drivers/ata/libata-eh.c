@@ -28,6 +28,21 @@
 #include <trace/events/libata.h>
 #include "libata.h"
 
+static int spd_limit = 4;
+module_param(spd_limit, int, 0644);
+
+static int out_spd_limit = -1;
+module_param(out_spd_limit, int, 0644);
+static ata_power_reset_func_t ata_power_reset_ops = NULL;
+
+static int g_ata_power_cycle_retry = 8;
+module_param(g_ata_power_cycle_retry, int, 0644);
+
+static int g_ata_power_cycle_retry_msleep = 5000; /* 5s */
+module_param(g_ata_power_cycle_retry_msleep, int, 0644);
+
+
+
 enum {
 	/* speed down verdicts */
 	ATA_EH_SPDN_NCQ_OFF		= (1 << 0),
@@ -2552,13 +2567,21 @@ static int ata_do_reset(struct ata_link *link, ata_reset_fn_t reset,
 			bool clear_classes)
 {
 	struct ata_device *dev;
+	int rc;
 
 	if (clear_classes)
 		ata_for_each_dev(dev, link, ALL)
 			classes[dev->devno] = ATA_DEV_UNKNOWN;
-
-	return reset(link, classes, deadline);
+	rc = reset(link, classes, deadline);
+	if (!rc) {
+		if ((ata_power_reset_ops != NULL) && (!ata_phys_link_online(link))) {
+			printk(KERN_ERR "ata%u phy not link, rc=%d\n", link->ap->print_id, rc);
+			rc = -EIO;
+		}
+	}
+	return rc;
 }
+
 
 static int ata_eh_followup_srst_needed(struct ata_link *link, int rc)
 {
@@ -2570,6 +2593,75 @@ static int ata_eh_followup_srst_needed(struct ata_link *link, int rc)
 		return 1;
 	return 0;
 }
+
+/**
+ *	reg_ata_ssd_power_reset
+ *	@power_reset_handle: bsp power reset fn
+ *
+ *	bsp call to register power reset fn
+ *
+ *	RETURNS:
+ *	0 on success, others on failure.
+ */
+int reg_ata_ssd_power_reset(ata_power_reset_func_t power_reset_handle)
+{
+	if (power_reset_handle == NULL) {
+		return -EINVAL;
+	}
+	ata_power_reset_ops = power_reset_handle;
+	return 0;
+}
+EXPORT_SYMBOL(reg_ata_ssd_power_reset);
+
+/**
+ *	unreg_ata_ssd_power_reset
+ *
+ *	bsp call to unregister power reset fn
+ *
+ *	RETURNS:
+ *	0 on success, others on failure.
+ */
+int unreg_ata_ssd_power_reset(void)
+{
+	ata_power_reset_ops = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(unreg_ata_ssd_power_reset);
+
+/**
+ *	ata_eh_power_reset
+ *	@ap: ssd port to reset
+ *
+ *	ata interface for ssd power reset
+ *
+ *	RETURNS:
+ *	0 on success, others on failure.
+ */
+static int ata_eh_power_reset(unsigned int ap)
+{
+	int rc;
+	ata_power_reset_func_t bsp_reset;
+
+	printk(KERN_DEBUG "ata%d: power reset start\n", ap);
+
+	bsp_reset = ata_power_reset_ops;
+
+	if (bsp_reset != NULL) {
+		rc = bsp_reset(ap);
+	} else {
+		rc = -ENOSYS;
+	}
+
+	if (rc != 0) {
+		printk(KERN_ERR "ata%d: power reset failed, rc = %d\n", ap, rc);
+	} else {
+		printk(KERN_INFO "ata%d: power reset succeed\n", ap);
+	}
+
+	return rc;
+}
+
 
 int ata_eh_reset(struct ata_link *link, int classify,
 		 ata_prereset_fn_t prereset, ata_reset_fn_t softreset,
@@ -2589,7 +2681,10 @@ int ata_eh_reset(struct ata_link *link, int classify,
 	ata_reset_fn_t reset;
 	unsigned long flags;
 	u32 sstatus;
-	int nr_unknown, rc;
+	int nr_unknown, rc, ret;
+	bool ata_power_cycle_flag = false;
+	int ata_power_cycle_retry = 0;
+
 
 	/*
 	 * Prepare to reset
@@ -2711,7 +2806,12 @@ int ata_eh_reset(struct ata_link *link, int classify,
 	if (ata_is_host_link(link))
 		ata_eh_freeze_port(ap);
 
-	deadline = ata_deadline(jiffies, ata_eh_reset_timeouts[try++]);
+	if (try >= max_tries) {
+		deadline = ata_deadline(jiffies, g_ata_power_cycle_retry_msleep);
+	} else {
+		deadline = ata_deadline(jiffies, ata_eh_reset_timeouts[try++]);
+	}
+
 
 	if (reset) {
 		if (verbose)
@@ -2734,6 +2834,7 @@ int ata_eh_reset(struct ata_link *link, int classify,
 		else
 			trace_ata_link_softreset_end(link, classes, rc);
 		if (rc && rc != -EAGAIN) {
+			printk(KERN_ERR "ata%u comreset rc=%d\n", ap->print_id, rc);
 			failed_link = link;
 			goto fail;
 		}
@@ -2919,6 +3020,15 @@ int ata_eh_reset(struct ata_link *link, int classify,
 		rc = -ERESTART;
 
 	if (try >= max_tries) {
+		/* if power cycle ata retry failed, retry again */
+		if (ata_power_cycle_flag == true) {
+			ata_power_cycle_retry++;
+			if (ata_power_cycle_retry <= g_ata_power_cycle_retry) {
+				printk(KERN_INFO "ata%d: power cycle retry failed, retry %d again\n",
+					ap->print_id, ata_power_cycle_retry);
+				goto retry;
+			}
+		}
 		/*
 		 * Thaw host port even if reset failed, so that the port
 		 * can be retried on the next phy event.  This risks
@@ -2955,7 +3065,15 @@ int ata_eh_reset(struct ata_link *link, int classify,
 	}
 
 	if (try == max_tries - 1) {
-		sata_down_spd_limit(link, 0);
+		ret = ata_eh_power_reset(ap->print_id);
+		if (ret == 0) { /* power reset success */
+			link->sata_spd_limit = spd_limit;
+			sata_set_spd(link);
+			link->sata_spd_limit = out_spd_limit;
+			ata_power_cycle_flag = true;
+		} else {    /* power reset failed, maintain the original processing method */
+			sata_down_spd_limit(link, 0);
+		}
 		if (slave)
 			sata_down_spd_limit(slave, 0);
 	} else if (rc == -EPIPE)
