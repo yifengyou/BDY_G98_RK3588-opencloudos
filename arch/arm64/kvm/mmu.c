@@ -2270,3 +2270,131 @@ void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled)
 
 	trace_kvm_toggle_cache(*vcpu_pc(vcpu), was_enabled, now_enabled);
 }
+
+static int __kvm_mmu_hva_is_mapped(unsigned long addr)
+{
+	struct vm_area_struct *vma;
+	int mapped = 1;	// mapped indicates the number of pages checked in this operation
+	unsigned long vma_page_size;
+
+	if (kvm_is_error_hva(addr))
+		return -1;
+
+	mmap_read_lock(current->mm);
+	vma = vma_lookup(current->mm, addr);
+	if (vma == NULL)
+		goto out;
+
+	vma_page_size = vma_kernel_pagesize(vma);
+	mapped = (vma_page_size - (addr % vma_page_size)) >> PAGE_SHIFT;
+
+	if (is_vm_hugetlb_page(vma)) {
+		if (!hugetlbfs_pagecache_present(hstate_vma(vma), vma, addr))
+			mapped = -mapped;
+	} else {
+		/*
+		 * Currently, only hugetlb file mapping is supported.
+		 * Print warning message for other file mapping in order
+		 * to remind developers to adapt.
+		 */
+		WARN_ON(vma->vm_file);
+	}
+out:
+	mmap_read_unlock(current->mm);
+	return mapped;
+}
+
+static void kvm_mmu_mark_memslot_touched_log_range(
+			struct kvm_memory_slot *slot,
+			gfn_t start, gfn_t end)
+{
+	struct page *page = NULL;
+	struct page *hpage = NULL;
+	int npages;
+
+	while (start < end) {
+		npages = gfn_to_page_many_atomic(slot, start, &page, 1);
+		if (npages <= 0) {
+			npages = __kvm_mmu_hva_is_mapped(gfn_to_hva_memslot(slot, start));
+		} else {
+			if (PageCompound(page)) {
+				hpage = compound_head(page);
+				npages = 1 << compound_order(hpage);
+				npages -= start % npages;
+			} else {
+				npages = 1;
+			}
+			put_page(page);
+		}
+		if (WARN_ON(npages == 0))
+			npages = 1;
+		if (npages < 0) {
+			/* skip npage gfns, which are unmapped */
+			start -= npages;
+			continue;
+		}
+
+		bitmap_set(slot->dirty_bitmap, start - slot->base_gfn,
+				   min(end - start, (gfn_t)npages));
+		start += npages;
+	}
+}
+
+#define MARK_TOUCHED_STEP_GFN (512 * 256)
+static void clear_memslot_dirty_bitmap(struct kvm_memory_slot *memslot)
+{
+	unsigned long n = kvm_dirty_bitmap_bytes(memslot);
+
+	memslot->flags &= ~KVM_MEM_HUGE_POD;
+	memset(memslot->dirty_bitmap, 0, n);
+}
+
+int kvm_mmu_mark_touched_log(struct kvm *kvm)
+{
+	int i, bkt;
+	struct kvm_memslots *slots;
+	struct kvm_memory_slot *memslot;
+	bool has_next = true;
+	unsigned long gfn_offset = 0;
+
+	mutex_lock(&kvm->slots_lock);
+
+	while (has_next) {
+		has_next = false;
+		for (i = 0; i < KVM_MAX_NR_ADDRESS_SPACES; i++) {
+			slots = __kvm_memslots(kvm, i);
+			kvm_for_each_memslot(memslot, bkt, slots) {
+				gfn_t start, end;
+
+				/* skip invalid memslot */
+				if (memslot->flags & KVM_MEMSLOT_INVALID)
+					continue;
+
+				/* only dirty log memslot need set bitmaps */
+				if (!memslot->dirty_bitmap)
+					continue;
+
+				if (memslot->flags & KVM_MEM_HUGE_POD)
+					clear_memslot_dirty_bitmap(memslot);
+
+				start = max(memslot->base_gfn + gfn_offset, memslot->base_gfn);
+				end = min(start + MARK_TOUCHED_STEP_GFN,
+						  memslot->base_gfn + memslot->npages);
+				if (start >= end)
+					continue;
+				has_next = true;
+				kvm_mmu_mark_memslot_touched_log_range(memslot, start, end);
+			}
+		}
+		if (has_next) {
+			mutex_unlock(&kvm->slots_lock);
+			gfn_offset += MARK_TOUCHED_STEP_GFN;
+			cond_resched();
+			mutex_lock(&kvm->slots_lock);
+		} else {
+			mutex_unlock(&kvm->slots_lock);
+		}
+	}
+
+	return 0;
+}
