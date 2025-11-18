@@ -10,6 +10,8 @@
 #include "obmm_core.h"
 
 struct ub_mem_info;
+struct resource;
+struct ubmem_resource;
 
 struct preimport_range {
 	int numa_id;
@@ -52,5 +54,6 @@ int preimport_commit_prefilled(phys_addr_t start, phys_addr_t end,
 			       const struct obmm_datapath *datapath, int *p_numa_id,
 			       void **p_handle);
 int preimport_uncommit_prefilled(void *handle, phys_addr_t start, phys_addr_t end);
+struct ubmem_resource *preimport_get_resource_prefilled(void *handle);
 
 #endif

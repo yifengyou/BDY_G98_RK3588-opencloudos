@@ -9,12 +9,14 @@
 
 #include "obmm_preimport.h"
 #include "obmm_addr_check.h"
+#include "obmm_resource.h"
 
 struct prefilled_preimport_range {
 	struct preimport_range pr;
 	spinlock_t bitmap_lock;
 	unsigned long nbits;
 	unsigned long *bitmap;
+	struct ubmem_resource *ubmem_res;
 };
 static DEFINE_MUTEX(preimport_mutex);
 
@@ -45,12 +47,22 @@ static int create_prefilled_preimport_range(const struct obmm_cmd_preimport *cmd
 		return -ENOMEM;
 	}
 
+	ppr->ubmem_res = setup_ubmem_resource(cmd->pa, cmd->length, true);
+	if (IS_ERR(ppr->ubmem_res)) {
+		pr_err("failed to setup ubmem resource on preimport. pa=%pa, size=%#llx, ret=%pe\n",
+		       &cmd->pa, cmd->length, ppr->ubmem_res);
+		kfree(ppr->bitmap);
+		kfree(ppr);
+		return PTR_ERR(ppr->ubmem_res);
+	}
+
 	*p_ppr = ppr;
 	return 0;
 }
 
 static void destroy_prefilled_preimport_range(const struct prefilled_preimport_range *ppr)
 {
+	release_ubmem_resource(ppr->ubmem_res);
 	kfree(ppr->bitmap);
 	kfree(ppr);
 }
@@ -331,6 +343,11 @@ int preimport_uncommit_prefilled(void *handle, phys_addr_t start, phys_addr_t en
 
 	put_ppr(ppr);
 	return ret;
+}
+
+struct ubmem_resource *preimport_get_resource_prefilled(void *handle)
+{
+	return ((struct prefilled_preimport_range *)handle)->ubmem_res;
 }
 
 void preimport_init_prefilled(void)

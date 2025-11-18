@@ -14,6 +14,7 @@
 #include "obmm_cache.h"
 #include "obmm_import.h"
 #include "obmm_preimport.h"
+#include "obmm_resource.h"
 #include "obmm_addr_check.h"
 
 static void set_import_region_datapath(const struct obmm_import_region *i_reg,
@@ -45,6 +46,7 @@ static unsigned long get_pa_range_mem_cap(u32 scna, phys_addr_t pa, size_t size)
 
 static int setup_pa(struct obmm_import_region *i_reg)
 {
+	int ret;
 	phys_addr_t start, end;
 	struct obmm_datapath datapath;
 
@@ -53,8 +55,19 @@ static int setup_pa(struct obmm_import_region *i_reg)
 	if (i_reg->region.mem_cap == 0)
 		return -EINVAL;
 
-	if (!region_preimport(&i_reg->region))
+	if (!region_preimport(&i_reg->region)) {
+		struct ubmem_resource *ubmem_res;
+
+		ubmem_res = setup_ubmem_resource(i_reg->pa, i_reg->region.mem_size, false);
+		if (IS_ERR(ubmem_res)) {
+			pr_err("failed to setup ubmem resource. pa=%pa, size=%#llx, ret=%pe\n",
+			       &i_reg->pa, i_reg->region.mem_size, ubmem_res);
+			return PTR_ERR(ubmem_res);
+		}
+		i_reg->ubmem_res = ubmem_res;
+
 		return 0;
+	}
 
 	start = i_reg->pa;
 	end = i_reg->pa + i_reg->region.mem_size - 1;
@@ -62,6 +75,12 @@ static int setup_pa(struct obmm_import_region *i_reg)
 
 	return preimport_commit_prefilled(start, end, &datapath, &i_reg->numa_id,
 					  &i_reg->preimport_handle);
+	if (ret)
+		return ret;
+
+	i_reg->ubmem_res = preimport_get_resource_prefilled(i_reg->preimport_handle);
+
+	return 0;
 }
 
 /* NOTE: do not clear PA in the teardown process. Error rollback procedure may rely on it. */
@@ -70,7 +89,7 @@ static int teardown_pa(struct obmm_import_region *i_reg)
 	bool preimport = region_preimport(&i_reg->region);
 
 	if (!preimport)
-		return 0;
+		return release_ubmem_resource(i_reg->ubmem_res);
 	/* prefilled and preimport */
 	return preimport_uncommit_prefilled(i_reg->preimport_handle, i_reg->pa,
 					    i_reg->pa + i_reg->region.mem_size - 1);

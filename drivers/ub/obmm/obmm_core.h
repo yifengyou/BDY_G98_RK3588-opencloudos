@@ -41,6 +41,8 @@ extern size_t __obmm_memseg_size;
 
 #define MAX_MEMINFO_COUNT MAX_IMPORT_COUNT
 
+struct ubmem_resource;
+
 enum obmm_region_type {
 	OBMM_EXPORT_REGION,
 	OBMM_IMPORT_REGION
@@ -150,6 +152,8 @@ struct obmm_import_region {
 	u32 dcna;
 	u32 scna;
 
+	/* resource of the PA range */
+	struct ubmem_resource *ubmem_res;
 	u64 pa;
 
 	/* imported NUMA node */
