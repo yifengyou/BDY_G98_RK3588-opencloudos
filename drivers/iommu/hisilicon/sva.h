@@ -44,6 +44,11 @@ static inline int ummu_master_enable_sva(struct ummu_master *master,
 	return -ENODEV;
 }
 
+static inline bool ummu_master_sva_enabled(struct ummu_master *master)
+{
+	return false;
+}
+
 static inline int ummu_master_disable_sva(struct ummu_master *master,
 					  enum iommu_dev_features feat)
 {

@@ -506,12 +506,13 @@ static int ummu_dev_disable_feat(struct device *dev,
 
 static int ummu_def_domain_type(struct device *dev)
 {
+#ifdef CONFIG_UB_UMMU_BYPASSDEV
 	int ret;
 
 	ret = ummu_bypass_dev_domain_type(dev);
 	if (ret)
 		return ret;
-
+#endif
 	if (iommu_default_passthrough())
 		return IOMMU_DOMAIN_IDENTITY;
 	return 0;

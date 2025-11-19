@@ -24,7 +24,8 @@ config UB_UMMU
 	select IOMMU_IO_PGTABLE_LPAE
 	select GENERIC_MSI_IRQ
 	select IOMMUFD_DRIVER if IOMMUFD
-	select UMMU_CORE
+	select UB_UMMU_CORE
+	select UB_UMMU_CORE_DRIVER
 	select UB_UMMU_BASE
 	help
 	  Support for implementations of the hisilicon UMMU architecture.
@@ -39,7 +40,6 @@ config UB_UMMU_SVA
 	select IOMMU_SVA
 	select IOMMU_KSVA
 	select IOMMU_IOPF
-	select MMU_NOTIFIER
 	default n
 	help
 	  Support for sharing process address spaces with devices using

@@ -423,8 +423,6 @@ enum ummu_device_config_type {
 
 #if IS_ENABLED(CONFIG_UB_UMMU_CORE_DRIVER)
 extern const struct tid_ops *ummu_core_tid_ops[TID_OPS_MAX];
-#else
-static const struct tid_ops *ummu_core_tid_ops[TID_OPS_MAX];
 #endif /* CONFIG_UB_UMMU_CORE_DRIVER */
 
 static inline struct ummu_core_device *to_ummu_core(struct iommu_device *iommu)
