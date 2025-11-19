@@ -28,6 +28,10 @@
 #include "dev.h"
 #include "net-sysfs.h"
 
+
+#ifdef CONFIG_RPS
+int sysctl_rps_force;
+#endif
 #ifdef CONFIG_SYSFS
 static const char fmt_hex[] = "%#x\n";
 static const char fmt_dec[] = "%d\n";
@@ -902,9 +906,11 @@ static ssize_t store_rps_map(struct netdev_rx_queue *queue,
 	if (err)
 		goto out;
 
-	err = rps_cpumask_housekeeping(mask);
-	if (err)
-		goto out;
+	if (!sysctl_rps_force) {
+		err = rps_cpumask_housekeeping(mask);
+		if (err)
+			goto out;
+	}
 
 	err = netdev_rx_queue_set_rps_mask(queue, mask);
 

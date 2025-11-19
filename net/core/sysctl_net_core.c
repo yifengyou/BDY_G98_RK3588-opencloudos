@@ -680,6 +680,17 @@ static struct ctl_table net_core_table[] = {
 		.mode           = 0644,
 		.proc_handler	= proc_do_static_key,
 	},
+#ifdef CONFIG_RPS
+	{
+		.procname	= "rps_force",
+		.data		= &sysctl_rps_force,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{ }
 };
 

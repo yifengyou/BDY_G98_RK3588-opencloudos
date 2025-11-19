@@ -48,6 +48,10 @@ extern int		weight_p;
 extern int		dev_weight_rx_bias;
 extern int		dev_weight_tx_bias;
 
+#ifdef CONFIG_RPS
+extern int sysctl_rps_force;
+#endif
+
 /* rtnl helpers */
 extern struct list_head net_todo_list;
 void netdev_run_todo(void);
