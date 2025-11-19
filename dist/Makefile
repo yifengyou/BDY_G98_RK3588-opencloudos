@@ -230,7 +230,7 @@ dist-srpm: dist-sources
 dist: dist-rpm
 dist-rpms: dist-rpm
 dist-rpm: dist-sources
-	$(call DO_RPMBUILD,-bb $(RPMCROSSFLAGS) --rmsource --rmspec $(RPMFLAGS))
+	$(call DO_RPMBUILD,-bb $(RPMCROSSFLAGS) --rmsource --rmspec $(RPMFLAGS) --noclean)
 	@cd $(TOPDIR) ; rm -rf dist/sources ; git checkout dist/sources 1>/dev/null 2>&1
 
 dist-prep: dist-sources
