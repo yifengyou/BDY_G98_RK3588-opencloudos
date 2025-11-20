@@ -751,6 +751,10 @@ void kvm_set_cpu_caps(void)
 		F(TOPOEXT) | 0 /* PERFCTR_CORE */
 	);
 
+	kvm_cpu_cap_init_kvm_defined(CPUID_24_1_ECX,
+		F(AVX10_VNNI_INT)
+	);
+
 	kvm_cpu_cap_init_kvm_defined(CPUID_1E_1_EAX,
 		F(AMX_INT8_ALIAS) | F(AMX_BF16_ALIAS) | F(AMX_COMPLEX_ALIAS) |
 		F(AMX_FP16_ALIAS) | F(AMX_FP8) | F(AMX_TF32) | F(AMX_AVX512) |
@@ -1242,6 +1246,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 			break;
 		}
 
+		max_idx = entry->eax = min(entry->eax, 1u);
 		/*
 		 * The AVX10 version is encoded in EBX[7:0].  Note, the version
 		 * is guaranteed to be >=1 if AVX10 is supported.  Note #2, the
@@ -1251,9 +1256,20 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		cpuid_entry_override(entry, CPUID_24_0_EBX);
 		entry->ebx |= avx10_version;
 
-		entry->eax = 0;
 		entry->ecx = 0;
 		entry->edx = 0;
+
+		/* KVM only supports up to 0x24.0x1, capped above via min(). */
+		if (max_idx >= 1) {
+			entry = do_host_cpuid(array, function, 1);
+			if (!entry)
+				goto out;
+
+			cpuid_entry_override(entry, CPUID_24_1_ECX);
+			entry->eax = 0;
+			entry->ebx = 0;
+			entry->edx = 0;
+		}
 		break;
 	}
 	case KVM_CPUID_SIGNATURE: {
