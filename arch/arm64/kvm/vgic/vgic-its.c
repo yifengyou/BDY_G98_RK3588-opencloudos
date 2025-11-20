@@ -22,6 +22,7 @@
 
 #include "vgic.h"
 #include "vgic-mmio.h"
+#include "hisilicon/hisi_virt.h"
 
 static int vgic_its_save_tables_v0(struct vgic_its *its);
 static int vgic_its_restore_tables_v0(struct vgic_its *its);
@@ -534,7 +535,8 @@ static int vgic_mmio_uaccess_write_its_iidr(struct kvm *kvm,
 		return -EINVAL;
 
 #ifdef CONFIG_ARM64_HISI_IPIV
-	if (val & (1UL << HISI_GUEST_ENABLE_IPIV_SHIFT))
+	if (hisi_ipiv_supported_per_vm(kvm) &&
+	    val & (1UL << HISI_GUEST_ENABLE_IPIV_SHIFT))
 		kvm->arch.vgic.its_vm.enable_ipiv_from_guest = true;
 #endif
 
