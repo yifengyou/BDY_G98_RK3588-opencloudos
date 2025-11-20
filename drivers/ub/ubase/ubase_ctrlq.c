@@ -323,12 +323,12 @@ int ubase_ctrlq_init(struct ubase_dev *udev)
 	udev->ctrlq.csq_next_seq = 1;
 	atomic_set(&udev->ctrlq.req_cnt, 0);
 
-err_crq_table_init:
-	ubase_ctrlq_msg_queue_uninit(udev);
 success:
 	set_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state);
 	return 0;
 
+err_crq_table_init:
+	ubase_ctrlq_msg_queue_uninit(udev);
 err_msg_queue_init:
 	ubase_ctrlq_queue_uninit(udev);
 	return ret;
