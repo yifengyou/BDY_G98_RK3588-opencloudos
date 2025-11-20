@@ -178,15 +178,11 @@ struct ubase_ctrlq_msg_ctx {
 	struct completion	done;
 };
 
-struct ubase_ctrlq_crq_event_nbs {
-	struct list_head		list;
-	struct ubase_ctrlq_event_nb	crq_nb;
-};
-
 struct ubase_ctrlq_crq_table {
 	struct mutex	lock;
 	unsigned long	last_crq_scheduled;
-	struct ubase_ctrlq_crq_event_nbs	crq_nbs;
+	u16				crq_nb_cnt;
+	struct ubase_ctrlq_event_nb	*crq_nbs;
 };
 
 struct ubase_ctrlq {

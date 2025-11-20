@@ -11,19 +11,102 @@
 #include "ubase_cmd.h"
 #include "ubase_ctrlq.h"
 
-static inline void ubase_ctrlq_crq_table_init(struct ubase_dev *udev)
+/* UNIC ctrlq msg white list */
+static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_unic[] = {
+	{UBASE_CTRLQ_SER_TYPE_IP_ACL, UBASE_CTRLQ_OPC_NOTIFY_IP, NULL, NULL},
+};
+
+/* UDMA ctrlq msg white list */
+static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_udma[] = {
+	{UBASE_CTRLQ_SER_TYPE_TP_ACL, UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE, NULL, NULL},
+	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_UPDATE_SEID, NULL, NULL},
+	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO, NULL, NULL},
+};
+
+/* CDMA ctrlq msg white list */
+static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_cdma[] = {
+	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_UPDATE_SEID, NULL, NULL},
+};
+
+static int ubase_ctrlq_alloc_crq_tbl_mem(struct ubase_dev *udev)
+{
+	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
+	u16 cnt = 0;
+
+	if (ubase_dev_cdma_supported(udev)) {
+		cnt = ARRAY_SIZE(ubase_ctrlq_wlist_cdma);
+	} else if (ubase_dev_urma_supported(udev)) {
+		if (ubase_dev_unic_supported(udev))
+			cnt += ARRAY_SIZE(ubase_ctrlq_wlist_unic);
+		if (ubase_dev_udma_supported(udev))
+			cnt += ARRAY_SIZE(ubase_ctrlq_wlist_udma);
+	}
+
+	if (!cnt)
+		return -EINVAL;
+
+	crq_tab->crq_nbs = kcalloc(cnt, sizeof(struct ubase_ctrlq_event_nb), GFP_KERNEL);
+	if (!crq_tab->crq_nbs)
+		return -ENOMEM;
+
+	crq_tab->crq_nb_cnt = cnt;
+
+	return 0;
+}
+
+static void ubase_ctrlq_free_crq_tbl_mem(struct ubase_dev *udev)
 {
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
 
-	mutex_init(&crq_tab->lock);
-	INIT_LIST_HEAD(&crq_tab->crq_nbs.list);
+	kfree(crq_tab->crq_nbs);
+	crq_tab->crq_nbs = NULL;
+	crq_tab->crq_nb_cnt = 0;
 }
 
-static inline void ubase_ctrlq_crq_table_uninit(struct ubase_dev *udev)
+static void ubase_ctrlq_init_crq_wlist(struct ubase_dev *udev)
+{
+	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
+	u32 offset = 0;
+
+	if (ubase_dev_cdma_supported(udev)) {
+		memcpy(crq_tab->crq_nbs, ubase_ctrlq_wlist_cdma,
+		       sizeof(ubase_ctrlq_wlist_cdma));
+	} else if (ubase_dev_urma_supported(udev)) {
+		if (ubase_dev_unic_supported(udev)) {
+			memcpy(crq_tab->crq_nbs, ubase_ctrlq_wlist_unic,
+			       sizeof(ubase_ctrlq_wlist_unic));
+			offset = ARRAY_SIZE(ubase_ctrlq_wlist_unic);
+		}
+		if (ubase_dev_udma_supported(udev)) {
+			memcpy(&crq_tab->crq_nbs[offset], ubase_ctrlq_wlist_udma,
+			       sizeof(ubase_ctrlq_wlist_udma));
+		}
+	}
+}
+
+static int ubase_ctrlq_crq_table_init(struct ubase_dev *udev)
+{
+	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
+	int ret;
+
+	ret = ubase_ctrlq_alloc_crq_tbl_mem(udev);
+	if (ret)
+		return ret;
+
+	ubase_ctrlq_init_crq_wlist(udev);
+
+	mutex_init(&crq_tab->lock);
+
+	return 0;
+}
+
+static void ubase_ctrlq_crq_table_uninit(struct ubase_dev *udev)
 {
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
 
 	mutex_destroy(&crq_tab->lock);
+
+	ubase_ctrlq_free_crq_tbl_mem(udev);
 }
 
 static inline u16 ubase_ctrlq_msg_queue_depth(struct ubase_dev *udev)
@@ -233,10 +316,15 @@ int ubase_ctrlq_init(struct ubase_dev *udev)
 	if (ret)
 		goto err_msg_queue_init;
 
+	ret = ubase_ctrlq_crq_table_init(udev);
+	if (ret)
+		goto err_crq_table_init;
+
 	udev->ctrlq.csq_next_seq = 1;
 	atomic_set(&udev->ctrlq.req_cnt, 0);
-	ubase_ctrlq_crq_table_init(udev);
 
+err_crq_table_init:
+	ubase_ctrlq_msg_queue_uninit(udev);
 success:
 	set_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state);
 	return 0;
@@ -780,8 +868,7 @@ static void ubase_ctrlq_read_msg_data(struct ubase_dev *udev, u8 num, u8 *msg)
 
 static void ubase_ctrlq_send_unsupported_resp(struct ubase_dev *udev,
 					      struct ubase_ctrlq_base_block *head,
-					      void *msg_data, u16 msg_data_len,
-					      u16 seq)
+					      u16 resp_seq, u8 resp_ret)
 {
 	struct ubase_ctrlq_msg msg = {0};
 	int ret;
@@ -789,19 +876,14 @@ static void ubase_ctrlq_send_unsupported_resp(struct ubase_dev *udev,
 	msg.service_ver = head->service_ver;
 	msg.service_type = head->service_type;
 	msg.opcode = head->opcode;
-	msg.in_size = msg_data_len;
-	msg.in = msg_data;
 	msg.is_resp = 1;
-	msg.resp_seq = seq;
-	msg.resp_ret = EOPNOTSUPP;
-
-	ubase_info(udev, "ctrlq received unsupported req. seq=%u, ser_type=%d, ser_ver=%d, opc=0x%x.",
-		   seq, head->service_type, head->service_ver, head->opcode);
+	msg.resp_seq = resp_seq;
+	msg.resp_ret = resp_ret;
 
 	ret = __ubase_ctrlq_send(udev, &msg, NULL);
 	if (ret)
-		ubase_warn(udev, "failed to send ctrlq unsupported resp. seq=%u, ser_type=%d, ser_ver=%d, opc=0x%x, ret=%d.",
-			   seq, head->service_type, head->service_ver, head->opcode, ret);
+		ubase_warn(udev, "failed to send ctrlq unsupport resp, ret=%d.",
+			   ret);
 }
 
 static void ubase_ctrlq_crq_event_callback(struct ubase_dev *udev,
@@ -809,27 +891,43 @@ static void ubase_ctrlq_crq_event_callback(struct ubase_dev *udev,
 					   void *msg_data, u16 msg_data_len,
 					   u16 seq)
 {
+#define EDRVNOEXIST 255
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
-	struct ubase_ctrlq_crq_event_nbs *nbs;
-	int ret = -EOPNOTSUPP;
+	int ret = -ENOENT;
+	u32 i;
+
+	ubase_info(udev,
+		   "ctrlq recv notice req: seq=%u, ser_type=%u, ser_ver=%u, opc=0x%x.",
+		   seq, head->service_type, head->service_ver, head->opcode);
 
 	mutex_lock(&crq_tab->lock);
-	list_for_each_entry(nbs, &crq_tab->crq_nbs.list, list) {
-		if (nbs->crq_nb.service_type == head->service_type &&
-		    nbs->crq_nb.opcode == head->opcode) {
-			ret = nbs->crq_nb.crq_handler(nbs->crq_nb.back,
-						      head->service_ver,
-						      msg_data,
-						      msg_data_len,
-						      seq);
+	for (i = 0; i < crq_tab->crq_nb_cnt; i++) {
+		if (crq_tab->crq_nbs[i].service_type == head->service_type &&
+		    crq_tab->crq_nbs[i].opcode == head->opcode) {
+			if (!crq_tab->crq_nbs[i].crq_handler) {
+				ret = -EDRVNOEXIST;
+				break;
+			}
+			ret = crq_tab->crq_nbs[i].crq_handler(crq_tab->crq_nbs[i].back,
+							      head->service_ver,
+							      msg_data,
+							      msg_data_len,
+							      seq);
 			break;
 		}
 	}
 	mutex_unlock(&crq_tab->lock);
 
-	if (ret == -EOPNOTSUPP)
-		ubase_ctrlq_send_unsupported_resp(udev, head, msg_data,
-						  msg_data_len, seq);
+	if (ret == -ENOENT) {
+		ubase_info(udev, "this notice is not supported.");
+		ubase_ctrlq_send_unsupported_resp(udev, head, seq, EOPNOTSUPP);
+	} else if (ret == -EOPNOTSUPP) {
+		ubase_info(udev, "the notice processor return not support.");
+		ubase_ctrlq_send_unsupported_resp(udev, head, seq, EOPNOTSUPP);
+	} else if (ret == -EDRVNOEXIST) {
+		ubase_info(udev, "the notice processor is unregistered.");
+		ubase_ctrlq_send_unsupported_resp(udev, head, seq, EDRVNOEXIST);
+	}
 }
 
 static void ubase_ctrlq_notify_completed(struct ubase_dev *udev,
@@ -1064,10 +1162,10 @@ void ubase_ctrlq_clean_service_task(struct ubase_delay_work *ubase_work)
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 				   struct ubase_ctrlq_event_nb *nb)
 {
-	struct ubase_ctrlq_crq_event_nbs *nbs, *tmp, *new_nbs;
 	struct ubase_ctrlq_crq_table *crq_tab;
 	struct ubase_dev *udev;
-	int ret;
+	int ret = -ENOENT;
+	u32 i;
 
 	if (!aux_dev || !nb || !nb->crq_handler)
 		return -EINVAL;
@@ -1075,31 +1173,21 @@ int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 	udev = __ubase_get_udev_by_adev(aux_dev);
 	crq_tab = &udev->ctrlq.crq_table;
 	mutex_lock(&crq_tab->lock);
-	list_for_each_entry_safe(nbs, tmp, &crq_tab->crq_nbs.list, list) {
-		if (nbs->crq_nb.service_type == nb->service_type &&
-		    nbs->crq_nb.opcode == nb->opcode) {
-			ret = -EEXIST;
-			goto err_crq_register;
+	for (i = 0; i < crq_tab->crq_nb_cnt; i++) {
+		if (crq_tab->crq_nbs[i].service_type == nb->service_type &&
+		    crq_tab->crq_nbs[i].opcode == nb->opcode) {
+			if (crq_tab->crq_nbs[i].crq_handler) {
+				ret = -EEXIST;
+				break;
+			}
+			crq_tab->crq_nbs[i].back = nb->back;
+			crq_tab->crq_nbs[i].crq_handler = nb->crq_handler;
+			ret = 0;
+			break;
 		}
 	}
 
-	new_nbs = kzalloc(sizeof(*new_nbs), GFP_KERNEL);
-	if (!new_nbs) {
-		ret = -ENOMEM;
-		goto err_crq_register;
-	}
-
-	new_nbs->crq_nb = *nb;
-	list_add_tail(&new_nbs->list, &crq_tab->crq_nbs.list);
 	mutex_unlock(&crq_tab->lock);
-
-	return 0;
-
-err_crq_register:
-	mutex_unlock(&crq_tab->lock);
-	ubase_err(udev,
-		  "failed to register ctrlq crq event, opcode = 0x%x, service_type = 0x%x, ret = %d.\n",
-		  nb->opcode, nb->service_type, ret);
 
 	return ret;
 }
@@ -1108,9 +1196,9 @@ EXPORT_SYMBOL(ubase_ctrlq_register_crq_event);
 void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,
 				      u8 service_type, u8 opcode)
 {
-	struct ubase_ctrlq_crq_event_nbs *nbs, *tmp;
 	struct ubase_ctrlq_crq_table *crq_tab;
 	struct ubase_dev *udev;
+	u32 i;
 
 	if (!aux_dev)
 		return;
@@ -1118,11 +1206,11 @@ void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,
 	udev = __ubase_get_udev_by_adev(aux_dev);
 	crq_tab = &udev->ctrlq.crq_table;
 	mutex_lock(&crq_tab->lock);
-	list_for_each_entry_safe(nbs, tmp, &crq_tab->crq_nbs.list, list) {
-		if (nbs->crq_nb.service_type == service_type &&
-		    nbs->crq_nb.opcode == opcode) {
-			list_del(&nbs->list);
-			kfree(nbs);
+	for (i = 0; i < crq_tab->crq_nb_cnt; i++) {
+		if (crq_tab->crq_nbs[i].service_type == service_type &&
+		    crq_tab->crq_nbs[i].opcode == opcode) {
+			crq_tab->crq_nbs[i].back = NULL;
+			crq_tab->crq_nbs[i].crq_handler = NULL;
 			break;
 		}
 	}

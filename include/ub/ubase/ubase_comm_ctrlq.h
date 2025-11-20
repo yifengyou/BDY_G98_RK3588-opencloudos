@@ -28,16 +28,17 @@ enum ubase_ctrlq_ser_ver {
 };
 
 enum ubase_ctrlq_ser_type {
-	UBASE_CTRLQ_SER_TYPE_TP_ACL = 0x01,
-	UBASE_CTRLQ_SER_TYPE_DEV_REGISTER = 0x02,
-	UBASE_CTRLQ_SER_TYPE_IP_ACL = 0x03,
-	UBASE_CTRLQ_SER_TYPE_QOS = 0x04,
+	UBASE_CTRLQ_SER_TYPE_TP_ACL		= 0x01,
+	UBASE_CTRLQ_SER_TYPE_DEV_REGISTER	= 0x02,
+	UBASE_CTRLQ_SER_TYPE_IP_ACL		= 0x03,
+	UBASE_CTRLQ_SER_TYPE_QOS		= 0x04,
 };
 
-enum ubase_ctrlq_opc_type {
+enum ubase_ctrlq_opc_type_tp {
 	UBASE_CTRLQ_OPC_CREATE_TP	= 0x11,
 	UBASE_CTRLQ_OPC_DESTROY_TP	= 0x12,
 	UBASE_CTRLQ_OPC_TP_FLUSH_DONE	= 0x14,
+	UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE	= 0x15,
 };
 
 enum ubase_ctrlq_opc_type_qos {
@@ -45,14 +46,16 @@ enum ubase_ctrlq_opc_type_qos {
 	UBASE_CTRLQ_OPC_QUERY_SL	= 0x02,
 };
 
-enum ubase_ctrlq_opc_ip {
-	UBASE_CTRLQ_OPC_NOTIFY_IP = 0x01,
-	UBASE_CTRLQ_OPC_QUERY_IP = 0x02,
+enum ubase_ctrlq_opc_type_ip {
+	UBASE_CTRLQ_OPC_NOTIFY_IP	= 0x01,
+	UBASE_CTRLQ_OPC_QUERY_IP	= 0x02,
 };
 
 enum ubase_ctrlq_opc_type_dev_register {
-	UBASE_CTRLQ_OPC_CTRLQ_CTRL	= 0x14,
-	UBASE_CTRLQ_OPC_UE_RESET_CTRL	= 0x15,
+	UBASE_CTRLQ_OPC_UPDATE_SEID		= 0x02,
+	UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO	= 0x13,
+	UBASE_CTRLQ_OPC_CTRLQ_CTRL		= 0x14,
+	UBASE_CTRLQ_OPC_UE_RESET_CTRL		= 0x15,
 };
 
 struct ubase_ctrlq_msg {
