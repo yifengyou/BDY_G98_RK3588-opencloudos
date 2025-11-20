@@ -354,14 +354,14 @@ int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 		break;
 #ifdef CONFIG_ARM64_HISI_IPIV
 	case ARM_SMCCC_VENDOR_PV_SGI_FEATURES:
-		if (hisi_ipiv_supported_per_vm(vcpu))
+		if (hisi_ipiv_supported_per_vm(vcpu->kvm))
 			val[0] = SMCCC_RET_SUCCESS;
 		else
 			val[0] = SMCCC_RET_NOT_SUPPORTED;
 		break;
 	case ARM_SMCCC_VENDOR_PV_SGI_ENABLE:
-		if (hisi_ipiv_supported_per_vm(vcpu)) {
-			hisi_ipiv_enable_per_vm(vcpu);
+		if (hisi_ipiv_supported_per_vm(vcpu->kvm)) {
+			hisi_ipiv_enable_per_vm(vcpu->kvm);
 			val[0] = SMCCC_RET_SUCCESS;
 		} else {
 			val[0] = SMCCC_RET_NOT_SUPPORTED;

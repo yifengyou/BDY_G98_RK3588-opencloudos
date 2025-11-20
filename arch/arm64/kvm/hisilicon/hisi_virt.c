@@ -201,27 +201,27 @@ bool hisi_ipiv_supported(void)
 
 extern struct static_key_false ipiv_enable;
 
-bool hisi_ipiv_supported_per_vm(struct kvm_vcpu *vcpu)
+bool hisi_ipiv_supported_per_vm(struct kvm *kvm)
 {
 	/* IPIV is supported by the hardware */
 	if (!static_branch_unlikely(&ipiv_enable))
 		return false;
 
 	/* vSGI passthrough is configured */
-	if (!vcpu->kvm->arch.vgic.nassgireq)
+	if (!kvm->arch.vgic.nassgireq)
 		return false;
 
 	/* IPIV is enabled by the user */
-	if (!vcpu->kvm->arch.vgic.its_vm.enable_ipiv_from_vmm)
+	if (!kvm->arch.vgic.its_vm.enable_ipiv_from_vmm)
 		return false;
 
 	return true;
 }
 
-void hisi_ipiv_enable_per_vm(struct kvm_vcpu *vcpu)
+void hisi_ipiv_enable_per_vm(struct kvm *kvm)
 {
 	/* Enable IPIV feature */
-	vcpu->kvm->arch.vgic.its_vm.enable_ipiv_from_guest = true;
+	kvm->arch.vgic.its_vm.enable_ipiv_from_guest = true;
 }
 
 void ipiv_gicd_init(void)
