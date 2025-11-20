@@ -229,6 +229,7 @@ void ubase_suspend(struct ubase_dev *udev)
 	ubase_ctrlq_disable_remote(udev);
 	ubase_ctrlq_disable(udev);
 	ubase_irq_table_free(udev);
+	ubase_flush_workqueue(udev);
 }
 
 void ubase_resume(struct ubase_dev *udev)

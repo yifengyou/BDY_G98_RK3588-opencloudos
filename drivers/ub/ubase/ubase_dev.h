@@ -451,4 +451,6 @@ void ubase_virt_handler(struct ubase_dev *udev, u16 bus_ue_id, bool is_en);
 int ubase_activate_handler(struct ubase_dev *udev, u32 bus_ue_id);
 int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id);
 
+void ubase_flush_workqueue(struct ubase_dev *udev);
+
 #endif

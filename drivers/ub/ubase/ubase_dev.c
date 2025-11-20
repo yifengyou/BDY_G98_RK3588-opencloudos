@@ -1317,6 +1317,14 @@ int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id)
 	return ubase_send_activate_dev_req(udev, false, (u16)bus_ue_id);
 }
 
+void ubase_flush_workqueue(struct ubase_dev *udev)
+{
+	flush_workqueue(udev->ubase_wq);
+	flush_workqueue(udev->ubase_async_wq);
+	flush_workqueue(udev->ubase_period_wq);
+	flush_workqueue(udev->ubase_arq_wq);
+}
+
 int ubase_activate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
