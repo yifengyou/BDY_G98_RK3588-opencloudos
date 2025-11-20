@@ -41,7 +41,7 @@ static void unic_update_rack_addr_state(struct unic_vport *vport,
 			addr_node->state = UNIC_COMM_ADDR_TO_ADD;
 			unic_format_masked_ip_addr(format_masked_ip_addr, addr);
 			unic_info(unic_dev,
-				  "deleted an existing ip %s by accident and need to add it.\n",
+				  "stack deleted an planned ip %s, need to re-add it.\n",
 				  format_masked_ip_addr);
 		}
 		break;
@@ -90,7 +90,7 @@ static int unic_update_stack_ip_addr(struct unic_vport *vport,
 	list_add_tail(&addr_node->node, list);
 	unic_format_masked_ip_addr(format_masked_ip_addr, addr);
 	unic_info(unic_dev,
-		  "added a new ip %s by accident and need to delete it.\n",
+		  "stack added a non-planned ip %s, need to delete it.\n",
 		  format_masked_ip_addr);
 	set_bit(UNIC_VPORT_STATE_IP_TBL_CHANGE, &vport->state);
 	goto unlock_and_exit;
@@ -468,6 +468,9 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 	struct unic_ctrlq_ip_notify_req *req;
 	struct unic_stack_ip_info st_ip;
 	int ret;
+
+	if (service_ver != UBASE_CTRLQ_SER_VER_01)
+		return -EOPNOTSUPP;
 
 	if (len < sizeof(*req)) {
 		unic_err(priv, "failed to verify ip info size, len = %u.\n", len);

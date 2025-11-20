@@ -306,10 +306,11 @@ err_unlock:
 	return ret;
 }
 
-static int ubase_cmd_query_version(struct ubase_dev *udev, u32 *fw_version)
+static int ubase_cmd_query_version(struct ubase_dev *udev)
 {
 	struct ubase_query_version_cmd *resp;
 	struct ubase_cmdq_desc desc;
+	u32 fw_ver;
 	int ret;
 
 	ubase_cmd_setup_basic_desc(&desc, UBASE_OPC_QUERY_FW_VER, true, 1);
@@ -321,13 +322,14 @@ static int ubase_cmd_query_version(struct ubase_dev *udev, u32 *fw_version)
 	}
 
 	resp = (struct ubase_query_version_cmd *)desc.data;
-	*fw_version = le32_to_cpu(resp->firmware);
+	udev->caps.dev_caps.fw_version = le32_to_cpu(resp->fw_version);
+	fw_ver = udev->caps.dev_caps.fw_version;
 
 	ubase_info(udev, "The firmware version is %u.%u.%u.%u\n",
-		   u32_get_bits(*fw_version, UBASE_FW_VERSION_BYTE3_MASK),
-		   u32_get_bits(*fw_version, UBASE_FW_VERSION_BYTE2_MASK),
-		   u32_get_bits(*fw_version, UBASE_FW_VERSION_BYTE1_MASK),
-		   u32_get_bits(*fw_version, UBASE_FW_VERSION_BYTE0_MASK));
+		   u32_get_bits(fw_ver, UBASE_FW_VERSION_BYTE3_MASK),
+		   u32_get_bits(fw_ver, UBASE_FW_VERSION_BYTE2_MASK),
+		   u32_get_bits(fw_ver, UBASE_FW_VERSION_BYTE1_MASK),
+		   u32_get_bits(fw_ver, UBASE_FW_VERSION_BYTE0_MASK));
 
 	return 0;
 }
@@ -366,7 +368,7 @@ int ubase_cmd_init(struct ubase_dev *udev)
 
 	clear_bit(UBASE_STATE_CMD_DISABLE, &udev->hw.state);
 
-	ret = ubase_cmd_query_version(udev, &udev->caps.dev_caps.fw_version);
+	ret = ubase_cmd_query_version(udev);
 	if (ret)
 		goto err_query_version;
 

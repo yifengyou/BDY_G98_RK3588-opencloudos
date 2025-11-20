@@ -156,13 +156,10 @@ static void ubase_parse_dev_caps_unic(struct ubase_dev *udev,
 	struct ubase_adev_caps *unic_caps = &udev->caps.unic_caps;
 
 	unic_caps->jfs.max_cnt = le32_to_cpu(resp->nic_jfs_max_cnt);
-	unic_caps->jfs.reserved_cnt = le32_to_cpu(resp->nic_jfs_reserved_cnt);
 	unic_caps->jfs.depth = le32_to_cpu(resp->nic_jfs_depth);
 	unic_caps->jfr.max_cnt = le32_to_cpu(resp->nic_jfr_max_cnt);
-	unic_caps->jfr.reserved_cnt = le32_to_cpu(resp->nic_jfr_reserved_cnt);
 	unic_caps->jfr.depth = le32_to_cpu(resp->nic_jfr_depth);
 	unic_caps->jfc.max_cnt = le32_to_cpu(resp->nic_jfc_max_cnt);
-	unic_caps->jfc.reserved_cnt = le32_to_cpu(resp->nic_jfc_reserved_cnt);
 	unic_caps->jfc.depth = le32_to_cpu(resp->nic_jfc_depth);
 	unic_caps->cqe_size = le16_to_cpu(resp->nic_cqe_size);
 	unic_caps->utp_port_bitmap = le32_to_cpu(resp->port_bitmap);
@@ -174,13 +171,10 @@ static void ubase_parse_dev_caps_udma(struct ubase_dev *udev,
 	struct ubase_adev_caps *udma_caps = &udev->caps.udma_caps;
 
 	udma_caps->jfs.max_cnt = le32_to_cpu(resp->udma_jfs_max_cnt);
-	udma_caps->jfs.reserved_cnt = le32_to_cpu(resp->udma_jfs_reserved_cnt);
 	udma_caps->jfs.depth = le32_to_cpu(resp->udma_jfs_depth);
 	udma_caps->jfr.max_cnt = le32_to_cpu(resp->udma_jfr_max_cnt);
-	udma_caps->jfr.reserved_cnt = le32_to_cpu(resp->udma_jfr_reserved_cnt);
 	udma_caps->jfr.depth = le32_to_cpu(resp->udma_jfr_depth);
 	udma_caps->jfc.max_cnt = le32_to_cpu(resp->udma_jfc_max_cnt);
-	udma_caps->jfc.reserved_cnt = le32_to_cpu(resp->udma_jfc_reserved_cnt);
 	udma_caps->jfc.depth = le32_to_cpu(resp->udma_jfc_depth);
 	udma_caps->cqe_size = le16_to_cpu(resp->udma_cqe_size);
 	udma_caps->jtg_max_cnt = le32_to_cpu(resp->jtg_max_cnt);
@@ -951,7 +945,7 @@ int __ubase_perf_stats(struct ubase_dev *udev, u64 port_bitmap, u32 period,
 		       struct ubase_perf_stats_result *data, u32 data_size)
 {
 #define UBASE_MS_TO_US(ms) (1000 * (ms))
-	struct ubase_stop_perf_stats_cmd resp = {0};
+	struct ubase_stop_perf_stats_cmd resp;
 	unsigned long logic_port_bitmap;
 	int ret, j, k, port_num;
 	u8 i;
@@ -988,6 +982,8 @@ int __ubase_perf_stats(struct ubase_dev *udev, u64 port_bitmap, u32 period,
 	for (i = 0, k = 0; i < UBASE_MAX_PORT_NUM && k < port_num; i++) {
 		if (!test_bit(i, (unsigned long *)&port_bitmap))
 			continue;
+
+		memset(&resp, 0, sizeof(resp));
 		ret = ubase_stop_perf_stats(udev, &resp, period, i);
 		if (ret)
 			goto unlock;

@@ -88,7 +88,7 @@ static int unic_get_dfx_reg_num(struct unic_dev *unic_dev, u32 *reg_num,
 	ubase_fill_inout_buf(&out, UBASE_OPC_DFX_REG_NUM, true,
 			     reg_arr_size * sizeof(u32), reg_num);
 	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
-	if (ret && ret != -EPERM)
+	if (ret)
 		unic_err(unic_dev,
 			 "failed to query dfx reg num, ret = %d.\n", ret);
 
@@ -149,17 +149,13 @@ int unic_get_regs_len(struct net_device *netdev)
 		return -ENOMEM;
 
 	ret = unic_get_dfx_reg_num(unic_dev, reg_num, reg_arr_size);
-	if (!ret) {
-		count += unic_get_dfx_regs_len(unic_dev, unic_dfx_reg_arr,
-					       reg_arr_size, reg_num);
-	} else if (ret != -EPERM) {
-		unic_err(unic_dev,
-			 "failed to get dfx regs length, ret = %d.\n", ret);
+	if (ret) {
 		kfree(reg_num);
-
 		return -EBUSY;
 	}
 
+	count += unic_get_dfx_regs_len(unic_dev, unic_dfx_reg_arr,
+				       reg_arr_size, reg_num);
 	kfree(reg_num);
 
 	return count;
@@ -286,16 +282,15 @@ void unic_get_regs(struct net_device *netdev, struct ethtool_regs *cmd,
 
 	pdata += unic_get_res_regs(unic_dev, pdata);
 	ret = unic_get_dfx_reg_num(unic_dev, reg_num, reg_arr_size);
-	if (!ret) {
-		ret = unic_get_dfx_regs(unic_dev, pdata, unic_dfx_reg_arr,
-					reg_arr_size, reg_num);
-		if (ret)
-			unic_err(unic_dev,
-				 "failed to get dfx regs, ret = %d.\n", ret);
-	} else if (ret != -EPERM) {
-		unic_err(unic_dev,
-			 "failed to get dfx reg num, ret = %d.\n", ret);
+	if (ret) {
+		kfree(reg_num);
+		return;
 	}
+
+	ret = unic_get_dfx_regs(unic_dev, pdata, unic_dfx_reg_arr,
+				reg_arr_size, reg_num);
+	if (ret)
+		unic_err(unic_dev, "failed to get dfx regs, ret = %d.\n", ret);
 
 	kfree(reg_num);
 }

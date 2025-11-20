@@ -67,9 +67,6 @@ static int unic_get_fecparam(struct net_device *ndev,
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 	struct unic_mac *mac = &unic_dev->hw.mac;
 
-	if (!unic_dev_fec_supported(unic_dev))
-		return -EOPNOTSUPP;
-
 	fec->fec = mac->fec_ability;
 	fec->active_fec = mac->fec_mode;
 

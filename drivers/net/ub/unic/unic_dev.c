@@ -248,10 +248,12 @@ static int unic_init_vl_info(struct unic_dev *unic_dev)
 		return ret;
 
 	ret = unic_init_vl_maxrate(unic_dev);
-	if (ret)
+	if (ret && ret != -EPERM)
 		return ret;
 
-	return unic_init_vl_sch(unic_dev);
+	ret = unic_init_vl_sch(unic_dev);
+
+	return ret == -EPERM ? 0 : ret;
 }
 
 static int unic_init_channels_attr(struct unic_dev *unic_dev)
@@ -559,17 +561,12 @@ static int unic_dev_init_mtu(struct unic_dev *unic_dev)
 {
 	struct net_device *netdev = unic_dev->comdev.netdev;
 	struct unic_caps *caps = &unic_dev->caps;
-	int ret;
 
 	netdev->mtu = UB_DATA_LEN;
 	netdev->max_mtu = caps->max_trans_unit;
 	netdev->min_mtu = caps->min_trans_unit;
 
-	ret = unic_config_mtu(unic_dev, netdev->mtu);
-	if (ret == -EPERM)
-		return 0;
-
-	return ret;
+	return unic_config_mtu(unic_dev, netdev->mtu);
 }
 
 static int unic_init_mac(struct unic_dev *unic_dev)
@@ -583,11 +580,11 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 
 	ret = unic_set_mac_speed_duplex(unic_dev, mac->speed, mac->duplex,
 					mac->lanes);
-	if (ret && ret != -EPERM)
+	if (ret)
 		return ret;
 
 	ret = unic_set_mac_autoneg(unic_dev, mac->autoneg);
-	if (ret && ret != -EPERM)
+	if (ret)
 		return ret;
 
 	ret = unic_dev_fec_supported(unic_dev) && mac->user_fec_mode ?
@@ -621,9 +618,7 @@ int unic_set_mtu(struct unic_dev *unic_dev, int new_mtu)
 	new_mtu = max(new_mtu, UB_DATA_LEN);
 
 	ret = unic_check_validate_dump_mtu(unic_dev, new_mtu, &max_frame_size);
-	if (ret == -EPERM) {
-		return 0;
-	} else if (ret < 0) {
+	if (ret) {
 		unic_err(unic_dev, "invalid MTU(%d), please check, ret = %d.\n",
 			 new_mtu, ret);
 		return -EINVAL;

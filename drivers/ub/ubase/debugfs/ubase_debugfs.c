@@ -94,6 +94,7 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 		{"\tdie_id: %u\n", dev_caps->die_id},
 		{"\tue_id: %u\n", dev_caps->ue_id},
 		{"\tnl_id: %u\n", dev_caps->nl_id},
+		{"\tfw_version: %u\n", dev_caps->fw_version},
 	};
 	int i;
 
@@ -123,29 +124,20 @@ static void ubase_dbg_dump_adev_caps(struct seq_file *s,
 		u32 caps_info;
 	} ubase_adev_caps_info[] = {
 		{"\tjfs_max_cnt: %u\n", caps->jfs.max_cnt},
-		{"\tjfs_reserved_cnt: %u\n", caps->jfs.reserved_cnt},
 		{"\tjfs_depth: %u\n", caps->jfs.depth},
 		{"\tjfr_max_cnt: %u\n", caps->jfr.max_cnt},
-		{"\tjfr_reserved_cnt: %u\n", caps->jfr.reserved_cnt},
 		{"\tjfr_depth: %u\n", caps->jfr.depth},
 		{"\tjfc_max_cnt: %u\n", caps->jfc.max_cnt},
-		{"\tjfc_reserved_cnt: %u\n", caps->jfc.reserved_cnt},
 		{"\tjfc_depth: %u\n", caps->jfc.depth},
 		{"\ttp_max_cnt: %u\n", caps->tp.max_cnt},
-		{"\ttp_reserved_cnt: %u\n", caps->tp.reserved_cnt},
 		{"\ttp_depth: %u\n", caps->tp.depth},
 		{"\ttpg_max_cnt: %u\n", caps->tpg.max_cnt},
-		{"\ttpg_reserved_cnt: %u\n", caps->tpg.reserved_cnt},
 		{"\ttpg_depth: %u\n", caps->tpg.depth},
 		{"\tcqe_size: %hu\n", caps->cqe_size},
 		{"\tutp_port_bitmap: 0x%x\n", caps->utp_port_bitmap},
 		{"\tjtg_max_cnt: %u\n", caps->jtg_max_cnt},
 		{"\trc_max_cnt: %u\n", caps->rc_max_cnt},
 		{"\trc_depth: %u\n", caps->rc_que_depth},
-		{"\tccc_max_cnt: %u\n", caps->ccc_max_cnt},
-		{"\tdest_addr_max_cnt: %u\n", caps->dest_addr_max_cnt},
-		{"\tseid_upi_max_cnt: %u\n", caps->seid_upi_max_cnt},
-		{"\ttpm_max_cnt: %u\n", caps->tpm_max_cnt},
 		{"\tprealloc_mem_dma_len: %llu\n", caps->pmem.dma_len},
 	};
 	int i;

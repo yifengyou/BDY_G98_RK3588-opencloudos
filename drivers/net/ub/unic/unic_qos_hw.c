@@ -59,7 +59,6 @@ int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 	u32 vl_rate;
 	int i, ret;
 
-	req.bus_ue_id = cpu_to_le16(USHRT_MAX);
 	req.vl_bitmap = cpu_to_le16(vl_bitmap);
 	for (i = 0; i < caps->vl_num; i++) {
 		vl_rate = vl_maxrate[i] / UNIC_MBYTE_PER_SEND;
@@ -72,7 +71,7 @@ int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 			     sizeof(req), &req);
 
 	ret = ubase_cmd_send_in(adev, &in);
-	if (ret)
+	if (ret && ret != -EPERM)
 		dev_err(adev->dev.parent,
 			"failed to config vl rate limit, ret = %d.\n", ret);
 

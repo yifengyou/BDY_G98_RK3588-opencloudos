@@ -30,7 +30,7 @@ struct ubase_caps_item {
 
 struct ubase_res_cmd_resp {
 	__le32	cap_bits[UBASE_CAP_LEN];
-	__le32	rsvd[3];
+	__le32	rsvd0[3];
 
 	u8	rsvd1[2];
 	__le16	ceq_vector_num;
@@ -43,37 +43,32 @@ struct ubase_res_cmd_resp {
 	__le32	aeqe_depth;
 	__le32	ceqe_depth;
 	__le32	udma_jfs_max_cnt;
-	__le32	udma_jfs_reserved_cnt;
+	u8	rsvd2[4];
 
 	__le32	udma_jfs_depth;
 	__le32	udma_jfr_max_cnt;
-	__le32	udma_jfr_reserved_cnt;
+	u8	rsvd3[4];
 	__le32	udma_jfr_depth;
 	u8	nic_vl_num;
-	u8	rsvd2[3];
+	u8	rsvd4[3];
 	u8	nic_vl[UBASE_MAX_REQ_VL_NUM];
 	__le32	udma_jfc_max_cnt;
 
-	__le32	udma_jfc_reserved_cnt;
+	u8	rsvd5[4];
 	__le32	udma_jfc_depth;
-	__le32	udma_tp_max_cnt;
-	__le32	udma_tp_reserved_cnt;
-	__le32	udma_tp_depth;
-	__le32	udma_tpg_max_cnt;
-	__le32	udma_tpg_reserved_cnt;
-	__le32	udma_tpg_depth;
+	u8	rsvd6[24];
 
 	__le32	nic_jfs_max_cnt;
-	__le32	nic_jfs_reserved_cnt;
+	u8	rsvd7[4];
 	__le32	nic_jfs_depth;
 	__le32	nic_jfr_max_cnt;
-	__le32	nic_jfr_reserved_cnt;
+	u8	rsvd8[4];
 	__le32	nic_jfr_depth;
-	__le32	rsvd3[2];
+	__le32	rsvd9[2];
 
-	__le32	rsvd4;
+	__le32	rsvd10;
 	__le32	nic_jfc_max_cnt;
-	__le32	nic_jfc_reserved_cnt;
+	u8	rsvd11[4];
 	__le32	nic_jfc_depth;
 	__le32	nic_tp_max_cnt;
 	__le32	nic_tp_reserved_cnt;
@@ -83,10 +78,7 @@ struct ubase_res_cmd_resp {
 	__le32	nic_tpg_reserved_cnt;
 	__le32	nic_tpg_depth;
 	__le32	total_ue_num;
-	__le32	jfs_ctx_size;
-	__le32	jfr_ctx_size;
-	__le32	jfc_ctx_size;
-	__le32	tp_ctx_size;
+	u8	rsvd12[16];
 	__le16	rsvd_jetty_cnt;
 	__le16	mac_stats_num;
 
@@ -95,24 +87,22 @@ struct ubase_res_cmd_resp {
 	__le32	public_jetty_cnt;
 	__le32	tp_extdb_buf_size;
 	__le32	tp_timer_buf_size;
-	u8	port_work_mode;
+	u8	resv13;
 	u8	udma_vl_num;
 	u8	udma_tp_resp_vl_offset;
 	u8	ue_num;
 	__le32	port_bitmap;
-	u8	rsvd5[4];
+	u8	rsvd14[4];
 
 	/* include udma tp and ctp req vl */
 	u8	udma_req_vl[UBASE_MAX_REQ_VL_NUM];
 	__le32	udma_rc_depth;
-	u8	rsvd6[4];
+	u8	rsvd15[4];
 	__le32	jtg_max_cnt;
 	__le32	rc_max_cnt_per_vl;
-	__le32	dest_addr_max_cnt;
-	__le32	seid_upi_max_cnt;
+	u8	rsvd16[8];
 
-	__le32	tpm_max_cnt;
-	__le32	ccc_max_cnt;
+	u8	rsvd17[32];
 };
 
 struct ubase_query_oor_resp {

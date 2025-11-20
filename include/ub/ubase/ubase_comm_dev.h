@@ -103,7 +103,6 @@ struct ubase_caps {
 struct ubase_res_caps {
 	u32	max_cnt;
 	u32	start_idx;
-	u32	reserved_cnt;
 	u32	depth;
 };
 
@@ -123,10 +122,6 @@ struct ubase_adev_caps {
 	u32			jtg_max_cnt;
 	u32			rc_max_cnt;
 	u32			rc_que_depth;
-	u32			ccc_max_cnt;
-	u32			dest_addr_max_cnt;
-	u32			seid_upi_max_cnt;
-	u32			tpm_max_cnt;
 	u16			cqe_size;
 };
 

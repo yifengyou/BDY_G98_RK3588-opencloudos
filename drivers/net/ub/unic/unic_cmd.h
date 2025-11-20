@@ -150,7 +150,7 @@ struct unic_config_vl_map_cmd {
 };
 
 struct unic_config_vl_speed_cmd {
-	__le16 bus_ue_id;
+	u8 resv0[2];
 	__le16 vl_bitmap;
 	__le32 max_speed[UBASE_MAX_VL_NUM];
 	u8 resv1[20];

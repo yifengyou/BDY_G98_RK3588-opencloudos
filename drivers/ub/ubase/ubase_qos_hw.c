@@ -195,13 +195,10 @@ static int __ubase_config_tm_vl_sch(struct ubase_dev *udev, u16 vl_bitmap,
 	int ret;
 	u8 i;
 
-	/* the configuration takes effect for all entities. */
-	req.bus_ue_id = cpu_to_le16(USHRT_MAX);
-	req.vl_bitmap = cpu_to_le16(vl_bitmap);
-
 	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
 		tsa_bitmap |= vl_tsa[i] ? 1 << i : 0;
 
+	req.vl_bitmap = cpu_to_le16(vl_bitmap);
 	req.vl_tsa = cpu_to_le16(tsa_bitmap);
 	memcpy(req.vl_bw, vl_bw, UBASE_MAX_VL_NUM);
 
@@ -209,7 +206,7 @@ static int __ubase_config_tm_vl_sch(struct ubase_dev *udev, u16 vl_bitmap,
 			     sizeof(req), &req);
 
 	ret = __ubase_cmd_send_in(udev, &in);
-	if (ret)
+	if (ret && ret != -EPERM)
 		ubase_err(udev, "failed to config tm vl sch, ret = %d", ret);
 
 	return ret;
@@ -230,7 +227,7 @@ static int __ubase_config_ets_vl_sch(struct ubase_dev *udev, u16 vl_bitmap,
 			     &req);
 
 	ret = __ubase_cmd_send_in(udev, &in);
-	if (ret)
+	if (ret && ret != -EPERM)
 		ubase_err(udev, "failed to cfg ets vl sch, ret = %d.", ret);
 
 	return ret;

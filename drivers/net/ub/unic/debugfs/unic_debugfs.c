@@ -46,7 +46,6 @@ static const struct unic_dbg_cap_bit_info {
 	{"\tsupport_ubl: %u\n", &unic_dev_ubl_supported},
 	{"\tsupport_ets: %u\n", &unic_dev_ets_supported},
 	{"\tsupport_fec: %u\n", &unic_dev_fec_supported},
-	{"\tsupport_rss: %u\n", &unic_dev_rss_supported},
 	{"\tsupport_tc_speed_limit: %u\n", &unic_dev_tc_speed_limit_supported},
 	{"\tsupport_tx_csum_offload: %u\n", &unic_dev_tx_csum_offload_supported},
 	{"\tsupport_rx_csum_offload: %u\n", &unic_dev_rx_csum_offload_supported},

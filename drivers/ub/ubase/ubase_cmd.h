@@ -43,10 +43,16 @@ enum ubase_cmd_state {
 };
 
 struct ubase_query_version_cmd {
-	__le32 firmware;
-	__le32 hardware;
-	__le32 rsv;
-	__le32 caps[UBASE_CAP_LEN];
+	__le32	fw_version;
+	u8	rsv[20];
+};
+
+enum ubase_drv_cap_bit {
+	UBASE_CAP_SUP_ACTIVATE_B = 0,
+};
+
+struct ubase_notify_drv_cap_cmd {
+	u8	cap_bits[24]; /* see ubase_drv_cap_bit */
 };
 
 #define UBASE_UBCL_CFG_DATA_ALIGN	4
@@ -106,10 +112,10 @@ struct ubase_cfg_ets_vl_sch_cmd {
 };
 
 struct ubase_cfg_tm_vl_sch_cmd {
-	__le16 bus_ue_id;
+	u8 rsvd0[2];
 	__le16 vl_bitmap;
 	__le16 vl_tsa;
-	u8 rsvd[2];
+	u8 rsvd1[2];
 	u8 vl_bw[UBASE_MAX_VL_NUM];
 };
 

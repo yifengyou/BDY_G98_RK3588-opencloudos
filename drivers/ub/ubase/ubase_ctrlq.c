@@ -742,6 +742,32 @@ static void ubase_ctrlq_read_msg_data(struct ubase_dev *udev, u8 num, u8 *msg)
 	}
 }
 
+static void ubase_ctrlq_send_unsupported_resp(struct ubase_dev *udev,
+					      struct ubase_ctrlq_base_block *head,
+					      void *msg_data, u16 msg_data_len,
+					      u16 seq)
+{
+	struct ubase_ctrlq_msg msg = {0};
+	int ret;
+
+	msg.service_ver = head->service_ver;
+	msg.service_type = head->service_type;
+	msg.opcode = head->opcode;
+	msg.in_size = msg_data_len;
+	msg.in = msg_data;
+	msg.is_resp = 1;
+	msg.resp_seq = seq;
+	msg.resp_ret = EOPNOTSUPP;
+
+	ubase_info(udev, "ctrlq received unsupported req. seq=%u, ser_type=%d, ser_ver=%d, opc=%u.",
+		   seq, head->service_type, head->service_ver, head->opcode);
+
+	ret = __ubase_ctrlq_send(udev, &msg, NULL);
+	if (ret)
+		ubase_warn(udev, "failed to send ctrlq unsupported resp. seq=%u, ser_type=%d, ser_ver=%d, opc=%u.",
+			   seq, head->service_type, head->service_ver, head->opcode);
+}
+
 static void ubase_ctrlq_crq_event_callback(struct ubase_dev *udev,
 					   struct ubase_ctrlq_base_block *head,
 					   void *msg_data, u16 msg_data_len,
@@ -749,20 +775,25 @@ static void ubase_ctrlq_crq_event_callback(struct ubase_dev *udev,
 {
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
 	struct ubase_ctrlq_crq_event_nbs *nbs;
+	int ret = -EOPNOTSUPP;
 
 	mutex_lock(&crq_tab->lock);
 	list_for_each_entry(nbs, &crq_tab->crq_nbs.list, list) {
 		if (nbs->crq_nb.service_type == head->service_type &&
 		    nbs->crq_nb.opcode == head->opcode) {
-			nbs->crq_nb.crq_handler(nbs->crq_nb.back,
-						head->service_ver,
-						msg_data,
-						msg_data_len,
-						seq);
+			ret = nbs->crq_nb.crq_handler(nbs->crq_nb.back,
+						      head->service_ver,
+						      msg_data,
+						      msg_data_len,
+						      seq);
 			break;
 		}
 	}
 	mutex_unlock(&crq_tab->lock);
+
+	if (ret == -EOPNOTSUPP)
+		ubase_ctrlq_send_unsupported_resp(udev, head, msg_data,
+						  msg_data_len, seq);
 }
 
 static void ubase_ctrlq_notify_completed(struct ubase_dev *udev,

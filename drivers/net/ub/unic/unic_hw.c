@@ -76,7 +76,7 @@ int unic_set_mac_autoneg(struct unic_dev *unic_dev, u8 autoneg)
 			     sizeof(req), &req);
 
 	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
-	if (ret && ret != -EPERM)
+	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,
 			"failed to send cmd in config autoneg(%u), ret = %d.\n",
 			autoneg, ret);
@@ -105,7 +105,7 @@ int unic_set_mac_speed_duplex(struct unic_dev *unic_dev, u32 speed, u8 duplex,
 			     sizeof(req), &req);
 
 	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
-	if (ret && ret != -EPERM)
+	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,
 			"failed to send cmd in config speed(%u), ret = %d.\n",
 			speed, ret);
@@ -334,9 +334,7 @@ int unic_set_promisc_mode(struct unic_dev *unic_dev,
 
 	time_out = unic_cmd_timeout(unic_dev);
 	ret = ubase_cmd_send_in_ex(adev, &in, time_out);
-	if (ret == -EPERM)
-		return 0;
-	else if (ret)
+	if (ret)
 		unic_err(unic_dev,
 			 "failed to set promisc mode, ret = %d.\n", ret);
 
@@ -561,15 +559,15 @@ static int unic_query_flush_status(struct unic_dev *unic_dev, u8 *status)
 	struct ubase_cmd_buf in;
 	int ret;
 
+	if (unic_dev_ubl_supported(unic_dev))
+		return -EOPNOTSUPP;
+
 	ubase_fill_inout_buf(&in, UBASE_OPC_QUERY_FLUSH_STATUS, true, 0, NULL);
 	ubase_fill_inout_buf(&out, UBASE_OPC_QUERY_FLUSH_STATUS, false,
 			     sizeof(resp), &resp);
 
 	ret = ubase_cmd_send_inout(unic_dev->comdev.adev, &in, &out);
 	if (ret) {
-		if (ret == -EPERM)
-			return -EOPNOTSUPP;
-
 		unic_err(unic_dev,
 			 "failed to send cmd when query flush status, ret = %d.\n",
 			 ret);
