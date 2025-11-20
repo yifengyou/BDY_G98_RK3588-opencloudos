@@ -24,8 +24,12 @@
 #define MEM_EVENT_MAX_NUM 16
 #define MAR_ERR_ADDR_COUNT 10
 #define MAR_ERR_ADDR_SIZE 2
+#define MEM_DECODER_NUMBER_V1 5
+#define MEM_DECODER_NUMBER_V2 2
 
 #define hpa_gen(addr_h, addr_l) (((u64)(addr_h) << 32) | (addr_l))
+
+static u8 ub_mem_num;
 
 struct ub_mem_decoder {
 	struct device *dev;
@@ -58,25 +62,26 @@ struct hi_get_ubmem_event_pld {
 static bool hi_mem_validate_pa(struct ub_bus_controller *ubc,
 			       u64 pa_start, u64 pa_end, bool cacheable);
 
-static void hi_mem_drain_start(struct ub_mem_device *mem_device)
+static void hi_mem_drain_start(struct ub_bus_controller *ubc)
 {
-	struct ub_mem_decoder *decoder, *data = mem_device->priv_data;
+	struct ub_mem_decoder *decoder, *data = ubc->mem_device->priv_data;
 
 	if (!data) {
-		dev_err(mem_device->dev, "ubc mem_decoder is null.\n");
+		dev_err(&ubc->dev, "ubc mem_decoder is null.\n");
 		return;
 	}
 
-	for (int i = 0; i < MEM_INFO_NUM; i++) {
+	for (int i = 0; i < ub_mem_num; i++) {
 		decoder = &data[i];
 		writel(0, decoder->base_reg + DRAIN_ENABLE_REG_OFFSET);
 		writel(1, decoder->base_reg + DRAIN_ENABLE_REG_OFFSET);
 	}
 }
 
-static int hi_mem_drain_state(struct ub_mem_device *mem_device)
+static int hi_mem_drain_state(struct ub_bus_controller *ubc)
 {
-	struct ub_mem_decoder *decoder, *data = mem_device->priv_data;
+	struct ub_mem_decoder *decoder, *data = ubc->mem_device->priv_data;
+	struct ub_mem_device *mem_device = ubc->mem_device;
 	int val = 0;
 
 	if (!data) {
@@ -84,7 +89,7 @@ static int hi_mem_drain_state(struct ub_mem_device *mem_device)
 		return 0;
 	}
 
-	for (int i = 0; i < MEM_INFO_NUM; i++) {
+	for (int i = 0; i < ub_mem_num; i++) {
 		decoder = &data[i];
 		val = readb(decoder->base_reg + DRAIN_STATE_REG_OFFSET) & 0x1;
 		dev_info_ratelimited(decoder->dev, "ub memory decoder[%d] drain state, val=%d\n",
@@ -246,16 +251,25 @@ static irqreturn_t hi_mem_ras_irq(int irq, void *context)
 	return IRQ_WAKE_THREAD;
 }
 
-static int hi_mem_decoder_create_one(struct ub_bus_controller *ubc, int mar_id)
+static bool is_ub_mem_version_valid(struct ub_bus_controller *ubc)
 {
-	struct hi_ubc_private_data *data = (struct hi_ubc_private_data *)ubc->data;
-	struct ub_mem_decoder *decoder, *priv_data = ubc->mem_device->priv_data;
+	struct hi_ubc_private_data *data = ubc->data;
 
-	decoder = &priv_data[mar_id];
+	if (!data || data->ub_mem_version == UB_MEM_VERSION_INVALID)
+		return false;
+	return true;
+}
+
+static int hi_mem_decoder_create_one(struct ub_bus_controller *ubc, int index)
+{
+	struct ub_mem_decoder *decoder, *priv_data = ubc->mem_device->priv_data;
+	struct hi_ubc_private_data *data = ubc->data;
+
+	decoder = &priv_data[index];
 	decoder->dev = &ubc->dev;
 	decoder->uent = ubc->uent;
 
-	decoder->base_reg = ioremap(data->mem_pa_info[mar_id].decode_addr,
+	decoder->base_reg = ioremap(data->mem_pa_info[index].decode_addr,
 				    SZ_64);
 	if (!decoder->base_reg) {
 		dev_err(decoder->dev, "ub mem decoder base reg ioremap failed.\n");
@@ -265,24 +279,47 @@ static int hi_mem_decoder_create_one(struct ub_bus_controller *ubc, int mar_id)
 	return 0;
 }
 
-static void hi_mem_decoder_remove_one(struct ub_bus_controller *ubc, int mar_id)
+static void hi_mem_decoder_remove_one(struct ub_bus_controller *ubc, int index)
 {
 	struct ub_mem_decoder *priv_data = ubc->mem_device->priv_data;
 
-	iounmap(priv_data[mar_id].base_reg);
+	iounmap(priv_data[index].base_reg);
+}
+
+static u8 get_mem_decoder_number(struct hi_ubc_private_data *data)
+{
+	switch (data->ub_mem_version) {
+	case UB_MEM_VERSION_0:
+	case UB_MEM_VERSION_1:
+		return MEM_DECODER_NUMBER_V1;
+	case UB_MEM_VERSION_2:
+		return MEM_DECODER_NUMBER_V2;
+	default:
+		return 0;
+	}
 }
 
 int hi_mem_decoder_create(struct ub_bus_controller *ubc)
 {
 	struct ub_mem_device *mem_device;
+	struct hi_ubc_private_data *data;
 	void *priv_data;
 	int ret;
+
+	if (!is_ub_mem_version_valid(ubc)) {
+		dev_info(&ubc->dev, "Don't need to create mem decoder\n");
+		return 0;
+	}
+
+	ub_mem_num = get_mem_decoder_number(data);
+	if (!ub_mem_num)
+		return -EINVAL;
 
 	mem_device = kzalloc(sizeof(*mem_device), GFP_KERNEL);
 	if (!mem_device)
 		return -ENOMEM;
 
-	priv_data = kcalloc(MEM_INFO_NUM, sizeof(struct ub_mem_decoder),
+	priv_data = kcalloc(ub_mem_num, sizeof(struct ub_mem_decoder),
 			    GFP_KERNEL);
 	if (!priv_data) {
 		kfree(mem_device);
@@ -296,7 +333,7 @@ int hi_mem_decoder_create(struct ub_bus_controller *ubc)
 	mem_device->priv_data = priv_data;
 	ubc->mem_device = mem_device;
 
-	for (int i = 0; i < MEM_INFO_NUM; i++) {
+	for (int i = 0; i < ub_mem_num; i++) {
 		ret = hi_mem_decoder_create_one(ubc, i);
 		if (ret) {
 			dev_err(&ubc->dev, "hi mem create decoder %d failed\n", i);
@@ -318,7 +355,12 @@ void hi_mem_decoder_remove(struct ub_bus_controller *ubc)
 	if (!ubc->mem_device)
 		return;
 
-	for (int i = 0; i < MEM_INFO_NUM; i++)
+	if (!is_ub_mem_version_valid(ubc)) {
+		dev_info(&ubc->dev, "Don't need to remove mem decoder\n");
+		return;
+	}
+
+	for (int i = 0; i < ub_mem_num; i++)
 		hi_mem_decoder_remove_one(ubc, i);
 
 	kfree(ubc->mem_device->priv_data);
@@ -333,7 +375,12 @@ void hi_register_ubmem_irq(struct ub_bus_controller *ubc)
 	u32 usi_idx;
 
 	if (!ubc->mem_device) {
-		pr_err("mem device is NULL!\n");
+		pr_err("register ubmem irq failed, mem device is NULL!\n");
+		return;
+	}
+
+	if (!is_ub_mem_version_valid(ubc)) {
+		dev_info(&ubc->dev, "Don't need to register_ubmem_irq\n");
 		return;
 	}
 
@@ -371,6 +418,11 @@ void hi_unregister_ubmem_irq(struct ub_bus_controller *ubc)
 		return;
 	}
 
+	if (!is_ub_mem_version_valid(ubc)) {
+		dev_info(&ubc->dev, "Don't need to unregister_ubmem_irq\n");
+		return;
+	}
+
 	irq_num = ubc->mem_device->ubmem_irq_num;
 	if (irq_num < 0)
 		return;
@@ -404,8 +456,8 @@ static bool hi_mem_validate_pa(struct ub_bus_controller *ubc,
 		return false;
 	}
 
-	data = (struct hi_ubc_private_data *)ubc->data;
-	for (u16 i = 0; i < MEM_INFO_NUM; i++) {
+	data = ubc->data;
+	for (u16 i = 0; i < ub_mem_num; i++) {
 		if (ub_hpa_valid(pa_start, pa_end,
 				 data->mem_pa_info[i].cc_base_addr,
 				 data->mem_pa_info[i].cc_base_size) &&
