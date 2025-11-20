@@ -140,6 +140,12 @@ ifeq ($(NODEP), 1)
 override RPMFLAGS := --nodeps $(RPMFLAGS)
 endif
 
+# Allow clean build artifacts as default
+NOCLEAN=0
+ifeq ($(NOCLEAN), 1)
+override RPMFLAGS := --noclean $(RPMFLAGS)
+endif
+
 # Crossbuild
 ifneq ($(BUILD_ARCH),$(NATIVE_ARCH))
 RPMCROSSFLAGS = --with crossbuild --target $(BUILD_ARCH) --define "_cross_compile $(BUILD_ARCH)-linux-gnu-"
@@ -230,7 +236,7 @@ dist-srpm: dist-sources
 dist: dist-rpm
 dist-rpms: dist-rpm
 dist-rpm: dist-sources
-	$(call DO_RPMBUILD,-bb $(RPMCROSSFLAGS) --rmsource --rmspec $(RPMFLAGS) --noclean)
+	$(call DO_RPMBUILD,-bb $(RPMCROSSFLAGS) --rmsource --rmspec $(RPMFLAGS))
 	@cd $(TOPDIR) ; rm -rf dist/sources ; git checkout dist/sources 1>/dev/null 2>&1
 
 dist-prep: dist-sources
