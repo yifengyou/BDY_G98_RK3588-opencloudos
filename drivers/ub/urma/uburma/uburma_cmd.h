@@ -390,6 +390,7 @@ struct uburma_cmd_import_jfr {
 		/* correspond to urma_token_t */
 		uint32_t token;
 		uint32_t trans_mode;
+		uint32_t tp_type;
 	} in;
 	struct {
 		uint32_t tpn;
@@ -407,6 +408,7 @@ struct uburma_cmd_import_jfr_ex {
 		/* correspond to ubcore_token */
 		uint32_t token;
 		uint32_t trans_mode;
+		uint32_t tp_type;
 		/* correspond to struct ubcore_active_tp_cfg */
 		uint64_t tp_handle;
 		uint64_t peer_tp_handle;
@@ -546,6 +548,7 @@ struct uburma_cmd_import_jetty {
 		uint32_t trans_mode;
 		uint32_t policy;
 		uint32_t type;
+		uint32_t tp_type;
 	} in;
 	struct {
 		uint32_t tpn;
@@ -565,6 +568,7 @@ struct uburma_cmd_import_jetty_ex {
 		uint32_t trans_mode;
 		uint32_t policy;
 		uint32_t type;
+		uint32_t tp_type;
 		/* correspond to struct ubcore_active_tp_cfg */
 		uint64_t tp_handle;
 		uint64_t peer_tp_handle;

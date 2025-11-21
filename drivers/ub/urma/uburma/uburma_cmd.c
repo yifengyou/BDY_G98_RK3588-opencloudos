@@ -1668,6 +1668,7 @@ static int uburma_cmd_import_jfr(struct ubcore_device *ubc_dev,
 	cfg.flag.value = arg.in.flag;
 	cfg.token_value.token = arg.in.token;
 	cfg.trans_mode = arg.in.trans_mode;
+	cfg.tp_type = (enum ubcore_tp_type)arg.in.tp_type;
 	cfg.eid_index = file->ucontext->eid_index;
 	fill_udata(&udata, file->ucontext, &arg.udata);
 
@@ -1724,6 +1725,7 @@ static int uburma_cmd_import_jfr_ex(struct ubcore_device *ubc_dev,
 	cfg.flag.value = arg.in.flag;
 	cfg.token_value.token = arg.in.token;
 	cfg.trans_mode = arg.in.trans_mode;
+	cfg.tp_type = (enum ubcore_tp_type)arg.in.tp_type;
 	cfg.eid_index = file->ucontext->eid_index;
 
 	active_tp_cfg.tp_handle.value = arg.in.tp_handle;
@@ -1812,6 +1814,7 @@ static int uburma_cmd_import_jetty(struct ubcore_device *ubc_dev,
 	cfg.flag.value = arg.in.flag;
 	cfg.policy = (enum ubcore_jetty_grp_policy)arg.in.policy;
 	cfg.type = (enum ubcore_target_type)arg.in.type;
+	cfg.tp_type = (enum ubcore_tp_type)arg.in.tp_type;
 	cfg.eid_index = file->ucontext->eid_index;
 	fill_udata(&udata, file->ucontext, &arg.udata);
 
@@ -3045,6 +3048,7 @@ static int uburma_cmd_import_jetty_ex(struct ubcore_device *ubc_dev,
 	cfg.flag.value = arg.in.flag;
 	cfg.policy = (enum ubcore_jetty_grp_policy)arg.in.policy;
 	cfg.type = (enum ubcore_target_type)arg.in.type;
+	cfg.tp_type = (enum ubcore_tp_type)arg.in.tp_type;
 	cfg.eid_index = file->ucontext->eid_index;
 
 	active_tp_cfg.tp_handle.value = arg.in.tp_handle;

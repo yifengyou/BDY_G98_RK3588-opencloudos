@@ -588,6 +588,7 @@ uburma_import_jfr_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JFR_IN_FLAG, arg->in.flag);
 	SPEC(s++, IMPORT_JFR_IN_TOKEN, arg->in.token);
 	SPEC(s++, IMPORT_JFR_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, IMPORT_JFR_IN_TP_TYPE, arg->in.tp_type);
 	SPEC(s++, IMPORT_JFR_IN_UDATA, arg->udata);
 }
 
@@ -805,6 +806,7 @@ uburma_import_jetty_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JETTY_IN_TRANS_MODE, arg->in.trans_mode);
 	SPEC(s++, IMPORT_JETTY_IN_POLICY, arg->in.policy);
 	SPEC(s++, IMPORT_JETTY_IN_TYPE, arg->in.type);
+	SPEC(s++, IMPORT_JETTY_IN_TP_TYPE, arg->in.tp_type);
 	SPEC(s++, IMPORT_JETTY_IN_UDATA, arg->udata);
 }
 
@@ -1287,6 +1289,7 @@ uburma_import_jetty_ex_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JETTY_EX_IN_TRANS_MODE, arg->in.trans_mode);
 	SPEC(s++, IMPORT_JETTY_EX_IN_POLICY, arg->in.policy);
 	SPEC(s++, IMPORT_JETTY_EX_IN_TYPE, arg->in.type);
+	SPEC(s++, IMPORT_JETTY_EX_IN_TP_TYPE, arg->in.tp_type);
 	SPEC(s++, IMPORT_JETTY_EX_IN_TP_HANDLE, arg->in.tp_handle);
 	SPEC(s++, IMPORT_JETTY_EX_IN_PEER_TP_HANDLE,
 	     arg->in.peer_tp_handle);
@@ -1320,6 +1323,7 @@ uburma_import_jfr_ex_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JFR_EX_IN_FLAG, arg->in.flag);
 	SPEC(s++, IMPORT_JFR_EX_IN_TOKEN, arg->in.token);
 	SPEC(s++, IMPORT_JFR_EX_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, IMPORT_JFR_EX_IN_TP_TYPE, arg->in.tp_type);
 	SPEC(s++, IMPORT_JFR_EX_IN_TP_HANDLE, arg->in.tp_handle);
 	SPEC(s++, IMPORT_JFR_EX_IN_PEER_TP_HANDLE,
 	     arg->in.peer_tp_handle);
