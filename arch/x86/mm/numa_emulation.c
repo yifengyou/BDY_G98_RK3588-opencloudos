@@ -12,6 +12,8 @@
 
 static int emu_nid_to_phys[MAX_NUMNODES];
 static char *emu_cmdline __initdata;
+static bool emu_setup_cpu_distribution;
+static int emu_nid_to_cnt[MAX_NUMNODES] = {0};
 
 int __init numa_emu_cmdline(char *str)
 {
@@ -387,6 +389,9 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 	for (i = 0; i < MAX_NUMNODES; i++)
 		emu_nid_to_phys[i] = NUMA_NO_NODE;
 
+	/* If it contains 'C', also distribute CPUs evenly across nodes. */
+	emu_setup_cpu_distribution = !!strchr(emu_cmdline, 'C');
+
 	/*
 	 * If the numa=fake command-line contains a 'M' or 'G', it represents
 	 * the fixed node size.  Otherwise, if it is just a single number N,
@@ -491,6 +496,38 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 		__apicid_to_node[i] = j < ARRAY_SIZE(emu_nid_to_phys) ? j : 0;
 	}
 
+	/*
+	 * If CPU distribution is enabled (C flag), distribute CPUs evenly
+	 * across emulated nodes instead of preserving physical mapping.
+	 */
+	if (emu_setup_cpu_distribution) {
+		int apicid_cnt = 0;
+		int nr_cpu_per_node;
+
+		/* Count valid APIC IDs */
+		for (i = 0; i < ARRAY_SIZE(__apicid_to_node); i++) {
+			if (__apicid_to_node[i] != NUMA_NO_NODE)
+				apicid_cnt++;
+		}
+
+		nr_cpu_per_node = apicid_cnt / (max_emu_nid + 1);
+		pr_info("NUMA: Distributing %d CPUs evenly across %d emulated nodes\n",
+			apicid_cnt, max_emu_nid + 1);
+
+		for (i = 0; i < ARRAY_SIZE(__apicid_to_node); i++) {
+			if (__apicid_to_node[i] == NUMA_NO_NODE)
+				continue;
+			for (j = 0; j < ARRAY_SIZE(emu_nid_to_phys); j++) {
+				if (__apicid_to_node[i] == emu_nid_to_phys[j] &&
+				    emu_nid_to_cnt[j] < nr_cpu_per_node) {
+					__apicid_to_node[i] = j;
+					emu_nid_to_cnt[j]++;
+					break;
+				}
+			}
+		}
+	}
+
 	/* make sure all emulated nodes are mapped to a physical node */
 	for (i = 0; i < ARRAY_SIZE(emu_nid_to_phys); i++)
 		if (emu_nid_to_phys[i] == NUMA_NO_NODE)
@@ -537,6 +574,16 @@ void numa_add_cpu(int cpu)
 	physnid = emu_nid_to_phys[nid];
 
 	/*
+	 * If CPU distribution is enabled, each CPU belongs to exactly one
+	 * emulated node. Otherwise, map the CPU to each emulated node that
+	 * is allocated on the physical node of the CPU's APIC id.
+	 */
+	if (emu_setup_cpu_distribution) {
+		cpumask_set_cpu(cpu, node_to_cpumask_map[nid]);
+		return;
+	}
+
+	/*
 	 * Map the cpu to each emulated node that is allocated on the physical
 	 * node of the cpu's apic id.
 	 */
@@ -564,6 +611,16 @@ static void numa_set_cpumask(int cpu, bool enable)
 	}
 
 	physnid = emu_nid_to_phys[nid];
+
+	/*
+	 * If CPU distribution is enabled, each CPU belongs to exactly one
+	 * emulated node. Otherwise, map the CPU to each emulated node that
+	 * is allocated on the physical node.
+	 */
+	if (emu_setup_cpu_distribution) {
+		debug_cpumask_set_cpu(cpu, nid, enable);
+		return;
+	}
 
 	for_each_online_node(nid) {
 		if (emu_nid_to_phys[nid] != physnid)
