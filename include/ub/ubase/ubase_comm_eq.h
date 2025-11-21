@@ -50,6 +50,13 @@ enum ubase_event_type {
 	UBASE_EVENT_TYPE_MAX
 };
 
+/**
+ * struct ubase_event_nb - ubase event notification block
+ * @drv_type: auxiliary device driver type
+ * @event_type: event type
+ * @nb: notifier block
+ * @back: arbitrary registered pointer
+ */
 struct ubase_event_nb {
 	enum ubase_drv_type	drv_type;
 	u8			event_type;
@@ -57,6 +64,20 @@ struct ubase_event_nb {
 	void			*back;
 };
 
+/**
+ * struct ubase_aeqe - asynchronous event interrupt queue elements
+ * @event_type: event type
+ * @sub_type: sub event type
+ * @rsv0: reserved bits
+ * @owner: owner bit
+ * @num: jfsn/jettyn/jfrn/jfcn/jtgn/tpn
+ * @rsv1: reserved bits
+ * @out_param: mailbox output parameter
+ * @seq_num: mailbox sequence number
+ * @status: mailbox status
+ * @event: aeqe event information
+ * @rsv: reserved bits
+ */
 struct ubase_aeqe {
 	u32			event_type : 8;
 	u32			sub_type : 8;
@@ -82,6 +103,12 @@ struct ubase_aeqe {
 	u32			rsv[12];
 };
 
+/**
+ * struct ubase_aeq_notify_info - aeq notification information
+ * @event_type: event type
+ * @sub_type: sub event type
+ * @aeqe: aeq elements
+ */
 struct ubase_aeq_notify_info {
 	u8			event_type;
 	u8			sub_type;
@@ -92,7 +119,6 @@ int ubase_event_register(struct auxiliary_device *adev,
 			 struct ubase_event_nb *cb);
 void ubase_event_unregister(struct auxiliary_device *adev,
 			    struct ubase_event_nb *cb);
-
 int ubase_comp_register(struct auxiliary_device *adev,
 			int (*comp_handler)(struct notifier_block *nb,
 					    unsigned long jfcn, void *data));

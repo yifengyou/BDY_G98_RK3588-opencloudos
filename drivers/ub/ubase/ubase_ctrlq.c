@@ -824,6 +824,28 @@ int __ubase_ctrlq_send(struct ubase_dev *udev, struct ubase_ctrlq_msg *msg,
 	return ret;
 }
 
+/**
+ * ubase_ctrlq_send_msg() - ctrlq message send function
+ * @aux_dev: auxiliary device
+ * @msg: the message to be sent
+ *
+ * The driver uses this function to send a ctrlq message to the management software.
+ * The management software determines the module responsible for processing the message
+ * based on 'msg->service_ver', 'msg->service_type', and 'msg->opcode';
+ * it also retrieves the length and content of the data to be sent from
+ * 'msg->in_size' and 'msg->in'.
+ * When 'msg->is_resp' is set to 1, it indicates that the message is a response
+ * to a ctrlq message from the management software. 'msg->resp_seq' and 'msg->resp_ret'
+ * represent the sequence number and processing result of the ctrlq message from
+ * the management software.
+ * When 'msg->need_resp' is set to 1, it indicates that the management software needs
+ * to respond to the driver's ctrlq message. If 'msg->out_size' is not zero and
+ * 'msg->out' is not empty, this function will wait synchronously for the management
+ * software's response, and the response information will be stored in 'msg->out'.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. May sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,
 			 struct ubase_ctrlq_msg *msg)
 {
@@ -1159,6 +1181,19 @@ void ubase_ctrlq_clean_service_task(struct ubase_delay_work *ubase_work)
 	spin_unlock_bh(&csq->lock);
 }
 
+
+/**
+ * ubase_ctrlq_register_crq_event() - register ctrlq crq event processing function
+ * @aux_dev: auxiliary device
+ * @nb: the ctrlq crq event notification block
+ *
+ * Register the ctrlq crq handler function. When the management software reports
+ * a ctrlq crq event, if the registered 'nb->opcode' and 'nb->service_type' match
+ * the crq, the 'nb->crq_handler' function will be called to process it.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 				   struct ubase_ctrlq_event_nb *nb)
 {
@@ -1193,6 +1228,17 @@ int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 }
 EXPORT_SYMBOL(ubase_ctrlq_register_crq_event);
 
+/**
+ * ubase_ctrlq_unregister_crq_event() - unregister ctrlq crq event processing function
+ * @aux_dev: auxiliary device
+ * @service_type: the ctrlq service type
+ * @opcode: the ctrlq opcode
+ *
+ * Unregisters the ctrlq crq processing function. This function is called when user
+ * no longer wants to handle the 'service_type' and 'opcode' ctrlq crq events.
+ *
+ * Context: Any context.
+ */
 void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,
 				      u8 service_type, u8 opcode)
 {

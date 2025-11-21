@@ -1003,6 +1003,19 @@ static int __ubase_event_register(struct ubase_dev *udev,
 	return ret;
 }
 
+/**
+ * ubase_event_register() - register asynchronous event processing function
+ * @adev: auxiliary device
+ * @cb: asynchronous event notification block
+ *
+ * This function uses `blocking_notifier_chain_register` to register the
+ * asynchronous event handling function. When the ubase driver receives an
+ * asynchronous event and matches it with the registered event notification
+ * block, it calls the registered function via `blocking_notifier_call_chain`.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_event_register(struct auxiliary_device *adev,
 			 struct ubase_event_nb *cb)
 {
@@ -1038,6 +1051,16 @@ static void __ubase_event_unregister(struct ubase_dev *udev,
 			  cb->event_type, ret);
 }
 
+/**
+ * ubase_event_unregister() - unregister asynchronous event processing function
+ * @adev: auxiliary device
+ * @cb: ubase asynchronous event notification block
+ *
+ * This function uses `blocking_notifier_chain_unregister` to unregister the
+ * asynchronous event handling function.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ */
 void ubase_event_unregister(struct auxiliary_device *adev,
 			    struct ubase_event_nb *cb)
 {
@@ -1048,6 +1071,20 @@ void ubase_event_unregister(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_event_unregister);
 
+/**
+ * ubase_comp_register() - register completion event processing function
+ * @adev: auxiliary device
+ * @comp_handler: completion event processing function. nb: struct notifier_block,
+ * jfcn: jfc index, data: self-defined data pointer.
+ *
+ * This function uses `atomic_notifier_chain_register` to register the
+ * completion event handling function. When the ubase driver receives a
+ * completion event that matches a registered auxiliary device, it calls the
+ * registered function via `atomic_notifier_call_chain`.
+ *
+ * Context: Process context, may sleep
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_comp_register(struct auxiliary_device *adev,
 			int (*comp_handler)(struct notifier_block *nb,
 					    unsigned long jfcn, void *data))
@@ -1071,6 +1108,15 @@ int ubase_comp_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_comp_register);
 
+/**
+ * ubase_comp_unregister() - unregister completion event processing function
+ * @adev: auxiliary device
+ *
+ * This function uses `atomic_notifier_chain_unregister` to unregister the
+ * completion event handling function.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ */
 void ubase_comp_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;

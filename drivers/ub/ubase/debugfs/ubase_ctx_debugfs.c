@@ -252,6 +252,19 @@ static void __ubase_print_context_hw(struct seq_file *s, void *ctx_addr,
 	}
 }
 
+/**
+ * ubase_print_context_hw() - formatted the context output to seq file
+ * @s: seq_file
+ * @ctx_addr: context address
+ * @ctx_len: context length
+ *
+ * This function outputs the contents of `ctx_addr` to a seq_file according to
+ * the specified format.
+ * Each line in the file is 32 bits, and the number of lines is `ctx_len / sizeof(u32)`.
+ * If `ctx_len` is not an integer multiple of 4, there will be truncation at the end.
+ *
+ * Context: Any context.
+ */
 void ubase_print_context_hw(struct seq_file *s, void *ctx_addr, u32 ctx_len)
 {
 	if (!s || !ctx_addr)

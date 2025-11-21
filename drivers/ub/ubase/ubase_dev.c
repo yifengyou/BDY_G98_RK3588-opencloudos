@@ -883,6 +883,15 @@ void ubase_resume_aux_devices(struct ubase_dev *udev)
 	mutex_unlock(&priv->uadev_lock);
 }
 
+/**
+ * ubase_adev_ubl_supported() - determine whether ub link is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether ub link is supported.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_ubl_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -892,6 +901,15 @@ bool ubase_adev_ubl_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_ubl_supported);
 
+/**
+ * ubase_adev_ctrlq_supported() - determine whether to support ctrlq
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support ctrlq.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -901,6 +919,15 @@ bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_ctrlq_supported);
 
+/**
+ * ubase_adev_eth_mac_supported() - determine whether eth link is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether eth link is supported.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -910,6 +937,15 @@ bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_eth_mac_supported);
 
+/**
+ * ubase_get_io_base() - get io space base address
+ * @adev: auxiliary device
+ *
+ * The function is used to get io space base address.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_resource_space
+ */
 struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -919,6 +955,15 @@ struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_io_base);
 
+/**
+ * ubase_get_mem_base() - get memory space base address
+ * @adev: auxiliary device
+ *
+ * The function is used to get memory space base address.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_resource_space
+ */
 struct ubase_resource_space *ubase_get_mem_base(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -928,6 +973,15 @@ struct ubase_resource_space *ubase_get_mem_base(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_mem_base);
 
+/**
+ * ubase_get_dev_caps() - get ubase capabilities
+ * @adev: auxiliary device
+ *
+ * The function is used to get ubase capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_caps
+ */
 struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -937,6 +991,15 @@ struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_dev_caps);
 
+/**
+ * ubase_get_udma_caps() - get udma auxiliary device capabilities
+ * @adev: udma auxiliary device pointer
+ *
+ * The function is used to get udma auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_udma_caps(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -950,12 +1013,30 @@ struct ubase_adev_caps *ubase_get_udma_caps(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_udma_caps);
 
+/**
+ * ubase_get_cdma_caps() - get cdma auxiliary device capabilities
+ * @adev: cdma auxiliary device pointer
+ *
+ * The function is used to get cdma auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_cdma_caps(struct auxiliary_device *adev)
 {
 	return ubase_get_udma_caps(adev);
 }
 EXPORT_SYMBOL(ubase_get_cdma_caps);
 
+/**
+ * ubase_get_reset_stage() - get current reset stage
+ * @adev: auxiliary device
+ *
+ * The function is used to get current reset stage.
+ *
+ * Context: Any context.
+ * Return: enum ubase_reset_stage
+ */
 enum ubase_reset_stage ubase_get_reset_stage(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -969,6 +1050,17 @@ enum ubase_reset_stage ubase_get_reset_stage(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_reset_stage);
 
+/**
+ * ubase_virt_register() - register auxiliary device virtualization handling function
+ * @adev: auxiliary device
+ * @virt_handler: the function pointer to handle virtualization. adev: the same as the
+ * parameter 'adev', bus_ue_id: bus ub entity id, is_en: true - enable virtualization,
+ * false - disable virtualization.
+ *
+ * The function is used to register auxiliary device virtualization handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_virt_register(struct auxiliary_device *adev,
 			 void (*virt_handler)(struct auxiliary_device *adev,
 					      u16 bus_ue_id, bool is_en))
@@ -987,6 +1079,14 @@ void ubase_virt_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_virt_register);
 
+/**
+ * ubase_virt_unregister() - unregister auxiliary device virtualization handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device virtualization handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_virt_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1002,6 +1102,16 @@ void ubase_virt_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_virt_unregister);
 
+/**
+ * ubase_port_register() - register auxiliary device port handling function
+ * @adev: auxiliary device
+ * @port_handler: the function pointer to port handling. adev: the same as the
+ * parameter 'adev', link_up: true - link up, false - link down.
+ *
+ * The function is used to register auxiliary device port handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_port_register(struct auxiliary_device *adev,
 			 void (*port_handler)(struct auxiliary_device *adev,
 					      bool link_up))
@@ -1020,6 +1130,14 @@ void ubase_port_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_port_register);
 
+/**
+ * ubase_port_unregister() - unregister auxiliary device port handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device port handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_port_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1035,6 +1153,16 @@ void ubase_port_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_port_unregister);
 
+/**
+ * ubase_reset_register() - register auxiliary device reset function
+ * @adev: auxiliary device
+ * @reset_handler: the function pointer to reset. adev: the same as the parameter
+ * 'adev', stage: enum ubase_reset_stage.
+ *
+ * The function is used to register auxiliary device reset function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_reset_register(struct auxiliary_device *adev,
 			  void (*reset_handler)(struct auxiliary_device *adev,
 						enum ubase_reset_stage stage))
@@ -1053,6 +1181,14 @@ void ubase_reset_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_reset_register);
 
+/**
+ * ubase_reset_unregister() - unregister auxiliary device reset function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device reset function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_reset_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1068,6 +1204,15 @@ void ubase_reset_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_reset_unregister);
 
+/**
+ * ubase_get_unic_caps() - get unic auxiliary device capabilities
+ * @adev: unic auxiliary device pointer
+ *
+ * The function is used to get unic auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_unic_caps(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1163,6 +1308,15 @@ bool ubase_dbg_default(void)
 	return ubase_debug;
 }
 
+/**
+ * ubase_get_adev_qos() - get auxiliary device qos information
+ * @adev: auxiliary device
+ *
+ * The function is used to get auxiliary device qos information.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_qos
+ */
 struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1200,6 +1354,16 @@ static void ubase_activate_notify(struct ubase_dev *udev,
 		mutex_unlock(&udev->priv.uadev_lock);
 }
 
+/**
+ * ubase_activate_register() - register auxiliary device activate handling function
+ * @adev: auxiliary device
+ * @activate_handler: the function pointer to activate handling. adev: the same
+ * as the parameter 'adev', activate: true - activate, false - deactivate.
+ *
+ * The function is used to register auxiliary device activate handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_activate_register(struct auxiliary_device *adev,
 			     void (*activate_handler)(struct auxiliary_device *adev,
 						      bool activate))
@@ -1218,6 +1382,14 @@ void ubase_activate_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_activate_register);
 
+/**
+ * ubase_activate_unregister() - unregister auxiliary device activate handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device activate handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_activate_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1326,6 +1498,17 @@ void ubase_flush_workqueue(struct ubase_dev *udev)
 	flush_workqueue(udev->ubase_arq_wq);
 }
 
+/**
+ * ubase_activate_dev() - activate device
+ * @adev: auxiliary device
+ *
+ * The auxiliary device actively initializes the activate device process.
+ * This function will call the activate handling functions registered by all
+ * auxiliary devices under the same ub entity.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_activate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1359,6 +1542,17 @@ activate_dev_err:
 }
 EXPORT_SYMBOL(ubase_activate_dev);
 
+/**
+ * ubase_deactivate_dev() - deactivate device
+ * @adev: auxiliary device
+ *
+ * The auxiliary device actively initializes the deactivate device process.
+ * This function will call the activate handling functions registered by all
+ * auxiliary devices under the same ub entity.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_deactivate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1418,6 +1612,16 @@ static int __ubase_get_bus_eid(struct ubase_dev *udev, struct ubase_bus_eid *eid
 	return ubase_query_bus_eid(udev, eid);
 }
 
+/**
+ * ubase_get_bus_eid() - get bus entity id
+ * @adev: auxiliary device
+ * @eid: save the bus entity id
+ *
+ * The function is used to get bus entity id.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_get_bus_eid(struct auxiliary_device *adev, struct ubase_bus_eid *eid)
 {
 	struct ubase_dev *udev;

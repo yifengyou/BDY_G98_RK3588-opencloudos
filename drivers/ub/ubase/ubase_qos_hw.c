@@ -436,6 +436,25 @@ static int ubase_check_sl_bitmap(struct ubase_dev *udev, unsigned long sl_bitmap
 	return 0;
 }
 
+/**
+ * ubase_check_qos_sch_param() - check qos schedule parameters
+ * @adev: auxiliary device
+ * @vl_bitmap: vl bitmap
+ * @vl_bw: vl bandwidth weight
+ * @vl_tsa: vl schedule mode
+ * @is_ets: is ETS flow control mode
+ *
+ * The function is used to check qos schedule parameters
+ * Obtain valid vls through 'vl_bitmap'. The vl scheduling mode 'vl_tsa' supports
+ * two types: dwrr and sp. The sum of the vl scheduling weights 'vl_bw' must be
+ * 100. When 'is_ets' is true, it indicates ETS flow control, and the scheduling
+ * weight for vls with sp scheduling mode must be 0; when 'is_ets' is false, it
+ * indicates TM flow control, and the scheduling weight for vls with sp
+ * scheduling mode cannot be 0.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_check_qos_sch_param(struct auxiliary_device *adev, u16 vl_bitmap,
 			      u8 *vl_bw, u8 *vl_tsa, bool is_ets)
 {
@@ -451,6 +470,20 @@ int ubase_check_qos_sch_param(struct auxiliary_device *adev, u16 vl_bitmap,
 }
 EXPORT_SYMBOL(ubase_check_qos_sch_param);
 
+/**
+ * ubase_config_tm_vl_sch() - configuring TM flow control scheduling
+ * @adev: auxiliary device
+ * @vl_bitmap: vl bitmap
+ * @vl_bw: vl bandwidth weight
+ * @vl_tsa: vl schedule mode
+ *
+ * The function is used to configure TM flow control scheduling.
+ * Configure the scheduling weight 'vl_bw' and scheduling mode 'vl_tsa'
+ * corresponding to the valid vl in 'vl_bitmap' to the TM flow control.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_config_tm_vl_sch(struct auxiliary_device *adev, u16 vl_bitmap,
 			   u8 *vl_bw, u8 *vl_tsa)
 {
@@ -465,6 +498,25 @@ int ubase_config_tm_vl_sch(struct auxiliary_device *adev, u16 vl_bitmap,
 }
 EXPORT_SYMBOL(ubase_config_tm_vl_sch);
 
+/**
+ * ubase_set_priqos_info() - set priority qos information
+ * @dev: device
+ * @sl_priqos: priority qos
+ *
+ * The function is used to set priority qos information.
+ * Through 'sl_priqos->sl_bitmap', obtain the valid priority sl, use sl as an
+ * index to get the corresponding bandwidth weight and scheduling mode from
+ * 'sl_priqos->weight' and 'sl_priqos->ch_mode', and configure them to the hardware.
+ * Specifically, when 'sl_priqos-> port_bitmap' is 0, it configures the TM flow
+ * control; when 'port_bitmap' is not 0, it configures the ETS flow control for
+ * the corresponding port.
+ * The SP scheduling weight for TM flow control cannot be 0; multiple SP traffic
+ * flows are scheduled according to their weights. For ETS flow control, the SP
+ * scheduling weight must be 0.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_set_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos)
 {
 	struct ubase_dev *udev;
@@ -484,6 +536,21 @@ int ubase_set_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos)
 }
 EXPORT_SYMBOL(ubase_set_priqos_info);
 
+/**
+ * ubase_get_priqos_info() - get priority qos information
+ * @dev: device
+ * @sl_priqos: save the queried priority QoS information
+ *
+ * The function is used to get priority qos information.
+ * Obtain the priority sl available for the device, as well as the corresponding
+ * bandwidth weight and scheduling mode.
+ * When port_bitmap is 0, the obtained values are the bandwidth weight and
+ * scheduling mode for TM flow control; when port_bitmap is not 0, the obtained
+ * values are the bandwidth weight and scheduling mode for ETS flow control.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_get_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos)
 {
 	struct ubase_dev *udev;
@@ -995,6 +1062,17 @@ static bool ubase_is_udma_tp_vl(struct ubase_adev_qos *qos, u8 vl)
 	return false;
 }
 
+/**
+ * ubase_update_udma_dscp_vl() - update udma's dscp to vl mapping
+ * @adev: auxiliary device
+ * @dscp_vl: dscp to vl mapping
+ * @dscp_num: dscp number
+ *
+ * The function updates the dscp to vl mapping based on 'dscp_vl' and saves it
+ * to 'udma_dscp_vl' in 'truct ubase_adev_qos'.
+ *
+ * Context: Any context.
+ */
 void ubase_update_udma_dscp_vl(struct auxiliary_device *adev, u8 *dscp_vl,
 			       u8 dscp_num)
 {

@@ -399,6 +399,18 @@ static bool __ubase_dbg_dentry_support(struct device *dev, u32 property)
 	return false;
 }
 
+/**
+ * ubase_dbg_dentry_support() - determine whether to create debugfs dentries and debugfs cmd files
+ * @adev: auxiliary device
+ * @property: property of debugfs dentry or debufs cmd file
+ *
+ * The function is used in the 'support' functions of 'struct ubase_dbg_cmd_info'
+ * and 'struct ubase_dbg_cmd_info‘ to determine whether to create debugfs dentries
+ * and debugfs cmd files.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_dbg_dentry_support(struct auxiliary_device *adev, u32 property)
 {
 	if (!adev)
@@ -426,6 +438,19 @@ static int __ubase_dbg_seq_file_init(struct device *dev,
 	return 0;
 }
 
+/**
+ * ubase_dbg_seq_file_init() - ubase init debugfs cmd file
+ * @dev: the device
+ * @dirs: ubase debugfs dentry information
+ * @dbgfs: ubase debugfs data structure
+ * @idx: index of dirs
+ *
+ * This function is used in the 'init' function within 'struct ubase_dbg_cmd_info'
+ * to create a ubase debugfs cmd file.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_dbg_seq_file_init(struct device *dev,
 			    struct ubase_dbg_dentry_info *dirs,
 			    struct ubase_dbgfs *dbgfs, u32 idx)
@@ -714,6 +739,18 @@ static int ubase_dbg_create_file(struct device *dev, struct ubase_dbgfs *dbgfs,
 	return 0;
 }
 
+/**
+ * ubase_dbg_create_dentry() - ubase debugfs create dentry
+ * @dev: the device
+ * @dbgfs: ubase debugfs data structure
+ * @dirs: ubase debugfs dentry information
+ * @root_idx: index of the root dentry in dirs, and the root dentry must be the last one in the path
+ *
+ * This function is used to create a ubase debugfs cmd file.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_dbg_create_dentry(struct device *dev, struct ubase_dbgfs *dbgfs,
 			    struct ubase_dbg_dentry_info *dirs, u32 root_idx)
 {
@@ -794,6 +831,15 @@ void ubase_dbg_unregister_debugfs(void)
 	debugfs_remove_recursive(ubase_dbgfs_root);
 }
 
+/**
+ * ubase_diag_debugfs_root() - get ubase debugfs root dentry
+ * @adev: auxiliary device
+ *
+ * This function is used to get ubase debugfs root dentry.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct dentry
+ */
 struct dentry *ubase_diag_debugfs_root(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -803,6 +849,17 @@ struct dentry *ubase_diag_debugfs_root(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_diag_debugfs_root);
 
+/**
+ * ubase_dbg_format_time() - formatted the time output to seq file
+ * @time: time value
+ * @s: seq_file
+ *
+ * The function outputs the time in the format of
+ * 'week month day hour:minute:second year' to seq_file.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_dbg_format_time(time64_t time, struct seq_file *s)
 {
 #define YEAR_OFFSET 1900

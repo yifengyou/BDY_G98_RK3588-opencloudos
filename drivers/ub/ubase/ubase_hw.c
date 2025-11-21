@@ -1007,6 +1007,22 @@ unlock:
 	return ret;
 }
 
+/**
+ * ubase_perf_stats() - get ub port stats
+ * @adev: auxiliary device
+ * @port_bitmap: port bitmap
+ * @period: period, unit: ms
+ * @data: stats data
+ * @data_size: data size
+ *
+ * The function is used to query the port bandwidth and the bandwidth of each vl
+ * under the port. The bandwidth statistics collection duration is 'period'.
+ * The larger the 'period', the longer the time required, and the more accurate
+ * the bandwidth measurement.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_perf_stats(struct auxiliary_device *adev, u64 port_bitmap, u32 period,
 		     struct ubase_perf_stats_result *data, u32 data_size)
 {

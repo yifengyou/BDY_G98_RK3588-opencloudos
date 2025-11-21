@@ -58,6 +58,21 @@ enum ubase_ctrlq_opc_type_dev_register {
 	UBASE_CTRLQ_OPC_UE_RESET_CTRL		= 0x15,
 };
 
+/**
+ * struct ubase_ctrlq_msg - ubase ctrlq msg structure
+ * @service_ver: ctrlq service version
+ * @service_type: ctrlq service type
+ * @opcode: ctrlq opcode
+ * @need_resp: whether the message need a response
+ * @is_resp: whether the message is a response
+ * @resv: reserved bits
+ * @resp_ret: the return value of response message
+ * @resp_seq: response message sequence
+ * @in_size: input data buffer size
+ * @out_size: output data buffer size
+ * @in: input data buffer
+ * @out: output data buffer
+ */
 struct ubase_ctrlq_msg {
 	enum ubase_ctrlq_ser_ver	service_ver;
 	enum ubase_ctrlq_ser_type	service_type;
@@ -74,6 +89,13 @@ struct ubase_ctrlq_msg {
 	void	*out;
 };
 
+/**
+ * struct ubase_ctrlq_event_nb - ubase ctrlq event notification block structure
+ * @service_type: ctrlq service type
+ * @opcode: ctrlq crq opcode
+ * @back: arbitrary registered pointer
+ * @crq_handler: ctrlq crq handle function
+ */
 struct ubase_ctrlq_event_nb {
 	u8	service_type;
 	u8	opcode;
@@ -84,7 +106,6 @@ struct ubase_ctrlq_event_nb {
 
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,
 			 struct ubase_ctrlq_msg *msg);
-
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 				   struct ubase_ctrlq_event_nb *nb);
 void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,

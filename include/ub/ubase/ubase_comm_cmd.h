@@ -110,6 +110,23 @@ enum ubase_opcode_type {
 	UBASE_OPC_ACTIVATE_RESP		= 0xF010,
 };
 
+/**
+ * union ubase_mbox - ubase mailbox structure
+ * @in_param_l: input data storage address lower 32 bits
+ * @in_param_h: input data storage address high 32 bits
+ * @cmd: mailbox command
+ * @tag: queue id
+ * @seq_num: sequence number
+ * @event_en: 0-poll mode, 1-event mode
+ * @mbx_ue_id: mailbox ub entity id
+ * @rsv: reserved bits
+ * @status: mailbox command execution completion status, 0-success, 1-fail
+ * @hw_run: hardware running status, 0-not running, 1-running
+ * @rsv1: reserved bits
+ * @query_status:execution result of the mailbox query command, 0-success, 1-fail
+ * @query_hw_run: hardware running status of the mailbox query command, 0-not running, 1-running
+ * @query_rsv: reserved bits
+ */
 union ubase_mbox {
 	struct {
 		/* MB 0 */
@@ -137,6 +154,13 @@ union ubase_mbox {
 	};
 };
 
+/**
+ * struct ubase_cmd_buf - ubase cmd buffer structure
+ * @opcode: cmdq opcode
+ * @is_read: read or write, true for read, false for write
+ * @data_size: valid length of data
+ * @data: data buffer
+ */
 struct ubase_cmd_buf {
 	u16	opcode;
 	bool	is_read;
@@ -144,6 +168,13 @@ struct ubase_cmd_buf {
 	void	*data;
 };
 
+/**
+ * struct ubase_crq_event_nb - ubase crq event notification block structure
+ * @opcode: cmdq crq opcode
+ * @back: arbitrary registered pointer
+ * @crq_handler: cmdq crq handle function. dev: the struct member variable 'back',
+ * data: the crq message data, len: the crq message data length.
+ */
 struct ubase_crq_event_nb {
 	u16 opcode;
 	void *back;

@@ -51,6 +51,17 @@ out_send_cmd_fail:
 	return ret;
 }
 
+/**
+ * ubase_get_ub_port_stats() - get ub port stats
+ * @adev: auxiliary device
+ * @port_id: port id
+ * @data: ub date link layer stats
+ *
+ * The function is used to get ub port stats.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 			    struct ubase_ub_dl_stats *data)
 {

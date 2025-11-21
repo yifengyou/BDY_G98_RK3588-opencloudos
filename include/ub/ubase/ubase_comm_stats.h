@@ -210,6 +210,17 @@ struct ubase_eth_mac_stats {
 	u64	rx_merge_frame_smd_error_pkts;
 };
 
+/**
+ * struct ubase_perf_stats_result - traffic bandwidth statistics results
+ * @valid: data valid flag, 0-invalid, 1-valid
+ * @resv0: reserved bits
+ * @port_id: port id
+ * @resv1: reserved bits
+ * @tx_port_bw: tx port bandwidth
+ * @rx_port_bw: rx port bandwidth
+ * @tx_vl_bw: tx vl bandwidth
+ * @rx_vl_bw: rx vl bandwidth
+ */
 struct ubase_perf_stats_result {
 	u8	valid : 1;
 	u8	resv0 : 7;
