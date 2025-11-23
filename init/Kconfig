@@ -1349,6 +1349,13 @@ config NET_NS
 
 endif # NAMESPACES
 
+config NVIDIA_SMI_TRAP
+	bool "NVIDIA SMI trap"
+	default y
+	help
+	  Enable trap on NVIDIA SMI calls to solve the problem when acquiring
+	  information caused by host pid and guest pid difference.
+
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support"
 	depends on PROC_FS
