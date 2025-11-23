@@ -220,6 +220,9 @@ static int max_sched_granularity_ns = NSEC_PER_SEC; /* 1 second */
 
 #endif
 
+#ifdef CONFIG_NVIDIA_SMI_TRAP
+extern unsigned int sysctl_nvidia_smi_trap;
+#endif
 #endif /* CONFIG_SYSCTL */
 
 /*
@@ -2992,6 +2995,15 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 	},
 #endif
+#endif
+#ifdef CONFIG_NVIDIA_SMI_TRAP
+	{
+		.procname       = "nvidia_smi_trap",
+		.data           = &sysctl_nvidia_smi_trap,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+	},
 #endif
 	{ }
 };
