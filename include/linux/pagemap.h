@@ -206,6 +206,8 @@ enum mapping_flags {
 	AS_RELEASE_ALWAYS,	/* Call ->release_folio(), even if no private data */
 	AS_STABLE_WRITES,	/* must wait for writeback before modifying
 				   folio contents */
+	AS_INACCESSIBLE,	/* Do not attempt direct R/W access to the mapping,
+				   including to move the mapping */
 #ifdef CONFIG_EMM_RAMDISK_SWAP
 	AS_RAM_SWAP,		/* ramdisk based swap space, XXX: rename to some thing commonly used */
 #endif
@@ -292,6 +294,22 @@ static inline void mapping_set_release_always(struct address_space *mapping)
 static inline void mapping_clear_release_always(struct address_space *mapping)
 {
 	clear_bit(AS_RELEASE_ALWAYS, &mapping->flags);
+}
+
+static inline void mapping_set_inaccessible(struct address_space *mapping)
+{
+	/*
+	 * It's expected inaccessible mappings are also unevictable. Compaction
+	 * migrate scanner (isolate_migratepages_block()) relies on this to
+	 * reduce page locking.
+	 */
+	set_bit(AS_UNEVICTABLE, &mapping->flags);
+	set_bit(AS_INACCESSIBLE, &mapping->flags);
+}
+
+static inline bool mapping_inaccessible(struct address_space *mapping)
+{
+	return test_bit(AS_INACCESSIBLE, &mapping->flags);
 }
 
 static inline bool mapping_stable_writes(const struct address_space *mapping)

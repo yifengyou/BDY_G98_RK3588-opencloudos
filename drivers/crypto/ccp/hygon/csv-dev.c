@@ -145,7 +145,7 @@ static int csv_get_api_version(void)
 	sev->api_major = status->api_major;
 	sev->api_minor = status->api_minor;
 	sev->build = status->build;
-	sev->state = status->state;
+	sev->sev_plat_status.state = status->state;
 
 	csv_update_api_version(status);
 
