@@ -124,11 +124,11 @@ static inline bool hisi_ipiv_supported(void)
 {
 	return false;
 }
-static bool hisi_ipiv_supported_per_vm(struct kvm_vcpu *vcpu)
+static inline bool hisi_ipiv_supported_per_vm(struct kvm *kvm)
 {
 	return false;
 }
-static void hisi_ipiv_enable_per_vm(struct kvm_vcpu *vcpu) {}
+static inline void hisi_ipiv_enable_per_vm(struct kvm *kvm) {}
 static inline void ipiv_gicd_init(void) {}
 #endif /* CONFIG_ARM64_HISI_IPIV */
 static inline void kvm_get_pg_cfg(void) {}
