@@ -319,7 +319,8 @@ static inline swp_entry_t page_swap_entry(struct page *page)
 }
 
 /* linux/mm/workingset.c */
-bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool tracking);
+bool workingset_test_recent(void *shadow, bool file, bool *workingset,
+				bool flush, bool tracking);
 void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg);
 void workingset_refault(struct folio *folio, void *shadow);
 

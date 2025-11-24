@@ -644,6 +644,7 @@ bool cgroup_need_sli(struct cgroup *cgrp);
 
 void cgroup_path_from_kernfs_id(u64 id, char *buf, size_t buflen);
 struct cgroup *cgroup1_get_from_id(u64 id, int hierarchy_id);
+struct cgroup *__cgroup_get_from_id(u64 id);
 struct cgroup *cgroup_get_from_id(u64 id);
 #else /* !CONFIG_CGROUPS */
 

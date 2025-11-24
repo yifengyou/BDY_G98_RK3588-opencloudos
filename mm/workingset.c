@@ -599,11 +599,13 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
  * @file: whether the corresponding folio is from the file lru.
  * @workingset: where the workingset value unpacked from shadow should
  * be stored.
+ * @flush: whether to flush cgroup rstat.
  * @tracking: whether do workingset tracking or not
  *
  * Return: true if the shadow is for a recently evicted folio; false otherwise.
  */
-bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool tracking)
+bool workingset_test_recent(void *shadow, bool file, bool *workingset,
+				bool flush, bool tracking)
 {
 	struct mem_cgroup *eviction_memcg;
 	struct lruvec *eviction_lruvec;
@@ -635,6 +637,19 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool trac
 	eviction_memcg = try_get_flush_memcg(memcgid);
 	if (!eviction_memcg)
 		return false;
+
+	/*
+	 * Flush stats (and potentially sleep) outside the RCU read section.
+	 *
+	 * Note that workingset_test_recent() itself might be called in RCU read
+	 * section (for e.g, in cachestat) - these callers need to skip flushing
+	 * stats (via the flush argument).
+	 *
+	 * XXX: With per-memcg flushing and thresholding, is ratelimiting
+	 * still needed here?
+	 */
+	if (flush)
+		mem_cgroup_flush_stats_ratelimited(eviction_memcg);
 
 	/*
 	 * Flush stats (and potentially sleep) outside the RCU read section.
@@ -725,7 +740,7 @@ void workingset_refault(struct folio *folio, void *shadow)
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + file, nr);
 
-	if (!workingset_test_recent(shadow, file, &workingset, true))
+	if (!workingset_test_recent(shadow, file, &workingset, true, true))
 		return;
 
 	folio_set_active(folio);
