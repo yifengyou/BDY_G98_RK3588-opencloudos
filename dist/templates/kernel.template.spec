@@ -1503,7 +1503,11 @@ fi
 # In TS private release, kernel command line in /etc/default/grub will add "tk_private=1".
 # When install TS private release, do not need install "usb-storage nouveau cfg80211" into initramfs.
 tk_private_val=1
-grep -q "tk_private=1" /etc/default/grub 2>/dev/null || tk_private_val=0
+no_tk_private_param=0
+grep -q "tk_private=1" /etc/default/grub 2>/dev/null || no_tk_private_param=1
+if (( $no_tk_private_param == 1 )); then
+	tk_private_val=0
+fi
 
 # Support for earlier private versions of TS4 which hasn't the command parameter of "tk_private=1"
 set +e
@@ -1530,7 +1534,16 @@ if [ -f /etc/dracut.conf ]; then
 	sed -i 's/ virtio_blk / /g' /etc/dracut.conf
 fi
 
-if (( $tk_private_val == 1 )); then echo "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" >> /etc/dracut.conf ; fi
+if (( $tk_private_val == 1 )); then
+	echo "omit_dracutmodules+=\" usb-storage nouveau cfg80211 \"" >> /etc/dracut.conf
+	if (( $no_tk_private_param == 1 )); then
+		if [ -f /etc/default/grub ]; then
+			# RPM install will stop if command run fail, using "true" to let the script run continue
+			sed -i 's/^GRUB_CMDLINE_LINUX="/GRUB_CMDLINE_LINUX="tk_private=1 /' /etc/default/grub || true
+			grub2-mkconfig -o /boot/grub2/grub.cfg 1>/dev/null 2>&1 || true
+		fi
+	fi
+fi
 
 # End %pre modules
 
