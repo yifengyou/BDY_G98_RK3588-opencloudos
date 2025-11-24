@@ -1531,6 +1531,7 @@ set -e
 
 if [ -f /etc/dracut.conf ]; then
 	cp -a /etc/dracut.conf /etc/dracut.conf.kernelinstall.backup
+	# CONFIG_VIRTIO_BLK have changed from m to y
 	sed -i 's/ virtio_blk / /g' /etc/dracut.conf
 fi
 
