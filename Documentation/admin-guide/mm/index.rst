@@ -38,7 +38,6 @@ the Linux memory management.
    pagemap
    shrinker_debugfs
    soft-dirty
-   swap_numa
    transhuge
    userfaultfd
    zswap
