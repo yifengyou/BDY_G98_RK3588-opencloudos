@@ -461,7 +461,7 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 	msg.is_resp = cmd->is_resp;
 	msg.is_async = cmd->is_async;
 	msg.resp_seq = cmd->seq;
-	msg.in = (u8 *)head + UBASE_CTRLQ_HDR_LEN;
+	msg.in = cmd->in_size ? (u8 *)head + UBASE_CTRLQ_HDR_LEN : NULL;
 	msg.in_size = cmd->in_size;
 	msg.out = NULL;
 	msg.out_size = 0;
@@ -474,8 +474,9 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 
 	ret = __ubase_ctrlq_send(udev, &msg, &ue_info);
 	if (ret)
-		ubase_err(udev, "failed to send opc(0x%x) ctrlq, ret = %d.\n",
-			  head->opcode, ret);
+		ubase_err(udev,
+			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, ret = %d.\n",
+			  head->service_type, head->opcode, ret);
 
 	return ret;
 }
