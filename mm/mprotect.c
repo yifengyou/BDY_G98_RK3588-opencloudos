@@ -36,6 +36,9 @@
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+#include <asm/haoc/ptp.h>
+#endif
 
 #include "internal.h"
 
@@ -585,6 +588,9 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 	unsigned int mm_cp_flags = 0;
 	unsigned long charged = 0;
 	int error;
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	unsigned long reg;
+#endif
 
 	if (newflags == oldflags) {
 		*pprev = vma;
@@ -645,7 +651,15 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 		mm_cp_flags |= MM_CP_TRY_CHANGE_WRITABLE;
 	vma_set_page_prot(vma);
 
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_disable_iee(&reg);
+	#endif
 	change_protection(tlb, vma, start, end, mm_cp_flags);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_enable_iee(reg);
+	#endif
 
 	/*
 	 * Private VM_LOCKED VMA becoming writable: trigger COW to avoid major

@@ -77,6 +77,16 @@
 #include <trace/events/sched.h>
 #include <linux/hook_frame.h>
 
+#ifdef CONFIG_IEE_PTRP
+#include <asm/haoc/iee-token.h>
+#endif
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+#include <asm/haoc/ptp.h>
+#endif
+#ifdef CONFIG_CREDP
+#include <asm/haoc/iee-cred.h>
+#endif
+
 static int bprm_creds_from_file(struct linux_binprm *bprm);
 
 int suid_dumpable = 0;
@@ -735,7 +745,14 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		free_pgd_range(&tlb, old_start, old_end, new_end,
 			next ? next->vm_start : USER_PGTABLES_CEILING);
 	}
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_tlb_finish_mmu(&tlb);
+	else
+		tlb_finish_mmu(&tlb);
+	#else
 	tlb_finish_mmu(&tlb);
+	#endif
 
 	vma_prev(&vmi);
 	/* Shrink the vma to just the new range */
@@ -1025,6 +1042,10 @@ static int exec_mmap(struct mm_struct *mm)
 	if (!IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
 		local_irq_enable();
 	activate_mm(active_mm, mm);
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_set_token_pgd(tsk, mm->pgd);
+#endif
 	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
 		local_irq_enable();
 	lru_gen_add_mm(mm);
@@ -1672,12 +1693,20 @@ static void bprm_fill_uid(struct linux_binprm *bprm, struct file *file)
 
 	if (mode & S_ISUID) {
 		bprm->per_clear |= PER_CLEAR_ON_SETID;
+		#ifdef CONFIG_CREDP
+		iee_set_cred_euid(bprm->cred, vfsuid_into_kuid(vfsuid));
+		#else
 		bprm->cred->euid = vfsuid_into_kuid(vfsuid);
+		#endif
 	}
 
 	if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) {
 		bprm->per_clear |= PER_CLEAR_ON_SETID;
+		#ifdef CONFIG_CREDP
+		iee_set_cred_egid(bprm->cred, vfsgid_into_kgid(vfsgid));
+		#else
 		bprm->cred->egid = vfsgid_into_kgid(vfsgid);
+		#endif
 	}
 }
 
@@ -1928,9 +1957,17 @@ static int do_execveat_common(int fd, struct filename *filename,
 {
 	struct linux_binprm *bprm;
 	int retval;
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	unsigned long reg;
+#endif
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+if (haoc_enabled)
+	ptp_disable_iee(&reg);
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -2007,6 +2044,10 @@ out_free:
 
 out_ret:
 	putname(filename);
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+if (haoc_enabled)
+	ptp_enable_iee(reg);
+#endif
 	return retval;
 }
 

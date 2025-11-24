@@ -99,6 +99,28 @@ jiffies = jiffies_64;
 
 #endif
 
+#ifdef CONFIG_IEE_SIP
+#define IEE_SI_TEXT				\
+. = ALIGN(PAGE_SIZE);		\
+__iee_si_text_start = .;	\
+*(.iee.si_text)				\
+. = ALIGN(PAGE_SIZE);		\
+__iee_si_text_end = .;
+
+#define IEE_SI_DATA				\
+	. = ALIGN(PAGE_SIZE);       \
+	__iee_si_data_start = .;	\
+*(.iee.si_data)				\
+. = ALIGN(PAGE_SIZE);       \
+__iee_si_data_end = .;
+#endif
+#ifdef CONFIG_CREDP
+#define CRED_DATA				\
+	. = ALIGN(PAGE_SIZE);		\
+	*(.iee.cred)				\
+	. = ALIGN(PAGE_SIZE);
+#endif
+
 PHDRS {
 	text PT_LOAD FLAGS(5);          /* R_E */
 	data PT_LOAD FLAGS(6);          /* RW_ */
@@ -131,6 +153,9 @@ SECTIONS
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
+#ifdef CONFIG_IEE_SIP
+		IEE_SI_TEXT
+#endif
 		SOFTIRQENTRY_TEXT
 #ifdef CONFIG_RETPOLINE
 		*(.text..__x86.indirect_thunk)
@@ -181,6 +206,12 @@ SECTIONS
 		CACHELINE_ALIGNED_DATA(L1_CACHE_BYTES)
 
 		DATA_DATA
+#ifdef CONFIG_IEE_SIP
+		IEE_SI_DATA
+#endif
+#ifdef CONFIG_CREDP
+		CRED_DATA
+#endif
 		CONSTRUCTORS
 
 		/* rarely changed data like cpu maps */

@@ -56,6 +56,9 @@
 #include <asm/setup.h>
 #include <asm/ftrace.h>
 
+#ifdef CONFIG_IEE
+#include <asm/haoc/iee.h>
+#endif
 #include "mm_internal.h"
 
 #include "ident_map.c"
@@ -1369,6 +1372,16 @@ failed:
 
 void __init mem_init(void)
 {
+#ifdef CONFIG_PTP
+if (haoc_enabled){
+	ptp_pg_cache_init(&pgd_cache, PGD_ALLOCATION_ORDER, 1, "pgd_cache");
+	#ifdef CONFIG_X86_5LEVEL
+	ptp_pg_cache_init(&pg_cache, 0, 4, "pg_cache");
+	#else
+	ptp_pg_cache_init(&pg_cache, 0, 3, "pg_cache");
+	#endif
+}
+#endif
 	pci_iommu_alloc();
 
 	/* clear_bss() already clear the empty_zero_page */
@@ -1390,6 +1403,24 @@ void __init mem_init(void)
 	if (get_gate_vma(&init_mm))
 		kclist_add(&kcore_vsyscall, (void *)VSYSCALL_ADDR, PAGE_SIZE, KCORE_USER);
 
+	#ifdef CONFIG_IEE
+	/*
+	 * Split the linear mapping region of the kernel address space into two equally-sized parts.
+	 * The lower region retains the original linear mapping.
+	 * The upper region becomes the IEE linear mapping area.
+	 * Note that the IEE mapping region is mapped with read-only permissions.
+	 */
+	if (haoc_enabled)
+		iee_init();
+	#endif
+	#ifdef CONFIG_PTP
+	if(haoc_enabled){
+		ptp_set_iee_reserved(&pg_cache);
+		ptp_set_iee_reserved(&pgd_cache);
+		ptp_mark_all_pgtable_ro();
+		ptp_iee_disable_init();
+	}
+	#endif
 	preallocate_vmalloc_pages();
 }
 
