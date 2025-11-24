@@ -187,6 +187,10 @@ extern int sysctl_vm_ramdisk_swaptune;
 extern int sysctl_vm_swapcache_fastfree;
 #endif
 
+#ifdef CONFIG_EMM_BATCH_DIRTY_TLB_FLUSH
+extern int sysctl_vm_batch_dirty_tlb_flush;
+#endif
+
 #if defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
 extern unsigned int sysctl_allow_memcg_migrate_ignore_blkio_bind __read_mostly;
 #endif
@@ -3106,6 +3110,17 @@ static struct ctl_table vm_table[] = {
 	{
 		.procname       = "swapcache_fastfree",
 		.data           = &sysctl_vm_swapcache_fastfree,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
+#endif
+#ifdef CONFIG_EMM_BATCH_DIRTY_TLB_FLUSH
+	{
+		.procname       = "batch_dirty_tlb_flush",
+		.data           = &sysctl_vm_batch_dirty_tlb_flush,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec_minmax,
