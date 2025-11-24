@@ -1,3 +1,366 @@
+* Mon Nov 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.116-44
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !536 Add HAOC feature for OpenCloudOS linux-6.6: IEE,IEE_SIP,IEE_PTRP, CREDP，PTP(x86)
+- HAOC: Support page table protection for x86 IEE.
+- HAOC: Add support for x86 CRED Protection (CREDP).
+- HAOC: Support pointer protection for x86 IEE (IEE_PTRP) Support pointer protection for x86 IEE (IEE_PTRP).
+- Add SMEP and SMAP check for IEE_SIP
+- Haoc: Add support for x86 Sensitive Instruction Protection(IEE_SIP)
+- Remove "def_bool = y" for IEE in Kconfig and edit x86_64_defconfig to enable IEE by default.
+- HAOC: Add kernel command line support for x86 IEE.
+- HAOC: Isolated Execution Environment(x86)
+- Merge linux 6.6.116 into TK5 release branch
+- Linux 6.6.116
+- Merge linux 6.6.115 into TK5 release branch
+- Linux 6.6.115
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- !534 [Hygon] [6.6] [Bugfix] Fix memory bandwidth counter width for Hygon QoS
+- x86/resctrl: Fix memory bandwidth counter width for Hygon CPUs
+- !532 Defaule enable mucse ethernet driver for arm64 Merge pull request
+- Defaule enable mucse ethernet driver for arm64
+- !525 AMD Venice essential patches phase1
+- EDAC/mc_sysfs: Increase legacy channel support to 16
+- EDAC/amd64: Add support for AMD family 1Ah-based newer models
+- hwmon: (k10temp) Add thermal support for AMD Family 1Ah-based models
+- crypto: ccp - Add support for PCI device 0x17D8
+- x86/CPU/AMD: Add X86_FEATURE_ZEN6
+- x86/cpufeatures: Free up unused feature bits
+- !512 LoongArch: Fix the improper handling of the set_virtual_map's return value
+- LoongArch: Fix the improper handling of the set_virtual_map's return value
+- !515 Swap Table: Phase 1 Feature Fixes and Phase 2 Implementation
+- mm, swap: remove no longer needed _swap_info_get
+- mm, swap: drop the SWAP_HAS_CACHE flag
+- mm, swap: clean up and improve swap entries freeing
+- mm, swap: check swap table directly for checking cache
+- mm, swap: add folio to swap cache directly on allocation
+- mm, swap: sanitize swap entry management workflow
+- mm, swap: remove workaround for unsynchronized swap map cache state
+- mm, swap: use swap cache as the swap in synchronize layer
+- mm, swap: split locked entry duplicating into a standalone helper
+- mm, swap: consolidate cluster reclaim and check logic
+- mm, swap: swap entry of a bad slot should not be considered as swapped out
+- mm/shmem, swap: remove SWAP_MAP_SHMEM
+- mm/shmem: never bypass the swap cache for SWP_SYNCHRONOUS_IO
+- mm, swap: free the swap cache after folio is mapped
+- mm, swap: simplify the code and reduce indention
+- mm, swap: always try to free swap cache for SWP_SYNCHRONOUS_IO devices
+- mm, swap: never bypass the swap cache even for SWP_SYNCHRONOUS_IO
+- mm, swap: split swap cache preparation loop into a standalone helper
+- mm/swap: rename __read_swap_cache_async to swap_cache_alloc_folio
+- mm: avoid unconditional one-tick sleep when swapcache_prepare fails
+- mm/swap: select swap device with default priority round robin
+- mm/swap: do not choose swap device according to numa node
+- mm/shmem: fix THP allocation and fallback loop
+- mm, swap: remove redundant argument for isolating a cluster
+- mm/migrate, swap: drop usage of folio_index
+- mm, swap: cleanup swap entry allocation parameter
+- mm, swap: rename helper for setup bad slots
+- mm, swap: do not perform synchronous discard during allocation
+- mm/shmem: writeout free swap if swap_writeout() reactivates
+- mm/shmem: hold shmem_swaplist spinlock (not mutex) much less
+- Merge branch sevsnp-host support into 'release' (merge request !768)
+- KVM: x86: don't fall through case statements without annotations
+- KVM: x86: Only advertise KVM_CAP_READONLY_MEM when supported by VM
+- KVM: x86: Check that the high 32bits are clear in kvm_arch_vcpu_ioctl_run()
+- crypto: ccp - Add support for SNP_FEATURE_INFO command
+- crypto: ccp - New bit-field definitions for SNP_PLATFORM_STATUS command
+- crypto: ccp - Cache SEV platform status and platform state
+- tools headers: Update the x86 headers with the kernel sources
+- x86/sev: Provide SVSM discovery support
+- crypto: ccp - Fix checks for SNP_VLEK_LOAD input buffer length
+- crypto: ccp - Fix locking on alloc failure handling
+- KVM: SVM: Add missing member in SNP_LAUNCH_START command structure
+- KVM: Allow CPU to reschedule while setting per-page memory attributes
+- KVM: x86/mmu: Prevent installing hugepages when mem attributes are changing
+- KVM: x86/mmu: Check and free obsolete roots in kvm_mmu_reload()
+- KVM: SVM: Fix SNP AP destroy race with VMRUN
+- KVM: x86: block KVM_CAP_SYNC_REGS if guest state is protected
+- KVM: selftests: Fix printf() format goof in SEV smoke test
+- KVM: SVM: Disable AVIC on SNP-enabled system without HvInUseWrAllowed feature
+- kvm: svm: Fix gctx page leak on invalid inputs
+- KVM: SVM: Propagate error from snp_guest_req_init() to userspace
+- KVM: selftests: fix unintentional noop test in guest_memfd_test.c
+- Documentation: Improve crash_kexec_post_notifiers description
+- crypto: ccp - do not request interrupt on cmd completion when irqs disabled
+- KVM: SEV: Update KVM_AMD_SEV Kconfig entry and mention SEV-SNP
+- KVM: x86/mmu: Check that root is valid/loaded when pre-faulting SPTEs
+- KVM: x86: Disallow read-only memslots for SEV-ES and SEV-SNP (and TDX)
+- KVM: SVM: Fix an error code in sev_gmem_post_populate()
+- KVM: SVM: Fix uninitialized variable bug
+- KVM: x86/mmu: fix determination of max NPT mapping level for private pages
+- crypto: ccp - Fix null pointer dereference in __sev_snp_shutdown_locked
+- KVM: selftests: Fix shift of 32 bit unsigned int more than 32 bits
+- KVM: x86: Fully re-initialize supported_vm_types on vendor module load
+- KVM: x86/mmu: Move private vs. shared check above slot validity checks
+- KVM: fix documentation for KVM_CREATE_GUEST_MEMFD
+- tools/include: Sync x86 asm/msr-index.h with the kernel sources
+- KVM: x86/mmu: x86: Don't overflow lpage_info when checking attributes
+- KVM: selftests: Explicitly close guest_memfd files in some gmem tests
+- KVM: selftests: Create GUEST_MEMFD for relevant invalid flags testcases
+- KVM: x86: Update KVM_SW_PROTECTED_VM docs to make it clear they're a WIP
+- KVM: Make KVM_MEM_GUEST_MEMFD mutually exclusive with KVM_MEM_READONLY
+- crypto: ccp - Have it depend on AMD_IOMMU
+- iommu/amd: Fix failure return from snp_lookup_rmpentry()
+- Documentation: virt: Fix up pre-formatted text block for SEV ioctls
+- KVM: x86: add missing "depends on KVM"
+- selftests/kvm: fix compilation on non-x86_64 platforms
+- KVM: SVM: Invalidate "next" SNP VMSA GPA even on failure
+- KVM: SVM: Mark VMCB dirty before processing incoming snp_vmsa_gpa
+- KVM: SVM: Use guard(mutex) to simplify SNP AP Creation error handling
+- KVM: SVM: Simplify request+kick logic in SNP AP Creation handling
+- KVM: SVM: Require AP's "requested" SEV_FEATURES to match KVM's view
+- KVM: SVM: Don't change target vCPU state on AP Creation VMGEXIT error
+- KVM: SVM: Refuse to attempt VRMUN if an SEV-ES+ guest has an invalid VMSA
+- KVM: SVM: Don't rely on DebugSwap to restore host DR0..DR3
+- KVM: SVM: Save host DR masks on CPUs with DebugSwap
+- KVM: selftests: Add a basic SEV-SNP smoke test
+- KVM: selftests: Decouple SEV policy from VM type
+- KVM: selftests: Ensure KVM supports AVX for SEV-ES VMSA FPU test
+- KVM: selftests: Add SEV-ES shutdown test
+- KVM: selftests: Drop manual XCR0 configuration from SEV smoke test
+- KVM: selftests: Force GUEST_MEMFD flag for SNP VM type
+- KVM: selftests: Adjust number of files rlimit for all "standard" VMs
+- KVM: selftests: Add library support for interacting with SNP
+- tools/include: Sync uapi/linux/kvm.h and asm/kvm.h with the kernel sources
+- KVM: selftests: Introduce SEV VM type check
+- KVM: selftests: Replace assert() with TEST_ASSERT_EQ()
+- KVM: selftests: Add SMT control state helper
+- KVM: selftests: Add vmgexit helper
+- KVM: selftests: SEV-SNP test for KVM_SEV_INIT2
+- KVM: selftests: x86: Add test for KVM_PRE_FAULT_MEMORY
+- KVM: SVM: Explicitly require FLUSHBYASID to enable SEV support
+- KVM: guest_memfd: abstract how prepared folios are recorded
+- KVM: guest_memfd: let kvm_gmem_populate() operate only on private gfns
+- KVM: extend kvm_range_has_memory_attributes() to check subset of attributes
+- KVM: cleanup and add shortcuts to kvm_range_has_memory_attributes()
+- KVM: guest_memfd: move check for already-populated page to common code
+- KVM: remove kvm_arch_gmem_prepare_needed()
+- KVM: guest_memfd: make kvm_gmem_prepare_folio() operate on a single struct kvm
+- KVM: guest_memfd: delay kvm_gmem_prepare_folio() until the memory is passed to the guest
+- KVM: guest_memfd: return locked folio from __kvm_gmem_get_pfn
+- KVM: rename CONFIG_HAVE_KVM_GMEM_* to CONFIG_HAVE_KVM_ARCH_GMEM_*
+- KVM: guest_memfd: do not go through struct page
+- KVM: guest_memfd: delay folio_mark_uptodate() until after successful preparation
+- KVM: guest_memfd: return folio from __kvm_gmem_get_pfn()
+- virt: guest_memfd: fix reference leak on hwpoisoned page
+- KVM: x86: disallow pre-fault for SNP VMs before initialization
+- KVM: Document KVM_PRE_FAULT_MEMORY ioctl
+- KVM: x86: Implement kvm_arch_vcpu_pre_fault_memory()
+- KVM: x86/mmu: Make kvm_mmu_do_page_fault() return mapped level
+- KVM: x86/mmu: Bump pf_taken stat only in the "real" page fault handler
+- KVM: x86/mmu: Account pf_{fixed,emulate,spurious} in callers of "do page fault"
+- KVM: x86/mmu: check for invalid async page faults involving private memory
+- KVM: x86/mmu: Pass full 64-bit error code when handling page faults
+- KVM: Add KVM_PRE_FAULT_MEMORY vcpu ioctl to pre-populate guest memory
+- KVM: x86: Force KVM_WERROR if the global WERROR is enabled
+- KVM: x86: Turn off KVM_WERROR by default for all configs
+- KVM: interrupt kvm_gmem_populate() on signals
+- KVM: SNP: Fix LBR Virtualization for SNP guest
+- x86/sev: Fix broken SNP support with KVM module built-in
+- iommu/amd: remove return value of amd_iommu_detect
+- iommu/amd: Do not enable SNP when V2 page table is enabled
+- x86/sev/docs: Document the SNP Reverse Map Table (RMP)
+- x86/sev: Add full support for a segmented RMP table
+- x86/sev: Treat the contiguous RMP table as a single RMP segment
+- x86/sev: Map only the RMP table entries instead of the full RMP range
+- x86/sev: Move the SNP probe routine out of the way
+- x86/sev: Require the RMPREAD instruction after Zen4
+- x86/sev: Add support for the RMPREAD instruction
+- x86/sev: Prepare for using the RMPREAD instruction to access the RMP
+- x86/sev: Do RMP memory coverage check after max_pfn has been set
+- KVM: SVM: Ensure PSP module is initialized if KVM module is built-in
+- crypto: ccp: Add external API interface for PSP module initialization
+- crypto: ccp: Add the SNP_VLEK_LOAD command
+- KVM: SEV: Provide support for SNP_EXTENDED_GUEST_REQUEST NAE event
+- x86/sev: Move sev_guest.h into common SEV header
+- KVM: SEV: Provide support for SNP_GUEST_REQUEST NAE event
+- KVM: SVM: Remove the need to trigger an UNBLOCK event on AP creation
+- KVM: SEV: Don't WARN() if RMP lookup fails when invalidating gmem pages
+- KVM: SEV: Automatically switch reclaimed pages to shared
+- KVM: SVM: Add module parameter to enable SEV-SNP
+- KVM: SEV: Avoid WBINVD for HVA-based MMU notifications for SNP
+- KVM: x86: Implement hook for determining max NPT mapping level
+- KVM: SEV: Implement gmem hook for invalidating private pages
+- KVM: SEV: Implement gmem hook for initializing private pages
+- KVM: SEV: Support SEV-SNP AP Creation NAE event
+- KVM: SEV: Add support to handle RMP nested page faults
+- KVM: SEV: Add support to handle Page State Change VMGEXIT
+- KVM: SEV: Add support to handle MSR based Page State Change VMGEXIT
+- KVM: SEV: Add support to handle GHCB GPA register VMGEXIT
+- KVM: SEV: Add KVM_SEV_SNP_LAUNCH_FINISH command
+- KVM: SEV: Add KVM_SEV_SNP_LAUNCH_UPDATE command
+- KVM: SEV: Add KVM_SEV_SNP_LAUNCH_START command
+- KVM: SEV: Add initial SEV-SNP support
+- KVM: x86/mmu: Use synthetic page fault error code to indicate private faults
+- KVM: x86: Move synthetic PFERR_* sanity checks to SVM's #NPF handler
+- KVM: x86: Define more SEV+ page fault error bits/flags for #NPF
+- KVM: x86: Remove separate "bit" defines for page fault error code masks
+- KVM: SEV: Select KVM_GENERIC_PRIVATE_MEM when CONFIG_KVM_AMD_SEV=y
+- KVM: MMU: Disable fast path if KVM_EXIT_MEMORY_FAULT is needed
+- KVM: SEV: Allow per-guest configuration of GHCB protocol version
+- KVM: SEV: Add GHCB handling for termination requests
+- KVM: SEV: Add GHCB handling for Hypervisor Feature Support requests
+- KVM: SEV: Add support to handle AP reset MSR protocol
+- selftests: kvm: add test for transferring FPU state into VMSA
+- selftests: kvm: split "launch" phase of SEV VM creation
+- selftests: kvm: switch to using KVM_X86_*_VM
+- selftests: kvm: add tests for KVM_SEV_INIT2
+- KVM: selftests: Add a basic SEV-ES smoke test
+- KVM: selftests: Add a basic SEV smoke test
+- KVM: selftests: Use the SEV library APIs in the intra-host migration test
+- KVM: selftests: Add library for creating and interacting with SEV guests
+- KVM: selftests: Allow tagging protected memory in guest page tables
+- KVM: selftests: Explicitly ucall pool from shared memory
+- KVM: selftests: Add support for protected vm_vaddr_* allocations
+- KVM: selftests: Add support for allocating/managing protected guest memory
+- KVM: selftests: Add a macro to iterate over a sparsebit range
+- KVM: selftests: Make sparsebit structs const where appropriate
+- KVM: selftests: Extend VM creation's @shape to allow control of VM subtype
+- KVM: SEV: allow SEV-ES DebugSwap again
+- KVM: SEV: introduce KVM_SEV_INIT2 operation
+- KVM: SEV: sync FPU and AVX state at LAUNCH_UPDATE_VMSA time
+- KVM: SEV: define VM types for SEV and SEV-ES
+- KVM: SVM: Return -EINVAL instead of -EBUSY on attempt to re-init SEV/SEV-ES
+- KVM: SEV: introduce to_kvm_sev_info
+- KVM: x86: Add supported_vm_types to kvm_caps
+- KVM: x86/mmu: Restrict KVM_SW_PROTECTED_VM to the TDP MMU
+- KVM: x86: add fields to struct kvm_arch for CoCo features
+- KVM: SEV: store VMSA features in kvm_sev_info
+- KVM: SEV: publish supported VMSA features
+- KVM: introduce new vendor op for KVM_GET_DEVICE_ATTR
+- KVM: x86: use u64_to_user_ptr()
+- KVM: SVM: Compile sev.c if and only if CONFIG_KVM_AMD_SEV=y
+- KVM: SVM: Invert handling of SEV and SEV_ES feature flags
+- Documentation: kvm/sev: clarify usage of KVM_MEMORY_ENCRYPT_OP
+- Documentation: kvm/sev: separate description of firmware
+- KVM: SEV: fix compat ABI for KVM_MEMORY_ENCRYPT_OP
+- KVM: x86: move x86-specific structs to uapi/asm/kvm.h
+- KVM: x86: Add hook for determining max NPT mapping level
+- KVM: x86/mmu: Exit to userspace with -EFAULT if private fault hits emulation
+- KVM: guest_memfd: Add hook for invalidating memory
+- KVM: guest-memfd: fix unused-function warning
+- KVM: guest_memfd: Add interface for populating gmem pages with user data
+- KVM: guest_memfd: extract __kvm_gmem_get_pfn()
+- KVM: guest_memfd: Add hook for initializing memory
+- KVM: guest_memfd: limit overzealous WARN
+- KVM: guest_memfd: pass error up from filemap_grab_folio
+- mm, virt: merge AS_UNMOVABLE and AS_INACCESSIBLE
+- KVM: guest_memfd: Use AS_INACCESSIBLE when creating guest_memfd inode
+- mm: Introduce AS_INACCESSIBLE for encrypted/confidential memory
+- KVM: selftests: Add a memory region subtest to validate invalid flags
+- KVM: selftests: Test KVM exit behavior for private memory/access
+- KVM: selftests: Add basic selftest for guest_memfd()
+- KVM: selftests: Expand set_memory_region_test to validate guest_memfd()
+- KVM: selftests: Add KVM_SET_USER_MEMORY_REGION2 helper
+- KVM: selftests: Add x86-only selftest for private memory conversions
+- KVM: selftests: Add GUEST_SYNC[1-6] macros for synchronizing more data
+- KVM: selftests: Introduce VM "shape" to allow tests to specify the VM type
+- KVM: selftests: Add helpers to do KVM_HC_MAP_GPA_RANGE hypercalls (x86)
+- KVM: selftests: Add helpers to convert guest memory b/w private and shared
+- KVM: selftests: Add support for creating private memslots
+- KVM: selftests: Convert lib's mem regions to KVM_SET_USER_MEMORY_REGION2
+- KVM: selftests: Drop unused kvm_userspace_memory_region_find() helper
+- KVM: x86: Add support for "protected VMs" that can utilize private memory
+- KVM: Allow arch code to track number of memslot address spaces per VM
+- KVM: Drop superfluous __KVM_VCPU_MULTIPLE_ADDRESS_SPACE macro
+- KVM: x86/mmu: Handle page fault for private memory
+- KVM: x86: Disallow hugepages when memory attributes are mixed
+- KVM: x86: "Reset" vcpu->run->exit_reason early in KVM_RUN
+- KVM: Add KVM_CREATE_GUEST_MEMFD ioctl() for guest-specific backing memory
+- fs: Rename anon_inode_getfile_secure() and anon_inode_getfd_secure()
+- mm: Add AS_UNMOVABLE to mark mapping as completely unmovable
+- KVM: Introduce per-page memory attributes
+- KVM: Drop .on_unlock() mmu_notifier hook
+- KVM: Add a dedicated mmu_notifier flag for reclaiming freed memory
+- KVM: Add KVM_EXIT_MEMORY_FAULT exit to report faults to userspace
+- KVM: Convert KVM_ARCH_WANT_MMU_NOTIFIER to CONFIG_KVM_GENERIC_MMU_NOTIFIER
+- KVM: PPC: Return '1' unconditionally for KVM_CAP_SYNC_MMU
+- KVM: PPC: Drop dead code related to KVM_ARCH_WANT_MMU_NOTIFIER
+- KVM: WARN if there are dangling MMU invalidations at VM destruction
+- LoongArch: KVM: Fix build due to API changes
+- KVM: Use gfn instead of hva for mmu_notifier_retry
+- KVM: Assert that mmu_invalidate_in_progress *never* goes negative
+- KVM: Tweak kvm_hva_range and hva_handler_t to allow reusing for gfn ranges
+- x86/sev: Ensure that RMP table fixups are reserved
+- x86/sev: Add callback to apply RMP table fixups for kexec
+- x86/e820: Add a new e820 table update helper
+- x86/CPU/AMD: Track SNP host status with cc_platform_*()
+- x86/cc: Add cc_platform_set/_clear() helpers
+- x86/kvm/Kconfig: Have KVM_AMD_SEV select ARCH_HAS_CC_PLATFORM
+- x86/alternatives: Catch late X86_FEATURE modifiers
+- x86/alternatives: Remove a superfluous newline in _static_cpu_has()
+- x86/sev: Move sev_setup_arch() to mem_encrypt.c
+- crypto: ccp: Add the SNP_SET_CONFIG command
+- crypto: ccp: Add the SNP_COMMIT command
+- crypto: ccp: Add the SNP_PLATFORM_STATUS command
+- x86/cpufeatures: Enable/unmask SEV-SNP CPU feature
+- KVM: SEV: Make AVIC backing, VMSA and VMCB memory allocation SNP safe
+- crypto: ccp: Add panic notifier for SEV/SNP firmware shutdown on kdump
+- iommu/amd: Clean up RMP entries for IOMMU pages during SNP shutdown
+- crypto: ccp: Handle legacy SEV commands when SNP is enabled
+- crypto: ccp: Handle non-volatile INIT_EX data when SNP is enabled
+- crypto: ccp: Handle the legacy TMR allocation when SNP is enabled
+- x86/sev: Introduce an SNP leaked pages list
+- crypto: ccp: Provide an API to issue SEV and SNP commands
+- crypto: ccp: Add support to initialize the AMD-SP for SEV-SNP
+- crypto: ccp - Fix uAPI definitions of PSP errors
+- crypto: ccp: Define the SEV-SNP commands
+- x86/sev: Adjust the directmap to avoid inadvertent RMP faults
+- x86/sev: Add helper functions for RMPUPDATE and PSMASH instruction
+- x86/fault: Dump RMP table information when RMP page faults occur
+- x86/traps: Define RMP violation #PF error code
+- x86/fault: Add helper for dumping RMP entries
+- x86/sev: Add RMP entry lookup helpers
+- x86/mtrr: Don't print errors if MtrrFixDramModEn is set when SNP enabled
+- x86/sev: Add SEV-SNP host initialization support
+- iommu/amd: Don't rely on external callers to enable IOMMU SNP support
+- x86/speculation: Do not enable Automatic IBRS if SEV-SNP is enabled
+- x86/cpufeatures: Add SEV-SNP CPU feature
+- Merge distribute_fake_numa into 'release' (merge request !823)
+- x86: mm: support distribute CPU if NUMA_EMU enabled
+- Merge branch 'nvidia-smi' into 'release' (merge request !824)
+- ioctl: trap nvidia-smi command
+- dist,Makefile: add NOCLEAN argument to control RPMFLAGS
+- dist,Makefile: do not clean build artifacts during run make dist-rpm
+- Merge branch 'rps' into 'release' (merge request !822)
+- net: add sysctl_rps_force to set housekeeping cpus
+- Merge request !820
+- Revert "exfat: change to get file size from DataLength"
+- Revert "exfat: fix out-of-bounds access of directory entries"
+- Merge request !819
+- SSD: Active power cycling on abnormalities
+- Merge branch 'release-cve' into release branch
+- LoongArch: KVM: Fix stack protector issue in send_ipi_data()
+- gfs2: Validate i_depth for exhash directories
+- drm/amd/display: fix a Null pointer dereference vulnerability
+- parse_longname(): strrchr() expects NUL-terminated string
+- Fix CVE-2025-38705
+- drm/amd/pm: fix null pointer access
+- rcu/nocb: Fix possible invalid rdp's->nocb_cb_kthread pointer access
+- wifi: ath11k: Clear affinity hint before calling ath11k_pcic_free_irq() in error path
+- ipvs: Defer ip_vs_ftp unregister during netns cleanup
+- scsi: mvsas: Fix use-after-free bugs in mvs_work_queue
+- Merge OCK linux-6.6/devel branch into TK5 release branch
+- Merge request !810
+- rue/net: add support to dump throttle count
+- Merge branch 'remove_intel_net_drivers_release' into 'release' (merge request !811)
+- drivers,thirdparty: remove intel commercial ethernet drivers
+- Merge psi performance improve into 'release' (merge request !796)
+- psi: add prefetch and adjust coding for psi to get better cacheline performance
+- psi: move if condition of mem_full outward from psi_group_change
+- sched/psi: Optimise psi_group_change a bit
+- psi: move bug detection elsewhere
+- psi: use static key for cpu instead of percpu switches sysctl
+- psi: use jiffies instead of sched_clock to record PSI time
+- psi: use __ffs() function instead of whole traverse
+- psi: fix inaccurate PSI statistics of memfull
+- Merge branch 'remove-verbose-flag' into 'release' (merge request !809)
+- dist/spec: remove verbose flag from tar command
+- Merge branch 'release-fix-cpuidle' into 'release' (merge request !804)
+- cpuidle: governors: menu: Select polling state in some more cases
+- cpuidle: governors: menu: Rearrange main loop in menu_select()
+- Revert "cpuidle: menu: Avoid discarding useful information"
+
 * Fri Nov  7 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.114-43
 - Merge branch 'olice/release' into 'release' (merge request !801)
 - netfilter/ipvs: fix local_out hook function name and logic
