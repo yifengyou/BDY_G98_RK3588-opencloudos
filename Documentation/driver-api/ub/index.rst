@@ -11,8 +11,9 @@ The Linux UnifiedBus implementer's API guide
 	   Table of contents
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 4
 
     ubfi
     ubus
     ubase
+    cdma
