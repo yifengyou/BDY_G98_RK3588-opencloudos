@@ -162,6 +162,7 @@ config SCHED_CLASS_EXT
 
 config SCHED_QOS_RUE
 	bool "Tencent RUE"
+	depends on BPF_SYSCALL && BPF_JIT && DEBUG_INFO_BTF
 	select SCHED_CLASS_EXT
 	select EXT_GROUP_SCHED
 	select SCHED_DEBUG

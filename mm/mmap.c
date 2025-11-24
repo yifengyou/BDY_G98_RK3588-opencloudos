@@ -53,6 +53,9 @@
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+#include <asm/haoc/ptp.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmap.h>
@@ -2374,10 +2377,21 @@ static void unmap_region(struct mm_struct *mm, struct ma_state *mas,
 	update_hiwater_rss(mm);
 	unmap_vmas(&tlb, mas, vma, start, end, tree_end, mm_wr_locked);
 	mas_set(mas, mt_start);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		tlb_flush_mmu(&tlb);
+	#endif
 	free_pgtables(&tlb, mas, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				 next ? next->vm_start : USER_PGTABLES_CEILING,
 				 mm_wr_locked);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_tlb_finish_mmu(&tlb);
+	else
+		tlb_finish_mmu(&tlb);
+	#else
 	tlb_finish_mmu(&tlb);
+	#endif
 }
 
 /*
@@ -2592,6 +2606,9 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	MA_STATE(mas_detach, &mt_detach, 0, 0);
 	mt_init_flags(&mt_detach, vmi->mas.tree->ma_flags & MT_FLAGS_LOCK_MASK);
 	mt_on_stack(mt_detach);
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	unsigned long reg;
+#endif
 
 	/*
 	 * If we need to split any vma, do it now to save pain later.
@@ -2707,8 +2724,16 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	 * were isolated before we downgraded mmap_lock.
 	 */
 	mas_set(&mas_detach, 1);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_disable_iee(&reg);
+	#endif
 	unmap_region(mm, &mas_detach, vma, prev, next, start, end, count,
 		     !unlock);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_enable_iee(reg);
+	#endif
 	/* Statistics and freeing VMAs */
 	mas_set(&mas_detach, 0);
 	remove_mt(mm, &mas_detach);
@@ -3408,6 +3433,9 @@ void exit_mmap(struct mm_struct *mm)
 	unsigned long nr_accounted = 0;
 	MA_STATE(mas, &mm->mm_mt, 0, 0);
 	int count = 0;
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	unsigned long reg;
+#endif
 
 	/* mm's last user has gone, and its about to be pulled down */
 	mmu_notifier_release(mm);
@@ -3427,7 +3455,15 @@ void exit_mmap(struct mm_struct *mm)
 	tlb_gather_mmu_fullmm(&tlb, mm);
 	/* update_hiwater_rss(mm) here? but nobody should be looking */
 	/* Use ULONG_MAX here to ensure all VMAs in the mm are unmapped */
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_disable_iee(&reg);
+	#endif
 	unmap_vmas(&tlb, &mas, vma, 0, ULONG_MAX, ULONG_MAX, false);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_enable_iee(reg);
+	#endif
 	mmap_read_unlock(mm);
 
 	/*
@@ -3438,9 +3474,20 @@ void exit_mmap(struct mm_struct *mm)
 	mmap_write_lock(mm);
 	mt_clear_in_rcu(&mm->mm_mt);
 	mas_set(&mas, vma->vm_end);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		tlb_flush_mmu(&tlb);
+	#endif
 	free_pgtables(&tlb, &mas, vma, FIRST_USER_ADDRESS,
 		      USER_PGTABLES_CEILING, true);
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_tlb_finish_mmu(&tlb);
+	else
+		tlb_finish_mmu(&tlb);
+	#else
 	tlb_finish_mmu(&tlb);
+	#endif
 
 	/*
 	 * Walk the list again, actually closing and freeing it, with preemption

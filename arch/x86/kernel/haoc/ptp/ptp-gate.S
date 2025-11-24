@@ -1,0 +1,133 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#include <linux/linkage.h>
+#include <asm/asm.h>
+#include <asm/processor-flags.h>
+#include <asm/percpu.h>
+#include <asm/asm-offsets.h>
+
+/* scratch_reg would be changed,
+caller should dertimine if scratch_reg should be saved and restored */
+.macro DISABLE_WP scratch_reg:req
+	/* Disable write protection*/
+	movq %cr0, %\scratch_reg
+	andq $(~X86_CR0_WP), %\scratch_reg
+	movq %\scratch_reg, %cr0
+.endm
+
+.macro ENABLE_WP scratch_reg:req
+	/* Enable write protection */
+	movq %cr0, %\scratch_reg
+1:
+	orq $X86_CR0_WP, %\scratch_reg
+	movq %\scratch_reg, %cr0
+	testq $X86_CR0_WP, %\scratch_reg
+	je 1b
+.endm
+
+SYM_FUNC_START(ptp_xchg)
+	/* save RFLAGS, close irq */
+	pushfq
+	cli
+
+	pushq %r12
+
+#ifdef CONFIG_PTP
+	movq PER_CPU_VAR(iee_disables) + IEE_DISABLE, %r12
+	testq %r12, %r12
+	jz xchg_wp_enabled
+
+	xchg	%rsi, (%rdi)
+	movq	%rsi, %rax
+
+	popq %r12
+	popfq
+	jmp __x86_return_thunk
+
+xchg_wp_enabled:
+#endif
+	DISABLE_WP r12
+
+	xchg	%rsi, (%rdi)
+	movq	%rsi, %rax
+
+	ENABLE_WP r12
+
+	popq %r12
+
+	/* restore RFLAGS*/
+	popfq
+	jmp __x86_return_thunk  /* ret */
+SYM_FUNC_END(ptp_xchg)
+
+SYM_FUNC_START(ptp_try_cmpxchg)
+	/* save RFLAGS, close irq */
+	pushfq
+	cli
+
+	pushq %r12
+
+#ifdef CONFIG_PTP
+	movq PER_CPU_VAR(iee_disables) + IEE_DISABLE, %r12
+	testq %r12, %r12
+	jz cmpxchg_wp_enabled
+
+	movq %rsi, %rax
+	lock cmpxchgq %rdx, (%rdi)
+
+	popq %r12
+	popfq
+	jmp __x86_return_thunk
+
+cmpxchg_wp_enabled:
+#endif
+	DISABLE_WP r12
+
+	movq %rsi, %rax
+	lock cmpxchgq %rdx, (%rdi)
+
+	ENABLE_WP r12
+
+	popq %r12
+	/* restore RFLAGS*/
+	popfq
+	jmp __x86_return_thunk  /* ret */
+SYM_FUNC_END(ptp_try_cmpxchg)
+
+SYM_FUNC_START(ptp_rw_gate)
+	/* save Interrupt flag */
+	pushfq
+	/* close irq*/
+	cli
+
+	pushq %r12
+
+#ifdef CONFIG_PTP
+	movq PER_CPU_VAR(iee_disables) + IEE_DISABLE, %r12
+	testq %r12, %r12
+	jz ptprw_wp_enabled
+
+	leaq iee_funcs(%rip), %rax
+	call *(%rax, %rdi, 8)
+
+	popq %r12
+	popfq
+	jmp __x86_return_thunk
+
+ptprw_wp_enabled:
+#endif
+	DISABLE_WP r12
+
+	/* call iee func */
+	leaq iee_funcs(%rip), %rax
+	call *(%rax, %rdi, 8)
+
+	ENABLE_WP r12
+
+	popq %r12
+
+	/* restore irq*/
+	popfq
+
+	jmp __x86_return_thunk  /* ret */
+SYM_FUNC_END(ptp_rw_gate)
+EXPORT_SYMBOL(ptp_rw_gate)

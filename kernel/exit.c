@@ -79,6 +79,9 @@
 #include <linux/hook_frame.h>
 #include <linux/sched.h>
 #include <linux/limits.h>
+#ifdef CONFIG_IEE_PTRP
+#include <asm/haoc/iee-token.h>
+#endif
 
 extern int sysctl_vm_memory_qos;
 unsigned long sysctl_async_mem_free_pages = ULONG_MAX;
@@ -571,6 +574,10 @@ static void exit_mm(void)
 	smp_mb__after_spinlock();
 	local_irq_disable();
 	current->mm = NULL;
+#ifdef CONFIG_IEE_PTRP
+	if(haoc_enabled)
+		iee_set_token_pgd(current, NULL);
+#endif
 	membarrier_update_current_mm(NULL);
 	enter_lazy_tlb(mm, current);
 	local_irq_enable();

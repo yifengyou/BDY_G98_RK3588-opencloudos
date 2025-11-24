@@ -1011,6 +1011,27 @@ void __init setup_arch(char **cmdline_p)
 
 	parse_early_param();
 
+#ifdef CONFIG_IEE_SIP
+    /*
+     * Perform a one-time check for IEE_SIP prerequisites. This must be done
+     * early in setup_arch() before any code might rely on these features.
+     * At this point, CPU features (from early_cpu_init) and kernel command
+     * line (from parse_early_param) are both available.
+     */
+    if (haoc_enabled) {
+		bool smep_ok = cpu_feature_enabled(X86_FEATURE_SMEP);
+		bool smap_ok = cpu_feature_enabled(X86_FEATURE_SMAP);
+		if (smep_ok && smap_ok) {
+			pr_info("IEE_SIP: Feature is active. CPU supports SMEP and SMAP.\n");
+		} else {
+			// Fail-fast: The user wants the feature, but the hardware
+			// doesn't support it. This is a fatal configuration error.
+			panic("IEE_SIP: FATAL: Feature enabled via 'haoc=on' but hardware is missing support (SMEP:%d, SMAP:%d).\n",
+					smep_ok, smap_ok);
+		}
+    }
+#endif
+
 	if (efi_enabled(EFI_BOOT))
 		efi_memblock_x86_reserve_range();
 

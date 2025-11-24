@@ -6,6 +6,10 @@
 #include <asm/tlb.h>
 #include <asm/fixmap.h>
 #include <asm/mtrr.h>
+#ifdef CONFIG_PTP
+#include <linux/ptp-cache.h>
+#include <asm/haoc/iee-access.h>
+#endif
 
 #ifdef CONFIG_DYNAMIC_PHYSICAL_MASK
 phys_addr_t physical_mask __ro_after_init = (1ULL << __PHYSICAL_MASK_SHIFT) - 1;
@@ -415,15 +419,34 @@ static inline void _pgd_free(pgd_t *pgd)
 }
 #else
 
+#ifdef CONFIG_PTP
+struct pg_cache pgd_cache;
+#endif
+
 static inline pgd_t *_pgd_alloc(void)
 {
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		return (pgd_t *)ptp_pg_alloc(&pgd_cache, GFP_PGTABLE_USER);
+	else
+		return (pgd_t *)__get_free_pages(GFP_PGTABLE_USER,
+						 PGD_ALLOCATION_ORDER);
+	#else
 	return (pgd_t *)__get_free_pages(GFP_PGTABLE_USER,
 					 PGD_ALLOCATION_ORDER);
+	#endif
 }
 
 static inline void _pgd_free(pgd_t *pgd)
 {
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptp_pg_free(&pgd_cache, pgd);
+	else
+		free_pages((unsigned long)pgd, PGD_ALLOCATION_ORDER);
+	#else
 	free_pages((unsigned long)pgd, PGD_ALLOCATION_ORDER);
+	#endif
 }
 #endif /* CONFIG_X86_PAE */
 
@@ -556,9 +579,19 @@ int ptep_test_and_clear_young(struct vm_area_struct *vma,
 {
 	int ret = 0;
 
-	if (pte_young(*ptep))
+	if (pte_young(*ptep)) {
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ret = iee_test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *) &ptep->pte);
+	else
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
 					 (unsigned long *) &ptep->pte);
+	#else
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *) &ptep->pte);
+	#endif
+	}
 
 	return ret;
 }
@@ -569,9 +602,19 @@ int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 {
 	int ret = 0;
 
-	if (pmd_young(*pmdp))
+	if (pmd_young(*pmdp)){
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ret = iee_test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)pmdp);
+	else
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
 					 (unsigned long *)pmdp);
+	#else
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)pmdp);
+	#endif
+	}
 
 	return ret;
 }
@@ -583,9 +626,19 @@ int pudp_test_and_clear_young(struct vm_area_struct *vma,
 {
 	int ret = 0;
 
-	if (pud_young(*pudp))
+	if (pud_young(*pudp)){
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ret = iee_test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)pudp);
+	else
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
 					 (unsigned long *)pudp);
+	#else
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)pudp);
+	#endif
+	}
 
 	return ret;
 }
@@ -835,14 +888,28 @@ int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 	for (i = 0; i < PTRS_PER_PMD; i++) {
 		if (!pmd_none(pmd_sv[i])) {
 			pte = (pte_t *)pmd_page_vaddr(pmd_sv[i]);
+			#ifdef CONFIG_PTP
+			if (haoc_enabled)
+				ptp_pg_free(&pg_cache, pte);
+			else
+				free_page((unsigned long)pte);
+			#else
 			free_page((unsigned long)pte);
+			#endif
 		}
 	}
 
 	free_page((unsigned long)pmd_sv);
 
 	pagetable_pmd_dtor(virt_to_ptdesc(pmd));
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptp_pg_free(&pg_cache, pmd);
+	else
+		free_page((unsigned long)pmd);
+	#else
 	free_page((unsigned long)pmd);
+	#endif
 
 	return 1;
 }
@@ -865,7 +932,14 @@ int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 	/* INVLPG to clear all paging-structure caches */
 	flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
 
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptp_pg_free(&pg_cache, pte);
+	else
+		free_page((unsigned long)pte);
+	#else
 	free_page((unsigned long)pte);
+	#endif
 
 	return 1;
 }

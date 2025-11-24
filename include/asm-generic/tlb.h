@@ -207,6 +207,9 @@ struct mmu_table_batch {
 	((PAGE_SIZE - sizeof(struct mmu_table_batch)) / sizeof(void *))
 
 extern void tlb_remove_table(struct mmu_gather *tlb, void *table);
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+extern void ptp_tlb_remove_table(struct mmu_gather *tlb, void *table);
+#endif
 
 #else /* !CONFIG_MMU_GATHER_HAVE_TABLE_FREE */
 
@@ -357,6 +360,9 @@ struct mmu_gather {
 };
 
 void tlb_flush_mmu(struct mmu_gather *tlb);
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+void ptp_tlb_flush_mmu(struct mmu_gather *tlb);
+#endif
 
 static inline void __tlb_adjust_range(struct mmu_gather *tlb,
 				      unsigned long address,
@@ -472,14 +478,36 @@ static inline void tlb_remove_page_size(struct mmu_gather *tlb,
 		tlb_flush_mmu(tlb);
 }
 
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+static inline void ptp_tlb_remove_page_size(struct mmu_gather *tlb,
+					struct page *page, int page_size)
+{
+	if (__tlb_remove_page_size(tlb, page, false, page_size))
+		ptp_tlb_flush_mmu(tlb);
+}
+#endif
+
 static inline void tlb_remove_page(struct mmu_gather *tlb, struct page *page)
 {
 	return tlb_remove_page_size(tlb, page, PAGE_SIZE);
 }
 
+#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+static inline void ptp_tlb_remove_page(struct mmu_gather *tlb, struct page *page)
+{
+	return ptp_tlb_remove_page_size(tlb, page, PAGE_SIZE);
+}
+#endif
 static inline void tlb_remove_ptdesc(struct mmu_gather *tlb, void *pt)
 {
+	#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
+	if (haoc_enabled)
+		ptp_tlb_remove_table(tlb, pt);
+	else
+		tlb_remove_table(tlb, pt);
+	#else
 	tlb_remove_table(tlb, pt);
+	#endif
 }
 
 /* Like tlb_remove_ptdesc, but for page-like page directories. */
