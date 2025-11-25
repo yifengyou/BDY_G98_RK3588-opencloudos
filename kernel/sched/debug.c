@@ -348,6 +348,7 @@ static __init int sched_init_debug(void)
 #endif
 
 	debugfs_create_u32("base_slice_ns", 0644, debugfs_sched, &sysctl_sched_base_slice);
+	debugfs_create_u32("latency_ns", 0644, debugfs_sched, &sysctl_sched_latency);
 
 	debugfs_create_u32("latency_warn_ms", 0644, debugfs_sched, &sysctl_resched_latency_warn_ms);
 	debugfs_create_u32("latency_warn_once", 0644, debugfs_sched, &sysctl_resched_latency_warn_once);
@@ -892,6 +893,7 @@ static void sched_debug_header(struct seq_file *m)
 #define PN(x) \
 	SEQ_printf(m, "  .%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
 	PN(sysctl_sched_base_slice);
+	PN(sysctl_sched_latency);
 	P(sysctl_sched_child_runs_first);
 	P(sysctl_sched_features);
 #undef PN
