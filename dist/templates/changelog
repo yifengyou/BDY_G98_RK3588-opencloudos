@@ -1,3 +1,11 @@
+* Tue Nov 25 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.117-45
+- Merge linux 6.6.117 into TK5 release branch
+- Linux 6.6.117
+- Merge branch 'batch-tlb-flush' into 'release' (merge request !786)
+- mm, vmscan: flush TLB for every 31 folios evictions
+- emm, config, sysctl: introduce batch tlb flushing switch
+- mm, vmscan: split up shirnk_page_list
+
 * Mon Nov 24 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.116-44
 - Merge OCK linux-6.6/devel branch into TK5 release branch
 - !536 Add HAOC feature for OpenCloudOS linux-6.6: IEE,IEE_SIP,IEE_PTRP, CREDP，PTP(x86)
