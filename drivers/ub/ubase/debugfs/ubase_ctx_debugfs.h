@@ -11,7 +11,6 @@ struct device;
 
 int ubase_dbg_dump_aeq_context(struct seq_file *s, void *data);
 int ubase_dbg_dump_ceq_context(struct seq_file *s, void *data);
-int ubase_dbg_dump_tpg_ctx(struct seq_file *s, void *data);
 int ubase_dbg_dump_tp_ctx_hw(struct seq_file *s, void *data);
 int ubase_dbg_dump_tpg_ctx_hw(struct seq_file *s, void *data);
 int ubase_dbg_dump_aeq_ctx_hw(struct seq_file *s, void *data);

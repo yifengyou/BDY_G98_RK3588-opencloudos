@@ -162,7 +162,6 @@ static void ubase_parse_dev_caps_unic(struct ubase_dev *udev,
 	unic_caps->jfc.max_cnt = le32_to_cpu(resp->nic_jfc_max_cnt);
 	unic_caps->jfc.depth = le32_to_cpu(resp->nic_jfc_depth);
 	unic_caps->cqe_size = le16_to_cpu(resp->nic_cqe_size);
-	unic_caps->utp_port_bitmap = le32_to_cpu(resp->port_bitmap);
 }
 
 static void ubase_parse_dev_caps_udma(struct ubase_dev *udev,
@@ -585,7 +584,7 @@ static void ubase_uninit_dma_buf(struct ubase_dev *udev,
 	buf->addr = NULL;
 }
 
-static int ubase_init_ta_tp_ext_buf(struct ubase_dev *udev)
+static int ubase_init_ta_ext_buf(struct ubase_dev *udev)
 {
 	UBASE_DEFINE_DMA_BUFS(udev);
 	int i, ret;
@@ -609,7 +608,7 @@ err_out:
 	return ret;
 }
 
-static void ubase_uninit_ta_tp_ext_buf(struct ubase_dev *udev)
+static void ubase_uninit_ta_ext_buf(struct ubase_dev *udev)
 {
 	UBASE_DEFINE_DMA_BUFS(udev);
 	int i;
@@ -860,9 +859,9 @@ int ubase_hw_init(struct ubase_dev *udev)
 		return ret;
 	}
 
-	ret = ubase_init_ta_tp_ext_buf(udev);
+	ret = ubase_init_ta_ext_buf(udev);
 	if (ret)
-		goto err_init_ta_tp_ext_buf;
+		goto err_init_ta_ext_buf;
 
 	ret = ubase_dev_init_tp_tpg(udev);
 	if (ret) {
@@ -875,8 +874,8 @@ int ubase_hw_init(struct ubase_dev *udev)
 	return 0;
 
 err_init_tp_tpg:
-	ubase_uninit_ta_tp_ext_buf(udev);
-err_init_ta_tp_ext_buf:
+	ubase_uninit_ta_ext_buf(udev);
+err_init_ta_ext_buf:
 	ubase_uninit_ctx_buf(udev);
 
 	return ret;
@@ -887,7 +886,7 @@ void ubase_hw_uninit(struct ubase_dev *udev)
 	clear_bit(UBASE_STATE_CTX_READY_B, &udev->state_bits);
 
 	ubase_dev_uninit_tp_tpg(udev);
-	ubase_uninit_ta_tp_ext_buf(udev);
+	ubase_uninit_ta_ext_buf(udev);
 
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
 		ubase_ctrlq_disable_remote(udev);

@@ -20,10 +20,10 @@
 #include "unic_dcbnl.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_ip.h"
 #include "unic_mac.h"
 #include "unic_netdev.h"
 #include "unic_qos_hw.h"
-#include "unic_rack_ip.h"
 #include "unic_reset.h"
 #include "unic_event.h"
 

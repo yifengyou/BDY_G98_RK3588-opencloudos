@@ -23,10 +23,10 @@
 #include "unic_event.h"
 #include "unic_guid.h"
 #include "unic_hw.h"
+#include "unic_ip.h"
 #include "unic_qos_hw.h"
 #include "unic_mac.h"
 #include "unic_netdev.h"
-#include "unic_rack_ip.h"
 #include "unic_vlan.h"
 #include "unic_dev.h"
 
@@ -711,7 +711,7 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 
 	unic_link_status_update(unic_dev);
 	unic_update_port_info(unic_dev);
-	unic_sync_rack_ip_table(unic_dev);
+	unic_sync_ip_table(unic_dev);
 
 	if (unic_dev_eth_mac_supported(unic_dev))
 		unic_sync_mac_table(unic_dev);
@@ -841,7 +841,7 @@ static int unic_init_vport(struct unic_dev *unic_dev)
 
 static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
-	unic_uninit_rack_ip_table(unic_dev);
+	unic_uninit_ip_table(unic_dev);
 
 	if (unic_dev_eth_mac_supported(unic_dev)) {
 		unic_uninit_mac_table(unic_dev);
@@ -1096,7 +1096,7 @@ int unic_dev_init(struct auxiliary_device *adev)
 		goto err_unregister_event;
 	}
 
-	unic_query_rack_ip(adev);
+	unic_query_ip_by_ctrlq(adev);
 	unic_start_dev_period_task(netdev);
 
 	return 0;

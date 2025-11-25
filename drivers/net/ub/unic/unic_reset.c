@@ -9,9 +9,9 @@
 #include "unic_cmd.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_ip.h"
 #include "unic_mac.h"
 #include "unic_netdev.h"
-#include "unic_rack_ip.h"
 #include "unic_reset.h"
 
 static void unic_dev_suspend(struct unic_dev *unic_dev)
@@ -94,7 +94,7 @@ static void unic_reset_init(struct auxiliary_device *adev)
 	if (ret)
 		goto err_unic_resume;
 
-	unic_query_rack_ip(adev);
+	unic_query_ip_by_ctrlq(adev);
 	unic_start_period_task(netdev);
 
 	if_running = netif_running(netdev);

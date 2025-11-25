@@ -13,7 +13,7 @@
 
 #include "unic_comm_addr.h"
 #include "unic_trace.h"
-#include "unic_rack_ip.h"
+#include "unic_ip.h"
 
 static void unic_update_rack_addr_state(struct unic_vport *vport,
 					struct unic_comm_addr_node *addr_node,
@@ -334,7 +334,7 @@ stop_traverse:
 	unic_sync_rack_ip_list(vport, &tmp_add_list, UNIC_CTRLQ_ADD_IP);
 }
 
-void unic_sync_rack_ip_table(struct unic_dev *unic_dev)
+void unic_sync_ip_table(struct unic_dev *unic_dev)
 {
 	struct unic_vport *vport = &unic_dev->vport;
 
@@ -655,7 +655,7 @@ static void unic_update_rack_ip_list(struct unic_vport *vport,
 	spin_unlock_bh(&vport->addr_tbl.ip_list_lock);
 }
 
-void unic_query_rack_ip(struct auxiliary_device *adev)
+void unic_query_ip_by_ctrlq(struct auxiliary_device *adev)
 {
 #define UNIC_LOOP_COUNT(total_size, size) ((total_size) / (size) + 1)
 
@@ -706,7 +706,7 @@ void unic_query_rack_ip(struct auxiliary_device *adev)
 	}
 }
 
-void unic_uninit_rack_ip_table(struct unic_dev *unic_dev)
+void unic_uninit_ip_table(struct unic_dev *unic_dev)
 {
 	struct unic_vport *vport = &unic_dev->vport;
 	struct list_head *list = &vport->addr_tbl.ip_list;

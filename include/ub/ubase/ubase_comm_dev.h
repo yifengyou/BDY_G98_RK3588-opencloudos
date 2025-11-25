@@ -168,10 +168,8 @@ struct ubase_pmem_caps {
  * @jfs: jfs resource capabilities
  * @jfr: jfr resource capabilities
  * @jfc: jfc resource capabilities
- * @tp: tp resource capabilities
  * @tpg: tp group resource capabilities
  * @pmem: physical memory capabilities
- * @utp_port_bitmap: utp port bitmap
  * @jtg_max_cnt: jetty group max count
  * @rc_max_cnt: rc max count
  * @rc_que_depth: rc queue depth
@@ -185,10 +183,8 @@ struct ubase_adev_caps {
 	struct ubase_res_caps	jfs;
 	struct ubase_res_caps	jfr;
 	struct ubase_res_caps	jfc;
-	struct ubase_res_caps	tp;
 	struct ubase_res_caps	tpg;
 	struct ubase_pmem_caps	pmem;
-	u32			utp_port_bitmap;  /* utp port bitmap */
 	u32			jtg_max_cnt;
 	u32			rc_max_cnt;
 	u32			rc_que_depth;
@@ -222,8 +218,6 @@ struct ubase_ctx_buf_cap {
  * @jfc: jfc context buffer capability
  * @jtg: jetty group context buffer capability
  * @rc: rc context buffer capability
- * @tp: tp context buffer capability
- * @tpg: tp group context buffer capability
  */
 struct ubase_ctx_buf {
 	struct ubase_ctx_buf_cap jfs;
@@ -231,9 +225,6 @@ struct ubase_ctx_buf {
 	struct ubase_ctx_buf_cap jfc;
 	struct ubase_ctx_buf_cap jtg;
 	struct ubase_ctx_buf_cap rc;
-
-	struct ubase_ctx_buf_cap tp;
-	struct ubase_ctx_buf_cap tpg;
 };
 
 struct net_device;

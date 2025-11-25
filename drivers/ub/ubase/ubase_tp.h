@@ -11,6 +11,8 @@
 
 #include "ubase_dev.h"
 
+#define UBASE_TRANS_TYPE_UM_TP		0x2
+
 #define UBASE_TP_PORT_BITMAP_STEP	2
 
 #define UBASE_WAIT_TP_FLUSH_TOTAL_STEPS	12

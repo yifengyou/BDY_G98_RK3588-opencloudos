@@ -24,13 +24,13 @@
 #include "unic_dev.h"
 #include "unic_event.h"
 #include "unic_hw.h"
+#include "unic_ip.h"
 #include "unic_mac.h"
 #include "unic_rx.h"
 #include "unic_tx.h"
 #include "unic_txrx.h"
 #include "unic_vlan.h"
 #include "unic_netdev.h"
-#include "unic_rack_ip.h"
 
 static int unic_netdev_set_tcs(struct net_device *netdev)
 {

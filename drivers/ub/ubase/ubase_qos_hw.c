@@ -745,7 +745,7 @@ static int ubase_assign_urma_vl(struct ubase_dev *udev, u8 *urma_sl,
 	return 0;
 }
 
-static int ubase_parse_rack_nic_vl(struct ubase_dev *udev)
+static int ubase_parse_nic_vl(struct ubase_dev *udev)
 {
 	return ubase_assign_urma_vl(udev, udev->qos.nic_sl, udev->qos.nic_sl_num,
 				    udev->qos.nic_vl, &udev->qos.nic_vl_num);
@@ -812,7 +812,7 @@ static int ubase_parse_rack_cdma_req_sl_vl(struct ubase_dev *udev)
 	return 0;
 }
 
-static int ubase_parse_rack_cdma_sl_vl(struct ubase_dev *udev)
+static int ubase_parse_cdma_sl_vl(struct ubase_dev *udev)
 {
 	int ret;
 
@@ -828,16 +828,16 @@ static int ubase_parse_rack_cdma_sl_vl(struct ubase_dev *udev)
 	return 0;
 }
 
-static inline int ubase_parse_rack_nic_sl_vl(struct ubase_dev *udev)
+static inline int ubase_parse_nic_sl_vl(struct ubase_dev *udev)
 {
-	return ubase_parse_rack_nic_vl(udev);
+	return ubase_parse_nic_vl(udev);
 }
 
-static int ubase_parse_rack_urma_sl_vl(struct ubase_dev *udev)
+static int ubase_parse_urma_sl_vl(struct ubase_dev *udev)
 {
 	int ret;
 
-	ret = ubase_parse_rack_nic_sl_vl(udev);
+	ret = ubase_parse_nic_sl_vl(udev);
 	if (ret)
 		return ret;
 
@@ -851,13 +851,13 @@ static int ubase_parse_rack_urma_sl_vl(struct ubase_dev *udev)
 	return 0;
 }
 
-static int ubase_parse_rack_adev_sl_vl(struct ubase_dev *udev)
+static int ubase_parse_adev_sl_vl(struct ubase_dev *udev)
 {
 	if (ubase_dev_cdma_supported(udev))
-		return ubase_parse_rack_cdma_sl_vl(udev);
+		return ubase_parse_cdma_sl_vl(udev);
 
 	if (ubase_dev_urma_supported(udev))
-		return ubase_parse_rack_urma_sl_vl(udev);
+		return ubase_parse_urma_sl_vl(udev);
 
 	return 0;
 }
@@ -913,7 +913,7 @@ static int ubase_parse_sl_vl(struct ubase_dev *udev)
 	if (ret)
 		return ret;
 
-	ret = ubase_parse_rack_adev_sl_vl(udev);
+	ret = ubase_parse_adev_sl_vl(udev);
 	if (ret)
 		return ret;
 

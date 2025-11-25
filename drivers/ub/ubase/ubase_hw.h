@@ -70,39 +70,33 @@ struct ubase_res_cmd_resp {
 	__le32	nic_jfc_max_cnt;
 	u8	rsvd11[4];
 	__le32	nic_jfc_depth;
-	__le32	nic_tp_max_cnt;
-	__le32	nic_tp_reserved_cnt;
-	__le32	nic_tp_depth;
-	__le32	nic_tpg_max_cnt;
-
-	__le32	nic_tpg_reserved_cnt;
-	__le32	nic_tpg_depth;
-	__le32	total_ue_num;
 	u8	rsvd12[16];
+
+	u8	rsvd13[8];
+	__le32	total_ue_num;
+	u8	rsvd14[16];
 	__le16	rsvd_jetty_cnt;
 	__le16	mac_stats_num;
 
 	__le32	ta_extdb_buf_size;
 	__le32	ta_timer_buf_size;
 	__le32	public_jetty_cnt;
-	__le32	tp_extdb_buf_size;
-	__le32	tp_timer_buf_size;
-	u8	resv13;
+	u8	rsvd15[9];
 	u8	udma_vl_num;
 	u8	udma_tp_resp_vl_offset;
 	u8	ue_num;
 	__le32	port_bitmap;
-	u8	rsvd14[4];
+	u8	rsvd16[4];
 
 	/* include udma tp and ctp req vl */
 	u8	udma_req_vl[UBASE_MAX_REQ_VL_NUM];
 	__le32	udma_rc_depth;
-	u8	rsvd15[4];
+	u8	rsvd17[4];
 	__le32	jtg_max_cnt;
 	__le32	rc_max_cnt_per_vl;
-	u8	rsvd16[8];
+	u8	rsvd18[8];
 
-	u8	rsvd17[32];
+	u8	rsvd19[32];
 };
 
 struct ubase_query_oor_resp {
