@@ -53,6 +53,8 @@ struct ub_entity *ub_alloc_ent(void)
 	INIT_LIST_HEAD(&uent->slot_list);
 	INIT_LIST_HEAD(&uent->instance_node);
 
+	mutex_init(&uent->active_mutex);
+
 	uent->dev.type = &ub_dev_type;
 	uent->cna = 0;
 	uent->tid = 0; /* default tid according to ummu */
@@ -971,12 +973,17 @@ void ub_entity_enable(struct ub_entity *uent, u8 enable)
 	ub_cfg_write_byte(uent, UB_BUS_ACCESS_EN, enable);
 	ub_cfg_write_byte(uent, UB_ENTITY_RS_ACCESS_EN, enable);
 
-	if (!enable && !ub_entity_test_priv_flag(uent, UB_ENTITY_ACTIVE))
+	mutex_lock(&uent->active_mutex);
+
+	if (!enable && !ub_entity_test_priv_flag(uent, UB_ENTITY_ACTIVE)) {
+		mutex_unlock(&uent->active_mutex);
 		return;
+	}
 
 	if (uent->ubc && uent->ubc->ops && uent->ubc->ops->entity_enable) {
 		ret = uent->ubc->ops->entity_enable(uent, enable);
 		if (ret) {
+			mutex_unlock(&uent->active_mutex);
 			ub_err(uent, "entity enable, ret=%d, enable=%u\n",
 			       ret, enable);
 			return;
@@ -989,6 +996,8 @@ void ub_entity_enable(struct ub_entity *uent, u8 enable)
 		ub_entity_assign_priv_flag(uent, UB_ENTITY_ACTIVE, true);
 	else
 		ub_entity_assign_priv_flag(uent, UB_ENTITY_ACTIVE, false);
+
+	mutex_unlock(&uent->active_mutex);
 }
 EXPORT_SYMBOL_GPL(ub_entity_enable);
 
@@ -1074,12 +1083,11 @@ int ub_activate_entity(struct ub_entity *uent, u32 entity_idx)
 		return -EINVAL;
 	}
 
-	if (!device_trylock(&target_dev->dev))
-		return -EBUSY;
+	mutex_lock(&target_dev->active_mutex);
 
 	if (ub_entity_test_priv_flag(target_dev, UB_ENTITY_ACTIVE)) {
 		ub_warn(uent, "entity_idx[%u] is already in normal state\n", entity_idx);
-		device_unlock(&target_dev->dev);
+		mutex_unlock(&target_dev->active_mutex);
 		return 0;
 	}
 
@@ -1091,7 +1099,7 @@ int ub_activate_entity(struct ub_entity *uent, u32 entity_idx)
 		ub_info(uent, "udrv activate entity_idx[%u] success\n", entity_idx);
 	}
 
-	device_unlock(&target_dev->dev);
+	mutex_unlock(&target_dev->active_mutex);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ub_activate_entity);
@@ -1115,12 +1123,11 @@ int ub_deactivate_entity(struct ub_entity *uent, u32 entity_idx)
 		return -EINVAL;
 	}
 
-	if (!device_trylock(&target_dev->dev))
-		return -EBUSY;
+	mutex_lock(&target_dev->active_mutex);
 
 	if (!ub_entity_test_priv_flag(target_dev, UB_ENTITY_ACTIVE)) {
 		ub_warn(uent, "entity_idx[%u] is already in disable state\n", entity_idx);
-		device_unlock(&target_dev->dev);
+		mutex_unlock(&target_dev->active_mutex);
 		return 0;
 	}
 
@@ -1132,7 +1139,7 @@ int ub_deactivate_entity(struct ub_entity *uent, u32 entity_idx)
 		ub_info(uent, "udrv deactivate entity_idx[%u] success\n", entity_idx);
 	}
 
-	device_unlock(&target_dev->dev);
+	mutex_unlock(&target_dev->active_mutex);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ub_deactivate_entity);
