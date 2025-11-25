@@ -1378,7 +1378,7 @@ config EMM_ZRAM_CONF
 
 config EMM_BATCH_DIRTY_TLB_FLUSH
 	bool "Batch flush TLB for dirty pages on pageout"
-	depends on EMM
+	depends on ENHANCED_MM
 	default y
 	help
 	  Kernel by default flush pages one by one for dirty pages on page
