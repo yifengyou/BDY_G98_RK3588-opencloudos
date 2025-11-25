@@ -36,24 +36,24 @@ static int ubase_dbg_dump_rst_info(struct seq_file *s, void *data)
 static void ubase_dbg_dump_caps_bits(struct seq_file *s, struct ubase_dev *udev)
 {
 #define CAP_FMT(name) "\tsupport_" #name ": %d\n"
-#define PTRINT_CAP(name, func) seq_printf(s, CAP_FMT(name), func(udev))
+#define PRTINT_CAP(name, func) seq_printf(s, CAP_FMT(name), func(udev))
 
-	PTRINT_CAP(ub_link, ubase_dev_ubl_supported);
-	PTRINT_CAP(ta_extdb_buffer_config, ubase_dev_ta_extdb_buf_supported);
-	PTRINT_CAP(ta_timer_buffer_config, ubase_dev_ta_timer_buf_supported);
-	PTRINT_CAP(err_handle, ubase_dev_err_handle_supported);
-	PTRINT_CAP(ctrlq, ubase_dev_ctrlq_supported);
-	PTRINT_CAP(eth_mac, ubase_dev_eth_mac_supported);
-	PTRINT_CAP(mac_stats, ubase_dev_mac_stats_supported);
-	PTRINT_CAP(prealloc, __ubase_dev_prealloc_supported);
-	PTRINT_CAP(udma, ubase_dev_udma_supported);
-	PTRINT_CAP(unic, ubase_dev_unic_supported);
-	PTRINT_CAP(uvb, ubase_dev_uvb_supported);
-	PTRINT_CAP(ip_over_urma, ubase_ip_over_urma_supported);
+	PRTINT_CAP(ub_link, ubase_dev_ubl_supported);
+	PRTINT_CAP(ta_extdb_buffer_config, ubase_dev_ta_extdb_buf_supported);
+	PRTINT_CAP(ta_timer_buffer_config, ubase_dev_ta_timer_buf_supported);
+	PRTINT_CAP(err_handle, ubase_dev_err_handle_supported);
+	PRTINT_CAP(ctrlq, ubase_dev_ctrlq_supported);
+	PRTINT_CAP(eth_mac, ubase_dev_eth_mac_supported);
+	PRTINT_CAP(mac_stats, ubase_dev_mac_stats_supported);
+	PRTINT_CAP(prealloc, __ubase_dev_prealloc_supported);
+	PRTINT_CAP(udma, ubase_dev_udma_supported);
+	PRTINT_CAP(unic, ubase_dev_unic_supported);
+	PRTINT_CAP(uvb, ubase_dev_uvb_supported);
+	PRTINT_CAP(ip_over_urma, ubase_ip_over_urma_supported);
 	if (ubase_ip_over_urma_supported(udev))
-		PTRINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
-	PTRINT_CAP(activate_proxy, ubase_activate_proxy_supported);
-	PTRINT_CAP(utp, ubase_utp_supported);
+		PRTINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
+	PRTINT_CAP(activate_proxy, ubase_activate_proxy_supported);
+	PRTINT_CAP(utp, ubase_utp_supported);
 }
 
 static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
