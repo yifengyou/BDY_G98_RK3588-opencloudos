@@ -69,8 +69,10 @@ struct ubase_ctrlq_query_vl_req {
 
 struct ubase_ctrlq_query_sl_resp {
 	__le16 unic_sl_bitmap;
-	__le16 udma_sl_bitmap;
-	u8 rsv[16];
+	u8 rsv0[2];
+	__le16 udma_tp_sl_bitmap;
+	__le16 udma_ctp_sl_bitmap;
+	u8 rsv1[12];
 };
 
 struct ubase_ctrlq_query_sl_req {

@@ -158,11 +158,6 @@ struct ubase_ctx_buf_map {
 	u16 mb_cmd;
 };
 
-struct ubase_query_vl_ageing_cmd {
-	__le16	vl_ageing_en;
-	u8	rsv[22];
-};
-
 struct ubase_query_ctp_vl_offset_cmd {
 	u8	ctp_vl_offset;
 	u8	rsv[23];
