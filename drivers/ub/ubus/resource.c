@@ -12,7 +12,6 @@
 #include "ubus.h"
 #include "msg.h"
 #include "decoder.h"
-#include "omm.h"
 #include "resource.h"
 
 struct query_token_msg_pld_req {

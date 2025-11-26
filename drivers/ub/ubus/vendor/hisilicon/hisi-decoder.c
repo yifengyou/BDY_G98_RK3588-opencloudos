@@ -3,11 +3,13 @@
  * Copyright (c) HiSilicon Technologies Co., Ltd. 2025. All rights reserved.
  */
 
-#define pr_fmt(fmt)	"ubus omm: " fmt
+#define pr_fmt(fmt)	"ubus hisi decoder: " fmt
 
 #include <linux/dma-mapping.h>
-#include "decoder.h"
-#include "omm.h"
+#include <ub/ubfi/ubfi.h>
+#include "../../ubus.h"
+#include "hisi-ubus.h"
+#include "hisi-decoder.h"
 
 enum entry_type {
 	INVALID_ENTRY = 0x0,
@@ -95,6 +97,7 @@ struct range_table_entry {
 	u64 reserve11 : 12;
 };
 
+#define DECODER_PAGE_TABLE_ENTRY_SIZE	8
 #define UBA_ADDR_OFFSET			12
 
 #define DECODER_PAGE_INDEX_LOC		20
@@ -107,6 +110,11 @@ struct range_table_entry {
 #define DECODER_RGTLB_ADDRESS_MASK	GENMASK_ULL(34, 20)
 #define DECODER_RGTLB_ADDRESS_OFFSET	20
 #define TOKEN_VALID_MASK		GENMASK(0, 0)
+#define MEM_LMT_MAX			0x7FFF
+#define RANGE_UBA_LOW_MASK		GENMASK_ULL(34, 20)
+#define RANGE_UBA_HIGH_MASK		GENMASK_ULL(63, 35)
+#define UBA_CARRY			0x800000000
+#define UBA_NOCARRY			0x0
 
 #define get_pgtlb_idx(decoder, pa) ((((pa) - (decoder)->mmio_base_addr) & \
 				    DECODER_PAGE_TABLE_MASK) >> \
@@ -485,12 +493,6 @@ static int handle_page_table(struct ub_decoder *decoder, u64 *offset,
 	return ret;
 }
 
-#define MEM_LMT_MAX		0x7FFF
-#define RANGE_UBA_LOW_MASK	GENMASK_ULL(34, 20)
-#define RANGE_UBA_HIGH_MASK	GENMASK_ULL(63, 35)
-#define UBA_CARRY		0x800000000
-#define UBA_NOCARRY		0x0
-
 static void fill_range_table(struct ub_decoder *decoder,
 			     struct range_table_entry *rg_entry,
 			     struct decoder_map_info *info, u64 *offset)
@@ -593,7 +595,7 @@ static int handle_table(struct ub_decoder *decoder,
 			       ret);
 			/* if it is map operation, revert it. unmap operation can't revert */
 			if (is_map)
-				(void)ub_decoder_unmap(decoder, info->pa,
+				(void)hi_decoder_unmap(decoder, info->pa,
 						       rollback_size);
 			break;
 		}
@@ -601,44 +603,7 @@ static int handle_table(struct ub_decoder *decoder,
 	return ret;
 }
 
-int ub_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size)
-{
-	int ret;
-	struct decoder_map_info info = {
-		.pa = addr,
-		.size = size,
-	};
-
-	if (!decoder) {
-		pr_err("unmap mmio decoder ptr is null\n");
-		return -EINVAL;
-	}
-	if (size < SZ_1M)
-		size = SZ_1M;
-	ret = handle_table(decoder, &info, false);
-	if (ret)
-		return ret;
-	return ub_decoder_cmd_request(decoder, addr, size, TLBI_PARTIAL);
-}
-
-int ub_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
-{
-	if (!decoder || !info) {
-		pr_err("decoder or map info is null\n");
-		return -EINVAL;
-	}
-	if (info->size < SZ_1M)
-		info->size = SZ_1M;
-	ub_info(decoder->uent,
-		"decoder map, pa=%#llx, uba=%#llx, size=%#llx, cna=%#x, orderid=%#x, ordertype=%#x, eid_l=%#llx, eid_h=%#llx, upi=%#x src_eid=%#x\n",
-		info->pa, info->uba, info->size, info->tpg_num, info->order_id,
-		info->order_type, info->eid_low, info->eid_high, info->upi,
-		info->src_eid);
-
-	return handle_table(decoder, info, true);
-}
-
-void ub_decoder_init_page_table(struct ub_decoder *decoder, void *pgtlb_base)
+static void ub_decoder_init_page_table(struct ub_decoder *decoder, void *pgtlb_base)
 {
 	struct page_table_entry *pgtlb_entry;
 	int i;
@@ -649,4 +614,101 @@ void ub_decoder_init_page_table(struct ub_decoder *decoder, void *pgtlb_base)
 		pgtlb_entry->next_lv_addr = decoder->invalid_page_dma;
 		pgtlb_entry->pgtlb_attr = PGTLB_ATTR_DEFAULT;
 	}
+}
+
+void hi_register_decoder_base_addr(struct ub_bus_controller *ubc,
+				   u64 *cmd_queue, u64 *event_queue)
+{
+	struct hi_ubc_private_data *data = (struct hi_ubc_private_data *)ubc->data;
+
+	*cmd_queue = data->io_decoder_cmdq;
+	*event_queue = data->io_decoder_evtq;
+}
+
+int hi_create_decoder_table(struct ub_decoder *decoder)
+{
+	struct page_table_desc *invalid_desc = &decoder->invalid_desc;
+	struct page_table *pgtlb;
+	void *pgtlb_base;
+	size_t size;
+
+	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
+	pgtlb = &decoder->pgtlb;
+	pgtlb_base = dmam_alloc_coherent(decoder->dev, size,
+					 &pgtlb->pgtlb_dma, GFP_KERNEL);
+	if (!pgtlb_base)
+		return -ENOMEM;
+
+	pgtlb->pgtlb_base = pgtlb_base;
+
+	size = sizeof(*pgtlb->desc_base) * DECODER_PAGE_TABLE_SIZE;
+	pgtlb->desc_base = kzalloc(size, GFP_KERNEL);
+	if (!pgtlb->desc_base)
+		goto release_pgtlb;
+
+	invalid_desc->page_base = dmam_alloc_coherent(decoder->dev,
+						      RANGE_TABLE_PAGE_SIZE,
+						      &invalid_desc->page_dma,
+						      GFP_KERNEL);
+	if (!invalid_desc->page_base)
+		goto release_desc;
+
+	decoder->invalid_page_dma = (invalid_desc->page_dma &
+				     DECODER_PGTBL_PGPRT_MASK) >>
+				     DECODER_DMA_PAGE_ADDR_OFFSET;
+
+	ub_decoder_init_page_table(decoder, pgtlb_base);
+
+	return 0;
+
+release_desc:
+	kfree(pgtlb->desc_base);
+	pgtlb->desc_base = NULL;
+release_pgtlb:
+	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
+	dmam_free_coherent(decoder->dev, size, pgtlb_base, pgtlb->pgtlb_dma);
+	return -ENOMEM;
+}
+
+void hi_free_decoder_table(struct ub_decoder *decoder)
+{
+	struct page_table_desc *invalid_desc = &decoder->invalid_desc;
+	size_t size;
+
+	dmam_free_coherent(decoder->dev, RANGE_TABLE_PAGE_SIZE,
+			   invalid_desc->page_base, invalid_desc->page_dma);
+	kfree(decoder->pgtlb.desc_base);
+
+	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
+	dmam_free_coherent(decoder->dev, size, decoder->pgtlb.pgtlb_base,
+			   decoder->pgtlb.pgtlb_dma);
+}
+
+int hi_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size)
+{
+	int ret;
+	struct decoder_map_info info = {
+		.pa = addr,
+		.size = size,
+	};
+
+	if (size < SZ_1M)
+		size = SZ_1M;
+	ret = handle_table(decoder, &info, false);
+	if (ret)
+		return ret;
+	return ub_decoder_cmd_request(decoder, addr, size, TLBI_PARTIAL);
+}
+
+int hi_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
+{
+	if (info->size < SZ_1M)
+		info->size = SZ_1M;
+	ub_info(decoder->uent,
+		"decoder map, pa=%#llx, uba=%#llx, size=%#llx, cna=%#x, orderid=%#x, ordertype=%#x, eid_l=%#llx, eid_h=%#llx, upi=%#x src_eid=%#x\n",
+		info->pa, info->uba, info->size, info->tpg_num, info->order_id,
+		info->order_type, info->eid_low, info->eid_high, info->upi,
+		info->src_eid);
+
+	return handle_table(decoder, info, true);
 }

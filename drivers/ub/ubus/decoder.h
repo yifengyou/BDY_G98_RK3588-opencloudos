@@ -87,33 +87,20 @@ struct ub_decoder {
 	struct mutex table_lock;
 };
 
-#define DECODER_PGTBL_PGPRT_MASK GENMASK_ULL(47, 12)
-#define DECODER_DMA_PAGE_ADDR_OFFSET 12
-
-#define PGTLB_CACHE_IR_NC	0b00
-#define PGTLB_CACHE_IR_WBRA	0b01
-#define PGTLB_CACHE_IR_WT	0b10
-#define PGTLB_CACHE_IR_WB	0b11
-#define PGTLB_CACHE_OR_NC	0b0000
-#define PGTLB_CACHE_OR_WBRA	0b0100
-#define PGTLB_CACHE_OR_WT	0b1000
-#define PGTLB_CACHE_OR_WB	0b1100
-#define PGTLB_CACHE_SH_NSH	0b000000
-#define PGTLB_CACHE_SH_OSH	0b100000
-#define PGTLB_CACHE_SH_ISH	0b110000
-
-#define PGTLB_ATTR_DEFAULT	(PGTLB_CACHE_IR_WBRA |	\
-				 PGTLB_CACHE_OR_WBRA |	\
-				 PGTLB_CACHE_SH_ISH)
-
-#define RGTLB_TO_PGTLB 8
-#define DECODER_PAGE_ENTRY_SIZE 64
-#define DECODER_PAGE_SIZE (1 << 12)
-#define DECODER_PAGE_TABLE_SIZE (1 << 12)
-#define PAGE_TABLE_PAGE_SIZE (DECODER_PAGE_ENTRY_SIZE * DECODER_PAGE_SIZE)
-#define RANGE_TABLE_PAGE_SIZE (DECODER_PAGE_ENTRY_SIZE * \
-			       DECODER_PAGE_SIZE * \
-			       RGTLB_TO_PGTLB)
+struct decoder_map_info {
+	phys_addr_t pa;
+	phys_addr_t uba;
+	u64 size;
+	u32 tpg_num;
+	u8 order_id;
+	u8 order_type;
+	u64 eid_low;
+	u64 eid_high;
+	u32 token_id;
+	u32 token_value;
+	u32 upi;
+	u32 src_eid;
+};
 
 void ub_decoder_init(struct ub_entity *uent);
 void ub_decoder_uninit(struct ub_entity *uent);
@@ -121,4 +108,6 @@ void ub_init_decoder_usi(struct ub_entity *uent);
 void ub_uninit_decoder_usi(struct ub_entity *uent);
 int ub_decoder_cmd_request(struct ub_decoder *decoder, phys_addr_t addr,
 			   u64 size, enum ub_cmd_op_type op);
+int ub_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info);
+int ub_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size);
 #endif /* __DECODER_H__ */

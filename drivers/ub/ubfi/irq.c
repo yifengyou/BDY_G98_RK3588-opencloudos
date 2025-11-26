@@ -61,8 +61,10 @@ int ubrt_register_gsi(u32 hwirq, int trigger, int polarity, const char *name,
 	res->start = irq;
 	res->end = irq;
 	res->flags = IORESOURCE_IRQ;
-#endif
 	return 0;
+#else
+	return -EINVAL;
+#endif
 }
 EXPORT_SYMBOL_GPL(ubrt_register_gsi);
 

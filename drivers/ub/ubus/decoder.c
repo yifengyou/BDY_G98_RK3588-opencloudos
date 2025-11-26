@@ -13,7 +13,6 @@
 
 #include "ubus.h"
 #include "ubus_controller.h"
-#include "omm.h"
 #include "decoder.h"
 
 #define MMIO_SIZE_MASK		GENMASK_ULL(18, 16)
@@ -32,8 +31,6 @@
 #define EVTQ_SIZE_USE_OFFSET	8
 #define EVTQ_ENABLE		0x1
 #define EVT_ENTRY_SIZE		16
-
-#define DECODER_PAGE_TABLE_ENTRY_SIZE 8
 
 #define DECODER_QUEUE_TIMEOUT_US 1000000 /* 1s */
 
@@ -170,68 +167,24 @@ static u32 ub_decoder_device_set(struct ub_decoder *decoder)
 	return ret;
 }
 
-static int ub_decoder_create_page_table(struct ub_decoder *decoder)
+static int ub_decoder_create_page_table(struct ub_bus_controller *ubc,
+					struct ub_decoder *decoder)
 {
-	struct page_table_desc *invalid_desc = &decoder->invalid_desc;
-	struct ub_entity *uent = decoder->uent;
-	struct page_table *pgtlb;
-	void *pgtlb_base;
-	size_t size;
+	if (ubc->ops->create_decoder_table)
+		return ubc->ops->create_decoder_table(decoder);
 
-	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
-	pgtlb = &decoder->pgtlb;
-	pgtlb_base = dmam_alloc_coherent(decoder->dev, size,
-					 &pgtlb->pgtlb_dma, GFP_KERNEL);
-	if (!pgtlb_base) {
-		ub_err(uent, "allocate ub decoder page table fail\n");
-		return -ENOMEM;
-	}
-	pgtlb->pgtlb_base = pgtlb_base;
-
-	size = sizeof(*pgtlb->desc_base) * DECODER_PAGE_TABLE_SIZE;
-	pgtlb->desc_base = kzalloc(size, GFP_KERNEL);
-	if (!pgtlb->desc_base) {
-		ub_err(uent, "allocate ub decoder page table desc fail\n");
-		goto release_pgtlb;
-	}
-
-	invalid_desc->page_base = dmam_alloc_coherent(decoder->dev,
-						      RANGE_TABLE_PAGE_SIZE,
-						      &invalid_desc->page_dma,
-						      GFP_KERNEL);
-	if (!invalid_desc->page_base) {
-		ub_err(uent, "decoder alloc free page fail\n");
-		goto release_desc;
-	}
-	decoder->invalid_page_dma = (invalid_desc->page_dma &
-				     DECODER_PGTBL_PGPRT_MASK) >>
-				     DECODER_DMA_PAGE_ADDR_OFFSET;
-
-	ub_decoder_init_page_table(decoder, pgtlb_base);
-
-	return 0;
-
-release_desc:
-	kfree(pgtlb->desc_base);
-	pgtlb->desc_base = NULL;
-release_pgtlb:
-	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
-	dmam_free_coherent(decoder->dev, size, pgtlb_base, pgtlb->pgtlb_dma);
-	return -ENOMEM;
+	ub_err(decoder->uent, "ub bus controller can't create decoder table\n");
+	return -EPERM;
 }
 
-static void ub_decoder_free_page_table(struct ub_decoder *decoder)
+static void ub_decoder_free_page_table(struct ub_bus_controller *ubc,
+				       struct ub_decoder *decoder)
 {
-	struct page_table_desc *invalid_desc = &decoder->invalid_desc;
-	size_t size;
-
-	dmam_free_coherent(decoder->dev, RANGE_TABLE_PAGE_SIZE,
-			   invalid_desc->page_base, invalid_desc->page_dma);
-	kfree(decoder->pgtlb.desc_base);
-
-	size = DECODER_PAGE_TABLE_ENTRY_SIZE * DECODER_PAGE_TABLE_SIZE;
-	dmam_free_coherent(decoder->dev, size, decoder->pgtlb.pgtlb_base,
-			   decoder->pgtlb.pgtlb_dma);
+	if (ubc->ops->free_decoder_table)
+		ubc->ops->free_decoder_table(decoder);
+	else
+		ub_err(decoder->uent,
+			"ub bus controller can't free decoder table\n");
 }
 
 static void ub_get_decoder_mmio_base(struct ub_bus_controller *ubc,
@@ -302,7 +255,7 @@ static int ub_create_decoder(struct ub_bus_controller *ubc)
 	if (ret)
 		goto release_decoder;
 
-	ret = ub_decoder_create_page_table(decoder);
+	ret = ub_decoder_create_page_table(ubc, decoder);
 	if (ret) {
 		ub_err(uent, "decoder create page table failed\n");
 		goto release_queue;
@@ -321,7 +274,7 @@ static int ub_create_decoder(struct ub_bus_controller *ubc)
 	return ret;
 
 release_page_table:
-	ub_decoder_free_page_table(decoder);
+	ub_decoder_free_page_table(ubc, decoder);
 release_queue:
 	ub_decoder_uninit_queue(decoder);
 release_decoder:
@@ -397,7 +350,7 @@ static void ub_remove_decoder(struct ub_bus_controller *ubc)
 
 	ub_decoder_device_unset(decoder);
 
-	ub_decoder_free_page_table(decoder);
+	ub_decoder_free_page_table(ubc, decoder);
 
 	ub_decoder_uninit_queue(decoder);
 
@@ -635,6 +588,7 @@ int ub_decoder_cmd_request(struct ub_decoder *decoder, phys_addr_t addr,
 	ret = wait_for_cmdq_notify(decoder);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(ub_decoder_cmd_request);
 
 static bool queue_empty(struct ub_decoder_queue *q)
 {
@@ -838,4 +792,39 @@ void ub_decoder_uninit(struct ub_entity *uent)
 		return;
 
 	ub_remove_decoder(uent->ubc);
+}
+
+int ub_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size)
+{
+	struct ub_bus_controller *ubc;
+
+	if (!decoder) {
+		pr_err("unmap mmio decoder ptr is null\n");
+		return -EINVAL;
+	}
+
+	ubc = decoder->uent->ubc;
+	if (!ubc->ops->decoder_unmap) {
+		pr_err("decoder_unmap ops not exist\n");
+		return -EINVAL;
+	}
+	return ubc->ops->decoder_unmap(ubc->decoder, addr, size);
+}
+
+int ub_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
+{
+	struct ub_bus_controller *ubc;
+
+	if (!decoder || !info) {
+		pr_err("decoder or map info is null\n");
+		return -EINVAL;
+	}
+
+	ubc = decoder->uent->ubc;
+	if (!ubc->ops->decoder_map) {
+		pr_err("decoder_map ops not exist\n");
+		return -EINVAL;
+	}
+
+	return ubc->ops->decoder_map(ubc->decoder, info);
 }
