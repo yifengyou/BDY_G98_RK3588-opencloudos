@@ -149,6 +149,7 @@ fwctl User API
 ==============
 
 .. kernel-doc:: include/uapi/fwctl/fwctl.h
+.. kernel-doc:: include/uapi/fwctl/ub_fwctl.h
 
 sysfs Class
 -----------
