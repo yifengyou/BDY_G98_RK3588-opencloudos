@@ -208,6 +208,7 @@ void unic_link_status_change(struct net_device *netdev, bool linkup)
 			netif_tx_wake_all_queues(netdev);
 			netif_carrier_on(netdev);
 			unic_clear_fec_stats(unic_dev);
+			ubase_clear_eth_port_stats(unic_dev->comdev.adev);
 		}
 	} else {
 		netif_carrier_off(netdev);
@@ -333,6 +334,7 @@ int unic_net_open_no_link_change(struct net_device *netdev)
 		netif_tx_wake_all_queues(netdev);
 		netif_carrier_on(netdev);
 		unic_clear_fec_stats(unic_dev);
+		ubase_clear_eth_port_stats(unic_dev->comdev.adev);
 	}
 
 	return 0;

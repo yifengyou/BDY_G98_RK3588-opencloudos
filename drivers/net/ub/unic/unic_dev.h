@@ -331,6 +331,11 @@ static inline bool unic_dev_pause_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PAUSE_B);
 }
 
+static inline bool unic_dev_eth_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_ETH_B);
+}
+
 static inline bool unic_dev_serial_serdes_lb_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_SERIAL_SERDES_LB_B);

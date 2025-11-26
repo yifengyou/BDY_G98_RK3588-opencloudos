@@ -99,16 +99,21 @@ static const struct unic_dbg_cap_bit_info {
 	bool (*get_bit)(struct unic_dev *dev);
 } unic_cap_bits[] = {
 	{"\tsupport_ubl: %u\n", &unic_dev_ubl_supported},
+	{"\tsupport_pfc: %u\n", &unic_dev_pfc_supported},
 	{"\tsupport_ets: %u\n", &unic_dev_ets_supported},
 	{"\tsupport_fec: %u\n", &unic_dev_fec_supported},
+	{"\tsupport_pause: %u\n", &unic_dev_pause_supported},
+	{"\tsupport_eth: %u\n", &unic_dev_eth_supported},
 	{"\tsupport_tc_speed_limit: %u\n", &unic_dev_tc_speed_limit_supported},
 	{"\tsupport_tx_csum_offload: %u\n", &unic_dev_tx_csum_offload_supported},
 	{"\tsupport_rx_csum_offload: %u\n", &unic_dev_rx_csum_offload_supported},
 	{"\tsupport_app_lb: %u\n", &unic_dev_app_lb_supported},
+	{"\tsupport_external_lb: %u\n", &unic_dev_external_lb_supported},
 	{"\tsupport_serial_serdes_lb: %u\n", &unic_dev_serial_serdes_lb_supported},
-	{"\tsupport_parallel_serdes_lb: %u\n", unic_dev_parallel_serdes_lb_supported},
+	{"\tsupport_parallel_serdes_lb: %u\n", &unic_dev_parallel_serdes_lb_supported},
 	{"\tsupport_fec_stats: %u\n", &unic_dev_fec_stats_supported},
 	{"\tsupport_cfg_mac: %u\n", &unic_dev_cfg_mac_supported},
+	{"\tsupport_cfg_vlan_filter: %u\n", &unic_dev_cfg_vlan_filter_supported},
 };
 
 static void unic_dbg_dump_caps_bits(struct unic_dev *unic_dev,

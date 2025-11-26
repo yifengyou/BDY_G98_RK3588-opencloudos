@@ -6,6 +6,7 @@
 
 #include <linux/phy.h>
 #include <ub/ubase/ubase_comm_cmd.h>
+#include <ub/ubase/ubase_comm_dev.h>
 #include <ub/ubase/ubase_comm_stats.h>
 
 #include "unic.h"
@@ -451,6 +452,36 @@ static u64 *unic_get_queues_stats(struct unic_dev *unic_dev,
 	return data;
 }
 
+static void unic_get_mac_stats(struct unic_dev *unic_dev, u64 *data)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	const struct unic_mac_stats_desc *stats_desc;
+	struct ubase_eth_mac_stats mac_stats = {0};
+	u32 stats_num = caps->mac_stats_num;
+	u32 i, stats_desc_num;
+	u8 *stats;
+	int ret;
+
+	if (unic_dev_ubl_supported(unic_dev))
+		return;
+
+	stats_desc = unic_eth_stats_str;
+	stats_desc_num = ARRAY_SIZE(unic_eth_stats_str);
+	ret = ubase_get_eth_port_stats(adev, &mac_stats);
+	if (ret)
+		return;
+
+	stats = (u8 *)&mac_stats;
+	for (i = 0; i < stats_desc_num; i++) {
+		if (stats_desc[i].stats_num > stats_num)
+			continue;
+
+		*data = UNIC_STATS_READ(stats, stats_desc[i].offset);
+		data++;
+	}
+}
+
 void unic_get_stats(struct net_device *netdev,
 		    struct ethtool_stats *stats, u64 *data)
 {
@@ -470,6 +501,7 @@ void unic_get_stats(struct net_device *netdev,
 	p = unic_get_queues_stats(unic_dev, unic_rq_stats_str,
 				  ARRAY_SIZE(unic_rq_stats_str),
 				  UNIC_QUEUE_TYPE_RQ, p);
+	unic_get_mac_stats(unic_dev, p);
 }
 
 static u8 *unic_get_strings(u8 *data, const char *prefix, u32 num,
@@ -510,18 +542,72 @@ static u8 *unic_get_queues_strings(struct unic_dev *unic_dev, u8 *data)
 	return data;
 }
 
+static void
+unic_get_mac_strings(struct unic_dev *unic_dev, u8 *data,
+		     const struct unic_mac_stats_desc *strs, u32 size)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	u32 stats_num = caps->mac_stats_num;
+	u32 i;
+
+	if (!ubase_adev_mac_stats_supported(adev))
+		return;
+
+	for (i = 0; i < size; i++) {
+		if (strs[i].stats_num > stats_num)
+			continue;
+
+		(void)snprintf(data, ETH_GSTRING_LEN, "%s", strs[i].desc);
+		data += ETH_GSTRING_LEN;
+	}
+}
+
 void unic_get_stats_strings(struct net_device *netdev, u32 stringset, u8 *data)
 {
 	struct unic_dev *unic_dev = netdev_priv(netdev);
+	char unic_test_strs[][ETH_GSTRING_LEN] = {
+		"App      Loopback test ",
+		"Serdes   serial Loopback test",
+		"Serdes   parallel Loopback test",
+		"External Loopback test",
+	};
 	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		p = unic_get_queues_strings(unic_dev, p);
+		if (unic_dev_ubl_supported(unic_dev))
+			break;
+
+		unic_get_mac_strings(unic_dev, p, unic_eth_stats_str,
+				     ARRAY_SIZE(unic_eth_stats_str));
+		break;
+	case ETH_SS_TEST:
+		memcpy(data, unic_test_strs, sizeof(unic_test_strs));
 		break;
 	default:
 		break;
 	}
+}
+
+static int unic_get_mac_count(struct unic_dev *unic_dev,
+			      const struct unic_mac_stats_desc strs[], u32 size)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	u32 stats_num = caps->mac_stats_num;
+	int count = 0;
+	u32 i;
+
+	if (!ubase_adev_mac_stats_supported(adev))
+		return 0;
+
+	for (i = 0; i < size; i++)
+		if (strs[i].stats_num <= stats_num)
+			count++;
+
+	return count;
 }
 
 int unic_get_sset_count(struct net_device *netdev, int stringset)
@@ -534,6 +620,11 @@ int unic_get_sset_count(struct net_device *netdev, int stringset)
 	case ETH_SS_STATS:
 		count = ARRAY_SIZE(unic_sq_stats_str) * channel_num;
 		count += ARRAY_SIZE(unic_rq_stats_str) * channel_num;
+		if (unic_dev_ubl_supported(unic_dev))
+			break;
+
+		count += unic_get_mac_count(unic_dev, unic_eth_stats_str,
+						ARRAY_SIZE(unic_eth_stats_str));
 		break;
 	case ETH_SS_TEST:
 		count = unic_get_selftest_count(unic_dev);
@@ -558,6 +649,32 @@ static void unic_get_fec_stats_total(struct unic_dev *unic_dev, u8 stats_flags,
 		fec_stats->corrected_bits.total = total->corr_bits;
 }
 
+static void unic_get_fec_stats_lanes(struct unic_dev *unic_dev, u8 stats_flags,
+				     struct ethtool_fec_stats *fec_stats)
+{
+	u8 lane_num = unic_dev->stats.fec_stats.lane_num;
+	u8 i;
+
+	if (lane_num == 0 || lane_num > UNIC_FEC_STATS_MAX_LANE) {
+		unic_err(unic_dev,
+			 "fec stats lane number is invalid, lane_num = %u.\n",
+			 lane_num);
+		return;
+	}
+
+	for (i = 0; i < lane_num; i++) {
+		if (stats_flags & UNIC_FEC_CORR_BLOCKS)
+			fec_stats->corrected_blocks.lanes[i] =
+				unic_dev->stats.fec_stats.lane[i].corr_blocks;
+		if (stats_flags & UNIC_FEC_UNCORR_BLOCKS)
+			fec_stats->uncorrectable_blocks.lanes[i] =
+				unic_dev->stats.fec_stats.lane[i].uncorr_blocks;
+		if (stats_flags & UNIC_FEC_CORR_BITS)
+			fec_stats->corrected_bits.lanes[i] =
+				unic_dev->stats.fec_stats.lane[i].corr_bits;
+	}
+}
+
 static void unic_get_ubl_fec_stats(struct unic_dev *unic_dev,
 				   struct ethtool_fec_stats *fec_stats)
 {
@@ -568,6 +685,26 @@ static void unic_get_ubl_fec_stats(struct unic_dev *unic_dev,
 	case ETHTOOL_FEC_RS:
 		stats_flags = UNIC_FEC_UNCORR_BLOCKS | UNIC_FEC_CORR_BITS;
 		unic_get_fec_stats_total(unic_dev, stats_flags, fec_stats);
+		break;
+	default:
+		unic_err(unic_dev,
+			 "fec stats is not supported in mode(0x%x).\n",
+			 fec_mode);
+		break;
+	}
+}
+
+static void unic_get_eth_fec_stats(struct unic_dev *unic_dev,
+				   struct ethtool_fec_stats *fec_stats)
+{
+	u32 fec_mode = unic_dev->hw.mac.fec_mode;
+	u8 stats_flags = 0;
+
+	switch (fec_mode) {
+	case ETHTOOL_FEC_RS:
+		stats_flags = UNIC_FEC_CORR_BLOCKS | UNIC_FEC_UNCORR_BLOCKS;
+		unic_get_fec_stats_total(unic_dev, stats_flags, fec_stats);
+		unic_get_fec_stats_lanes(unic_dev, UNIC_FEC_CORR_BITS, fec_stats);
 		break;
 	default:
 		unic_err(unic_dev,
@@ -591,4 +728,6 @@ void unic_get_fec_stats(struct net_device *ndev,
 
 	if (unic_dev_ubl_supported(unic_dev))
 		unic_get_ubl_fec_stats(unic_dev, fec_stats);
+	else
+		unic_get_eth_fec_stats(unic_dev, fec_stats);
 }

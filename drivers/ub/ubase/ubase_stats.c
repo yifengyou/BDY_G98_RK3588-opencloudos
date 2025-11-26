@@ -52,6 +52,33 @@ out_send_cmd_fail:
 }
 
 /**
+ * ubase_clear_eth_port_stats() - clear eth port stats
+ * @adev: auxiliary device
+ *
+ * The function is used to clear eth port stats.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+void ubase_clear_eth_port_stats(struct auxiliary_device *adev)
+{
+	struct ubase_eth_mac_stats *eth_stats;
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	eth_stats = &udev->stats.eth_stats;
+	if (ubase_dev_eth_mac_supported(udev)) {
+		mutex_lock(&udev->stats.stats_lock);
+		memset(eth_stats, 0, sizeof(*eth_stats));
+		mutex_unlock(&udev->stats.stats_lock);
+	}
+}
+EXPORT_SYMBOL(ubase_clear_eth_port_stats);
+
+/**
  * ubase_get_ub_port_stats() - get ub port stats
  * @adev: auxiliary device
  * @port_id: port id
@@ -132,4 +159,20 @@ void ubase_update_activate_stats(struct ubase_dev *udev, bool activate,
 	record->stats[idx].result = result;
 
 	mutex_unlock(&record->lock);
+}
+
+int ubase_update_eth_stats_trylock(struct ubase_dev *udev)
+{
+	struct ubase_eth_mac_stats *eth_stats = &udev->stats.eth_stats;
+	u32 stats_num = sizeof(*eth_stats) / sizeof(u64);
+	int ret;
+
+	if (!mutex_trylock(&udev->stats.stats_lock))
+		return 0;
+
+	ret = ubase_update_mac_stats(udev, udev->caps.dev_caps.io_port_logic_id,
+				     (u64 *)eth_stats, stats_num, true);
+	mutex_unlock(&udev->stats.stats_lock);
+
+	return ret;
 }

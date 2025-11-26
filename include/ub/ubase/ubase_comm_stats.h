@@ -232,6 +232,7 @@ struct ubase_perf_stats_result {
 	u32	rx_vl_bw[UBASE_STATS_MAX_VL_NUM];
 };
 
+void ubase_clear_eth_port_stats(struct auxiliary_device *adev);
 int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 			    struct ubase_ub_dl_stats *data);
 int ubase_get_eth_port_stats(struct auxiliary_device *adev,
