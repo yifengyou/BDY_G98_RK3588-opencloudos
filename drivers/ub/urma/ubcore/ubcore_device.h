@@ -41,8 +41,6 @@ void ubcore_clear_pattern1_eid(struct ubcore_device *dev,
 			       union ubcore_eid *eid);
 void ubcore_clear_pattern3_eid(struct ubcore_device *dev,
 			       union ubcore_eid *eid);
-int ubcore_delete_sip(struct ubcore_sip_info *sip);
-void ubcore_uvs_release_sip_list(struct ubcore_uvs_instance *uvs);
 
 static inline bool ubcore_check_ctrlplane(struct ubcore_device *dev)
 {

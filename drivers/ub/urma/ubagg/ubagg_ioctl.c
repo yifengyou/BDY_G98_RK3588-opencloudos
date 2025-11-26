@@ -382,9 +382,9 @@ static int ubagg_get_seg_info(struct ubcore_device *dev,
 		ubagg_log_err("Failed to find seg.\n");
 		return -1;
 	}
-	spin_unlock(&ubagg_seg_ht->lock);
 	memcpy((void *)user_ctl->out.addr, tmp_seg->ex_info.slaves,
 	       sizeof(tmp_seg->ex_info.slaves));
+	spin_unlock(&ubagg_seg_ht->lock);
 	return 0;
 }
 

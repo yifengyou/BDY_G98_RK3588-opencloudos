@@ -415,61 +415,6 @@ free_msg:
 	return 0;
 }
 
-static struct ubcore_nlmsg *
-ubcore_get_migrate_vtp_req(struct ubcore_vtp *vtp,
-			   enum ubcore_event_type event_type,
-			   struct ubcore_device *dev)
-{
-	uint32_t payload_len = (uint32_t)sizeof(struct ubcore_migrate_vtp_req);
-	struct ubcore_migrate_vtp_req *mig_req;
-	struct ubcore_nlmsg *req;
-
-	req = ubcore_alloc_nlmsg(payload_len, &vtp->cfg.local_eid,
-				 &vtp->cfg.peer_eid);
-	if (req == NULL)
-		return NULL;
-
-	req->transport_type = UBCORE_TRANSPORT_UB;
-	if (event_type == UBCORE_EVENT_MIGRATE_VTP_SWITCH) {
-		req->msg_type = UBCORE_CMD_MIGRATE_VTP_SWITCH;
-	} else if (event_type == UBCORE_EVENT_MIGRATE_VTP_ROLLBACK) {
-		req->msg_type = UBCORE_CMD_MIGRATE_VTP_ROLLBACK;
-	} else {
-		kfree(req);
-		ubcore_log_err("wrong event msg type");
-		return NULL;
-	}
-	mig_req = (struct ubcore_migrate_vtp_req *)(void *)req->payload;
-	(void)memcpy(mig_req->dev_name, dev->dev_name, UBCORE_MAX_DEV_NAME);
-
-	mig_req->vtp_cfg.ue_idx = vtp->cfg.ue_idx;
-	mig_req->vtp_cfg.vtpn = vtp->cfg.vtpn;
-	mig_req->vtp_cfg.local_jetty = vtp->cfg.local_jetty;
-	mig_req->vtp_cfg.local_eid = vtp->cfg.local_eid;
-	mig_req->vtp_cfg.peer_eid = vtp->cfg.peer_eid;
-	mig_req->vtp_cfg.peer_jetty = vtp->cfg.peer_jetty;
-	mig_req->vtp_cfg.flag = vtp->cfg.flag;
-	mig_req->vtp_cfg.trans_mode = vtp->cfg.trans_mode;
-
-	return req;
-}
-
-void ubcore_report_migrate_vtp(struct ubcore_device *dev,
-			       struct ubcore_vtp *vtp,
-			       enum ubcore_event_type event_type)
-{
-	struct ubcore_nlmsg *req_msg;
-
-	req_msg = ubcore_get_migrate_vtp_req(vtp, event_type, dev);
-	if (req_msg == NULL) {
-		ubcore_log_err("Failed to get migrate vtp switch req");
-		return;
-	}
-	ubcore_log_info("Success to nowait send migrate vtp request");
-
-	kfree(req_msg);
-}
-
 struct ubcore_nlmsg *ubcore_nl_send_wait(struct ubcore_device *dev,
 					 struct ubcore_nlmsg *req,
 					 struct ubcore_uvs_instance *uvs)

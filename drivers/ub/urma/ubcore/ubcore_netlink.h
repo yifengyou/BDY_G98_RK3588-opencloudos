@@ -197,10 +197,6 @@ struct ubcore_nlmsg *ubcore_alloc_nlmsg(size_t payload_len,
 					const union ubcore_eid *src_eid,
 					const union ubcore_eid *dst_eid);
 
-void ubcore_report_migrate_vtp(struct ubcore_device *dev,
-			       struct ubcore_vtp *vtp,
-			       enum ubcore_event_type event_type);
-
 int ubcore_get_uvs_init_res_done(struct netlink_callback *cb);
 int ubcore_get_uvs_init_res_dump(struct sk_buff *skb,
 				 struct netlink_callback *cb);
