@@ -9,6 +9,7 @@
 
 #include <linux/auxiliary_bus.h>
 #include <linux/dma-mapping.h>
+#include <linux/if_ether.h>
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
@@ -291,6 +292,7 @@ struct ubase_dev {
 	struct ubase_act_ctx	act_ctx;
 	struct ubase_arq_msg_ring	arq;
 	struct ubase_prealloc_mem_info	pmem_info;
+	u8			dev_mac[ETH_ALEN];
 };
 
 #define UBASE_ERR_MSG_LEN	128

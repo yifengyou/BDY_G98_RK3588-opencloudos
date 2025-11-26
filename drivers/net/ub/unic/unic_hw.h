@@ -55,6 +55,9 @@ struct unic_promisc_en {
 	u8 en_uc_ip;
 	u8 en_uc_guid;
 	u8 en_mc;
+	u8 en_uc_mac;
+	u8 en_mc_mac;
+	u8 en_bc;
 };
 
 #define UNIC_RSS_MAX_CNT	10U

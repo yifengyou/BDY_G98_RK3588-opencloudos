@@ -20,6 +20,7 @@
 #include "unic_dcbnl.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_mac.h"
 #include "unic_netdev.h"
 #include "unic_qos_hw.h"
 #include "unic_rack_ip.h"
@@ -86,6 +87,9 @@ static void unic_activate_event_process(struct unic_dev *unic_dev)
 	else
 		clear_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &unic_dev->vport.state);
 
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_activate_mac_table(unic_dev);
+
 out:
 	mutex_lock(&act_info->mutex);
 	act_info->deactivate = false;
@@ -118,6 +122,9 @@ static void unic_deactivate_event_process(struct unic_dev *unic_dev)
 	mutex_lock(&act_info->mutex);
 	act_info->deactivate = true;
 	mutex_unlock(&act_info->mutex);
+
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_deactivate_mac_table(unic_dev);
 
 	ret = unic_activate_promisc_mode(unic_dev, false);
 	if (ret)

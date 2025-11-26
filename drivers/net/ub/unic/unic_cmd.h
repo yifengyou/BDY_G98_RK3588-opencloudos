@@ -152,6 +152,20 @@ struct unic_query_flush_status_resp {
 	u8 rsv[23];
 };
 
+struct unic_query_mac_addr_resp {
+	u8	mac[ETH_ALEN];
+	u8	rsv[18];
+};
+
+struct unic_mac_tbl_entry_cmd {
+	u8	resp_code;
+	u8	mac_type;
+	u8	is_pfc;
+	u8	rsvd0;
+	u8	mac_addr[ETH_ALEN];
+	u8	rsvd1[14];
+};
+
 struct unic_vlan_filter_cfg_cmd {
 	u16 vlan_id;
 	u8 is_add;

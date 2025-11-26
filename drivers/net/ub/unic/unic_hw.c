@@ -342,6 +342,10 @@ static void unic_setup_promisc_req(struct unic_promisc_cfg_cmd *req,
 
 	req->promisc_mc_ind = 1;
 	req->promisc_rx_mc_en = promisc_en->en_mc;
+
+	req->promisc_rx_uc_mac_en = promisc_en->en_uc_mac;
+	req->promisc_rx_mc_mac_en = promisc_en->en_mc_mac;
+	req->promisc_rx_bc_en = promisc_en->en_bc;
 }
 
 int unic_get_promisc_mode(struct unic_dev *unic_dev,
@@ -372,6 +376,9 @@ int unic_set_promisc_mode(struct unic_dev *unic_dev,
 	u32 time_out;
 	int ret;
 
+	if (!unic_dev_ubl_supported(unic_dev))
+		promisc_en->en_bc = 1;
+
 	unic_setup_promisc_req(&req, promisc_en);
 
 	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_PROMISC_MODE, false,
@@ -390,6 +397,8 @@ void unic_fill_promisc_en(struct unic_promisc_en *promisc_en, u8 flags)
 {
 	promisc_en->en_uc_ip = !!(flags & UNIC_UPE);
 	promisc_en->en_mc = !!(flags & UNIC_MPE);
+	promisc_en->en_uc_mac = !!(flags & UNIC_UPE);
+	promisc_en->en_mc_mac = !!(flags & UNIC_MPE);
 }
 
 int unic_activate_promisc_mode(struct unic_dev *unic_dev, bool activate)

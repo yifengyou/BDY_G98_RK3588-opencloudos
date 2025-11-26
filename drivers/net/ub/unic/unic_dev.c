@@ -24,6 +24,7 @@
 #include "unic_guid.h"
 #include "unic_hw.h"
 #include "unic_qos_hw.h"
+#include "unic_mac.h"
 #include "unic_netdev.h"
 #include "unic_rack_ip.h"
 #include "unic_vlan.h"
@@ -619,6 +620,12 @@ static void unic_uninit_mac(struct unic_dev *unic_dev)
 	mutex_destroy(&record->lock);
 }
 
+static void unic_uninit_dev_addr(struct unic_dev *unic_dev)
+{
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_uninit_mac_addr(unic_dev);
+}
+
 int unic_set_mtu(struct unic_dev *unic_dev, int new_mtu)
 {
 	u16 max_frame_size;
@@ -664,6 +671,10 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 	unic_link_status_update(unic_dev);
 	unic_update_port_info(unic_dev);
 	unic_sync_rack_ip_table(unic_dev);
+
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_sync_mac_table(unic_dev);
+
 	unic_sync_promisc_mode(unic_dev);
 	unic_sync_vlan_filter(unic_dev);
 
@@ -690,6 +701,12 @@ static void unic_init_vport_info(struct unic_dev *unic_dev)
 	spin_lock_init(&unic_dev->vport.addr_tbl.tmp_ip_lock);
 	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.ip_list);
 	spin_lock_init(&unic_dev->vport.addr_tbl.ip_list_lock);
+
+	if (unic_dev_eth_mac_supported(unic_dev)) {
+		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.uc_mac_list);
+		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.mc_mac_list);
+		spin_lock_init(&unic_dev->vport.addr_tbl.mac_list_lock);
+	}
 }
 
 static int unic_alloc_vport_buf(struct unic_dev *unic_dev)
@@ -785,8 +802,10 @@ static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
 	unic_uninit_rack_ip_table(unic_dev);
 
-	if (unic_dev_eth_mac_supported(unic_dev))
+	if (unic_dev_eth_mac_supported(unic_dev)) {
+		unic_uninit_mac_table(unic_dev);
 		unic_uninit_vlan_config(unic_dev);
+	}
 
 	unic_uninit_vport_buf(unic_dev);
 }
@@ -808,7 +827,7 @@ static int unic_init_dev_addr(struct unic_dev *unic_dev)
 	if (unic_dev_ubl_supported(unic_dev))
 		return unic_init_guid(unic_dev);
 
-	return 0;
+	return unic_init_mac_addr(unic_dev);
 }
 
 static int unic_init_netdev_priv(struct net_device *netdev,
@@ -848,7 +867,7 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 	ret = unic_init_channels_attr(priv);
 	if (ret)
-		goto unic_unint_mac;
+		goto err_uninit_dev_addr;
 
 	ret = unic_init_channels(priv, priv->channels.num);
 	if (ret) {
@@ -862,6 +881,8 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 err_uninit_channels_attr:
 	unic_uninit_channels_attr(priv);
+err_uninit_dev_addr:
+	unic_uninit_dev_addr(priv);
 unic_unint_mac:
 	unic_uninit_mac(priv);
 err_uninit_vport:
@@ -878,6 +899,7 @@ static void unic_uninit_netdev_priv(struct net_device *netdev)
 
 	unic_uninit_channels(priv);
 	unic_uninit_channels_attr(priv);
+	unic_uninit_dev_addr(priv);
 	unic_uninit_mac(priv);
 	unic_uninit_vport(priv);
 	mutex_destroy(&priv->act_info.mutex);

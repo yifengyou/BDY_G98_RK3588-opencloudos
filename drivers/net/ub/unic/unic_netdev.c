@@ -24,6 +24,7 @@
 #include "unic_dev.h"
 #include "unic_event.h"
 #include "unic_hw.h"
+#include "unic_mac.h"
 #include "unic_rx.h"
 #include "unic_tx.h"
 #include "unic_txrx.h"
@@ -527,6 +528,42 @@ static int unic_change_mtu(struct net_device *netdev, int new_mtu)
 	return 0;
 }
 
+static int unic_set_mac_address(struct net_device *netdev, void *addr)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	char format_mac[UNIC_FORMAT_MAC_LEN];
+	u8 unic_addr[UNIC_ADDR_LEN] = {0};
+	struct sockaddr *mac_addr = addr;
+	int ret;
+
+	if (!unic_dev_cfg_mac_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	if (!mac_addr || !is_valid_ether_addr((const u8 *)mac_addr->sa_data)) {
+		unic_err(unic_dev, "invalid user mac.\n");
+		return -EADDRNOTAVAIL;
+	}
+
+	unic_comm_format_mac_addr(format_mac, mac_addr->sa_data);
+	if (ether_addr_equal(netdev->dev_addr, mac_addr->sa_data)) {
+		unic_info(unic_dev, "already using mac(%s).\n", format_mac);
+		return 0;
+	}
+
+	ether_addr_copy(unic_addr, mac_addr->sa_data);
+	ret = unic_cfg_mac_address(unic_dev, unic_addr);
+	if (ret) {
+		unic_err(unic_dev, "failed to set mac address, ret = %d.\n", ret);
+		return ret;
+	}
+
+	dev_addr_set(netdev, unic_addr);
+	ubase_set_dev_mac(unic_dev->comdev.adev, netdev->dev_addr,
+			  netdev->addr_len);
+
+	return ret;
+}
+
 static u8 unic_get_netdev_flags(struct net_device *netdev)
 {
 	struct unic_dev *unic_dev = netdev_priv(netdev);
@@ -535,6 +572,8 @@ static u8 unic_get_netdev_flags(struct net_device *netdev)
 	if (netdev->flags & IFF_PROMISC) {
 		if (unic_dev_ubl_supported(unic_dev))
 			flags = UNIC_USER_UPE | UNIC_USER_MPE;
+		else
+			flags = UNIC_USER_UPE | UNIC_USER_MPE | UNIC_USER_BPE;
 	} else if (netdev->flags & IFF_ALLMULTI) {
 		flags = UNIC_USER_MPE;
 	}
@@ -546,9 +585,19 @@ static void unic_set_rx_mode(struct net_device *netdev)
 {
 	struct unic_dev *unic_dev = netdev_priv(netdev);
 	struct unic_vport *vport = &unic_dev->vport;
+	u8 promisc_changed;
 	u8 new_flags;
 
 	new_flags = unic_get_netdev_flags(netdev);
+	if (unic_dev_eth_mac_supported(unic_dev)) {
+		__dev_uc_sync(netdev, unic_add_uc_mac, unic_del_uc_mac);
+		__dev_mc_sync(netdev, unic_add_mc_mac, unic_del_mc_mac);
+		promisc_changed = unic_dev->netdev_flags ^ new_flags;
+		if (promisc_changed & UNIC_USER_UPE)
+			set_bit(UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
+				&vport->state);
+	}
+
 	unic_dev->netdev_flags = new_flags;
 
 	set_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &vport->state);
@@ -650,6 +699,7 @@ static const struct net_device_ops unic_netdev_ops = {
 	.ndo_change_mtu = unic_change_mtu,
 	.ndo_open = unic_net_open,
 	.ndo_stop = unic_net_stop,
+	.ndo_set_mac_address = unic_set_mac_address,
 	.ndo_set_rx_mode = unic_set_rx_mode,
 	.ndo_select_queue = unic_select_queue,
 	.ndo_vlan_rx_add_vid = unic_vlan_rx_add_vid,
@@ -667,15 +717,31 @@ static bool unic_port_dev_check(const struct net_device *dev)
 	return dev->netdev_ops == &unic_netdev_ops;
 }
 
-static int unic_ipaddr_event(struct notifier_block *nb, unsigned long event,
-			     struct sockaddr *sa, struct net_device *ndev,
-			     u16 ip_mask)
+static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,
+			     u16 ip_mask, unsigned long event)
+{
+	enum UNIC_COMM_ADDR_STATE state;
+	int ret = NOTIFY_OK;
+
+	switch (event) {
+	case NETDEV_UP:
+		state = UNIC_COMM_ADDR_TO_ADD;
+		break;
+	case NETDEV_DOWN:
+		state = UNIC_COMM_ADDR_TO_DEL;
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return ret;
+}
+
+static int unic_ub_ip_event(struct sockaddr *sa, struct net_device *ndev,
+			    u16 ip_mask, unsigned long event)
 {
 	struct unic_dev *unic_dev;
 	int ret;
-
-	if (ndev->type != ARPHRD_UB)
-		return NOTIFY_DONE;
 
 	if (!unic_port_dev_check(ndev))
 		return NOTIFY_DONE;
@@ -698,6 +764,18 @@ static int unic_ipaddr_event(struct notifier_block *nb, unsigned long event,
 	}
 
 	return NOTIFY_OK;
+}
+
+static int unic_ipaddr_event(struct notifier_block *nb, unsigned long event,
+			     struct sockaddr *sa, struct net_device *ndev,
+			     u16 ip_mask)
+{
+	if (ndev->type == ARPHRD_ETHER)
+		return unic_eth_ip_event(sa, ndev, ip_mask, event);
+	else if (ndev->type == ARPHRD_UB)
+		return unic_ub_ip_event(sa, ndev, ip_mask, event);
+	else
+		return NOTIFY_DONE;
 }
 
 static int unic_inetaddr_event(struct notifier_block *nb, unsigned long event,

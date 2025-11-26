@@ -387,4 +387,8 @@ int ubase_activate_dev(struct auxiliary_device *adev);
 int ubase_deactivate_dev(struct auxiliary_device *adev);
 int ubase_get_bus_eid(struct auxiliary_device *adev, struct ubase_bus_eid *eid);
 
+int ubase_get_dev_mac(struct auxiliary_device *adev, u8 *dev_addr, u8 addr_len);
+int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
+		      u8 addr_len);
+
 #endif

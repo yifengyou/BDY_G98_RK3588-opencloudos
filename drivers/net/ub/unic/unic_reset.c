@@ -9,6 +9,7 @@
 #include "unic_cmd.h"
 #include "unic_dev.h"
 #include "unic_hw.h"
+#include "unic_mac.h"
 #include "unic_netdev.h"
 #include "unic_rack_ip.h"
 #include "unic_reset.h"
@@ -42,6 +43,9 @@ static void unic_reset_down(struct auxiliary_device *adev)
 	 * to prevent that concurrent deactivate event ubable to close promisc
 	 * when resetting
 	 */
+	if (unic_dev_eth_mac_supported(priv))
+		unic_deactivate_mac_table(priv);
+
 	ret = unic_activate_promisc_mode(priv, false);
 	if (ret)
 		unic_warn(priv, "failed to close promisc, ret = %d.\n", ret);

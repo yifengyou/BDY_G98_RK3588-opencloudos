@@ -4,6 +4,7 @@
  *
  */
 
+#include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <ub/ubus/ubus.h>
 
@@ -1634,3 +1635,55 @@ int ubase_get_bus_eid(struct auxiliary_device *adev, struct ubase_bus_eid *eid)
 	return __ubase_get_bus_eid(udev, eid);
 }
 EXPORT_SYMBOL(ubase_get_bus_eid);
+
+/**
+ * ubase_set_dev_mac() - Record the MAC address of the device
+ * @adev: auxiliary device
+ * @dev_addr: MAC address of the device
+ * @addr_len: MAC address length
+ *
+ * This function is used to record the MAC address of the device, and store the
+ * MAC address in the ubase_dev structure.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
+		      u8 addr_len)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !dev_addr || addr_len < ETH_ALEN)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	ether_addr_copy(udev->dev_mac, dev_addr);
+
+	return 0;
+}
+EXPORT_SYMBOL(ubase_set_dev_mac);
+
+/**
+ * ubase_get_dev_mac() - Obtain the device MAC address and output it.
+ * @adev: auxiliary device
+ * @dev_addr: Output parameter, save the obtained MAC address array.
+ * @addr_len: Length of the array for storing MAC addresses
+ *
+ * This function is used to get the device MAC address from ubase_dev.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_get_dev_mac(struct auxiliary_device *adev, u8 *dev_addr, u8 addr_len)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !dev_addr || addr_len < ETH_ALEN)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	ether_addr_copy(dev_addr, udev->dev_mac);
+
+	return 0;
+}
+EXPORT_SYMBOL(ubase_get_dev_mac);
