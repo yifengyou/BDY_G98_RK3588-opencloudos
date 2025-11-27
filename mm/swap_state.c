@@ -552,8 +552,9 @@ failed:
  * @new_page_allocated: sets true if allocation happened, false otherwise
  *
  * Allocate a folio in the swap cache for one swap slot, typically before
- * doing IO (swap in or swap out). The swap slot indicated by @entry must
- * have a non-zero swap count (swapped out). Currently only supports order 0.
+ * doing IO (e.g. swap in or zswap writeback). The swap slot indicated by
+ * @entry must have a non-zero swap count (swapped out).
+ * Currently only supports order 0.
  *
  * Context: Caller must protect the swap device with reference count or locks.
  * Return: Returns the existing folio if @entry is cached already. Returns
