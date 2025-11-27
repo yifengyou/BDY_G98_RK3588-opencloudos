@@ -764,11 +764,82 @@ static int udma_ctrlq_check_tp_active(struct auxiliary_device *adev,
 	return ret;
 }
 
+static int udma_ctrlq_send_eid_guid_response(struct udma_dev *udma_dev,
+					     uint16_t seq,
+					     int ret_val)
+{
+	struct ubase_ctrlq_msg msg = {};
+	int in_buf = 0;
+	int ret;
+
+	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	msg.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	msg.opcode = UDMA_CTRLQ_OPC_UPDATE_UE_SEID_GUID;
+	msg.need_resp = 0;
+	msg.is_resp = 1;
+	msg.resp_seq = seq;
+	msg.resp_ret = (uint8_t)(-ret_val);
+	msg.in = (void *)&in_buf;
+	msg.in_size = sizeof(in_buf);
+
+	ret = ubase_ctrlq_send_msg(udma_dev->comdev.adev, &msg);
+	if (ret)
+		dev_err(udma_dev->dev, "send eid-guid rsp failed, ret = %d.\n",
+			ret);
+
+	return ret;
+}
+
+static int udma_ctrlq_notify_mue_eid_guid(struct auxiliary_device *adev,
+					  uint8_t service_ver,
+					  void *data,
+					  uint16_t len,
+					  uint16_t seq)
+{
+	struct udma_ctrlq_ue_eid_guid_out eid_guid_entry = {};
+	struct udma_dev *udma_dev;
+
+	if (adev == NULL || data == NULL) {
+		pr_err("adev is null : %d, data is null : %d.\n",
+			adev == NULL, data == NULL);
+		return -EINVAL;
+	}
+
+	udma_dev = get_udma_dev(adev);
+	if (udma_dev->is_ue)
+		return 0;
+
+	if (udma_dev->status != UDMA_NORMAL)
+		return udma_ctrlq_send_eid_guid_response(udma_dev, seq, 0);
+	if (len < sizeof(struct udma_ctrlq_ue_eid_guid_out)) {
+		dev_err(udma_dev->dev, "eid-guid len(%u) is invalid.\n", len);
+		return udma_ctrlq_send_eid_guid_response(udma_dev, seq, -EINVAL);
+	}
+	memcpy(&eid_guid_entry, data, sizeof(eid_guid_entry));
+	if (eid_guid_entry.op_type != UDMA_CTRLQ_EID_GUID_ADD &&
+	    eid_guid_entry.op_type != UDMA_CTRLQ_EID_GUID_DEL) {
+		dev_err(udma_dev->dev, "eid-guid type(%u) is invalid.\n",
+			eid_guid_entry.op_type);
+		return udma_ctrlq_send_eid_guid_response(udma_dev, seq,
+							 -EINVAL);
+	}
+	if (eid_guid_entry.eid_info.eid_idx >= SEID_TABLE_SIZE) {
+		dev_err(udma_dev->dev, "invalid ue eid_idx = %u.\n",
+			eid_guid_entry.eid_info.eid_idx);
+		return udma_ctrlq_send_eid_guid_response(udma_dev, seq,
+							 -EINVAL);
+	}
+
+	return udma_ctrlq_send_eid_guid_response(udma_dev, seq, 0);
+}
+
 static struct ubase_ctrlq_event_nb udma_ctrlq_opts[] = {
 	{UBASE_CTRLQ_SER_TYPE_TP_ACL, UDMA_CMD_CTRLQ_CHECK_TP_ACTIVE, NULL,
 	 udma_ctrlq_check_tp_active},
 	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UDMA_CTRLQ_UPDATE_SEID_INFO, NULL,
 	 udma_ctrlq_eid_update},
+	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UDMA_CTRLQ_OPC_UPDATE_UE_SEID_GUID, NULL,
+	 udma_ctrlq_notify_mue_eid_guid},
 };
 
 static int udma_register_one_ctrlq_event(struct auxiliary_device *adev,

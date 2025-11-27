@@ -53,6 +53,7 @@ enum ubase_ctrlq_opc_type_ip {
 
 enum ubase_ctrlq_opc_type_dev_register {
 	UBASE_CTRLQ_OPC_UPDATE_SEID		= 0x02,
+	UBASE_CTRLQ_OPC_UPDATE_UE_SEID_GUID	= 0x03,
 	UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO	= 0x13,
 	UBASE_CTRLQ_OPC_CTRLQ_CTRL		= 0x14,
 	UBASE_CTRLQ_OPC_UE_RESET_CTRL		= 0x15,
