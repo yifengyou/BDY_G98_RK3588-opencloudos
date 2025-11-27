@@ -949,7 +949,7 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 	}
 
 	if (ubase_dev_udma_supported(udev) &&
-+	    !(udma_tp_sl_cnt + udma_ctp_sl_cnt)) {
+	    !(udma_tp_sl_cnt + udma_ctp_sl_cnt)) {
 		ubase_err(udev, "udma doesn't have any sl.\n");
 		return -EIO;
 	}
