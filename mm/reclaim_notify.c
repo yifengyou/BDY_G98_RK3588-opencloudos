@@ -70,6 +70,17 @@ unsigned long do_reclaim_notify(enum reclaim_reason reason,
 
 		data.nr_nid = idx;
 		data.sync = true;
+	} else if (reason == RR_HUGEPAGE_RECLAIM) {
+		if (WARN_ON((int *)reclaim_context == NULL))
+			return 0;
+
+		nid = *(int *)reclaim_context;
+		if (numa_is_remote_node(nid))
+			return 0;
+
+		data.nid[0] = nid;
+		data.nr_nid = 1;
+		data.sync = true;
 	} else {
 		pg_data_t *pgdat =  (pg_data_t *)reclaim_context;
 
