@@ -14,4 +14,5 @@ UnifiedBus Subsystem
    ubase/index
    ubfi/index
    ubus/index
+   ummu-core
    cdma/index

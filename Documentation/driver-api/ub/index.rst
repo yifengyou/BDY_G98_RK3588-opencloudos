@@ -15,5 +15,6 @@ The Linux UnifiedBus implementer's API guide
 
     ubfi
     ubus
+    ummu-core
     ubase
     cdma
