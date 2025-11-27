@@ -170,6 +170,11 @@ static int udma_dev_res_ratio_ctrlq_handler(struct auxiliary_device *adev,
 	struct udma_ctrlq_event_nb *udma_cb;
 	int ret;
 
+	if (service_ver != UBASE_CTRLQ_SER_VER_01) {
+		dev_err(udev->dev, "Unsupported server version (%u).\n", service_ver);
+		return -EOPNOTSUPP;
+	}
+
 	mutex_lock(&udev->npu_nb_mutex);
 	udma_cb = xa_load(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
 	if (!udma_cb) {
@@ -646,6 +651,14 @@ int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	tp_attr_req.tp_attr.tp_attr_bitmap = tp_attr_bitmap;
 	memcpy(&tp_attr_req.tp_attr.tp_attr_value, (void *)tp_attr, sizeof(*tp_attr));
 
+	udma_swap_endian((uint8_t *)tp_attr->sip, tp_attr_req.tp_attr.tp_attr_value.sip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->dip, tp_attr_req.tp_attr.tp_attr_value.dip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->sma, tp_attr_req.tp_attr.tp_attr_value.sma,
+			 UBCORE_MAC_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->dma, tp_attr_req.tp_attr.tp_attr_value.dma,
+			 UBCORE_MAC_BYTES);
 	udma_ctrlq_set_tp_msg(&msg, &tp_attr_req, sizeof(tp_attr_req), NULL, 0);
 	msg.opcode = UDMA_CMD_CTRLQ_SET_TP_ATTR;
 
@@ -687,6 +700,14 @@ int udma_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	*tp_attr_bitmap = tp_attr_resp.tp_attr.tp_attr_bitmap;
 	memcpy((void *)tp_attr, &tp_attr_resp.tp_attr.tp_attr_value,
 	       sizeof(tp_attr_resp.tp_attr.tp_attr_value));
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.sip, tp_attr->sip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.dip, tp_attr->dip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.sma, tp_attr->sma,
+			 UBCORE_MAC_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.dma, tp_attr->dma,
+			 UBCORE_MAC_BYTES);
 
 	return 0;
 }
