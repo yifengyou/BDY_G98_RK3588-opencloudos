@@ -51,7 +51,9 @@ struct udma_ctrlq_tpid {
 	uint32_t tpid : 24;
 	uint32_t tpn_cnt : 8;
 	uint32_t tpn_start : 24;
-	uint32_t rsv : 8;
+	uint32_t rsv0 : 4;
+	uint32_t migr : 1;
+	uint32_t rsv1 : 3;
 };
 
 struct udma_ctrlq_tpid_list_rsp {
