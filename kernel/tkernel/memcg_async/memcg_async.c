@@ -5,7 +5,7 @@
 
 #ifdef CONFIG_MEMCG
 int sysctl_memcg_async;
-#define MG_MAGIC 0xf379f54b
+#define MG_MAGIC 0x379f54b
 int memcg_async_sysctl_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -23,10 +23,13 @@ int memcg_async_sysctl_handler(struct ctl_table *table, int write,
 		goto out;
 
 	if (write) {
-		if (sysctl_memcg_async)
-			sysctl_vm_memory_qos = MG_MAGIC;
-		else
-			sysctl_vm_memory_qos = 0;
+		if (sysctl_memcg_async) {
+			if (!sysctl_vm_memory_qos)
+				sysctl_vm_memory_qos = MG_MAGIC;
+		} else {
+			if (sysctl_vm_memory_qos == MG_MAGIC)
+				sysctl_vm_memory_qos = 0;
+		}
 
 		memory_qos_update();
 	}
