@@ -173,13 +173,9 @@ void __swap_cache_add_folio(struct swap_cluster_info *ci,
  * @entry: The swap entry corresponding to the folio.
  * @gfp: gfp_mask for XArray node allocation.
  * @shadowp: If a shadow is found, return the shadow.
- * @alloc: If it's the allocator that is trying to insert a folio. Allocator
- *         sets SWAP_HAS_CACHE to pin slots before insert so skip map update.
  *
  * Context: Caller must ensure @entry is valid and protect the swap device
  * with reference count or locks.
- * The caller also needs to update the corresponding swap_map slots with
- * SWAP_HAS_CACHE bit to avoid race or conflict.
  */
 static int swap_cache_add_folio(struct folio *folio, swp_entry_t entry,
 				void **shadowp)
@@ -556,8 +552,9 @@ failed:
  * @new_page_allocated: sets true if allocation happened, false otherwise
  *
  * Allocate a folio in the swap cache for one swap slot, typically before
- * doing IO (swap in or swap out). The swap slot indicated by @entry must
- * have a non-zero swap count (swapped out). Currently only supports order 0.
+ * doing IO (e.g. swap in or zswap writeback). The swap slot indicated by
+ * @entry must have a non-zero swap count (swapped out).
+ * Currently only supports order 0.
  *
  * Context: Caller must protect the swap device with reference count or locks.
  * Return: Returns the existing folio if @entry is cached already. Returns
