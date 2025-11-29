@@ -46,7 +46,11 @@ enum {
 enum sentry_msg_helper_msg_type {
     SMH_MESSAGE_POWER_OFF,
     SMH_MESSAGE_OOM,
+    SMH_MESSAGE_PANIC,
+    SMH_MESSAGE_KERNEL_REBOOT,
     SMH_MESSAGE_UB_MEM_ERR,
+    SMH_MESSAGE_PANIC_ACK,
+    SMH_MESSAGE_KERNEL_REBOOT_ACK,
     SMH_MESSAGE_UNKNOWN,
 };
 
@@ -65,6 +69,10 @@ struct sentry_msg_helper_msg {
 			int reason;
 		} oom_info;
 		struct {
+			uint32_t cna;
+			char eid[EID_MAX_LEN];
+		} remote_info;
+		struct {
 			uint64_t pa;
 			int mem_type;
 			int fault_with_kill;
@@ -74,10 +82,98 @@ struct sentry_msg_helper_msg {
     unsigned long res;
 };
 
+// urma communication interface
+extern int urma_send(const char *buf, size_t len, const char *dst_eid, int die_index);
+extern int urma_recv(char **buf_arr, size_t len);
+
+// UVB communication interface
+extern int uvb_send(const char *str, uint32_t dst_cna, bool is_sync);
+
 extern uint32_t g_local_cna;
 #define UVB_SENDER_ID_SYSSENTRY_INDEX (g_local_cna)
 #define UVB_SENDER_ID_SYSSENTRY (UBIOS_USER_ID_RICH_OS | UVB_SENDER_ID_SYSSENTRY_INDEX)
 #define UVB_RECEIVER_ID_SYSSENTRY(cna) (UBIOS_USER_ID_UB_DEVICE | (cna))
+
+/*
+ * str format type_cna_eid or type_cna_eid_res. type_cna_eid_res is ack msg.
+ * */
+static inline int convert_str_to_smh_msg(const char *str,
+	struct sentry_msg_helper_msg *smh_msg,
+	uint32_t *random_id)
+{
+    int n;
+    int ret = 0;
+    char input_copy[URMA_SEND_DATA_MAX_LEN];
+
+    n = sscanf(str, "%d_%s", (int *)&smh_msg->type, input_copy);
+    if (n != 2) {
+		pr_warn("Invalid msg str format and parse type failed! str is [%s].\n", str);
+		return -EINVAL;
+    }
+
+	switch (smh_msg->type) {
+	case SMH_MESSAGE_PANIC:
+	case SMH_MESSAGE_KERNEL_REBOOT:
+	    // eid length is EID_MAX_LEN - 1
+		if (!(sscanf(input_copy, "%u_%39[^_]_%llu_%u%n",
+			 &smh_msg->helper_msg_info.remote_info.cna,
+			 smh_msg->helper_msg_info.remote_info.eid,
+			 &smh_msg->timeout_time,
+			 random_id,
+			 &n) == 4) || strlen(input_copy) != n) {
+			pr_warn("Invalid msg str format and parse cna/eid failed! str is [%s].\n", str);
+			ret = -1;
+		}
+		break;
+	case SMH_MESSAGE_PANIC_ACK:
+	case SMH_MESSAGE_KERNEL_REBOOT_ACK:
+		if (!(sscanf(input_copy, "%u_%39[^_]_%lu%n",
+			 &smh_msg->helper_msg_info.remote_info.cna,
+			 smh_msg->helper_msg_info.remote_info.eid,
+			 &smh_msg->res,
+			 &n) == 3) || strlen(input_copy) != n) {
+			pr_warn("Invalid msg str format and parse cna/eid failed! str is [%s].\n", str);
+			ret = -1;
+		}
+		break;
+	default:
+	    pr_warn("Invalid event type!\n");
+	    ret = -1;
+    }
+    return ret;
+}
+
+static inline void free_char_array(char **array_ptr, int array_len)
+{
+    if (array_ptr) {
+		for (int i = 0; i < array_len; i++) {
+			if (array_ptr[i]) {
+				kfree(array_ptr[i]);
+				array_ptr[i] = NULL;
+			}
+		}
+		kfree(array_ptr);
+		array_ptr = NULL;
+    }
+}
+
+/*
+ * Return 1 when buf is valid ipv4 format, return 0 when buf is invalid ipv4 format
+ * or any error occurs.
+ *
+*/
+static inline int is_valid_ipv4(const char *buf)
+{
+    int ret;
+    __be32 addr;
+
+    if (buf == NULL) {
+	return 0;
+    }
+
+    ret = in4_pton(buf, strnlen(buf, EID_MAX_LEN), (u8 *)&addr, '\0', NULL);
+    return ret;
+}
 
 static inline int sentry_create_proc_file(const char *name, struct proc_dir_entry *parent,
 					  const struct proc_ops *proc_ops)
