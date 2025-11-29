@@ -181,6 +181,13 @@ config ACPI_BUTTON
 	  To compile this driver as a module, choose M here:
 	  the module will be called button.
 
+config ACPI_POWER_NOTIFIER_CHAIN
+	bool "enable acpi power notifier chain"
+	depends on ACPI_BUTTON && ARM64
+	default n
+	help
+	  Say Y here to enable acpi power notifier chain.
+
 config ACPI_TINY_POWER_BUTTON
 	tristate "Tiny Power Button Driver"
 	depends on !ACPI_BUTTON
