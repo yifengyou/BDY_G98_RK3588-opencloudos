@@ -67,14 +67,40 @@ static void ubcore_set_topo_fill_spec_in(void *arg_addr,
 	SPEC(s++, SET_TOPO_IN_TOPO_NUM, arg->in.topo_num);
 }
 
+static void ubcore_get_route_list_fill_spec_in(void *arg_addr,
+	struct ubcore_cmd_spec *spec)
+{
+	struct ubcore_cmd_get_route_list *arg = arg_addr;
+	struct ubcore_cmd_spec *s = spec;
+
+	SPEC(s++, GET_ROUTE_LIST_IN_ROUTE_PAIR, arg->in);
+}
+
+static void ubcore_get_route_list_fill_spec_out(void *arg_addr,
+	struct ubcore_cmd_spec *spec)
+{
+	struct ubcore_cmd_get_route_list *arg = arg_addr;
+	struct ubcore_cmd_spec *s = spec;
+
+	SPEC(s++, GET_ROUTE_LIST_OUT_ROUTE_LIST, arg->out);
+}
+
 static struct ubcore_tlv_handler
-	g_global_tlv_handler[] = { [0] = { 0 },
-				   [UBCORE_CMD_SET_TOPO] = {
-					   ubcore_set_topo_fill_spec_in,
-					   SET_TOPO_IN_NUM,
-					   NULL,
-					   0,
-				   } };
+	g_global_tlv_handler[] = {
+		[0] = { 0 },
+		[UBCORE_CMD_SET_TOPO] = {
+			ubcore_set_topo_fill_spec_in,
+			SET_TOPO_IN_NUM,
+			NULL,
+			0,
+		},
+		[UBCORE_CMD_GET_ROUTE_LIST] = {
+			ubcore_get_route_list_fill_spec_in,
+			GET_ROUTE_LIST_IN_NUM,
+			ubcore_get_route_list_fill_spec_out,
+			GET_ROUTE_LIST_OUT_NUM,
+		}
+	};
 
 static struct ubcore_cmd_attr *
 ubcore_create_tlv_attr(struct ubcore_cmd_hdr *hdr, uint32_t *attr_size)

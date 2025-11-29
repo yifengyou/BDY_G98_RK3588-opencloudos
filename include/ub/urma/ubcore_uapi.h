@@ -15,6 +15,29 @@
 #define UBCORE_UAPI_H
 
 #include "ubcore_types.h"
+
+union ubcore_route_flag {
+	struct {
+		uint32_t rtp: 1;
+		uint32_t ctp: 1;
+		uint32_t utp: 1;
+		uint32_t reserved: 29;
+	} bs;
+	uint32_t value;
+};
+
+struct ubcore_route {
+	union ubcore_eid src;
+	union ubcore_eid dst;
+	union ubcore_route_flag flag;
+	uint32_t hops;	// Only supports direct routes, currently 0.
+};
+
+struct ubcore_route_list {
+	uint32_t route_num;
+	struct ubcore_route buf[16];
+};
+
 /**
  * Application specifies the device to allocate an context.
  * @param[in] dev: ubcore_device found by add ops in the client.
@@ -757,19 +780,15 @@ void ubcore_cgroup_uncharge(struct ubcore_cg_object *cg_obj,
 
 /**
  * Get primary or port eid from topo info
- * @param[in] tp_type: tp type, 0-RTP, 1-CTP, 2-UTP,
- *                     refer to enum ubcore_tp_type;
- * @param[in] src_v_eid: source virtual eid, refer
- *                     to source bonding eid;
- * @param[in] dst_v_eid: dest virtual eid, refer to
- *                     dest bonding eid;
- * @param[out] src_p_eid: source physical eid, refer
- *                      to source primary or port eid;
- * @param[out] dst_p_eid: dest physical eid, refer
- *                      to dest primary or port eid;
+ * @param[in] route_v: bonding route represented as a pair of eid,
+ *                     only src and dst is needed as input.
+ *                     refer to ubcore_route;
+ * @param[out] route_list: list of all ubcore_route, which is
+ *                         get from global topo_map.
+ *                         refer to source bonding eid;
+ * @return: 0 on success, other value on error
  */
-int ubcore_get_topo_eid(uint32_t tp_type, union ubcore_eid *src_v_eid,
-	union ubcore_eid *dst_v_eid, union ubcore_eid *src_p_eid,
-	union ubcore_eid *dst_p_eid);
+int ubcore_get_route_list(struct ubcore_route *route_v,
+	struct ubcore_route_list *route_list);
 
 #endif
