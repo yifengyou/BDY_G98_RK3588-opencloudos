@@ -577,49 +577,46 @@ static DECLARE_RWSEM(ub_share_port_notify_list_rwsem);
 
 struct ub_share_port_notify_node {
 	struct ub_entity *parent;
-	struct ub_entity *idev;
+	struct ub_entity *entity;
 	u16 port_id;
 	struct ub_share_port_ops *ops;
 	struct list_head node;
 };
 
-int ub_register_share_port(struct ub_entity *idev, u16 port_id,
+int ub_register_share_port(struct ub_entity *entity, u16 port_id,
 			   struct ub_share_port_ops *ops)
 {
 	struct ub_share_port_notify_node *notify_node;
 	struct ub_entity *parent;
 	struct ub_port *port;
 
-	if (unlikely(!idev || !ops))
+	if (unlikely(!entity || !ops))
 		return -EINVAL;
 
-	if (!is_idev(idev)) {
-		ub_err(idev, "don't support non-idev device with type %u register share port\n",
-		       uent_type(idev));
+	if (!is_idev(entity) && !is_ibus_controller(entity)) {
+		ub_err(entity,
+		       "don't support device with type %u register share port\n",
+		       uent_type(entity));
 		return -EINVAL;
 	}
 
 	/* get primary entity first */
-	parent = idev;
-	while (!is_primary(parent))
-		parent = parent->pue;
+	parent = entity;
+	if (is_idev(parent)) {
+		while (!is_primary(parent))
+			parent = parent->pue;
 
-	/* check parent is controller */
-	parent = to_ub_entity(parent->dev.parent);
-	if (!is_ibus_controller(parent)) {
-		ub_err(idev, "don't support register share port at non-controller device with type %u\n",
-		       uent_type(parent));
-		return -EINVAL;
-	}
-
-	if (port_id >= parent->port_nums) {
-		ub_err(parent, "port id %u exceeds port num %u\n", port_id,
-		       parent->port_nums);
-		return -EINVAL;
+		/* check parent is controller */
+		parent = to_ub_entity(parent->dev.parent);
+		if (!is_ibus_controller(parent)) {
+			ub_err(entity, "don't support register share port at non-controller device with type %u\n",
+			       uent_type(parent));
+			return -EINVAL;
+		}
 	}
 
 	port = parent->ports + port_id;
-	if (!port->shareable) {
+	if (is_idev(entity) && !port->shareable) {
 		ub_err(parent, "port%u isn't shareable\n", port_id);
 		return -EINVAL;
 	}
@@ -629,7 +626,7 @@ int ub_register_share_port(struct ub_entity *idev, u16 port_id,
 		return -ENOMEM;
 
 	notify_node->parent = parent;
-	notify_node->idev = idev;
+	notify_node->entity = entity;
 	notify_node->port_id = port_id;
 	notify_node->ops = ops;
 	INIT_LIST_HEAD(&notify_node->node);
@@ -638,33 +635,33 @@ int ub_register_share_port(struct ub_entity *idev, u16 port_id,
 	list_add_tail(&notify_node->node, &ub_share_port_notify_list);
 	up_write(&ub_share_port_notify_list_rwsem);
 
-	ub_info(idev, "register share port at %u success\n", port_id);
+	ub_info(entity, "register share port at %u success\n", port_id);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ub_register_share_port);
 
-void ub_unregister_share_port(struct ub_entity *idev, u16 port_id,
+void ub_unregister_share_port(struct ub_entity *entity, u16 port_id,
 			      struct ub_share_port_ops *ops)
 {
 	struct ub_share_port_notify_node *notify_node;
 
-	if (unlikely(!idev))
+	if (unlikely(!entity))
 		return;
 
 	down_write(&ub_share_port_notify_list_rwsem);
 
 	list_for_each_entry(notify_node, &ub_share_port_notify_list, node) {
-		if (notify_node->idev != idev ||
+		if (notify_node->entity != entity ||
 		    notify_node->port_id != port_id || notify_node->ops != ops)
 			continue;
 
 		list_del(&notify_node->node);
 		kfree(notify_node);
-		ub_info(idev, "unregister share port at %u success\n", port_id);
+		ub_info(entity, "unregister share port at %u success\n", port_id);
 		goto unlock;
 	}
 
-	ub_err(idev, "share port %u isn't registered, unregister failed\n",
+	ub_err(entity, "share port %u isn't registered, unregister failed\n",
 	       port_id);
 unlock:
 	up_write(&ub_share_port_notify_list_rwsem);
@@ -672,13 +669,13 @@ unlock:
 EXPORT_SYMBOL_GPL(ub_unregister_share_port);
 
 void ub_notify_share_port(struct ub_port *port,
-			  enum ub_share_port_notify_type type)
+			  enum ub_port_event type)
 {
 	struct ub_share_port_notify_node *notify_node;
 	struct ub_share_port_ops *ops;
 	struct ub_entity *uent;
 
-	if (!port || type >= NOTIFY_TYPE_MAX)
+	if (!port || type > UB_PORT_EVENT_RESET_DONE)
 		return;
 
 	uent = port->uent;
@@ -689,23 +686,13 @@ void ub_notify_share_port(struct ub_port *port,
 			continue;
 
 		ops = notify_node->ops;
-		switch (type) {
-		case RESET_PREPARE:
-			if (ops->reset_prepare)
-				ops->reset_prepare(notify_node->idev,
-						   notify_node->port_id);
-			break;
-		case RESET_DONE:
-			if (ops->reset_done)
-				ops->reset_done(notify_node->idev,
-						notify_node->port_id);
-			break;
-		default:
-			break;
-		}
+		if (ops->event_notify)
+			ops->event_notify(notify_node->entity,
+					  notify_node->port_id, type);
 	}
 	up_read(&ub_share_port_notify_list_rwsem);
 }
+EXPORT_SYMBOL_GPL(ub_notify_share_port);
 
 bool ub_port_check_link_up(struct ub_port *port)
 {

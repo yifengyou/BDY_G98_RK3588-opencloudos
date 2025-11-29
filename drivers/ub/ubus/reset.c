@@ -293,8 +293,7 @@ int ub_port_reset(struct ub_entity *dev, int port_id)
 		return -EINVAL;
 	}
 
-	if (port->shareable)
-		ub_notify_share_port(port, RESET_PREPARE);
+	ub_notify_share_port(port, UB_PORT_EVENT_RESET_PREPARE);
 
 	/* enable port reset */
 	ret = ub_port_write_dword(port, UB_PORT_RST, 0x01);
@@ -310,8 +309,7 @@ int ub_port_reset(struct ub_entity *dev, int port_id)
 	device_unlock(&dev->dev);
 
 	if (ub_wait_port_complete(port)) {
-		if (port->shareable)
-			ub_notify_share_port(port, RESET_DONE);
+		ub_notify_share_port(port, UB_PORT_EVENT_RESET_DONE);
 		port->link_state = LINK_STATE_NORMAL;
 		ub_info(dev, "port(%d) reset success!\n", port_id);
 		return ret;

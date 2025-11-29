@@ -613,9 +613,9 @@ static void ub_port_reset_notify_handler(struct ub_bus_controller *ubc, void *ms
 	port = ubc->uent->ports + pld->port_index;
 	if (port->shareable && port->domain_boundary) {
 		if (pld->type == RESET_PREPARE)
-			ub_notify_share_port(port, RESET_PREPARE);
+			ub_notify_share_port(port, UB_PORT_EVENT_RESET_PREPARE);
 		else if (pld->type == RESET_DONE)
-			ub_notify_share_port(port, RESET_DONE);
+			ub_notify_share_port(port, UB_PORT_EVENT_RESET_DONE);
 	}
 
 rsp:

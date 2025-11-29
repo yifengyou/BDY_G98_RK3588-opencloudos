@@ -537,3 +537,48 @@ int hi_send_entity_enable_msg(struct ub_entity *uent, u8 enable)
 
 	return 0;
 }
+
+int hi_send_port_reset_msg(struct ub_entity *uent, u16 port_idx)
+{
+	struct port_reset_pld *rst_pld;
+	struct vdm_msg_pkt pkt = {};
+	struct msg_info info = {};
+	struct msg_pkt_dw0 *pld_dw0;
+	u8 status;
+	int ret;
+
+	if (!uent->ubc->cluster)
+		return 0;
+
+	ub_msg_pkt_header_init(&pkt.header, uent, VDM_PORT_RESET_PLD_SIZE,
+			       code_gen(UB_MSG_CODE_VDM, UB_VENDOR_MSG,
+					MSG_REQ), true);
+
+	pkt.guid_high = *(u64 *)(&uent->ubc->uent->guid.dw[SZ_2]);
+	pld_dw0 = &pkt.pld_dw0;
+	pld_dw0->opcode = VDM_OPCODE_UB2FM_COMM_MSG;
+	pld_dw0->sub_opcode = VDM_SUB_OPCODE_PORT_RESET;
+	rst_pld = &pkt.reset_pld;
+	rst_pld->port_idx = port_idx;
+
+	message_info_init(&info, uent->ubc->uent, &pkt, &pkt,
+			  (VDM_PORT_RESET_SIZE << MSG_REQ_SIZE_OFFSET) |
+			  VDM_PORT_RESET_SIZE);
+
+	ub_info(uent, "Sync request port reset msg\n");
+
+	ret = hi_message_sync_request(uent->message->mdev, &info,
+				      pkt.header.msgetah.code);
+	if (ret) {
+		ub_err(uent, "msg sync request ret=%d\n", ret);
+		return ret;
+	}
+
+	status = pkt.header.msgetah.rsp_status;
+	if (status != UB_MSG_RSP_SUCCESS) {
+		ub_err(uent, "msg rsp status=%#02x\n", status);
+		return -EINVAL;
+	}
+
+	return 0;
+}
