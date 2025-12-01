@@ -424,7 +424,7 @@ static void mem_allocator_uninit_one(int nid)
 static char *mempool_allocator;
 module_param(mempool_allocator, charp, 0440);
 MODULE_PARM_DESC(mempool_allocator,
-		 "OBMM mempool allocator. If not set, use kernel cmdline pmd_mapping to select.");
+		 "OBMM mempool allocator. If not set, use buddy_highmem allocator.");
 static const char * const allocator_names[] = {
 	"hugetlb_pmd",
 	"hugetlb_pud",
@@ -479,7 +479,7 @@ static int init_mem_allocator_granu(enum allocator_id aid)
 	if (!mem_allocator_granu) {
 		if (aid == ALLOCATOR_HUGETLB_PUD)
 			__obmm_memseg_size = PUD_SIZE;
-		else if (aid == ALLOCATOR_HUGETLB_PMD)
+		else
 			__obmm_memseg_size = PMD_SIZE;
 		return 0;
 	}
