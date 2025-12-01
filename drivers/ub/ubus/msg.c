@@ -162,7 +162,7 @@ struct workqueue_struct *get_rx_msg_wq(u8 msg_code)
 	return rx_msg_wq[msg_code];
 }
 
-static bool msg_rx_flag;
+static atomic_t msg_rx_flag;
 
 int message_rx_init(void)
 {
@@ -186,18 +186,20 @@ int message_rx_init(void)
 		rx_msg_wq[i] = q;
 	}
 
-	msg_rx_flag = true;
+	wmb(); /* Ensure the register is written correctly. */
+	atomic_set(&msg_rx_flag, 1);
 
 	return 0;
 }
 
 void message_rx_uninit(void)
 {
-#define MSG_RX_WAIT_US 1000
+#define MSG_RX_WAIT_US 15000
 	struct workqueue_struct *q;
 	int i;
 
-	msg_rx_flag = false;
+	atomic_set(&msg_rx_flag, 0);
+	wmb(); /* Ensure the register is written correctly. */
 	/* For cpus still handle rx msg in interrupt context */
 	udelay(MSG_RX_WAIT_US);
 
@@ -297,7 +299,7 @@ int message_rx_handler(struct ub_bus_controller *ubc, void *pkt, u16 len)
 	struct msg_extended_header *msgetah = &header->msgetah;
 	struct ub_rx_msg_task *task;
 
-	if (!msg_rx_flag)
+	if (!atomic_read(&msg_rx_flag))
 		return -EBUSY;
 
 	if (len < MSG_PKT_HEADER_SIZE) {

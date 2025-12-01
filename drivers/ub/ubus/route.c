@@ -505,6 +505,10 @@ static void ub_set_route_table_entry(struct ub_entity *uent, u32 dst_cna,
 	if (uent->port_nums == 1)
 		return;
 
+	/* In a cluster scenario, do not configure the UBC routing table. */
+	if (is_ibus_controller(uent) && uent->ubc->cluster)
+		return;
+
 	pr_info("cna %#x uent set dstcna %#x route\n", uent->cna, dst_cna);
 
 	for (i = 0; i < EBW(uent->port_nums); i++) {
