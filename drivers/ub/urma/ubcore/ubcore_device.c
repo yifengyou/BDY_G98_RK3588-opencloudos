@@ -624,6 +624,8 @@ static int ubcore_alloc_hash_tables(struct ubcore_device *dev)
 
 	ubcore_update_hash_tables_size(&dev->attr.dev_cap);
 	for (i = 0; i < ARRAY_SIZE(g_ht_params); i++) {
+		if (g_ht_params[i].size == 0)
+			continue;
 		ret = ubcore_hash_table_alloc(&dev->ht[i], &g_ht_params[i]);
 		if (ret != 0) {
 			ubcore_log_err("alloc hash tables failed.\n");
@@ -637,60 +639,6 @@ free_tables:
 	for (j = 0; j < i; j++)
 		ubcore_hash_table_free(&dev->ht[j]);
 	return -1;
-}
-
-static void ubcore_destroy_vtp_in_unreg_dev(void *arg)
-{
-	struct ubcore_vtp *vtp = (struct ubcore_vtp *)arg;
-
-	if (vtp->cfg.vtpn != UINT_MAX && vtp->ub_dev->ops->destroy_vtp != NULL)
-		(void)vtp->ub_dev->ops->destroy_vtp(vtp);
-	else
-		kfree(vtp);
-}
-
-static void ubcore_destroy_tp_in_unreg_dev(void *arg)
-{
-	struct ubcore_tp *tp = (struct ubcore_tp *)arg;
-
-	if (tp->ub_dev->ops->destroy_tp != NULL)
-		(void)tp->ub_dev->ops->destroy_tp(tp);
-}
-
-static void ubcore_destroy_utp_in_unreg_dev(void *arg)
-{
-	struct ubcore_utp *utp = (struct ubcore_utp *)arg;
-
-	if (utp->ub_dev->ops->destroy_utp != NULL)
-		(void)utp->ub_dev->ops->destroy_utp(utp);
-}
-
-static void ubcore_destroy_tpg_in_unreg_dev(void *arg)
-{
-	struct ubcore_tpg *tpg = (struct ubcore_tpg *)arg;
-
-	if (tpg->ub_dev->ops->destroy_tpg != NULL)
-		(void)tpg->ub_dev->ops->destroy_tpg(tpg);
-}
-
-static void ubcore_free_driver_res(struct ubcore_device *dev)
-{
-	if (!dev->attr.tp_maintainer)
-		return;
-
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_RM_VTP],
-				       ubcore_destroy_vtp_in_unreg_dev);
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_RC_VTP],
-				       ubcore_destroy_vtp_in_unreg_dev);
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_UM_VTP],
-				       ubcore_destroy_vtp_in_unreg_dev);
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_TP],
-				       ubcore_destroy_tp_in_unreg_dev);
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_UTP],
-				       ubcore_destroy_utp_in_unreg_dev);
-
-	ubcore_hash_table_free_with_cb(&dev->ht[UBCORE_HT_TPG],
-				       ubcore_destroy_tpg_in_unreg_dev);
 }
 
 static void ubcore_free_hash_tables(struct ubcore_device *dev)
@@ -928,7 +876,6 @@ destroy_upi:
 static void uninit_ubcore_device(struct ubcore_device *dev)
 {
 	mutex_destroy(&dev->ldev_mutex);
-	ubcore_free_driver_res(dev);
 	ubcore_free_hash_tables(dev);
 	ubcore_destroy_eidtable(dev);
 	uninit_ubcore_mue(dev);
