@@ -5,3 +5,4 @@ obj-y += ubfi/
 obj-$(CONFIG_UB_URMA) += urma/
 obj-$(CONFIG_UB_UBASE) += ubase/
 obj-y += obmm/
+obj-$(CONFIG_UB_SENTRY) += sentry/
