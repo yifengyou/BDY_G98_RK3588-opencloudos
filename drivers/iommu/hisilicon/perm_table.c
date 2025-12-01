@@ -203,7 +203,7 @@ static int ummu_alloc_mapt_mem_for_table(struct ummu_domain *ummu_domain,
 		goto err_out;
 	}
 
-	if (ummu->cap.prod_ver == NO_PROD_ID) {
+	if (ummu->cap.options & UMMU_OPT_CHK_MAPT_CONTINUITY) {
 		ret = ummu_device_check_pa_continuity(ummu,
 			virt_to_phys(alloc_ptr),
 			PAGE_ORDER_TO_MAPT_ORDER(blk_para->block_size_order),

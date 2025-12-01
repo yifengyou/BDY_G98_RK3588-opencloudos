@@ -328,17 +328,19 @@ void ummu_sync_tct(struct ummu_device *ummu, u32 tecte_tag, u32 tid,
 			.deid_0 = tecte_tag,
 		},
 	};
-	struct ummu_mcmdq_ent cmd_plbi_all = {
-		.opcode = CMD_PLBI_OS_EIDTID,
-		.plbi = {
-			.tid = tid,
-			.tecte_tag = tecte_tag,
-		},
-	};
+
+	if (ummu->cap.options & UMMU_OPT_SYNC_WITH_PLBI) {
+		struct ummu_mcmdq_ent cmd_plbi_all = {
+			.opcode = CMD_PLBI_OS_EIDTID,
+			.plbi = {
+				.tid = tid,
+				.tecte_tag = tecte_tag,
+			},
+		};
+		ummu_mcmdq_issue_cmd(ummu, &cmd_plbi_all);
+	}
 
 	trace_ummu_sync_tct(dev_name(ummu->dev), tecte_tag, tid, leaf);
-	if (!ummu->cap.prod_ver)
-		ummu_mcmdq_issue_cmd(ummu, &cmd_plbi_all);
 	ummu_mcmdq_issue_cmd_with_sync(ummu, &cmd_cfgi_tct);
 }
 

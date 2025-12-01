@@ -30,7 +30,7 @@
 #define UMMU_DRV_NAME "ummu"
 #define HISI_VENDOR_ID 0xCC08
 
-static bool ummu_special_identify;
+static u16 ummu_chip_identifier;
 
 int ummu_write_reg_sync(struct ummu_device *ummu, u32 val,
 			u32 reg_off, u32 ack_off)
@@ -125,7 +125,7 @@ static int ummu_init_structures(struct ummu_device *ummu)
 	if (ret)
 		goto resource_release;
 
-	if (ummu->cap.support_mapt) {
+	if (ummu->cap.features & UMMU_FEAT_MAPT) {
 		/* ctrl page is private for every ummu hardware */
 		ummu_device_init_permq_ctrl_page(ummu);
 		/* ctx table is common for every ummu hardware */
@@ -141,21 +141,26 @@ resource_release:
 	return ret;
 }
 
-static void ummu_device_hw_probe_ver(struct ummu_device *ummu)
+static void ummu_device_hw_probe_iidr(struct ummu_device *ummu)
 {
 	u32 reg = readl_relaxed(ummu->base + UMMU_IIDR);
 
-	ummu->cap.prod_ver = (u16)FIELD_GET(IIDR_PROD_ID, reg);
 	/*
-	 * On the hisi chip with IIDR_PROD_ID set to 0,
-	 * ummu enables special_identify to perform some
-	 * specialized operations.
+	 * In the 1st generation On the hisi chip, IIDR_PROD_ID is set to 0,
+	 * ummu enables chip_identifier to perform some specialized operations.
 	 */
-	if (ummu_special_identify && !ummu->cap.prod_ver) {
+	if ((ummu_chip_identifier == HISI_VENDOR_ID) &&
+	    !FIELD_GET(IIDR_PROD_ID, reg)) {
 		ummu->cap.options |= UMMU_OPT_DOUBLE_PLBI;
 		ummu->cap.options |= UMMU_OPT_KCMD_PLBI;
+		ummu->cap.options |= UMMU_OPT_CHK_MAPT_CONTINUITY;
+		ummu->cap.options |= UMMU_OPT_MCMDQ_DECREASE;
+		ummu->cap.options |= UMMU_OPT_SYNC_WITH_PLBI;
 		ummu->cap.features &= ~UMMU_FEAT_STALLS;
 	}
+
+	dev_notice(ummu->dev, "features 0x%08x, options 0x%08x.\n",
+		   ummu->cap.features, ummu->cap.options);
 }
 
 static void ummu_device_hw_probe_cap0(struct ummu_device *ummu)
@@ -178,7 +183,8 @@ static void ummu_device_hw_probe_cap0(struct ummu_device *ummu)
 	ubrt_pasids = ummu->core_dev.iommu.max_pasids;
 	cap_pasids = 1 << ummu->cap.tid_bits;
 	if (ubrt_pasids > cap_pasids)
-		pr_warn("ubrt max_pasids[%u] beyond capacity.\n", ubrt_pasids);
+		dev_warn(ummu->dev, "ubrt max_pasids[%u] beyond capacity.\n",
+			 ubrt_pasids);
 	pasids = min(cap_pasids, (1UL << UB_MAX_TID_BITS));
 	ummu->core_dev.iommu.max_pasids = min(ubrt_pasids, pasids);
 	/* TECTE_TAG size */
@@ -434,10 +440,14 @@ static int ummu_device_hw_probe_cap4(struct ummu_device *ummu)
 	int hw_permq_ent;
 
 	hw_permq_ent = 1 << FIELD_GET(CAP4_UCMDQ_LOG2SIZE, reg);
-	ummu->cap.permq_ent_num.cmdq_num = hw_permq_ent;
+	ummu->cap.permq_ent_num.cmdq_num =
+		min_t(int, round_up(PAGE_SIZE / PCMDQ_ENT_BYTES, PCMDQ_ENT_BYTES),
+		hw_permq_ent);
 
 	hw_permq_ent = 1 << FIELD_GET(CAP4_UCPLQ_LOG2SIZE, reg);
-	ummu->cap.permq_ent_num.cplq_num = hw_permq_ent;
+	ummu->cap.permq_ent_num.cplq_num =
+		min_t(int, round_up(PAGE_SIZE / PCPLQ_ENT_BYTES, PCPLQ_ENT_BYTES),
+		hw_permq_ent);
 
 	if (ummu->impl_ops && ummu->impl_ops->hw_probe)
 		return ummu->impl_ops->hw_probe(ummu);
@@ -452,7 +462,7 @@ static void ummu_device_hw_probe_cap5(struct ummu_device *ummu)
 		ummu->cap.features |= UMMU_FEAT_RANGE_PLBI;
 
 	if (reg & CAP5_MAPT_SUPPORT)
-		ummu->cap.support_mapt = true;
+		ummu->cap.features |= UMMU_FEAT_MAPT;
 
 	if (reg & CAP5_PT_GRAN4K_BIT)
 		ummu->cap.ptsize_bitmap |= SZ_4K;
@@ -472,8 +482,8 @@ static void ummu_device_hw_probe_cap5(struct ummu_device *ummu)
 	if (ummu_sva_supported(ummu))
 		ummu->cap.features |= UMMU_FEAT_SVA;
 
-	dev_info(ummu->dev, "ias = %u-bit, oas = %u-bit, features = 0x%08x.\n",
-		 ummu->cap.ias, ummu->cap.oas, ummu->cap.features);
+	dev_info(ummu->dev, "ias %u-bit, oas %u-bit.\n",
+		 ummu->cap.ias, ummu->cap.oas);
 }
 
 static void ummu_device_hw_probe_cap6(struct ummu_device *ummu)
@@ -510,7 +520,7 @@ static int ummu_device_hw_init(struct ummu_device *ummu)
 
 	ummu_device_hw_probe_cap5(ummu);
 	ummu_device_hw_probe_cap6(ummu);
-	ummu_device_hw_probe_ver(ummu);
+	ummu_device_hw_probe_iidr(ummu);
 
 	return 0;
 }
@@ -603,7 +613,7 @@ static int ummu_device_reset(struct ummu_device *ummu)
 	if (ret)
 		return ret;
 
-	if (ummu->cap.support_mapt) {
+	if (ummu->cap.features & UMMU_FEAT_MAPT) {
 		ummu_device_set_permq_ctxtbl(ummu);
 		ret = ummu_device_mapt_enable(ummu);
 		if (ret)
@@ -646,8 +656,7 @@ static int ummu_device_ubrt_probe(struct ummu_device *ummu)
 	}
 
 	node = (struct ummu_node *)fw->ubrt_node;
-	if (node->vendor_id == HISI_VENDOR_ID)
-		ummu_special_identify = true;
+	ummu_chip_identifier = node->vendor_id;
 
 	ummu->core_dev.iommu.min_pasids = node->min_tid;
 	ummu->core_dev.iommu.max_pasids = node->max_tid;

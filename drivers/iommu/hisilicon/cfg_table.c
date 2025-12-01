@@ -1125,7 +1125,7 @@ static void ummu_device_make_default_tecte(struct ummu_device *ummu,
 		  TECT_ENT0_TCR_EL2 : TECT_ENT0_TCR_NSEL1;
 	target->data[0] = cpu_to_le64(
 		TECT_ENT0_V | FIELD_PREP(TECT_ENT0_TCRC_SEL, tcr_sel) |
-		(ummu->cap.support_mapt ? TECT_ENT0_MAPT_EN : 0) |
+		((ummu->cap.features & UMMU_FEAT_MAPT) ? TECT_ENT0_MAPT_EN : 0) |
 		FIELD_PREP(TECT_ENT0_ST_MODE, TECT_ENT0_ST_MODE_S1) |
 		FIELD_PREP(TECT_ENT0_PRIV_SEL, TECT_ENT0_PRIV_SEL_PRIV));
 
