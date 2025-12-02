@@ -58,12 +58,9 @@ void iee_setup_asid(void)
 
 void __init iee_init_post(void)
 {
-	if (!haoc_enabled) {
-		pr_info("IEE: HAOC is disabled\n");
+	if (!haoc_enabled)
 		return;
-	}
 
-	pr_info("IEE: Initializing IEE feature\n");
 	iee_setup_asid();
 	/* Flush tlb to enable IEE. */
 	flush_tlb_all();
@@ -72,7 +69,11 @@ void __init iee_init_post(void)
 	iee_prepare_init_task_token();
 #endif
 	iee_init_done = true;
-	pr_info("IEE: Initialization completed successfully\n");
+
+#ifdef CONFIG_IEE_SIP
+	extern void iee_si_init(void);
+	iee_si_init();
+#endif
 }
 
 void __init iee_stack_init(void)
@@ -85,11 +86,6 @@ void __init iee_stack_init(void)
 
 static int __init parse_haoc_enabled(char *str)
 {
-	int ret = kstrtobool(str, &haoc_enabled);
-	if (ret == 0)
-		pr_info("IEE: HAOC parameter set to %s\n", haoc_enabled ? "enabled" : "disabled");
-	else
-		pr_warn("IEE: Failed to parse haoc parameter\n");
-	return ret;
+	return kstrtobool(str, &haoc_enabled);
 }
 early_param("haoc", parse_haoc_enabled);

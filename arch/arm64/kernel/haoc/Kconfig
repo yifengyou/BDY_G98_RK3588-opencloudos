@@ -23,4 +23,12 @@ config IEE_PTRP
 		Could be a enhancement of other sub-module of HAOC.
 	depends on IEE
 
+config IEE_SIP
+	bool "Sensitive Instruction Protection for IEE(IEE_SIP)"
+	help
+		Protects critical instructions that may break the isolation of IEE,
+		such as writing system control registers. These instructions would
+		be executated inside IEE.
+	depends on IEE
+
 endmenu # HAOC
