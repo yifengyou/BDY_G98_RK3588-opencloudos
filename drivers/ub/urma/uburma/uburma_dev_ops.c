@@ -145,7 +145,7 @@ void uburma_release_file(struct kref *ref)
 	ubc_dev = srcu_dereference(file->ubu_dev->ubc_dev,
 				   &file->ubu_dev->ubc_dev_srcu);
 	if (ubc_dev && !ubc_dev->ops->disassociate_ucontext &&
-	    ubc_dev->ops->owner != NULL)
+	    ubc_dev->ops->owner)
 		module_put(ubc_dev->ops->owner);
 
 	srcu_read_unlock(&file->ubu_dev->ubc_dev_srcu, srcu_idx);
@@ -184,7 +184,7 @@ int uburma_open(struct inode *inode, struct file *filp)
 	}
 
 	if (!ubc_dev->ops->disassociate_ucontext &&
-	    !ubc_dev->ops->owner) {
+	    ubc_dev->ops->owner) {
 		if (!try_module_get(ubc_dev->ops->owner)) {
 			ret = -ENODEV;
 			goto err;
