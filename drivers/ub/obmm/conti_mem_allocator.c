@@ -258,8 +258,8 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 	spin_lock_irqsave(&allocator->lock, flags);
 	available = conti_get_avail(allocator);
 	if (!allow_slow && available < size) {
-		pr_err("%s:fast alloc failed. nid: %d, request: 0x%lx, available: 0x%lx", __func__,
-		       allocator->nid, size, available);
+		pr_err("%s:fast alloc failed. nid: %d, request: 0x%lx, available: 0x%lx\n",
+			__func__, allocator->nid, size, available);
 		spin_unlock_irqrestore(&allocator->lock, flags);
 		goto out_continue_pool;
 	}
@@ -487,7 +487,7 @@ int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, siz
 	int ret;
 
 	if (!allocator || !ops) {
-		pr_err("%s: null pointer.", __func__);
+		pr_err("%s: null pointer.\n", __func__);
 		return -EINVAL;
 	}
 	if (!ops->need_expand || !ops->expand_size) {

@@ -304,12 +304,12 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 
 	print_mmap_param(file, vma);
 	if (!region_allow_mmap(reg)) {
-		pr_err("mmap region %d: not allow to be mmaped", reg->regionid);
+		pr_err("mmap region %d: not allow to be mmaped\n", reg->regionid);
 		return -EPERM;
 	}
 
 	if (!validate_perm(file, vma->vm_flags)) {
-		pr_err("mmap region %d: invalid vma permission", reg->regionid);
+		pr_err("mmap region %d: invalid vma permission\n", reg->regionid);
 		return -EPERM;
 	}
 
@@ -318,7 +318,7 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 	offset = vma->vm_pgoff << PAGE_SHIFT;
 
 	if (offset & OBMM_MMAP_FLAG_HUGETLB_PMD) {
-		pr_debug("trying hugepage mmap");
+		pr_debug("trying hugepage mmap\n");
 		mmap_granu = OBMM_MMAP_GRANU_PMD;
 		offset &= ~OBMM_MMAP_FLAG_HUGETLB_PMD;
 	} else {
@@ -874,9 +874,6 @@ const struct file_operations obmm_shm_fops = { .owner = THIS_MODULE,
 
 static void obmm_shm_dev_release(struct device *dev)
 {
-	struct obmm_region *reg;
-
-	reg = container_of(dev, struct obmm_region, device);
 	module_put(THIS_MODULE);
 }
 

@@ -233,7 +233,7 @@ int obmm_unpreimport(struct obmm_cmd_preimport *cmd)
 	ret = preimport_release_prefilled(cmd->pa, cmd->pa + cmd->length - 1);
 	if (ret == 0)
 		module_put(THIS_MODULE);
-	pr_info("%s: unpreimport on nid=%d finished.\n", __func__, cmd->numa_id);
+	pr_info("%s: unpreimport on pa=%#llx finished.\n", __func__, cmd->pa);
 
 	return ret;
 }

@@ -234,7 +234,7 @@ static int calculate_export_region_size(unsigned long *total_size,
 	}
 	node_set(cmd_export->pxm_numa, nodes);
 	if (!nodes_on_same_package(&nodes)) {
-		pr_err("Cannot use memory from multiple sockets.\n");
+		pr_err("Cannot use memory from multiple sockets or memory and ub controller is from different sockets.\n");
 		return -EINVAL;
 	}
 

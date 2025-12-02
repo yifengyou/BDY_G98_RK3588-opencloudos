@@ -247,7 +247,7 @@ bool validate_scna(u32 scna)
 	int ret = ub_mem_get_numa_id(scna);
 
 	if (ret < 0) {
-		pr_err("%#x is not a known scna, lookup ret=%pe", scna, ERR_PTR(ret));
+		pr_err("%#x is not a known scna, lookup ret=%pe\n", scna, ERR_PTR(ret));
 		return false;
 	}
 	return true;
@@ -432,7 +432,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.create, (void __user *)arg,
 					  sizeof(struct obmm_cmd_export));
 		if (ret) {
-			pr_err("failed to load export argument");
+			pr_err("failed to load export argument\n");
 			return -EFAULT;
 		}
 
@@ -443,7 +443,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_to_user((void __user *)arg, &cmd_param.create,
 					sizeof(struct obmm_cmd_export));
 		if (ret) {
-			pr_err("failed to write export result");
+			pr_err("failed to write export result\n");
 			return -EFAULT;
 		}
 	} break;
@@ -451,7 +451,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.import, (void __user *)arg,
 					  sizeof(struct obmm_cmd_import));
 		if (ret) {
-			pr_err("failed to load import argument");
+			pr_err("failed to load import argument\n");
 			return -EFAULT;
 		}
 
@@ -462,7 +462,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_to_user((void __user *)arg, &cmd_param.import,
 					sizeof(struct obmm_cmd_import));
 		if (ret) {
-			pr_err("failed to write import result");
+			pr_err("failed to write import result\n");
 			return -EFAULT;
 		}
 	} break;
@@ -470,7 +470,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.unexport, (void __user *)arg,
 					  sizeof(struct obmm_cmd_unexport));
 		if (ret) {
-			pr_err("failed to load unexport argument");
+			pr_err("failed to load unexport argument\n");
 			return -EFAULT;
 		}
 
@@ -480,7 +480,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.unimport, (void __user *)arg,
 					  sizeof(struct obmm_cmd_unimport));
 		if (ret) {
-			pr_err("failed to load unimport argument");
+			pr_err("failed to load unimport argument\n");
 			return -EFAULT;
 		}
 
@@ -490,7 +490,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.query, (void __user *)arg,
 					  sizeof(struct obmm_cmd_addr_query));
 		if (ret) {
-			pr_err("failed to load addr_query argument");
+			pr_err("failed to load addr_query argument\n");
 			return -EFAULT;
 		}
 
@@ -501,7 +501,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_to_user((void __user *)arg, &cmd_param.query,
 					sizeof(struct obmm_cmd_addr_query));
 		if (ret) {
-			pr_err("failed to write obmm_query result");
+			pr_err("failed to write obmm_query result\n");
 			return -EFAULT;
 		}
 	} break;
@@ -528,7 +528,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.preimport, (void __user *)arg,
 					  sizeof(struct obmm_cmd_preimport));
 		if (ret) {
-			pr_err("failed to load preimport argument");
+			pr_err("failed to load preimport argument\n");
 			return -EFAULT;
 		}
 
@@ -539,7 +539,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_to_user((void __user *)arg, &cmd_param.preimport,
 					sizeof(struct obmm_cmd_preimport));
 		if (ret) {
-			pr_err("failed to write preimport result");
+			pr_err("failed to write preimport result\n");
 			return -EFAULT;
 		}
 	} break;
@@ -547,7 +547,7 @@ static long obmm_dev_ioctl(struct file *file __always_unused, unsigned int cmd, 
 		ret = (int)copy_from_user(&cmd_param.preimport, (void __user *)arg,
 					  sizeof(struct obmm_cmd_preimport));
 		if (ret) {
-			pr_err("failed to load preimport argument");
+			pr_err("failed to load preimport argument\n");
 			return -EFAULT;
 		}
 

@@ -246,7 +246,7 @@ int set_export_vendor(struct obmm_export_region *e_reg, const void __user *vendo
 		return 0;
 	}
 	if (vendor_len > OBMM_MAX_VENDOR_LEN) {
-		pr_err("invalid vendor_len = 0x%x, should less than 0x%x", vendor_len,
+		pr_err("invalid vendor_len = 0x%x, should less than 0x%x\n", vendor_len,
 		       OBMM_MAX_VENDOR_LEN);
 		return -EINVAL;
 	}
