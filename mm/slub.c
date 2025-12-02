@@ -2153,10 +2153,10 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	slab->inuse = 0;
 	slab->frozen = 0;
 
-// #ifdef CONFIG_IEE
-// 	if(haoc_enabled)
-// 		iee_allocate_slab_data(s, slab, oo_order(oo));
-// #endif
+#ifdef CONFIG_IEE
+	if(haoc_enabled)
+		iee_allocate_slab_data(s, slab, oo_order(oo));
+#endif
 #ifdef CONFIG_CREDP
 	if (haoc_enabled && s == cred_jar)
 		set_iee_page((unsigned long)page_address(folio_page(slab_folio(slab), 0)),
@@ -2214,13 +2214,13 @@ static void __free_slab(struct kmem_cache *s, struct slab *slab)
 	__folio_clear_slab(folio);
 	mm_account_reclaimed_pages(pages);
 	unaccount_slab(slab, order, s);
-// #ifdef CONFIG_IEE
-// 	if(haoc_enabled)
-// 	{
-// 		if (iee_free_slab_data(s, slab, order))
-// 			return;
-// 	}
-// #endif
+#ifdef CONFIG_IEE
+	if(haoc_enabled)
+	{
+		if (iee_free_slab_data(s, slab, order))
+			return;
+	}
+#endif
 #ifdef CONFIG_CREDP
 	if (haoc_enabled && s == cred_jar) {
 		#ifdef CONFIG_X86_64
