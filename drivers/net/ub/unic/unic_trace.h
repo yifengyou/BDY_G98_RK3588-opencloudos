@@ -146,6 +146,29 @@ TRACE_EVENT(unic_ip_req_skb,
 				    sizeof(u32))
 	    )
 );
+
+TRACE_EVENT(unic_rq_ci_mismatch,
+	    TP_PROTO(struct unic_rq *rq, const u32 start_rqe_idx),
+	    TP_ARGS(rq, start_rqe_idx),
+
+	    TP_STRUCT__entry(__field(u16, queue_index)
+			__field(u16, ci)
+			__field(u32, start_rqe_idx)
+			__string(devname, rq->netdev->name)
+	    ),
+
+	    TP_fast_assign(__entry->queue_index = rq->queue_index;
+			__entry->ci = rq->ci;
+			__entry->start_rqe_idx = start_rqe_idx;
+			__assign_str(devname, rq->netdev->name);
+	    ),
+
+	    TP_printk("%s rq_ci: queue_index=%u sw_rq_ci=%u hw_rq_ci=%u",
+		      __get_str(devname), __entry->queue_index, __entry->ci,
+		      __entry->start_rqe_idx
+	    )
+);
+
 #endif /* _UNIC_TRACE_H_ */
 
 /* This must be outside ifdef _UNIC_TRACE_H */

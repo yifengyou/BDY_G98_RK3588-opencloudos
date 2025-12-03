@@ -238,7 +238,6 @@ struct unic_cq {
 	struct unic_jfc_ctx	jfc_ctx;
 	u32			jfcn;
 	u32			ci; /* the start of next to consume */
-	u64			event_cnt;
 };
 
 static inline u8 unic_get_cqe_size(void)
