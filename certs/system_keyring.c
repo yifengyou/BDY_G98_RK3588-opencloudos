@@ -32,6 +32,29 @@ extern __initconst const u8 system_certificate_list[];
 extern __initconst const unsigned long system_certificate_list_size;
 extern __initconst const unsigned long module_cert_size;
 
+/*
+ * Find a key by ID in the trusted keyring.
+ * @id_0: The first ID to look for or NULL.
+ * @id_1: The second ID to look for or NULL, matched together with @id_0
+ * @id_2: The fallback ID to match against builtin_trusted_keys keys' id[2] if
+ * both of the other IDs are NULL.
+ *
+ * Find a key in the trusted keyring by identifier. If secondary trusted
+ * keyring is enabled, it will search in the secondary trusted keyring first.
+ * Else it will search in the builtin trusted keyring.
+ */
+struct key *find_asymmetric_key_in_trusted_keyring(
+	const struct asymmetric_key_id *id_0,
+	const struct asymmetric_key_id *id_1,
+	const struct asymmetric_key_id *id_2)
+{
+#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING
+	return find_asymmetric_key(secondary_trusted_keys, id_0, id_1, id_2, false);
+#else
+	return find_asymmetric_key(builtin_trusted_keys, id_0, id_1, id_2, false);
+#endif
+}
+
 /**
  * restrict_link_by_builtin_trusted - Restrict keyring addition by built-in CA
  * @dest_keyring: Keyring being linked to.
