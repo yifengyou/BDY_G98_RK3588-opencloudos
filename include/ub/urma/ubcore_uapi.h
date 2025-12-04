@@ -35,7 +35,7 @@ struct ubcore_route {
 
 struct ubcore_route_list {
 	uint32_t route_num;
-	struct ubcore_route buf[16];
+	struct ubcore_route buf[UBCORE_MAX_ROUTE_NUM];
 };
 
 /**
