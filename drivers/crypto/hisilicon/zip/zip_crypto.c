@@ -4,6 +4,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
 #include <linux/dma-mapping.h>
+#include <linux/highmem.h>
 #include <linux/scatterlist.h>
 #include "zip.h"
 
@@ -84,6 +85,8 @@ struct hisi_zip_sqe_ops {
 struct hisi_zip_ctx {
 	struct hisi_zip_qp_ctx qp_ctx[HZIP_CTX_Q_NUM];
 	const struct hisi_zip_sqe_ops *ops;
+	struct crypto_comp *soft_tfm;
+	bool fallback;
 };
 
 static int sgl_sge_nr_set(const char *val, const struct kernel_param *kp)
@@ -109,6 +112,38 @@ static const struct kernel_param_ops sgl_sge_nr_ops = {
 static u16 sgl_sge_nr = HZIP_SGL_SGE_NR;
 module_param_cb(sgl_sge_nr, &sgl_sge_nr_ops, &sgl_sge_nr, 0444);
 MODULE_PARM_DESC(sgl_sge_nr, "Number of sge in sgl(1-255)");
+
+static int hisi_zip_fallback_do_work(struct crypto_comp *tfm, struct acomp_req *acomp_req,
+			  bool is_decompress)
+{
+	void *input, *output;
+	const char *algo;
+	int err = 0;
+	int ret;
+
+	input = kmap_local_page(sg_page(acomp_req->src)) + acomp_req->src->offset;
+	output = kmap_local_page(sg_page(acomp_req->dst)) + acomp_req->dst->offset;
+
+	if (!is_decompress)
+		ret = crypto_comp_compress(tfm, input, acomp_req->slen,
+					   output, &acomp_req->dlen);
+	else
+		ret = crypto_comp_decompress(tfm, input, acomp_req->slen,
+					     output, &acomp_req->dlen);
+	if (ret) {
+		algo = crypto_tfm_alg_driver_name(crypto_comp_tfm(tfm));
+		pr_err("failed to do fallback %s work, ret=%d\n", algo, ret);
+		err = -EIO;
+	}
+
+	kunmap_local(output);
+	kunmap_local(input);
+
+	if (acomp_req->base.complete)
+		acomp_request_complete(acomp_req, err);
+
+	return ret;
+}
 
 static struct hisi_zip_req *hisi_zip_create_req(struct hisi_zip_qp_ctx *qp_ctx,
 						struct acomp_req *req)
@@ -317,6 +352,9 @@ static int hisi_zip_acompress(struct acomp_req *acomp_req)
 	struct hisi_zip_req *req;
 	int ret;
 
+	if (ctx->fallback)
+		return hisi_zip_fallback_do_work(ctx->soft_tfm, acomp_req, 0);
+
 	req = hisi_zip_create_req(qp_ctx, acomp_req);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
@@ -337,6 +375,9 @@ static int hisi_zip_adecompress(struct acomp_req *acomp_req)
 	struct device *dev = &qp_ctx->qp->qm->pdev->dev;
 	struct hisi_zip_req *req;
 	int ret;
+
+	if (ctx->fallback)
+		return hisi_zip_fallback_do_work(ctx->soft_tfm, acomp_req, 1);
 
 	req = hisi_zip_create_req(qp_ctx, acomp_req);
 	if (IS_ERR(req))
@@ -505,6 +546,29 @@ static void hisi_zip_set_acomp_cb(struct hisi_zip_ctx *ctx,
 		ctx->qp_ctx[i].qp->req_cb = fn;
 }
 
+static int hisi_zip_fallback_init(struct hisi_zip_ctx *ctx, const char *alg_name)
+{
+	if (!IS_ERR_OR_NULL(ctx->soft_tfm))
+		return 0;
+
+	ctx->soft_tfm = crypto_alloc_comp(alg_name, 0, 0);
+	if (IS_ERR_OR_NULL(ctx->soft_tfm)) {
+		pr_err("could not alloc soft tfm %s\n", alg_name);
+		return PTR_ERR(ctx->soft_tfm);
+	}
+
+	return 0;
+}
+
+static void hisi_zip_fallback_uninit(struct hisi_zip_ctx *ctx)
+{
+	if (IS_ERR_OR_NULL(ctx->soft_tfm))
+		return;
+
+	crypto_free_comp(ctx->soft_tfm);
+	ctx->soft_tfm = NULL;
+}
+
 static int hisi_zip_acomp_init(struct crypto_acomp *tfm)
 {
 	const char *alg_name = crypto_tfm_alg_name(&tfm->base);
@@ -515,7 +579,7 @@ static int hisi_zip_acomp_init(struct crypto_acomp *tfm)
 	ret = hisi_zip_ctx_init(ctx, COMP_NAME_TO_TYPE(alg_name), tfm->base.node);
 	if (ret) {
 		pr_err("failed to init ctx (%d)!\n", ret);
-		return ret;
+		goto switch_to_soft;
 	}
 
 	dev = &ctx->qp_ctx[0].qp->qm->pdev->dev;
@@ -540,16 +604,22 @@ err_release_req_q:
 	hisi_zip_release_req_q(ctx);
 err_ctx_exit:
 	hisi_zip_ctx_exit(ctx);
-	return ret;
+switch_to_soft:
+	ctx->fallback = true;
+	return hisi_zip_fallback_init(ctx, alg_name);
 }
 
 static void hisi_zip_acomp_exit(struct crypto_acomp *tfm)
 {
 	struct hisi_zip_ctx *ctx = crypto_tfm_ctx(&tfm->base);
 
-	hisi_zip_release_sgl_pool(ctx);
-	hisi_zip_release_req_q(ctx);
-	hisi_zip_ctx_exit(ctx);
+	if (!ctx->fallback) {
+		hisi_zip_release_sgl_pool(ctx);
+		hisi_zip_release_req_q(ctx);
+		hisi_zip_ctx_exit(ctx);
+	}
+
+	hisi_zip_fallback_uninit(ctx);
 }
 
 static struct acomp_alg hisi_zip_acomp_deflate = {
@@ -560,7 +630,8 @@ static struct acomp_alg hisi_zip_acomp_deflate = {
 	.base			= {
 		.cra_name		= "deflate",
 		.cra_driver_name	= "hisi-deflate-acomp",
-		.cra_flags		= CRYPTO_ALG_ASYNC,
+		.cra_flags		= CRYPTO_ALG_ASYNC |
+					  CRYPTO_ALG_NEED_FALLBACK,
 		.cra_module		= THIS_MODULE,
 		.cra_priority		= HZIP_ALG_PRIORITY,
 		.cra_ctxsize		= sizeof(struct hisi_zip_ctx),
