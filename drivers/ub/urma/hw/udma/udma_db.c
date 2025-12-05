@@ -69,6 +69,7 @@ void udma_unpin_sw_db(struct udma_context *ctx, struct udma_sw_db *db)
 		list_del(&db->page->list);
 		udma_umem_release(db->page->umem, false);
 		kfree(db->page);
+		db->page = NULL;
 	}
 
 	mutex_unlock(&ctx->pgdir_mutex);

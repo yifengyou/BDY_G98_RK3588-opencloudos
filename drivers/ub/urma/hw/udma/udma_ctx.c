@@ -200,7 +200,8 @@ static int udma_mmap_hugepage(struct udma_dev *dev, struct ubcore_ucontext *uctx
 		return -EINVAL;
 	}
 
-	vm_flags_set(vma, VM_IO | VM_LOCKED | VM_DONTEXPAND | VM_DONTDUMP | VM_DONTCOPY);
+	vm_flags_set(vma, VM_IO | VM_LOCKED | VM_DONTEXPAND | VM_DONTDUMP | VM_DONTCOPY |
+		     VM_WIPEONFORK);
 	vma->vm_page_prot = __pgprot(((~PTE_ATTRINDX_MASK) & vma->vm_page_prot.pgprot) |
 				     PTE_ATTRINDX(MT_NORMAL));
 	if (udma_alloc_u_hugepage(to_udma_context(uctx), vma)) {

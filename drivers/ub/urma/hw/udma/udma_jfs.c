@@ -102,6 +102,7 @@ void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 	if (sq->buf.kva) {
 		udma_k_free_buf(dev, &sq->buf);
 		kfree(sq->wrid);
+		sq->wrid = NULL;
 		return;
 	}
 

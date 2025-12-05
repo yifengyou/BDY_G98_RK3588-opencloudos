@@ -418,15 +418,21 @@ static void udma_init_ida_table(struct udma_ida *ida_table, uint32_t max, uint32
 	ida_table->next = min;
 }
 
-void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min)
+void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min, bool irq_lock)
 {
 	udma_init_ida_table(&table->ida_table, max, min);
-	xa_init(&table->xa);
+	if (irq_lock)
+		xa_init_flags(&table->xa, XA_FLAGS_LOCK_IRQ);
+	else
+		xa_init(&table->xa);
 }
 
-void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex)
+void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex, bool irq_lock)
 {
-	xa_init(table);
+	if (irq_lock)
+		xa_init_flags(table, XA_FLAGS_LOCK_IRQ);
+	else
+		xa_init(table);
 	mutex_init(udma_mutex);
 }
 
@@ -582,6 +588,7 @@ int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 	if (IS_ERR(buf->umem)) {
 		ret = PTR_ERR(buf->umem);
 		vfree(buf->aligned_va);
+		buf->aligned_va = NULL;
 		dev_err(udma_dev->dev, "pin kernel buf failed, ret = %d.\n", ret);
 		return ret;
 	}

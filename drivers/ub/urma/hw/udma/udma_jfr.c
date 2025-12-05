@@ -81,7 +81,7 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 		goto err_alloc_db;
 	}
 
-	udma_init_udma_table(&jfr->idx_que.jfr_idx_table, jfr->idx_que.buf.entry_cnt - 1, 0);
+	udma_init_udma_table(&jfr->idx_que.jfr_idx_table, jfr->idx_que.buf.entry_cnt - 1, 0, false);
 
 	jfr->rq.tid = dev->tid;
 

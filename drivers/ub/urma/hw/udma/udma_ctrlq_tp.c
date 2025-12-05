@@ -331,7 +331,8 @@ static int udma_ctrlq_store_one_tpid(struct udma_dev *udev, struct xarray *ctrlq
 	int ret;
 
 	if (debug_switch)
-		dev_info(udev->dev, "udma ctrlq store one tpid start. tpid %u\n", tpid->tpid);
+		dev_info_ratelimited(udev->dev, "udma ctrlq store one tpid start. tpid %u\n",
+				     tpid->tpid);
 
 	if (xa_load(ctrlq_tpid_table, tpid->tpid)) {
 		dev_warn(udev->dev,
@@ -418,7 +419,7 @@ static int udma_ctrlq_store_tpid_list(struct udma_dev *udev,
 	int i;
 
 	if (debug_switch)
-		dev_info(udev->dev, "udma ctrlq store tpid list tp_list_cnt = %u.\n",
+		dev_info_ratelimited(udev->dev, "udma ctrlq store tpid list tp_list_cnt = %u.\n",
 			 tpid_list_resp->tp_list_cnt);
 
 	for (i = 0; i < (int)tpid_list_resp->tp_list_cnt; i++) {
@@ -775,10 +776,6 @@ int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *activ
 	struct udma_dev *udma_dev = to_udma_dev(dev);
 	int ret;
 
-	if (debug_switch)
-		udma_dfx_ctx_print(udma_dev, "udma active tp ex", active_cfg->tp_handle.bs.tpid,
-				   sizeof(struct ubcore_active_tp_cfg) / sizeof(uint32_t),
-				   (uint32_t *)active_cfg);
 	ret = udma_ctrlq_set_active_tp_ex(udma_dev, active_cfg);
 	if (ret)
 		dev_err(udma_dev->dev, "Failed to set active tp msg, ret %d.\n", ret);
@@ -792,7 +789,8 @@ int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle
 	struct udma_dev *udma_dev = to_udma_dev(dev);
 
 	if (debug_switch)
-		dev_info(udma_dev->dev, "udma deactivate tp ex tp_id = %u\n", tp_handle.bs.tpid);
+		dev_info_ratelimited(udma_dev->dev, "udma deactivate tp ex tp_id = %u\n",
+				     tp_handle.bs.tpid);
 
 	return udma_k_ctrlq_deactive_tp(udma_dev, tp_handle, udata);
 }
