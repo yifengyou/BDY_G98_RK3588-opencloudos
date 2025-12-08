@@ -22,8 +22,9 @@
 #include "obmm_cache.h"
 #include "ubmempool_allocator.h"
 
-#define DEFAULT_MEMPOOL_SIZE "1G"
-static char *mempool_size = DEFAULT_MEMPOOL_SIZE;
+#define MAX_DEFAULT_PARAM_LENGTH 20
+static char default_mempool_size[MAX_DEFAULT_PARAM_LENGTH] = "1G";
+static char *mempool_size = default_mempool_size;
 module_param(mempool_size, charp, 0440);
 MODULE_PARM_DESC(mempool_size, "Max aviliable cached memory total.");
 
@@ -421,7 +422,8 @@ static void mem_allocator_uninit_one(int nid)
 	timer_shutdown_sync(&mem_allocators[nid].refill_timer);
 }
 
-static char *mempool_allocator;
+static char default_mempool_allocator[MAX_DEFAULT_PARAM_LENGTH] = "buddy_highmem";
+static char *mempool_allocator = default_mempool_allocator;
 module_param(mempool_allocator, charp, 0440);
 MODULE_PARM_DESC(mempool_allocator,
 		 "OBMM mempool allocator. If not set, use buddy_highmem allocator.");
@@ -451,11 +453,6 @@ static int select_mem_allocator(void)
 {
 	int i;
 
-	if (!mempool_allocator) {
-		pr_info("no allocator specified. using buddy_highmem.\n");
-		return ALLOCATOR_BUDDY_HIGHMEM;
-	}
-
 	for (i = 0; i < ALLOCATOR_MAX; i++) {
 		if (!strcmp(allocator_names[i], mempool_allocator))
 			break;
@@ -472,8 +469,21 @@ static int select_mem_allocator(void)
 	return i;
 }
 
+static void print_granu(char s[MAX_DEFAULT_PARAM_LENGTH], size_t granu)
+{
+	static const char * const units[] = {"", "K", "M", "G", "T"};
+	int i = 0;
+
+	while (granu >= 1024 && i < ARRAY_SIZE(units) - 1) {
+		granu >>= 10;
+		i++;
+	}
+	snprintf(s, MAX_DEFAULT_PARAM_LENGTH, "%lu%s", granu, units[i]);
+}
+
 static int init_mem_allocator_granu(enum allocator_id aid)
 {
+	static char def_granu[MAX_DEFAULT_PARAM_LENGTH];
 	char *p = mem_allocator_granu;
 
 	if (!mem_allocator_granu) {
@@ -481,6 +491,9 @@ static int init_mem_allocator_granu(enum allocator_id aid)
 			__obmm_memseg_size = PUD_SIZE;
 		else
 			__obmm_memseg_size = PMD_SIZE;
+
+		print_granu(def_granu, __obmm_memseg_size);
+		mem_allocator_granu = def_granu;
 		return 0;
 	}
 
