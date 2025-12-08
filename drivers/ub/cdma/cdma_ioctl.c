@@ -215,7 +215,7 @@ static int cdma_cmd_create_ctp(struct cdma_ioctl_hdr *hdr,
 	return 0;
 
 delete_ctp:
-	cdma_delete_ctp(cdev, ctp->tp_id);
+	cdma_delete_ctp(cdev, ctp->tp_id, false);
 delete_obj:
 	cdma_uobj_delete(uobj);
 
@@ -260,7 +260,7 @@ static int cdma_cmd_delete_ctp(struct cdma_ioctl_hdr *hdr,
 	}
 	ctp = uobj->object;
 
-	cdma_delete_ctp(cdev, ctp->tp_id);
+	cdma_delete_ctp(cdev, ctp->tp_id, cfile->uctx->invalid);
 	cdma_uobj_delete(uobj);
 	cdma_set_queue_res(cdev, queue, QUEUE_RES_TP, NULL);
 

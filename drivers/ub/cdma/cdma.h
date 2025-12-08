@@ -38,6 +38,7 @@ enum cdma_cqe_size {
 enum cdma_status {
 	CDMA_NORMAL,
 	CDMA_SUSPEND,
+	CDMA_INVALID
 };
 
 enum cdma_client_ops {

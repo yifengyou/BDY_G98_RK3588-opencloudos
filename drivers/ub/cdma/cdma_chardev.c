@@ -67,7 +67,7 @@ static long cdma_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct cdma_ioctl_hdr hdr = { 0 };
 	int ret;
 
-	if (!cfile->cdev || cfile->cdev->status == CDMA_SUSPEND) {
+	if (!cfile->cdev || cfile->cdev->status >= CDMA_SUSPEND) {
 		pr_info("ioctl cdev is invalid.\n");
 		return -ENODEV;
 	}
@@ -126,7 +126,7 @@ static int cdma_remap_pfn_range(struct cdma_file *cfile, struct vm_area_struct *
 	u32 jfs_id;
 	u32 cmd;
 
-	if (cdev->status == CDMA_SUSPEND) {
+	if (cdev->status >= CDMA_SUSPEND) {
 		dev_warn(cdev->dev, "cdev is resetting.\n");
 		return -EBUSY;
 	}
@@ -177,7 +177,7 @@ static int cdma_mmap(struct file *file, struct vm_area_struct *vma)
 	struct cdma_umap_priv *priv;
 	int ret;
 
-	if (!cfile->cdev || cfile->cdev->status == CDMA_SUSPEND) {
+	if (!cfile->cdev || cfile->cdev->status >= CDMA_SUSPEND) {
 		pr_info("mmap cdev is invalid.\n");
 		return -ENODEV;
 	}
@@ -267,7 +267,7 @@ static int cdma_open(struct inode *inode, struct file *file)
 	chardev = container_of(inode->i_cdev, struct cdma_chardev, cdev);
 	cdev = container_of(chardev, struct cdma_dev, chardev);
 
-	if (cdev->status == CDMA_SUSPEND) {
+	if (cdev->status >= CDMA_SUSPEND) {
 		dev_warn(cdev->dev, "cdev is resetting.\n");
 		return -EBUSY;
 	}

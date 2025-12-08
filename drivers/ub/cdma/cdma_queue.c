@@ -100,7 +100,7 @@ static int cdma_create_queue_res(struct cdma_dev *cdev, struct queue_cfg *cfg,
 	return 0;
 
 delete_tp:
-	cdma_delete_ctp(cdev, queue->tp->tp_id);
+	cdma_delete_ctp(cdev, queue->tp->tp_id, false);
 delete_jfc:
 	cdma_delete_jfc(cdev, queue->jfc->id, NULL);
 
@@ -112,7 +112,7 @@ static void cdma_delete_queue_res(struct cdma_dev *cdev,
 {
 	cdma_delete_jfs(cdev, queue->jfs->id);
 	queue->jfs = NULL;
-	cdma_delete_ctp(cdev, queue->tp->tp_id);
+	cdma_delete_ctp(cdev, queue->tp->tp_id, false);
 	queue->tp = NULL;
 	cdma_delete_jfc(cdev, queue->jfc->id, NULL);
 	queue->jfc = NULL;

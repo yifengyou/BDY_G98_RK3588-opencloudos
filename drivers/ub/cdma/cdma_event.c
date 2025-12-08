@@ -512,6 +512,8 @@ static int cdma_get_async_event(struct cdma_jfae *jfae, struct file *filp,
 	struct cdma_cmd_async_event async_event = { 0 };
 	struct cdma_jfe_event *event;
 	struct list_head event_list;
+	struct cdma_context *ctx;
+	struct cdma_dev *cdev;
 	u32 event_cnt;
 	int ret;
 
@@ -520,7 +522,10 @@ static int cdma_get_async_event(struct cdma_jfae *jfae, struct file *filp,
 		return -EINVAL;
 	}
 
-	if (!jfae->cfile->cdev || jfae->cfile->cdev->status == CDMA_SUSPEND) {
+	ctx = jfae->ctx;
+	cdev = jfae->cfile->cdev;
+
+	if (!cdev || cdev->status == CDMA_INVALID || !ctx || ctx->invalid) {
 		pr_info("wait dev invalid event success.\n");
 		async_event.event_data = 0;
 		async_event.event_type = CDMA_EVENT_DEV_INVALID;
@@ -562,11 +567,16 @@ static int cdma_get_async_event(struct cdma_jfae *jfae, struct file *filp,
 static __poll_t cdma_jfae_poll(struct file *filp, struct poll_table_struct *wait)
 {
 	struct cdma_jfae *jfae = (struct cdma_jfae *)filp->private_data;
+	struct cdma_context *ctx;
+	struct cdma_dev *cdev;
 
-	if (!jfae || !jfae->cfile || !jfae->cfile->cdev)
+	if (!jfae || !jfae->cfile)
 		return POLLERR;
 
-	if (jfae->cfile->cdev->status == CDMA_SUSPEND)
+	ctx = jfae->ctx;
+	cdev = jfae->cfile->cdev;
+
+	if (!cdev || cdev->status == CDMA_INVALID || !ctx || ctx->invalid)
 		return POLLIN | POLLRDNORM;
 
 	return cdma_jfe_poll(&jfae->jfe, filp, wait);
@@ -575,25 +585,21 @@ static __poll_t cdma_jfae_poll(struct file *filp, struct poll_table_struct *wait
 static long cdma_jfae_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct cdma_jfae *jfae = (struct cdma_jfae *)filp->private_data;
-	unsigned int nr;
-	int ret;
+	unsigned int nr = (unsigned int)_IOC_NR(cmd);
+	long ret = -ENOIOCTLCMD;
 
 	if (!jfae)
 		return -EINVAL;
-
-	nr = (unsigned int)_IOC_NR(cmd);
 
 	switch (nr) {
 	case JFAE_CMD_GET_ASYNC_EVENT:
 		ret = cdma_get_async_event(jfae, filp, arg);
 		break;
 	default:
-		dev_err(jfae->cfile->cdev->dev, "nr = %u.\n", nr);
-		ret = -ENOIOCTLCMD;
-		break;
+		pr_err("jfae ioctl wrong nr = %u.\n", nr);
 	}
 
-	return (long)ret;
+	return ret;
 }
 
 static int cdma_delete_jfae(struct inode *inode, struct file *filp)

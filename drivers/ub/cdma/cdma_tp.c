@@ -202,7 +202,7 @@ err_alloc_tp:
 	return NULL;
 }
 
-void cdma_delete_ctp(struct cdma_dev *cdev, u32 tp_id)
+void cdma_delete_ctp(struct cdma_dev *cdev, u32 tp_id, bool invalid)
 {
 	struct cdma_tp_cfg cfg = { 0 };
 	struct cdma_tp *tp;
@@ -219,7 +219,7 @@ void cdma_delete_ctp(struct cdma_dev *cdev, u32 tp_id)
 	spin_lock(&cdev->ctp_table.lock);
 	refcount_dec(&tp->refcount);
 	if (refcount_dec_if_one(&tp->refcount)) {
-		if (cdev->status != CDMA_SUSPEND) {
+		if (cdev->status == CDMA_NORMAL && !invalid) {
 			flag = true;
 			tpn = tp->base.tpn;
 			cfg = tp->base.cfg;

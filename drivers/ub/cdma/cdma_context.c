@@ -151,7 +151,7 @@ static void cdma_cleanup_queue_res(struct cdma_dev *cdev, struct cdma_context *c
 			cdma_delete_jfs(cdev, queue->jfs->id);
 
 		if (queue->tp)
-			cdma_delete_ctp(cdev, queue->tp->tp_id);
+			cdma_delete_ctp(cdev, queue->tp->tp_id, ctx->invalid);
 
 		if (queue->jfc)
 			cdma_delete_jfc(cdev, queue->jfc->id, NULL);

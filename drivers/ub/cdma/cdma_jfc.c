@@ -249,11 +249,19 @@ static int cdma_query_jfc_destroy_done(struct cdma_dev *cdev, uint32_t jfcn)
 	return ret;
 }
 
-static int cdma_destroy_and_flush_jfc(struct cdma_dev *cdev, u32 jfcn)
+static int cdma_destroy_and_flush_jfc(struct cdma_dev *cdev, struct cdma_jfc *jfc)
 {
 #define QUERY_MAX_TIMES 5
+	struct cdma_context *ctx = jfc->base.ctx;
+	u32 jfcn = jfc->jfcn;
 	u32 wait_times = 0;
 	int ret;
+
+	if (cdev->status == CDMA_INVALID || (ctx && ctx->invalid)) {
+		dev_info(cdev->dev,
+			 "resetting Ignore jfc ctx, jfcn = %u\n", jfcn);
+		return 0;
+	}
 
 	ret = cdma_post_destroy_jfc_mbox(cdev, jfcn, CDMA_JFC_STATE_INVALID);
 	if (ret) {
@@ -555,11 +563,9 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		return -EINVAL;
 	}
 
-	if (!(jfc->base.ctx && jfc->base.ctx->invalid)) {
-		ret = cdma_destroy_and_flush_jfc(cdev, jfc->jfcn);
-		if (ret)
-			dev_err(cdev->dev, "jfc delete failed, jfcn = %u.\n", jfcn);
-	}
+	ret = cdma_destroy_and_flush_jfc(cdev, jfc);
+	if (ret)
+		dev_err(cdev->dev, "jfc delete failed, jfcn = %u.\n", jfcn);
 
 	if (refcount_dec_and_test(&jfc->event_refcount))
 		complete(&jfc->event_comp);

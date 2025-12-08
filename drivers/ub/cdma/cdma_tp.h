@@ -70,7 +70,7 @@ struct cdma_ctrlq_tp_delete_cfg {
 struct cdma_base_tp *cdma_create_ctp(struct cdma_dev *cdev,
 				     struct cdma_tp_cfg *cfg);
 
-void cdma_delete_ctp(struct cdma_dev *cdev, uint32_t tp_id);
+void cdma_delete_ctp(struct cdma_dev *cdev, uint32_t tp_id, bool invalid);
 
 void cdma_destroy_ctp_imm(struct cdma_dev *cdev, uint32_t tp_id);
 

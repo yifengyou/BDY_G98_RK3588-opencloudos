@@ -107,13 +107,13 @@ static void cdma_reset_down(struct auxiliary_device *adev)
 
 	mutex_lock(&g_cdma_reset_mutex);
 	cdev = get_cdma_dev(adev);
-	if (!cdev || cdev->status == CDMA_SUSPEND) {
+	if (!cdev || cdev->status >= CDMA_SUSPEND) {
 		dev_warn(&adev->dev, "cdma device is not ready.\n");
 		mutex_unlock(&g_cdma_reset_mutex);
 		return;
 	}
 
-	cdev->status = CDMA_SUSPEND;
+	cdev->status = CDMA_INVALID;
 	cdma_cmd_flush(cdev);
 	cdma_reset_unmap_vma_pages(cdev, true);
 	cdma_client_handler(cdev, CDMA_CLIENT_STOP);
@@ -136,7 +136,7 @@ static void cdma_reset_uninit(struct auxiliary_device *adev)
 	}
 
 	stage = ubase_get_reset_stage(adev);
-	if (stage == UBASE_RESET_STAGE_UNINIT && cdev->status == CDMA_SUSPEND) {
+	if (stage == UBASE_RESET_STAGE_UNINIT && cdev->status == CDMA_INVALID) {
 		cdma_client_handler(cdev, CDMA_CLIENT_REMOVE);
 		cdma_destroy_dev(cdev, is_rmmod);
 	}
@@ -225,12 +225,12 @@ static void cdma_uninit_dev(struct auxiliary_device *auxdev)
 	dev_dbg(&auxdev->dev, "%s called, matched aux dev(%s.%u).\n",
 		 __func__, auxdev->name, auxdev->id);
 
+	ubase_reset_unregister(auxdev);
 	mutex_lock(&g_cdma_reset_mutex);
 	cdev = dev_get_drvdata(&auxdev->dev);
 	if (!cdev) {
-		dev_err(&auxdev->dev, "get drvdata from ubase failed.\n");
-		ubase_reset_unregister(auxdev);
 		mutex_unlock(&g_cdma_reset_mutex);
+		dev_err(&auxdev->dev, "cdma device is not exist.\n");
 		return;
 	}
 
@@ -239,19 +239,15 @@ static void cdma_uninit_dev(struct auxiliary_device *auxdev)
 	cdma_client_handler(cdev, CDMA_CLIENT_STOP);
 	cdma_client_handler(cdev, CDMA_CLIENT_REMOVE);
 	cdma_reset_unmap_vma_pages(cdev, false);
-
-	if (!is_rmmod) {
-		ret = ubase_deactivate_dev(auxdev);
-		dev_info(&auxdev->dev, "ubase deactivate dev ret = %d.\n", ret);
-	}
-
-	ubase_reset_unregister(auxdev);
+	ret = is_rmmod ? 0 : ubase_deactivate_dev(auxdev);
 	cdma_dbg_uninit(auxdev);
 	cdma_unregister_event(auxdev);
 	cdma_destroy_chardev(cdev);
 	cdma_free_cfile_uobj(cdev);
 	cdma_destroy_dev(cdev, true);
 	mutex_unlock(&g_cdma_reset_mutex);
+
+	dev_info(&auxdev->dev, "cdma device remove success, ret = %d.\n", ret);
 }
 
 static void cdma_reset_init(struct auxiliary_device *adev)
@@ -331,7 +327,6 @@ static int cdma_probe(struct auxiliary_device *auxdev,
 static void cdma_remove(struct auxiliary_device *auxdev)
 {
 	cdma_uninit_dev(auxdev);
-	pr_info("cdma device remove success.\n");
 }
 
 static const struct auxiliary_device_id cdma_id_table[] = {

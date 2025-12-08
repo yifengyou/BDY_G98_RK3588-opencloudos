@@ -498,9 +498,17 @@ static bool cdma_destroy_jfs_precondition(struct cdma_dev *cdev,
 }
 
 static int cdma_modify_and_destroy_jfs(struct cdma_dev *cdev,
-				       struct cdma_jetty_queue *sq)
+				       struct cdma_jfs *jfs)
 {
+	struct cdma_context *ctx = jfs->base_jfs.ctx;
+	struct cdma_jetty_queue *sq = &jfs->sq;
 	int ret = 0;
+
+	if (cdev->status == CDMA_INVALID || (ctx && ctx->invalid)) {
+		dev_info(cdev->dev,
+			 "resetting Ignore jfs ctx, id = %u.\n", sq->id);
+		return 0;
+	}
 
 	if (!cdma_destroy_jfs_precondition(cdev, sq))
 		return -EINVAL;
@@ -538,11 +546,9 @@ int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id)
 		return -EINVAL;
 	}
 
-	if (!(jfs->base_jfs.ctx && jfs->base_jfs.ctx->invalid)) {
-		ret = cdma_modify_and_destroy_jfs(cdev, &jfs->sq);
-		if (ret)
-			dev_err(cdev->dev, "jfs delete failed, id = %u.\n", jfs->id);
-	}
+	ret = cdma_modify_and_destroy_jfs(cdev, jfs);
+	if (ret)
+		dev_err(cdev->dev, "jfs delete failed, id = %u.\n", jfs->id);
 
 	if (refcount_dec_and_test(&jfs->ae_ref_cnt))
 		complete(&jfs->ae_comp);
@@ -1018,7 +1024,7 @@ static int cdma_post_sq_wr(struct cdma_dev *cdev, struct cdma_jetty_queue *sq,
 
 post_wr:
 	if (wr_cnt) {
-		if (cdev->status != CDMA_SUSPEND) {
+		if (cdev->status == CDMA_NORMAL) {
 			/* Ensure the order of write memory operations */
 			wmb();
 			if (wr_cnt == 1 && dwqe_enable && (sq->pi - sq->ci == 1))
