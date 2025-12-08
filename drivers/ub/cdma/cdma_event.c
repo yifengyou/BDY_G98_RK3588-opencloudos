@@ -611,7 +611,10 @@ static int cdma_delete_jfae(struct inode *inode, struct file *filp)
 
 	if (!mutex_trylock(&cfile->ctx_mutex))
 		return -ENOLCK;
-	jfae->ctx->jfae = NULL;
+
+	if (jfae->ctx)
+		jfae->ctx->jfae = NULL;
+
 	cdma_uninit_jfe(&jfae->jfe);
 	kfree(jfae);
 	filp->private_data = NULL;
