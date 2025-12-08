@@ -86,9 +86,10 @@ struct ubase_aeqe {
 
 	union {
 		struct {
-			u32	num;
-			u32	rsv0;
+			u32	num : 20;
+			u32	rsv0 : 12;
 			u32	rsv1;
+			u32	rsv2;
 		} queue_event;
 
 #pragma pack(push, 1)
