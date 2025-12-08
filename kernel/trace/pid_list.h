@@ -76,7 +76,8 @@ union upper_chunk {
 };
 
 struct trace_pid_list {
-	rwlock_t			lock;
+	seqcount_raw_spinlock_t		seqcount;
+	raw_spinlock_t			lock;
 	struct irq_work			refill_irqwork;
 	union upper_chunk		*upper[UPPER1_SIZE]; // 1 or 2K in size
 	union upper_chunk		*upper_list;
