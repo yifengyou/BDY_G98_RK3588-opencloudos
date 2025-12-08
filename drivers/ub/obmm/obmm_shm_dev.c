@@ -391,17 +391,6 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 			if (ret)
 				goto err_release_local_state_info;
 		}
-		/*
-		 * initialize region-level ownership info if not done yet.
-		 * once initialized, the OBMM ownership will persist until
-		 * the memdev goes offline.
-		 */
-		ret = init_ownership_info(reg);
-		if (ret)
-			goto err_release_local_state_info;
-		ret = check_mmap_allowed(reg, vma, mem_state);
-		if (ret)
-			goto err_release_local_state_info;
 
 		ret = map_obmm_region(vma, reg, mmap_granu);
 		if (ret) {
