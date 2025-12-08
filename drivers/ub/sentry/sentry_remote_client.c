@@ -229,7 +229,10 @@ int remote_event_handler(enum sentry_msg_helper_msg_type remote_type,
 			ack_done = get_ack_done(&sentry_remote_ctx.remote_event_ack_msg_buf,
 							remote_ack_type, COMM_TYPE_UNKNOWN);
 			spin_unlock(&sentry_buf_lock);
-			continue;
+			if (ack_done) {
+				pr_info("Receive ack message, stop blocking early\n");
+				break;
+			}
 		}
 		/* Handle acknowledgment in panic mode */
 		if (uvb_send_success) {
