@@ -31,4 +31,4 @@ struct cdma_uobj *cdma_uobj_get(struct cdma_file *cfile, int id,
 void cdma_cleanup_context_uobj(struct cdma_file *cfile, enum cdma_remove_reason why);
 void cdma_close_uobj_fd(struct cdma_file *cfile);
 
-#endif
+#endif /* __CDMA_UOBJ_H__ */

@@ -36,4 +36,5 @@ struct cdma_queue *cdma_create_queue(struct cdma_dev *cdev,
 int cdma_delete_queue(struct cdma_dev *cdev, u32 queue_id);
 void cdma_set_queue_res(struct cdma_dev *cdev, struct cdma_queue *queue,
 			enum cdma_queue_res_type type, void *res);
-#endif
+
+#endif /* __CDMA_QUEUE_H__ */

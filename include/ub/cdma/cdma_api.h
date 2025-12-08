@@ -236,4 +236,4 @@ int dma_register_client(struct dma_client *client);
 
 void dma_unregister_client(struct dma_client *client);
 
-#endif
+#endif /* _UB_CDMA_CDMA_API_H_ */

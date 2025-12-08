@@ -188,4 +188,4 @@ int cdma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 int cdma_poll_jfc(struct cdma_base_jfc *base_jfc, int cr_cnt,
 		  struct dma_cr *cr);
 
-#endif /* CDMA_JFC_H */
+#endif /* __CDMA_JFC_H__ */

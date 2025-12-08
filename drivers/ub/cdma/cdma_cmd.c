@@ -32,8 +32,10 @@ static int cdma_query_caps_from_firmware(struct cdma_dev *cdev)
 	int ret;
 
 	ret = cdma_cmd_query_fw_resource(cdev, &cmd);
-	if (ret)
-		return dev_err_probe(cdev->dev, ret, "query fw resource failed\n");
+	if (ret) {
+		dev_err(cdev->dev, "query fw resource failed, ret = %d\n", ret);
+		return ret;
+	}
 
 	caps->jfs_sge = cmd.jfs_sge;
 	caps->trans_mode = cmd.trans_mode;
@@ -42,9 +44,9 @@ static int cdma_query_caps_from_firmware(struct cdma_dev *cdev)
 	caps->ue_cnt = cmd.ue_cnt;
 	caps->ue_id = cmd.ue_id;
 
-	dev_dbg(cdev->dev, "jfs_sge = 0x%x, trans_mode = 0x%x, seid.max_cnt = 0x%x\n",
+	dev_info(cdev->dev, "jfs_sge = 0x%x, trans_mode = 0x%x, seid.max_cnt = 0x%x\n",
 		 caps->jfs_sge, caps->trans_mode, caps->seid.max_cnt);
-	dev_dbg(cdev->dev, "feature = 0x%x, ue_cnt = 0x%x, ue_id = 0x%x\n",
+	dev_info(cdev->dev, "feature = 0x%x, ue_cnt = 0x%x, ue_id = 0x%x\n",
 		 caps->feature, caps->ue_cnt, caps->ue_id);
 
 	return 0;
@@ -207,7 +209,7 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev)
 	attr->eu_num = out_query.seid_num;
 
 	for (i = 0; i < attr->eu_num; i++)
-		dev_dbg(cdev->dev,
+		dev_info(cdev->dev,
 			"cdma init eus[%u], upi = 0x%x, eid = 0x%x, eid_idx = 0x%x.\n",
 			i, eus[i].upi, eus[i].eid.dw0, eus[i].eid_idx);
 	mutex_unlock(&cdev->eu_mutex);

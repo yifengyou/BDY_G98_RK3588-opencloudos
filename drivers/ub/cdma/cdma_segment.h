@@ -32,4 +32,4 @@ void cdma_seg_ungrant(struct cdma_segment *seg);
 struct dma_seg *cdma_import_seg(struct dma_seg_cfg *cfg);
 void cdma_unimport_seg(struct dma_seg *seg);
 
-#endif /* CDMA_SEGMENT_H */
+#endif /* __CDMA_SEGMENT_H__ */

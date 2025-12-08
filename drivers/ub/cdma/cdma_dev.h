@@ -34,4 +34,4 @@ void cdma_unregister_crq_event(struct auxiliary_device *adev);
 int cdma_create_arm_db_page(struct cdma_dev *cdev);
 void cdma_destroy_arm_db_page(struct cdma_dev *cdev);
 
-#endif /* _CDMA_DEV_H_ */
+#endif /* __CDMA_DEV_H__ */

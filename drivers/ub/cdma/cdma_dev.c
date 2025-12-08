@@ -232,10 +232,10 @@ static int cdma_ctrlq_eu_add(struct cdma_dev *cdev, struct eu_info *eu)
 		if (eu->eid_idx != eus[i].eid_idx)
 			continue;
 
-		dev_dbg(cdev->dev,
-			"cdma.%u: eid_idx[0x%x] eid[0x%x->0x%x] upi[0x%x->0x%x] update success.\n",
-			cdev->adev->id, eu->eid_idx, eus[i].eid.dw0,
-			eu->eid.dw0, eus[i].upi, eu->upi & CDMA_UPI_MASK);
+		dev_info(cdev->dev,
+			 "cdma.%u: eid_idx[0x%x] eid[0x%x->0x%x] upi[0x%x->0x%x] update success.\n",
+			 cdev->adev->id, eu->eid_idx, eus[i].eid.dw0,
+			 eu->eid.dw0, eus[i].upi, eu->upi & CDMA_UPI_MASK);
 
 		eus[i].eid = eu->eid;
 		eus[i].upi = eu->upi & CDMA_UPI_MASK;
@@ -254,7 +254,7 @@ static int cdma_ctrlq_eu_add(struct cdma_dev *cdev, struct eu_info *eu)
 	}
 
 	eus[attr->eu_num++] = *eu;
-	dev_dbg(cdev->dev,
+	dev_info(cdev->dev,
 		 "cdma.%u: eid_idx[0x%x] eid[0x%x] upi[0x%x] add success.\n",
 		 cdev->adev->id, eu->eid_idx, eu->eid.dw0,
 		 eu->upi & CDMA_UPI_MASK);
@@ -479,7 +479,6 @@ void cdma_destroy_dev(struct cdma_dev *cdev, bool is_remove)
 
 	if (is_remove) {
 		cdma_free_dev_tid(cdev);
-
 		cdma_del_device_from_list(cdev);
 		cdma_uninit_dev_param(cdev);
 		kfree(cdev);

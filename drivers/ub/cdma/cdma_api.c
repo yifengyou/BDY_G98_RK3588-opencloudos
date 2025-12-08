@@ -367,7 +367,7 @@ void dma_free_queue(struct dma_device *dma_dev, int queue_id)
 	}
 
 	ctx_res = (struct cdma_ctx_res *)dma_dev->private_data;
-	queue = (struct cdma_queue *)xa_load(&ctx_res->queue_xa, queue_id);
+	queue = xa_load(&ctx_res->queue_xa, queue_id);
 	if (!queue) {
 		dev_err(cdev->dev, "no queue found in this device, id = %d\n",
 			queue_id);

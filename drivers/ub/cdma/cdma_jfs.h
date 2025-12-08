@@ -326,4 +326,4 @@ int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id);
 int cdma_post_jfs_wr(struct cdma_jfs *jfs, struct cdma_jfs_wr *wr,
 		     struct cdma_jfs_wr **bad_wr);
 
-#endif
+#endif /* __CDMA_JFS_H__ */

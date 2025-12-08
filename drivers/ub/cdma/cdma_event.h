@@ -76,4 +76,5 @@ void cdma_release_comp_event(struct cdma_jfce *jfce, struct list_head *event_lis
 void cdma_release_async_event(struct cdma_context *ctx, struct list_head *event_list);
 
 void cdma_put_jfae(struct cdma_context *ctx);
-#endif /* CDMA_EVENT_H */
+
+#endif /* __CDMA_EVENT_H__ */

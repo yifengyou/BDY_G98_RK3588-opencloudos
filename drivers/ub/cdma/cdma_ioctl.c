@@ -71,8 +71,7 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 	int ret;
 
 	if (cfile->uctx) {
-		dev_err(cdev->dev, "create jfae failed, ctx handle = %d.\n",
-			ctx->handle);
+		dev_err(cdev->dev, "cdma context has been created.\n");
 		return -EEXIST;
 	}
 
@@ -92,7 +91,8 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 
 	ctx->jfae = cdma_alloc_jfae(cfile);
 	if (!ctx->jfae) {
-		dev_err(cdev->dev, "create jfae failed.\n");
+		dev_err(cdev->dev, "create jfae failed, ctx handle = %d.\n",
+			ctx->handle);
 		ret = -EFAULT;
 		goto free_context;
 	}

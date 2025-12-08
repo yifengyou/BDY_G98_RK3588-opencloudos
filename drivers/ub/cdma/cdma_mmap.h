@@ -11,4 +11,4 @@ void cdma_unmap_vma_pages(struct cdma_file *cfile);
 const struct vm_operations_struct *cdma_get_umap_ops(void);
 void cdma_umap_priv_init(struct cdma_umap_priv *priv, struct vm_area_struct *vma);
 
-#endif /* CDMA_MMAP_H */
+#endif /* __CDMA_MMAP_H__ */

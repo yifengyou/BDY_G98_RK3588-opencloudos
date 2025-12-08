@@ -73,4 +73,5 @@ struct cdma_base_tp *cdma_create_ctp(struct cdma_dev *cdev,
 void cdma_delete_ctp(struct cdma_dev *cdev, uint32_t tp_id);
 
 void cdma_destroy_ctp_imm(struct cdma_dev *cdev, uint32_t tp_id);
-#endif /* CDMA_TP_H */
+
+#endif /* __CDMA_TP_H__ */

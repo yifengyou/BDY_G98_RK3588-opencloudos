@@ -23,7 +23,7 @@ static inline int cdma_ctrlq_msg_send(struct cdma_dev *cdev,
 static int cdma_ctrlq_create_ctp(struct cdma_dev *cdev,
 				 struct cdma_tp_cfg *cfg, u32 *tpn)
 {
-	struct cdma_ctrlq_tp_create_cfg ctrlq_tp;
+	struct cdma_ctrlq_tp_create_cfg ctrlq_tp = { 0 };
 	struct cdma_ctrlq_tp_ret tp_out = { 0 };
 	struct ubase_ctrlq_msg msg = { 0 };
 	int ret;
@@ -75,25 +75,29 @@ static void cdma_ctrlq_delete_ctp(struct cdma_dev *cdev, u32 tpn,
 	struct ubase_ctrlq_msg msg = { 0 };
 	int ret;
 
-	ctrlq_tp.seid_flag = CDMA_CTRLQ_FLAG_ON;
-	ctrlq_tp.deid_flag = CDMA_CTRLQ_FLAG_ON;
-	ctrlq_tp.scna = cfg->scna;
-	ctrlq_tp.dcna = cfg->dcna;
-	ctrlq_tp.seid[0] = cfg->seid;
-	ctrlq_tp.deid[0] = cfg->deid;
-	ctrlq_tp.tpn = tpn;
-	ctrlq_tp.route_type = CDMA_ROUTE_TYPE_CNA;
-	ctrlq_tp.trans_type = CDMA_TRANS_TYPE_CDMA_CTP;
+	ctrlq_tp = (struct cdma_ctrlq_tp_delete_cfg) {
+		.seid_flag = CDMA_CTRLQ_FLAG_ON,
+		.deid_flag = CDMA_CTRLQ_FLAG_ON,
+		.scna = cfg->scna,
+		.dcna = cfg->dcna,
+		.seid[0] = cfg->seid,
+		.deid[0] = cfg->deid,
+		.tpn = tpn,
+		.route_type = CDMA_ROUTE_TYPE_CNA,
+		.trans_type = CDMA_TRANS_TYPE_CDMA_CTP
+	};
 
-	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
-	msg.service_type = UBASE_CTRLQ_SER_TYPE_TP_ACL;
-	msg.opcode = CDMA_CTRLQ_DELETE_CTP;
-	msg.need_resp = CDMA_CTRLQ_FLAG_ON;
-	msg.is_resp = CDMA_CTRLQ_FLAG_OFF;
-	msg.in_size = sizeof(ctrlq_tp);
-	msg.in = &ctrlq_tp;
-	msg.out_size = sizeof(tp_out);
-	msg.out = &tp_out;
+	msg = (struct ubase_ctrlq_msg) {
+		.service_ver = UBASE_CTRLQ_SER_VER_01,
+		.service_type = UBASE_CTRLQ_SER_TYPE_TP_ACL,
+		.opcode = CDMA_CTRLQ_DELETE_CTP,
+		.need_resp = CDMA_CTRLQ_FLAG_ON,
+		.is_resp = CDMA_CTRLQ_FLAG_OFF,
+		.in_size = sizeof(ctrlq_tp),
+		.in = &ctrlq_tp,
+		.out_size = sizeof(tp_out),
+		.out = &tp_out
+	};
 
 	ret = cdma_ctrlq_msg_send(cdev, &msg);
 	if (ret)

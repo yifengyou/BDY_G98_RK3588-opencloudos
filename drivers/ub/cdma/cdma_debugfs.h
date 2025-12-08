@@ -55,4 +55,4 @@ struct cdma_dbgfs {
 int cdma_dbg_init(struct auxiliary_device *adev);
 void cdma_dbg_uninit(struct auxiliary_device *adev);
 
-#endif /* CDMA_DEBUGFS_H */
+#endif /* __CDMA_DEBUGFS_H__ */

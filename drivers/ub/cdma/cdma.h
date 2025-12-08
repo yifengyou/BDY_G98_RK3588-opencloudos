@@ -230,4 +230,4 @@ static inline struct cdma_dev *get_cdma_dev(struct auxiliary_device *adev)
 	return (struct cdma_dev *)dev_get_drvdata(&adev->dev);
 }
 
-#endif /* _CDMA_H_ */
+#endif /* __CDMA_H__ */

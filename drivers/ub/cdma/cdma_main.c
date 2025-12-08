@@ -383,5 +383,4 @@ static void __exit cdma_exit(void)
 module_init(cdma_init);
 module_exit(cdma_exit);
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0");
 MODULE_DESCRIPTION("Hisilicon UBus Crystal DMA Driver");

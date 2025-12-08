@@ -108,4 +108,4 @@ int cdma_pin_queue_addr(struct cdma_dev *cdev, u64 addr, u32 len,
 			struct cdma_buf *buf);
 void cdma_unpin_queue_addr(struct cdma_umem *umem);
 
-#endif
+#endif /* __CDMA_COMMON_H__ */

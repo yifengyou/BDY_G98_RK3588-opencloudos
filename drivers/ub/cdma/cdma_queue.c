@@ -16,8 +16,7 @@ struct cdma_queue *cdma_find_queue(struct cdma_dev *cdev, u32 queue_id)
 	struct cdma_queue *queue;
 
 	spin_lock(&cdev->queue_table.lock);
-	queue = (struct cdma_queue *)idr_find(&cdev->queue_table.idr_tbl.idr,
-					      queue_id);
+	queue = idr_find(&cdev->queue_table.idr_tbl.idr, queue_id);
 	spin_unlock(&cdev->queue_table.lock);
 
 	return queue;

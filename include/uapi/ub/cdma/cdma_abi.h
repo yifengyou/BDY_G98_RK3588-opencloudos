@@ -417,4 +417,4 @@ enum jfc_poll_state {
 	JFC_POLL_ERR,
 };
 
-#endif
+#endif /* _UAPI_UB_CDMA_CDMA_ABI_H_ */
