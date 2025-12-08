@@ -3660,7 +3660,7 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 		/* yield cpu to avoid soft lockup */
 		cond_resched();
 
-		if (numa_remote_hugetlb_nowatermark(nid) && !drained && (nid != NUMA_NO_NODE)) {
+		if ((nid != NUMA_NO_NODE) && numa_remote_hugetlb_nowatermark(nid) && !drained) {
 			hugetlb_drain_remote_pcp(h, nid);
 			drained = true;
 		}
