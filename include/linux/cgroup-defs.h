@@ -333,6 +333,7 @@ struct cgroup_base_stat {
 #ifdef CONFIG_SCHED_CORE
 	u64 forceidle_sum;
 #endif
+	u64 ntime;
 };
 
 /*
@@ -352,10 +353,29 @@ struct cgroup_base_stat {
  * frequency decreases the cost of each read.
  *
  * This struct hosts both the fields which implement the above -
- * updated_children and updated_next - and the fields which track basic
- * resource statistics on top of it - bsync, bstat and last_bstat.
+ * updated_children and updated_next.
  */
 struct cgroup_rstat_cpu {
+	/*
+	 * Child cgroups with stat updates on this cpu since the last read
+	 * are linked on the parent's ->updated_children through
+	 * ->updated_next.
+	 *
+	 * In addition to being more compact, singly-linked list pointing
+	 * to the cgroup makes it unnecessary for each per-cpu struct to
+	 * point back to the associated cgroup.
+	 *
+	 * Protected by per-cpu cgroup_rstat_cpu_lock.
+	 */
+	struct cgroup *updated_children;	/* terminated by self cgroup */
+	struct cgroup *updated_next;		/* NULL iff not on the list */
+};
+
+/*
+ * This struct hosts the fields which track basic resource statistics on
+ * top of it - bsync, bstat and last_bstat.
+ */
+struct cgroup_rstat_base_cpu {
 	/*
 	 * ->bsync protects ->bstat.  These are the only fields which get
 	 * updated in the hot path.
@@ -529,7 +549,15 @@ struct cgroup {
 
 	/* per-cpu recursive resource statistics */
 	struct cgroup_rstat_cpu __percpu *rstat_cpu;
+	struct cgroup_rstat_base_cpu __percpu *rstat_base_cpu;
 	struct list_head rstat_css_list;
+
+	/*
+	 * A singly-linked list of cgroup structures to be rstat flushed.
+	 * This is a scratch field to be used exclusively by
+	 * cgroup_rstat_flush_locked() and protected by cgroup_rstat_lock.
+	 */
+	struct cgroup	*rstat_flush_next;
 
 	/* cgroup basic resource statistics */
 	struct cgroup_base_stat last_bstat;
