@@ -14,7 +14,7 @@ extern "C" {
 
 
 #define OBMM_MAX_LOCAL_NUMA_NODES   16
-#define MAX_NUMA_DIST               254
+#define MAX_NUMA_DIST               255
 #define OBMM_MAX_PRIV_LEN           512
 #define OBMM_MAX_VENDOR_LEN         128
 
