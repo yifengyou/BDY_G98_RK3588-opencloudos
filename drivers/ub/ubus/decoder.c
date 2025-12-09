@@ -75,28 +75,68 @@ static int ub_decoder_init_queue(struct ub_bus_controller *ubc,
 
 static u32 set_mmio_base_reg(struct ub_decoder *decoder)
 {
-	u32 ret;
+	u32 mmio_high = upper_32_bits(decoder->mmio_base_addr);
+	u32 mmio_low = lower_32_bits(decoder->mmio_base_addr);
+	struct ub_entity *ent = decoder->uent;
+	u32 low_bit, high_bit, ret;
+
+	if (!ent->ubc->cluster) {
+		ret = (u32)ub_cfg_write_dword(ent, DECODER_MMIO_BA0,
+					      0xffffffff);
+		ret |= (u32)ub_cfg_write_dword(ent, DECODER_MMIO_BA1,
+					       0xffffffff);
+		ret |= (u32)ub_cfg_read_dword(ent, DECODER_MMIO_BA0, &low_bit);
+		ret |= (u32)ub_cfg_read_dword(ent, DECODER_MMIO_BA1, &high_bit);
+		if (ret) {
+			ub_err(ent, "Failed to access decoder MMIO BA\n");
+			return ret;
+		}
+
+		if ((low_bit | mmio_low) != low_bit ||
+		    (high_bit | mmio_high) != high_bit) {
+			ub_err(ent, "decoder MMIO address does not match HW reg\n");
+			return -EINVAL;
+		}
+	}
 
 	ret = (u32)ub_cfg_write_dword(decoder->uent, DECODER_MMIO_BA0,
 				      lower_32_bits(decoder->mmio_base_addr));
 	ret |= (u32)ub_cfg_write_dword(decoder->uent, DECODER_MMIO_BA1,
 				       upper_32_bits(decoder->mmio_base_addr));
-	if (ret)
-		ub_err(decoder->uent, "set decoder mmio base failed\n");
 
 	return ret;
 }
 
 static u32 set_page_table_reg(struct ub_decoder *decoder)
 {
-	u32 ret;
+	u32 matt_high = upper_32_bits(decoder->pgtlb.pgtlb_dma);
+	u32 matt_low = lower_32_bits(decoder->pgtlb.pgtlb_dma);
+	struct ub_entity *ent = decoder->uent;
+	u32 low_bit, high_bit, ret;
+
+	if (!ent->ubc->cluster) {
+		ret = (u32)ub_cfg_write_dword(ent, DECODER_MATT_BA0,
+					      0xffffffff);
+		ret |= (u32)ub_cfg_write_dword(ent, DECODER_MATT_BA1,
+					       0xffffffff);
+		ret |= (u32)ub_cfg_read_dword(ent, DECODER_MATT_BA0, &low_bit);
+		ret |= (u32)ub_cfg_read_dword(ent, DECODER_MATT_BA1, &high_bit);
+		if (ret) {
+			ub_err(ent, "Failed to access decoder MATT BA\n");
+			return ret;
+		}
+
+		if ((low_bit | matt_low) != low_bit ||
+		    (high_bit | matt_high) != high_bit) {
+			ub_err(ent, "decoder MATT address does not match HW reg\n");
+			return -EINVAL;
+		}
+	}
 
 	ret = (u32)ub_cfg_write_dword(decoder->uent, DECODER_MATT_BA0,
 				      lower_32_bits(decoder->pgtlb.pgtlb_dma));
 	ret |= (u32)ub_cfg_write_dword(decoder->uent, DECODER_MATT_BA1,
 				       upper_32_bits(decoder->pgtlb.pgtlb_dma));
-	if (ret)
-		ub_err(decoder->uent, "set decoder page table reg failed\n");
 
 	return ret;
 }
@@ -145,6 +185,25 @@ static u32 set_queue_reg(struct ub_decoder *decoder)
 	return ret;
 }
 
+static void unset_queue_reg(struct ub_decoder *decoder)
+{
+	struct ub_entity *uent = decoder->uent;
+	u32 ret;
+
+	ret = (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_CFG,
+				      decoder->vals.cmdq_cfg_val);
+	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_CFG,
+				       decoder->vals.evtq_cfg_val);
+
+	ret |= (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_BASE_ADDR0, 0);
+	ret |= (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_BASE_ADDR1, 0);
+
+	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_BASE_ADDR0, 0);
+	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_BASE_ADDR1, 0);
+	if (ret)
+		ub_err(uent, "unset queue reg fail\n");
+}
+
 static u32 set_decoder_enable(struct ub_decoder *decoder)
 {
 	u32 ret = (u32)ub_cfg_write_dword(decoder->uent, DECODER_CTRL, 1);
@@ -155,6 +214,14 @@ static u32 set_decoder_enable(struct ub_decoder *decoder)
 	return ret;
 }
 
+static void unset_decoder_enable(struct ub_decoder *decoder)
+{
+	struct ub_entity *uent = decoder->uent;
+
+	if (ub_cfg_write_dword(uent, DECODER_CTRL, 0))
+		ub_err(uent, "unset decoder enable fail\n");
+}
+
 static u32 ub_decoder_device_set(struct ub_decoder *decoder)
 {
 	u32 ret;
@@ -163,6 +230,11 @@ static u32 ub_decoder_device_set(struct ub_decoder *decoder)
 	ret |= set_page_table_reg(decoder);
 	ret |= set_queue_reg(decoder);
 	ret |= set_decoder_enable(decoder);
+
+	if (ret) {
+		unset_decoder_enable(decoder);
+		unset_queue_reg(decoder);
+	}
 
 	return ret;
 }
@@ -187,21 +259,26 @@ static void ub_decoder_free_page_table(struct ub_bus_controller *ubc,
 			"ub bus controller can't free decoder table\n");
 }
 
-static void ub_get_decoder_mmio_base(struct ub_bus_controller *ubc,
+static int ub_get_decoder_mmio_base(struct ub_bus_controller *ubc,
 				     struct ub_decoder *decoder)
 {
 	struct resource_entry *entry;
 
-	decoder->mmio_base_addr = -1;
 	resource_list_for_each_entry(entry, &ubc->resources) {
 		if (entry->res->flags == IORESOURCE_MEM &&
-		    strstr(entry->res->name, "UB_BUS_CTL") &&
-		    entry->res->start < decoder->mmio_base_addr)
+			strstr(entry->res->name, "UB_BUS_CTL")) {
 			decoder->mmio_base_addr = entry->res->start;
+			decoder->mmio_end_addr = entry->res->end;
+			break;
+		}
 	}
 
-	ub_info(decoder->uent, "decoder mmio base is %#llx\n",
-		decoder->mmio_base_addr);
+	if (decoder->mmio_base_addr == 0) {
+		ub_err(decoder->uent, "get decoder mmio base failed\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static const char * const mmio_size_desc[] = {
@@ -209,15 +286,21 @@ static const char * const mmio_size_desc[] = {
 	"2Tbyte", "4Tbyte", "8Tbyte", "16Tbyte"
 };
 
+static const u64 mmio_size[] = {
+	128ULL * SZ_1G, 256ULL * SZ_1G, 512ULL * SZ_1G, SZ_1T,
+	2 * SZ_1T, 4 * SZ_1T, 8 * SZ_1T, 16 * SZ_1T
+};
+
 static int ub_get_decoder_cap(struct ub_decoder *decoder)
 {
 	struct ub_entity *uent = decoder->uent;
+	u64 size;
 	u32 val;
 	int ret;
 
 	ret = ub_cfg_read_dword(uent, DECODER_CAP, &val);
 	if (ret) {
-		ub_err(uent, "read decoder cap failed\n");
+		ub_err(uent, "read decoder cap fail\n");
 		return ret;
 	}
 
@@ -225,9 +308,15 @@ static int ub_get_decoder_cap(struct ub_decoder *decoder)
 	decoder->cmdq.qs = (val & CMDQ_SIZE_MASK) >> CMDQ_SIZE_OFFSET;
 	decoder->evtq.qs = (val & EVTQ_SIZE_MASK) >> EVTQ_SIZE_OFFSET;
 
-	ub_dbg(uent, "cmdq_queue_size=%u, evtq_queue_size=%u, mmio_size=%s\n",
-	       decoder->cmdq.qs, decoder->evtq.qs,
-	       mmio_size_desc[decoder->mmio_size_sup]);
+	size = decoder->mmio_end_addr - decoder->mmio_base_addr + 1;
+	if (size > mmio_size[decoder->mmio_size_sup])
+		decoder->mmio_end_addr = decoder->mmio_base_addr +
+					 mmio_size[decoder->mmio_size_sup] - 1;
+
+	ub_info(uent, "decoder mmio_addr[%#llx-%#llx], cmdq_queue_size=%u, evtq_queue_size=%u, mmio_size_sup=%s\n",
+		decoder->mmio_base_addr, decoder->mmio_end_addr,
+		decoder->cmdq.qs, decoder->evtq.qs,
+		mmio_size_desc[decoder->mmio_size_sup]);
 	return 0;
 }
 
@@ -245,7 +334,9 @@ static int ub_create_decoder(struct ub_bus_controller *ubc)
 	decoder->uent = uent;
 	mutex_init(&decoder->table_lock);
 
-	ub_get_decoder_mmio_base(ubc, decoder);
+	ret = ub_get_decoder_mmio_base(ubc, decoder);
+	if (ret)
+		goto release_decoder;
 
 	ret = ub_get_decoder_cap(decoder);
 	if (ret)
@@ -293,25 +384,6 @@ static void unset_mmio_base_reg(struct ub_decoder *decoder)
 		ub_err(uent, "unset mmio base reg failed\n");
 }
 
-static void unset_queue_reg(struct ub_decoder *decoder)
-{
-	struct ub_entity *uent = decoder->uent;
-	u32 ret;
-
-	ret = (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_CFG,
-				      decoder->vals.cmdq_cfg_val);
-	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_CFG,
-				       decoder->vals.evtq_cfg_val);
-
-	ret |= (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_BASE_ADDR0, 0);
-	ret |= (u32)ub_cfg_write_dword(uent, DECODER_CMDQ_BASE_ADDR1, 0);
-
-	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_BASE_ADDR0, 0);
-	ret |= (u32)ub_cfg_write_dword(uent, DECODER_EVENTQ_BASE_ADDR1, 0);
-	if (ret)
-		ub_err(uent, "unset queue reg failed\n");
-}
-
 static void unset_page_table_reg(struct ub_decoder *decoder)
 {
 	struct ub_entity *uent = decoder->uent;
@@ -321,14 +393,6 @@ static void unset_page_table_reg(struct ub_decoder *decoder)
 	ret |= (u32)ub_cfg_write_dword(uent, DECODER_MATT_BA1, 0);
 	if (ret)
 		ub_err(uent, "unset page table reg failed\n");
-}
-
-static void unset_decoder_enable(struct ub_decoder *decoder)
-{
-	struct ub_entity *uent = decoder->uent;
-
-	if (ub_cfg_write_dword(uent, DECODER_CTRL, 0))
-		ub_err(uent, "unset decoder enable failed\n");
 }
 
 static void ub_decoder_device_unset(struct ub_decoder *decoder)

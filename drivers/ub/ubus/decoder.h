@@ -72,6 +72,7 @@ struct ub_decoder {
 	struct device *dev;
 	struct ub_entity *uent;
 	phys_addr_t mmio_base_addr;
+	phys_addr_t mmio_end_addr;
 	u32 mmio_size_sup;
 	u64 rg_size;
 	struct ub_decoder_queue cmdq;
