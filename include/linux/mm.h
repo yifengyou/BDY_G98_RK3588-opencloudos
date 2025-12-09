@@ -1241,6 +1241,25 @@ static inline int page_mapcount(struct page *page)
 	return mapcount;
 }
 
+/*
+ * proc_kpage_read_mapcount - get mapcount for /proc/kpagecount
+ * @page: the page to get mapcount for
+ *
+ * This is similar to page_mapcount() but avoids calling
+ * folio_entire_mapcount() which has a VM_BUG_ON_FOLIO assertion
+ * that can fail in certain edge cases when reading /proc/kpagecount.
+ */
+static inline int proc_kpage_read_mapcount(struct page *page)
+{
+	int mapcount = atomic_read(&page->_mapcount) + 1;
+
+	if (mapcount < 0)
+		mapcount = 0;
+	if (unlikely(PageCompound(page)))
+		mapcount += atomic_read(&page_folio(page)->_entire_mapcount) + 1;
+	return mapcount;
+}
+
 int folio_total_mapcount(struct folio *folio);
 
 /**
