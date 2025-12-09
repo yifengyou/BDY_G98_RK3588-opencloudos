@@ -26,6 +26,10 @@
 	dev_info(&ucdev->fwctl.dev, "PID %u: " format, current->pid, \
 		##__VA_ARGS__)
 
+#define ubctl_warn(ucdev, format, ...) \
+	dev_warn(&ucdev->fwctl.dev, "PID %u: " format, current->pid, \
+		##__VA_ARGS__)
+
 #define UBCTL_GET_PHY_ADDR(high, low) ((((u64)(high)) << 32) | (low))
 #define UBCTL_EXTRACT_BITS(value, start, end) \
 	(((value) >> (start)) & ((1UL << ((end) - (start) + 1)) - 1))

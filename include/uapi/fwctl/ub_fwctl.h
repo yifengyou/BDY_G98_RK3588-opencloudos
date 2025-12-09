@@ -58,6 +58,18 @@ enum ub_fwctl_cmdrpc_type {
 	 * @UTOOL_CMD_QUERY_NL_ABN: Query NL layer NL_ABN related registers
 	 */
 	UTOOL_CMD_QUERY_NL_ABN = 0x0004,
+	/**
+	 * @UTOOL_CMD_QUERY_NL_SSU_SW: Query ssu_sw non-empty dfx statistics
+	 */
+	UTOOL_CMD_QUERY_NL_SSU_SW = 0x0005,
+	/**
+	 * @UTOOL_CMD_QUERY_NL_SSU_OQ: Query ssu_oq non-empty dfx statistics
+	 */
+	UTOOL_CMD_QUERY_NL_SSU_OQ = 0x0006,
+	/**
+	 * @UTOOL_CMD_QUERY_NL_SSU_P2P: Query ssu_p2p queue non-empty dfx statistics
+	 */
+	UTOOL_CMD_QUERY_NL_SSU_P2P = 0x0007,
 
 	/**
 	 * @UTOOL_CMD_QUERY_TP: Query all registers at the TP layer
