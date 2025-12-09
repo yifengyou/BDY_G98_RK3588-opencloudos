@@ -915,15 +915,17 @@ out:
 
 int ub_default_bus_instance_init(struct ub_entity *uent)
 {
-	bool m_idev = is_p_idevice(uent);
-	bool fad = is_p_device(uent);
 	struct ub_bus_instance *bi;
+	bool use_cluster;
 	int ret;
 
 	if (is_switch(uent))
 		return 0;
 
-	if (fad || m_idev) {
+	use_cluster = is_p_device(uent) || is_p_idevice(uent) ||
+		      (is_ibus_controller(uent) && uent->ubc->cluster);
+
+	if (use_cluster) {
 		mutex_lock(&dynamic_mutex);
 		bi = ub_find_bus_instance(eid_match, &uent->user_eid);
 	} else {
@@ -931,7 +933,7 @@ int ub_default_bus_instance_init(struct ub_entity *uent)
 	}
 
 	if (!bi) {
-		if (fad || m_idev)
+		if (use_cluster)
 			mutex_unlock(&dynamic_mutex);
 		ub_err(uent, "get default bi NULL\n");
 		return -EINVAL;
@@ -941,7 +943,7 @@ int ub_default_bus_instance_init(struct ub_entity *uent)
 	ret = ub_bind_bus_instance(uent, bi);
 	mutex_unlock(&uent->instance_lock);
 
-	if (fad || m_idev) {
+	if (use_cluster) {
 		ub_bus_instance_put(bi);
 		mutex_unlock(&dynamic_mutex);
 	}

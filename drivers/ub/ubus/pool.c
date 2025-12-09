@@ -533,7 +533,14 @@ static void ub_cfg_cpl_notify_handler(struct ub_bus_controller *ubc, void *msg,
 	if (ret) {
 		dev_err(&ubc->dev, "handle notify bi failed, ret=%d\n", ret);
 		rsp_status = err_to_msg_rsp(ret);
+		goto rsp;
 	}
+
+	if (!ub_entity_test_priv_flag(ubc->uent, UB_ENTITY_START)) {
+		ubc->uent->user_eid = notify->eid[0];
+		ub_start_ent(ubc->uent);
+	}
+
 rsp:
 	header->msgetah.rsp_status = rsp_status;
 	ub_cfg_cpl_notify_msg_rsp(ubc, header);

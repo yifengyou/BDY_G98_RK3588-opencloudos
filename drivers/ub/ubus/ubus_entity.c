@@ -421,6 +421,11 @@ void ub_entity_add(struct ub_entity *uent, void *ctx)
 		ret = ub_ports_add(uent);
 		WARN_ON(ret);
 	}
+
+	if (is_ibus_controller(uent)) {
+		ret = ub_static_bus_instance_init(uent->ubc);
+		WARN_ON(ret);
+	}
 }
 EXPORT_SYMBOL_GPL(ub_entity_add);
 
@@ -431,11 +436,6 @@ void ub_start_ent(struct ub_entity *uent)
 
 	if (!uent)
 		return;
-
-	if (is_ibus_controller(uent)) {
-		ret = ub_static_bus_instance_init(uent->ubc);
-		WARN_ON(ret);
-	}
 
 	ret = ub_default_bus_instance_init(uent);
 	WARN_ON(ret);
@@ -507,9 +507,6 @@ void ub_stop_ent(struct ub_entity *uent)
 	ub_remove_sysfs_ent_files(uent);
 
 	ub_default_bus_instance_uninit(uent);
-
-	if (is_ibus_controller(uent))
-		ub_static_bus_instance_uninit(uent->ubc);
 }
 EXPORT_SYMBOL_GPL(ub_stop_ent);
 
@@ -526,6 +523,9 @@ void ub_remove_ent(struct ub_entity *uent)
 	/* Remove mue in primary dev, when uent is entN, mue_list is NULL */
 	list_for_each_entry_safe_reverse(ent, tmp, &uent->mue_list, node)
 		ub_remove_ent(ent);
+
+	if (is_ibus_controller(uent))
+		ub_static_bus_instance_uninit(uent->ubc);
 
 	if (is_primary(uent))
 		ub_ports_del(uent);
@@ -1008,7 +1008,8 @@ int ub_set_user_info(struct ub_entity *uent)
 
 	u32 eid = uent->ubc->uent->eid;
 
-	if (is_p_device(uent))
+	if (is_p_device(uent) ||
+	    (uent->ubc->cluster && is_ibus_controller(uent)))
 		goto cfg1;
 
 	/* set dsteid to device */
@@ -1033,7 +1034,8 @@ void ub_unset_user_info(struct ub_entity *uent)
 	if (!uent)
 		return;
 
-	if (is_p_device(uent))
+	if (is_p_device(uent) ||
+	    (uent->ubc->cluster && is_ibus_controller(uent)))
 		goto cfg1;
 
 	ub_cfg_write_dword(uent, UB_UCNA, 0);

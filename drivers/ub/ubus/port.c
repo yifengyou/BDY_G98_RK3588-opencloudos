@@ -353,8 +353,12 @@ static umode_t ub_port_qdlws_is_visible(struct kobject *kobj,
 					struct attribute *a, int n)
 {
 	struct ub_port *port = to_ub_port(kobj);
+	struct ub_entity *uent = port->uent;
 
 	if (port->type == VIRTUAL)
+		return 0;
+
+	if (is_ibus_controller(uent) && uent->ubc->cluster)
 		return 0;
 
 	if (test_bit(UB_PORT_CAP15_QDLWS, port->cap_map))

@@ -271,9 +271,4 @@ enum ub_port_cap_id {
 #define QDLWS_EXEC_STATUS_MASK GENMASK(2, 0)
 #define QDLWS_EXEC_STATUS_MAX 4
 
-/* Error Message Queue Capability */
-#define EMQ_CAP_START 0x00001400
-#define UB_CAP_ERR_MSG_QUE_CTL 0x8
-#define  UB_CAP_INTERRUPT_GEN_ENA 0x100
-
 #endif /* _UAPI_UB_UBUS_UBUS_REGS_H_ */

@@ -93,7 +93,7 @@ void ub_eu_table_init(struct ub_entity *uent)
 	struct ub_bus_controller *ubc = uent->ubc;
 	int ret;
 
-	if (!is_ibus_controller(uent))
+	if (!is_ibus_controller(uent) || ubc->cluster)
 		return;
 
 	ret = ub_eu_table_init_common(uent);
@@ -136,6 +136,9 @@ int ub_cfg_eu_table(struct ub_bus_controller *ubc, bool flag, u32 eid, u16 upi)
 {
 	struct ub_bus_controller_ops *ops = ubc->ops;
 	int ret;
+
+	if (ubc->cluster)
+		return 0;
 
 	if (!ops || !ops->eu_cfg)
 		return -ENODEV;
