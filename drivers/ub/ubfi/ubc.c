@@ -212,7 +212,7 @@ static int ubc_dev_new_resource_entry(struct resource *res,
 	return 0;
 }
 
-static int dts_register_irq(u32 ctl_no, int irq_type, const char *name,
+static int dts_register_irq(u32 ctl_no, int irq_idx, const char *name,
 			    struct resource *res)
 {
 	struct device_node *np;
@@ -228,16 +228,16 @@ static int dts_register_irq(u32 ctl_no, int irq_type, const char *name,
 		if (ctl_no != index)
 			continue;
 
-		irq = irq_of_parse_and_map(np, irq_type);
+		irq = irq_of_parse_and_map(np, irq_idx);
 		if (!irq)
 			continue;
 	}
 
 	if (!irq) {
-		pr_err("irq_type %d parse and map fail\n", irq_type);
+		pr_err("irq_idx %d parse and map failed\n", irq_idx);
 		return -EINVAL;
 	}
-	pr_info("irq_type[%d] register success, irq=%u\n", irq_type, irq);
+	pr_info("irq_idx %d register successfully, irq=%u\n", irq_idx, irq);
 
 	res->name = name;
 	res->start = irq;
@@ -258,9 +258,9 @@ static void remove_ubc_resource(struct ub_bus_controller *ubc)
 		if ((res->flags & IORESOURCE_IRQ)
 		    && !strcmp(res->name, "UBUS")
 		    && !ubc->ctl_no) {
-			if (bios_mode == ACPI)
+			if (firmware_mode == ACPI)
 				ubrt_unregister_gsi(ubc->attr.msg_int);
-			else if (bios_mode == DTS)
+			else
 				irq_dispose_mapping(ubc->queue_virq);
 		}
 	}
@@ -296,12 +296,10 @@ static int add_ubc_irq_resource(struct ubc_node *node,
 	trigger = !!(ubc->attr.msg_int_attr & UB_MSGQ_INT_TRIGGER_MASK);
 	polarity = !!(ubc->attr.msg_int_attr & UB_MSGQ_INT_POLARITY_MASK);
 
-	if (bios_mode == ACPI)
+	if (firmware_mode == ACPI)
 		ret = ubrt_register_gsi(hwirq, trigger, polarity, "UBUS", &res);
-	else if (bios_mode == DTS)
-		ret = dts_register_irq(ubc->ctl_no, 0, "UBUS", &res);
 	else
-		ret = -EINVAL;
+		ret = dts_register_irq(ubc->ctl_no, 0, "UBUS", &res);
 
 	if (ret) {
 		pr_err("register irq fail, ret=%d\n", ret);
@@ -318,9 +316,9 @@ static int add_ubc_irq_resource(struct ubc_node *node,
 	return 0;
 
 out:
-	if (bios_mode == ACPI)
+	if (firmware_mode == ACPI)
 		ubrt_unregister_gsi(hwirq);
-	else if (bios_mode == DTS)
+	else
 		irq_dispose_mapping(res.start);
 
 	return ret;
@@ -333,7 +331,7 @@ static void ub_release_ubc_dev(struct device *dev)
 
 	pr_info("%s release ub bus controller device.\n", ubc->name);
 
-	if (bios_mode == DTS) {
+	if (firmware_mode == DTS) {
 		usi_np = irq_domain_get_of_node(dev->msi.domain);
 		if (usi_np)
 			of_node_put(usi_np);
@@ -509,7 +507,7 @@ static int create_ubc(struct ubc_node *node, u32 ctl_no)
 	if (ret)
 		goto free_resource;
 
-	/* after init_ubc, ubc resources will be released in the dev->release */
+	/* after init_ubc, if failed, ubc resources will be released in the dev->release */
 	ret = init_ubc(ubc);
 	if (ret)
 		return ret;
@@ -551,9 +549,10 @@ static int parse_ubc_table(void *info_node)
 
 	pr_info("cna_start=%u, cna_end=%u\n", ubc_cna_start, ubc_cna_end);
 	pr_info("eid_start=%u, eid_end=%u\n", ubc_eid_start, ubc_eid_end);
-	pr_info("ubc_count=%u, bios_cluster_mode=%u, feature=%u\n", count,
+	pr_info("ubc_count=%u, firmware_cluster_mode=%u, feature=%u\n", count,
 		cluster_mode, ubc_feature);
-	if (ubc_cna_start > ubc_cna_end || ubc_eid_start > ubc_eid_end) {
+	if (ubc_cna_start > ubc_cna_end || ubc_eid_start > ubc_eid_end ||
+	    ubc_cna_start == 0 || ubc_eid_start == 0) {
 		pr_err("eid or cna range is incorrect\n");
 		return -EINVAL;
 	}
@@ -597,9 +596,9 @@ int handle_ubc_table(u64 pointer)
 	if (ret)
 		goto err_handle;
 
-	pr_info("Update msi domain for ub bus controller\n");
+	pr_debug("Update msi domain for ub bus controller\n");
 	/* Update msi domain for ub bus controller */
-	if (bios_mode == ACPI)
+	if (firmware_mode == ACPI)
 		ret = acpi_update_ubc_msi_domain();
 	else
 		ret = dts_update_ubc_msi_domain();

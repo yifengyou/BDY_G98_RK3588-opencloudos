@@ -15,16 +15,16 @@
 #define ACPI_SIG_UBRT "UBRT" /* UB Root Table */
 #define UBIOS_INFO_TABLE "linux,ubios-information-table"
 
-enum bios_report_mode bios_mode = UNKNOWN;
+enum firmware_report_mode firmware_mode = UNKNOWN;
 
-static void ub_bios_mode_init(void)
+static void ub_firmware_mode_init(void)
 {
 	if (acpi_disabled)
-		bios_mode = DTS;
+		firmware_mode = DTS;
 	else
-		bios_mode = ACPI;
+		firmware_mode = ACPI;
 
-	pr_info("Starting with mode: %d\n", bios_mode);
+	pr_info("Starting with mode: %d\n", firmware_mode);
 }
 
 static int ubfi_get_acpi_ubrt(void)
@@ -34,14 +34,13 @@ static int ubfi_get_acpi_ubrt(void)
 
 	status = acpi_get_table(ACPI_SIG_UBRT, 0, &header);
 	if (ACPI_FAILURE(status)) {
-		pr_err("ACPI failed to get UBRT.\n");
 		if (status != AE_NOT_FOUND)
 			pr_err("ACPI failed msg: %s\n",
 				acpi_format_exception(status));
 		return -ENODEV;
 	}
 	acpi_table = (struct acpi_table_ubrt *)header;
-	pr_info("get ubrt by acpi success\n");
+	pr_debug("get ubrt by acpi success\n");
 	return 0;
 }
 
@@ -65,35 +64,32 @@ static int ubfi_get_dts_ubrt(void)
 	if (!ubios_table)
 		return -ENOMEM;
 
-	pr_info("ubfi get ubrt by device tree success\n");
+	pr_debug("ubfi get ubrt by device tree success\n");
 	return 0;
 }
 
 static int ubfi_get_ubrt(void)
 {
-	if (bios_mode == ACPI)
+	if (firmware_mode == ACPI)
 		return ubfi_get_acpi_ubrt();
-	else if (bios_mode == DTS)
+	else
 		return ubfi_get_dts_ubrt();
-	return -EINVAL;
 }
 
 static int handle_ubrt(void)
 {
-	if (bios_mode == ACPI)
+	if (firmware_mode == ACPI)
 		return handle_acpi_ubrt();
-	else if (bios_mode == DTS)
+	else
 		return handle_dts_ubrt();
-
-	return -EINVAL;
 }
 
 static void ubfi_put_ubrt(void)
 {
-	if (bios_mode == ACPI) {
+	if (firmware_mode == ACPI) {
 		acpi_put_table((struct acpi_table_header *)acpi_table);
 		acpi_table = NULL;
-	} else if (bios_mode == DTS) {
+	} else {
 		ub_table_put(ubios_table);
 		ubios_table = NULL;
 	}
@@ -103,15 +99,21 @@ static int __init ubfi_init(void)
 {
 	int ret;
 
-	ub_bios_mode_init();
+	ub_firmware_mode_init();
 
 	ret = ubfi_get_ubrt();
 	if (ret) {
-		pr_warn("can't get ub information from bios, ret=%d\n", ret);
+		pr_warn("can't get ub information from firmware, ret=%d\n", ret);
 		return 0;
 	}
 
-	return handle_ubrt();
+	ret = handle_ubrt();
+	if (ret) {
+		pr_err("failed to handle ubrt, ret=%d\n", ret);
+		ubfi_put_ubrt();
+	}
+
+	return ret;
 }
 
 static void __exit ubfi_exit(void)

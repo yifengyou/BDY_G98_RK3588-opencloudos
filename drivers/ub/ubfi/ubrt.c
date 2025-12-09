@@ -21,10 +21,13 @@ struct acpi_table_ubrt *acpi_table;
 struct ubios_root_table *ubios_table;
 
 /*
- * ummu max count is 32, max size is 40 + 32 * 128 = 4640
- * ubc max count is 32, max size is 40 + 88 + 32 * 256 + 32 * 4 = 8448
+ * ubios max sub table count is 256, max size is 40 + 8 * 256 = 2088
+ * ummu max count is 32, max size is 32 + 8 + 32 * 160 = 5160
+ * ubc max count is 32, max size is 32 + 24 + 32 * 384 = 12344
+ * Choose the largest one as the maximum value for the ubios table.
  */
-#define UBIOS_TABLE_TOTLE_SIZE_MAX 8448
+#define UBIOS_TABLE_TOTAL_SIZE_MAX (sizeof(struct ubrt_ubc_table) + \
+				    32 * sizeof(struct ubc_node))
 
 /* remember to use ub_table_put to release memory alloced by ub_table_get */
 void *ub_table_get(u64 pa)
@@ -44,8 +47,9 @@ void *ub_table_get(u64 pa)
 
 	total_size = readl(va + UB_TABLE_HEADER_NAME_LEN);
 	pr_debug("ub table size is[0x%x]\n", total_size);
-	if (total_size == 0 || total_size > UBIOS_TABLE_TOTLE_SIZE_MAX) {
-		pr_err("ubios table size is invalid\n");
+	if (total_size == 0 || total_size > UBIOS_TABLE_TOTAL_SIZE_MAX) {
+		pr_err("ubios table size is invalid, total_size=0x%x\n",
+		       total_size);
 		iounmap(va);
 		return NULL;
 	}
@@ -81,6 +85,7 @@ void uninit_ub_nodes(void)
 
 int handle_acpi_ubrt(void)
 {
+	bool ubc_done = false, ummu_done = false;
 	struct ubrt_sub_table *sub_table;
 	int ret = 0;
 	u32 i;
@@ -89,16 +94,14 @@ int handle_acpi_ubrt(void)
 
 	for (i = 0; i < acpi_table->count; i++) {
 		sub_table = &acpi_table->sub_table[i];
-		switch (sub_table->type) {
-		case UB_BUS_CONTROLLER_TABLE:
+		if (sub_table->type == UB_BUS_CONTROLLER_TABLE && !ubc_done) {
 			ret = handle_ubc_table(sub_table->pointer);
-			break;
-		case UMMU_TABLE:
+			ubc_done = true;
+		} else if (sub_table->type == UMMU_TABLE && !ummu_done) {
 			ret = handle_ummu_table(sub_table->pointer);
-			break;
-		default:
+			ummu_done = true;
+		} else {
 			pr_warn("Ignore sub table: type %u\n", sub_table->type);
-			break;
 		}
 		if (ret) {
 			pr_err("parse ubrt sub table type %u failed\n",
@@ -112,10 +115,25 @@ fail:
 	return ret;
 }
 
+static int get_ubrt_table_name(char *name, u64 sub_table)
+{
+	void __iomem *va;
+
+	va = ioremap(sub_table, sizeof(struct ub_table_header));
+	if (!va) {
+		pr_err("ioremap ub table header failed\n");
+		return -ENOMEM;
+	}
+
+	memcpy_fromio(name, va, UB_TABLE_HEADER_NAME_LEN - 1);
+	iounmap(va);
+	return 0;
+}
+
 int handle_dts_ubrt(void)
 {
-	char name[UB_TABLE_HEADER_NAME_LEN] = {};
-	struct ub_table_header *header;
+	bool ubc_done = false, ummu_done = false;
+	char name[UB_TABLE_HEADER_NAME_LEN];
 	int ret = 0, i;
 
 	if (ubios_table->count == 0) {
@@ -125,24 +143,28 @@ int handle_dts_ubrt(void)
 	pr_info("ubios sub table count is %u\n", ubios_table->count);
 
 	for (i = 0; i < ubios_table->count; i++) {
-		header = (struct ub_table_header *)ub_table_get(
-			 ubios_table->sub_tables[i]);
-		if (!header)
+		memset(name, 0, UB_TABLE_HEADER_NAME_LEN);
+		ret = get_ubrt_table_name(name, ubios_table->sub_tables[i]);
+		if (ret)
+			goto out;
+		if (name[0] == '\0')
 			continue;
-
-		memcpy(name, header->name, UB_TABLE_HEADER_NAME_LEN - 1);
 		pr_info("ubrt sub table name is %s\n", name);
-		ub_table_put(header);
 
-		if (!strncmp(name, UBIOS_SIG_UBC, strlen(UBIOS_SIG_UBC)))
-			ret = handle_ubc_table(ubios_table->sub_tables[i]);
-		else if (!strncmp(name, UBIOS_SIG_UMMU, strlen(UBIOS_SIG_UMMU)))
+		if (!strncmp(name, UBIOS_SIG_UMMU, strlen(UBIOS_SIG_UMMU)) &&
+		    !ummu_done) {
 			ret = handle_ummu_table(ubios_table->sub_tables[i]);
-		else
+			ummu_done = true;
+		} else if (!strncmp(name, UBIOS_SIG_UBC, strlen(UBIOS_SIG_UBC)) &&
+			   !ubc_done) {
+			ret = handle_ubc_table(ubios_table->sub_tables[i]);
+			ubc_done = true;
+		} else {
 			pr_warn("Ignore sub table: %s\n", name);
+		}
 
 		if (ret) {
-			pr_err("Create %s device ret=%d\n", name, ret);
+			pr_err("Create %s failed, ret=%d\n", name, ret);
 			goto out;
 		}
 	}

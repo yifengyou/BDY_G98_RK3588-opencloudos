@@ -43,10 +43,6 @@ enum ubrt_sub_table_type {
 	UB_BUS_CONTROLLER_TABLE = 0,
 	UMMU_TABLE = 1,
 	UB_RESERVED_MEMORY_TABLE = 2,
-	VIRTUAL_BUS_TABLE = 3,
-	CALL_ID_SERVICE_TABLE = 4,
-	UB_ENTITY_TABLE = 5,
-	UB_TOPOLOGY_TABLE = 6,
 };
 
 extern struct acpi_table_ubrt *acpi_table;
