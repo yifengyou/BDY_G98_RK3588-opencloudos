@@ -95,13 +95,17 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 		{"\tdie_id: %u\n", dev_caps->die_id},
 		{"\tue_id: %u\n", dev_caps->ue_id},
 		{"\tnl_id: %u\n", dev_caps->nl_id},
-		{"\tfw_version: %u\n", dev_caps->fw_version},
 	};
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(ubase_common_caps_info); i++)
 		seq_printf(s, ubase_common_caps_info[i].format,
 			   ubase_common_caps_info[i].caps_info);
+	seq_printf(s, "\tfw_version: %u.%u.%u.%u\n",
+		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE3_MASK),
+		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE2_MASK),
+		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE1_MASK),
+		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE0_MASK));
 }
 
 static void ubase_dbg_dump_common_caps(struct seq_file *s, struct ubase_dev *udev)
