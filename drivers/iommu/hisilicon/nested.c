@@ -184,7 +184,6 @@ static int ummu_fix_user_cmd(struct ummu_device *ummu,
 	case CMD_CFGI_TECT_RANGE:
 	case CMD_CFGI_TCT:
 	case CMD_CFGI_TCT_ALL:
-	case CMD_CFGI_TECTS_PIDM:
 		cmd[2] &= ~CMD_CFGI_2_TECTE_TAG;
 		cmd[2] |= FIELD_PREP(CMD_CFGI_2_TECTE_TAG, tecte_tag);
 		break;

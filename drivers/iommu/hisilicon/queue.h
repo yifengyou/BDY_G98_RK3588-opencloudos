@@ -204,7 +204,6 @@ struct ummu_mcmdq_ent {
 #define CMD_CFGI_TECT_RANGE 0x09
 #define CMD_CFGI_TCT 0x0A
 #define CMD_CFGI_TCT_ALL 0x0B
-#define CMD_CFGI_TECTS_PIDM 0x0C
 		struct {
 			bool leaf;
 			u32 tid;
