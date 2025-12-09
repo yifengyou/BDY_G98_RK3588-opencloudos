@@ -1626,26 +1626,39 @@ int ubase_activate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
 	struct ub_entity *ue;
-	int ret;
+	int ret = 0;
 
 	if (!adev)
 		return 0;
 
 	udev = __ubase_get_udev_by_adev(adev);
 
+	ubase_info(udev, "ubase activate dev, state_bits = 0x%lx.\n",
+		   udev->state_bits);
+
+	if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+		ubase_info(udev, "skip activate dev while resetting.\n");
+		goto skip_activate_dev;
+	}
+
 	ue = container_of(udev->dev, struct ub_entity, dev);
-	if (ubase_activate_proxy_supported(udev) &&
-	    !test_bit(UBASE_STATE_DISABLED_B, &udev->state_bits))
+	if (ubase_activate_proxy_supported(udev))
 		ret = ub_activate_entity(ue, ue->entity_idx);
 	else
 		ret = ubase_activate_handler(udev, ue->entity_idx);
 
 	if (ret) {
+		if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+			ubase_info(udev, "skip activate dev while resetting.\n");
+			ret = 0;
+			goto skip_activate_dev;
+		}
 		ubase_err(udev,
 			  "failed to activate ubase dev, ret = %d.\n", ret);
 		goto activate_dev_err;
 	}
 
+skip_activate_dev:
 	ubase_activate_notify(udev, adev, true);
 
 activate_dev_err:
@@ -1654,6 +1667,27 @@ activate_dev_err:
 	return ret;
 }
 EXPORT_SYMBOL(ubase_activate_dev);
+
+static int ubase_deactivate_wait_reset_done(struct ubase_dev *udev)
+{
+#define UBASE_MAX_WAIT_RST_CNT	1000
+#define UBASE_WAIT_RST_TIME	10
+
+	u16 cnt = 0;
+
+	while (test_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits)) {
+		if (!cnt)
+			ubase_info(udev,
+				   "waitting for reset done in deactivate process.\n");
+		msleep(UBASE_WAIT_RST_TIME);
+		if (++cnt >= UBASE_MAX_WAIT_RST_CNT) {
+			ubase_err(udev, "wait reset done timeout.\n");
+			return -EBUSY;
+		}
+	}
+
+	return 0;
+}
 
 /**
  * ubase_deactivate_dev() - deactivate device
@@ -1677,14 +1711,29 @@ int ubase_deactivate_dev(struct auxiliary_device *adev)
 
 	udev = __ubase_get_udev_by_adev(adev);
 
-	ue = container_of(udev->dev, struct ub_entity, dev);
+	ubase_info(udev, "ubase deactivate dev, state_bits = 0x%lx.\n",
+		   udev->state_bits);
+
+	if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+		ret = ubase_deactivate_wait_reset_done(udev);
+		if (ret) {
+			ubase_update_activate_stats(udev, false, ret);
+			return ret;
+		}
+		ubase_activate_notify(udev, adev, false);
+		goto out;
+	}
+
 	ubase_activate_notify(udev, adev, false);
 
-	if (ubase_activate_proxy_supported(udev) &&
-	    !test_bit(UBASE_STATE_DISABLED_B, &udev->state_bits))
+	ue = container_of(udev->dev, struct ub_entity, dev);
+	if (ubase_activate_proxy_supported(udev))
 		ret = ub_deactivate_entity(ue, ue->entity_idx);
 	else
 		ret = ubase_deactivate_handler(udev, ue->entity_idx);
+
+	if (ret && test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		ret = ubase_deactivate_wait_reset_done(udev);
 
 	if (ret) {
 		ubase_err(udev,
@@ -1692,6 +1741,7 @@ int ubase_deactivate_dev(struct auxiliary_device *adev)
 		ubase_activate_notify(udev, adev, true);
 	}
 
+out:
 	ubase_update_activate_stats(udev, false, ret);
 
 	return ret;

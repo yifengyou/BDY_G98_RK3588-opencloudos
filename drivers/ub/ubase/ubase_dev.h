@@ -148,6 +148,7 @@ enum ubase_dev_state_bit {
 	UBASE_STATE_HIMAC_RESETTING_B,
 	UBASE_STATE_CTX_READY_B,
 	UBASE_STATE_PREALLOC_OK_B,
+	UBASE_STATE_RST_WAIT_DEACTIVE_B,
 };
 
 struct ubase_crq_event_nbs {

@@ -217,6 +217,7 @@ void ubase_suspend(struct ubase_dev *udev)
 	}
 
 	set_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
+	set_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 
 	if (ubase_dev_pmu_supported(udev)) {
 		__ubase_cmd_disable(udev);
@@ -257,11 +258,13 @@ void ubase_resume(struct ubase_dev *udev)
 		__ubase_cmd_enable(udev);
 		udev->reset_stat.reset_done_cnt++;
 		udev->reset_stat.hw_reset_done_cnt++;
+		clear_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 		clear_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
 		clear_bit(UBASE_STATE_DISABLED_B, &udev->state_bits);
 		return;
 	}
 
+	clear_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 	udev->reset_stat.hw_reset_done_cnt++;
 	ubase_suspend_aux_devices(udev);
 	ubase_dev_reset_uninit(udev);
