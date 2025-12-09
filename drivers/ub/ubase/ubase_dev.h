@@ -70,7 +70,6 @@ struct ubase_dev_caps {
 	struct ubase_adev_caps	udma_caps;
 	struct ubase_adev_caps	unic_caps;
 	struct ubase_caps	dev_caps;
-	struct ubase_ue_caps	ue_caps;
 };
 
 struct ubase_mbox_cmd {

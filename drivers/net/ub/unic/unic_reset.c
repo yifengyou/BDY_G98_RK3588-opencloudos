@@ -94,7 +94,7 @@ static void unic_reset_init(struct auxiliary_device *adev)
 	if (ret)
 		goto err_unic_resume;
 
-	unic_query_ip_by_ctrlq(adev);
+	unic_query_ip_addr(adev);
 	unic_start_period_task(netdev);
 
 	if_running = netif_running(netdev);

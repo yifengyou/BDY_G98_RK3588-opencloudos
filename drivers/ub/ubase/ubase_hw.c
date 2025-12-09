@@ -24,7 +24,7 @@ struct ubase_dma_buf_desc {
 	bool (*is_supported)(struct ubase_dev *dev);
 };
 
-#define UBASE_DEFINE_DMA_BUFS(udev) \
+#define UBASE_DEFINE_TA_DMA_BUFS(udev) \
 	struct ubase_dma_buf_desc bufs[] = { \
 		{ &(udev)->ta_ctx.extdb_buf, UBASE_OPC_TA_EXTDB_VA_CONFIG, \
 		  &ubase_dev_ta_extdb_buf_supported }, \
@@ -107,7 +107,7 @@ static void ubase_check_dev_caps_comm(struct ubase_dev *udev)
 
 static int ubase_check_dev_caps_extdb(struct ubase_dev *udev)
 {
-	UBASE_DEFINE_DMA_BUFS(udev);
+	UBASE_DEFINE_TA_DMA_BUFS(udev);
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(bufs); i++) {
@@ -586,7 +586,7 @@ static void ubase_uninit_dma_buf(struct ubase_dev *udev,
 
 static int ubase_init_ta_ext_buf(struct ubase_dev *udev)
 {
-	UBASE_DEFINE_DMA_BUFS(udev);
+	UBASE_DEFINE_TA_DMA_BUFS(udev);
 	int i, ret;
 
 	for (i = 0; i < ARRAY_SIZE(bufs); i++) {
@@ -610,7 +610,7 @@ err_out:
 
 static void ubase_uninit_ta_ext_buf(struct ubase_dev *udev)
 {
-	UBASE_DEFINE_DMA_BUFS(udev);
+	UBASE_DEFINE_TA_DMA_BUFS(udev);
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(bufs); i++) {

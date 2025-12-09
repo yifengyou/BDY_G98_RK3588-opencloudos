@@ -7,10 +7,13 @@
 #include <ub/ubase/ubase_comm_ctrlq.h>
 
 #include "ubase_ctrlq.h"
+#include "ubase_dev.h"
 #include "ubase_reset.h"
 #include "ubase_tp.h"
 
-int ubase_notify_tp_fd_by_ctrlq(struct ubase_dev *udev, u32 tpn)
+#define UBASE_TRANS_TYPE_UM_TP 0x2
+
+static int ubase_notify_tp_flush_done(struct ubase_dev *udev, u32 tpn)
 {
 	struct ubase_ctrlq_tp_fd_req req = {0};
 	struct ubase_ctrlq_msg msg = {0};
@@ -74,7 +77,7 @@ int ubase_ae_tp_flush_done(struct notifier_block *nb, unsigned long event,
 
 	tp_num = info->aeqe->event.queue_event.num;
 
-	return ubase_notify_tp_fd_by_ctrlq(udev, tp_num);
+	return ubase_notify_tp_flush_done(udev, tp_num);
 }
 
 int ubase_ae_tp_level_error(struct notifier_block *nb, unsigned long event,
@@ -96,7 +99,7 @@ int ubase_ae_tp_level_error(struct notifier_block *nb, unsigned long event,
 	return 0;
 }
 
-static int ubase_create_tp_tpg_by_ctrlq(struct ubase_dev *udev, u32 vl)
+static int ubase_create_tp_tpg(struct ubase_dev *udev, u32 vl)
 {
 	struct ubase_tp_layer_ctx *tp_ctx = &udev->tp_ctx;
 	struct ubase_ctrlq_create_tp_resp resp = {0};
@@ -133,7 +136,7 @@ static int ubase_create_tp_tpg_by_ctrlq(struct ubase_dev *udev, u32 vl)
 	return 0;
 }
 
-static void ubase_wait_tp_flush_done_by_ctrlq(struct ubase_dev *udev, u32 vl)
+static void ubase_wait_tp_flush_done(struct ubase_dev *udev, u32 vl)
 {
 	struct ubase_tpg *tpg = &udev->tp_ctx.tpg[vl];
 	int i;
@@ -150,7 +153,7 @@ static void ubase_wait_tp_flush_done_by_ctrlq(struct ubase_dev *udev, u32 vl)
 		   vl, atomic_read(&tpg->tp_fd_cnt));
 }
 
-static void ubase_destroy_tp_tpg_by_ctrlq(struct ubase_dev *udev, u32 vl)
+static void ubase_destroy_tp_tpg(struct ubase_dev *udev, u32 vl)
 {
 	struct ubase_ctrlq_destroy_tp_req req = {0};
 	struct ubase_ctrlq_msg msg = {0};
@@ -176,24 +179,24 @@ static void ubase_destroy_tp_tpg_by_ctrlq(struct ubase_dev *udev, u32 vl)
 		return;
 	}
 
-	ubase_wait_tp_flush_done_by_ctrlq(udev, vl);
+	ubase_wait_tp_flush_done(udev, vl);
 }
 
-static void ubase_destroy_multi_tp_tpg_by_ctrlq(struct ubase_dev *udev, u32 num)
+static void ubase_destroy_multi_tp_tpg(struct ubase_dev *udev, u32 num)
 {
 	u32 idx;
 
 	for (idx = 0; idx < num; idx++)
-		ubase_destroy_tp_tpg_by_ctrlq(udev, idx);
+		ubase_destroy_tp_tpg(udev, idx);
 }
 
-static int ubase_create_multi_tp_tpg_by_ctrlq(struct ubase_dev *udev)
+static int ubase_create_multi_tp_tpg(struct ubase_dev *udev)
 {
 	int ret;
 	u32 i;
 
 	for (i = 0; i < udev->caps.unic_caps.tpg.max_cnt; i++) {
-		ret = ubase_create_tp_tpg_by_ctrlq(udev, i);
+		ret = ubase_create_tp_tpg(udev, i);
 		if (ret) {
 			ubase_err(udev, "failed to create tp tpg, tpgn = %u, ret = %d.\n",
 				  i, ret);
@@ -204,7 +207,7 @@ static int ubase_create_multi_tp_tpg_by_ctrlq(struct ubase_dev *udev)
 	return 0;
 
 err_create_tp_tpg:
-	ubase_destroy_multi_tp_tpg_by_ctrlq(udev, i);
+	ubase_destroy_multi_tp_tpg(udev, i);
 
 	return ret;
 }
@@ -227,7 +230,7 @@ int ubase_dev_init_tp_tpg(struct ubase_dev *udev)
 	}
 	spin_unlock(&tp_ctx->tpg_lock);
 
-	ret = ubase_create_multi_tp_tpg_by_ctrlq(udev);
+	ret = ubase_create_multi_tp_tpg(udev);
 	if (ret) {
 		spin_lock(&tp_ctx->tpg_lock);
 		devm_kfree(udev->dev, tp_ctx->tpg);
@@ -251,7 +254,7 @@ void ubase_dev_uninit_tp_tpg(struct ubase_dev *udev)
 		return;
 
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
-		ubase_destroy_multi_tp_tpg_by_ctrlq(udev, num);
+		ubase_destroy_multi_tp_tpg(udev, num);
 
 	spin_lock(&tp_ctx->tpg_lock);
 	devm_kfree(udev->dev, tp_ctx->tpg);

@@ -1011,6 +1011,36 @@ struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev)
 EXPORT_SYMBOL(ubase_get_dev_caps);
 
 /**
+ * ubase_get_mdrv_data() - get unic netdev
+ * @adev: auxiliary device
+ *
+ * The function is used to get unic netdev.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty or does not support the unic device,
+ * otherwise the pointer to struct ubase_adev_com
+ */
+const struct ubase_adev_com *ubase_get_mdrv_data(struct auxiliary_device *adev)
+{
+	struct auxiliary_device *unic_adev;
+	struct ubase_priv *priv;
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return NULL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (!ubase_dev_unic_supported(udev))
+		return NULL;
+
+	priv = &udev->priv;
+	unic_adev = &priv->uadev[UBASE_DRV_UNIC]->adev;
+
+	return dev_get_drvdata(&unic_adev->dev);
+}
+EXPORT_SYMBOL(ubase_get_mdrv_data);
+
+/**
  * ubase_get_udma_caps() - get udma auxiliary device capabilities
  * @adev: udma auxiliary device pointer
  *

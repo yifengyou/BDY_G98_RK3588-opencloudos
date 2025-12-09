@@ -36,24 +36,24 @@ static int ubase_dbg_dump_rst_info(struct seq_file *s, void *data)
 static void ubase_dbg_dump_caps_bits(struct seq_file *s, struct ubase_dev *udev)
 {
 #define CAP_FMT(name) "\tsupport_" #name ": %d\n"
-#define PRTINT_CAP(name, func) seq_printf(s, CAP_FMT(name), func(udev))
+#define PRINT_CAP(name, func) seq_printf(s, CAP_FMT(name), func(udev))
 
-	PRTINT_CAP(ub_link, ubase_dev_ubl_supported);
-	PRTINT_CAP(ta_extdb_buffer_config, ubase_dev_ta_extdb_buf_supported);
-	PRTINT_CAP(ta_timer_buffer_config, ubase_dev_ta_timer_buf_supported);
-	PRTINT_CAP(err_handle, ubase_dev_err_handle_supported);
-	PRTINT_CAP(ctrlq, ubase_dev_ctrlq_supported);
-	PRTINT_CAP(eth_mac, ubase_dev_eth_mac_supported);
-	PRTINT_CAP(mac_stats, ubase_dev_mac_stats_supported);
-	PRTINT_CAP(prealloc, __ubase_dev_prealloc_supported);
-	PRTINT_CAP(udma, ubase_dev_udma_supported);
-	PRTINT_CAP(unic, ubase_dev_unic_supported);
-	PRTINT_CAP(uvb, ubase_dev_uvb_supported);
-	PRTINT_CAP(ip_over_urma, ubase_ip_over_urma_supported);
+	PRINT_CAP(ub_link, ubase_dev_ubl_supported);
+	PRINT_CAP(ta_extdb_buffer_config, ubase_dev_ta_extdb_buf_supported);
+	PRINT_CAP(ta_timer_buffer_config, ubase_dev_ta_timer_buf_supported);
+	PRINT_CAP(err_handle, ubase_dev_err_handle_supported);
+	PRINT_CAP(ctrlq, ubase_dev_ctrlq_supported);
+	PRINT_CAP(eth_mac, ubase_dev_eth_mac_supported);
+	PRINT_CAP(mac_stats, ubase_dev_mac_stats_supported);
+	PRINT_CAP(prealloc, __ubase_dev_prealloc_supported);
+	PRINT_CAP(udma, ubase_dev_udma_supported);
+	PRINT_CAP(unic, ubase_dev_unic_supported);
+	PRINT_CAP(uvb, ubase_dev_uvb_supported);
+	PRINT_CAP(ip_over_urma, ubase_ip_over_urma_supported);
 	if (ubase_ip_over_urma_supported(udev))
-		PRTINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
-	PRTINT_CAP(activate_proxy, ubase_activate_proxy_supported);
-	PRTINT_CAP(utp, ubase_utp_supported);
+		PRINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
+	PRINT_CAP(activate_proxy, ubase_activate_proxy_supported);
+	PRINT_CAP(utp, ubase_utp_supported);
 }
 
 static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
@@ -612,12 +612,12 @@ static struct ubase_dbg_cmd_info ubase_dbg_cmd[] = {
 		.read_func = ubase_dbg_dump_perf_stats,
 	},
 	{
-		.name = "rack_vl_bitmap",
+		.name = "vl_bitmap",
 		.dentry_index = UBASE_DBG_DENTRY_QOS,
 		.property = UBASE_SUP_URMA | UBASE_SUP_CDMA | UBASE_SUP_UBL,
 		.support = __ubase_dbg_dentry_support,
 		.init = __ubase_dbg_seq_file_init,
-		.read_func = ubase_dbg_dump_rack_vl_bitmap,
+		.read_func = ubase_dbg_dump_vl_bitmap,
 	},
 	{
 		.name = "adev_qos",

@@ -414,8 +414,12 @@ static unsigned long ubase_get_sl_bitmap(struct ubase_dev *udev)
 
 	for (i = 0; i < qos->nic_sl_num; i++)
 		sl_bitmap |= 1 << qos->nic_sl[i];
-	for (i = 0; i < qos->sl_num; i++)
-		sl_bitmap |= 1 << qos->sl[i];
+
+	for (i = 0; i < qos->tp_sl_num; i++)
+		sl_bitmap |= 1 << qos->tp_sl[i];
+
+	for (i = 0; i < qos->ctp_sl_num; i++)
+		sl_bitmap |= 1 << qos->ctp_sl[i];
 
 	return sl_bitmap;
 }
@@ -594,14 +598,6 @@ static int ubase_query_ctp_vl_offset(struct ubase_dev *udev, u8 *ctp_vl_offset)
 	return 0;
 }
 
-static inline void ubase_parse_udma_req_vl_uboe(struct ubase_dev *udev)
-{
-	struct ubase_adev_qos *qos = &udev->qos;
-
-	qos->tp_vl_num = qos->vl_num;
-	memcpy(qos->tp_req_vl, qos->vl, qos->vl_num);
-}
-
 static int ubase_check_ctp_resp_vl(struct ubase_dev *udev, u8 ctp_vl_offset)
 {
 	struct ubase_adev_qos *qos = &udev->qos;
@@ -639,24 +635,18 @@ static int ubase_parse_ctp_resp_vl(struct ubase_dev *udev)
 	return 0;
 }
 
-static bool ubase_get_vl_sl(struct ubase_dev *udev, u8 vl, u8 *sl, u8 *sl_num)
+static void ubase_get_vl_sl(struct ubase_dev *udev, u8 vl, u8 *sl, u8 *sl_num)
 {
-	bool sl_exist = false;
 	u8 i;
 
 	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
-		if (udev->qos.ue_sl_vl[i] == vl) {
+		if (udev->qos.ue_sl_vl[i] == vl)
 			sl[(*sl_num)++] = i;
-			sl_exist = true;
-		}
 	}
-
-	return sl_exist;
 }
 
-static void ubase_gather_udma_req_resp_vl(struct ubase_dev *udev,
-					       u8 *req_vl, u8 req_vl_num,
-					       u8 resp_vl_off)
+static void ubase_gather_udma_req_resp_vl(struct ubase_dev *udev, u8 *req_vl,
+					  u8 req_vl_num, u8 resp_vl_off)
 {
 	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
 	struct ubase_adev_qos *qos = &udev->qos;
@@ -689,11 +679,9 @@ static void ubase_gather_urma_req_resp_vl(struct ubase_dev *udev)
 	dev_caps->vl_num = qos->nic_vl_num;
 
 	/* Restriction: The unic vl can't be used as the dma resp vl. */
-	ubase_gather_udma_req_resp_vl(udev, qos->tp_req_vl,
-				      qos->tp_vl_num,
+	ubase_gather_udma_req_resp_vl(udev, qos->tp_req_vl, qos->tp_vl_num,
 				      qos->tp_resp_vl_offset);
-	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl,
-				      qos->ctp_vl_num,
+	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl, qos->ctp_vl_num,
 				      qos->ctp_resp_vl_offset);
 
 	/* dev_caps->vl_num is used for DCB tool configuration. Therefore,
@@ -751,7 +739,7 @@ static int ubase_parse_nic_vl(struct ubase_dev *udev)
 				    udev->qos.nic_vl, &udev->qos.nic_vl_num);
 }
 
-static int ubase_parse_rack_udma_req_vl_ub(struct ubase_dev *udev)
+static int ubase_parse_udma_req_vl(struct ubase_dev *udev)
 {
 	struct ubase_adev_qos *qos = &udev->qos;
 	int ret;
@@ -761,51 +749,40 @@ static int ubase_parse_rack_udma_req_vl_ub(struct ubase_dev *udev)
 	if (ret)
 		return ret;
 
-	return ubase_assign_urma_vl(udev, qos->ctp_sl, qos->ctp_sl_num,
-				    qos->ctp_req_vl, &qos->ctp_vl_num);
-}
-
-static int ubase_parse_rack_udma_req_vl(struct ubase_dev *udev)
-{
 	if (ubase_dev_ubl_supported(udev))
-		return ubase_parse_rack_udma_req_vl_ub(udev);
-
-	ubase_parse_udma_req_vl_uboe(udev);
+		return ubase_assign_urma_vl(udev, qos->ctp_sl, qos->ctp_sl_num,
+					    qos->ctp_req_vl, &qos->ctp_vl_num);
 
 	return 0;
 }
 
-static int ubase_parse_rack_udma_vl(struct ubase_dev *udev)
+static int ubase_parse_udma_vl(struct ubase_dev *udev)
 {
 	int ret;
 
-	ret = ubase_parse_rack_udma_req_vl(udev);
+	ret = ubase_parse_udma_req_vl(udev);
 	if (ret)
 		return ret;
 
 	return ubase_parse_udma_resp_vl(udev);
 }
 
-static int ubase_parse_rack_cdma_resp_vl(struct ubase_dev *udev)
+static int ubase_parse_cdma_resp_vl(struct ubase_dev *udev)
 {
 	return ubase_parse_ctp_resp_vl(udev);
 }
 
-static int ubase_parse_rack_cdma_req_sl_vl(struct ubase_dev *udev)
+static int ubase_parse_cdma_sl(struct ubase_dev *udev)
 {
 	struct ubase_adev_qos *qos = &udev->qos;
-	bool exist = false;
 	u8 i;
 
-	for (i = 0; i < qos->vl_num; i++) {
-		exist = ubase_get_vl_sl(udev, qos->vl[i], qos->ctp_sl,
-					&qos->ctp_sl_num);
-		if (exist)
-			qos->ctp_req_vl[qos->ctp_vl_num++] = qos->vl[i];
-	}
+	for (i = 0; i < qos->ctp_vl_num; i++)
+		ubase_get_vl_sl(udev, qos->ctp_req_vl[i], qos->ctp_sl,
+				&qos->ctp_sl_num);
 
-	if (!qos->ctp_vl_num) {
-		ubase_err(udev, "cdma doesn't have any req vl.\n");
+	if (!qos->ctp_sl_num) {
+		ubase_err(udev, "cdma doesn't have any sl.\n");
 		return -EINVAL;
 	}
 
@@ -816,11 +793,11 @@ static int ubase_parse_cdma_sl_vl(struct ubase_dev *udev)
 {
 	int ret;
 
-	ret = ubase_parse_rack_cdma_req_sl_vl(udev);
+	ret = ubase_parse_cdma_sl(udev);
 	if (ret)
 		return ret;
 
-	ret = ubase_parse_rack_cdma_resp_vl(udev);
+	ret = ubase_parse_cdma_resp_vl(udev);
 	if (ret)
 		return ret;
 
@@ -828,21 +805,16 @@ static int ubase_parse_cdma_sl_vl(struct ubase_dev *udev)
 	return 0;
 }
 
-static inline int ubase_parse_nic_sl_vl(struct ubase_dev *udev)
-{
-	return ubase_parse_nic_vl(udev);
-}
-
 static int ubase_parse_urma_sl_vl(struct ubase_dev *udev)
 {
 	int ret;
 
-	ret = ubase_parse_nic_sl_vl(udev);
+	ret = ubase_parse_nic_vl(udev);
 	if (ret)
 		return ret;
 
 	if (ubase_dev_udma_supported(udev)) {
-		ret = ubase_parse_rack_udma_vl(udev);
+		ret = ubase_parse_udma_vl(udev);
 		if (ret)
 			return ret;
 	}
@@ -875,23 +847,23 @@ static void ubase_parse_max_vl(struct ubase_dev *udev)
 {
 	struct ubase_adev_caps *udma_caps = &udev->caps.udma_caps;
 	struct ubase_adev_qos *qos = &udev->qos;
-	u8 i, max_vl = 0;
+	u8 i, ue_max_vl_id = 0;
 
 	for (i = 0; i < qos->nic_vl_num; i++)
-		max_vl = max(qos->nic_vl[i], max_vl);
+		ue_max_vl_id = max(qos->nic_vl[i], ue_max_vl_id);
 
 	for (i = 0; i < qos->tp_vl_num; i++)
-		max_vl = max(qos->tp_req_vl[i] +
-			     qos->tp_resp_vl_offset, max_vl);
+		ue_max_vl_id = max(qos->tp_req_vl[i] + qos->tp_resp_vl_offset,
+				   ue_max_vl_id);
 
 	for (i = 0; i < qos->ctp_vl_num; i++)
-		max_vl = max(qos->ctp_req_vl[i] +
-			     qos->ctp_resp_vl_offset, max_vl);
+		ue_max_vl_id = max(qos->ctp_req_vl[i] + qos->ctp_resp_vl_offset,
+				   ue_max_vl_id);
 
-	qos->ue_max_vl_id = max_vl;
+	qos->ue_max_vl_id = ue_max_vl_id;
 
 	if (ubase_dev_urma_supported(udev))
-		udma_caps->rc_max_cnt *= (max_vl + 1);
+		udma_caps->rc_max_cnt *= (ue_max_vl_id + 1);
 }
 
 static int ubase_get_nic_max_vl(struct ubase_dev *udev)
@@ -934,7 +906,7 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	struct ubase_ctrlq_query_vl_req req = {0};
 	struct ubase_ctrlq_msg msg = {0};
 	unsigned long vl_bitmap;
-	u8 i, vl_cnt = 0;
+	u8 i, cdma_vl_cnt = 0;
 	int ret;
 
 	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
@@ -958,16 +930,33 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 
 	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
 		if (test_bit(i, &vl_bitmap))
-			udev->qos.vl[vl_cnt++] = i;
+			udev->qos.ctp_req_vl[cdma_vl_cnt++] = i;
 
-	if (!vl_cnt)
-		return -EBUSY;
+	if (!cdma_vl_cnt) {
+		ubase_err(udev, "cdma doesn't have any vl.\n");
+		return -EIO;
+	}
 
-	udev->qos.vl_num = vl_cnt;
+	udev->qos.ctp_vl_num = cdma_vl_cnt;
 
 	ubase_dbg(udev, "ctrlq query vl_bitmap = %lx.\n", vl_bitmap);
 
 	return 0;
+}
+
+static bool ubase_check_udma_sl_valid(struct ubase_dev *udev, u8 udma_tp_sl_cnt,
+				     u8 udma_ctp_sl_cnt)
+{
+	if (!ubase_dev_udma_supported(udev))
+		return true;
+
+	if (ubase_dev_ubl_supported(udev) && !(udma_tp_sl_cnt + udma_ctp_sl_cnt))
+		return false;
+
+	if (!ubase_dev_ubl_supported(udev) && !udma_tp_sl_cnt)
+		return false;
+
+	return true;
 }
 
 static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
@@ -1015,8 +1004,7 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 		return -EIO;
 	}
 
-	if (ubase_dev_udma_supported(udev) &&
-	    !(udma_tp_sl_cnt + udma_ctp_sl_cnt)) {
+	if (!ubase_check_udma_sl_valid(udev, udma_tp_sl_cnt, udma_ctp_sl_cnt)) {
 		ubase_err(udev, "udma doesn't have any sl.\n");
 		return -EIO;
 	}

@@ -1096,7 +1096,7 @@ int unic_dev_init(struct auxiliary_device *adev)
 		goto err_unregister_event;
 	}
 
-	unic_query_ip_by_ctrlq(adev);
+	unic_query_ip_addr(adev);
 	unic_start_dev_period_task(netdev);
 
 	return 0;
