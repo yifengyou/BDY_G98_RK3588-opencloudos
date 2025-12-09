@@ -143,7 +143,6 @@ struct ubase_caps {
  * struct ubase_res_caps - ubase resource capbilities
  * @max_cnt: the resource max count
  * @start_idx: start index
- * @reserved_cnt: reserved count
  * @depth: the queue depth of the resource
  */
 struct ubase_res_caps {
@@ -172,10 +171,6 @@ struct ubase_pmem_caps {
  * @jtg_max_cnt: jetty group max count
  * @rc_max_cnt: rc max count
  * @rc_que_depth: rc queue depth
- * @ccc_max_cnt: ccc max count
- * @dest_addr_max_cnt: dest addr max count
- * @seid_upi_max_cnt:seid upi max count
- * @tpm_max_cnt: tpm max count
  * @cqe_size: cqe size
  */
 struct ubase_adev_caps {
@@ -324,6 +319,9 @@ bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev);
 bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev);
 bool ubase_adev_mac_stats_supported(struct auxiliary_device *aux_dev);
 bool ubase_adev_prealloc_supported(struct auxiliary_device *aux_dev);
+bool ubase_adev_ip_over_urma_supported(struct auxiliary_device *adev);
+bool ubase_adev_ip_over_urma_utp_supported(struct auxiliary_device *adev);
+
 struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev);
 struct ubase_resource_space *ubase_get_mem_base(struct auxiliary_device *adev);
 struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev);

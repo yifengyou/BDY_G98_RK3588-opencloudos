@@ -1403,6 +1403,45 @@ bool ubase_adev_mac_stats_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_mac_stats_supported);
 
+/**
+ * ubase_adev_ip_over_urma_supported() - determine whether to support IP over
+ * urma
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support IP over urma.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
+bool ubase_adev_ip_over_urma_supported(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_ip_over_urma_supported(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_ip_over_urma_supported);
+
+/**
+ * ubase_adev_ip_over_urma_utp_supported() - determine whether to support utp
+ * when IP over urma is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support utp when IP over urma
+ * is supported
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
+bool ubase_adev_ip_over_urma_utp_supported(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_ip_over_urma_utp_supported(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_ip_over_urma_utp_supported);
+
 static void ubase_activate_notify(struct ubase_dev *udev,
 				  struct auxiliary_device *adev, bool activate)
 {
