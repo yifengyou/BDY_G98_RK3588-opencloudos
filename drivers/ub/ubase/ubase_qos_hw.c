@@ -862,7 +862,7 @@ static void ubase_parse_max_vl(struct ubase_dev *udev)
 
 	qos->ue_max_vl_id = ue_max_vl_id;
 
-	if (ubase_dev_urma_supported(udev))
+	if (ubase_dev_urma_supported(udev) && !udev->use_fixed_rc_num)
 		udma_caps->rc_max_cnt *= (ue_max_vl_id + 1);
 }
 
@@ -966,6 +966,7 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 	struct ubase_ctrlq_query_sl_resp resp = {0};
 	struct ubase_ctrlq_query_sl_req req = {0};
 	struct ubase_ctrlq_msg msg = {0};
+	u16 rc_max_cnt;
 	int ret;
 	u8 i;
 
@@ -984,6 +985,12 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 		ubase_err(udev,
 			  "failed to send ctrlq msg when query sl, ret = %d.\n", ret);
 		return ret;
+	}
+
+	rc_max_cnt = le16_to_cpu(resp.rc_max_cnt);
+	if (rc_max_cnt != 0) {
+		udev->use_fixed_rc_num = true;
+		udev->caps.udma_caps.rc_max_cnt = rc_max_cnt;
 	}
 
 	unic_sl_bitmap = le16_to_cpu(resp.unic_sl_bitmap);

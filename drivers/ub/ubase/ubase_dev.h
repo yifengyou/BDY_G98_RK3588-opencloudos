@@ -289,6 +289,7 @@ struct ubase_dev {
 	struct ubase_priv	priv;
 	struct ubase_hw		hw;
 
+	bool			use_fixed_rc_num;
 	struct ubase_dev_caps	caps;
 	struct ubase_adev_qos	qos;
 	struct ubase_dbgfs	dbgfs;
