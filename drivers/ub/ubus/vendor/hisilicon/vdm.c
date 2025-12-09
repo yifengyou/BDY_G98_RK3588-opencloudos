@@ -14,8 +14,6 @@
 #include "hisi-ubus.h"
 #include "vdm.h"
 
-static DEFINE_SPINLOCK(ub_vdm_lock);
-
 struct opcode_func_map {
 	u16 sub_opcode;
 	u16 idev_pkt_size;
@@ -274,6 +272,7 @@ static u8 ub_idevice_ue_add_handler(struct ub_bus_controller *ubc, struct vdm_ms
 	struct ub_entity *pue, *alloc_dev = NULL;
 	u16 ue_entity_idx = pld->ue_entity_idx;
 	int start_idx, end_idx, ret;
+	int lock = 0;
 	u8 status;
 
 	/* check whether pue is registered. */
@@ -306,10 +305,13 @@ static u8 ub_idevice_ue_add_handler(struct ub_bus_controller *ubc, struct vdm_ms
 		goto ue_reg_rsp;
 	}
 
-	spin_lock(&ub_vdm_lock);
-	ret = ub_idevice_enable_handle(pue, ue_entity_idx, 0, NULL, &alloc_dev);
-	spin_unlock(&ub_vdm_lock);
+	lock = device_trylock(&pue->dev);
+	if (!lock) {
+		status = UB_MSG_RSP_EXEC_EBUSY;
+		goto ue_reg_rsp;
+	}
 
+	ret = ub_idevice_enable_handle(pue, ue_entity_idx, 0, NULL, &alloc_dev);
 	if (ret == 0) {
 		alloc_dev->user_eid = pld->user_eid[0];
 		ub_info(pue, "enable idev ue succeeded, user_eid=0x%x\n",
@@ -331,6 +333,9 @@ ue_reg_rsp:
 		pue->num_ues += 1;
 	}
 
+	if (lock)
+		device_unlock(&pue->dev);
+
 	return status;
 }
 
@@ -346,6 +351,7 @@ static u8 ub_idevice_ue_rls_handler(struct ub_bus_controller *ubc, struct vdm_ms
 	struct ub_entity *pue, *vd_dev, *tmp;
 	u16 ue_entity_idx = pld->ue_entity_idx;
 	u16 start_idx, end_idx;
+	int lock = 0;
 	u8 status;
 
 	/* search for pue with guid. Return an error if pue does not exist */
@@ -372,6 +378,12 @@ static u8 ub_idevice_ue_rls_handler(struct ub_bus_controller *ubc, struct vdm_ms
 			"The pue of this vdm ue to be disabled is normal\n");
 	}
 
+	lock = device_trylock(&pue->dev);
+	if (!lock) {
+		status = UB_MSG_RSP_EXEC_EBUSY;
+		goto ue_rls_rsp;
+	}
+
 	status = UB_MSG_RSP_EXEC_ENODEV;
 	/* otherwise, delete this ue with ue idx in message payload */
 	list_for_each_entry_safe(vd_dev, tmp, &pue->ue_list, node)
@@ -388,6 +400,9 @@ ue_rls_rsp:
 		ub_disable_ent(vd_dev);
 		pue->num_ues -= 1;
 	}
+
+	if (lock)
+		device_unlock(&pue->dev);
 
 	return status;
 }
