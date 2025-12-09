@@ -204,5 +204,5 @@ void ubase_unregister_ae_event(struct ubase_dev *udev);
 void ubase_enable_misc_vector(struct ubase_dev *udev, bool enable);
 void ubase_disable_ce_irqs(struct ubase_dev *udev);
 int ubase_enable_ce_irqs(struct ubase_dev *udev);
-
+void ubase_ctrlq_task_schedule(struct ubase_dev *udev);
 #endif

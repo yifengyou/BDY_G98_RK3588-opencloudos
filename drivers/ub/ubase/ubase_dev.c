@@ -657,7 +657,23 @@ static int ubase_notify_drv_capbilities(struct ubase_dev *udev)
 	return __ubase_cmd_send_in(udev, &in);
 }
 
+static int ubase_log_rs_init(struct ubase_dev *udev)
+{
+#define UBASE_RATELIMIT_INTERVAL (2 * HZ)
+#define UBASE_RATELIMIT_BURST 40
+
+	raw_spin_lock_init(&udev->log_rs.rs.lock);
+	udev->log_rs.rs.interval = UBASE_RATELIMIT_INTERVAL;
+	udev->log_rs.rs.burst = UBASE_RATELIMIT_BURST;
+
+	return 0;
+}
+
 static const struct ubase_init_function ubase_init_func_map[] = {
+	{
+		"init log rs", UBASE_SUP_ALL, 0,
+		ubase_log_rs_init, NULL
+	},
 	{
 		"init work queue", UBASE_SUP_ALL, 0,
 		ubase_wq_init, ubase_wq_uninit

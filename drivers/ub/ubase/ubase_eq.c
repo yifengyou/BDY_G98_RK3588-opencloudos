@@ -210,7 +210,7 @@ static void ubase_errhandle_task_schedule(struct ubase_dev *udev)
 				 &udev->service_task.service_task, 0);
 }
 
-static void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
+void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
 {
 	if (!test_and_set_bit(UBASE_STATE_CTRLQ_SERVICE_SCHED,
 			      &udev->service_task.state)) {

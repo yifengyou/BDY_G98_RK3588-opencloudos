@@ -986,15 +986,17 @@ void ubase_ctrlq_handle_crq_msg(struct ubase_dev *udev,
 		spin_lock_bh(&csq->lock);
 		ctx = &udev->ctrlq.msg_queue[seq];
 		if (!ctx->valid) {
-			ubase_warn(udev,
-				   "seq is invalid, opcode = 0x%x, service_type = 0x%x, seq = %u.\n",
-				   head->opcode, head->service_type, seq);
-			goto unlock;
+			spin_unlock_bh(&csq->lock);
+			ubase_warn_rl(udev, udev->log_rs.ctrlq_self_seq_invalid_log_cnt,
+				      "seq is invalid, opcode = 0x%x, service_type = 0x%x, seq = %u.\n",
+				      head->opcode, head->service_type, seq);
+			return;
 		}
 		if (ctx->is_sync) {
 			ubase_ctrlq_notify_completed(udev, head, seq, msg_data,
 						     data_len);
-			goto unlock;
+			spin_unlock_bh(&csq->lock);
+			return;
 		}
 		ctx->valid = 0;
 		spin_unlock_bh(&csq->lock);
@@ -1002,9 +1004,6 @@ void ubase_ctrlq_handle_crq_msg(struct ubase_dev *udev,
 
 	ubase_ctrlq_crq_event_callback(udev, head, msg_data, data_len, seq);
 	return;
-
-unlock:
-	spin_unlock_bh(&csq->lock);
 }
 
 static void ubase_ctrlq_handle_self_msg(struct ubase_dev *udev,
@@ -1048,9 +1047,10 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 		spin_lock_bh(&csq->lock);
 		ctx = udev->ctrlq.msg_queue[seq];
 		if (!ctx.valid) {
-			ubase_warn(udev, "invalid seq = %u, opcode = 0x%x, service_type = 0x%x.\n",
-				   seq, head->opcode, head->service_type);
 			spin_unlock_bh(&csq->lock);
+			ubase_warn_rl(udev, udev->log_rs.ctrlq_other_seq_invalid_log_cnt,
+				      "invalid seq = %u, opcode = 0x%x, service_type = 0x%x.\n",
+				      seq, head->opcode, head->service_type);
 			return;
 		}
 		if (!ctx.is_sync)
@@ -1095,14 +1095,18 @@ static inline void ubase_ctrlq_reset_crq_ci(struct ubase_dev *udev)
 
 static void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
 {
+#define UBASE_CTRLQ_CRQ_POLLING_BUDGET 256
+
 	struct ubase_ctrlq_ring *crq = &udev->ctrlq.crq;
 	struct ub_entity *ue = to_ub_entity(udev->dev);
 	struct ubase_ctrlq_base_block head = {0};
+	u32 cnt = 0;
 	u8 bb_num;
 	u8 *addr;
 	u16 seq;
 
-	while (!ubase_ctrlq_crq_is_empty(udev, &udev->hw)) {
+	while (cnt++ < UBASE_CTRLQ_CRQ_POLLING_BUDGET &&
+	       !ubase_ctrlq_crq_is_empty(udev, &udev->hw)) {
 		if (!test_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state)) {
 			ubase_warn(udev, "ctrlq is disabled in crq.\n");
 			return;
@@ -1134,6 +1138,19 @@ static void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
 
 		ubase_ctrlq_update_crq_ci(udev, bb_num);
 	}
+
+	if (udev->log_rs.ctrlq_self_seq_invalid_log_cnt ||
+	    udev->log_rs.ctrlq_other_seq_invalid_log_cnt) {
+		ubase_warn(udev,
+			   "ubase log rate is limited, ctrlq_self_seq_invalid_log_cnt = %u, ctrlq_other_seq_invalid_log_cnt = %u.\n",
+			   udev->log_rs.ctrlq_self_seq_invalid_log_cnt,
+			   udev->log_rs.ctrlq_other_seq_invalid_log_cnt);
+		udev->log_rs.ctrlq_self_seq_invalid_log_cnt = 0;
+		udev->log_rs.ctrlq_other_seq_invalid_log_cnt = 0;
+	}
+
+	if (!ubase_ctrlq_crq_is_empty(udev, &udev->hw))
+		ubase_ctrlq_task_schedule(udev);
 }
 
 void ubase_ctrlq_service_task(struct ubase_delay_work *ubase_work)
