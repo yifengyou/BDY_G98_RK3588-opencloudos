@@ -1239,6 +1239,11 @@ int ummu_perm_grant(struct iommu_domain *domain, void *va, size_t size,
 		ret = ummu_update_info(data_info.op, mapt_info, &data_info);
 
 	plb_gather->va = (void *)data_info.data_base;
+	if (data_info.op == UMMU_GRANT)
+		plb_gather->size = 0;
+	else
+		plb_gather->size = data_info.data_size;
+
 	plb_gather->size = data_info.data_size;
 	data_info.tokenval = 0;
 	return ret;

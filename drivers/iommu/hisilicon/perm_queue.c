@@ -335,6 +335,7 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 
 	domain->qid = qid;
 	ummu_init_permq_ctxtbl_ent(domain, permq);
+	dma_wmb();
 	ummu_init_permq_ctrltbl_ent(ummu->ucmdq_ctrl_page, qid);
 	return 0;
 
