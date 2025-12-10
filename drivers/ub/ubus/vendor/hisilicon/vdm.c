@@ -256,10 +256,11 @@ static u8 ub_idevice_pue_rls_handler(struct ub_bus_controller *ubc, struct vdm_m
 		status = UB_MSG_RSP_SUCCESS;
 	}
 
+	ub_vdm_msg_rsp(ubc, pkt, status);
+
 	if (status == UB_MSG_RSP_SUCCESS)
 		ub_disable_ent(uent);
 
-	ub_vdm_msg_rsp(ubc, pkt, status);
 	return status;
 }
 

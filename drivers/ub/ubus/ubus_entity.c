@@ -463,6 +463,7 @@ EXPORT_SYMBOL_GPL(ub_start_ent);
 static void ub_release_ent(struct device *dev)
 {
 	struct ub_entity *uent;
+	u32 uent_num;
 
 	uent = to_ub_entity(dev);
 	if (is_primary(uent) && !is_p_device(uent)) {
@@ -480,8 +481,9 @@ static void ub_release_ent(struct device *dev)
 
 	kfree(uent->driver_override);
 	uent->token_value = 0;
+	uent_num = uent->uent_num;
 	kfree(uent);
-	pr_info("uent release\n");
+	pr_info("uent[%#x] release\n", uent_num);
 }
 
 void ub_stop_ent(struct ub_entity *uent)
