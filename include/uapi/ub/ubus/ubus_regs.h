@@ -81,6 +81,7 @@ enum ub_port_cap_id {
 #define  UB_SLOT_WLPS 0x2
 #define  UB_SLOT_PLPS 0x4
 #define  UB_SLOT_PDSS 0x8
+#define  UB_SLOT_PWCS 0x10
 #define UB_SLOT_PORT UB_ADDR_TO_POS(0x3)
 #define  UB_SLOT_START_PORT 0x0000ffff
 #define UB_SLOT_PP_CTRL UB_ADDR_TO_POS(0x4)

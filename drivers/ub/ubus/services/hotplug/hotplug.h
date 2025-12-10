@@ -53,6 +53,7 @@ struct ub_slot {
 #define WORK_LED(slot)		((slot)->slot_cap & UB_SLOT_WLPS)
 #define PWR_LED(slot)		((slot)->slot_cap & UB_SLOT_PLPS)
 #define PRESENT(slot)		((slot)->slot_cap & UB_SLOT_PDSS)
+#define PWR(slot)		((slot)->slot_cap & UB_SLOT_PWCS)
 
 struct ubhp_msg_payload {
 	u16 slot_id;
