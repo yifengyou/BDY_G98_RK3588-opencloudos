@@ -219,11 +219,4 @@ extern u8 ubc_feature;
 void ubrt_iommu_get_resv_regions(struct device *dev, struct list_head *list);
 #endif /* CONFIG_UB_UBFI */
 
-#if IS_ENABLED(CONFIG_UB_UBRT_PLAT_DEV)
-int ubrt_pmsi_get_interrupt_id(struct device *dev, u32 *interrupt_id);
-#else
-static inline int ubrt_pmsi_get_interrupt_id(struct device *dev, u32 *interrupt_id)
-{ return -ENODEV; }
-#endif /* CONFIG_UB_UBRT_PLAT_DEV */
-
 #endif /* _UB_UBFI_UBFI_H_ */

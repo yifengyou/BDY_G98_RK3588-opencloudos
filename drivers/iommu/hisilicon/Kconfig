@@ -18,7 +18,7 @@ config UB_UMMU_BASE
 config UB_UMMU
 	tristate "Hisilicon UB MMU Support"
 	depends on ARM64 && ARCH_HISI
-	depends on UB_UBUS && UB_UBFI && UB_UBRT_PLAT_DEV
+	depends on UB_UBUS && UB_UBFI
 	default n
 	select IOMMU_API
 	select IOMMU_IO_PGTABLE_LPAE
