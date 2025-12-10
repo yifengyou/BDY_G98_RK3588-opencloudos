@@ -109,14 +109,15 @@ static int __init ummu_add_resources(struct platform_device *pdev,
 
 static int ummu_rename_device(struct platform_device *pdev, enum ubrt_node_type type)
 {
-	static int device_count;
+	static int device_ummu_count;
+	static int device_pmu_count;
 	char new_name[32];
 	int ret;
 
 	if (type == UBRT_UMMU)
-		ret = snprintf(new_name, sizeof(new_name), "ummu.%d", device_count);
+		ret = snprintf(new_name, sizeof(new_name), "ummu.%d", device_ummu_count++);
 	else
-		ret = snprintf(new_name, sizeof(new_name), "ummu_pmu.%d", device_count);
+		ret = snprintf(new_name, sizeof(new_name), "ummu_pmu.%d", device_pmu_count++);
 
 	if (ret < 0 || ret >= sizeof(new_name)) {
 		dev_err(&pdev->dev, "failed to generate new device name\n");
@@ -129,8 +130,6 @@ static int ummu_rename_device(struct platform_device *pdev, enum ubrt_node_type 
 		return ret;
 	}
 	pdev->name = pdev->dev.kobj.name;
-
-	device_count++;
 
 	return 0;
 }

@@ -104,7 +104,7 @@ Contact:	Jingbin Wu <wujingbin2@huawei.com>
 Description:
 		Maximum TokenID bit width supported in non-secure state.
 
-What:		/sys/class/iommu/ummu.<x>/ummu-iommu/tid_type
+What:		/sys/class/iommu/logic_ummu/tid_type
 Date:		Oct 2025
 KernelVersion:	6.6
 Contact:	Jingbin Wu <wujingbin2@huawei.com>

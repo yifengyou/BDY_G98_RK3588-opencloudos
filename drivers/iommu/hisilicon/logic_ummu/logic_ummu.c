@@ -2064,6 +2064,61 @@ static inline struct fwnode_handle *logic_ummu_alloc_fwnode_static(void)
 	return handle;
 }
 
+static const char *get_domain_type_str(u32 domain_type)
+{
+	switch (domain_type) {
+	case IOMMU_DOMAIN_DMA:
+		return "IOMMU_DOMAIN_DMA";
+	case IOMMU_DOMAIN_IDENTITY:
+		return "IOMMU_DOMAIN_IDENTITY";
+	case IOMMU_DOMAIN_SVA:
+		return "IOMMU_DOMAIN_SVA";
+	default:
+		return "UNKNOWN DOMAIN TYPE";
+	}
+}
+
+static ssize_t tid_type_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct ummu_core_device *ummu_core;
+	u32 tid = 0, tid_type;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &tid);
+	if (ret < 0 || tid >= UMMU_INVALID_TID)
+		return -EINVAL;
+
+	ummu_core = to_ummu_core(dev_to_iommu_device(dev));
+	ret = ummu_core_get_tid_type(ummu_core, tid, &tid_type);
+	if (ret) {
+		pr_err("Invalid tid = 0x%x, ret = %d.\n", tid, ret);
+		return ret;
+	}
+
+	pr_info("tid = 0x%x, domain_type = %s.\n", tid,
+		get_domain_type_str(tid_type));
+
+	return (ssize_t)count;
+}
+static DEVICE_ATTR_WO(tid_type);
+
+static struct attribute *logic_ummu_attrs[] = {
+	&dev_attr_tid_type.attr,
+	NULL,
+};
+
+static struct attribute_group logic_ummu_group = {
+	.name = NULL,
+	.attrs = logic_ummu_attrs,
+};
+
+const struct attribute_group *logic_ummu_groups[] = {
+	&logic_ummu_group,
+	NULL,
+};
+
 int logic_ummu_device_init(void)
 {
 	int ret;
@@ -2088,7 +2143,7 @@ int logic_ummu_device_init(void)
 		pr_err("add logic ummu device failed\n");
 		goto out_free_fwnode;
 	}
-	ret = iommu_device_sysfs_add(&logic_ummu.core_dev.iommu, NULL, NULL,
+	ret = iommu_device_sysfs_add(&logic_ummu.core_dev.iommu, NULL, logic_ummu_groups,
 				     "%s", "logic_ummu");
 	if (ret) {
 		pr_err("register logic ummu to sysfs failed.\n");
