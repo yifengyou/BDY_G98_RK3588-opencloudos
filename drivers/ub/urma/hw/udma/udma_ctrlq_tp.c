@@ -73,7 +73,6 @@ static struct udma_ue_idx_table *udma_find_ue_idx_by_tpn(struct udma_dev *udev,
 	xa_lock(&udev->tpn_ue_idx_table);
 	tp_ue_idx_info = xa_load(&udev->tpn_ue_idx_table, tpn);
 	if (!tp_ue_idx_info) {
-		dev_warn(udev->dev, "ue idx info not exist, tpn %u.\n", tpn);
 		xa_unlock(&udev->tpn_ue_idx_table);
 
 		return NULL;

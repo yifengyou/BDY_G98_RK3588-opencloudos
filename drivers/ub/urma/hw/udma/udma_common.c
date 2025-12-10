@@ -249,8 +249,8 @@ int udma_id_alloc_auto_grow(struct udma_dev *udma_dev, struct udma_ida *ida_tabl
 		id = ida_alloc_range(&ida_table->ida, ida_table->min, ida_table->max,
 				     GFP_ATOMIC);
 		if (id < 0) {
-			dev_err(udma_dev->dev, "failed to alloc id, ret = %d.\n", id);
 			spin_unlock(&ida_table->lock);
+			dev_err(udma_dev->dev, "failed to alloc id, ret = %d.\n", id);
 			return id;
 		}
 	}
@@ -291,9 +291,9 @@ int udma_specify_adv_id(struct udma_dev *udma_dev, struct udma_group_bitmap *bit
 
 	spin_lock(&bitmap_table->lock);
 	if ((bit[block] & (1U << bit_idx)) == 0) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"user specify id %u been used.\n", user_id);
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -347,10 +347,10 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 		;
 
 	if (i == bitmap_cnt) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"all bitmaps have been used, bitmap_cnt = %u.\n",
 			bitmap_cnt);
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -370,9 +370,9 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 		;
 	if (i == bitmap_cnt ||
 	    (i + 1) * NUM_JETTY_PER_GROUP > bitmap_table->n_bits) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"no completely bitmap for Jetty group.\n");
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -858,9 +858,11 @@ void udma_init_hugepage(struct udma_dev *dev)
 void udma_destroy_hugepage(struct udma_dev *dev)
 {
 	struct udma_hugepage_priv *priv;
+	struct udma_hugepage_priv *tmp;
 
 	mutex_lock(&dev->hugepage_lock);
-	list_for_each_entry(priv, &dev->hugepage_list, list) {
+	list_for_each_entry_safe(priv, tmp, &dev->hugepage_list, list) {
+		list_del(&priv->list);
 		dev_info(dev->dev, "unmap_hugepage, 2m_page_num=%u.\n",
 			 priv->va_len >> UDMA_HUGEPAGE_SHIFT);
 		udma_unpin_k_addr(priv->umem);

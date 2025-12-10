@@ -96,6 +96,7 @@ int udma_free_ucontext(struct ubcore_ucontext *ucontext)
 {
 	struct udma_dev *udma_dev = to_udma_dev(ucontext->ub_dev);
 	struct udma_hugepage_priv *priv;
+	struct udma_hugepage_priv *tmp;
 	struct vm_area_struct *vma;
 	struct udma_context *ctx;
 	int ret;
@@ -111,7 +112,8 @@ int udma_free_ucontext(struct ubcore_ucontext *ucontext)
 	ummu_sva_unbind_device(ctx->sva);
 
 	mutex_lock(&ctx->hugepage_lock);
-	list_for_each_entry(priv, &ctx->hugepage_list, list) {
+	list_for_each_entry_safe(priv, tmp, &ctx->hugepage_list, list) {
+		list_del(&priv->list);
 		if (current->mm) {
 			mmap_write_lock(current->mm);
 			vma = find_vma(current->mm, (unsigned long)priv->va_base);
@@ -148,9 +150,9 @@ static int udma_mmap_jetty_dsqe(struct udma_dev *dev, struct ubcore_ucontext *uc
 	xa_lock(&dev->jetty_table.xa);
 	sq = xa_load(&dev->jetty_table.xa, j_id);
 	if (!sq) {
+		xa_unlock(&dev->jetty_table.xa);
 		dev_err(dev->dev,
 			"mmap failed, j_id: %llu not exist\n", j_id);
-		xa_unlock(&dev->jetty_table.xa);
 		return -EINVAL;
 	}
 
@@ -160,9 +162,9 @@ static int udma_mmap_jetty_dsqe(struct udma_dev *dev, struct ubcore_ucontext *uc
 		jetty_uctx = to_udma_jfs_from_queue(sq)->ubcore_jfs.uctx;
 
 	if (jetty_uctx != uctx) {
+		xa_unlock(&dev->jetty_table.xa);
 		dev_err(dev->dev,
 			"mmap failed, j_id: %llu, uctx invalid\n", j_id);
-		xa_unlock(&dev->jetty_table.xa);
 		return -EINVAL;
 	}
 	xa_unlock(&dev->jetty_table.xa);

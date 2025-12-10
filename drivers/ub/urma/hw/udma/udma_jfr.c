@@ -393,10 +393,10 @@ static int udma_alloc_jfr_id(struct udma_dev *udma_dev, uint32_t cfg_id, uint32_
 			id = ida_alloc_range(&ida_table->ida, min = ida_table->min,
 					     max, GFP_ATOMIC);
 		if (id < 0) {
+			spin_unlock(&ida_table->lock);
 			dev_err(udma_dev->dev,
 				"alloc jfr id range (%u - %u) failed, ret = %d.\n",
 				min, max, id);
-			spin_unlock(&ida_table->lock);
 
 			return id;
 		}

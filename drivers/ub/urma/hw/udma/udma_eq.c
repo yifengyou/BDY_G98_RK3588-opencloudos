@@ -84,9 +84,9 @@ static int udma_ae_jfs_check_err(struct auxiliary_device *adev, uint32_t queue_n
 	xa_lock(&udma_dev->jetty_table.xa);
 	udma_sq = (struct udma_jetty_queue *)xa_load(&udma_dev->jetty_table.xa, queue_num);
 	if (!udma_sq) {
+		xa_unlock(&udma_dev->jetty_table.xa);
 		dev_warn(udma_dev->dev,
 			 "async event for bogus queue number = %u.\n", queue_num);
-		xa_unlock(&udma_dev->jetty_table.xa);
 		return -EINVAL;
 	}
 
@@ -138,9 +138,9 @@ static int udma_ae_jfr_check_err(struct auxiliary_device *adev, uint32_t queue_n
 	xa_lock(&udma_dev->jfr_table.xa);
 	udma_jfr = (struct udma_jfr *)xa_load(&udma_dev->jfr_table.xa, queue_num);
 	if (!udma_jfr) {
+		xa_unlock(&udma_dev->jfr_table.xa);
 		dev_warn(udma_dev->dev,
 			 "async event for bogus jfr number = %u.\n", queue_num);
-		xa_unlock(&udma_dev->jfr_table.xa);
 		return -EINVAL;
 	}
 
@@ -172,9 +172,9 @@ static int udma_ae_jfc_check_err(struct auxiliary_device *adev, uint32_t queue_n
 	xa_lock_irqsave(&udma_dev->jfc_table.xa, flags);
 	udma_jfc = (struct udma_jfc *)xa_load(&udma_dev->jfc_table.xa, queue_num);
 	if (!udma_jfc) {
+		xa_unlock_irqrestore(&udma_dev->jfc_table.xa, flags);
 		dev_warn(udma_dev->dev,
 			 "async event for bogus jfc number = %u.\n", queue_num);
-		xa_unlock_irqrestore(&udma_dev->jfc_table.xa, flags);
 		return -EINVAL;
 	}
 
@@ -206,9 +206,9 @@ static int udma_ae_jetty_group_check_err(struct auxiliary_device *adev, uint32_t
 	xa_lock(&udma_dev->jetty_grp_table.xa);
 	udma_jetty_grp = (struct udma_jetty_grp *)xa_load(&udma_dev->jetty_grp_table.xa, queue_num);
 	if (!udma_jetty_grp) {
+		xa_unlock(&udma_dev->jetty_grp_table.xa);
 		dev_warn(udma_dev->dev,
 			 "async event for bogus jetty group number = %u.\n", queue_num);
-		xa_unlock(&udma_dev->jetty_grp_table.xa);
 		return -EINVAL;
 	}
 
@@ -373,9 +373,9 @@ static int udma_save_tpn_ue_idx_info(struct udma_dev *udma_dev, uint8_t ue_idx,
 	tp_ue_idx_info = xa_load(&udma_dev->tpn_ue_idx_table, tpn);
 	if (tp_ue_idx_info) {
 		if (tp_ue_idx_info->num >= UDMA_UE_NUM) {
+			xa_unlock(&udma_dev->tpn_ue_idx_table);
 			dev_err(udma_dev->dev,
 				"num exceeds the maximum value.\n");
-			xa_unlock(&udma_dev->tpn_ue_idx_table);
 
 			return -EINVAL;
 		}
