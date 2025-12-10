@@ -21,7 +21,7 @@
 #define HZIP_BUF_TYPE_M				GENMASK(11, 8)
 #define HZIP_SGL				0x1
 
-#define HZIP_ALG_PRIORITY			300
+#define HZIP_ALG_PRIORITY			80
 #define HZIP_SGL_SGE_NR				10
 
 #define HZIP_ALG_DEFLATE			GENMASK(5, 4)
