@@ -162,6 +162,11 @@ static ssize_t port_reset_store(struct ub_port *port, const char *buf,
 		return -EINVAL;
 	}
 
+	if (port->uent->ubc->cluster) {
+		ub_err(port->uent, "Port reset is not supported by sysfs in cluster mode\n");
+		return -EINVAL;
+	}
+
 	ret = ub_port_reset_function(port);
 	if (ret < 0)
 		return ret;
