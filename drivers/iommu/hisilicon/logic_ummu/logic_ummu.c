@@ -21,11 +21,6 @@
 #include "../ummu_cfg_v1.h"
 #include "logic_ummu.h"
 
-struct logic_ummu_domain {
-	struct ummu_base_domain base_domain;
-	struct ummu_base_domain *agent_domain;
-};
-
 struct logic_ummu_device {
 	struct ummu_core_device core_dev;
 	struct ummu_device *agent_device;
@@ -39,6 +34,12 @@ struct logic_ummu_viommu {
 	struct ummu_core_device *core_dev;
 	struct iommu_domain *parent;
 	struct iommu_domain *nested;
+};
+
+struct logic_ummu_domain {
+	struct ummu_base_domain base_domain;
+	struct ummu_base_domain *agent_domain;
+	struct logic_ummu_viommu *logic_viommu;
 };
 
 struct eid_info {
@@ -514,10 +515,12 @@ static void logic_ummu_free(struct iommu_domain *domain)
 		return;
 	}
 
-	if (domain->type != IOMMU_DOMAIN_NESTED)
+	if (domain->type != IOMMU_DOMAIN_NESTED) {
 		logic_domain_free(logic_domain, ops);
-	else
+	} else {
 		logic_nested_domain_free(logic_domain, ops);
+		logic_domain->logic_viommu->nested = NULL;
+	}
 
 	kfree(logic_domain);
 }
@@ -1018,6 +1021,7 @@ logic_ummu_viommu_alloc_domain_nested(struct iommufd_viommu *viommu,
 		}
 	}
 	logic_vummu->nested = &logic_domain->base_domain.domain;
+	logic_domain->logic_viommu = logic_vummu;
 	return &logic_domain->base_domain.domain;
 error_handle:
 	list_for_each_entry_safe(nested_base_domain, iter, &logic_domain->base_domain.list, list) {
@@ -1040,8 +1044,10 @@ logic_ummu_viommu_cache_invalidate(struct iommufd_viommu *viommu,
 	u32 cmd_num, succ_cnt;
 	int err, ret = 0;
 
-	if (!logic_vummu->nested || !array)
+	if (!logic_vummu->nested || !array) {
+		pr_debug("invalid viommu.\n");
 		return -EINVAL;
+	}
 
 	if (!helper || !helper->cache_invalidate_user)
 		return -EOPNOTSUPP;
