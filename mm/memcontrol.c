@@ -667,6 +667,10 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
+#ifdef CONFIG_MEMCG_ZRAM
+	MEMCG_ZRAM_B,
+	MEMCG_ZRAMED,
+#endif
 };
 
 #define NR_MEMCG_NODE_STAT_ITEMS ARRAY_SIZE(memcg_node_stat_items)
