@@ -137,9 +137,6 @@ static int hisi_zip_fallback_do_work(struct crypto_comp *tfm, struct acomp_req *
 	kunmap_local(output);
 	kunmap_local(input);
 
-	if (acomp_req->base.complete)
-		acomp_request_complete(acomp_req, ret);
-
 	return ret;
 }
 
