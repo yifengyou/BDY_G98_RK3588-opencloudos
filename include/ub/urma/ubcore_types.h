@@ -218,7 +218,8 @@ union ubcore_jfs_flag {
 		/* (0x3): OL, low layer ordering */
 		/* (0x4): UNO, unreliable non ordering */
 		uint32_t multi_path : 1;
-		uint32_t reserved : 20;
+		uint32_t ctp_rc_mul_path_mode : 1;
+		uint32_t reserved : 19;
 	} bs;
 	uint32_t value;
 };
@@ -1344,7 +1345,8 @@ union ubcore_jetty_flag {
 		/* (0x3): OL, low layer ordering */
 		/* (0x4): UNO, unreliable non ordering */
 		uint32_t multi_path : 1;
-		uint32_t reserved : 19;
+		uint32_t ctp_rc_mul_path_mode : 1;
+		uint32_t reserved : 18;
 	} bs;
 	uint32_t value;
 };
