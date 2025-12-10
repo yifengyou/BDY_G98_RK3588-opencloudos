@@ -1174,7 +1174,12 @@ void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 static bool check_tecte_can_set(const struct ummu_tecte_data *tecte,
 				const struct ummu_tecte_data *src)
 {
-	u32 st_mode = FIELD_GET(TECT_ENT0_ST_MODE, le64_to_cpu(tecte->data[0]));
+	u32 st_mode;
+
+	if (!src->data[0])
+		return true;
+
+	st_mode = FIELD_GET(TECT_ENT0_ST_MODE, le64_to_cpu(tecte->data[0]));
 
 	switch (st_mode) {
 	case TECT_ENT0_ST_MODE_ABORT:
@@ -1298,8 +1303,11 @@ void ummu_del_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, en
 	}
 
 	ummu_device_delete_kvtbl(ummu, meta->tecte_tag, eid, kv_index);
-	if (kref_read(&meta->ref) == 1)
+	/* 2 indicates that only the last EID remains. */
+	if (kref_read(&meta->ref) == 2) {
 		ummu_device_write_tecte(ummu, meta->tecte_tag, &ummu_clear_tecte);
+		meta->valid = false;
+	}
 
 	os_meta_del_eid(meta, eid);
 }
