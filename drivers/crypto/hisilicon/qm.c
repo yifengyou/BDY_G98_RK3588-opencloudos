@@ -1206,6 +1206,11 @@ static irqreturn_t qm_aeq_thread(int irq, void *data)
 
 	atomic64_inc(&qm->debug.dfx.aeq_irq_cnt);
 
+	if (qm_pm_get_sync(qm)) {
+		dev_err(&qm->pdev->dev, "failed to get runtime PM for aeq handle\n");
+		return IRQ_HANDLED;
+	}
+
 	while (QM_AEQE_PHASE(dw0) == qm->status.aeqc_phase) {
 		type = (dw0 >> QM_AEQE_TYPE_SHIFT) & QM_AEQE_TYPE_MASK;
 		qp_id = dw0 & QM_AEQE_CQN_MASK;
@@ -1240,6 +1245,8 @@ static irqreturn_t qm_aeq_thread(int irq, void *data)
 	}
 
 	qm_db(qm, 0, QM_DOORBELL_CMD_AEQ, qm->status.aeq_head, 0);
+
+	qm_pm_put_sync(qm);
 
 	return IRQ_HANDLED;
 }
