@@ -114,7 +114,7 @@ module_param_cb(sgl_sge_nr, &sgl_sge_nr_ops, &sgl_sge_nr, 0444);
 MODULE_PARM_DESC(sgl_sge_nr, "Number of sge in sgl(1-255)");
 
 static int hisi_zip_fallback_do_work(struct crypto_comp *tfm, struct acomp_req *acomp_req,
-			  bool is_decompress)
+				     bool is_decompress)
 {
 	void *input, *output;
 	const char *algo;
@@ -552,6 +552,9 @@ static int hisi_zip_fallback_init(struct hisi_zip_ctx *ctx, const char *alg_name
 {
 	if (!IS_ERR_OR_NULL(ctx->soft_tfm))
 		return 0;
+
+	if (!crypto_has_comp(alg_name, 0, 0))
+		return -ENODEV;
 
 	ctx->soft_tfm = crypto_alloc_comp(alg_name, 0, 0);
 	if (IS_ERR_OR_NULL(ctx->soft_tfm)) {
