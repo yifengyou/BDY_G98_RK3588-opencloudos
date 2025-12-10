@@ -192,11 +192,11 @@ static int logic_ummu_attach_dev(struct iommu_domain *domain,
 				 struct device *dev)
 {
 	struct logic_ummu_domain *logic_domain = iommu_to_logic_domain(domain);
+	const struct ummu_device_helper *helper = get_agent_helper();
 	const struct ummu_core_ops *core_ops = get_agent_core_ops();
 	struct ummu_base_domain *ummu_base_domain, *agent_domain;
-	const struct ummu_device_helper *helper = get_agent_helper();
+	enum ummu_dom_cfg_sync_type sync_type = SYNC_TYPE_NONE;
 	const struct iommu_domain_ops *ops;
-	enum ummu_dom_cfg_sync_type sync_type;
 	int ret;
 
 	agent_domain = logic_domain->agent_domain;
@@ -217,9 +217,7 @@ static int logic_ummu_attach_dev(struct iommu_domain *domain,
 	}
 	/* the domain attributes might be changed, sync to logic domain */
 	logic_domain_update_attr(logic_domain);
-	if (domain->type == IOMMU_DOMAIN_NESTED)
-		sync_type = SYNC_NESTED_DOM_MUTI_CFG;
-	else
+	if (domain->type != IOMMU_DOMAIN_NESTED)
 		sync_type = SYNC_DOM_MUTI_CFG;
 
 	list_for_each_entry(ummu_base_domain, &logic_domain->base_domain.list,

@@ -240,9 +240,9 @@ struct ummu_hash_table_cfg {
 
 /* ummu device inner helper functions */
 enum ummu_dom_cfg_sync_type {
+	SYNC_TYPE_NONE,
 	SYNC_DOM_ALL_CFG,
 	SYNC_DOM_MUTI_CFG,
-	SYNC_NESTED_DOM_MUTI_CFG,
 	SYNC_CLEAR_DOM_ALL_CFG,
 };
 

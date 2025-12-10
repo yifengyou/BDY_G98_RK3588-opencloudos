@@ -676,7 +676,7 @@ static void ummu_cfg_sync(struct ummu_base_domain *base_domain)
 	else
 		u_domain = to_ummu_domain(&base_domain->domain);
 
-	ummu = core_to_ummu_device(u_domain->base_domain.core_dev);
+	ummu = core_to_ummu_device(base_domain->core_dev);
 	tag = u_domain->cfgs.tecte_tag;
 	tid = u_domain->base_domain.tid;
 
@@ -713,17 +713,12 @@ static int ummu_sync_dom_cfg(struct ummu_base_domain *src,
 		dst_domain->cfgs.tecte_tag = src_domain->cfgs.tecte_tag;
 		dst_domain->cfgs.stage = src_domain->cfgs.stage;
 		break;
-	case SYNC_NESTED_DOM_MUTI_CFG:
-		src_domain = to_nested_domain(&src->domain)->s2_parent;
-		dst_domain = to_nested_domain(&dst->domain)->s2_parent;
-		dst_domain->base_domain.tid = src_domain->base_domain.tid;
-		dst_domain->cfgs.tecte_tag = src_domain->cfgs.tecte_tag;
-		dst_domain->cfgs.stage = src_domain->cfgs.stage;
-		break;
 	case SYNC_CLEAR_DOM_ALL_CFG:
 		dst_domain = to_ummu_domain(&dst->domain);
 		memset(&dst_domain->cfgs, 0, sizeof(dst_domain->cfgs));
 		dst_domain->base_domain.tid = UMMU_INVALID_TID;
+		break;
+	case SYNC_TYPE_NONE:
 		break;
 	default:
 		return -EINVAL;
