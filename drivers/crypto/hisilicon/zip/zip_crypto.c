@@ -118,7 +118,6 @@ static int hisi_zip_fallback_do_work(struct crypto_comp *tfm, struct acomp_req *
 {
 	void *input, *output;
 	const char *algo;
-	int err = 0;
 	int ret;
 
 	input = kmap_local_page(sg_page(acomp_req->src)) + acomp_req->src->offset;
@@ -133,14 +132,13 @@ static int hisi_zip_fallback_do_work(struct crypto_comp *tfm, struct acomp_req *
 	if (ret) {
 		algo = crypto_tfm_alg_driver_name(crypto_comp_tfm(tfm));
 		pr_err("failed to do fallback %s work, ret=%d\n", algo, ret);
-		err = -EIO;
 	}
 
 	kunmap_local(output);
 	kunmap_local(input);
 
 	if (acomp_req->base.complete)
-		acomp_request_complete(acomp_req, err);
+		acomp_request_complete(acomp_req, ret);
 
 	return ret;
 }
@@ -348,12 +346,14 @@ static int hisi_zip_acompress(struct acomp_req *acomp_req)
 {
 	struct hisi_zip_ctx *ctx = crypto_tfm_ctx(acomp_req->base.tfm);
 	struct hisi_zip_qp_ctx *qp_ctx = &ctx->qp_ctx[HZIP_QPC_COMP];
-	struct device *dev = &qp_ctx->qp->qm->pdev->dev;
 	struct hisi_zip_req *req;
+	struct device *dev;
 	int ret;
 
 	if (ctx->fallback)
 		return hisi_zip_fallback_do_work(ctx->soft_tfm, acomp_req, 0);
+
+	dev = &qp_ctx->qp->qm->pdev->dev;
 
 	req = hisi_zip_create_req(qp_ctx, acomp_req);
 	if (IS_ERR(req))
@@ -372,12 +372,14 @@ static int hisi_zip_adecompress(struct acomp_req *acomp_req)
 {
 	struct hisi_zip_ctx *ctx = crypto_tfm_ctx(acomp_req->base.tfm);
 	struct hisi_zip_qp_ctx *qp_ctx = &ctx->qp_ctx[HZIP_QPC_DECOMP];
-	struct device *dev = &qp_ctx->qp->qm->pdev->dev;
 	struct hisi_zip_req *req;
+	struct device *dev;
 	int ret;
 
 	if (ctx->fallback)
 		return hisi_zip_fallback_do_work(ctx->soft_tfm, acomp_req, 1);
+
+	dev = &qp_ctx->qp->qm->pdev->dev;
 
 	req = hisi_zip_create_req(qp_ctx, acomp_req);
 	if (IS_ERR(req))
