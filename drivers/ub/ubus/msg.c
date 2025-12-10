@@ -83,39 +83,20 @@ static void dev_message_put(struct ub_entity *uent)
 
 int message_probe_device(struct ub_entity *uent)
 {
-	const struct message_ops *ops = uent->ubc->mdev->ops;
-	int ret;
-
 	if (!dev_message_get(uent))
 		return -ENOMEM;
 
-	if (uent->message->mdev)
-		return 0;
-
-	if (ops->probe_dev) {
-		ret = ops->probe_dev(uent);
-		if (ret)
-			goto err_probe;
-	}
-
-	uent->message->mdev = uent->ubc->mdev;
+	if (!uent->message->mdev)
+		uent->message->mdev = uent->ubc->mdev;
 
 	return 0;
-
-err_probe:
-	dev_message_put(uent);
-	return ret;
 }
 
 void message_remove_device(struct ub_entity *uent)
 {
-	const struct message_ops *ops = uent->ubc->mdev->ops;
-
 	if (!uent->message)
 		return;
 
-	if (ops->remove_dev)
-		ops->remove_dev(uent);
 	dev_message_put(uent);
 }
 
