@@ -807,7 +807,7 @@ int ubase_dbg_format_time(time64_t time, struct seq_file *s)
 {
 #define YEAR_OFFSET 1900
 	const char week[7][4] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-	const char mouth[12][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	const char month[12][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 				   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 	struct tm t;
 
@@ -817,7 +817,7 @@ int ubase_dbg_format_time(time64_t time, struct seq_file *s)
 	time64_to_tm(time, 0, &t);
 
 	seq_printf(s, "%s %s %02d %02d:%02d:%02d %ld", week[t.tm_wday],
-		   mouth[t.tm_mon], t.tm_mday, t.tm_hour, t.tm_min,
+		   month[t.tm_mon], t.tm_mday, t.tm_hour, t.tm_min,
 		   t.tm_sec, t.tm_year + YEAR_OFFSET);
 	return 0;
 }
