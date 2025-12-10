@@ -996,6 +996,8 @@ int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 	int ret;
 
 	mutex_lock(&channels->mutex);
+
+	set_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 	__unic_uninit_channels(unic_dev);
 
 	channels->rss_size = new_rss_size;
@@ -1007,6 +1009,8 @@ int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,
 			"failed to change rss_size, ret = %d.\n", ret);
+	else
+		clear_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 
 	mutex_unlock(&channels->mutex);
 
