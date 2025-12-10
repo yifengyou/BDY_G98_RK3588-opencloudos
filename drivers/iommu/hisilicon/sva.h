@@ -55,7 +55,7 @@ static inline int ummu_master_disable_sva(struct ummu_master *master,
 	return -ENODEV;
 }
 
-static void ummu_iopf_queue_free(struct ummu_device *ummu)
+static inline void ummu_iopf_queue_free(struct ummu_device *ummu)
 {
 }
 

@@ -10,6 +10,8 @@
 #include <linux/platform_device.h>
 #include <linux/iopoll.h>
 #include <ub/ubfi/ubfi.h>
+#include <linux/acpi.h>
+#include <linux/of.h>
 
 #include "logic_ummu/logic_ummu.h"
 #include "ummu_impl.h"
@@ -766,24 +768,28 @@ static void ummu_device_shutdown(struct platform_device *pdev)
 	ummu_device_disable(ummu);
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id hisi_ummu_of_match[] = {
 	{ .compatible = "ub,ummu", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, hisi_ummu_of_match);
+#endif
 
+#ifdef CONFIG_ACPI
 static const struct acpi_device_id hisi_ummu_acpi_match[] = {
 	{ "HISI0551", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, hisi_ummu_acpi_match);
+#endif
 
 struct platform_driver ummu_driver = {
 	.driver = {
 		.name = UMMU_DRV_NAME,
 		.suppress_bind_attrs = true,
-		.of_match_table = hisi_ummu_of_match,
-		.acpi_match_table = hisi_ummu_acpi_match,
+		.of_match_table = of_match_ptr(hisi_ummu_of_match),
+		.acpi_match_table = ACPI_PTR(hisi_ummu_acpi_match),
 	},
 	.probe = ummu_device_probe,
 	.remove = ummu_device_remove,

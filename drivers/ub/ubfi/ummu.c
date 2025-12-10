@@ -173,6 +173,7 @@ static int ummu_config_update(struct platform_device *pdev,
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
 static acpi_status acpi_processor_ummu(acpi_handle handle, u32 lvl,
 				      void *context, void **rv)
 {
@@ -239,7 +240,6 @@ out:
 	return status;
 }
 
-#ifdef CONFIG_ACPI
 static int acpi_update_ummu_config(struct ummu_node *ummu_node, u32 index)
 {
 	acpi_status status;
