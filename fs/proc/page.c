@@ -70,7 +70,7 @@ static ssize_t kpagecount_read(struct file *file, char __user *buf,
 		if (!ppage)
 			pcount = 0;
 		else
-			pcount = page_mapcount(ppage);
+			pcount = proc_kpage_read_mapcount(ppage);
 
 		if (put_user(pcount, out)) {
 			ret = -EFAULT;
