@@ -158,7 +158,7 @@ static inline void sock_update_classid(struct sock_cgroup_data *skcd)
 		return;
 
 	rcu_read_lock();
-	skcd->cs = task_cls_state(current);
+	WRITE_ONCE(skcd->cs, task_cls_state(current));
 	rcu_read_unlock();
 }
 

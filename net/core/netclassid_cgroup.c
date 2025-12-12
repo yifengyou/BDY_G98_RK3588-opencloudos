@@ -168,7 +168,7 @@ static int update_classid_sock(const void *v, struct file *file, unsigned int n)
 	if (sock) {
 		sock_cgroup_set_classid(&sock->sk->sk_cgrp_data, ctx->classid);
 		rcu_read_lock();
-		sock->sk->sk_cgrp_data.cs = task_cls_state(ctx->task);
+		WRITE_ONCE(sock->sk->sk_cgrp_data.cs, task_cls_state(ctx->task));
 		rcu_read_unlock();
 	}
 	if (--ctx->batch == 0) {
