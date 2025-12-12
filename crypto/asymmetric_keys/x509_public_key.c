@@ -29,6 +29,8 @@ int x509_get_sig_params(struct x509_certificate *cert)
 	struct shash_desc *desc;
 	size_t desc_size;
 	int ret;
+	struct key *key;
+	const struct public_key *pkey;
 
 	pr_devel("==>%s()\n", __func__);
 
@@ -65,15 +67,26 @@ int x509_get_sig_params(struct x509_certificate *cert)
 	desc->tfm = tfm;
 
 	if (strcmp(cert->pub->pkey_algo, "sm2") == 0) {
+		key = find_asymmetric_key_in_trusted_keyring(sig->auth_ids[0],
+							    sig->auth_ids[1],
+							    sig->auth_ids[2]);
+		if (!IS_ERR(key))
+			pkey = asymmetric_key_public_key(key);
+		else
+			pkey = cert->pub;
+
 		ret = strcmp(sig->hash_algo, "sm3") != 0 ? -EINVAL :
 		      crypto_shash_init(desc) ?:
-		      sm2_compute_z_digest(desc, cert->pub->key,
-					   cert->pub->keylen, sig->digest) ?:
+		      sm2_compute_z_digest(desc, pkey->key,
+					  pkey->keylen, sig->digest) ?:
 		      crypto_shash_init(desc) ?:
 		      crypto_shash_update(desc, sig->digest,
 					  sig->digest_size) ?:
 		      crypto_shash_finup(desc, cert->tbs, cert->tbs_size,
 					 sig->digest);
+
+		if (!IS_ERR(key))
+			key_put(key);
 	} else {
 		ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size,
 					  sig->digest);
