@@ -418,7 +418,7 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	bool dst_match = false;
 
 	for (int i = 0; i < g_ubcore_topo_map->node_num; i++) {
-		if (num >= UBCORE_MAX_ROUTE_NUM - 1 || i >= IODIE_NUM) {
+		if (num >= UBCORE_MAX_ROUTE_NUM - 1) {
 			ubcore_log_warn("Finish to query topo map.\n");
 			return -EINVAL;
 		}
