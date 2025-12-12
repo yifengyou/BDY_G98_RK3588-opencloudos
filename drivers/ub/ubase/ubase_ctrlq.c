@@ -553,11 +553,31 @@ static void ubase_ctrlq_send_to_csq(struct ubase_dev *udev,
 	ubase_ctrlq_csq_report_irq(udev);
 }
 
+static int ubase_ctrlq_check_csq_enough(struct ubase_dev *udev, u16 num)
+{
+	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
+
+	csq->ci = (u16)ubase_read_dev(&udev->hw, UBASE_CTRLQ_CSQ_HEAD_REG);
+	if (num > ubase_ctrlq_remain_space(udev)) {
+		ubase_warn(udev,
+			   "no enough space in ctrlq, ci = %u, num = %u.\n",
+			   csq->ci, num);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
 static int ubase_ctrlq_send_msg_to_sq(struct ubase_dev *udev,
 				      struct ubase_ctrlq_base_block *head,
 				      struct ubase_ctrlq_msg *msg, u8 num)
 {
+	int ret;
+
 	if (ubase_dev_ctrlq_supported(udev)) {
+		ret = ubase_ctrlq_check_csq_enough(udev, num);
+		if (ret)
+			return ret;
 		ubase_ctrlq_send_to_csq(udev, head, msg, num);
 		return 0;
 	}
@@ -709,19 +729,19 @@ static int ubase_ctrlq_msg_check(struct ubase_dev *udev,
 	return -EINVAL;
 }
 
-static int ubase_ctrlq_check_csq_enough(struct ubase_dev *udev, u16 num)
+static int ubase_ctrlq_check_send_state(struct ubase_dev *udev,
+					struct ubase_ctrlq_msg *msg)
 {
-	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
+	if (udev->reset_stage == UBASE_RESET_STAGE_UNINIT &&
+	    !(msg->opcode == UBASE_CTRLQ_OPC_CTRLQ_CTRL &&
+	      msg->service_type == UBASE_CTRLQ_SER_TYPE_DEV_REGISTER)) {
+		ubase_dbg(udev, "ctrlq send is disabled.\n");
+		return -EAGAIN;
+	}
 
-	if (!ubase_dev_ctrlq_supported(udev))
-		return 0;
-
-	csq->ci = (u16)ubase_read_dev(&udev->hw, UBASE_CTRLQ_CSQ_HEAD_REG);
-	if (num > ubase_ctrlq_remain_space(udev)) {
-		ubase_warn(udev,
-			   "no enough space in ctrlq, ci = %u, num = %u.\n",
-			   csq->ci, num);
-		return -EBUSY;
+	if (!test_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state)) {
+		ubase_warn(udev, "ctrlq is disabled in csq.\n");
+		return -EAGAIN;
 	}
 
 	return 0;
@@ -729,26 +749,22 @@ static int ubase_ctrlq_check_csq_enough(struct ubase_dev *udev, u16 num)
 
 static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 				 struct ubase_ctrlq_msg *msg,
+				 u16 num,
 				 struct ubase_ctrlq_ue_info *ue_info)
 {
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
 	struct ubase_ctrlq_base_block head = {0};
-	u16 seq, num;
+	u16 seq, retry = 0;
 	int ret;
 
-	num = ubase_ctrlq_calc_bb_num(msg->in_size);
-
 	spin_lock_bh(&csq->lock);
-
-	ret = ubase_ctrlq_check_csq_enough(udev, num);
-	if (ret)
-		goto unlock;
 
 	if (!ubase_ctrlq_msg_is_resp(msg)) {
 		ret = ubase_ctrlq_alloc_seq(udev, msg, &seq);
 		if (ret) {
 			ubase_warn(udev, "no enough seq in ctrlq.\n");
-			goto unlock;
+			spin_unlock_bh(&csq->lock);
+			return ret;
 		}
 	} else {
 		seq = msg->resp_seq;
@@ -756,21 +772,32 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 
 	ubase_ctrlq_addto_msg_queue(udev, seq, msg, ue_info);
 
+	spin_unlock_bh(&csq->lock);
+
 	head.bb_num = num;
 	head.seq = cpu_to_le16(seq);
 	ubase_ctrlq_fill_first_bb(udev, &head, msg, ue_info);
-	ret = ubase_ctrlq_send_msg_to_sq(udev, &head, msg, num);
-	if (ret) {
+
+	do {
+		if (retry) {
+			msleep(UBASE_CTRLQ_RETRY_INTERVAL);
+			ubase_info(udev, "Ctrlq send msg retry = %u.\n", retry);
+		}
+
+		ret = ubase_ctrlq_check_send_state(udev, msg);
+		if (ret)
+			goto free_seq;
+		spin_lock_bh(&csq->lock);
+		ret = ubase_ctrlq_send_msg_to_sq(udev, &head, msg, num);
 		spin_unlock_bh(&csq->lock);
-		if (!ubase_ctrlq_msg_is_resp(msg))
-			ubase_ctrlq_free_seq(udev, seq);
-		return ret;
-	}
+		if (ret == -ETIMEDOUT)
+			continue;
+		else if (ret)
+			goto free_seq;
 
-	spin_unlock_bh(&csq->lock);
-
-	if (ubase_ctrlq_msg_is_sync_req(msg))
-		ret = ubase_ctrlq_wait_completed(udev, seq, msg);
+		if (ubase_ctrlq_msg_is_sync_req(msg))
+			ret = ubase_ctrlq_wait_completed(udev, seq, msg);
+	} while (ret == -ETIMEDOUT && retry++ < UBASE_CTRLQ_RETRY_TIMES);
 
 	if (ubase_ctrlq_msg_is_sync_req(msg) ||
 	    ubase_ctrlq_msg_is_notify_req(msg))
@@ -778,48 +805,27 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 
 	return ret;
 
-unlock:
-	spin_unlock_bh(&csq->lock);
+free_seq:
+	if (!ubase_ctrlq_msg_is_resp(msg))
+		ubase_ctrlq_free_seq(udev, seq);
 	return ret;
 }
 
 int __ubase_ctrlq_send(struct ubase_dev *udev, struct ubase_ctrlq_msg *msg,
 		       struct ubase_ctrlq_ue_info *ue_info)
 {
-#define UBASE_CTRLQ_RETRY_TIMES	3
-#define UBASE_RETRY_INTERVAL	100
-
-	int ret, retry_cnt = 0;
+	int ret;
+	u16 num;
 
 	ret = ubase_ctrlq_msg_check(udev, msg);
 	if (ret)
 		return ret;
 
-	while (retry_cnt++ <= UBASE_CTRLQ_RETRY_TIMES) {
-		if (udev->reset_stage == UBASE_RESET_STAGE_UNINIT &&
-		    !(msg->opcode == UBASE_CTRLQ_OPC_CTRLQ_CTRL &&
-		      msg->service_type == UBASE_CTRLQ_SER_TYPE_DEV_REGISTER)) {
-			ubase_dbg(udev, "ctrlq send is disabled.\n");
-			return -EAGAIN;
-		}
+	num = ubase_ctrlq_calc_bb_num(msg->in_size);
 
-		if (!test_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state)) {
-			ubase_warn(udev, "ctrlq is disabled in csq.\n");
-			return -EAGAIN;
-		}
-
-		atomic_inc(&udev->ctrlq.req_cnt);
-		ret = ubase_ctrlq_send_real(udev, msg, ue_info);
-		atomic_dec(&udev->ctrlq.req_cnt);
-		if (ret == -ETIMEDOUT && retry_cnt <= UBASE_CTRLQ_RETRY_TIMES) {
-			ubase_info(udev,
-				   "Ctrlq send msg retry, retry cnt = %d.\n",
-				   retry_cnt);
-			msleep(UBASE_RETRY_INTERVAL);
-		} else {
-			break;
-		}
-	}
+	atomic_inc(&udev->ctrlq.req_cnt);
+	ret = ubase_ctrlq_send_real(udev, msg, num, ue_info);
+	atomic_dec(&udev->ctrlq.req_cnt);
 
 	return ret;
 }

@@ -245,26 +245,26 @@ struct ubase_resource_space {
 
 /**
  * struct ubase_adev_qos - ubase auxiliary device qos information
- * @rdma_tp_vl_num: rdma tp vl number
- * @rdma_ctp_vl_num: rdma ctp vl number
- * @rdma_tp_resp_vl_offset: rdma tp response vl offset,
- *			    rdma_tp_resp_vl = rdma_ctp_resp_vl + rdma_tp_resp_vl_offset
- * @rdma_ctp_resp_vl_offset: rdma ctp response vl offset,
- *			     rdma_ctp_resp_vl = rdma_ctp_resp_vl + rdma_ctp_resp_vl_offset
- * @max_vl: max vl number
- * @resv: reserved bits
- * @rdma_tp_sl_num: rdma tp sl number
- * @rdma_ctp_sl_num: rdma ctp sl number
+ * @tp_sl_num: tp sl number
+ * @tp_sl: tp sl
+ * @ctp_sl_num: ctp sl number
+ * @ctp_sl: ctp sl
+ * @tp_vl_num: tp vl number
+ *
+ * @tp_resp_vl_offset: tp response vl offset,
+ *			tp_resp_vl = tp_resp_vl + tp_resp_vl_offset
+ * @tp_req_vl: tp request number
+ * @ctp_vl_num: ctp vl number
+ * @ctp_resp_vl_offset: ctp response vl offset,
+ *			ctp_resp_vl = ctp_resp_vl + ctp_resp_vl_offset
+ * @ctp_req_vl: ctp request vl
+ * @dscp_vl: dscp to vl mapping
  * @nic_sl_num: nic sl number
- * @nic_vl_num: nic vl number
- * @rdma_tp_req_vl: rdma tp request vl
- * @rdma_ctp_req_vl: rdma ctp request vl
- * @rdma_tp_sl: rdma tp sl
- * @rdma_ctp_sl: rdma ctp sl
  * @nic_sl: nic sl
+ * @nic_vl_num: nic vl number
  * @nic_vl: nic vl
- * @sl_vl: sl to vl mapping
- * @rdma_dscp_vl: rdma dscp to vl mapping
+ * @ue_max_vl_id: ue max vl index
+ * @ue_sl_vl: ue sl to vl mapping
  */
 struct ubase_adev_qos {
 	/* udma/cdma resource */
