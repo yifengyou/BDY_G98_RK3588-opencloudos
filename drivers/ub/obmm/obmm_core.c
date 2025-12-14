@@ -178,6 +178,8 @@ int obmm_query_by_pa(unsigned long pa, struct obmm_ext_addr *ext_addr)
 
 	spin_lock_irqsave(lock, flags);
 	list_for_each_entry(region, &g_obmm_ctx_info.regions, node) {
+		if (!try_get_obmm_region(region))
+			continue;
 		if (region->type == OBMM_IMPORT_REGION) {
 			struct obmm_import_region *i_reg;
 
@@ -190,7 +192,7 @@ int obmm_query_by_pa(unsigned long pa, struct obmm_ext_addr *ext_addr)
 			e_reg = container_of(region, struct obmm_export_region, region);
 			ret = get_pa_detail_export_region(e_reg, pa, ext_addr);
 		}
-
+		put_obmm_region(region);
 		if (ret == 0)
 			break;
 	}
