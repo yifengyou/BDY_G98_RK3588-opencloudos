@@ -69,17 +69,17 @@ int check_preimport_cmd_common(const struct obmm_cmd_preimport *cmd)
 	 * to check for OBMM_BASIC_GRANU here.
 	 */
 	if (cmd->length % memory_block_size_bytes() != 0) {
-		pr_err("preimport length not aligned to %#lx: %#llx + %#llx.\n",
-		       memory_block_size_bytes(), cmd->pa, cmd->length);
+		pr_err("preimport length not aligned to %#lx.\n",
+		       memory_block_size_bytes());
 		return -EINVAL;
 	}
 	if (cmd->pa % memory_block_size_bytes()) {
-		pr_err("preimport base PA not aligned to %#lx: %#llx + %#llx.\n",
-		       memory_block_size_bytes(), cmd->pa, cmd->length);
+		pr_err("preimport base PA not aligned to %#lx.\n",
+		       memory_block_size_bytes());
 		return -EINVAL;
 	}
 	if (cmd->length > ULLONG_MAX - cmd->pa) {
-		pr_err("preimport PA range overflowed: %#llx + %#llx.\n", cmd->pa, cmd->length);
+		pr_err("preimport PA range overflowed.\n");
 		return -EINVAL;
 	}
 	if (cmd->length == 0) {
@@ -103,18 +103,20 @@ int preimport_prepare_common(struct preimport_range *pr, uint8_t base_dist)
 	int ret, ret_err;
 
 	if (!ub_memory_validate_pa(pr->scna, pr->start, pr->end, true)) {
-		pr_err("PA range invalid. Cacheable memory cannot be managed with preimport: pa=%pa, size=%#llx\n",
-		       &pr->start, pr->end - pr->start + 1);
+		pr_err("PA range invalid. Cacheable memory cannot be managed with preimport\n");
 		return -EINVAL;
 	}
 
-	pr_info("call external: add_memory_remote(nid=%d, start=%pa, size=%#llx, flags=MEMORY_KEEP_ISOLATED)\n",
-		pr->numa_id, &pr->start, pr->end - pr->start + 1);
+	pr_info("call external: add_memory_remote(nid=%d, flags=MEMORY_KEEP_ISOLATED)\n",
+		pr->numa_id);
 	ret = add_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1,
 				MEMORY_KEEP_ISOLATED);
 	pr_debug("external called: add_memory_remote() returned %d\n", ret);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_err("failed to call add_memory_remote(nid=%d): %pe\n",
+		       pr->numa_id, ERR_PTR(ret));
 		return -EPERM;
+	}
 	WARN_ON(pr->numa_id != NUMA_NO_NODE && pr->numa_id != ret);
 	pr->numa_id = ret;
 
@@ -131,8 +133,7 @@ int preimport_prepare_common(struct preimport_range *pr, uint8_t base_dist)
 	return 0;
 
 err_remove_memory_remote:
-	pr_info("call external: remove_memory_remote(nid=%d, start=%pa, size=%#llx)\n", pr->numa_id,
-		&pr->start, pr->end - pr->start + 1);
+	pr_info("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
 	ret_err = remove_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1);
 	pr_debug("external called: remove_memory_remote() returned %d\n", ret_err);
 	return ret;
@@ -142,12 +143,14 @@ int preimport_release_common(struct preimport_range *pr, bool force)
 {
 	int ret;
 
-	pr_info("call external: remove_memory_remote(nid=%d, start=%pa, size=%#llx)\n", pr->numa_id,
-		&pr->start, pr->end - pr->start + 1);
+	pr_info("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
 	ret = remove_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1);
 	pr_debug("external called: remove_memory_remote() returned %pe\n", ERR_PTR(ret));
-	if (ret && !force)
+	if (ret && !force) {
+		pr_err("failed to call remove_memory_remote(nid=%d, size=%#llx): ret=%pe.\n",
+		       pr->numa_id, pr->end - pr->start + 1, ERR_PTR(ret));
 		return ret;
+	}
 
 	mutex_lock(&list_mutex);
 	list_del(&pr->node);

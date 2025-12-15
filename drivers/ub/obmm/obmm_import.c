@@ -38,8 +38,7 @@ static unsigned long get_pa_range_mem_cap(u32 scna, phys_addr_t pa, size_t size)
 	if (ub_memory_validate_pa(scna, pa_start, pa_end, false))
 		mem_cap |= OBMM_MEM_ALLOW_NONCACHEABLE_MMAP;
 	if (mem_cap == 0)
-		pr_err("PA range invalid. Non-UBMEM memory cannot be mmaped as import memory: pa=%pa, size=%#zx\n",
-		       &pa_start, size);
+		pr_err("PA range invalid. Non-UBMEM memory cannot be mmaped as import memory\n");
 
 	return mem_cap;
 }
@@ -60,8 +59,7 @@ static int setup_pa(struct obmm_import_region *i_reg)
 
 		ubmem_res = setup_ubmem_resource(i_reg->pa, i_reg->region.mem_size, false);
 		if (IS_ERR(ubmem_res)) {
-			pr_err("failed to setup ubmem resource. pa=%pa, size=%#llx, ret=%pe\n",
-			       &i_reg->pa, i_reg->region.mem_size, ubmem_res);
+			pr_err("failed to setup ubmem resource: ret=%pe\n", ubmem_res);
 			return PTR_ERR(ubmem_res);
 		}
 		i_reg->ubmem_res = ubmem_res;
@@ -99,17 +97,20 @@ static int teardown_remote_numa(struct obmm_import_region *i_reg, bool force)
 {
 	int ret, this_ret;
 
-	pr_info("call external: remove_memory_remote(nid=%d, pa=%#llx, size=%#llx)\n",
-		i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
+	pr_info("call external: remove_memory_remote(nid=%d, size=%#llx)\n",
+		i_reg->numa_id, i_reg->region.mem_size);
 	ret = remove_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
 	pr_debug("external called: remove_memory_remote, ret=%pe\n", ERR_PTR(ret));
 	/* a full rollback is still possible: check whether this is a full teardown */
-	if (ret != 0 && !force)
+	if (ret != 0 && !force) {
+		pr_err("remove_memory_remote(nid=%d, size=%#llx) failed: ret=%pe.\n",
+		       i_reg->numa_id, i_reg->region.mem_size, ERR_PTR(ret));
 		return ret;
+	}
 
 	if (region_preimport(&i_reg->region)) {
-		pr_info("call external: add_memory_remote(nid=%d, start=0x%llx, size=0x%llx, flags=MEMORY_KEEP_ISOLATED)\n",
-			i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
+		pr_info("call external: add_memory_remote(nid=%d, size=0x%llx, flags=MEMORY_KEEP_ISOLATED)\n",
+			i_reg->numa_id, i_reg->region.mem_size);
 		this_ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size,
 					     MEMORY_KEEP_ISOLATED);
 		pr_debug("external called: add_memory_remote() returned %d\n", this_ret);
@@ -132,13 +133,12 @@ static int setup_remote_numa(struct obmm_import_region *i_reg)
 		flags = MEMORY_DIRECT_ONLINE;
 
 	if (!(i_reg->region.mem_cap & OBMM_MEM_ALLOW_CACHEABLE_MMAP)) {
-		pr_err("PA range invalid. Cacheable memory cannot be managed with numa.remote: pa=%pa, size=%#llx\n",
-		       &i_reg->pa, i_reg->region.mem_size);
+		pr_err("PA range invalid. Cacheable memory cannot be managed with numa.remote\n");
 		return -EINVAL;
 	}
 
-	pr_info("call external: add_memory_remote(nid=%d, start=0x%llx, size=0x%llx, flags=%d)\n",
-		i_reg->numa_id, i_reg->pa, i_reg->region.mem_size, flags);
+	pr_info("call external: add_memory_remote(nid=%d, flags=%d)\n",
+		i_reg->numa_id, flags);
 	ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size, flags);
 	pr_debug("external called: add_memory_remote() returned %d\n", ret);
 	if (ret < 0) {

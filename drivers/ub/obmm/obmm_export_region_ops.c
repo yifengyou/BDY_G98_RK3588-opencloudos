@@ -129,15 +129,14 @@ static int kernel_pgtable_invalid_call(phys_addr_t start, phys_addr_t end,
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long end_pfn = (end + 1) >> PAGE_SHIFT;
 
-	pr_debug("call external: set_linear_mapping_invalid(start_pfn=%#lx, end_pfn=%#lx, set_inval=%d)\n",
-		 start_pfn, end_pfn, info->set_inval);
+	pr_debug("call external: set_linear_mapping_invalid(set_inval=%d)\n", info->set_inval);
 	ret = set_linear_mapping_invalid(start_pfn, end_pfn, info->set_inval);
 	if (ret < 0) {
-		pr_err("error calling set_linear_mapping_invalid(start_pfn=%#lx, end_pfn=%#lx, set_inval=%d): ret=%pe\n",
-		       start_pfn, end_pfn, info->set_inval, ERR_PTR(ret));
+		pr_err("error calling set_linear_mapping_invalid(set_inval=%d): ret=%pe\n",
+		       info->set_inval, ERR_PTR(ret));
 	} else {
-		pr_debug("external called: set_linear_mapping_invalid(start_pfn=%#lx, end_pfn=%#lx, set_inval=%d, ret=%pe)\n",
-			 start_pfn, end_pfn, info->set_inval, ERR_PTR(ret));
+		pr_debug("external called: set_linear_mapping_invalid(set_inval=%d, ret=%pe)\n",
+			 info->set_inval, ERR_PTR(ret));
 	}
 
 	info->ret = ret;

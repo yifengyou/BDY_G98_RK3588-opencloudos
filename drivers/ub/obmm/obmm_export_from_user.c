@@ -100,7 +100,7 @@ static bool hisi_workarounds_check_page_list(struct obmm_export_region *reg, str
 		nid = 0;
 #endif
 		if (nid < 0 || nid >= OBMM_MAX_LOCAL_NUMA_NODES) {
-			pr_err("Invalid node ID %d for page %p\n", nid, p);
+			pr_err("Invalid node ID %d.\n", nid);
 			return false;
 		}
 

@@ -49,8 +49,7 @@ static int create_prefilled_preimport_range(const struct obmm_cmd_preimport *cmd
 
 	ppr->ubmem_res = setup_ubmem_resource(cmd->pa, cmd->length, true);
 	if (IS_ERR(ppr->ubmem_res)) {
-		pr_err("failed to setup ubmem resource on preimport. pa=%pa, size=%#llx, ret=%pe\n",
-		       &cmd->pa, cmd->length, ppr->ubmem_res);
+		pr_err("failed to setup ubmem resource on preimport: ret=%pe\n", ppr->ubmem_res);
 		kfree(ppr->bitmap);
 		kfree(ppr);
 		return PTR_ERR(ppr->ubmem_res);
@@ -74,11 +73,11 @@ static int get_pa_mapping(phys_addr_t addr, struct prefilled_preimport_range **p
 
 	ret = query_pa_range(addr, &info);
 	if (ret) {
-		pr_err("No information found with PA=%pa.\n", &addr);
+		pr_err("No information found with PA requested.\n");
 		return ret;
 	}
 	if (info.user != OBMM_ADDR_USER_PREIMPORT) {
-		pr_err("PA=%pa is not a preimport address.\n", &addr);
+		pr_err("PA requested is not a preimport address.\n");
 		return -EINVAL;
 	}
 	if (info.data == not_ready_ptr) {
@@ -87,7 +86,6 @@ static int get_pa_mapping(phys_addr_t addr, struct prefilled_preimport_range **p
 	}
 	*p_ppr = (struct prefilled_preimport_range *)info.data;
 
-	pr_debug("prefilled preimport range found with PA %pa.\n", &addr);
 	return 0;
 }
 
@@ -166,22 +164,18 @@ int preimport_release_prefilled(phys_addr_t start, phys_addr_t end)
 	}
 	/* must be an exact match */
 	if (ppr->pr.start != start || ppr->pr.end != end) {
-		pr_err("requested range touches ppr<%pa> but is not an exact match.\n",
-		       &ppr->pr.start);
+		pr_err("requested range touches ppr but is not an exact match.\n");
 		ret = -EINVAL;
 		goto err_unlock;
 	}
 	if (ppr->pr.use_count != 0) {
-		pr_err("ppr<%pa> cannot be released: %u active users found.\n", &ppr->pr.start,
-		       ppr->pr.use_count);
+		pr_err("preimport cannot be released: %u active users found.\n", ppr->pr.use_count);
 		ret = -EBUSY;
 		goto err_unlock;
 	}
 	ret = preimport_release_common(&ppr->pr, false);
-	if (ret) {
-		pr_err("failed to release ppr<%pa>.\n", &ppr->pr.start);
+	if (ret)
 		goto err_unlock;
-	}
 	/* roll back is not possible from this point */
 
 	pa_range.start = ppr->pr.start;
@@ -193,7 +187,6 @@ int preimport_release_prefilled(phys_addr_t start, phys_addr_t end)
 	mutex_unlock(&preimport_mutex);
 
 	destroy_prefilled_preimport_range(ppr);
-	pr_debug("ppr<%pa> released.\n", &start);
 	return ret;
 
 err_unlock:
@@ -211,11 +204,10 @@ static int get_ppr(phys_addr_t pa, struct prefilled_preimport_range **p_ppr)
 	if (ret)
 		goto out_unlock;
 	if (ppr == not_ready_ptr) {
-		pr_err("ppr <%pa> not ready yet.\n", &pa);
+		pr_err("preimport requested not ready yet.\n");
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
-	pr_debug("ppr <%pa> refcount: %u -> %u.\n", &pa, ppr->pr.use_count, ppr->pr.use_count + 1);
 	ppr->pr.use_count += 1;
 	*p_ppr = ppr;
 out_unlock:
@@ -227,8 +219,6 @@ static void put_ppr(struct prefilled_preimport_range *ppr)
 {
 	mutex_lock(&preimport_mutex);
 	WARN_ON(ppr->pr.use_count == 0);
-	pr_debug("ppr <%pa> refcount: %u -> %u.\n", &ppr->pr.start, ppr->pr.use_count,
-		 ppr->pr.use_count - 1);
 	ppr->pr.use_count -= 1;
 	mutex_unlock(&preimport_mutex);
 }
@@ -241,8 +231,7 @@ static int occupy_ppr_blocks(struct prefilled_preimport_range *ppr, phys_addr_t 
 
 	spin_lock_irqsave(&ppr->bitmap_lock, flags);
 	if (start < ppr->pr.start || end > ppr->pr.end) {
-		pr_err("requested range [%pa, %pa] is not managed by ppr [%pa, %pa].\n", &start,
-		       &end, &ppr->pr.start, &ppr->pr.end);
+		pr_err("requested range is not managed by preimport.\n");
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -252,15 +241,13 @@ static int occupy_ppr_blocks(struct prefilled_preimport_range *ppr, phys_addr_t 
 	for (bit = init_bit; bit <= end_bit; bit++) {
 		if (test_bit(bit, ppr->bitmap)) {
 			ret = -EEXIST;
-			pr_err("conflicts on preimport block %lu of ppr<%pa>.\n", bit,
-			       &ppr->pr.start);
+			pr_err("requested range conflicts on preimport block %lu.\n", bit);
 			goto out_unlock;
 		}
 	}
 
 	for (bit = init_bit; bit <= end_bit; bit++)
 		set_bit(bit, ppr->bitmap);
-	pr_debug("ppr<%pa>: bitmap[%lu, %lu] set.\n", &ppr->pr.start, init_bit, end_bit);
 
 out_unlock:
 	spin_unlock_irqrestore(&ppr->bitmap_lock, flags);
@@ -275,8 +262,7 @@ static int free_ppr_blocks(struct prefilled_preimport_range *ppr, phys_addr_t st
 
 	spin_lock_irqsave(&ppr->bitmap_lock, flags);
 	if (start < ppr->pr.start || end > ppr->pr.end) {
-		pr_err("requested range [%pa, %pa] is not managed by ppr [%pa, %pa].\n", &start,
-		       &end, &ppr->pr.start, &ppr->pr.end);
+		pr_err("requested range is not managed by preimport.\n");
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -286,15 +272,13 @@ static int free_ppr_blocks(struct prefilled_preimport_range *ppr, phys_addr_t st
 	for (bit = init_bit; bit <= end_bit; bit++) {
 		if (!test_bit(bit, ppr->bitmap)) {
 			ret = -EINVAL;
-			pr_err("preimport block %lu of ppr<%pa> never used.\n", bit,
-			       &ppr->pr.start);
+			pr_err("preimport block %lu never used.\n", bit);
 			goto out_unlock;
 		}
 	}
 
 	for (bit = init_bit; bit <= end_bit; bit++)
 		clear_bit(bit, ppr->bitmap);
-	pr_debug("ppr<%pa>: bitmap[%lu, %lu] cleared.\n", &ppr->pr.start, init_bit, end_bit);
 
 out_unlock:
 	spin_unlock_irqrestore(&ppr->bitmap_lock, flags);

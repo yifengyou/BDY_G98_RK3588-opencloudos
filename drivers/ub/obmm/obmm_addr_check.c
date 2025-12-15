@@ -21,12 +21,7 @@ static struct pa_checker g_pa_checker;
 
 static bool is_same_pa_range(const struct obmm_pa_range *l, const struct obmm_pa_range *r)
 {
-	bool same = l->start == r->start && l->end == r->end;
-
-	if (!same)
-		pr_err("unmatched pa range: [%pa, %pa] vs. [%pa, %pa]\n", &l->start, &l->end,
-		       &r->start, &r->end);
-	return same;
+	return l->start == r->start && l->end == r->end;
 }
 
 int occupy_pa_range(const struct obmm_pa_range *pa_range)
@@ -46,14 +41,9 @@ int occupy_pa_range(const struct obmm_pa_range *pa_range)
 
 	if (ret != 0) {
 		kfree(persist_info);
-		pr_err("failed to occupy PA range [%pa, %pa]: ret=%pe\n", &pa_range->start,
-		       &pa_range->end, ERR_PTR(ret));
+		pr_err("failed to occupy PA range: ret=%pe\n", ERR_PTR(ret));
 		return ret;
 	}
-	pr_debug("pa_check: add [%pa,%pa]->{user=%s,data=%p}\n", &pa_range->start, &pa_range->end,
-		 pa_range->info.user == OBMM_ADDR_USER_DIRECT_IMPORT ?
-			"direct_import" : "preimport",
-		 pa_range->info.data);
 	return 0;
 }
 
@@ -68,19 +58,17 @@ int free_pa_range(const struct obmm_pa_range *pa_range)
 	entry = mtree_erase(&g_pa_checker.pa_ranges, (unsigned long)pa_range->start);
 	spin_unlock_irqrestore(&g_pa_checker.lock, flags);
 	if (!entry) {
-		pr_err("PA range [%pa, %pa], not found.\n", &pa_range->start, &pa_range->end);
+		pr_err("PA range to be freed not found.\n");
 		return -EFAULT;
 	}
 	ret = 0;
 	if (!is_same_pa_range((const struct obmm_pa_range *)entry, pa_range)) {
 		/* expected to be UNREACHABLE */
-		pr_err("BUG: PA range does not fully match.\n");
+		pr_err("BUG: PA range to be freed does not fully match.\n");
 		ret = -ENOTRECOVERABLE;
 	}
 	user = ((struct obmm_pa_range *)entry)->info.user == OBMM_ADDR_USER_DIRECT_IMPORT ?
 		       "import" : "preimport";
-	pr_debug("pa_check: del [%pa,?]->{user=%s,data=%p}\n", &pa_range->start, user,
-		 ((struct obmm_pa_range *)entry)->info.data);
 	kfree(entry);
 	return ret;
 }
@@ -126,9 +114,6 @@ int update_pa_range(phys_addr_t addr, const struct obmm_addr_info *info)
 
 	if (!retrieved)
 		return -EFAULT;
-	pr_debug("pa_check: update [%pa,?]->{user=%s,data=%p}\n", &addr,
-		 info->user == OBMM_ADDR_USER_DIRECT_IMPORT ? "direct_import" : "preimport",
-		 info->data);
 	return 0;
 }
 

@@ -373,11 +373,8 @@ static int conti_clear_thread(void *p)
 		list_del(&node->list);
 		allocator->memseg_clearing = node;
 
-		pr_debug("clearing: %d: %pa + 0x%lx\n", allocator->nid, &node->addr, node->size);
 		spin_unlock_irqrestore(&allocator->lock, flags);
 		ret = conti_clear_memseg(allocator, node);
-		pr_debug("%s: nid=%d, clear done node=%p, addr=%pa\n", __func__, allocator->nid,
-			 node, &node->addr);
 
 		spin_lock_irqsave(&allocator->lock, flags);
 		allocator->memseg_clearing = NULL;

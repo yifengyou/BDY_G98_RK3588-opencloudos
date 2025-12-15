@@ -71,8 +71,7 @@ int flush_cache_by_pa(phys_addr_t addr, size_t size, unsigned long cache_ops)
 	enum hisi_soc_cache_maint_type maint_type = hisi_maint_type[cache_ops];
 
 	if (skip_cache_maintain) {
-		pr_debug_ratelimited("cache maintenance request {addr=%pa, size=%#zx, cache_ops=%lu}.\n",
-				     &addr, size, cache_ops);
+		pr_debug_ratelimited("cache maintenance request {cache_ops=%lu}.\n", cache_ops);
 		return 0;
 	}
 
@@ -225,10 +224,5 @@ int modify_pgtable_prot(struct mm_struct *mm, void *va, size_t size, bool cachea
 	mmap_read_unlock(mm);
 	obmm_flush_tlb(mm);
 
-	pr_debug("scan [%p-%#lx]\n", va, (uintptr_t)va + size);
-	pr_debug("\tpmd: %d\n", info.pmd_cnt);
-	pr_debug("\tpmd leaf: %d\n", info.pmd_leaf_cnt);
-	pr_debug("\tpte: %d\n", info.pte_cnt);
-	pr_debug("\thugetlb: %d\n", info.hugetlb_cnt);
 	return 0;
 }

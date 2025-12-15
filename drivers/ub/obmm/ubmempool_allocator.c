@@ -201,16 +201,15 @@ static int set_memseg_linear_mapping_invalid(struct memseg_node *node, bool set_
 
 	start_pfn = PHYS_PFN(node->addr);
 	end_pfn = PHYS_PFN(node->addr + node->size);
-	pr_debug("call external: set_linear_mapping_invalid(start_pfn=%#lx, end_pfn=%#lx, set_nc=%d)\n",
-		 start_pfn, end_pfn, set_nc);
+	pr_debug("call external: set_linear_mapping_invalid(set_nc=%d)\n", set_nc);
 	ret = set_linear_mapping_invalid(start_pfn, end_pfn, set_nc);
 	if (ret) {
-		pr_err("failed to update kernel linear mapping cacheability for segment %#llx+%#lx, error=%pe.\n",
-		       node->addr, node->size, ERR_PTR(ret));
+		pr_err("failed to update kernel linear mapping cacheability: error=%pe.\n",
+		       ERR_PTR(ret));
 		return ret;
 	}
-	pr_debug("external called: set_linear_mapping_invalid(start_pfn=%#lx, end_pfn=%#lx, set_nc=%d, ret=%pe)\n",
-		start_pfn, end_pfn, set_nc, ERR_PTR(ret));
+	pr_debug("external called: set_linear_mapping_invalid(set_nc=%d, ret=%pe)\n",
+		 set_nc, ERR_PTR(ret));
 	return 0;
 }
 
@@ -238,8 +237,6 @@ static struct memseg_node *hugetlb_pmd_alloc_memseg(struct conti_mem_allocator *
 		goto out_free_seg;
 	}
 
-	pr_debug("%s: node %pa+%#lx\n", __func__, &node->addr, node->size);
-
 	ret = set_memseg_linear_mapping_invalid(node, true);
 	if (unlikely(ret))
 		goto out_free_seg;
@@ -265,8 +262,6 @@ static void hugetlb_free_memseg(struct conti_mem_allocator *a __always_unused,
 		pr_err("attempted to free NULL hugetlb memseg.\n");
 		return;
 	}
-
-	pr_debug("%s: node %pa+%#lx\n", __func__, &node->addr, node->size);
 
 	folio = pfn_folio(node->addr >> PAGE_SHIFT);
 
@@ -303,8 +298,6 @@ static struct memseg_node *hugetlb_pud_alloc_memseg(struct conti_mem_allocator *
 		goto out_free_seg;
 	}
 
-	pr_debug("%s: node %pa+%#lx\n", __func__, &node->addr, node->size);
-
 	ret = set_memseg_linear_mapping_invalid(node, true);
 	if (unlikely(ret))
 		goto out_free_seg;
@@ -330,8 +323,6 @@ static void buddy_free_memseg(struct conti_mem_allocator *a __always_unused,
 		pr_err("attempted to free NULL buddy memseg.\n");
 		return;
 	}
-
-	pr_debug("%s: node %pa+%#lx\n", __func__, &node->addr, node->size);
 
 	folio = pfn_folio(node->addr >> PAGE_SHIFT);
 
@@ -368,8 +359,6 @@ static struct memseg_node *buddy_alloc_memseg(struct conti_mem_allocator *a)
 		       a->granu, node->size);
 		goto out_free_seg;
 	}
-
-	pr_debug("%s: node %pa+%#lx\n", __func__, &node->addr, node->size);
 
 	ret = set_memseg_linear_mapping_invalid(node, true);
 	if (unlikely(ret))
