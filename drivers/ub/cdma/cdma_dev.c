@@ -298,30 +298,66 @@ static int cdma_ctrlq_eu_del(struct cdma_dev *cdev, struct eu_info *eu)
 	return ret;
 }
 
+static int cdma_ctrlq_eu_update_response(struct cdma_dev *cdev, u16 seq, int ret_val)
+{
+	struct ubase_ctrlq_msg msg = { 0 };
+	int inbuf = 0;
+	int ret;
+
+	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	msg.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	msg.opcode = CDMA_CTRLQ_EU_UPDATE;
+	msg.need_resp = 0;
+	msg.is_resp = 1;
+	msg.resp_seq = seq;
+	msg.resp_ret = (uint8_t)(-ret_val);
+	msg.in = (void *)&inbuf;
+	msg.in_size = sizeof(inbuf);
+
+	ret = ubase_ctrlq_send_msg(cdev->adev, &msg);
+	if (ret)
+		dev_err(cdev->dev, "send eu update response failed, ret = %d, ret_val = %d.\n",
+			ret, ret_val);
+	return ret;
+}
+
 static int cdma_ctrlq_eu_update(struct auxiliary_device *adev, u8 service_ver,
-			 void *data, u16 len, u16 seq)
+				void *data, u16 len, u16 seq)
 {
 	struct cdma_dev *cdev = dev_get_drvdata(&adev->dev);
-	struct cdma_ctrlq_eu_info *ctrlq_eu;
+	struct cdma_ctrlq_eu_info eu = { 0 };
 	int ret = -EINVAL;
 
-	if (len < sizeof(*ctrlq_eu)) {
-		dev_err(cdev->dev, "ctrlq data len is invalid.\n");
-		return -EINVAL;
+	if (cdev->status != CDMA_NORMAL) {
+		dev_err(cdev->dev, "status is abnormal and don't update eu.\n");
+		return cdma_ctrlq_eu_update_response(cdev, seq, 0);
 	}
 
-	ctrlq_eu = (struct cdma_ctrlq_eu_info *)data;
+	if (len < sizeof(eu)) {
+		dev_err(cdev->dev, "update eu msg len = %u is invalid.\n", len);
+		return cdma_ctrlq_eu_update_response(cdev, seq, -EINVAL);
+	}
+
+	memcpy(&eu, data, sizeof(eu));
+	if (eu.op != CDMA_CTRLQ_EU_ADD && eu.op != CDMA_CTRLQ_EU_DEL) {
+		dev_err(cdev->dev, "update eu op = %u is invalid.\n", eu.op);
+		return cdma_ctrlq_eu_update_response(cdev, seq, -EINVAL);
+	}
+
+	if (eu.eu.eid_idx >= CDMA_MAX_EU_NUM) {
+		dev_err(cdev->dev, "update eu invalid eid_idx = %u.\n",
+			eu.eu.eid_idx);
+		return cdma_ctrlq_eu_update_response(cdev, seq, -EINVAL);
+	}
 
 	mutex_lock(&cdev->eu_mutex);
-	if (ctrlq_eu->op == CDMA_CTRLQ_EU_ADD)
-		ret = cdma_ctrlq_eu_add(cdev, &ctrlq_eu->eu);
-	else if (ctrlq_eu->op == CDMA_CTRLQ_EU_DEL)
-		ret = cdma_ctrlq_eu_del(cdev, &ctrlq_eu->eu);
-	else
-		dev_err(cdev->dev, "ctrlq eu op is invalid.\n");
+	if (eu.op == CDMA_CTRLQ_EU_ADD)
+		ret = cdma_ctrlq_eu_add(cdev, &eu.eu);
+	else if (eu.op == CDMA_CTRLQ_EU_DEL)
+		ret = cdma_ctrlq_eu_del(cdev, &eu.eu);
 	mutex_unlock(&cdev->eu_mutex);
 
-	return ret;
+	return cdma_ctrlq_eu_update_response(cdev, seq, ret);
 }
 
 int cdma_create_arm_db_page(struct cdma_dev *cdev)
