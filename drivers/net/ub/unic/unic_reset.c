@@ -23,7 +23,6 @@ static void unic_reset_down(struct auxiliary_device *adev)
 {
 	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct net_device *netdev = priv->comdev.netdev;
-	bool if_running;
 	int ret;
 
 	if (!test_bit(UNIC_STATE_INITED, &priv->state) ||
@@ -33,7 +32,6 @@ static void unic_reset_down(struct auxiliary_device *adev)
 	}
 
 	set_bit(UNIC_STATE_RESETTING, &priv->state);
-	if_running = netif_running(netdev);
 
 	unic_info(priv, "unic reset start.\n");
 
@@ -53,7 +51,7 @@ static void unic_reset_down(struct auxiliary_device *adev)
 		set_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &priv->vport.state);
 
 	rtnl_lock();
-	ret = if_running ? unic_net_stop(netdev) : 0;
+	ret = netif_running(netdev) ? unic_net_stop(netdev) : 0;
 	rtnl_unlock();
 	if (ret)
 		unic_err(priv, "failed to stop unic net, ret = %d.\n", ret);
@@ -84,7 +82,6 @@ static void unic_reset_init(struct auxiliary_device *adev)
 {
 	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct net_device *netdev = priv->comdev.netdev;
-	bool if_running;
 	int ret;
 
 	if (!test_bit(UNIC_STATE_RESETTING, &priv->state))
@@ -97,11 +94,10 @@ static void unic_reset_init(struct auxiliary_device *adev)
 	unic_query_ip_addr(adev);
 	unic_start_period_task(netdev);
 
-	if_running = netif_running(netdev);
 	clear_bit(UNIC_STATE_RESETTING, &priv->state);
 	clear_bit(UNIC_STATE_DISABLED, &priv->state);
 	rtnl_lock();
-	ret = if_running ? unic_net_open(netdev) : 0;
+	ret = netif_running(netdev) ? unic_net_open(netdev) : 0;
 	rtnl_unlock();
 	if (ret)
 		unic_err(priv, "failed to up net, ret = %d.\n", ret);

@@ -153,6 +153,11 @@ static void unic_activate_handler(struct auxiliary_device *adev, bool activate)
 
 static void unic_ub_port_reset(struct unic_dev *unic_dev, bool link_up)
 {
+	struct net_device *netdev = unic_dev->comdev.netdev;
+
+	if (!netif_running(netdev))
+		return;
+
 	if (link_up)
 		unic_dev->hw.mac.link_status = UNIC_LINK_STATUS_UP;
 	else
@@ -163,11 +168,15 @@ static void unic_eth_port_reset(struct net_device *netdev, bool link_up)
 {
 	rtnl_lock();
 
+	if (!netif_running(netdev))
+		goto unlock;
+
 	if (link_up)
 		unic_net_open(netdev);
 	else
 		unic_net_stop(netdev);
 
+unlock:
 	rtnl_unlock();
 }
 
@@ -175,9 +184,6 @@ static void unic_port_handler(struct auxiliary_device *adev, bool link_up)
 {
 	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
 	struct net_device *netdev = unic_dev->comdev.netdev;
-
-	if (!netif_running(netdev))
-		return;
 
 	if (unic_dev_ubl_supported(unic_dev))
 		unic_ub_port_reset(unic_dev, link_up);
