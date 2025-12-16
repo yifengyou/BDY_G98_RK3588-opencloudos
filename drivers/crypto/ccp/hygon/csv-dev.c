@@ -65,6 +65,7 @@ int csv_cmd_buffer_len(int cmd)
 	case CSV3_CMD_RECEIVE_ENCRYPT_DATA:
 					return sizeof(struct csv3_data_receive_encrypt_data);
 	case CSV3_CMD_RECEIVE_ENCRYPT_CONTEXT:
+	case CSV3_CMD_LAUNCH_FINISH_EX:		return sizeof(struct csv3_data_launch_finish_ex);
 					return sizeof(struct csv3_data_receive_encrypt_context);
 	default:				return 0;
 	}
@@ -673,6 +674,12 @@ int csv_get_extension_info(void *buf, size_t *size)
 		*(uint32_t *)buf |= CSV_EXT_CSV3_INJ_SECRET;
 	}
 
+	/* Since firmware with build id 2393, support:
+	 *   c. issue CSV3_LAUNCH_FINISH_EX command
+	 */
+	if (csv_version_greater_or_equal(2393))
+		*(uint32_t *)buf |= CSV_EXT_CSV3_LFINISH_EX;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(csv_get_extension_info);
@@ -747,7 +754,12 @@ int csv_platform_cmd_set_secure_memory_region(struct sev_device *sev, int *error
 
 		csv_release_to_contiguous(cmd_set_smcr->base_address,
 					1UL << CSV_MR_ALIGN_BITS);
+		goto e_free_cmd_set_smcr;
 	}
+
+#ifdef CONFIG_SYSFS
+	csv3_meta = cmd_set_smcr->size;
+#endif
 
 e_free_cmd_set_smcr:
 	kfree((void *)cmd_set_smcr);
