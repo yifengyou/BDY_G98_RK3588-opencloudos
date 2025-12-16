@@ -94,7 +94,7 @@ EXPORT_SYMBOL_GPL(get_llc_id);
 DEFINE_PER_CPU_READ_MOSTLY(u16, cpu_l2c_id) = BAD_APICID;
 
 DEFINE_STATIC_KEY_FALSE(hygon_lmc_key);
-EXPORT_SYMBOL_GPL(hygon_lmc_key);
+EXPORT_SYMBOL(hygon_lmc_key);
 
 static struct ppin_info {
 	int	feature;
