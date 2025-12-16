@@ -1,3 +1,169 @@
+* Tue Dec 16 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-46
+- rue/net: ensure consistency of access to css pointer
+- crypto: x509: support SM2 certificate verification using trusted keyrings
+- module: add SM3 option for module signature
+- config: enable CONFIG_SECONDARY_TRUSTED_KEYRING
+- scripts: delete sortextable binary file
+- !550 dist/configs/50variant: add desktop variant with x86_64 and default configs
+- dist/configs/50variant: add desktop variant with x86_64 and default configs
+- Merge release-cve branch into release branch
+- vsock: Ignore signal/timeout on connect() if already established
+- be2net: pass wrb_params in case of OS2BMC
+- mptcp: fix race condition in mptcp_schedule_work()
+- vxlan: Fix NPD in {arp,neigh}_reduce() when using nexthop objects
+- vxlan: Fix NPD when refreshing an FDB entry with a nexthop object
+- Merge linux linux-6.6.119 into TK5 release branch
+- Linux 6.6.119
+- Merge linux 6.6.118 into TK5 release branch
+- Linux 6.6.118
+- Merge branch 'kpagecount_read_panic' into 'release' (merge request !849)
+- fs/proc/page: fix VM_BUG_ON_FOLIO crash in kpagecount_read
+- Merge branch 'nvidia-smi' into 'release' (merge request !840)
+- fs/ioctl: nvidia-smi process and memory display in docker
+- fs/ioctl: fix nvidia-smi ioctl rcu lock and put_pid
+- mm/memcontrol: fix bug of not adding zram related stats in memcg_stat_item
+- Merge branch 'objcg-perf' into 'release' (merge request !835)
+- objcg: export function lruvec_page_state for emm module
+- memcg: objcg stock trylock without irq disabling
+- memcg: no stock lock for cpu hot-unplug
+- memcg: make __mod_memcg_lruvec_state re-entrant safe against irqs
+- memcg: make count_memcg_events re-entrant safe against irqs
+- memcg: make mod_memcg_state re-entrant safe against irqs
+- memcg: move preempt disable to callers of memcg_rstat_updated
+- memcg: memcg_rstat_updated re-entrant safe against irqs
+- memcg: optimize memcg_rstat_updated
+- cgroup/rstat: desc member cgrp in cgroup_rstat_flush_release
+- cgroup/rstat: Fix forceidle time in cpu.stat
+- cgroup/rstat: avoid disabling irqs for O(num_cpu)
+- cgroup: add helper for checking when css is cgroup::self
+- cgroup: move rstat base stat objects into their own struct
+- cgroup/rstat: Tracking cgroup-level niced CPU time
+- cgroup/rstat: add force idle show helper
+- cgroup/rstat: add cgroup_rstat_cpu_lock helpers and tracepoints
+- cgroup/rstat: Optimize cgroup_rstat_updated_list()
+- cgroup/rstat: Reduce cpu_lock hold time in cgroup_rstat_flush_locked()
+- cgroup/rstat: add cgroup_rstat_lock helpers and tracepoints
+- memcg: no irq disable for memcg stock lock
+- memcg: completely decouple memcg and obj stocks
+- memcg: separate local_trylock for memcg and obj
+- memcg: simplify consume_stock
+- memcg: multi-memcg percpu charge cache
+- mm/swap: reduce indentation level
+- memcg: manually inline replace_stock_objcg
+- memcg: combine slab obj stock charging and accounting
+- memcg: use __mod_memcg_state in drain_obj_stock
+- memcg: do obj_cgroup_put inside drain_obj_stock
+- memcg: no refilling stock from obj_cgroup_release
+- memcg: manually inline __refill_stock
+- memcg: introduce memcg_uncharge
+- memcg: decouple drain_obj_stock from local stock
+- memcg: remove root memcg check from refill_stock
+- locking/local_lock: fix _Generic() matching of local_trylock_t
+- slab: ensure slab->obj_exts is clear in a newly allocated slab page
+- mm: memcg: move memcg_account_kmem() to memcontrol-v1.c
+- mm: memcg: introduce memcontrol-v1.c
+- locking/local_lock, mm: replace localtry_ helpers with local_trylock_t type
+- memcg: drain obj stock on cpu hotplug teardown
+- memcg: Use trylock to access memcg stock_lock.
+- lib/stackdepot, kasan: add flags to __stack_depot_save and rename
+- mm: memcg: use READ_ONCE()/WRITE_ONCE() to access stock->nr_pages
+- locking/local_lock: Introduce localtry_lock_t
+- locking/local_lock: Add local nested BH locking infrastructure.
+- locking/local_lock: Introduce guard definition for local_lock.
+- mm: fix multiple typos in multiple files
+- memcg: add tracing for memcg stat updates
+- mm/memcg: alignment memcg_data define condition
+- memcg: rearrange fields of mem_cgroup_per_node
+- memcg: remove the lockdep assert from __mod_objcg_mlstate()
+- memcg: use proper type for mod_memcg_state
+- memcg: warn for unexpected events and stats
+- mm: cleanup WORKINGSET_NODES in workingset
+- memcg: cleanup __mod_memcg_lruvec_state
+- memcg: reduce memory for the lruvec and memcg stats
+- mm: memcg: account memory used for memcg vmstats and lruvec stats
+- memcg: dynamically allocate lruvec_stats
+- memcg: reduce memory size of mem_cgroup_events_index
+- mm: memcg: normalize the value passed into memcg_rstat_updated()
+- memcg: factor out the replace_stock_objcg function
+- memcg: simple cleanup of stats update functions
+- mm/slub: avoid zeroing outside-object freepointer for single free
+- mm, slab: move slab_memcg hooks to mm/memcontrol.c
+- mm, slab: move memcg charging to post-alloc hook
+- mm: introduce slabobj_ext to support slab object extensions
+- mm, slab: remove memcg_from_slab_obj()
+- mm/slub: handle bulk and single object freeing separately
+- mm/slub: introduce __kmem_cache_free_bulk() without free hooks
+- mm: kmem: properly initialize local objcg variable in current_obj_cgroup()
+- ceph: remove SLAB_MEM_SPREAD flag usage
+- ext4: remove SLAB_MEM_SPREAD flag usage
+- btrfs: remove SLAB_MEM_SPREAD flag use
+- btrfs: use KMEM_CACHE() to create btrfs_trans_handle cache
+- btrfs: use KMEM_CACHE() to create btrfs_ordered_extent cache
+- btrfs: use KMEM_CACHE() to create btrfs_free_space cache
+- btrfs: use KMEM_CACHE() to create delayed ref caches
+- btrfs: use KMEM_CACHE() to create btrfs_delayed_node cache
+- btrfs: use KMEM_CACHE() to create btrfs_path cache
+- usb: isp1760: remove SLAB_MEM_SPREAD flag usage
+- dax: remove SLAB_MEM_SPREAD flag usage
+- 9p: remove SLAB_MEM_SPREAD flag usage
+- net: remove SLAB_MEM_SPREAD flag usage
+- efs: remove SLAB_MEM_SPREAD flag usage
+- jfs: remove SLAB_MEM_SPREAD flag usage
+- minix: remove SLAB_MEM_SPREAD flag usage
+- openpromfs: remove SLAB_MEM_SPREAD flag usage
+- proc: remove SLAB_MEM_SPREAD flag usage
+- qnx6: remove SLAB_MEM_SPREAD flag usage
+- reiserfs: remove SLAB_MEM_SPREAD flag usage
+- romfs: remove SLAB_MEM_SPREAD flag usage
+- sysv: remove SLAB_MEM_SPREAD flag usage
+- vfs: remove SLAB_MEM_SPREAD flag usage
+- mbcache: Simplify the allocation of slab caches
+- buffer: Use KMEM_CACHE instead of kmem_cache_create()
+- affs: remove SLAB_MEM_SPREAD flag usage
+- mm/slub: remove parameter 'flags' in create_kmalloc_caches()
+- mm/slub: fix bulk alloc and free stats
+- mm/slub: optimize free fast path code layout
+- mm/slub: optimize alloc fastpath code layout
+- mm/slub: remove slab_alloc() and __kmem_cache_alloc_lru() wrappers
+- mm/slab: move kmalloc() functions from slab_common.c to slub.c
+- mm/slab: move kmalloc_slab() to mm/slab.h
+- mm/slab: move kfree() from slab_common.c to slub.c
+- mm/slab: move struct kmem_cache_node from slab.h to slub.c
+- mm/slab: move memcg related functions from slab.h to slub.c
+- mm: kmem: reimplement get_obj_cgroup_from_current()
+- percpu: scoped objcg protection
+- mm: kmem: scoped objcg protection
+- mm: kmem: make memcg keep a reference to the original objcg
+- mm: kmem: add direct objcg pointer to task_struct
+- mm: kmem: optimize get_obj_cgroup_from_current()
+- mm/slab: move pre/post-alloc hooks from slab.h to slub.c
+- mm/slab: consolidate includes in the internal mm/slab.h
+- mm/slab: move the rest of slub_def.h to mm/slab.h
+- mm/slab: move struct kmem_cache_cpu declaration to slub.c
+- mm/slab: remove mm/slab.c and slab_def.h
+- mm/slab: remove CONFIG_SLAB code from slab common code
+- mm/slab: remove CONFIG_SLAB from all Kconfig and Makefile
+- mm/slab, docs: switch mm-api docs generation from slab.c to slub.c
+- Merge branch 'optimize_pid_list_lock' into 'release' (merge request !842)
+- trace/pid_list: optimize pid_list->lock contention
+- Revert "trace/pid_list: optimize pid_list->lock contention"
+- sched/fair: Add FAIR_SLEEPERS feature to optimize wakeup latency
+- Merge branch 'pps_increase' into 'release' (merge request !838)
+- pps: increase PPS_MAX_SOURCES to 32
+- Merge branch 'batch-tlb-flush' into 'release' (merge request !833)
+- emm, config, sysctl: fix EMM_BATCH_DIRTY_TLB_FLUSH depends
+- mm: memcg: fixed memory_qos is disable if enable
+- Merge branch 'swap-update' into 'release' (merge request !837)
+- mm/swapfile: fix list iteration in swap_sync_discard
+- mm: swap: remove scan_swap_map_slots() references from comments
+- mm, swap: use SWP_SOLIDSTATE to determine if swap is rotational
+- mm, swap: fix memory leak in setup_clusters() error path
+- mm/swap: fix wrong plist empty check in swap_alloc_slow()
+- mm, swap: update commit for swap cache API
+- mm, swap: stop mentioning HAS_CACHE
+- mm, swap: avoid duplicated usability check for cluster reclaim
+- mm, swap: remove no longer needed warning string
+
 * Tue Nov 25 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.117-45
 - Merge linux 6.6.117 into TK5 release branch
 - Linux 6.6.117
