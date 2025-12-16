@@ -477,6 +477,7 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 extern void bio_uninit(struct bio *);
 void bio_reset(struct bio *bio, struct block_device *bdev, blk_opf_t opf);
 void bio_chain(struct bio *, struct bio *);
+void bio_cb_chain(struct bio *, struct bio *, gfp_t);
 
 int __must_check bio_add_page(struct bio *bio, struct page *page, unsigned len,
 			      unsigned off);
