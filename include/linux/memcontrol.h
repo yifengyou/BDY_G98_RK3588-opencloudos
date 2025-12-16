@@ -272,6 +272,7 @@ struct mem_cgroup {
 	unsigned short zram_prio;
 	u32 emm_manager;
 	u32 emm_oversell;
+	int zram_reject_size;
 #endif
 
 	unsigned long soft_limit;

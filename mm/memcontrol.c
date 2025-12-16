@@ -7800,6 +7800,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	memcg->zram_max = PAGE_COUNTER_MAX;
 	memcg->emm_manager = 1;
 	memcg->emm_oversell = 0;
+	memcg->zram_reject_size = -1;
 #endif
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 #ifdef CONFIG_TEXT_UNEVICTABLE
