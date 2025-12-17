@@ -310,7 +310,7 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long size, offset;
 	uint8_t mem_state;
 	enum obmm_mmap_mode old_mmap_mode;
-	enum obmm_mmap_granu mmap_granu;
+	enum obmm_mmap_granu mmap_granu, init_mmap_granu;
 	int ret;
 	bool cacheable, o_sync;
 
@@ -331,21 +331,23 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (offset & OBMM_MMAP_FLAG_HUGETLB_PMD) {
 		pr_debug("trying hugepage mmap\n");
-		mmap_granu = OBMM_MMAP_GRANU_PMD;
 		offset &= ~OBMM_MMAP_FLAG_HUGETLB_PMD;
 		if (vma->vm_start % PMD_SIZE || vma->vm_end % PMD_SIZE) {
 			pr_err("error running huge mmap for not pmd-aligned vma: %#lx-%#lx\n",
 				vma->vm_start, vma->vm_end);
 			return -EINVAL;
 		}
+		mmap_granu = OBMM_MMAP_GRANU_PMD;
 	} else {
 		mmap_granu = OBMM_MMAP_GRANU_PAGE;
 	}
+	init_mmap_granu = reg->mmap_granu;
 	if (reg->mmap_granu == OBMM_MMAP_GRANU_NONE) {
 		reg->mmap_granu = mmap_granu;
 	} else if (reg->mmap_granu != mmap_granu) {
 		pr_err("map with PAGE_SIZE and PMD_SIZE granu should not be mixed on the same region\n");
-		return -EINVAL;
+		ret = -EPERM;
+		goto err_reset_mmap_granu;
 	}
 
 	vma->vm_pgoff = offset >> PAGE_SHIFT;
@@ -353,7 +355,8 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 	if (offset >= reg->mem_size || size > reg->mem_size - offset) {
 		pr_err("mmap region %d: offset:%#lx, size:%#lx over region size: %#llx",
 		       reg->regionid, offset, size, reg->mem_size);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_reset_mmap_granu;
 	}
 
 	/*
@@ -404,6 +407,11 @@ static int obmm_shm_fops_mmap(struct file *file, struct vm_area_struct *vma)
 			ret = init_ownership_info(reg);
 			if (ret)
 				goto err_release_local_state_info;
+			/*
+			 * after ownership_info initialized, mmap_granu should not be
+			 * reset to OBMM_MMAP_GRANU_NONE.
+			 */
+			init_mmap_granu = reg->mmap_granu;
 			ret = check_mmap_allowed(reg, vma, mem_state);
 			if (ret)
 				goto err_release_local_state_info;
@@ -454,6 +462,8 @@ reset_cur_osync:
 		reg->mmap_mode = OBMM_MMAP_INIT;
 err_mutex_unlock:
 	mutex_unlock(&reg->state_mutex);
+err_reset_mmap_granu:
+	reg->mmap_granu = init_mmap_granu;
 	return ret;
 }
 
