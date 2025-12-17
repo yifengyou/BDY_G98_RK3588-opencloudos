@@ -25,6 +25,7 @@
 #include "obmm_core.h"
 #include "obmm_cache.h"
 #include "obmm_export.h"
+#include "obmm_shm_dev.h"
 
 int export_flags_to_region_flags(unsigned long *region_flags, unsigned long user_flags)
 {
@@ -266,6 +267,7 @@ int set_export_vendor(struct obmm_export_region *e_reg, const void __user *vendo
 
 void free_export_region(struct obmm_export_region *e_reg)
 {
+	wait_until_dev_released(&e_reg->region);
 	if (e_reg->vendor_len)
 		kfree(e_reg->vendor_info);
 

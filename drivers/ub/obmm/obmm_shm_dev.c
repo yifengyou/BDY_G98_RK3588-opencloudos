@@ -881,7 +881,16 @@ const struct file_operations obmm_shm_fops = { .owner = THIS_MODULE,
 
 static void obmm_shm_dev_release(struct device *dev)
 {
+	struct obmm_region *reg = container_of(dev, struct obmm_region, device);
+
+	atomic_set(&reg->device_released, 1);
 	module_put(THIS_MODULE);
+}
+
+void wait_until_dev_released(struct obmm_region *reg)
+{
+	while (atomic_read(&reg->device_released) == 0)
+		cpu_relax();
 }
 
 int obmm_shm_dev_add(struct obmm_region *reg)
@@ -917,6 +926,8 @@ int obmm_shm_dev_add(struct obmm_region *reg)
 		pr_err("Failed to add shm device %d. ret=%pe\n", reg->regionid, ERR_PTR(ret));
 		goto err_put_dev;
 	}
+
+	atomic_set(&reg->device_released, 0);
 
 	return 0;
 

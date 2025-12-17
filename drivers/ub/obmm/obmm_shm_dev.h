@@ -12,5 +12,7 @@ int obmm_shm_dev_init(void);
 void obmm_shm_dev_exit(void);
 int obmm_shm_dev_add(struct obmm_region *reg);
 void obmm_shm_dev_del(struct obmm_region *reg);
+void wait_until_dev_released(struct obmm_region *reg);
+
 
 #endif

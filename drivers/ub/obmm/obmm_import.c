@@ -16,6 +16,7 @@
 #include "obmm_preimport.h"
 #include "obmm_resource.h"
 #include "obmm_addr_check.h"
+#include "obmm_shm_dev.h"
 
 static void set_import_region_datapath(const struct obmm_import_region *i_reg,
 				       struct obmm_datapath *datapath)
@@ -415,6 +416,8 @@ int obmm_import(struct obmm_cmd_import *cmd_import)
 	if (i_reg == NULL)
 		return -ENOMEM;
 
+	atomic_set(&i_reg->region.device_released, 1);
+
 	/* arguments to region (logs produced by callee) */
 	retval = init_import_region_from_cmd(cmd_import, i_reg);
 	if (retval)
@@ -455,6 +458,7 @@ out_release_memory:
 out_region_uninit:
 	uninit_obmm_region(&i_reg->region);
 out_free_ireg:
+	wait_until_dev_released(&i_reg->region);
 	kfree(i_reg);
 	return retval;
 }
@@ -493,6 +497,7 @@ int obmm_unimport(const struct obmm_cmd_unimport *cmd_unimport)
 
 	deregister_obmm_region(reg);
 	uninit_obmm_region(reg);
+	wait_until_dev_released(&i_reg->region);
 	kfree(i_reg);
 
 	pr_info("%s: mem_id=%llu completed.\n", __func__, cmd_unimport->mem_id);

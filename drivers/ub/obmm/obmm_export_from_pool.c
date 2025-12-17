@@ -255,6 +255,8 @@ static struct obmm_export_region *alloc_region_from_cmd(struct obmm_cmd_export *
 	if (e_reg == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	atomic_set(&e_reg->region.device_released, 1);
+
 	e_reg->region.type = OBMM_EXPORT_REGION;
 	e_reg->region.mem_size = total_size;
 	e_reg->region.mem_cap = OBMM_MEM_ALLOW_CACHEABLE_MMAP | OBMM_MEM_ALLOW_NONCACHEABLE_MMAP;

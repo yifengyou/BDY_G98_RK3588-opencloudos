@@ -279,6 +279,8 @@ alloc_export_region_from_obmm_cmd_export_pid(const struct obmm_cmd_export_pid *e
 	if (e_reg == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	atomic_set(&e_reg->region.device_released, 1);
+
 	e_reg->mem_desc_pid.pid = export_pid->pid;
 	e_reg->mem_desc_pid.user_va = export_pid->va;
 	e_reg->region.mem_size = export_pid->length;

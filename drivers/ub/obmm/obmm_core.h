@@ -87,6 +87,7 @@ struct obmm_region {
 
 	struct cdev cdevice;
 	struct device device;
+	atomic_t device_released;
 
 	refcount_t refcnt;
 
