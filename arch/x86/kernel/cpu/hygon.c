@@ -489,7 +489,7 @@ unsigned int get_nt_block_copy_mini_len(void)
 
 	return mini_len;
 }
-EXPORT_SYMBOL_GPL(get_nt_block_copy_mini_len);
+EXPORT_SYMBOL(get_nt_block_copy_mini_len);
 
 static ssize_t show_nt_cpy_mini_len(struct kobject *kobj,
 				    struct kobj_attribute *attr, char *buf)

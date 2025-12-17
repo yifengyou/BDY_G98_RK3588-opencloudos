@@ -534,7 +534,7 @@ err:
 
 	return -1;
 }
-EXPORT_SYMBOL_GPL(kernel_fpu_begin_nonatomic_mask);
+EXPORT_SYMBOL(kernel_fpu_begin_nonatomic_mask);
 
 void kernel_fpu_end_nonatomic(void)
 {
@@ -550,7 +550,7 @@ void kernel_fpu_end_nonatomic(void)
 	clear_thread_flag(TIF_USING_FPU_NONATOMIC);
 	preempt_enable();
 }
-EXPORT_SYMBOL_GPL(kernel_fpu_end_nonatomic);
+EXPORT_SYMBOL(kernel_fpu_end_nonatomic);
 
 void save_fpregs_to_fpkernelstate(struct fpu *kfpu)
 {
