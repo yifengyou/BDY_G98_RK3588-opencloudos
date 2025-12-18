@@ -77,6 +77,7 @@ int sched_cluster_handler(struct ctl_table *table, int write,
 #ifdef CONFIG_SCHED_CLASS_EXT
 extern int sysctl_debug_scx_stall;
 extern unsigned int sysctl_scx_ignore_cpubind;
+extern int sysctl_scx_print_exit_kill;
 
 extern int scx_ignore_cpubind_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);

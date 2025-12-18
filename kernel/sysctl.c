@@ -2725,6 +2725,15 @@ static struct ctl_table kern_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
+	{
+		.procname	= "scx_print_exit_kill",
+		.data		= &sysctl_scx_print_exit_kill,
+		.maxlen		= sizeof(sysctl_scx_print_exit_kill),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_TWO,
+	},
 #endif
 #ifdef CONFIG_CGROUPFS
 	{
