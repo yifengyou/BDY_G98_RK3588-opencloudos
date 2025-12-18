@@ -77,6 +77,7 @@ obj-y					+= vdso-wrap.o
 obj-$(CONFIG_COMPAT_VDSO)		+= vdso32-wrap.o
 obj-$(CONFIG_UNWIND_PATCH_PAC_INTO_SCS)	+= patch-scs.o
 CFLAGS_patch-scs.o			+= -mbranch-protection=none
+obj-$(CONFIG_SCHED_PARAL)		+= prefer_numa.o
 
 # Force dependency (vdso*-wrap.S includes vdso.so through incbin)
 $(obj)/vdso-wrap.o: $(obj)/vdso/vdso.so

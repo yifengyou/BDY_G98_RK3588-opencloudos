@@ -11563,9 +11563,6 @@ static int __set_prefer_cpus_ptr(struct task_struct *p,
 	struct rq *rq;
 	int ret = 0;
 
-	if (!dynamic_affinity_enabled())
-		return -EPERM;
-
 	if (unlikely(!p->prefer_cpus))
 		return -EINVAL;
 

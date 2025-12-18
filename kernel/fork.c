@@ -661,8 +661,7 @@ void free_task(struct task_struct *tsk)
 		iee_invalidate_token(tsk);
 #endif
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
-	if (dynamic_affinity_enabled())
-		sched_prefer_cpus_free(tsk);
+	sched_prefer_cpus_free(tsk);
 #endif
 	free_task_struct(tsk);
 }
@@ -2436,11 +2435,9 @@ __latent_entropy struct task_struct *copy_process(
 	rt_mutex_init_task(p);
 
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
-	if (dynamic_affinity_enabled()) {
-		retval = sched_prefer_cpus_fork(p, current->prefer_cpus);
-		if (retval)
-			goto bad_fork_free;
-	}
+	retval = sched_prefer_cpus_fork(p, current->prefer_cpus);
+	if (retval)
+		goto bad_fork_free;
 #endif
 
 	lockdep_assert_irqs_enabled();

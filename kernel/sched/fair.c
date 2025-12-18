@@ -91,6 +91,10 @@ static unsigned int normalized_sysctl_sched_latency = 6000000ULL;
  */
 unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
 
+#ifdef CONFIG_SCHED_PARAL
+#include <asm/prefer_numa.h>
+#endif
+
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
@@ -8355,6 +8359,13 @@ unlock:
 }
 
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+#ifdef CONFIG_SCHED_PARAL
+bool sched_paral_used(void)
+{
+	return sched_feat(PARAL);
+}
+#endif
+
 static inline struct cpumask *task_prefer_cpus(struct task_struct *p)
 {
 	return p->prefer_cpus;
@@ -8391,13 +8402,15 @@ __setup("dynamic_affinity=", dynamic_affinity_switch_setup);
 
 static inline bool prefer_cpus_valid(struct task_struct *p)
 {
-	if (!dynamic_affinity_enabled())
-		return false;
+	struct cpumask *prefer_cpus = task_prefer_cpus(p);
 
-	return p->prefer_cpus &&
-	       !cpumask_empty(p->prefer_cpus) &&
-	       !cpumask_equal(p->prefer_cpus, p->cpus_ptr) &&
-	       cpumask_subset(p->prefer_cpus, p->cpus_ptr);
+	if (dynamic_affinity_enabled() || sched_paral_used()) {
+		return !cpumask_empty(prefer_cpus) &&
+			!cpumask_equal(prefer_cpus, p->cpus_ptr) &&
+			cpumask_subset(prefer_cpus, p->cpus_ptr);
+	}
+
+	return false;
 }
 
 static inline unsigned long taskgroup_cpu_util(struct task_group *tg,
@@ -8482,6 +8495,14 @@ static void set_task_select_cpus(struct task_struct *p, int *idlest_cpu,
 			tg_capacity += capacity_of(cpu);
 	}
 	rcu_read_unlock();
+
+	/* In extreme cases, it may cause uneven system load. */
+	if (sched_paral_used() && sysctl_sched_util_low_pct == 100 && nr_cpus_valid > 0) {
+		p->select_cpus = p->prefer_cpus;
+		if (sd_flag & SD_BALANCE_WAKE)
+			schedstat_inc(p->stats.nr_wakeups_preferred_cpus);
+		return;
+	}
 
 	/*
 	 * Follow cases should select cpus_ptr, checking by condition of
@@ -12984,6 +13005,12 @@ static void task_fork_fair(struct task_struct *p)
 	if (curr)
 		update_curr(cfs_rq);
 	place_entity(cfs_rq, se, ENQUEUE_INITIAL);
+
+#ifdef CONFIG_SCHED_PARAL
+	if (sched_paral_used())
+		set_task_paral_node(p);
+#endif
+
 	rq_unlock(rq, &rf);
 }
 

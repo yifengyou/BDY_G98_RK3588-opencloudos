@@ -7,6 +7,10 @@
  * Copyright(C) 2007, Red Hat, Inc., Ingo Molnar
  */
 
+#ifdef CONFIG_SCHED_PARAL
+#include <asm/prefer_numa.h>
+#endif
+
 /*
  * This allows printing both to /proc/sched_debug and
  * to the console
@@ -95,6 +99,41 @@ static void sched_feat_disable(int i) { };
 static void sched_feat_enable(int i) { };
 #endif /* CONFIG_JUMP_LABEL */
 
+int __weak is_prefer_numa(void)
+{
+	return 0;
+}
+
+#ifdef CONFIG_SCHED_PARAL
+static void sched_feat_disable_paral(char *cmp)
+{
+	struct task_struct *tsk, *t;
+
+	if (strncmp(cmp, "PARAL", 5) == 0) {
+		read_lock(&tasklist_lock);
+		for_each_process(tsk) {
+			if (tsk->flags & PF_KTHREAD || is_global_init(tsk))
+				continue;
+
+			for_each_thread(tsk, t)
+				cpumask_clear(t->prefer_cpus);
+		}
+		read_unlock(&tasklist_lock);
+	}
+}
+
+static bool sched_feat_enable_paral(char *cmp)
+{
+	if (strncmp(cmp, "PARAL", 5) != 0)
+		return true;
+
+	return is_prefer_numa();
+}
+#else
+static void sched_feat_disable_paral(char *cmp) {};
+static bool sched_feat_enable_paral(char *cmp) { return true; };
+#endif /* CONFIG_SCHED_PARAL */
+
 static int sched_feat_set(char *cmp)
 {
 	int i;
@@ -111,8 +150,12 @@ static int sched_feat_set(char *cmp)
 
 	if (neg) {
 		sysctl_sched_features &= ~(1UL << i);
+		sched_feat_disable_paral(cmp);
 		sched_feat_disable(i);
 	} else {
+		if (!sched_feat_enable_paral(cmp))
+			return -EPERM;
+
 		sysctl_sched_features |= (1UL << i);
 		sched_feat_enable(i);
 	}
@@ -1083,7 +1126,7 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 		P_SCHEDSTAT(nr_wakeups_passive);
 		P_SCHEDSTAT(nr_wakeups_idle);
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
-		if (dynamic_affinity_enabled()) {
+		if (dynamic_affinity_enabled() || sched_paral_used()) {
 			P_SCHEDSTAT(nr_wakeups_preferred_cpus);
 			P_SCHEDSTAT(nr_wakeups_force_preferred_cpus);
 		}

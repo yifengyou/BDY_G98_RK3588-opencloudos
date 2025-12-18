@@ -481,9 +481,6 @@ int host_pid_info(struct seq_file *m, struct pid_namespace *ns,
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
 static void task_cpus_preferred(struct seq_file *m, struct task_struct *task)
 {
-	if (!dynamic_affinity_enabled())
-		return;
-
 	seq_printf(m, "Cpus_preferred:\t%*pb\n",
 		   cpumask_pr_args(task->prefer_cpus));
 	seq_printf(m, "Cpus_preferred_list:\t%*pbl\n",
