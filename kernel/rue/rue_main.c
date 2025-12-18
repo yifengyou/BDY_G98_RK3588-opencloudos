@@ -24,3 +24,4 @@ module_init(rue_mod_init);
 module_exit(rue_mod_exit);
 MODULE_AUTHOR("Tencent Corporation");
 MODULE_LICENSE("GPL v2");
+MODULE_VERSION("0.1.0");
