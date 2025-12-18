@@ -124,11 +124,12 @@ static struct lruvec *__munlock_folio(struct folio *folio, struct lruvec *lruvec
 	int nr_pages = folio_nr_pages(folio);
 	bool isolated = false;
 
+	lruvec = folio_lruvec_relock_irq(folio, lruvec);
+
 	if (!folio_test_clear_lru(folio))
 		goto munlock;
 
 	isolated = true;
-	lruvec = folio_lruvec_relock_irq(folio, lruvec);
 
 	if (folio_test_unevictable(folio)) {
 		/* Then mlock_count is maintained, but might undercount */
