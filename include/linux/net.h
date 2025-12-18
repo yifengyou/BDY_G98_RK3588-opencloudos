@@ -127,9 +127,6 @@ struct socket {
 	const struct proto_ops	*ops; /* Might change with IPV6_ADDRFORM or MPTCP. */
 
 	struct socket_wq	wq;
-#ifdef CONFIG_SECURITY_NETWORK
-	struct task_struct *task;
-#endif
 };
 
 /*
