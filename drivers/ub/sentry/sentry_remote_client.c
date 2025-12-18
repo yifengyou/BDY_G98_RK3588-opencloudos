@@ -229,10 +229,7 @@ int remote_event_handler(enum sentry_msg_helper_msg_type remote_type,
 			ack_done = get_ack_done(&sentry_remote_ctx.remote_event_ack_msg_buf,
 							remote_ack_type, COMM_TYPE_UNKNOWN);
 			spin_unlock(&sentry_buf_lock);
-			if (ack_done) {
-				pr_info("Receive ack message, stop blocking early\n");
-				break;
-			}
+			goto check_ack_and_sleep;
 		}
 		/* Handle acknowledgment in panic mode */
 		if (uvb_send_success) {
@@ -262,7 +259,7 @@ do_urma_recv:
 			recv_msg_nodes = urma_recv(sentry_client_ctx.msg_str,
 							URMA_SEND_DATA_MAX_LEN);
 			if (recv_msg_nodes <= 0)
-				continue;
+				goto check_ack_and_sleep;
 			pr_info("urma received %d nodes\n", recv_msg_nodes);
 			for (int l = 0; l < recv_msg_nodes; l++) {
 				struct sentry_msg_helper_msg msg;
@@ -287,6 +284,7 @@ do_urma_recv:
 			}
 		}
 
+check_ack_and_sleep:
 		/* Check if acknowledgment received */
 		if (ack_done) {
 			pr_info("Receive ack message, stop blocking early\n");
