@@ -87,6 +87,7 @@ static void mptcp_pernet_set_defaults(struct mptcp_pernet *pernet)
 }
 
 #ifdef CONFIG_SYSCTL
+#ifndef CONFIG_KATA_SUPPORT
 static int mptcp_set_scheduler(char *scheduler, const char *name)
 {
 	struct mptcp_sched_ops *sched;
@@ -224,7 +225,7 @@ static void mptcp_pernet_del_table(struct mptcp_pernet *pernet)
 
 	kfree(table);
 }
-
+#endif
 #else
 
 static int mptcp_pernet_new_table(struct net *net, struct mptcp_pernet *pernet)

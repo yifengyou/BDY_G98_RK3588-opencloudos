@@ -150,6 +150,7 @@ void __init setup_per_cpu_areas(void)
 #else
 		atom_size = PAGE_SIZE;
 #endif
+#ifndef CONFIG_KATA_SUPPORT
 		rc = pcpu_embed_first_chunk(PERCPU_FIRST_CHUNK_RESERVE,
 					    dyn_size, atom_size,
 					    pcpu_cpu_distance,
@@ -157,6 +158,7 @@ void __init setup_per_cpu_areas(void)
 		if (rc < 0)
 			pr_warn("%s allocator failed (%d), falling back to page size\n",
 				pcpu_fc_names[pcpu_chosen_fc], rc);
+#endif
 	}
 	if (rc < 0)
 		rc = pcpu_page_first_chunk(PERCPU_FIRST_CHUNK_RESERVE,

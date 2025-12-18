@@ -4679,7 +4679,11 @@ EXPORT_SYMBOL_GPL(tcp_abort);
 
 extern struct tcp_congestion_ops tcp_reno;
 
+#ifndef CONFIG_KATA_SUPPORT
 static __initdata unsigned long thash_entries;
+#else
+static __initdata unsigned long thash_entries = 16384;
+#endif
 static int __init set_thash_entries(char *str)
 {
 	ssize_t ret;

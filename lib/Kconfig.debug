@@ -1314,7 +1314,7 @@ menu "Lock Debugging (spinlocks, mutexes, etc...)"
 config LOCK_DEBUGGING_SUPPORT
 	bool
 	depends on TRACE_IRQFLAGS_SUPPORT && STACKTRACE_SUPPORT && LOCKDEP_SUPPORT
-	default y
+	default y if !KATA_SUPPORT
 
 config PROVE_LOCKING
 	bool "Lock debugging: prove locking correctness"
