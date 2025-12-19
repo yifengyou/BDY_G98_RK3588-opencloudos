@@ -1277,6 +1277,7 @@ static void pageout_one(struct folio *folio, struct list_head *ret_folios,
 			goto keepit;
 		if (folio_test_dirty(folio) || folio_test_writeback(folio))
 			goto locked_keepit;
+		fallthrough;
 	case PAGE_CLEAN:
 		; /* try to free the folio below */
 	}
@@ -1359,7 +1360,7 @@ retry:
 		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
-		unsigned int nr_pages;
+		unsigned int nr_pages = 0;
 
 		cond_resched();
 
