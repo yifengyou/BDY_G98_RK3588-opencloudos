@@ -6807,9 +6807,11 @@ int __init ip6_route_init(void)
 
 #if IS_BUILTIN(CONFIG_IPV6)
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_PROC_FS)
+#ifndef CONFIG_KATA_SUPPORT
 	ret = bpf_iter_register();
 	if (ret)
 		goto out_register_late_subsys;
+#endif
 #endif
 #endif
 

@@ -223,8 +223,8 @@ config PUNIT_ATOM_DEBUG
 
 choice
 	prompt "Choose kernel unwinder"
-	default UNWINDER_ORC if X86_64
-	default UNWINDER_FRAME_POINTER if X86_32
+	default UNWINDER_ORC if X86_64 && !KATA_SUPPORT
+	default UNWINDER_FRAME_POINTER if (X86_32 || KATA_SUPPORT)
 	help
 	  This determines which method will be used for unwinding kernel stack
 	  traces for panics, oopses, bugs, warnings, perf, /proc/<pid>/stack,

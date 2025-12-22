@@ -265,6 +265,7 @@ static int __net_init ipv6_sysctl_net_init(struct net *net)
 	struct ctl_table *ipv6_icmp_table;
 	int err, i;
 
+#ifndef CONFIG_KATA_SUPPORT
 	err = -ENOMEM;
 	ipv6_table = kmemdup(ipv6_table_template, sizeof(ipv6_table_template),
 			     GFP_KERNEL);
@@ -316,6 +317,9 @@ out_ipv6_route_table:
 out_ipv6_table:
 	kfree(ipv6_table);
 	goto out;
+#else
+	return 0;
+#endif
 }
 
 static void __net_exit ipv6_sysctl_net_exit(struct net *net)

@@ -2000,6 +2000,10 @@ config DEBUG_PERF_USE_VMALLOC
 
 endmenu
 
+config KATA_SUPPORT
+	bool "support kata runtime"
+	default n
+
 config SYSTEM_DATA_VERIFICATION
 	def_bool n
 	select SYSTEM_TRUSTED_KEYRING

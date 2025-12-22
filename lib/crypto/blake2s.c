@@ -66,6 +66,8 @@ static int __init blake2s_mod_init(void)
 	return 0;
 }
 
+#ifndef CONFIG_KATA_SUPPORT
 module_init(blake2s_mod_init);
+#endif
 MODULE_DESCRIPTION("BLAKE2s hash function");
 MODULE_AUTHOR("Jason A. Donenfeld <Jason@zx2c4.com>");
