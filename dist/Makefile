@@ -173,9 +173,9 @@ dist-tarball:
 	@cd $(TOPDIR); git archive $(GITREF) $(TOPDIR) --format=tar.gz --prefix=$(TARNAME)/ --output $(TARFILE)
 
 dist-drivers:
-	@echo "Preparing thirdparty drivers."
 ifneq ($(DIST),oc9)
 ifneq ($(filter ofed, $(DISABLED)), ofed)
+	@echo "Preparing thirdparty drivers."
 	@cd $(TOPDIR)/dist/sources/ ; ./download-and-copy-drivers.sh ; cd $(TOPDIR)
 endif
 endif
