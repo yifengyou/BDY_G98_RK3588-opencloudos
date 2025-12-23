@@ -107,8 +107,8 @@ endif
 DISABLED = $(DEFAULT_DISABLED)
 ENABLED = $(DEFAULT_ENABLED)
 # Automatically disable non core package for non standard build, such as eks/cloudgame
-ifneq ($(CONFIG),generic-release)
-override DISABLED := ofed $(DISABLED)
+ifneq ($(CONFIG), generic-release)
+override DISABLED := ofed modsign $(DISABLED)
 endif
 # generic-debug only build kernel rpm, disable other rpms
 ifeq ($(CONFIG),generic-debug)
@@ -125,7 +125,9 @@ endif
 # Enabled module sign by default
 MODSIGN=1
 ifeq ($(MODSIGN), 0)
+ifneq ($(filter modsign, $(DISABLED)), modsign)
 override DISABLED := modsign $(DISABLED)
+endif
 endif
 
 # Enable private key pkg by default
@@ -144,6 +146,9 @@ endif
 NOCLEAN=0
 ifeq ($(NOCLEAN), 1)
 override RPMFLAGS := --noclean $(RPMFLAGS)
+ifneq ($(filter ofed, $(DISABLED)), ofed)
+override DISABLED := ofed $(DISABLED)
+endif
 endif
 
 # Crossbuild
