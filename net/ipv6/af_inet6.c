@@ -1148,7 +1148,6 @@ static int __init inet6_init(void)
 		goto netfilter_fail;
 	/* Create /proc/foo6 entries. */
 #ifdef CONFIG_PROC_FS
-#ifndef CONFIG_KATA_SUPPORT
 	err = -ENOMEM;
 	if (raw6_proc_init())
 		goto proc_raw6_fail;
@@ -1158,7 +1157,6 @@ static int __init inet6_init(void)
 		goto proc_misc6_fail;
 	if (if6_proc_init())
 		goto proc_if6_fail;
-#endif
 #endif
 	err = ip6_route_init();
 	if (err)
@@ -1231,11 +1229,9 @@ static int __init inet6_init(void)
 		goto igmp6_late_err;
 
 #ifdef CONFIG_SYSCTL
-#ifndef CONFIG_KATA_SUPPORT
 	err = ipv6_sysctl_register();
 	if (err)
 		goto sysctl_fail;
-#endif
 #endif
 
 	/* ensure that ipv6 stubs are visible only after ipv6 is ready */
