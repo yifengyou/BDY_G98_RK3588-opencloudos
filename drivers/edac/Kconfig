@@ -571,4 +571,11 @@ config EDAC_LOONGSON
 	  errors (CE) only. Loongson-3A5000/3C5000/3D5000/3A6000/3C6000
 	  are compatible.
 
+config EDAC_SW64
+	tristate "SW64 UNCORE_JUNZHANG"
+	depends on SW64 && SUBARCH_C4
+	help
+	  Support for error detection and correction on the
+	  UNCORE_JUNZHANG chipsets.
+
 endif # EDAC
