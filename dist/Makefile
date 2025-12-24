@@ -34,8 +34,9 @@ ARCH := $(NATIVE_ARCH)
 # ARCH to be covered by spec file
 SPEC_ARCH := x86_64 aarch64 riscv64 loongarch64
 # Which kernel config to use, this build system supports multiple config targets,
-# Get the available config by scripts/ls-config.sh
-CONFIG := $(shell $(DISTDIR)/scripts/ls-config-targets.sh | tail -n 1)
+# Get the available config by scripts/ls-config-targets.sh
+# Using generic-release config as default
+CONFIG := generic-release
 # Build a specific tag/commit with `make TAG=<tag>` or `make COMMIT=<commit>`
 TAG := $(COMMIT)
 # Extra RPM flags
