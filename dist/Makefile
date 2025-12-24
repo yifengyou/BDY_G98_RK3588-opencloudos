@@ -14,7 +14,7 @@ endif
 ### Downstream marker, update this when forking to another downstream
 KDIST =
 
-ifeq ($(DIST),oc9)
+ifeq ($(DIST), oc9)
 ### Vendor mark
 VENDOR = opencloudos
 VENDOR_CAPITALIZED = OpenCloudOS
@@ -106,10 +106,15 @@ endif
 # All params enabled by default (except kABI check, see below), ENABLED overrides DEFAULT_DISABLE.
 DISABLED = $(DEFAULT_DISABLED)
 ENABLED = $(DEFAULT_ENABLED)
-# Automatically disable non core package for non standard build, such as eks/cloudgame
+# Automatically disable non core package for non standard build, such as eks/kata/cloudgame
 ifneq ($(CONFIG), generic-release)
 override DISABLED := ofed modsign $(DISABLED)
 endif
+
+ifeq ($(DIST), oc9)
+override DISABLED := ofed $(DISABLED)
+endif
+
 # generic-debug only build kernel rpm, disable other rpms
 ifeq ($(CONFIG),generic-debug)
 override DISABLED := bpftool perf tools headers keypkg doc $(DISABLED)
@@ -125,9 +130,7 @@ endif
 # Enabled module sign by default
 MODSIGN=1
 ifeq ($(MODSIGN), 0)
-ifneq ($(filter modsign, $(DISABLED)), modsign)
 override DISABLED := modsign $(DISABLED)
-endif
 endif
 
 # Enable private key pkg by default
@@ -146,9 +149,7 @@ endif
 NOCLEAN=0
 ifeq ($(NOCLEAN), 1)
 override RPMFLAGS := --noclean $(RPMFLAGS)
-ifneq ($(filter ofed, $(DISABLED)), ofed)
 override DISABLED := ofed $(DISABLED)
-endif
 endif
 
 # Crossbuild
@@ -173,11 +174,9 @@ dist-tarball:
 	@cd $(TOPDIR); git archive $(GITREF) $(TOPDIR) --format=tar.gz --prefix=$(TARNAME)/ --output $(TARFILE)
 
 dist-drivers:
-ifneq ($(DIST),oc9)
 ifneq ($(filter ofed, $(DISABLED)), ofed)
 	@echo "Preparing thirdparty drivers."
 	@cd $(TOPDIR)/dist/sources/ ; ./download-and-copy-drivers.sh ; cd $(TOPDIR)
-endif
 endif
 
 $(CONFIGFILE): $(DISTFILES)
