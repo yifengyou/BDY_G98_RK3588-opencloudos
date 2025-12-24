@@ -98,6 +98,14 @@ else
 	@$(kecho) "*** NO tencentconfig! ERROR "
 endif
 
+kataconfig: $(obj)/conf
+ifneq ($(wildcard $(srctree)/arch/$(SRCARCH)/configs/kata.config),)
+	@$(kecho) "*** configuration is based on 'kata.config'"
+	$(Q)$< $(silent) --defconfig=arch/$(SRCARCH)/configs/kata.config $(Kconfig)
+else
+	@$(kecho) "*** NO kata.config! ERROR "
+endif
+
 %_defconfig: $(obj)/conf
 	$(Q)$< $(silent) --defconfig=arch/$(SRCARCH)/configs/$@ $(Kconfig)
 
