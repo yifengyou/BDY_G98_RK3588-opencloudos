@@ -2002,7 +2002,20 @@ endmenu
 
 config KATA_SUPPORT
 	bool "support kata runtime"
+	depends on !COMPILE_TEST
 	default n
+	help
+	  Enable support for Kata Containers, a secure container
+	  runtime that uses lightweight virtual machines.
+
+	  Kata Containers provide stronger workload isolation using
+	  hardware virtualization technology as a second layer of defense.
+
+	  If using "make allyesconfig" or "make allmodconfig" with KATA_SUPPORT
+	  enabled, compile will error. So let it depends on !COMPILE_TEST, because
+	  COMPILE_TEST will be y if in the case of allyesconfig and allmodconfig.
+
+	  If unsure, say N.
 
 config SYSTEM_DATA_VERIFICATION
 	def_bool n
