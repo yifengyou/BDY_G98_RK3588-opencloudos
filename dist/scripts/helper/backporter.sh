@@ -67,6 +67,8 @@ if ! git cat-file -e "$COMMIT"; then
 	_fetch_upstream "$COMMIT"
 fi
 
+COMMIT="$(git show $COMMIT | head -n 1 | awk '{print $2}')"
+
 if ! git cherry-pick "$COMMIT"; then
 	_resolve_conflict_shell
 	CONFLICT=resolved
