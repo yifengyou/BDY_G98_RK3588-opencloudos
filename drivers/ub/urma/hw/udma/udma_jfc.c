@@ -1068,6 +1068,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
 	struct udma_jfc_cqe *dest;
 	struct udma_jfc_cqe *cqe;
+	unsigned long flags;
 	struct ubcore_cr cr;
 	uint32_t nfreed = 0;
 	uint32_t local_id;
@@ -1078,7 +1079,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 		return;
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_lock(&udma_jfc->lock);
+		spin_lock_irqsave(&udma_jfc->lock, flags);
 
 	for (pi = udma_jfc->ci; get_next_cqe(udma_jfc, pi) != NULL; ++pi) {
 		if (pi > udma_jfc->ci + udma_jfc->buf.entry_cnt)
@@ -1113,5 +1114,5 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 	}
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_unlock(&udma_jfc->lock);
+		spin_unlock_irqrestore(&udma_jfc->lock, flags);
 }
