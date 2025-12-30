@@ -1546,6 +1546,18 @@ if (( $tk_private_val == 1 )); then
 	fi
 fi
 
+if [ -f /etc/kdump.conf ]; then
+	sed -i '/initramfs-small-size-conf/,$d' /etc/kdump.conf || true
+	echo "# TencentOS kdump initramfs-small-size-conf" >> /etc/kdump.conf
+	# Some driver will cost much memory, cause second kernel oom.
+	# Omit mlnx nic drivers
+	omit_drivers_list="mlx4_core mlx4_en mlx4_ib mlx5_core mlx5_ib mlx_compat mlxfw mlxdevm mlxsw_core mlxsw_i2c mlxsw_minimal mlxsw_pci mlxsw_spectrum"
+	omit_drivers_list="$omit_drivers_list ib_core ib_uverbs ib_cm ib_umad ib_ipoib iw_cm rdma_cm rdma_ucm knem xpmem"
+	# Omit bnxt and intel nic drivers
+	omit_drivers_list="$omit_drivers_list bnxt_en i40e ixgbe ixgbevf ice"
+	echo "dracut_args --omit-drivers \"$omit_drivers_list\"" >> /etc/kdump.conf
+fi
+
 # End %pre modules
 
 %post modules
