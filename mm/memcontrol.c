@@ -4680,7 +4680,7 @@ vm_pagecache_limit_retry_times __read_mostly = MEMCG_PAGECACHE_RETRIES;
 void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 {
 	long pages_reclaimed;
-	unsigned long pages_used, pages_max, goal_pages_used;
+	unsigned long pages_used, pages_max, goal_pages_used, nr_to_reclaim;
 	unsigned int retry_times = 0;
 	unsigned int limit_retry_times;
 	u32 max_ratio;
@@ -4720,6 +4720,8 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 				* pages_max / 100;
 	goal_pages_used = max_t(unsigned long, MIN_PAGECACHE_PAGES,
 				goal_pages_used);
+	nr_to_reclaim = (pages_max - goal_pages_used) / num_online_cpus();
+	nr_to_reclaim = max_t(unsigned long, nr_to_reclaim, SWAP_CLUSTER_MAX);
 
 	if (pages_used >= pages_max)
 		memcg_memory_event(memcg, MEMCG_PAGECACHE_MAX);
@@ -4728,9 +4730,7 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 		if (fatal_signal_pending(current))
 			break;
 
-		pages_reclaimed = shrink_page_cache_memcg(gfp_mask, memcg,
-				min_t(unsigned long, pages_max - goal_pages_used,
-						pages_used - goal_pages_used));
+		pages_reclaimed = shrink_page_cache_memcg(gfp_mask, memcg, nr_to_reclaim);
 
 		if (pages_reclaimed == -EINVAL)
 			return;
@@ -4750,8 +4750,8 @@ void mem_cgroup_shrink_pagecache(struct mem_cgroup *memcg, gfp_t gfp_mask)
 		}
 
 next_shrink:
-		pages_used = page_counter_read(&memcg->pagecache);
 		cond_resched();
+		pages_used = page_counter_read(&memcg->pagecache);
 	}
 }
 
