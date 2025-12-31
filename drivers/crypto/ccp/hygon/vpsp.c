@@ -30,6 +30,11 @@
 #define pr_fmt(fmt) "vpsp: " fmt
 #define VTKM_VM_BIND	0x904
 
+static int vpsp_backup_key(struct key_img_ctl *ctl);
+static int vpsp_restore_key(struct key_img_ctl *ctl);
+static int vpsp_backup_cmd_ctx(struct cmd_ctx_ctl *ctl);
+static int vpsp_restore_cmd_ctx(struct cmd_ctx_ctl *ctl);
+
 /*
  * The file mainly implements the base execution logic of virtual PSP in kernel mode,
  *	which mainly includes:
@@ -84,6 +89,30 @@ static struct vpsp_cmd_ctx *vpsp_hashtable_find_cmd_ctx(gpa_t key1, pid_t key2)
 	return entry;
 }
 
+static int vpsp_hashtable_save_cmd_ctx_by_pid(pid_t pid, struct vpsp_cmd_ctx *ctx[], uint32_t *nums)
+{
+	struct vpsp_cmd_ctx *entry = NULL;
+	struct hlist_node *tmp;
+	int i;
+
+	if (!nums)
+		return -EINVAL;
+	*nums = 0;
+
+	read_lock(&table_rwlock);
+	// Allowed entries to be deleted during traversal
+	hash_for_each_safe(vpsp_cmd_ctx_table, i, tmp, entry, node) {
+		if (entry->key2 == pid) {
+			if (ctx)
+				ctx[*nums] = entry;
+			++(*nums);
+		}
+	}
+	read_unlock(&table_rwlock);
+
+	return 0;
+}
+
 static void vpsp_hashtable_add_cmd_ctx(struct vpsp_cmd_ctx *ctx)
 {
 	struct vpsp_cmd_ctx *entry = NULL;
@@ -100,6 +129,8 @@ static void vpsp_hashtable_add_cmd_ctx(struct vpsp_cmd_ctx *ctx)
 	write_unlock(&table_rwlock);
 
 	vpsp_cmd_ctx_obj_get(ctx);
+
+	pr_debug("add cmd ctx gpa 0x%llx pid %d\n", ctx->key1, ctx->key2);
 }
 
 static void vpsp_hashtable_remove_cmd_ctx(struct vpsp_cmd_ctx *ctx)
@@ -108,6 +139,7 @@ static void vpsp_hashtable_remove_cmd_ctx(struct vpsp_cmd_ctx *ctx)
 	hash_del(&ctx->node);
 	write_unlock(&table_rwlock);
 
+	pr_debug("remove cmd ctx gpa 0x%llx pid %d\n", ctx->key1, ctx->key2);
 	vpsp_cmd_ctx_obj_put(ctx, false);
 }
 
@@ -155,6 +187,11 @@ static void vpsp_cmd_ctx_destroy(struct vpsp_cmd_ctx *cmd_ctx)
 {
 	if (!cmd_ctx)
 		return;
+
+	if (cmd_ctx->statval == VPSP_RUNNING)
+		pr_warn("destroy cmd_ctx is running, gpa 0x%llx, pid %d",
+			cmd_ctx->key1, cmd_ctx->key2);
+
 	/**
 	 * The initial refcount is 1,
 	 * need to additional decrement a refcount.
@@ -457,16 +494,33 @@ static int vpsp_try_bind_vtkm(struct kvm_vpsp *vpsp, struct vpsp_dev_ctx *vpsp_c
 	int ret;
 	struct vpsp_cmd *vcmd = (struct vpsp_cmd *)&cmd;
 
-	if (vpsp_ctx && !vpsp_ctx->vm_is_bound && vpsp->is_csv_guest) {
-		ret = kvm_bind_vtkm(vpsp->vm_handle, vcmd->cmd_id,
-					vpsp_ctx->vid, psp_ret);
-		if (ret || *psp_ret) {
-			pr_err("[%s] kvm bind vtkm failed with ret: %d, pspret: %d\n",
-				__func__, ret, *psp_ret);
-			return ret;
-		}
-		vpsp_ctx->vm_is_bound = 1;
+	if (!vpsp || !vpsp_ctx || !psp_ret)
+		return -EINVAL;
+
+	if (vpsp_ctx->vm_is_bound || !vpsp->is_csv_guest)
+		return 0;
+
+	/**
+	 * The vpsp_ctx->mutex ensures that kvm_bind_vtkm is
+	 * only executed once.
+	 *
+	 * otherwise error code -62 will be thrown.
+	 */
+	mutex_lock(&vpsp_ctx->mutex);
+	if (vpsp_ctx->vm_is_bound)
+		return 0;
+
+	ret = kvm_bind_vtkm(vpsp->vm_handle, vcmd->cmd_id,
+				vpsp_ctx->vid, psp_ret);
+	if (ret || *psp_ret) {
+		pr_err("[%s] kvm bind vtkm failed with ret: %d, pspret: %d\n",
+			__func__, ret, *psp_ret);
+		mutex_unlock(&vpsp_ctx->mutex);
+		return ret;
 	}
+
+	vpsp_ctx->vm_is_bound = 1;
+	mutex_unlock(&vpsp_ctx->mutex);
 	return 0;
 }
 
@@ -766,6 +820,8 @@ static int vpsp_add_vid(uint32_t vid)
 	pid_t cur_pid = task_pid_nr(current);
 	struct vpsp_dev_ctx new_entry = {.vid = vid, .pid = cur_pid};
 
+	mutex_init(&new_entry.mutex);
+
 	if (vpsp_get_dev_ctx(NULL, cur_pid) == 0)
 		return -EEXIST;
 	if (g_vpsp_vid_num == VPSP_VID_MAX_ENTRIES)
@@ -791,15 +847,34 @@ static int vpsp_del_vid(void)
 {
 	pid_t cur_pid = task_pid_nr(current);
 	int i, ret = -ENOENT;
+	struct vpsp_cmd_ctx **cmd_ctx = NULL;
+	uint32_t cmd_ctx_nums = 0;
+	int j;
 
 	write_lock(&vpsp_dev_rwlock);
 	for (i = 0; i < g_vpsp_vid_num; ++i) {
 		if (g_vpsp_context_array[i].pid == cur_pid) {
+			/**
+			 * In some cases, such as live migration,
+			 * there may be residual cmd ctx that needs to be forcibly destroyed.
+			 */
+			vpsp_hashtable_save_cmd_ctx_by_pid(cur_pid, NULL, &cmd_ctx_nums);
+			cmd_ctx = kcalloc(cmd_ctx_nums, sizeof(struct vpsp_cmd_ctx *), GFP_KERNEL);
+			if (!cmd_ctx) {
+				ret = -ENOMEM;
+				goto end;
+			}
+
+			vpsp_hashtable_save_cmd_ctx_by_pid(cur_pid, cmd_ctx, &cmd_ctx_nums);
+			for (j = 0; j < cmd_ctx_nums; ++j)
+				vpsp_cmd_ctx_destroy(cmd_ctx[j]);
+
 			--g_vpsp_vid_num;
 			pr_info("PSP: delete vid %d, by pid %d, total vid num is %d\n",
 				g_vpsp_context_array[i].vid, cur_pid, g_vpsp_vid_num);
 			memmove(&g_vpsp_context_array[i], &g_vpsp_context_array[i + 1],
 				sizeof(struct vpsp_dev_ctx) * (g_vpsp_vid_num - i));
+
 			ret = 0;
 			goto end;
 		}
@@ -807,6 +882,7 @@ static int vpsp_del_vid(void)
 
 end:
 	write_unlock(&vpsp_dev_rwlock);
+	kfree(cmd_ctx);
 	return ret;
 }
 
@@ -854,10 +930,26 @@ int do_vpsp_op_ioctl(struct vpsp_dev_ctrl *ctrl)
 		ret = vpsp_set_gpa_range(ctrl->data.gpa.gpa_start, ctrl->data.gpa.gpa_end);
 		break;
 
+	case VPSP_OP_BACKUP_KEY:
+		ret = vpsp_backup_key(&ctrl->data.key_img_ctl);
+		break;
+
+	case VPSP_OP_RESTORE_KEY:
+		ret = vpsp_restore_key(&ctrl->data.key_img_ctl);
+		break;
+
+	case VPSP_OP_BACKUP_CTX:
+		ret = vpsp_backup_cmd_ctx(&ctrl->data.cmd_ctx_ctl);
+		break;
+
+	case VPSP_OP_RESTORE_CTX:
+		ret = vpsp_restore_cmd_ctx(&ctrl->data.cmd_ctx_ctl);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
 	}
+
 	return ret;
 }
 
@@ -1014,7 +1106,7 @@ int vpsp_try_get_result(struct vpsp_cmd_ctx *cmd_ctx, struct vpsp_ret *psp_ret)
 			}
 		} else {
 			psp_worker_register_notify(vpsp_ringbuffer_wakeup_locked);
-			ret = psp_do_ringbuffer_cmds_locked(vpsp_ring_buffer, (int *)psp_ret);
+			ret = psp_do_ringbuffer_cmds_locked(vpsp_ring_buffer, (int *)psp_ret, true);
 			if (unlikely(ret)) {
 				pr_err("[%s]: psp ringbuf execute failed %d\n",
 						__func__, ret);
@@ -1127,4 +1219,503 @@ int vpsp_parse_ringbuffer_cmd_prio(uint8_t *prio,
 	vcmd->is_high_rb = 0;
 
 	return rb_supported;
+}
+
+static int vpsp_backup_key(struct key_img_ctl *ctl)
+{
+	int ret = 0;
+	int pspret = 0;
+	uint32_t cmdbuf_size;
+	uint8_t *img;
+	struct vtkm_cmdresp_key_backup *cmdresp = NULL;
+	struct vpsp_dev_ctx *vpsp_dev_ctx = NULL;
+	uint32_t image_offset;
+	pid_t cur_pid = task_tgid_nr(current);
+
+	if (!ctl)
+		return -EINVAL;
+
+	vpsp_get_dev_ctx(&vpsp_dev_ctx, cur_pid);
+	if (!vpsp_dev_ctx) {
+		pr_err("PSP: %s get vpsp_context failed from pid %d\n", __func__, cur_pid);
+		return -ENOENT;
+	}
+
+	cmdbuf_size = ctl->img_len + sizeof(struct vtkm_cmdresp_key_backup);
+	cmdbuf_size = cmdbuf_size > TKM_CMDRESP_MIN_SIZE ? cmdbuf_size : TKM_CMDRESP_MIN_SIZE;
+	cmdresp = kzalloc(cmdbuf_size, GFP_KERNEL);
+	if (!cmdresp)
+		return -ENOMEM;
+
+	cmdresp->head.buf_size = cmdbuf_size;
+	cmdresp->head.cmdresp_size = cmdbuf_size;
+	cmdresp->head.cmdresp_code = VTKM_KEY_BACKUP;
+	cmdresp->vid = vpsp_dev_ctx->vid;
+	cmdresp->image_length = 0;
+	cmdresp->scheme = KEY_PROT_SAME_GENERATION;
+
+	// get actual image length
+	if (!ctl->img_len) {
+		ret = psp_do_cmd(TKM_PSP_CMDID_OFFSET, cmdresp, &pspret);
+		if (ret == -EIO && pspret == TKM_ERR_SIZE_SMALL) {
+			ctl->img_len = cmdresp->image_length;
+			ret = 0;
+		} else {
+			pr_err("psp_do_cmd ret %d, pspret %d\n", ret, pspret);
+		}
+		goto end;
+	}
+
+	image_offset = sizeof(*cmdresp);
+	cmdresp->image_location = LOC_FILL_MODE_BIT(image_offset);
+	cmdresp->image_length = ctl->img_len;
+
+	ret = psp_do_cmd(TKM_PSP_CMDID_OFFSET, cmdresp, &pspret);
+	if (!ret && !pspret) {
+		img = (uint8_t *)(((uintptr_t)cmdresp) + image_offset);
+		ctl->img_len = cmdresp->image_length;
+
+		if (copy_to_user(ctl->key_img_ptr, img, ctl->img_len))
+			return -EFAULT;
+	} else {
+		pr_err("psp_do_cmd ret %d, pspret %d\n", ret, pspret);
+	}
+
+end:
+	kfree(cmdresp);
+	return ret;
+}
+
+static int vpsp_restore_key(struct key_img_ctl *ctl)
+{
+	int ret = 0;
+	int pspret = 0;
+	uint32_t cmdbuf_size, image_offset;
+	uint8_t *img;
+	struct vtkm_cmdresp_key_restore *cmdresp = NULL;
+	struct vpsp_dev_ctx *vpsp_dev_ctx = NULL;
+	pid_t cur_pid = task_tgid_nr(current);
+
+	if (!ctl || !ctl->img_len)
+		return -EINVAL;
+
+	vpsp_get_dev_ctx(&vpsp_dev_ctx, cur_pid);
+	if (!vpsp_dev_ctx) {
+		pr_err("PSP: %s get vpsp_context failed from pid %d\n", __func__, cur_pid);
+		return -ENOENT;
+	}
+
+	cmdbuf_size = ctl->img_len + sizeof(struct vtkm_cmdresp_key_restore);
+	cmdbuf_size = cmdbuf_size > TKM_CMDRESP_MIN_SIZE ? cmdbuf_size : TKM_CMDRESP_MIN_SIZE;
+	cmdresp = kzalloc(cmdbuf_size, GFP_KERNEL);
+	if (!cmdresp)
+		return -ENOMEM;
+
+	image_offset = sizeof(*cmdresp);
+
+	cmdresp->head.buf_size = cmdbuf_size;
+	cmdresp->head.cmdresp_size = cmdbuf_size;
+	cmdresp->head.cmdresp_code = VTKM_KEY_RESTORE;
+	cmdresp->vid = vpsp_dev_ctx->vid;
+	cmdresp->scheme = KEY_PROT_SAME_GENERATION;
+	cmdresp->image_location = LOC_FILL_MODE_BIT(image_offset);
+	cmdresp->image_length = ctl->img_len;
+
+	img = (uint8_t *)(((uintptr_t)cmdresp) + image_offset);
+	if (copy_from_user(img, ctl->key_img_ptr, ctl->img_len)) {
+		ret = -EFAULT;
+		goto end;
+	}
+
+	ret = psp_do_cmd(TKM_PSP_CMDID_OFFSET, cmdresp, &pspret);
+end:
+	kfree(cmdresp);
+	return ret;
+}
+
+/**
+ * vpsp_cmd_ctx_serialize - Serialize an array of vpsp command contexts
+ * @ctx:        Array of command context pointers to serialize
+ * @ctx_nums:   [IN] Number of contexts in array
+ *              [OUT] Actual number of contexts serialized (on success)
+ * @buf:        Output buffer for serialized data (NULL for size query)
+ * @buflen:     [IN] Size of output buffer
+ *              [OUT] Required buffer size or actual used size
+ *
+ * VERSION 1 Serialization format:
+ *  +------------------------------------------------+
+ *  | [HEADER AREA]:                                 |
+ *  |                                                |
+ *  | struct vpsp_serialized_header                  |
+ *  |   magic: 0x56505350 ("VPSP")                   |
+ *  |   buffer_len: Total serialized data length     |
+ *  |   version: Format version (1)                  |
+ *  |   ctx_count: Number of contexts                |
+ *  +------------------------------------------------+
+ *  | [METADATA AREA]:                               |
+ *  |                                                |
+ *  | struct vpsp_ctx_serialized[0]                  |
+ *  |   gpa: Guest Physical Address                  |
+ *  |   statval: Context status value                |
+ *  |   data_size: Size of context data              |
+ *  |   data_offset: Offset to data in buffer        |
+ *  |------------------------------------------------|
+ *  | struct vpsp_ctx_serialized[1]                  |
+ *  |   ...                                          |
+ *  |------------------------------------------------|
+ *  |   ... (additional context metadata)            |
+ *  +------------------------------------------------+
+ *  | [DATA AREA]:                                   |
+ *  |                                                |
+ *  |   Context 0 data                               |
+ *  |------------------------------------------------|
+ *  |   Context 1 data                               |
+ *  |   ...                                          |
+ *  +------------------------------------------------+
+ *
+ * Return: 0 on success, negative error code on failure:
+ *   -EINVAL: Invalid parameters
+ *   -ENOBUFS: Buffer too small (query mode)
+ */
+static int vpsp_cmd_ctx_serialize(struct vpsp_cmd_ctx **ctx,
+		uint32_t ctx_nums, uint8_t *buf, uint32_t *buflen)
+{
+	struct vpsp_serialized_header *header;
+	struct vpsp_ctx_serialized *ctx_meta;
+	uint32_t total_size = 0;
+	uint8_t *data_area = NULL;
+	int i;
+
+	if (ctx_nums == 0) {
+		*buflen = 0;
+		return 0;
+	}
+
+	/* calculate total size */
+	total_size = sizeof(struct vpsp_serialized_header);
+	for (i = 0; i < ctx_nums; i++) {
+		total_size += sizeof(struct vpsp_ctx_serialized);
+		total_size += ctx[i]->data_size;
+	}
+
+	/* ensure buffer is enough */
+	if (*buflen < total_size) {
+		/* return actual buffer size */
+		*buflen = total_size;
+		return -ENOBUFS;
+	}
+
+	/* fill header */
+	header = (struct vpsp_serialized_header *)buf;
+	header->magic = VPSP_MAGIC_NUM;
+	header->version = VPSP_SERIALIZED_VERSION;
+	header->ctx_count = ctx_nums;
+	header->buffer_len = total_size;
+
+	/* calculate data storage area address */
+	data_area = buf + sizeof(*header) + (ctx_nums * sizeof(struct vpsp_ctx_serialized));
+
+	/* fill serialize information for each vpsp cmd context */
+	for (i = 0; i < ctx_nums; i++) {
+		ctx_meta = &header->ctx_meta[i];
+		ctx_meta->gpa = ctx[i]->key1;
+		ctx_meta->statval = ctx[i]->statval;
+		ctx_meta->data_size = ctx[i]->data_size;
+
+		/* store pointer data */
+		if (ctx[i]->data_size > 0) {
+			if (!ctx[i]->data)
+				return -EINVAL;
+
+			ctx_meta->data_offset = (uint32_t)(data_area - buf);
+			memcpy(data_area, ctx[i]->data, ctx[i]->data_size);
+			data_area += ctx[i]->data_size;
+		} else {
+			/* no data need to storage */
+			ctx_meta->data_offset = 0;
+		}
+	}
+
+	*buflen = total_size;
+	return 0;
+}
+
+/**
+ * vpsp_cmd_ctx_deserialize - Deserialize command contexts from buffer
+ * @ctx:        Input vpsp_cmd_ctx pointer array for store context pointers
+ * @ctx_nums:   [IN] Capacity of context array
+ *              [OUT] Actual number of contexts deserialized
+ * @buf:        Input buffer containing serialized data
+ * @buflen:     Length of input buffer
+ *
+ * Deserialization process:
+ *  1. Verify magic and version
+ *  2. Validate buffer integrity
+ *  3. Parse header information
+ *  4. Load context data from data area
+ *
+ * Return: 0 on success, negative error code on failure:
+ *   -EINVAL: Invalid header or corrupted data
+ *   -ENOBUFS: Insufficient context array capacity
+ *   -ENOMEM: Memory allocation failure
+ */
+static int vpsp_cmd_ctx_deserialize(struct vpsp_cmd_ctx **ctx,
+		uint32_t *ctx_nums, uint8_t *buf, uint32_t buflen)
+{
+	const struct vpsp_serialized_header *header;
+	const struct vpsp_ctx_serialized *ctx_meta;
+	pid_t cur_pid = task_tgid_nr(current);
+	uint32_t parsed_count = 0;
+	int i, ret = 0;
+
+	if (!ctx_nums || !buf)
+		return -EINVAL;
+
+	if (*ctx_nums && !ctx)
+		return -EINVAL;
+
+	/* check header length */
+	if (buflen < sizeof(*header))
+		return -EINVAL;
+
+	header = (const struct vpsp_serialized_header *)buf;
+
+	/* ensure data is valid */
+	if (header->magic != VPSP_MAGIC_NUM || header->version != VPSP_SERIALIZED_VERSION)
+		return -EINVAL;
+
+	/* check total size */
+	if (buflen < header->buffer_len)
+		return -EINVAL;
+
+	/* ensure the vpsp context number is enough */
+	if (header->ctx_count > *ctx_nums) {
+		/* return actual number */
+		*ctx_nums = header->ctx_count;
+		return -ENOBUFS;
+	}
+
+	/* ensure context count is valid */
+	if (header->buffer_len < header->ctx_count * sizeof(struct vpsp_ctx_serialized))
+		return -EINVAL;
+
+	/* parse data for vpsp context */
+	for (i = 0; i < header->ctx_count; i++) {
+		if (!ctx[parsed_count])
+			return -ENOBUFS;
+
+		ctx_meta = &header->ctx_meta[i];
+		ctx[parsed_count]->key1 = ctx_meta->gpa;
+		ctx[parsed_count]->key2 = cur_pid;
+		ctx[parsed_count]->statval = ctx_meta->statval;
+		ctx[parsed_count]->data_size = ctx_meta->data_size;
+
+		/* alloc new buffer restore data pointer */
+		if (ctx_meta->data_size > 0) {
+			if (ctx_meta->data_offset == 0 ||
+				ctx_meta->data_offset + ctx_meta->data_size > buflen) {
+				/* offset invalid */
+				ret = -EINVAL;
+				goto failed;
+			}
+
+			ctx[parsed_count]->data = kmalloc(ctx_meta->data_size, GFP_KERNEL);
+			if (!ctx[parsed_count]->data) {
+				ret = -ENOMEM;
+				goto failed;
+			}
+
+			memcpy(ctx[parsed_count]->data, buf + ctx_meta->data_offset,
+				ctx_meta->data_size);
+		} else {
+			ctx[parsed_count]->data = NULL;
+		}
+
+		parsed_count++;
+	}
+
+	*ctx_nums = parsed_count;
+failed:
+	while (ret && parsed_count-- > 0) {
+		if (ctx[parsed_count]->data_size > 0)
+			kfree(ctx[parsed_count]->data);
+	}
+	return ret;
+}
+
+static int vpsp_force_cmd_ctx_completion(struct vpsp_cmd_ctx *ctx[], uint32_t nums)
+{
+	int i, ret = 0, psp_ret = 0;
+
+	for (i = 0; i < nums; ++i) {
+		bool mutex_locked = false;
+
+		while (true) {
+			if (ctx[i]->statval != PSP_CMD_STATUS_RUNNING)
+				break;
+
+			if (vpsp_psp_mutex_trylock()) {
+				mutex_locked = true;
+				break;
+			}
+
+			cond_resched();
+		}
+
+		if (!mutex_locked)
+			continue;
+
+		/**
+		 * There are commands in a running state update all queued and
+		 * pending commands via ringbuffer operations.
+		 *
+		 * Disable overcommit feature to avoid the additional latency
+		 * caused by failing to fully utilize the allocated overcommit size.
+		 */
+		ret = psp_do_ringbuffer_cmds_locked(vpsp_ring_buffer, (int *)&psp_ret, false);
+		if (unlikely(ret)) {
+			pr_err("[%s]: psp ringbuffer execute failed %d\n",
+					__func__, ret);
+			vpsp_psp_mutex_unlock();
+			return ret;
+		}
+
+		vpsp_ringbuffer_wakeup_locked(NULL);
+		vpsp_psp_mutex_unlock();
+		break;
+	}
+
+	return ret;
+}
+
+static int vpsp_backup_cmd_ctx(struct cmd_ctx_ctl *ctl)
+{
+	int ret = 0;
+	uint32_t buflen = 0;
+	pid_t cur_pid = task_tgid_nr(current);
+	void *cmd_ctx_buffer = NULL;
+	struct vpsp_cmd_ctx **cmd_ctx = NULL;
+	uint32_t cmd_ctx_nums = 0;
+
+	vpsp_hashtable_save_cmd_ctx_by_pid(cur_pid, NULL, &cmd_ctx_nums);
+	cmd_ctx = kcalloc(cmd_ctx_nums, sizeof(struct vpsp_cmd_ctx *), GFP_KERNEL);
+	if (!cmd_ctx) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	vpsp_hashtable_save_cmd_ctx_by_pid(cur_pid, cmd_ctx, &cmd_ctx_nums);
+
+	/* Check for unprocessed commands pending PSP handling */
+	ret = vpsp_force_cmd_ctx_completion(cmd_ctx, cmd_ctx_nums);
+	if (ret) {
+		pr_err("%s vpsp_force_cmd_ctx_completion failed %d\n", __func__, ret);
+		goto end;
+	}
+
+	ret = vpsp_cmd_ctx_serialize(cmd_ctx, cmd_ctx_nums, NULL, &buflen);
+	if (ret && ret != -ENOBUFS) {
+		pr_err("%s vpsp_cmd_ctx_serialize failed %d\n", __func__, ret);
+		goto end;
+	}
+
+	if (ctl->buffer_len < buflen) {
+		ctl->buffer_len = buflen;
+		ret = 0;
+		goto end;
+	}
+
+	cmd_ctx_buffer = kzalloc(ctl->buffer_len, GFP_KERNEL);
+	if (!cmd_ctx_buffer) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	ret = vpsp_cmd_ctx_serialize(cmd_ctx, cmd_ctx_nums,
+		cmd_ctx_buffer, &ctl->buffer_len);
+	if (ret) {
+		pr_err("%s vpsp_cmd_ctx_serialize failed %d\n", __func__, ret);
+		goto end;
+	}
+
+	if (copy_to_user(ctl->cmd_ctx_ptr, cmd_ctx_buffer, ctl->buffer_len)) {
+		ret = -EFAULT;
+		goto end;
+	}
+
+	pr_info("migrate(%d) save: serialization length %d, a total of %d cmd ctx were saved\n",
+		cur_pid, ctl->buffer_len, cmd_ctx_nums);
+end:
+	kfree(cmd_ctx);
+	kfree(cmd_ctx_buffer);
+	return ret;
+}
+
+static int vpsp_restore_cmd_ctx(struct cmd_ctx_ctl *ctl)
+{
+	int ret = 0, i;
+	uint32_t cmd_ctx_nums = 0;
+	void *cmd_ctx_buffer = NULL;
+	pid_t cur_pid = task_tgid_nr(current);
+	struct vpsp_cmd_ctx **load_cmd_ctx = NULL;
+
+	pr_info("migrate(%d) load: serialization length %d\n", cur_pid, ctl->buffer_len);
+
+	if (!ctl->buffer_len)
+		return 0;
+
+	cmd_ctx_buffer = kzalloc(ctl->buffer_len, GFP_KERNEL);
+	if (!cmd_ctx_buffer)
+		return -ENOMEM;
+
+	if (copy_from_user(cmd_ctx_buffer, ctl->cmd_ctx_ptr, ctl->buffer_len)) {
+		ret = -EFAULT;
+		goto end;
+	}
+
+	ret = vpsp_cmd_ctx_deserialize(NULL, &cmd_ctx_nums, cmd_ctx_buffer, ctl->buffer_len);
+	if (ret && ret != -ENOBUFS) {
+		pr_err("%s vpsp_cmd_ctx_deserialize failed %d\n", __func__, ret);
+		goto end;
+	}
+
+	load_cmd_ctx = kzalloc(cmd_ctx_nums * sizeof(struct vpsp_cmd_ctx *), GFP_KERNEL);
+	if (!load_cmd_ctx) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	for (i = 0; i < cmd_ctx_nums; ++i) {
+		load_cmd_ctx[i] = kmem_cache_zalloc(vpsp_cmd_ctx_slab, GFP_KERNEL);
+		if (!load_cmd_ctx[i]) {
+			ret = -ENOMEM;
+			goto end;
+		}
+		load_cmd_ctx[i]->key2 = cur_pid;
+		refcount_set(&load_cmd_ctx[i]->ref, 1);
+	}
+
+	ret = vpsp_cmd_ctx_deserialize(load_cmd_ctx, &cmd_ctx_nums,
+			cmd_ctx_buffer, ctl->buffer_len);
+	if (ret) {
+		pr_err("%s vpsp_cmd_ctx_deserialize failed %d\n", __func__, ret);
+		goto end;
+	}
+
+	for (i = 0; i < cmd_ctx_nums; ++i)
+		vpsp_hashtable_add_cmd_ctx(load_cmd_ctx[i]);
+
+	pr_info("migrate(%d) load: %d command contexts loaded\n", cur_pid, cmd_ctx_nums);
+	ret = 0;
+end:
+	if (ret) {
+		for (i = 0; i < cmd_ctx_nums; ++i) {
+			if (load_cmd_ctx[i])
+				kmem_cache_free(vpsp_cmd_ctx_slab, load_cmd_ctx[i]);
+		}
+	}
+
+	kfree(load_cmd_ctx);
+	kfree(cmd_ctx_buffer);
+	return ret;
 }
