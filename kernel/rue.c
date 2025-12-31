@@ -57,6 +57,9 @@ static int check_io_patch_state(struct rue_ops *ops, bool state)
 #ifdef CONFIG_BLK_CGROUP
 	if (state && !ops->io)
 		return -EINVAL;
+
+	if (!state)
+		sysctl_io_qos_enabled = 0;
 #endif
 
 	return 0;

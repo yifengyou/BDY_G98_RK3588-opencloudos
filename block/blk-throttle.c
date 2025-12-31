@@ -1513,9 +1513,6 @@ static int tg_set_buffered_write_bps(struct cgroup_subsys_state *css,
 {
 	struct blkcg *blkcg = css_to_blkcg(css);
 
-	if (!rue_io_enabled())
-		return -EPERM;
-
 	if (blkcg) {
 		blkcg->buffered_write_bps = val;
 		blkcg->dirty_ratelimit = INIT_DIRTY_BW;
@@ -1588,9 +1585,6 @@ static ssize_t blkcg_set_readwrite_ratio(struct kernfs_open_file *of, char *buf,
 {
 	struct blkcg *blkcg = css_to_blkcg(of_css(of));
 	unsigned int v;
-
-	if (!rue_io_enabled())
-		return -EPERM;
 
 	if (kstrtou32(buf, 0, &v))
 		return -EINVAL;

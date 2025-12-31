@@ -2008,6 +2008,24 @@ int proc_do_static_key(struct ctl_table *table, int write,
 	return ret;
 }
 
+static int io_qos_sysctl_handler(struct ctl_table *table, int write,
+				 void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	mutex_lock(&rue_mutex);
+	if (write && !READ_ONCE(rue_installed)) {
+		ret = -EPERM;
+		pr_info("RUE: rue kernel module is not enabled or installed.");
+		goto out;
+	}
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+out:
+	mutex_unlock(&rue_mutex);
+	return ret;
+}
+
 #ifdef CONFIG_MEMCG
 static int memory_qos_sysctl_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
@@ -2016,7 +2034,7 @@ static int memory_qos_sysctl_handler(struct ctl_table *table, int write,
 
 	mutex_lock(&rue_mutex);
 	if (write && !READ_ONCE(rue_installed)) {
-		error = -EBUSY;
+		error = -EPERM;
 		pr_info("RUE: rue kernel module is not enabled or installed.");
 		goto out;
 	}
@@ -2801,7 +2819,7 @@ static struct ctl_table kern_table[] = {
 		.data			= &sysctl_io_qos_enabled,
 		.maxlen			= sizeof(unsigned int),
 		.mode			= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler		= io_qos_sysctl_handler,
 		.extra1			= SYSCTL_ZERO,
 		.extra2			= SYSCTL_ONE,
 	},
