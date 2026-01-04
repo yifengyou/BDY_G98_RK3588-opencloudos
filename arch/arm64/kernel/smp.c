@@ -51,6 +51,9 @@
 #include <asm/tlbflush.h>
 #include <asm/ptrace.h>
 #include <asm/virt.h>
+#ifdef CONFIG_IEE
+#include <asm/haoc/iee.h>
+#endif
 
 #include <trace/events/ipi.h>
 
@@ -206,6 +209,14 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 */
 	mmgrab(mm);
 	current->active_mm = mm;
+
+#ifdef CONFIG_ARM64_TLBI_IPI
+	cpumask_set_cpu(cpu, mm_cpumask(mm));
+#endif
+#ifdef CONFIG_IEE
+	if (haoc_enabled)
+		iee_setup_asid();
+#endif
 
 	/*
 	 * TTBR0 is only used for the identity mapping at this stage. Make it
@@ -462,6 +473,9 @@ void __init smp_prepare_boot_cpu(void)
 	kasan_init_hw_tags();
 	/* Init percpu seeds for random tags after cpus are set up. */
 	kasan_init_sw_tags();
+#ifdef CONFIG_IEE
+	iee_stack_init();
+#endif
 }
 
 /*
