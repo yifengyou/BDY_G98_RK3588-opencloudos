@@ -4188,12 +4188,12 @@ done:
 		success = inc_max_seq(lruvec, seq, swappiness, force_scan);
 		if (do_walk)
 			atomic_long_dec(&lruvec->mm_state.nr_walkers);
+		if (wq_has_sleeper(&lruvec->mm_state.wait))
+			wake_up_all(&lruvec->mm_state.wait);
 		WARN_ON_ONCE(!success);
 	} else {
 		if (do_walk)
 			atomic_long_dec(&lruvec->mm_state.nr_walkers);
-		if (wq_has_sleeper(&lruvec->mm_state.wait))
-			wake_up_all(&lruvec->mm_state.wait);
 	}
 
 	/* Race, wait for other walkers to exit or anything calls inc_max_seq */
