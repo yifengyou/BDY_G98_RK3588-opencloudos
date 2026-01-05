@@ -5016,14 +5016,13 @@ static bool prepare_to_scan(struct lruvec *lruvec, struct scan_control *sc,
 	DEFINE_MAX_SEQ(lruvec);
 
 	/* wait for concurrent aging to prevent early OOM with high pressure */
-	if (sc->priority < DEF_PRIORITY)
+	if (!sc->priority)
 		max_seq = wait_for_aging(lruvec, max_seq);
 
 	/* if aging needed, try age first to generate cold gens */
 	if (should_run_aging(lruvec, max_seq, sc->priority, swappiness)) {
-		if (try_to_inc_max_seq(lruvec, max_seq, sc->priority < DEF_PRIORITY - 2,
-			swappiness, false))
-		*rotate = true;
+		if (try_to_inc_max_seq(lruvec, max_seq, !sc->priority, swappiness, false))
+			*rotate = true;
 	}
 
 	/* out of cold pages, over reclaimed, or raced on age, rotate and abort */
