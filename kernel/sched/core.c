@@ -11194,6 +11194,9 @@ cpu_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	tg = sched_create_group(parent);
 	if (IS_ERR(tg))
 		return ERR_PTR(-ENOMEM);
+#ifdef CONFIG_EXT_GROUP_SCHED
+	tg->scx = parent->scx;
+#endif
 #ifdef CONFIG_BT_GROUP_SCHED
 	tg->offline = parent->offline;
 #endif
