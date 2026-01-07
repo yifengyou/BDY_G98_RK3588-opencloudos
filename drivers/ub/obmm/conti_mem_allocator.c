@@ -7,6 +7,8 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
+#include <linux/kobject.h>
 
 #include "conti_mem_allocator.h"
 
@@ -103,6 +105,7 @@ size_t conti_mem_allocator_expand(struct conti_mem_allocator *allocator, size_t 
 
 	expand_size = size - count * allocator->granu;
 	atomic64_add(expand_size, &allocator->pooled_mem_size);
+	atomic64_add(expand_size, &allocator->uncleared_mem_size);
 	if (expand_size > 0)
 		pr_debug("%s: expand expect size %#zx, actual size %#zx\n", current->comm, size,
 			expand_size);
@@ -116,6 +119,7 @@ size_t conti_mem_allocator_contract(struct conti_mem_allocator *allocator, size_
 	struct memseg_node *node, *tmp;
 	unsigned long count, flags;
 	size_t contract_size;
+	size_t from_uncleared = 0, from_ready = 0;
 
 	if (size == 0 || size % allocator->granu) {
 		pr_err_ratelimited("size %#zx is zero or not aligned with allocator->granu.\n",
@@ -129,9 +133,11 @@ size_t conti_mem_allocator_contract(struct conti_mem_allocator *allocator, size_
 
 	INIT_LIST_HEAD(&contract_list);
 	spin_lock_irqsave(&allocator->lock, flags);
+
 	list_for_each_entry_safe(node, tmp, &allocator->memseg_uncleared, list) {
 		list_move_tail(&node->list, &contract_list);
 		count--;
+		from_uncleared += allocator->granu;
 		if (count == 0)
 			goto done;
 	}
@@ -139,6 +145,7 @@ size_t conti_mem_allocator_contract(struct conti_mem_allocator *allocator, size_
 	list_for_each_entry_safe(node, tmp, &allocator->memseg_ready, list) {
 		list_move_tail(&node->list, &contract_list);
 		count--;
+		from_ready += allocator->granu;
 		if (count == 0)
 			goto done;
 	}
@@ -151,6 +158,8 @@ done:
 	}
 	contract_size = size - count * allocator->granu;
 	atomic64_sub(contract_size, &allocator->pooled_mem_size);
+	atomic64_sub(from_uncleared, &allocator->uncleared_mem_size);
+	atomic64_sub(from_ready, &allocator->ready_mem_size);
 	if (contract_size > 0)
 		pr_debug("%s: nid: %d, contract expect size %#zx, actual size %#zx\n",
 			 current->comm, allocator->nid, size, contract_size);
@@ -243,6 +252,7 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 	struct list_head *first, *second, *entry, temp_list;
 	struct memseg_node *node;
 	size_t allocated = 0, available;
+	size_t first_allocated = 0, second_allocated = 0;
 	unsigned long flags;
 
 	atomic_inc(&pool_thread_should_pause);
@@ -263,10 +273,12 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 		spin_unlock_irqrestore(&allocator->lock, flags);
 		goto out_continue_pool;
 	}
+
 	list_for_each(entry, first) {
 		if (allocated >= size)
 			break;
 		allocated += allocator->granu;
+		first_allocated += allocator->granu;
 		pr_debug("alloc 1 node from %s list.\n", clear ? "cleared" : "uncleared");
 	}
 	list_cut_before(head, first, entry);
@@ -275,11 +287,19 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 		if (allocated >= size)
 			break;
 		allocated += allocator->granu;
+		second_allocated += allocator->granu;
 		pr_debug("alloc 1 node from %s list.\n", !clear ? "cleared" : "uncleared");
 	}
 	list_cut_before(&temp_list, second, entry);
 	spin_unlock_irqrestore(&allocator->lock, flags);
 
+	if (clear) {
+		atomic64_sub(first_allocated, &allocator->ready_mem_size);
+		atomic64_sub(second_allocated, &allocator->uncleared_mem_size);
+	} else {
+		atomic64_sub(first_allocated, &allocator->uncleared_mem_size);
+		atomic64_sub(second_allocated, &allocator->ready_mem_size);
+	}
 	atomic64_add(allocated, &allocator->used_mem_size);
 
 	/* now: head collects elements from the first list, temp_list holds elements form the
@@ -313,6 +333,7 @@ bool conti_mem_allocator_isolate_memseg(struct conti_mem_allocator *a, unsigned 
 {
 	struct memseg_node *node;
 	bool found = false;
+	bool from_ready = false;
 	unsigned long flags;
 
 	if (!a->initialized)
@@ -324,6 +345,7 @@ bool conti_mem_allocator_isolate_memseg(struct conti_mem_allocator *a, unsigned 
 			pr_debug("isolate memseg from cleared pool.\n");
 			list_move(&node->list, &a->memseg_poisoned);
 			found = true;
+			from_ready = true;
 			goto out;
 		}
 	}
@@ -342,8 +364,13 @@ bool conti_mem_allocator_isolate_memseg(struct conti_mem_allocator *a, unsigned 
 
 out:
 	spin_unlock_irqrestore(&a->lock, flags);
-	if (found)
+	if (found) {
 		atomic64_sub(a->granu, &a->pooled_mem_size);
+		if (from_ready)
+			atomic64_sub(a->granu, &a->ready_mem_size);
+		else
+			atomic64_sub(a->granu, &a->uncleared_mem_size);
+	}
 	return found;
 }
 
@@ -378,10 +405,15 @@ static int conti_clear_thread(void *p)
 
 		spin_lock_irqsave(&allocator->lock, flags);
 		allocator->memseg_clearing = NULL;
-		if (ret)
+		if (ret) {
+			/* Clearing failed, return to uncleared */
 			list_add(&node->list, &allocator->memseg_uncleared);
-		else
+		} else {
+			/* Clearing succeeded: move from uncleared to ready */
+			atomic64_sub(allocator->granu, &allocator->uncleared_mem_size);
+			atomic64_add(allocator->granu, &allocator->ready_mem_size);
 			list_add(&node->list, &allocator->memseg_ready);
+		}
 		spin_unlock_irqrestore(&allocator->lock, flags);
 	}
 	pr_debug("%s: nid=%d, exit\n", __func__, allocator->nid);
@@ -477,8 +509,77 @@ static int pool_thread_init(struct conti_mem_allocator *allocator)
 	return 0;
 }
 
+/* ========== Sysfs support ========== */
+
+static void conti_kobj_release(struct kobject *kobj)
+{
+	/* The kobject is embedded in conti_mem_allocator, nothing to free here */
+	/* Memory is managed by the allocator itself */
+}
+
+static const struct kobj_type conti_ktype = {
+	.release = conti_kobj_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+};
+
+static ssize_t total_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct conti_mem_allocator *allocator;
+
+	allocator = container_of(kobj, struct conti_mem_allocator, kobj);
+	return sysfs_emit(buf, "0x%llx\n", atomic64_read(&allocator->pooled_mem_size));
+}
+
+static ssize_t used_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct conti_mem_allocator *allocator;
+
+	allocator = container_of(kobj, struct conti_mem_allocator, kobj);
+	return sysfs_emit(buf, "0x%llx\n", atomic64_read(&allocator->used_mem_size));
+}
+
+static ssize_t available_cleared_show(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   char *buf)
+{
+	struct conti_mem_allocator *allocator;
+
+	allocator = container_of(kobj, struct conti_mem_allocator, kobj);
+	return sysfs_emit(buf, "0x%llx\n", atomic64_read(&allocator->ready_mem_size));
+}
+
+static ssize_t available_uncleared_show(struct kobject *kobj,
+				    struct kobj_attribute *attr,
+				    char *buf)
+{
+	struct conti_mem_allocator *allocator;
+
+	allocator = container_of(kobj, struct conti_mem_allocator, kobj);
+	return sysfs_emit(buf, "0x%llx\n", atomic64_read(&allocator->uncleared_mem_size));
+}
+
+static struct kobj_attribute total_attr = __ATTR(total, 0400, total_show, NULL);
+static struct kobj_attribute used_attr = __ATTR(used, 0400, used_show, NULL);
+static struct kobj_attribute available_cleared_attr =
+	__ATTR(available_cleared, 0400, available_cleared_show, NULL);
+static struct kobj_attribute available_uncleared_attr =
+	__ATTR(available_uncleared, 0400, available_uncleared_show, NULL);
+
+static struct attribute *conti_attrs[] = {
+	&total_attr.attr,
+	&used_attr.attr,
+	&available_cleared_attr.attr,
+	&available_uncleared_attr.attr,
+	NULL,
+};
+
+static struct attribute_group conti_attr_group = {
+	.attrs = conti_attrs,
+};
+
 int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, size_t granu,
-			     const struct conti_mempool_ops *ops, const char *fmt, ...)
+			     const struct conti_mempool_ops *ops,
+			     struct kobject *parent, const char *fmt, ...)
 {
 	va_list ap;
 	int ret;
@@ -496,6 +597,8 @@ int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, siz
 		return -EINVAL;
 	}
 
+	memset(allocator, 0, sizeof(*allocator));
+
 	va_start(ap, fmt);
 	allocator->name = kvasprintf(GFP_KERNEL, fmt, ap);
 	va_end(ap);
@@ -506,36 +609,69 @@ int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, siz
 	allocator->granu = granu;
 	atomic64_set(&allocator->pooled_mem_size, 0);
 	atomic64_set(&allocator->used_mem_size, 0);
+	atomic64_set(&allocator->ready_mem_size, 0);
+	atomic64_set(&allocator->uncleared_mem_size, 0);
 	spin_lock_init(&allocator->lock);
 	INIT_LIST_HEAD(&allocator->memseg_ready);
 	init_waitqueue_head(&allocator->clear_wq);
 	INIT_LIST_HEAD(&allocator->memseg_uncleared);
-	allocator->memseg_clearing = NULL;
 	INIT_LIST_HEAD(&allocator->memseg_poisoned);
-
+	allocator->memseg_clearing = NULL;
 	allocator->ops = ops;
 
 	if (ops->clear_memseg) {
 		ret = clear_thread_init(allocator);
-		if (ret) {
-			kfree(allocator->name);
-			allocator->name = NULL;
-			return ret;
-		}
+		if (ret)
+			goto err_free_name;
 	}
 
 	ret = pool_thread_init(allocator);
-	if (ret) {
-		if (allocator->clear_work)
-			kthread_stop(allocator->clear_work);
-		kfree(allocator->name);
-		allocator->name = NULL;
-		return ret;
+	if (ret)
+		goto err_stop_clear_thread;
+
+	/* Initialize sysfs */
+	if (parent) {
+		ret = kobject_init_and_add(&allocator->kobj, &conti_ktype,
+					   parent, "%s", allocator->name);
+		if (ret) {
+			pr_err("Failed to create sysfs directory for %s: %d\n",
+			       allocator->name, ret);
+			goto err_stop_pool_thread;
+		}
+
+		ret = sysfs_create_group(&allocator->kobj, &conti_attr_group);
+		if (ret) {
+			pr_err("Failed to create sysfs attributes for %s: %d\n",
+			       allocator->name, ret);
+			goto err_cleanup_sysfs;
+		}
+
+		allocator->sysfs_initialized = true;
 	}
 
 	allocator->initialized = true;
-
 	return 0;
+
+/* Exception paths: cleanup in reverse order of initialization */
+err_cleanup_sysfs:
+	kobject_put(&allocator->kobj);
+
+err_stop_pool_thread:
+	if (allocator->pool_work) {
+		kthread_stop(allocator->pool_work);
+		allocator->pool_work = NULL;
+	}
+
+err_stop_clear_thread:
+	if (allocator->clear_work) {
+		kthread_stop(allocator->clear_work);
+		allocator->clear_work = NULL;
+	}
+
+err_free_name:
+	kfree(allocator->name);
+	allocator->name = NULL;
+	return ret;
 }
 
 void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator)
@@ -544,17 +680,26 @@ void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator)
 	struct list_head free_list;
 	unsigned long flags;
 
-	INIT_LIST_HEAD(&free_list);
-	if (allocator->pool_work)
-		kthread_stop(allocator->pool_work);
+	allocator->initialized = false;
 
-	if (allocator->clear_work)
+	INIT_LIST_HEAD(&free_list);
+
+	if (allocator->pool_work) {
+		kthread_stop(allocator->pool_work);
+		allocator->pool_work = NULL;
+	}
+
+	if (allocator->clear_work) {
 		kthread_stop(allocator->clear_work);
+		allocator->clear_work = NULL;
+	}
 
 	kfree(allocator->name);
-	if (!allocator->ops->pool_free_memseg) {
+	allocator->name = NULL;
+
+	if (!allocator->ops || !allocator->ops->pool_free_memseg) {
 		pr_err("pool_free_memseg is not defined.\n");
-		return;
+		goto cleanup_sysfs;
 	}
 
 	/* Release all memory nodes chained in memseg_uncleared, memseg_ready
@@ -572,5 +717,12 @@ void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator)
 		list_del(&node->list);
 		conti_pool_free_memseg(allocator, node);
 	}
-	memset(allocator, 0, sizeof(*allocator));
+
+cleanup_sysfs:
+	if (allocator->sysfs_initialized) {
+		kobject_put(&allocator->kobj);
+		allocator->sysfs_initialized = false;
+	}
+
+	allocator->memseg_clearing = NULL;
 }
