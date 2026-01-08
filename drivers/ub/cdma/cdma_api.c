@@ -601,6 +601,7 @@ enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -611,10 +612,14 @@ enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, NULL);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma write failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -644,6 +649,7 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg || !data || !data->notify_seg) {
@@ -654,10 +660,15 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, data);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev,
+			"dma write with notify failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -684,6 +695,7 @@ enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -694,10 +706,14 @@ enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_read(cdev, cdma_queue, local_seg, rmt_seg);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma read failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -724,6 +740,7 @@ enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg || !data) {
@@ -734,10 +751,14 @@ enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_cas(cdev, cdma_queue, local_seg, rmt_seg, data);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma cas failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -763,6 +784,7 @@ enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -773,10 +795,14 @@ enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_faa(cdev, cdma_queue, local_seg, rmt_seg, add);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma faa failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -803,7 +829,9 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)
 {
 	struct cdma_queue *cdma_queue;
+	struct cdma_tp_cfg *cfg;
 	struct cdma_dev *cdev;
+	int npolled;
 	u32 eid;
 
 	if (!dma_dev || !cr_cnt || !cr) {
@@ -829,8 +857,14 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 			queue_id);
 		return -EINVAL;
 	}
+	cfg = &cdma_queue->tp->cfg;
 
-	return cdma_poll_jfc(cdma_queue->jfc, cr_cnt, cr);
+	npolled = cdma_poll_jfc(cdma_queue->jfc, cr_cnt, cr);
+	if (npolled > 0 && cr->status != DMA_CR_SUCCESS)
+		dev_err(cdev->dev, "poll jfc npolled = %d, seid = %u, deid = %u.\n",
+			npolled, cfg->seid, cfg->deid);
+
+	return npolled;
 }
 EXPORT_SYMBOL_GPL(dma_poll_queue);
 

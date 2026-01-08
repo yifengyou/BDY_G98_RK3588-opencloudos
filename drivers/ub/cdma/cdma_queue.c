@@ -71,13 +71,15 @@ static int cdma_create_queue_res(struct cdma_dev *cdev, struct queue_cfg *cfg,
 
 	queue->jfc = cdma_create_jfc(cdev, &jfc_cfg, NULL);
 	if (!queue->jfc) {
-		dev_err(cdev->dev, "create jfc failed.\n");
+		dev_err(cdev->dev, "create jfc failed, seid = %u, deid = %u.\n",
+			tp_cfg.seid, tp_cfg.deid);
 		return -EFAULT;
 	}
 
 	queue->tp = cdma_create_ctp(cdev, &tp_cfg);
 	if (!queue->tp) {
-		dev_err(cdev->dev, "create tp failed.\n");
+		dev_err(cdev->dev, "create tp failed, seid = %u, deid = %u.\n",
+			tp_cfg.seid, tp_cfg.deid);
 		ret = -EFAULT;
 		goto delete_jfc;
 	}
@@ -86,7 +88,8 @@ static int cdma_create_queue_res(struct cdma_dev *cdev, struct queue_cfg *cfg,
 	jfs_cfg.jfc_id = queue->jfc->id;
 	queue->jfs = cdma_create_jfs(cdev, &jfs_cfg, NULL);
 	if (!queue->jfs) {
-		dev_err(cdev->dev, "create jfs failed.\n");
+		dev_err(cdev->dev, "create jfs failed, seid = %u, deid = %u.\n",
+			tp_cfg.seid, tp_cfg.deid);
 		ret = -EFAULT;
 		goto delete_tp;
 	}
