@@ -402,7 +402,8 @@ static int cdma_cmd_delete_jfs(struct cdma_ioctl_hdr *hdr,
 	base_jfs = uobj->object;
 	ret = cdma_delete_jfs(cdev, base_jfs->id);
 	if (ret) {
-		dev_err(&cdev->adev->dev, "delete jfs failed.\n");
+		dev_err(&cdev->adev->dev, "delete jfs failed, ret = %d.\n",
+			ret);
 		return ret;
 	}
 
@@ -543,7 +544,7 @@ static int cdma_cmd_register_seg(struct cdma_ioctl_hdr *hdr,
 
 	cfg.sva = arg.in.addr;
 	cfg.len = arg.in.len;
-	seg = cdma_register_seg(cdev, &cfg, false);
+	seg = cdma_register_seg(cdev, &cfg, false, cfile->uctx);
 	if (!seg) {
 		dev_err(cdev->dev, "register seg failed.\n");
 		ret = -EINVAL;

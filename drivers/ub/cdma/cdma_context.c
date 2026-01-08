@@ -49,40 +49,104 @@ struct cdma_context *cdma_find_ctx_by_handle(struct cdma_dev *cdev, int handle)
 	return ctx;
 }
 
-static int cdma_ctx_alloc_tid(struct cdma_dev *cdev, struct cdma_context *ctx)
+static int cdma_ctx_ksva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
 {
 	struct ummu_param drvdata = { .mode = MAPT_MODE_TABLE };
 	int ret;
 
-	if (ctx->is_kernel)
-		ctx->sva = ummu_ksva_bind_device(cdev->dev, &drvdata);
-	else
-		ctx->sva = ummu_sva_bind_device(cdev->dev, current->mm, NULL);
-
+	ctx->sva = ummu_ksva_bind_device(cdev->dev, &drvdata);
 	if (!ctx->sva) {
-		dev_err(cdev->dev, "%s bind device failed.\n",
-			ctx->is_kernel ? "KSVA" : "SVA");
+		dev_err(cdev->dev, "ksva bind device failed.\n");
 		return -EFAULT;
 	}
 
 	ret = ummu_get_tid(cdev->dev, ctx->sva, &ctx->tid);
 	if (ret) {
-		dev_err(cdev->dev, "get tid failed, ret = %d.\n", ret);
-		if (ctx->is_kernel)
-			ummu_ksva_unbind_device(ctx->sva);
-		else
-			ummu_sva_unbind_device(ctx->sva);
+		dev_err(cdev->dev, "get ksva tid failed, ret = %d.\n", ret);
+		ummu_ksva_unbind_device(ctx->sva);
 	}
 
 	return ret;
 }
 
+static int cdma_ctx_sva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
+{
+	int sva_mode;
+	int ret;
+
+	sva_mode = cdev->sva_mode;
+	if (sva_mode == UMMU_SVA_SHARE_MODE) {
+		ctx->vdev = NULL;
+		ctx->sva = ummu_sva_bind_device(cdev->dev, current->mm, NULL);
+		if (!ctx->sva) {
+			dev_err(cdev->dev, "sva bind device failed.\n");
+			return -EFAULT;
+		}
+
+		ret = ummu_get_tid(cdev->dev, ctx->sva, &ctx->tid);
+		if (ret) {
+			dev_err(cdev->dev, "get sva tid failed, ret = %d.\n",
+				ret);
+			ummu_sva_unbind_device(ctx->sva);
+			return ret;
+		}
+	} else if (sva_mode == UMMU_SVA_SEPARATE_MODE) {
+		ctx->sva = NULL;
+		ctx->vdev = ummu_alloc_tdev_separated(&ctx->tid);
+		if (!ctx->vdev) {
+			dev_err(cdev->dev, "get vdev and tid failed.\n");
+			return -EFAULT;
+		}
+	} else {
+		dev_err(cdev->dev, "bind invalid sva mode, mode = %d.\n",
+			sva_mode);
+		return sva_mode;
+	}
+
+	return 0;
+}
+
+static int cdma_ctx_alloc_tid(struct cdma_dev *cdev, struct cdma_context *ctx)
+{
+	int ret;
+
+	if (ctx->is_kernel)
+		ret = cdma_ctx_ksva_bind(cdev, ctx);
+	else
+		ret = cdma_ctx_sva_bind(cdev, ctx);
+
+	if (ret)
+		dev_err(cdev->dev, "cdma context alloc tid failed, ret = %d.\n",
+			ret);
+
+	return ret;
+}
+
+static void cdma_ctx_ksva_unbind(struct cdma_context *ctx)
+{
+	ummu_ksva_unbind_device(ctx->sva);
+}
+
+static void cdma_ctx_sva_unbind(struct cdma_dev *cdev, struct cdma_context *ctx)
+{
+	int sva_mode;
+
+	sva_mode = cdev->sva_mode;
+	if (sva_mode == UMMU_SVA_SHARE_MODE)
+		ummu_sva_unbind_device(ctx->sva);
+	else if (sva_mode == UMMU_SVA_SEPARATE_MODE)
+		ummu_core_free_tdev(ctx->vdev);
+	else
+		dev_err(cdev->dev, "unbind invalid sva mode, mode = %d.\n",
+			sva_mode);
+}
+
 static void cdma_ctx_free_tid(struct cdma_dev *cdev, struct cdma_context *ctx)
 {
 	if (ctx->is_kernel)
-		ummu_ksva_unbind_device(ctx->sva);
+		cdma_ctx_ksva_unbind(ctx);
 	else
-		ummu_sva_unbind_device(ctx->sva);
+		cdma_ctx_sva_unbind(cdev, ctx);
 }
 
 struct cdma_context *cdma_alloc_context(struct cdma_dev *cdev, bool is_kernel)

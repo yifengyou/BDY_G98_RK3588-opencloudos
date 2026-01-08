@@ -173,7 +173,8 @@ struct cdma_queue *cdma_create_queue(struct cdma_dev *cdev,
 	if (is_kernel) {
 		ret = cdma_create_queue_res(cdev, cfg, queue, eid_index);
 		if (ret) {
-			dev_err(cdev->dev, "create queue res failed.\n");
+			dev_err(cdev->dev,
+				"create queue res failed, ret = %d.\n", ret);
 			cdma_delete_queue_id(cdev, id);
 			kfree(queue);
 			return NULL;

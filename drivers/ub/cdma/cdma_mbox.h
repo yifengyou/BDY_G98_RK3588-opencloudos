@@ -20,7 +20,6 @@ enum {
 	CDMA_CMD_DESTROY_JFC_CONTEXT	= 0x27,
 };
 
-/* The mailbox operation is as follows: */
 static inline void cdma_fill_mbx_attr(struct ubase_mbx_attr *attr, u32 tag,
 				      u8 op, u8 mbx_ue_id)
 {

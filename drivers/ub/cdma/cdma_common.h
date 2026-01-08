@@ -5,6 +5,7 @@
 #define __CDMA_COMMON_H__
 
 #include <linux/types.h>
+#include "cdma_context.h"
 #include "cdma.h"
 
 #define JETTY_DSQE_OFFSET 0x1000
@@ -97,15 +98,12 @@ static inline u64 cdma_cal_npages(u64 va, u64 len)
 }
 
 struct cdma_umem *cdma_umem_get(struct cdma_dev *cdev, u64 va, u64 len,
-				bool is_kernel);
-void cdma_umem_release(struct cdma_umem *umem, bool is_kernel);
+				bool is_kernel, struct cdma_context *ctx);
+void cdma_put_umem(struct cdma_umem *umem, bool is_kernel);
 
 int cdma_k_alloc_buf(struct cdma_dev *cdev, size_t memory_size,
 		     struct cdma_buf *buf);
 void cdma_k_free_buf(struct cdma_dev *cdev, size_t memory_size,
 		     struct cdma_buf *buf);
-int cdma_pin_queue_addr(struct cdma_dev *cdev, u64 addr, u32 len,
-			struct cdma_buf *buf);
-void cdma_unpin_queue_addr(struct cdma_umem *umem);
 
 #endif /* __CDMA_COMMON_H__ */

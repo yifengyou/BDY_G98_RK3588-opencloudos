@@ -88,7 +88,7 @@ int cdma_pin_sw_db(struct cdma_context *ctx, struct cdma_sw_db *db)
 
 	refcount_set(&page->refcount, 1);
 	page->user_virt = page_addr;
-	page->umem = cdma_umem_get(ctx->cdev, page_addr, PAGE_SIZE, false);
+	page->umem = cdma_umem_get(ctx->cdev, page_addr, PAGE_SIZE, false, ctx);
 	if (IS_ERR(page->umem)) {
 		ret = PTR_ERR(page->umem);
 		dev_err(ctx->cdev->dev, "get umem failed, ret = %d.\n", ret);
@@ -116,7 +116,7 @@ void cdma_unpin_sw_db(struct cdma_context *ctx, struct cdma_sw_db *db)
 
 	if (refcount_dec_and_test(&db->page->refcount)) {
 		list_del(&db->page->list);
-		cdma_umem_release(db->page->umem, false);
+		cdma_put_umem(db->page->umem, false);
 		kfree(db->page);
 		db->page = NULL;
 	}

@@ -60,8 +60,8 @@ static int cdma_add_device_to_list(struct cdma_dev *cdev)
 	ret = xa_err(xa_store(&cdma_devs_tbl, adev->id, cdev, GFP_KERNEL));
 	if (ret) {
 		dev_err(cdev->dev,
-			"store cdma device to table failed, adev id = %u.\n",
-			adev->id);
+			"store cdma device to table failed, adev id = %u, ret = %d.\n",
+			adev->id, ret);
 		up_write(&g_device_rwsem);
 		return ret;
 	}
@@ -177,6 +177,29 @@ static void cdma_init_base_dev(struct cdma_dev *cdev)
 	dev_cap->max_jfs_inline_len = caps->jfs_inline_sz;
 }
 
+static int cdma_init_iopf_feature(struct cdma_dev *cdev)
+{
+	u32 ummu_features;
+	int sva_mode;
+
+	sva_mode = ummu_get_sva_mode(cdev->dev);
+	if (sva_mode != UMMU_SVA_SHARE_MODE &&
+	    sva_mode != UMMU_SVA_SEPARATE_MODE) {
+		dev_err(cdev->dev, "get sva mode failed, ret = %d.\n",
+			sva_mode);
+		return sva_mode;
+	}
+
+	ummu_features = ummu_sva_get_features(cdev->dev);
+	cdev->iopf_feature = ummu_features & 1;
+	cdev->sva_mode = sva_mode;
+
+	dev_info(cdev->dev, "get sva features = %u, sva_mode = %d.\n",
+		 ummu_features, sva_mode);
+
+	return 0;
+}
+
 static int cdma_init_dev_param(struct cdma_dev *cdev)
 {
 	struct auxiliary_device *adev = cdev->adev;
@@ -189,6 +212,10 @@ static int cdma_init_dev_param(struct cdma_dev *cdev)
 
 	cdev->k_db_base = mem_base->addr;
 	cdev->db_base = mem_base->addr_unmapped;
+
+	ret = cdma_init_iopf_feature(cdev);
+	if (ret)
+		return ret;
 
 	ret = cdma_init_dev_caps(cdev);
 	if (ret)

@@ -147,10 +147,13 @@ struct cdma_umem {
 	union cdma_umem_flag flag;
 	struct sg_table sg_head;
 	struct cdma_dev *dev;
+	struct sg_append_table sgt_append;
 
 	u64 length;
 	u32 nmap;
 	u64 va;
+	u32 tid;
+	int sva_mode;
 };
 
 struct cdma_buf {
@@ -182,7 +185,8 @@ struct cdma_dev {
 	u32 eid;
 	u32 upi;
 	u32 tid;
-	u32 ummu_tid;
+	int sva_mode;
+	u32 iopf_feature;
 	u32 status;
 	u8 sl_num;
 	u8 sl[CDMA_MAX_SL_NUM];

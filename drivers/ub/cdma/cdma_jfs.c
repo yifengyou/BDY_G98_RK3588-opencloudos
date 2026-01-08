@@ -95,25 +95,28 @@ static inline void cdma_set_kernel_db(struct cdma_dev *cdev,
 	queue->db_addr = queue->dwqe_addr + CDMA_DOORBELL_OFFSET;
 }
 
-static int cdma_get_sq_buf(struct cdma_dev *cdev, struct cdma_jetty_queue *sq,
+static int cdma_get_sq_buf(struct cdma_dev *cdev, struct cdma_jfs *jfs,
 			   struct cdma_jfs_cfg *jfs_cfg,
-			   struct cdma_create_jfs_ucmd *ucmd, bool is_kernel)
+			   struct cdma_create_jfs_ucmd *ucmd)
 {
+	struct cdma_jetty_queue *sq = &jfs->sq;
 	u32 wqe_bb_depth;
 	u32 sqe_bb_cnt;
 	int ret = 0;
 	u32 size;
 
-	if (!is_kernel) {
-		ret = cdma_pin_queue_addr(cdev, ucmd->buf_addr,
-					  ucmd->buf_len, &sq->buf);
-		if (ret) {
-			dev_err(cdev->dev,
-				"pin jfs queue addr failed, ret = %d.\n",
+	if (!jfs->is_kernel) {
+		sq->buf.umem = cdma_umem_get(cdev, ucmd->buf_addr,
+					     ucmd->buf_len, false,
+					     jfs->base_jfs.ctx);
+		if (IS_ERR(sq->buf.umem)) {
+			ret = PTR_ERR(sq->buf.umem);
+			dev_err(cdev->dev, "get jfs umem failed, ret = %d.\n",
 				ret);
 			return ret;
 		}
 
+		sq->buf.addr = ucmd->buf_addr;
 		sq->buf.entry_cnt = ucmd->buf_len >> WQE_BB_SIZE_SHIFT;
 		sq->sqe_bb_cnt = ucmd->sqe_bb_cnt;
 		if (sq->sqe_bb_cnt > MAX_WQEBB_NUM)
@@ -137,8 +140,8 @@ static int cdma_get_sq_buf(struct cdma_dev *cdev, struct cdma_jetty_queue *sq,
 		ret = cdma_k_alloc_buf(cdev, size, &sq->buf);
 		if (ret) {
 			dev_err(cdev->dev,
-				"alloc jfs (%u) sq buf failed, size = %u.\n",
-				sq->id, size);
+				"alloc jfs (%u) sq buf failed, size = %u, ret = %d.\n",
+				sq->id, size, ret);
 			return ret;
 		}
 
@@ -222,7 +225,7 @@ static void cdma_free_sq_buf(struct cdma_dev *cdev, struct cdma_jetty_queue *sq)
 		size = sq->buf.entry_cnt * sq->buf.entry_size;
 		cdma_k_free_buf(cdev, size, &sq->buf);
 	} else {
-		cdma_unpin_queue_addr(sq->buf.umem);
+		cdma_put_umem(sq->buf.umem, false);
 		sq->buf.umem = NULL;
 	}
 }
@@ -293,7 +296,7 @@ struct cdma_base_jfs *cdma_create_jfs(struct cdma_dev *cdev,
 	jfs->dev = cdev;
 	jfs->queue_id = cfg->queue_id;
 
-	ret = cdma_get_sq_buf(cdev, &jfs->sq, cfg, &ucmd, jfs->is_kernel);
+	ret = cdma_get_sq_buf(cdev, jfs, cfg, &ucmd);
 	if (ret)
 		goto err_get_jfs_buf;
 
@@ -352,8 +355,7 @@ static int cdma_set_jfs_state(struct cdma_dev *cdev, u32 jfs_id,
 }
 
 static int cdma_query_jfs_ctx(struct cdma_dev *cdev,
-			      struct cdma_jfs_ctx *jfs_ctx,
-			      u32 jfs_id)
+			      struct cdma_jfs_ctx *jfs_ctx, u32 jfs_id)
 {
 	struct ubase_mbx_attr attr = { 0 };
 	struct ubase_cmd_mailbox *mailbox;
@@ -549,7 +551,8 @@ int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id)
 
 	ret = cdma_modify_and_destroy_jfs(cdev, jfs);
 	if (ret)
-		dev_err(cdev->dev, "jfs delete failed, id = %u.\n", jfs->id);
+		dev_err(cdev->dev, "jfs delete failed, id = %u, ret = %d.\n",
+			jfs->id, ret);
 
 	if (refcount_dec_and_test(&jfs->ae_ref_cnt))
 		complete(&jfs->ae_comp);
@@ -874,8 +877,8 @@ static int cdma_set_sqe(struct cdma_dev *cdev, struct cdma_sqe_ctl *sqe_ctl,
 	ret = cdma_fill_normal_sge(cdev, sqe_ctl, wr);
 	if (ret)
 		dev_err(cdev->dev,
-			"cdma fill normal sge failed, wr opcode = %u.\n",
-			(u8)wr->opcode);
+			"cdma fill normal sge failed, wr opcode = %u, ret = %d.\n",
+			(u8)wr->opcode, ret);
 
 	return ret;
 }
@@ -968,8 +971,9 @@ static int cdma_post_one_wr(struct cdma_jetty_queue *sq, struct cdma_jfs_wr *wr,
 
 	ret = cdma_copy_to_sq(sq, wqebb_cnt, tmp_sq);
 	if (ret) {
-		dev_err(cdev->dev, "cdma jfs overflow, wqebb_cnt = %u.\n",
-			wqebb_cnt);
+		dev_err(cdev->dev,
+			"cdma jfs overflow, wqebb_cnt = %u, ret = %d.\n",
+			wqebb_cnt, ret);
 		return ret;
 	}
 
@@ -1016,7 +1020,8 @@ static int cdma_post_sq_wr(struct cdma_dev *cdev, struct cdma_jetty_queue *sq,
 	for (it = wr; it != NULL; it = it->next) {
 		ret = cdma_post_one_wr(sq, it, cdev, &dwqe_addr, &dwqe_enable);
 		if (ret) {
-			dev_err(cdev->dev, "cdma post one wr failed.\n");
+			dev_err(cdev->dev,
+				"cdma post one wr failed, ret = %d.\n", ret);
 			*bad_wr = it;
 			goto post_wr;
 		}
@@ -1049,7 +1054,8 @@ int cdma_post_jfs_wr(struct cdma_jfs *jfs, struct cdma_jfs_wr *wr,
 	ret = cdma_post_sq_wr(cdev, &jfs->sq, wr, bad_wr);
 	if (ret)
 		dev_err(cdev->dev,
-			"cdma post jfs wr failed, sq_id = %u.\n", jfs->sq.id);
+			"cdma post jfs wr failed, sq_id = %u, ret = %d.\n",
+			jfs->sq.id, ret);
 
 	return ret;
 }

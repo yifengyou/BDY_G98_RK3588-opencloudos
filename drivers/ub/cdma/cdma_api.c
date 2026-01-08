@@ -431,7 +431,7 @@ struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
 	}
 	atomic_inc(&ctx->ref_cnt);
 
-	seg = cdma_register_seg(cdev, cfg, true);
+	seg = cdma_register_seg(cdev, cfg, true, NULL);
 	if (!seg)
 		goto decrease_cnt;
 

@@ -35,7 +35,8 @@ static inline void cdma_free_seg_handle(struct cdma_dev *cdev, u64 handle)
 }
 
 struct cdma_segment *cdma_register_seg(struct cdma_dev *cdev,
-				       struct dma_seg_cfg *cfg, bool is_kernel)
+				       struct dma_seg_cfg *cfg, bool is_kernel,
+				       struct cdma_context *ctx)
 {
 	struct cdma_segment *seg;
 	int handle;
@@ -44,7 +45,7 @@ struct cdma_segment *cdma_register_seg(struct cdma_dev *cdev,
 	if (!seg)
 		return NULL;
 
-	seg->umem = cdma_umem_get(cdev, cfg->sva, cfg->len, is_kernel);
+	seg->umem = cdma_umem_get(cdev, cfg->sva, cfg->len, is_kernel, ctx);
 	if (IS_ERR_OR_NULL(seg->umem)) {
 		dev_err(cdev->dev, "pin seg failed\n");
 		goto free_seg;
@@ -64,7 +65,7 @@ struct cdma_segment *cdma_register_seg(struct cdma_dev *cdev,
 	return seg;
 
 unpin_umem:
-	cdma_umem_release(seg->umem, is_kernel);
+	cdma_put_umem(seg->umem, is_kernel);
 free_seg:
 	kfree(seg);
 
@@ -74,15 +75,15 @@ free_seg:
 void cdma_unregister_seg(struct cdma_dev *cdev, struct cdma_segment *seg)
 {
 	cdma_free_seg_handle(cdev, seg->base.handle);
-	cdma_umem_release(seg->umem, seg->is_kernel);
+	cdma_put_umem(seg->umem, seg->is_kernel);
 	kfree(seg);
 }
 
 int cdma_seg_grant(struct cdma_dev *cdev, struct cdma_segment *seg,
 		   struct dma_seg_cfg *cfg)
 {
-	struct ummu_token_info token_info;
-	struct ummu_seg_attr seg_attr;
+	struct ummu_token_info token_info = { 0 };
+	struct ummu_seg_attr seg_attr = { 0 };
 	int ret;
 
 	seg->base.tid = seg->ctx->tid;

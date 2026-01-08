@@ -210,7 +210,7 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev)
 
 	for (i = 0; i < attr->eu_num; i++)
 		dev_info(cdev->dev,
-			"cdma init eus[%u], upi = 0x%x, eid = 0x%x, eid_idx = 0x%x.\n",
+			"init eus[%u], upi = 0x%x, eid = 0x%x, eid_idx = 0x%x.\n",
 			i, eus[i].upi, eus[i].eid.dw0, eus[i].eid_idx);
 	mutex_unlock(&cdev->eu_mutex);
 

@@ -393,7 +393,7 @@ int cdma_create_chardev(struct cdma_dev *cdev)
 		goto cdev_delete;
 	}
 
-	dev_dbg(cdev->dev, "create chardev: %s succeeded\n", chardev->name);
+	dev_info(cdev->dev, "cdma create chardev: %s success\n", chardev->name);
 	return 0;
 
 cdev_delete:
