@@ -8,15 +8,14 @@
 #include <linux/errno.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
 #include <ub/ubase/ubase_comm_dev.h>
-#include "cdma_queue.h"
 #include "cdma.h"
+#include "cdma_queue.h"
 #include "cdma_jfc.h"
 #include "cdma_jfs.h"
 #include "cdma_mbox.h"
 #include "cdma_cmd.h"
 #include "cdma_debugfs.h"
 
-#define CDMA_DBG_READ_LEN 65536
 #define BUF_10_BASE 10
 #define BUF_SIZE 8
 
@@ -728,16 +727,15 @@ static int cdma_dbg_create_cfg_file(struct cdma_dev *cdev,
 	return 0;
 }
 
-int cdma_dbg_init(struct auxiliary_device *adev)
+int cdma_dbg_init(struct cdma_dev *cdev)
 {
 	struct ubase_dbg_dentry_info dbg_dentry[CDMA_DBG_DENTRY_ROOT + 1] = {0};
-	struct dentry *ubase_root_dentry = ubase_diag_debugfs_root(adev);
+	struct auxiliary_device *adev = cdev->adev;
+	struct dentry *ubase_root_dentry;
 	struct device *dev = &adev->dev;
-	struct cdma_dev *cdev;
 	int ret;
 
-	cdev = dev_get_drvdata(dev);
-
+	ubase_root_dentry = ubase_diag_debugfs_root(adev);
 	if (!ubase_root_dentry) {
 		dev_err(dev, "dbgfs root dentry does not exist.\n");
 		return -ENOENT;
@@ -777,10 +775,8 @@ create_dentry_err:
 	return ret;
 }
 
-void cdma_dbg_uninit(struct auxiliary_device *adev)
+void cdma_dbg_uninit(struct cdma_dev *cdev)
 {
-	struct cdma_dev *cdev = dev_get_drvdata(&adev->dev);
-
 	if (!cdev->cdbgfs.dbgfs.dentry)
 		return;
 
