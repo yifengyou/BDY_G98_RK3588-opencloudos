@@ -59,11 +59,6 @@ struct ub_entity *msi_desc_to_ub_entity(struct msi_desc *desc)
 	return to_ub_entity(desc->dev);
 }
 
-static void __iomem *ub_vector_desc_base_addr(struct msi_desc *desc)
-{
-	return desc->ub_intr.vector_base;
-}
-
 void __iomem *ub_vector_desc_addr(struct msi_desc *desc)
 {
 	return desc->ub_intr.vector_base + (desc->ub_intr.intr_attrib.entry_nr *
@@ -73,12 +68,6 @@ void __iomem *ub_vector_desc_addr(struct msi_desc *desc)
 static void __iomem *ub_addr_desc_base_addr(struct msi_desc *desc)
 {
 	return desc->ub_intr.addr_base;
-}
-
-static void __iomem *ub_addr_desc_addr(struct msi_desc *desc)
-{
-	return desc->ub_intr.addr_base + (desc->ub_intr.intr_attrib.addr_index *
-					  UB_INTR_ADDR_ENTRY_SIZE);
 }
 
 static void ub_int_type1_update_mask(struct msi_desc *desc, u32 clear, u32 set)
@@ -102,9 +91,13 @@ static void ub_int_type1_mask(struct msi_desc *desc, u32 mask)
 static void ub_int_type2_mask(struct msi_desc *desc)
 {
 	void __iomem *addr = ub_vector_desc_addr(desc);
-	u32 reg_val = readl(addr + UB_INTR_VECTOR_ADDR_INDEX) | UB_INTR_VECTOR_MASK_MASK;
+	u16 addr_index;
+	u32 reg_val;
 
 	desc->ub_intr.intr_attrib.mask = 1;
+	addr_index = desc->ub_intr.intr_attrib.addr_index;
+	reg_val = UB_INTR_VECTOR_MASK_MASK | (u32)addr_index;
+
 	writel(reg_val, addr + UB_INTR_VECTOR_ADDR_INDEX);
 }
 
@@ -131,10 +124,11 @@ static void ub_int_type1_unmask_irq(struct msi_desc *desc, u32 mask)
 static void ub_int_type2_unmask_irq(struct msi_desc *desc)
 {
 	void __iomem *addr = ub_vector_desc_addr(desc);
-	u32 reg_val = readl(addr + UB_INTR_VECTOR_ADDR_INDEX) & (~UB_INTR_VECTOR_MASK_MASK);
+	u16 addr_index;
 
 	desc->ub_intr.intr_attrib.mask = 0;
-	writel(reg_val, addr + UB_INTR_VECTOR_ADDR_INDEX);
+	addr_index = desc->ub_intr.intr_attrib.addr_index;
+	writel((u32)addr_index, addr + UB_INTR_VECTOR_ADDR_INDEX);
 }
 
 static void ub_usi_desc_unmask(struct msi_desc *desc, u32 nr)
@@ -191,30 +185,6 @@ static void __iomem *ub_intr_find_one_addr(struct msi_msg *msg,
 	return first_unused_base;
 }
 
-static bool ub_intr_check_addr_used(struct msi_desc *entry)
-{
-	void __iomem *base, *vec_addr;
-	u16 addr_index;
-	u32 i, vec_cnt;
-
-	base = ub_vector_desc_base_addr(entry);
-	vec_addr = ub_vector_desc_addr(entry);
-	vec_cnt = entry->ub_intr.vec_num + 1;
-	addr_index = entry->ub_intr.intr_attrib.addr_index;
-
-	for (i = 0; i < vec_cnt; i++, base += UB_INTR_VECTOR_ENTRY_SIZE) {
-		if ((readl(base + UB_INTR_VECTOR_ADDR_INDEX) & UB_INTR_VECTOR_MASK_MASK) ||
-		    base == vec_addr)
-			continue;
-
-		if ((readl(base + UB_INTR_VECTOR_ADDR_INDEX) &
-		     UB_INTR_VECTOR_ADDR_INDEX_MASK) == addr_index)
-			return true;
-	}
-
-	return false;
-}
-
 static void ub_int_type1_clear_msg(struct msi_desc *entry, struct msi_msg *msg)
 {
 	struct ub_entity *uent = msi_desc_to_ub_entity(entry);
@@ -228,27 +198,18 @@ static void ub_int_type1_clear_msg(struct msi_desc *entry, struct msi_msg *msg)
 
 static void ub_int_type2_clear_msg(struct msi_desc *entry, struct msi_msg *msg)
 {
-	void __iomem *vector_base, *addr_base;
-	u32 reg_val;
+	void __iomem *vector_base;
 
-	addr_base = ub_addr_desc_addr(entry);
 	vector_base = ub_vector_desc_addr(entry);
-	if (!vector_base || !addr_base) {
+	if (!vector_base) {
 		WARN_ON(1);
 		return;
 	}
 
 	writel(0, vector_base + UB_INTR_VECTOR_ID);
-	reg_val = readl(vector_base + UB_INTR_VECTOR_ADDR_INDEX) &
-		  ~UB_INTR_VECTOR_ADDR_INDEX_MASK;
-	writel(reg_val, vector_base + UB_INTR_VECTOR_ADDR_INDEX);
-
-	if (!ub_intr_check_addr_used(entry)) {
-		writel(0, addr_base + UB_INTR_ADDR_TOKENID);
-		writel(0, addr_base + UB_INTR_ADDR_DSTEID_0);
-		writel(0, addr_base + UB_INTR_ADDR_ADDR_L);
-		writel(0, addr_base + UB_INTR_ADDR_ADDR_H);
-	}
+	/* clear interrupt index(bit 0~15), keep mask(bit 16) */
+	writel(UB_INTR_VECTOR_MASK_MASK,
+	       vector_base + UB_INTR_VECTOR_ADDR_INDEX);
 }
 
 static void __ub_clear_msi_msg(struct msi_desc *entry, struct msi_msg *msg)
@@ -527,6 +488,9 @@ EXPORT_SYMBOL_GPL(usi_setup_interrupts);
 
 void ub_disable_intr(struct ub_entity *uent)
 {
+	u32 i, addr_num;
+	void *intr_addr;
+
 	if (!uent || !uent->intr_enabled)
 		return;
 
@@ -534,6 +498,15 @@ void ub_disable_intr(struct ub_entity *uent)
 		ub_cfg_write_byte(uent, UB_INT_TYPE1_ENABLE, 0);
 		ub_cfg_write_dword(uent, UB_INT_TYPE1_INT_MASK, GENMASK(31, 0));
 	} else {
+		addr_num = ub_intr_addr_count(uent);
+		for (i = 0; i < addr_num; i++) {
+			intr_addr = uent->intr_addr_base + i * UB_INTR_ADDR_ENTRY_SIZE;
+			writel(0, intr_addr + UB_INTR_ADDR_TOKENID);
+			writel(0, intr_addr + UB_INTR_ADDR_DSTEID_0);
+			writel(0, intr_addr + UB_INTR_ADDR_ADDR_L);
+			writel(0, intr_addr + UB_INTR_ADDR_ADDR_H);
+		}
+
 		ub_cfg_write_byte(uent, UB_INT_MASK, 1);
 		ub_cfg_write_byte(uent, UB_INT_EN, 0);
 	}
