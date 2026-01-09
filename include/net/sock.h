@@ -568,6 +568,8 @@ struct sock {
 	/*VPC INFO*/
 	struct tvpc_info  sk_tvpc_info;
 
+	void *sk_biba_security;
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
