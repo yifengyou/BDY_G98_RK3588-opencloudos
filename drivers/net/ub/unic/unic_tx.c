@@ -86,7 +86,7 @@ static inline u16 unic_get_spare_page_num(struct unic_tx_buff *tx_buff)
 	return tx_buff->num - (pi - ci);
 }
 
-static bool unic_check_hw_ci_valid(u16 hw_ci, u16 sq_ci, struct unic_sq *sq)
+static bool unic_check_hw_ci_valid(struct unic_sq *sq, u16 hw_ci, u16 sq_ci)
 {
 	u16 sqebb_mask = unic_get_sqe_mask(sq);
 	struct unic_sqe_ctrl_section *ctrl;
@@ -100,6 +100,27 @@ static bool unic_check_hw_ci_valid(u16 hw_ci, u16 sq_ci, struct unic_sq *sq)
 		return false;
 	}
 
+	return true;
+}
+
+static bool unic_check_sq_ci_valid(struct unic_sq *sq, u32 sq_pi, u32 sq_ci)
+{
+	struct net_device *netdev = sq->netdev;
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	u16 sqebb_depth = unic_dev->channels.sqebb_depth;
+
+	if (unlikely(sq_pi < sq_ci))
+		sq_pi += UNIC_SQEBB_POINT_REVERSE;
+
+	if (unlikely(sq_pi == sq_ci)) {
+		unic_sq_stats_inc(sq, polled_old_pi);
+		return false;
+	}
+
+	if (unlikely(sq_pi - sq_ci > sqebb_depth)) {
+		unic_sq_stats_inc(sq, pi_ci_over_depth);
+		return false;
+	}
 	return true;
 }
 
@@ -137,20 +158,20 @@ static void unic_flush_unused_sqe(struct unic_sq *sq, u16 sqebb_mask,
 	}
 }
 
-static bool unic_check_hw_ci_late(struct unic_sq *sq, u16 sq_ci)
+static bool unic_check_hw_ci_late(struct unic_sq *sq, u32 sq_pi, u32 sq_ci)
 {
 	u32 effect_num, actual_num;
 
 	if (likely(!sq->check_ci_late))
 		return false;
 
-	effect_num = sq->pi < sq->start_pi ?
-		     (u32)sq->pi + UNIC_SQEBB_POINT_REVERSE - (u32)sq->start_pi :
-		     (u32)sq->pi - (u32)sq->start_pi;
+	effect_num = sq_pi < sq->start_pi ?
+		     sq_pi + UNIC_SQEBB_POINT_REVERSE - sq->start_pi :
+		     sq_pi - sq->start_pi;
 
-	actual_num = sq->pi < sq_ci ?
-		    (u32)sq->pi + UNIC_SQEBB_POINT_REVERSE - (u32)sq_ci :
-		    (u32)sq->pi - (u32)sq_ci;
+	actual_num = sq_pi < sq_ci ?
+		     sq_pi + UNIC_SQEBB_POINT_REVERSE - sq_ci :
+		     sq_pi - sq_ci;
 
 	if (unlikely(actual_num > effect_num)) {
 		unic_sq_stats_inc(sq, drop_cnt);
@@ -170,15 +191,20 @@ static bool unic_reclaim_sq_space(struct unic_sq *sq, int budget, u64 *bytes,
 	u16 sqebb_mask = unic_get_sqe_mask(sq);
 	union unic_cqe *cqe = sq->cq->cqe;
 	struct unic_cq *cq = sq->cq;
-	u32 cq_mask, cq_ci = cq->ci;
+	u32 cq_mask, last_cq_ci = cq->ci;
+	u16 sq_pi, sq_ci = sq->ci;
 	bool reclaimed = false;
 	struct sk_buff *skb;
-	u16 sq_ci = sq->ci;
 
 	cq_mask = unic_get_sq_cqe_mask(unic_dev);
 	cqe = &cq->cqe[cq->ci & cq_mask];
 	while (unic_cqe_owner_is_soft(jfc_shift, cq->ci, cqe->tx.owner)) {
-		trace_unic_tx_cqe(netdev, cq, sq->pi, sq_ci, cq_mask);
+		/* ensure that this polling thread can read the newest sq->pi
+		 * and sq->skbs[index] which match the cqe.
+		 */
+		dma_rmb();
+		sq_pi = sq->pi;
+		trace_unic_tx_cqe(netdev, cq, sq_pi, sq_ci, cq_mask);
 		if (unlikely(cqe->tx.fd)) {
 			cq->ci++;
 			unic_sq_stats_inc(sq, fd_cnt);
@@ -187,17 +213,23 @@ static bool unic_reclaim_sq_space(struct unic_sq *sq, int budget, u64 *bytes,
 			break;
 		}
 
-		if (unlikely(!unic_check_hw_ci_valid(cqe->tx.raw_ci, sq_ci, sq)))
+		if (unlikely(!unic_check_hw_ci_valid(sq, cqe->tx.raw_ci, sq_ci) ||
+			     !unic_check_sq_ci_valid(sq, sq_pi, sq_ci)))
 			break;
 
 		skb = sq->skbs[sq_ci & sqebb_mask];
+		if (unlikely(!skb)) {
+			unic_sq_stats_inc(sq, polled_skb_null);
+			break;
+		}
 
-		if (!clear && likely(!unic_check_hw_ci_late(sq, sq_ci))) {
+		if (!clear && likely(!unic_check_hw_ci_late(sq, sq_pi, sq_ci))) {
 			*bytes += skb_headlen(skb);
 			(*packets)++;
 		}
 
 		napi_consume_skb(skb, budget);
+		sq->skbs[sq_ci & sqebb_mask] = NULL;
 		unic_reclaim_single_sqe_space(sq, sqebb_mask, &sq_ci);
 
 		reclaimed = true;
@@ -205,7 +237,7 @@ static bool unic_reclaim_sq_space(struct unic_sq *sq, int budget, u64 *bytes,
 		cqe = &cq->cqe[cq->ci & cq_mask];
 	}
 
-	unic_cq_doorbell(cq, cq_ci);
+	unic_cq_doorbell(cq, last_cq_ci);
 	sq->ci = sq_ci;
 	return reclaimed;
 }
@@ -1292,13 +1324,17 @@ void unic_dump_sq_stats(struct net_device *netdev, u32 queue_idx)
 		  "ci_mismatch:      %llu\n"
 		  "fd_cnt:           %llu\n"
 		  "drop_cnt:         %llu\n"
-		  "cfg5_drop_cnt:    %llu\n",
+		  "cfg5_drop_cnt:    %llu\n"
+		  "polled_old_pi:    %llu\n"
+		  "polled_skb_null   %llu\n"
+		  "pi_ci_over_depth: %llu\n",
 		  queue_idx, queue->state, sq->pi, sq->ci,
 		  sq_stats->pad_err, sq_stats->bytes, sq_stats->packets,
 		  sq_stats->busy, sq_stats->more, sq_stats->restart_queue,
 		  sq_stats->over_max_sge_num, sq_stats->csum_err,
 		  sq_stats->ci_mismatch, sq_stats->fd_cnt, sq_stats->drop_cnt,
-		  sq_stats->cfg5_drop_cnt);
+		  sq_stats->cfg5_drop_cnt, sq_stats->polled_old_pi,
+		  sq_stats->polled_skb_null, sq_stats->pi_ci_over_depth);
 }
 
 void unic_mask_key_words(void *sqebb)
