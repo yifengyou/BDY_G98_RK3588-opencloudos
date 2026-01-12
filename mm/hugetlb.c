@@ -1440,6 +1440,32 @@ err:
 	return NULL;
 }
 
+struct folio *dequeue_1G_hugetlb_folio_nodemask(gfp_t gfp_mask, int node, nodemask_t *nodemask)
+{
+	struct folio *folio = NULL;
+	struct hstate *h;
+
+	h = size_to_hstate(1 << PUD_SHIFT);
+	if (!h)
+		return NULL;
+
+	if (node == NUMA_NO_NODE)
+		node = numa_mem_id();
+
+	spin_lock_irq(&hugetlb_lock);
+
+	if (!available_huge_pages(h))
+		goto err;
+
+	folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, node, nodemask);
+
+err:
+	spin_unlock_irq(&hugetlb_lock);
+
+	return folio;
+}
+EXPORT_SYMBOL(dequeue_1G_hugetlb_folio_nodemask);
+
 /*
  * common helper functions for hstate_next_node_to_{alloc|free}.
  * We may have allocated or freed a huge page based on a different
