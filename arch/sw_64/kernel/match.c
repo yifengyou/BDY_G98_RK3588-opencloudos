@@ -197,7 +197,6 @@ static ssize_t da_match_set(struct file *file, const char __user *user_buf,
 			strcpy(&tmp1[m], ret);
 
 	}
-	tmp1[400] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &da_match_cf1);
 	if (err)
@@ -243,7 +242,6 @@ static ssize_t dv_match_set(struct file *file, const char __user *user_buf,
 			strcpy(&tmp1[m], ret);
 
 	}
-	tmp1[400] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &dv_match_cf1);
 	if (err)
@@ -289,7 +287,6 @@ static ssize_t dav_match_set(struct file *file, const char __user *user_buf,
 			strcpy(&tmp1[m], ret);
 
 	}
-	tmp1[500] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &dav_match_cf1);
 	if (err)
@@ -342,7 +339,6 @@ static ssize_t ia_match_set(struct file *file, const char __user *user_buf,
 			strcpy(&tmp1[m], ret);
 
 	}
-	tmp1[400] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &ia_match_cf1);
 	if (err)
@@ -391,7 +387,6 @@ static ssize_t iv_match_set(struct file *file, const char __user *user_buf,
 			strcpy(&tmp1[m], ret);
 
 	}
-	tmp1[400] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &iv_match_cf1);
 	if (err)
@@ -432,7 +427,6 @@ static ssize_t ida_match_set(struct file *file, const char __user *user_buf,
 		if (ret != NULL)
 			strcpy(&tmp1[m], ret);
 	}
-	tmp1[400] = '\0';
 
 	err = kstrtoul(&tmp1[0], 0, &ida_match_cf1);
 	if (err)
