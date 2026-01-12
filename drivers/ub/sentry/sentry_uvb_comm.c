@@ -6,7 +6,7 @@
  * Create: 2025-04-23
  */
 
-#include <linux/firmware/ubios/cis.h>
+#include <linux/firmware/uvb/cis.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>

@@ -8,7 +8,7 @@
 
 #ifndef CIS_UVB_INTERFACE_H
 #define CIS_UVB_INTERFACE_H
-#include <linux/firmware/ubios/cis.h>
+#include <linux/firmware/uvb/cis.h>
 
 /**
  * struct cis_group - call id service group
