@@ -568,6 +568,26 @@ int cis_call_remote(u32 call_id, u32 sender_id, u32 receiver_id,
 	return cis_call_uvb(index, &para);
 }
 
+static bool check_msg_vaild(struct cis_message *msg)
+{
+	if (!msg)
+		return false;
+
+	if (msg->input && !msg->input_size)
+		return false;
+
+	if (!msg->input && msg->input_size)
+		return false;
+
+	if (msg->output && (!msg->p_output_size || !*msg->p_output_size))
+		return false;
+
+	if (!msg->output && msg->p_output_size && *msg->p_output_size)
+		return false;
+
+	return true;
+}
+
 /**
  * cis_call - Trigger a cis call with given aruguments.
  *
@@ -590,6 +610,17 @@ int cis_call_by_uvb(u32 call_id, u32 sender_id, u32 receiver_id,
 
 	pr_debug("cis call: call id %08x, sender id %08x, receiver id %08x\n",
 			call_id, sender_id, receiver_id);
+
+	if (!sender_id || !receiver_id) {
+		pr_err("senderid or receiverid can't be null\n");
+		return -EINVAL;
+	}
+
+	if (!check_msg_vaild(msg)) {
+		pr_err("check cis message invalid\n");
+		return -EINVAL;
+	}
+
 	if (cis_call_for_me(receiver_id) || cis_call_for_local(receiver_id)) {
 		func = search_local_cis_func(call_id, receiver_id);
 		if (func) {

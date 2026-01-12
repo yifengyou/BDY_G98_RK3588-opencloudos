@@ -193,7 +193,7 @@ static void uvb_polling_window(struct uvb_window_description *wd)
 		func = search_local_cis_func(message_id, receiver_id);
 		if (func) {
 			err = func(&msg);
-			if (!err && msg.output && *msg.p_output_size)
+			if (!err && msg.output && msg.p_output_size && *msg.p_output_size)
 				window->output_data_checksum =
 					checksum32(msg.output, *msg.p_output_size);
 		} else {
@@ -216,7 +216,7 @@ static void uvb_polling_window(struct uvb_window_description *wd)
 			goto free_resources;
 		}
 		err = cis_call_remote(message_id, UBIOS_MY_USER_ID, receiver_id, &msg, false);
-		if (!err && msg.output && *msg.p_output_size)
+		if (!err && msg.output && msg.p_output_size && *msg.p_output_size)
 			window->output_data_checksum =
 				checksum32(msg.output, *msg.p_output_size);
 		pr_info("cis call forward end\n");
@@ -271,7 +271,7 @@ static int uvb_polling_window_sync(struct uvb_window_description *wd)
 		func = search_local_cis_func(message_id, receiver_id);
 		if (func) {
 			err = func(&msg);
-			if (!err && msg.output && *msg.p_output_size)
+			if (!err && msg.output && msg.p_output_size && *msg.p_output_size)
 				window->output_data_checksum =
 					checksum32(msg.output, *msg.p_output_size);
 			if (err)
