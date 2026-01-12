@@ -154,7 +154,7 @@ static int cdma_remap_pfn_range(struct cdma_file *cfile, struct vm_area_struct *
 			return -EINVAL;
 		}
 
-		address = (uint64_t)db_addr + CDMA_JETTY_DSQE_OFFSET + jfs_id * PAGE_SIZE;
+		address = (uint64_t)db_addr + CDMA_JETTY_DSQE_OFFSET + jfs_id * CDMA_HW_PAGE_SIZE;
 
 		if (io_remap_pfn_range(vma, vma->vm_start, address >> PAGE_SHIFT,
 				       PAGE_SIZE, vma->vm_page_prot)) {

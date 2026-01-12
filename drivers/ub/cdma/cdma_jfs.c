@@ -91,7 +91,7 @@ static inline void cdma_set_kernel_db(struct cdma_dev *cdev,
 				      struct cdma_jetty_queue *queue)
 {
 	queue->dwqe_addr =
-		cdev->k_db_base + JETTY_DSQE_OFFSET + PAGE_SIZE * queue->id;
+		cdev->k_db_base + JETTY_DSQE_OFFSET + CDMA_HW_PAGE_SIZE * queue->id;
 	queue->db_addr = queue->dwqe_addr + CDMA_DOORBELL_OFFSET;
 }
 
