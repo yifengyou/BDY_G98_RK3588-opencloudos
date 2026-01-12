@@ -478,6 +478,16 @@ int host_pid_info(struct seq_file *m, struct pid_namespace *ns,
 	return 0;
 }
 
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+static void task_cpus_preferred(struct seq_file *m, struct task_struct *task)
+{
+	seq_printf(m, "Cpus_preferred:\t%*pb\n",
+		   cpumask_pr_args(task->prefer_cpus));
+	seq_printf(m, "Cpus_preferred_list:\t%*pbl\n",
+		   cpumask_pr_args(task->prefer_cpus));
+}
+#endif
+
 int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task)
 {
@@ -507,6 +517,9 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 	cpuset_task_status_allowed(m, task);
 	task_context_switch_counts(m, task);
 	arch_proc_pid_thread_features(m, task);
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+	task_cpus_preferred(m, task);
+#endif
 	return 0;
 }
 

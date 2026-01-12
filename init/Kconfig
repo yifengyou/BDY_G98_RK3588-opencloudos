@@ -1113,6 +1113,17 @@ config BT_GROUP_SCHED
 
 endif #CGROUP_SCHED
 
+config QOS_SCHED_DYNAMIC_AFFINITY
+	bool "qos dynamic affinity"
+	depends on CPUSETS
+	depends on FAIR_GROUP_SCHED
+	default n
+	help
+	 This feature lets you allocate preferred cpus to taskgroup. If enabled,
+	 it will make taskgroup only to use preferred cpus when cpu utilization
+	 of taskgroup is below threshold setted, otherwise make taskgroup to use
+	 cpus allowed.
+
 config SCHED_MM_CID
 	def_bool y
 	depends on SMP && RSEQ
@@ -1359,6 +1370,28 @@ config NVIDIA_SMI_TRAP
 	help
 	  Enable trap on NVIDIA SMI calls to solve the problem when acquiring
 	  information caused by host pid and guest pid difference.
+
+#
+# For architectures that want to enable the support for SCHED_PARAL
+#
+config ARCH_SUPPORTS_SCHED_PARAL
+	bool
+
+config SCHED_PARAL
+	bool "Parallelly schedule processes on different NUMA nodes"
+	depends on ARCH_SUPPORTS_SCHED_PARAL
+	depends on QOS_SCHED_DYNAMIC_AFFINITY
+	default n
+	help
+	  By enabling this feature, processes can be scheduled in parallel
+	  on various NUMA nodes to better utilize the cache in NUMA node.
+	  The usage is restricted to the following scenarios:
+	  1. No CPU binding is performed for user-space processes;
+	  2. It is applicable to distributed applications, such as business
+	     architectures with one master and multiple slaves running in
+	     parallel;
+	  3. The existing "qos dynamic affinity" and "qos smart grid"
+	     features must not be used simultaneously.
 
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support"
