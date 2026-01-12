@@ -26,6 +26,7 @@
 #ifndef _LINUX_KABI_H
 #define _LINUX_KABI_H
 
+#include <linux/args.h>
 #include <linux/compiler.h>
 #include <linux/kconfig.h>
 #include <linux/stringify.h>
