@@ -265,12 +265,20 @@ static int fill_uvb_window_with_buffer(struct uvb_window_description *wd,
 
 	window = window_address;
 	if (output_size) {
-		if (wd->size < *output_size + input_size)
+		if (wd->size < (u64)*output_size + (u64)input_size) {
+			pr_err("check wd size failed for output size\n");
 			return -EOVERFLOW;
+		}
 		window->output_data_size = *output_size;
+	} else {
+		window->output_data_size = UVB_OUTPUT_SIZE_NULL;
 	}
 
 	if (input) {
+		if (wd->size < input_size) {
+			pr_err("check wd size failed for input size\n");
+			return -EOVERFLOW;
+		}
 		new_input = memremap(wd->buffer, wd->size, MEMREMAP_WC);
 		if (!new_input) {
 			pr_err("memremap for wd_buffer_virt_addr failed\n");
@@ -281,7 +289,7 @@ static int fill_uvb_window_with_buffer(struct uvb_window_description *wd,
 	}
 
 	if (output)
-		new_output = (void *)(new_input + input_size);
+		new_output = (void *)(new_input + ALIGN(input_size, sizeof(u64)));
 
 	io_params->input = new_input;
 	io_params->input_size = input_size;
@@ -290,7 +298,7 @@ static int fill_uvb_window_with_buffer(struct uvb_window_description *wd,
 
 	window->input_data_address = new_input ? wd->buffer : 0;
 	window->input_data_size = input_size;
-	window->output_data_address = new_output ? wd->buffer + input_size : 0;
+	window->output_data_address = new_output ? wd->buffer + ALIGN(input_size, sizeof(u64)) : 0;
 
 	return 0;
 }
