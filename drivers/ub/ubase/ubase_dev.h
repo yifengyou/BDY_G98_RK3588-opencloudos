@@ -378,6 +378,11 @@ static inline bool ubase_ip_over_urma_utp_supported(struct ubase_dev *udev)
 	return ubase_get_cap_bit(udev, UBASE_SUPPORT_IP_OVER_URMA_UTP_B);
 }
 
+static inline bool ubase_pmu_irq_supported(struct ubase_dev *udev)
+{
+	return ubase_get_cap_bit(udev, UBASE_SUPPORT_PMU_IRQ_B);
+}
+
 static inline
 struct ubase_dev *ubase_get_udev_by_adev(struct auxiliary_device *adev)
 {

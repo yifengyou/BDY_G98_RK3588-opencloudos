@@ -625,6 +625,9 @@ static int ubase_request_aeq_irq(struct ubase_dev *udev)
 	struct ubase_irq *irq;
 	int ret;
 
+	if (ubase_dev_pmu_supported(udev))
+		return 0;
+
 	irq = irq_table->irqs[UBASE_AEQ_IRQ_INDEX];
 	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d", udev->dev_id,
 		 "aeq", 0);
@@ -671,6 +674,9 @@ static void ubase_free_ceq_irqs(struct ubase_dev *udev)
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
 
+	if (ubase_dev_pmu_supported(udev))
+		return;
+
 	for (i = 0; i < ceqs->num; i++) {
 		if (ubase_ubus_irq_vector(udev->dev, 0) != -EOPNOTSUPP)
 			free_irq(ceqs->ceq[i].eq.irqn, &ceqs->ceq[i]);
@@ -681,6 +687,9 @@ static void ubase_free_aeq_irq(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
 
+	if (ubase_dev_pmu_supported(udev))
+		return;
+
 	if (ubase_ubus_irq_vector(udev->dev, 0) != -EOPNOTSUPP)
 		free_irq(aeq->eq.irqn, udev);
 }
@@ -689,6 +698,9 @@ static void ubase_destroy_ceqs(struct ubase_dev *udev)
 {
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
+
+	if (ubase_dev_pmu_supported(udev))
+		return;
 
 	if (!ceqs->ceq)
 		return;
@@ -706,6 +718,9 @@ static void ubase_destroy_ceqs(struct ubase_dev *udev)
 static void ubase_destroy_aeq(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
+
+	if (ubase_dev_pmu_supported(udev))
+		return;
 
 	if (!aeq->eq.addr.addr)
 		return;
@@ -752,6 +767,9 @@ static int ubase_request_ceq_irqs(struct ubase_dev *udev)
 	struct ubase_ceqs *ceqs = &irq_table->ceqs;
 	u32 ceq_irq_num, i;
 	int ret;
+
+	if (ubase_dev_pmu_supported(udev))
+		return 0;
 
 	mutex_lock(&udev->irq_table.ceq_lock);
 	ceq_irq_num = udev->caps.dev_caps.num_ceq_vectors;
@@ -895,6 +913,9 @@ int ubase_irq_table_init(struct ubase_dev *udev)
 	struct ubase_irq_table *irq_table = &udev->irq_table;
 	int i, j, ret;
 
+	if (ubase_dev_pmu_supported(udev) && !ubase_pmu_irq_supported(udev))
+		return 0;
+
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
 		for (i = 0; i < UBASE_DRV_MAX; i++) {
 			for (j = 0; j < UBASE_EVENT_TYPE_MAX; j++)
@@ -952,6 +973,9 @@ void ubase_irq_table_free(struct ubase_dev *udev)
 
 void ubase_irq_table_uninit(struct ubase_dev *udev)
 {
+	if (ubase_dev_pmu_supported(udev) && !ubase_pmu_irq_supported(udev))
+		return;
+
 	ubase_irq_table_free(udev);
 	ubase_destroy_ceqs(udev);
 	ubase_destroy_aeq(udev);
@@ -964,6 +988,9 @@ void ubase_disable_ce_irqs(struct ubase_dev *udev)
 {
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
+
+	if (ubase_dev_pmu_supported(udev))
+		return;
 
 	if (test_bit(UBASE_STATE_IRQ_INVALID_B, &udev->state_bits))
 		return;

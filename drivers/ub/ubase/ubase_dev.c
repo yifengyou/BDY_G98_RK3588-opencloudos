@@ -680,6 +680,7 @@ static int ubase_notify_drv_capbilities(struct ubase_dev *udev)
 	struct ubase_cmd_buf in;
 
 	set_bit(UBASE_CAP_SUP_ACTIVATE_B, (unsigned long *)req.cap_bits);
+	set_bit(UBASE_PMU_CRQ_SUPPORT_B, (unsigned long *)req.cap_bits);
 
 	__ubase_fill_inout_buf(&in, UBASE_OPC_NOTIFY_DRV_CAPS, false,
 			       sizeof(req), &req);
@@ -741,7 +742,7 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 		ubase_query_port_bitmap, NULL
 	},
 	{
-		"init irq table", UBASE_SUP_NO_PMU, 1,
+		"init irq table", UBASE_SUP_ALL, 1,
 		ubase_irq_table_init, ubase_irq_table_uninit
 	},
 	{
