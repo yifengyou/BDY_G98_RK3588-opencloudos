@@ -16,5 +16,10 @@
 
 extern char iee_init_data_begin[];
 extern char iee_init_data_end[];
+extern char __iee_ptp_data_start[];
+extern char __iee_ptp_data_end[];
+
+extern spinlock_t swapper_pgdir_lock;
+extern struct mutex fixmap_lock;
 
 #endif

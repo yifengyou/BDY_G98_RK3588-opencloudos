@@ -30,6 +30,9 @@
 #include <linux/kasan.h>
 #include <linux/memremap.h>
 #include <linux/slab.h>
+#ifdef CONFIG_PTP
+#include <linux/ptp-cache.h>
+#endif
 
 struct mempolicy;
 struct anon_vma;
@@ -2972,7 +2975,15 @@ static inline bool pagetable_is_reserved(struct ptdesc *pt)
  */
 static inline struct ptdesc *pagetable_alloc(gfp_t gfp, unsigned int order)
 {
-	struct page *page = alloc_pages(gfp | __GFP_COMP, order);
+	struct page *page;
+#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		page = virt_to_page((unsigned long)ptp_pg_alloc(&pg_cache, gfp));
+	else
+		page = alloc_pages(gfp | __GFP_COMP, order);
+#else
+	page = alloc_pages(gfp | __GFP_COMP, order);
+#endif
 
 	return page_ptdesc(page);
 }
@@ -2988,7 +2999,14 @@ static inline void pagetable_free(struct ptdesc *pt)
 {
 	struct page *page = ptdesc_page(pt);
 
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptp_pg_free(&pg_cache, page_address(page));
+	else
+		__free_pages(page, compound_order(page));
+	#else
 	__free_pages(page, compound_order(page));
+	#endif
 }
 
 #if USE_SPLIT_PTE_PTLOCKS

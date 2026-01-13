@@ -47,7 +47,7 @@ static void __ptp_set_iee_pages(unsigned long start_addr, unsigned long end_addr
 
 	addr = start_addr;
 	while (addr < end_addr) {
-		set_iee_page(addr, PMD_ORDER, IEE_PGTABLE);
+		set_iee_page(addr, PMD_ORDER);
 		addr += PMD_SIZE;
 	}
 	flush_tlb_kernel_range(start_addr, end_addr);

@@ -14,6 +14,9 @@
 #include <asm/pgalloc.h>
 #include <asm/page.h>
 #include <asm/tlbflush.h>
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-func.h>
+#endif
 
 static struct kmem_cache *pgd_cache __ro_after_init;
 
@@ -22,7 +25,14 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 	gfp_t gfp = GFP_PGTABLE_USER;
 
 	if (PGD_SIZE == PAGE_SIZE)
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			return ptp_pg_alloc(&pg_cache, gfp);
+		else
+			return (pgd_t *)__get_free_page(gfp);
+		#else
 		return (pgd_t *)__get_free_page(gfp);
+		#endif
 	else
 		return kmem_cache_alloc(pgd_cache, gfp);
 }
@@ -30,7 +40,14 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	if (PGD_SIZE == PAGE_SIZE)
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			ptp_pg_free(&pg_cache, pgd);
+		else
+			free_page((unsigned long)pgd);
+		#else
 		free_page((unsigned long)pgd);
+		#endif
 	else
 		kmem_cache_free(pgd_cache, pgd);
 }

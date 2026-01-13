@@ -13,7 +13,14 @@
 
 static inline void __tlb_remove_table(void *_table)
 {
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptp_pg_free(&pg_cache, page_to_virt((struct page *)_table));
+	else
+		free_page_and_swap_cache((struct page *)_table);
+	#else
 	free_page_and_swap_cache((struct page *)_table);
+	#endif
 }
 
 #define tlb_flush tlb_flush

@@ -15,6 +15,9 @@
 #include <asm/kernel-pgtable.h>
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-ptp-init.h>
+#endif
 
 #define NR_BM_PTE_TABLES \
 	SPAN_NR_ENTRIES(FIXADDR_TOT_START, FIXADDR_TOP, PMD_SHIFT)
@@ -28,9 +31,15 @@ static_assert(NR_BM_PMD_TABLES == 1);
 
 #define BM_PTE_TABLE_IDX(addr)	__BM_TABLE_IDX(addr, PMD_SHIFT)
 
+#ifdef CONFIG_PTP
+pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __section(".iee.ptp") __aligned(PAGE_SIZE);
+pmd_t bm_pmd[PTRS_PER_PMD] __section(".iee.ptp") __aligned(PAGE_SIZE) __maybe_unused;
+pud_t bm_pud[PTRS_PER_PUD] __section(".iee.ptp") __aligned(PAGE_SIZE) __maybe_unused;
+#else
 static pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __page_aligned_bss;
 static pmd_t bm_pmd[PTRS_PER_PMD] __page_aligned_bss __maybe_unused;
 static pud_t bm_pud[PTRS_PER_PUD] __page_aligned_bss __maybe_unused;
+#endif
 
 static inline pte_t *fixmap_pte(unsigned long addr)
 {
@@ -44,8 +53,12 @@ static void __init early_fixmap_init_pte(pmd_t *pmdp, unsigned long addr)
 
 	if (pmd_none(pmd)) {
 		ptep = bm_pte[BM_PTE_TABLE_IDX(addr)];
+		#ifdef CONFIG_PTP
+		__iee_pmd_populate_pre_init(pmdp, __pa_symbol(ptep), PMD_TYPE_TABLE);
+		#else
 		__pmd_populate(pmdp, __pa_symbol(ptep),
 			       PMD_TYPE_TABLE | PMD_TABLE_AF);
+		#endif
 	}
 }
 
@@ -57,8 +70,12 @@ static void __init early_fixmap_init_pmd(pud_t *pudp, unsigned long addr,
 	pmd_t *pmdp;
 
 	if (pud_none(pud))
+		#ifdef CONFIG_PTP
+		__iee_pud_populate_pre_init(pudp, __pa_symbol(bm_pmd), PUD_TYPE_TABLE);
+		#else
 		__pud_populate(pudp, __pa_symbol(bm_pmd),
 			       PUD_TYPE_TABLE | PUD_TABLE_AF);
+		#endif
 
 	pmdp = pmd_offset_kimg(pudp, addr);
 	do {
@@ -85,8 +102,12 @@ static void __init early_fixmap_init_pud(p4d_t *p4dp, unsigned long addr,
 	}
 
 	if (p4d_none(p4d))
+		#ifdef CONFIG_PTP
+		__iee_p4d_populate_pre_init(p4dp, __pa_symbol(bm_pud), P4D_TYPE_TABLE);
+		#else
 		__p4d_populate(p4dp, __pa_symbol(bm_pud),
 			       P4D_TYPE_TABLE | P4D_TABLE_AF);
+		#endif
 
 	pudp = pud_offset_kimg(p4dp, addr);
 	early_fixmap_init_pmd(pudp, addr, end);
@@ -124,9 +145,23 @@ void __set_fixmap(enum fixed_addresses idx,
 	ptep = fixmap_pte(addr);
 
 	if (pgprot_val(flags)) {
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			iee_set_bm_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
+		else
+			__set_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
+		#else
 		__set_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
+		#endif
 	} else {
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			iee_set_bm_pte(ptep, __pte(0));
+		else
+			__pte_clear(&init_mm, addr, ptep);
+		#else
 		__pte_clear(&init_mm, addr, ptep);
+		#endif
 		flush_tlb_kernel_range(addr, addr+PAGE_SIZE);
 	}
 }
