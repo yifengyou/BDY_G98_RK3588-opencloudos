@@ -600,7 +600,7 @@ static inline void set_pud_at(struct mm_struct *mm, unsigned long addr,
 			PTE_ATTRINDX(MT_NORMAL_NC) | PTE_PXN | PTE_UXN)
 
 #ifdef CONFIG_ALTRA_ERRATUM_82288
-extern bool have_altra_erratum_82288;
+extern bool __read_mostly have_altra_erratum_82288;
 extern bool range_is_pci(phys_addr_t, size_t);
 #endif
 
