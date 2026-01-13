@@ -284,11 +284,8 @@ struct swap_info_struct {
 	struct completion comp;		/* seldom referenced */
 	spinlock_t lock;		/*
 					 * protect map scan related fields like
-					 * swap_map, lowest_bit, highest_bit,
-					 * inuse_pages, cluster_next,
-					 * cluster_nr, lowest_alloc,
-					 * highest_alloc, free/discard cluster
-					 * list. other fields are only changed
+					 * swap_map, inuse_pages and all cluster
+					 * lists. other fields are only changed
 					 * at swapon/swapoff, so are protected
 					 * by swap_lock. changing flags need
 					 * hold this lock and swap_lock. If
@@ -479,8 +476,7 @@ int find_first_swap(dev_t *device);
 extern unsigned int count_swap_pages(int, int);
 extern sector_t swapdev_block(int, pgoff_t);
 extern int __swap_count(swp_entry_t entry);
-extern bool swap_entry_swapped(struct swap_info_struct *si,
-			       unsigned long offset);
+extern bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry);
 extern int swp_swapcount(swp_entry_t entry);
 struct backing_dev_info;
 extern struct swap_info_struct *get_swap_device(swp_entry_t entry);
@@ -561,8 +557,7 @@ static inline int __swap_count(swp_entry_t entry)
 	return 0;
 }
 
-static inline bool swap_entry_swapped(struct swap_info_struct *si,
-				      unsigned long offset)
+static inline bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry)
 {
 	return false;
 }

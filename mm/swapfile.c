@@ -887,12 +887,16 @@ static bool cluster_alloc_range(struct swap_info_struct *si,
 		order = folio_order(folio);
 		nr_pages = 1 << order;
 		__swap_cache_add_folio(ci, folio, swp_entry(si->type, offset));
-	} else {
+	} else if (IS_ENABLED(CONFIG_HIBERNATION)) {
 		order = 0;
 		nr_pages = 1;
 		WARN_ON_ONCE(si->swap_map[offset]);
 		si->swap_map[offset] = 1;
 		swap_cluster_assert_table_empty(ci, offset, 1);
+	} else {
+		/* Allocation without folio is only possible with hibernation */
+		WARN_ON_ONCE(1);
+		return false;
 	}
 
 	/*
@@ -1397,7 +1401,7 @@ start_over:
 			put_swap_device(si);
 		}
 		if (ret)
-			return ret;
+			return true;
 
 		spin_lock(&swap_lock);
 		if (plist_node_empty(&next->list))
@@ -1405,7 +1409,7 @@ start_over:
 	}
 	spin_unlock(&swap_lock);
 
-	return ret;
+	return false;
 }
 
 /**
@@ -1539,11 +1543,15 @@ again:
  * @folio: folio with swap entries bounded.
  * @subpage: if not NULL, only increase the swap count of this subpage.
  *
+ * Typically called when the folio is unmapped and have its swap entry to
+ * take its palce.
+ *
  * Context: Caller must ensure the folio is locked and in the swap cache.
- * The caller also has to ensure there is no raced call to
- * swap_put_entries_direct before this helper returns, or the swap
- * map may underflow (TODO: maybe we should allow or avoid underflow to
- * make swap refcount lockless).
+ * NOTE: The caller also has to ensure there is no raced call to
+ * swap_put_entries_direct on its swap entry before this helper returns, or
+ * the swap map may underflow. Currently, we only accept @subpage == NULL
+ * for shmem due to the limitation of swap continuation: shmem always
+ * duplicates the swap entry only once, so there is no such issue for it.
  */
 int folio_dup_swap(struct folio *folio, struct page *subpage)
 {
@@ -1720,12 +1728,13 @@ int __swap_count(swp_entry_t entry)
 }
 
 /**
- * swap_entry_swapped - Check if the swap entry at @offset is swapped.
+ * swap_entry_swapped - Check if the swap entry is swapped.
  * @si: the swap device.
- * @offset: offset of the swap entry.
+ * @entry: the swap entry.
  */
-bool swap_entry_swapped(struct swap_info_struct *si, unsigned long offset)
+bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry)
 {
+	pgoff_t offset = swp_offset(entry);
 	struct swap_cluster_info *ci;
 	int count;
 
@@ -1822,7 +1831,7 @@ static bool folio_swapped(struct folio *folio)
 
 	si = __swap_entry_to_info(entry);
 	if (!IS_ENABLED(CONFIG_THP_SWAP) || likely(!folio_test_large(folio)))
-		return swap_entry_swapped(si, swp_offset(entry));
+		return swap_entry_swapped(si, entry);
 
 	return swap_page_trans_huge_swapped(si, entry, folio_order(folio));
 }
@@ -1960,7 +1969,7 @@ void swap_free_hibernation_slot(swp_entry_t entry)
 
 	ci = swap_cluster_lock(si, offset);
 	swap_put_entry_locked(si, ci, offset);
-	WARN_ON(swap_entry_swapped(si, offset));
+	WARN_ON(swap_entry_swapped(si, entry));
 	swap_cluster_unlock(ci);
 
 	/* In theory readahead might add it to the swap cache by accident */
@@ -3591,8 +3600,7 @@ void si_swapinfo(struct sysinfo *val)
  * Returns error code in following case.
  * - success -> 0
  * - swp_entry is invalid -> EINVAL
- * - swap-cache reference is requested but there is already one. -> EEXIST
- * - swap-cache reference is requested but the entry is not used. -> ENOENT
+ * - swap-mapped reference is requested but the entry is not used. -> ENOENT
  * - swap-mapped reference requested but needs continued swap count. -> ENOMEM
  */
 static int swap_dup_entries(struct swap_info_struct *si,
@@ -3606,16 +3614,20 @@ static int swap_dup_entries(struct swap_info_struct *si,
 	for (i = 0; i < nr; i++) {
 		count = si->swap_map[offset + i];
 		/*
-		 * Allocator never allocates bad slots, and readahead is guarded
-		 * by swap_entry_swapped.
+		 * For swapin out, allocator never allocates bad slots. for
+		 * swapin, readahead is guarded by swap_entry_swapped.
 		 */
-		VM_WARN_ON(count == SWAP_MAP_BAD);
+		if (WARN_ON(count == SWAP_MAP_BAD))
+			return -ENOENT;
 		/*
-		 * Swap count duplication is guranteed by either locked swap cache
-		 * folio (folio_dup_swap) or external lock (swap_dup_entry_direct).
+		 * Swap count duplication must be guarded by either swap cache folio (from
+		 * folio_dup_swap) or external lock of existing entry (from swap_dup_entry_direct).
 		 */
-		VM_WARN_ON(!count &&
-			   !swp_tb_is_folio(__swap_table_get(ci, offset % SWAPFILE_CLUSTER)));
+		if (WARN_ON(!count &&
+			    !swp_tb_is_folio(__swap_table_get(ci, offset % SWAPFILE_CLUSTER))))
+			return -ENOENT;
+		if (WARN_ON((count & ~COUNT_CONTINUED) > SWAP_MAP_MAX))
+			return -EINVAL;
 	}
 
 	for (i = 0; i < nr; i++) {
