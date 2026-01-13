@@ -220,10 +220,91 @@ static int compare_ubcore_eid(const union ubcore_eid src_eid,
 			new_src_eid.in4.addr);
 		return 0;
 	}
-	pr_err("match eid failed, src eid:%llx, %x, %x, dst eid: %llx, %x, %x\n",
-	       src_eid.in4.reserved, src_eid.in4.prefix, src_eid.in4.addr,
-	       dst_eid.in4.reserved, dst_eid.in4.prefix, dst_eid.in4.addr);
 	return -EINVAL;
+}
+
+
+/**
+ * unimport_tjetty - Unimport all target jetties for a specific die
+ * @die_index: Index of the die to unimport jetties from
+ *
+ * Return: 0 on success, -EINVAL on invalid die_index
+ *
+ * This function unimports all target jetties associated with a specific die
+ * index and cleans up the references.
+ */
+static int unimport_tjetty(int die_index)
+{
+	int i;
+
+	if (die_index < 0 || die_index >= MAX_DIE_NUM) {
+		pr_err("invalid die_index (%d), range is [0, %d]\n",
+		       die_index, MAX_DIE_NUM - 1);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < MAX_NODE_NUM; i++) {
+		if (sentry_urma_dev[die_index].tjetty[i]) {
+			ubcore_unimport_jetty(sentry_urma_dev[die_index].tjetty[i]);
+			sentry_urma_dev[die_index].tjetty[i] = NULL;
+		}
+	}
+
+	return 0;
+}
+
+
+static void release_urma_dev_source(int die_index)
+{
+
+	if (!sentry_urma_dev[die_index].sentry_ubcore_dev) {
+		pr_info("urma %d dev is not exist, ignore to release the urma source.\n", die_index);
+		return;
+	}
+
+	unimport_tjetty(die_index);
+
+	if (sentry_urma_dev[die_index].jetty) {
+		ubcore_delete_jetty(sentry_urma_dev[die_index].jetty);
+		sentry_urma_dev[die_index].jetty = NULL;
+	}
+
+	if (sentry_urma_dev[die_index].s_seg) {
+		ubcore_unregister_seg(sentry_urma_dev[die_index].s_seg);
+		sentry_urma_dev[die_index].s_seg = NULL;
+		kfree(sentry_urma_dev[die_index].s_seg_va);
+		sentry_urma_dev[die_index].s_seg_va = NULL;
+	}
+
+	if (sentry_urma_dev[die_index].r_seg) {
+		ubcore_unregister_seg(sentry_urma_dev[die_index].r_seg);
+		sentry_urma_dev[die_index].r_seg = NULL;
+		kfree(sentry_urma_dev[die_index].r_seg_va);
+		sentry_urma_dev[die_index].r_seg_va = NULL;
+	}
+
+	if (sentry_urma_dev[die_index].jetty_jfr) {
+		ubcore_delete_jfr(sentry_urma_dev[die_index].jetty_jfr);
+		sentry_urma_dev[die_index].jetty_jfr = NULL;
+	}
+
+	if (sentry_urma_dev[die_index].receiver_jfc) {
+		ubcore_delete_jfc(sentry_urma_dev[die_index].receiver_jfc);
+		sentry_urma_dev[die_index].receiver_jfc = NULL;
+	}
+
+	if (sentry_urma_dev[die_index].sender_jfc) {
+		ubcore_delete_jfc(sentry_urma_dev[die_index].sender_jfc);
+		sentry_urma_dev[die_index].sender_jfc = NULL;
+	}
+
+	sentry_urma_dev[die_index].sentry_ubcore_dev = NULL;
+	sentry_urma_dev[die_index].is_created = false;
+
+	sentry_urma_dev[die_index].server_eid_valid_num = 0;
+	memset(&sentry_urma_dev[die_index].local_eid, 0, sizeof(sentry_urma_dev[die_index].local_eid));
+	memset(sentry_urma_dev[die_index].server_eid, 0, sizeof(sentry_urma_dev[die_index].server_eid));
+	memset(sentry_urma_dev[die_index].server_eid_array, 0, MAX_NODE_NUM * EID_MAX_LEN * sizeof(char));
 }
 
 /**
@@ -263,14 +344,24 @@ static int sentry_add_device(struct ubcore_device *dev)
 static void sentry_remove_device(struct ubcore_device *dev, void *d __always_unused)
 {
 	struct ubcore_dev_list *dev_node;
+	int die_index = 0;
 
+	urma_mutex_lock_op(URMA_LOCK);
 	list_for_each_entry(dev_node, &ub_dev_list_head, list) {
 		if (dev_node->dev == dev) {
+			for (die_index = 0; die_index < MAX_DIE_NUM; die_index++) {
+				if (sentry_urma_dev[die_index].sentry_ubcore_dev == dev) {
+					pr_info("release the urma %d dev before remove the urma device\n", die_index);
+					release_urma_dev_source(die_index);
+					break;
+				}
+			}
 			list_del(&dev_node->list);
 			kfree(dev_node);
 			break;
 		}
 	}
+	urma_mutex_lock_op(URMA_UNLOCK);
 }
 
 static struct ubcore_client sentry_ubcore_client = {
@@ -313,34 +404,6 @@ void free_global_char(void)
 	sentry_urma_ctx.urma_recv_sender_cr = NULL;
 }
 
-/**
- * unimport_tjetty - Unimport all target jetties for a specific die
- * @die_index: Index of the die to unimport jetties from
- *
- * Return: 0 on success, -EINVAL on invalid die_index
- *
- * This function unimports all target jetties associated with a specific die
- * index and cleans up the references.
- */
-static int unimport_tjetty(int die_index)
-{
-	int i;
-
-	if (die_index < 0 || die_index >= MAX_DIE_NUM) {
-		pr_err("invalid die_index (%d), range is [0, %d]\n",
-		       die_index, MAX_DIE_NUM - 1);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < MAX_NODE_NUM; i++) {
-		if (sentry_urma_dev[die_index].tjetty[i]) {
-			ubcore_unimport_jetty(sentry_urma_dev[die_index].tjetty[i]);
-			sentry_urma_dev[die_index].tjetty[i] = NULL;
-		}
-	}
-
-	return 0;
-}
 
 /**
  * init_global_char - Initialize global character buffers
@@ -445,6 +508,7 @@ init_ubcore_fail:
 	return ret;
 }
 
+
 /**
  * release_ubcore_resource - Release all URMA resources for all dies
  *
@@ -468,44 +532,7 @@ static void release_ubcore_resource(void)
 
 	/* Release resources for each die */
 	for (die_index = 0; die_index < MAX_DIE_NUM; die_index++) {
-		unimport_tjetty(die_index);
-
-		if (sentry_urma_dev[die_index].jetty) {
-			ubcore_delete_jetty(sentry_urma_dev[die_index].jetty);
-			sentry_urma_dev[die_index].jetty = NULL;
-		}
-
-		if (sentry_urma_dev[die_index].s_seg) {
-			ubcore_unregister_seg(sentry_urma_dev[die_index].s_seg);
-			sentry_urma_dev[die_index].s_seg = NULL;
-			kfree(sentry_urma_dev[die_index].s_seg_va);
-			sentry_urma_dev[die_index].s_seg_va = NULL;
-		}
-
-		if (sentry_urma_dev[die_index].r_seg) {
-			ubcore_unregister_seg(sentry_urma_dev[die_index].r_seg);
-			sentry_urma_dev[die_index].r_seg = NULL;
-			kfree(sentry_urma_dev[die_index].r_seg_va);
-			sentry_urma_dev[die_index].r_seg_va = NULL;
-		}
-
-		if (sentry_urma_dev[die_index].jetty_jfr) {
-			ubcore_delete_jfr(sentry_urma_dev[die_index].jetty_jfr);
-			sentry_urma_dev[die_index].jetty_jfr = NULL;
-		}
-
-		if (sentry_urma_dev[die_index].receiver_jfc) {
-			ubcore_delete_jfc(sentry_urma_dev[die_index].receiver_jfc);
-			sentry_urma_dev[die_index].receiver_jfc = NULL;
-		}
-
-		if (sentry_urma_dev[die_index].sender_jfc) {
-			ubcore_delete_jfc(sentry_urma_dev[die_index].sender_jfc);
-			sentry_urma_dev[die_index].sender_jfc = NULL;
-		}
-
-		sentry_urma_dev[die_index].sentry_ubcore_dev = NULL;
-		sentry_urma_dev[die_index].is_created = false;
+		release_urma_dev_source(die_index);
 	}
 
 	urma_mutex_lock_op(URMA_UNLOCK);
@@ -688,6 +715,11 @@ int sentry_post_recv(struct ubcore_jetty *r_jetty, struct ubcore_target_seg *rec
 		return -EINVAL;
 	}
 
+	if (!sentry_urma_dev[die_index].sentry_ubcore_dev) {
+		pr_err("%s failed: urma %d dev is not exist\n", __func__, die_index);
+		return -EINVAL;
+	}
+
 	sge_addr = (uint64_t)sentry_urma_dev[die_index].r_seg_va + SGE_MAX_LEN * node_idx;
 	sentry_urma_dev[die_index].r_sge[node_idx].addr = sge_addr;
 	sentry_urma_dev[die_index].r_sge[node_idx].len = SGE_MAX_LEN;
@@ -834,6 +866,12 @@ static struct ubcore_tjetty *create_tjetty(struct ubcore_tjetty_cfg *tjetty_cfg,
 					   int eid_index, int die_index)
 {
 	int ret;
+
+	if (!sentry_urma_dev[die_index].sentry_ubcore_dev) {
+		pr_err("%s failed: urma %d dev is not exist\n", __func__, die_index);
+		return NULL;
+	}
+
 	struct ubcore_get_tp_cfg tp_cfg = {
 		.flag.bs.ctp = 1,
 		.trans_mode = UBCORE_TP_RM,
@@ -1083,8 +1121,6 @@ EXPORT_SYMBOL(match_index_by_remote_ub_eid);
 int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 {
 	int ret;
-	bool is_the_same = true;
-	union ubcore_eid initial_value = {0};
 	int i;
 
 	/* Prepare for new device matching by cleaning up old resources */
@@ -1096,30 +1132,6 @@ int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 		return -EINVAL;
 	}
 	pr_info("ubcore init success\n");
-
-	/* Check if the current EID configuration is the same as previous */
-	for (i = 0; i < MAX_DIE_NUM; i++) {
-		if (memcmp(&eid[i], &initial_value, sizeof(union ubcore_eid)) == 0)
-			break;
-
-		/*
-		 * Settings are considered changed in two scenarios:
-		 * 1. This is a new setting (no previous value exists).
-		 * 2. A previous value exists, but the new value is different.
-		 */
-		if ((sentry_urma_dev[i].is_created &&
-		     memcmp(&sentry_urma_dev[i].local_eid, &eid[i],
-			    sizeof(union ubcore_eid)) != 0) ||
-		    !sentry_urma_dev[i].is_created) {
-			is_the_same = false;
-			break;
-		}
-	}
-
-	if (is_the_same) {
-		pr_info("New eid is the same with current eid, skip to create new resource\n");
-		return 0;
-	}
 
 	/* Create resources for each EID */
 	for (i = 0; i < eid_num; i++) {
@@ -1604,7 +1616,7 @@ static int heartbeat_thread(void *arg)
 			/* Verify rebuilt connections */
 			if (rebuilt) {
 				msleep_interruptible(HB_WAIT_ACK_SLEEP_MS);
-				memset(sentry_urma_ctx.heartbeat_thread_cr, 0, sizeof(sentry_urma_ctx.heartbeat_thread_cr));
+				memset(sentry_urma_ctx.heartbeat_thread_cr, 0, sizeof(struct ubcore_cr) * MAX_NODE_NUM);
 
 				if (!sentry_urma_ctx.is_panic_mode &&
 				    !mutex_trylock(&sentry_urma_mutex))
@@ -1730,6 +1742,12 @@ static int rebuild_tjetty(int idx, int die_index)
 {
 	struct ubcore_tjetty *tjetty_tmp = NULL;
 	struct ubcore_tjetty *tjetty_to_clear = NULL;
+
+	if (!sentry_urma_dev[die_index].sentry_ubcore_dev) {
+		pr_err("%s failed: urma %d dev is not exist\n", __func__, die_index);
+		return -EINVAL;
+	}
+
 	struct ubcore_tjetty_cfg cfg = {
 		.id.id = sentry_urma_ctx.client_jetty_id,
 		.id.eid = sentry_urma_dev[die_index].server_eid[idx],
@@ -1856,6 +1874,12 @@ static int sentry_post_jetty_send_wr(const char *buf, size_t len, int tjetty_idx
 	    !mutex_trylock(&sentry_urma_mutex)) {
 		pr_debug("sentry_post_jetty_send_wr: lock busy, skipping %d\n", tjetty_idx);
 		return 0;
+	}
+
+	if (!sentry_urma_dev[die_index].sentry_ubcore_dev) {
+		pr_err("%s failed: urma %d dev is not exist\n", __func__, die_index);
+		urma_mutex_lock_op(URMA_UNLOCK);
+		return -EINVAL;
 	}
 
 	tj_i = sentry_urma_dev[die_index].tjetty[tjetty_idx];
@@ -2087,6 +2111,7 @@ int urma_recv(char **buf_arr, size_t len)
 	/* Check each die for incoming messages */
 	for (die_index = 0; die_index < sentry_urma_ctx.local_eid_num_configured; die_index++) {
 		int cnt;
+
 		memset(sentry_urma_ctx.urma_recv_cr, 0, sizeof(struct ubcore_cr) * MAX_NODE_NUM);
 
 		if (!sentry_urma_ctx.is_panic_mode &&
