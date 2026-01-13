@@ -3244,7 +3244,7 @@ extern int cpuacct_cgroupfs_cpu_usage(struct cgroup_subsys_state *css, int cpu, 
 int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v, int max_cpu)
 {
 	typedef struct usage_info {
-		u64 sys, usr, idle;
+		u64 sys, usr, idle, steal;
 		int cpuid;
 	} u_info;
 
@@ -3252,10 +3252,10 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	bool is_top_cgrp;
 	struct timespec64 boottime;
 	struct cgroup_subsys_state *css;
-	u64 sys, usr, cpu_total, cpu_idle, acct_total, total_sys, total_usr, total_idle, cpu_total_v2;
-	u64 n_ctx_switch, n_process, n_running, n_blocked;
-	int i, k = 0, num_cpu = nr_cpu_ids + 1;;
-	total_sys = 0, total_usr = 0, total_idle = 0;
+	u64 sys, usr, steal, cpu_total, cpu_idle, acct_total, total_sys, total_usr, total_idle, cpu_total_v2;
+	u64 n_ctx_switch, n_process, n_running, n_blocked, total_steal;
+	int i, k = 0, num_cpu = nr_cpu_ids + 1;
+	total_sys = 0, total_usr = 0, total_idle = 0, total_steal = 0, steal = 0;
 
 	is_top_cgrp = !cs->css.parent ? true : false;
 
@@ -3291,6 +3291,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		++k;
 		cpu_total = 0;
 		cpu_idle = get_idle_time(&kcs, i);
+		steal     = kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_USER];
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
@@ -3310,10 +3311,12 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 			total_sys += sys;
 			total_usr += usr;
 			total_idle += cpu_idle;
+			total_steal += steal;
 			if (k < num_cpu) {
 				res[k].sys = sys;
 				res[k].usr = usr;
 				res[k].idle = cpu_idle;
+				res[k].steal = steal;
 				res[k].cpuid = i;
 			}
 		} else {
@@ -3344,6 +3347,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 			res[i].sys = total_sys / show_cpus;
 			res[i].usr = total_usr / show_cpus;
 			res[i].idle = total_idle / show_cpus;
+			res[i].steal = total_steal / show_cpus;
 		}
 	}
 
@@ -3351,6 +3355,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 	res[0].sys = total_sys;
 	res[0].usr = total_usr;
 	res[0].idle = total_idle;
+	res[0].steal = total_steal;
 	/* Should not use/show res[0].cpuid */
 	res[0].cpuid = -1;
 
@@ -3370,7 +3375,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		seq_put_decimal_ull(m, " ", 0);
 		seq_put_decimal_ull(m, " ", 0);
 		seq_put_decimal_ull(m, " ", 0);
-		seq_put_decimal_ull(m, " ", 0);
+		seq_put_decimal_ull(m, " ", nsec_to_clock_t(res[i].steal));
 		seq_put_decimal_ull(m, " ", 0);
 		seq_put_decimal_ull(m, " ", 0);
 		seq_putc(m, '\n');
