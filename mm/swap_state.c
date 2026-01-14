@@ -575,7 +575,7 @@ struct folio *swap_cache_alloc_folio(swp_entry_t entry, gfp_t gfp_mask,
 		return folio;
 
 	/* Skip allocation for unused and bad swap slot for readahead. */
-	if (!swap_entry_swapped(si, swp_offset(entry)))
+	if (!swap_entry_swapped(si, entry))
 		return NULL;
 
 	/* Allocate a new folio to be added into the swap cache. */

@@ -2701,13 +2701,6 @@ breakouterloop_mmap_lock:
 
 	return progress;
 }
-#else
-static unsigned int khugepaged_scan_exec_mm_slot(unsigned int pages, int *result,
-						 struct collapse_control *cc)
-{
-	BUILD_BUG();
-	return 0;
-}
 #endif /* CONFIG_HUGETEXT */
 
 static int khugepaged_has_work(void)
