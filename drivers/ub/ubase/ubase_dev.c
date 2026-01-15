@@ -288,6 +288,11 @@ static void ubase_uninit_aux_devices(struct ubase_dev *udev)
 	struct ubase_priv *priv = &udev->priv;
 	int i;
 
+	/* Before uninitializing the auxiliary device, disable the CE IRQ to
+	 * avoid concurrency.
+	 */
+	ubase_disable_ce_irqs(udev);
+
 	mutex_lock(&priv->uadev_lock);
 	for (i = ARRAY_SIZE(ubase_adev_devices) - 1; i >= 0; i--) {
 		if (!priv->uadev[i])
@@ -782,10 +787,6 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 	{
 		"enable period service task", UBASE_SUP_NO_PMU, 0,
 		ubase_enable_period_service_task, ubase_cancel_period_service_task
-	},
-	{
-		"enable ce irq", UBASE_SUP_NO_PMU, 1,
-		ubase_enable_ce_irqs, ubase_disable_ce_irqs
 	},
 };
 

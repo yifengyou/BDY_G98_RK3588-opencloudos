@@ -735,7 +735,6 @@ static int ubase_request_ceq_irq(struct ubase_dev *udev, struct ubase_ceq *ceq,
 	if (ubase_ubus_irq_vector(udev->dev, 0) == -EOPNOTSUPP)
 		return 0;
 
-	irq_set_status_flags(irq->irqn, IRQ_NOAUTOEN);
 	ret = request_irq(irq->irqn, ubase_ceq_int_handler, 0, irq->name, ceq);
 	if (ret) {
 		ubase_err(udev, "failed to request ceq[%u], ret = %d.\n",
@@ -971,20 +970,6 @@ void ubase_disable_ce_irqs(struct ubase_dev *udev)
 
 	for (i = 0; i < ceqs->num; i++)
 		disable_irq(ceqs->ceq[i].eq.irqn);
-}
-
-int ubase_enable_ce_irqs(struct ubase_dev *udev)
-{
-	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
-	u32 i;
-
-	if (test_bit(UBASE_STATE_IRQ_INVALID_B, &udev->state_bits))
-		return 0;
-
-	for (i = 0; i < ceqs->num; i++)
-		enable_irq(ceqs->ceq[i].eq.irqn);
-
-	return 0;
 }
 
 static int __ubase_event_register(struct ubase_dev *udev,
