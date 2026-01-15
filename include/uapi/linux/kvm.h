@@ -1250,6 +1250,8 @@ struct kvm_ppc_resize_hpt {
 /* support userspace to request management of CSV3 shared pages */
 #define KVM_CAP_HYGON_COCO_EXT_CSV3_SP_MGR        (1 << 4)
 
+#define KVM_CAP_ARM_HW_DIRTY_STATE_TRACK 502
+
 #ifdef KVM_CAP_IRQ_ROUTING
 
 struct kvm_irq_routing_irqchip {
