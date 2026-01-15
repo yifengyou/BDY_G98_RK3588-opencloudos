@@ -10,9 +10,22 @@
 #ifndef _LINUX_IEE_MMU_H
 #define _LINUX_IEE_MMU_H
 
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-ptp-init.h>
+#endif
+
 extern phys_addr_t __init early_iee_stack_alloc(int order);
 extern phys_addr_t __init early_iee_data_alloc(int shift);
 extern void __iee_create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
+				 unsigned long virt, phys_addr_t size,
+				 pgprot_t prot,
+				 phys_addr_t (*pgtable_alloc)(int),
+				 int flags);
+extern phys_addr_t __init early_iee_pgtable_alloc(int shift);
+extern phys_addr_t __init early_pgtable_alloc(int shift);
+extern phys_addr_t __pgd_pgtable_alloc(int shift);
+extern phys_addr_t pgd_pgtable_alloc(int shift);
+extern void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				 unsigned long virt, phys_addr_t size,
 				 pgprot_t prot,
 				 phys_addr_t (*pgtable_alloc)(int),
