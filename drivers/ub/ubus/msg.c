@@ -366,11 +366,11 @@ int ub_vdm_message(struct ub_entity *uent, struct ub_vdm_pld *vdm_pld)
 		return -EINVAL;
 	}
 
-	req_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->req_pld_len, GFP_KERNEL);
+	req_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->req_pld_len, GFP_ATOMIC);
 	if (!req_pkt)
 		return -ENOMEM;
 
-	rsp_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->rsp_buf_len, GFP_KERNEL);
+	rsp_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->rsp_buf_len, GFP_ATOMIC);
 	if (!rsp_pkt) {
 		kfree(req_pkt);
 		return -ENOMEM;
