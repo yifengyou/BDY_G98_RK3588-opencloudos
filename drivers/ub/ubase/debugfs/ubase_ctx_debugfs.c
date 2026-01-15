@@ -176,7 +176,6 @@ static void ubase_mask_eq_ctx_key_words(void *buf)
 
 	eq->eqe_base_addr_l = 0;
 	eq->eqe_base_addr_h = 0;
-	eq->eqe_token_id = 0;
 	eq->eqe_token_value = 0;
 }
 
@@ -186,7 +185,6 @@ static void ubase_mask_tp_ctx_key_words(void *buf)
 
 	tp->wqe_ba_l = 0;
 	tp->wqe_ba_h = 0;
-	tp->tp_wqe_token_id = 0;
 	tp->reorder_q_addr_l = 0;
 	tp->reorder_q_addr_h = 0;
 	tp->scc_token = 0;

@@ -238,12 +238,8 @@ static void unic_mask_jfs_ctx_key_words(void *buf)
 {
 	struct unic_jfs_ctx *jfs = (struct unic_jfs_ctx *)buf;
 
-	jfs->sqe_token_id_l = 0;
-	jfs->sqe_token_id_h = 0;
 	jfs->sqe_base_addr_l = 0;
 	jfs->sqe_base_addr_h = 0;
-	jfs->sqe_pld_tokenid = 0;
-	jfs->rmt_tokenid = 0;
 	jfs->user_data_l = 0;
 	jfs->user_data_h = 0;
 }
@@ -252,11 +248,8 @@ static void unic_mask_jfr_ctx_key_words(void *buf)
 {
 	struct unic_jfr_ctx *jfr = (struct unic_jfr_ctx *)buf;
 
-	jfr->rqe_token_id_l = 0;
-	jfr->rqe_token_id_h = 0;
 	jfr->rqe_base_addr_l = 0;
 	jfr->rqe_base_addr_h = 0;
-	jfr->pld_token_id = 0;
 	jfr->token_value = 0;
 	jfr->user_data_l = 0;
 	jfr->user_data_h = 0;
@@ -273,10 +266,8 @@ static void unic_mask_jfc_ctx_key_words(void *buf)
 
 	jfc->cqe_base_addr_l = 0;
 	jfc->cqe_base_addr_h = 0;
-	jfc->queue_token_id = 0;
 	jfc->record_db_addr_l = 0;
 	jfc->record_db_addr_h = 0;
-	jfc->rmt_token_id = 0;
 	jfc->remote_token_value = 0;
 }
 
