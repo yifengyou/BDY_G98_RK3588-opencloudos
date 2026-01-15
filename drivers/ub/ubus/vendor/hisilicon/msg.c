@@ -63,6 +63,7 @@ static inline void cqe_state_set(struct hi_message_device *hmd, int idx,
 #define HI_MSG_CQ_POLL_PERIOD		100
 #define HI_TIMEOUT_MSG_POLL_PERIOD	500
 #define HI_MSG_AGING_PERIOD		2
+#define MAX_CQ_POLL_PER_TIME		64
 
 #define MSG_MAX (HI_SQ_CFG_DEPTH - 1)
 #define q_left_cnt(q) ((q)->depth - q_used_cnt((q)) - 1)
@@ -391,6 +392,8 @@ static int hi_msg_cq_poller(struct hi_message_device *hmd)
 handled:
 		cqe_state_set(hmd, idx, CQ_SW_HANDLED);
 		handled_cnt++;
+		if (handled_cnt == MAX_CQ_POLL_PER_TIME)
+			break;
 	}
 
 	spin_unlock_irqrestore(&cq->lock, flags);
@@ -755,6 +758,8 @@ static int hi_msg_timeout_poller(struct hi_message_device *hmd)
 		if (hi_cqe_ageing(hmd, idx) || hi_is_timeout_msg(hmd, idx)) {
 			cqe_state_set(hmd, idx, CQ_SW_HANDLED);
 			handled_cnt++;
+			if (handled_cnt == MAX_CQ_POLL_PER_TIME)
+				break;
 		}
 	}
 
