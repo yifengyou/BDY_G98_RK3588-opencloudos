@@ -144,11 +144,22 @@ struct ghes_arr {
 	unsigned int count;
 };
 
+static inline bool is_hest_blacklisted(struct acpi_hest_header *hest_hdr)
+{
+#ifdef X86_VENDOR_AMD
+	return boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+		(hest_hdr->source_id & 0xF000) != 0;
+#else
+	return 0;
+#endif
+}
+
 static int __init hest_parse_ghes_count(struct acpi_hest_header *hest_hdr, void *data)
 {
 	int *count = data;
 
-	if (is_generic_error(hest_hdr))
+	if (is_generic_error(hest_hdr) &&
+	    !is_hest_blacklisted(hest_hdr))
 		(*count)++;
 	return 0;
 }
@@ -159,7 +170,8 @@ static int __init hest_parse_ghes(struct acpi_hest_header *hest_hdr, void *data)
 	struct ghes_arr *ghes_arr = data;
 	int rc, i;
 
-	if (!is_generic_error(hest_hdr))
+	if (!is_generic_error(hest_hdr) ||
+	    is_hest_blacklisted(hest_hdr))
 		return 0;
 
 	if (!((struct acpi_hest_generic *)hest_hdr)->enabled)
