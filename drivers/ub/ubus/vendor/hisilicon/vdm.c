@@ -437,7 +437,7 @@ static int ub_vdm_msg_info_handle(struct ub_bus_controller *ubc,
 		}
 	}
 
-	dev_err(&ubc->dev, "vdm sub opvode is invalid, sub_opcode = %#x\n", sub_opcode);
+	dev_err(&ubc->dev, "vdm sub opcode is invalid, sub_opcode = %#x\n", sub_opcode);
 	return UB_MSG_RSP_EXEC_EINVAL;
 }
 
