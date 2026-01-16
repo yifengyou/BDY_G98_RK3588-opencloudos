@@ -796,10 +796,14 @@ static void unic_free_multi_rq_resource(struct unic_dev *unic_dev, u32 num)
 
 void unic_destroy_rq(struct unic_dev *unic_dev, u32 num)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	enum ubase_reset_stage reset_stage;
+
 	if (!num)
 		return;
 
-	if (!__unic_resetting(unic_dev))
+	reset_stage = ubase_get_reset_stage(adev);
+	if (reset_stage != UBASE_RESET_STAGE_UNINIT)
 		unic_destroy_multi_jfr_context(unic_dev, num);
 
 	unic_free_multi_rq_resource(unic_dev, num);

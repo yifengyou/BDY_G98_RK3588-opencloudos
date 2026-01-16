@@ -841,6 +841,7 @@ void unic_destroy_sq(struct unic_dev *unic_dev, u32 num)
 {
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct ubase_adev_caps *unic_caps = ubase_get_unic_caps(adev);
+	enum ubase_reset_stage reset_stage;
 	u32 jfs_start_idx;
 
 	if (!num || !unic_caps)
@@ -848,7 +849,8 @@ void unic_destroy_sq(struct unic_dev *unic_dev, u32 num)
 
 	jfs_start_idx = unic_caps->jfs.start_idx;
 
-	if (!__unic_resetting(unic_dev))
+	reset_stage = ubase_get_reset_stage(adev);
+	if (reset_stage != UBASE_RESET_STAGE_UNINIT)
 		unic_destroy_multi_jfs(unic_dev, num, jfs_start_idx);
 
 	unic_free_multi_sq_resource(unic_dev, num);
