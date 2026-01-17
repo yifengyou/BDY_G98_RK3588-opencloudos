@@ -15,6 +15,7 @@
 #include <linux/sysfs.h>
 #include <linux/bug.h>
 #include <linux/nmi.h>
+#include <linux/cc_platform.h>
 
 #include <asm/cpu_entry_area.h>
 #include <asm/stacktrace.h>
@@ -123,6 +124,33 @@ static __always_inline bool in_exception_stack(unsigned long *stack, struct stac
 
 	begin += (unsigned long)ep->offs;
 	end = begin + (unsigned long)ep->size;
+
+	/*
+	 * The VC and VC2 exception stacks are only mapped when running as an
+	 * SEV-ES or SEV-SNP guest (CC_ATTR_GUEST_STATE_ENCRYPT). On Intel CPUs
+	 * and non-SEV AMD systems, these stacks are not mapped even though
+	 * estack_pages[] contains their descriptors. The struct
+	 * cea_exception_stacks always reserves space for all exception stacks
+	 * regardless of whether they are actually used/mapped.
+	 *
+	 * If we reach here with a VC or VC2 stack type on a system where these
+	 * stacks are not mapped, accessing regs->sp below would cause a page
+	 * fault. This can happen when PEBS/NMI sampling captures a stack
+	 * pointer that falls within the unmapped VC/VC2 address range.
+	 */
+	if (ep->type == STACK_TYPE_EXCEPTION + ESTACK_VC ||
+	    ep->type == STACK_TYPE_EXCEPTION + ESTACK_VC2) {
+		if (!IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT) ||
+		    !cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT)) {
+			printk_deferred_once(KERN_WARNING
+				"WARNING: unmapped VC/VC2 exception stack access: "
+				"stk=%px range=[%px-%px) type=%s page_idx=%u\n",
+				(void *)stk, (void *)begin, (void *)end,
+				stack_type_name(ep->type), k);
+			return false;
+		}
+	}
+
 	regs = (struct pt_regs *)end - 1;
 
 	info->type	= ep->type;
