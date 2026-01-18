@@ -279,6 +279,12 @@ int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly;
 static int watermark_scale_factor = 10;
 
+/*
+ * Maximum number of reclaim retries without progress before OOM killer
+ * is considered as the only way forward. Configurable via sysctl.
+ */
+int sysctl_max_reclaim_retries __read_mostly = MAX_RECLAIM_RETRIES_DEFAULT;
+
 /* movable_zone is the "real" zone pages in ZONE_MOVABLE are taken from */
 int movable_zone;
 EXPORT_SYMBOL(movable_zone);
@@ -6590,6 +6596,15 @@ static struct ctl_table page_alloc_sysctl_table[] = {
 		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
 #endif
+	{
+		.procname	= "max_reclaim_retries",
+		.data		= &sysctl_max_reclaim_retries,
+		.maxlen		= sizeof(sysctl_max_reclaim_retries),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ONE,      /* Min 1 retry */
+		.extra2		= SYSCTL_ONE_HUNDRED, /* Max 100 retries */
+	},
 	{}
 };
 
