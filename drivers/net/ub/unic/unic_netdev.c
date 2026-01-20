@@ -749,6 +749,8 @@ static int unic_ub_ip_event(struct sockaddr *sa, struct net_device *ndev,
 		return NOTIFY_DONE;
 
 	unic_dev = netdev_priv(ndev);
+	if (__unic_removing(unic_dev))
+		return NOTIFY_OK;
 
 	switch (event) {
 	case NETDEV_UP:

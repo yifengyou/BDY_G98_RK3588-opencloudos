@@ -1108,6 +1108,10 @@ int ubase_comp_register(struct auxiliary_device *adev,
 
 	uadev = container_of(adev, struct ubase_adev, adev);
 	uadev->comp_notifier.notifier_call = comp_handler;
+
+	if (ubase_shutting_down(uadev->udev))
+		return 0;
+
 	ret = atomic_notifier_chain_register(&uadev->comp_nh,
 					     &uadev->comp_notifier);
 	if (ret)
@@ -1137,6 +1141,8 @@ void ubase_comp_unregister(struct auxiliary_device *adev)
 		return;
 
 	uadev = container_of(adev, struct ubase_adev, adev);
+	if (ubase_shutting_down(uadev->udev))
+		return;
 
 	ret = atomic_notifier_chain_unregister(&uadev->comp_nh,
 					       &uadev->comp_notifier);

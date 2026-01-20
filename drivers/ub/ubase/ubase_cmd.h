@@ -259,7 +259,8 @@ struct ubase_activate_req {
 	__le16	bus_ue_id;
 	__le16	msn;
 	u8	activate;
-	u8	resv[19];
+	u8	shutdown;
+	u8	resv[18];
 };
 
 struct ubase_activate_resp {

@@ -357,7 +357,8 @@ void ubase_ctrlq_disable_remote(struct ubase_dev *udev)
 	u32 resp;
 	int ret;
 
-	if (!ubase_dev_ctrlq_supported(udev))
+	if (!ubase_dev_ctrlq_supported(udev) ||
+	    (ubase_shutting_down(udev) && ubase_is_ctrl_node(udev)))
 		return;
 
 	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
@@ -589,12 +590,20 @@ static int ubase_ctrlq_send_msg_to_sq(struct ubase_dev *udev,
 static int ubase_ctrlq_wait_completed(struct ubase_dev *udev, u16 seq,
 				      struct ubase_ctrlq_msg *msg)
 {
+#define UBASE_CTRLQ_TIMEOUT_CASE_SHUT_DOWN 500
+
 	struct ubase_ctrlq_msg_ctx *ctx = &udev->ctrlq.msg_queue[seq];
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
+	u32 timeout;
 	int ret;
 
+	if (ubase_shutting_down(udev) && ubase_is_ctrl_node(udev))
+		timeout = UBASE_CTRLQ_TIMEOUT_CASE_SHUT_DOWN;
+	else
+		timeout = msg->timeout ? msg->timeout : csq->tx_timeout;
+
 	if (!wait_for_completion_timeout(&ctx->done,
-					 msecs_to_jiffies(csq->tx_timeout))) {
+					 msecs_to_jiffies(timeout))) {
 		ubase_err(udev,
 			  "ctrlq wait resp timeout, seq = %u, opcode = 0x%x, service_type = 0x%x.\n",
 			  seq, msg->opcode, msg->service_type);
@@ -798,6 +807,9 @@ static int ubase_ctrlq_send_real(struct ubase_dev *udev,
 
 		if (ubase_ctrlq_msg_is_sync_req(msg))
 			ret = ubase_ctrlq_wait_completed(udev, seq, msg);
+
+		if (ubase_shutting_down(udev) && ubase_is_ctrl_node(udev))
+			break;
 	} while (ret == -ETIMEDOUT && retry++ < UBASE_CTRLQ_RETRY_TIMES);
 
 	if (ubase_ctrlq_msg_is_sync_req(msg) ||

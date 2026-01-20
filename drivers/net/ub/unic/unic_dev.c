@@ -543,6 +543,7 @@ static inline void unic_uninit_rss(struct unic_dev *unic_dev)
 
 static void __unic_uninit_channels(struct unic_dev *unic_dev)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct unic_channels *channels = &unic_dev->channels;
 	u32 i;
 
@@ -551,8 +552,10 @@ static void __unic_uninit_channels(struct unic_dev *unic_dev)
 	if (!channels->c)
 		return;
 
-	for (i = 0; i < channels->num; i++)
-		netif_napi_del(&channels->c[i].napi);
+	if (!ubase_adev_shutting_down(adev)) {
+		for (i = 0; i < channels->num; i++)
+			netif_napi_del(&channels->c[i].napi);
+	}
 
 	unic_destroy_jetty(unic_dev, channels->num);
 
@@ -1107,10 +1110,31 @@ err_free_netdev:
 	return ret;
 }
 
-void unic_dev_uninit(struct auxiliary_device *adev)
+static void unic_uninit_netdev(struct auxiliary_device *adev)
 {
 	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct net_device *netdev = priv->comdev.netdev;
+
+	if (netdev->reg_state != NETREG_UNINITIALIZED) {
+		if (ubase_adev_shutting_down(adev)) {
+			rtnl_lock();
+			netif_device_detach(netdev);
+			dev_close(netdev);
+			rtnl_unlock();
+		} else {
+			unregister_netdev(netdev);
+		}
+	}
+
+	unic_uninit_netdev_priv(netdev);
+
+	if (!ubase_adev_shutting_down(adev))
+		free_netdev(netdev);
+}
+
+void unic_dev_uninit(struct auxiliary_device *adev)
+{
+	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct unic_promisc_en promisc_en = {0};
 
 	/* cancel service task and wait it finish before release resources. */
@@ -1125,12 +1149,7 @@ void unic_dev_uninit(struct auxiliary_device *adev)
 	/* Explicitly disable promisc to avoid hardware promisc residue */
 	unic_set_promisc_mode(priv, &promisc_en);
 
-	if (netdev->reg_state != NETREG_UNINITIALIZED)
-		unregister_netdev(netdev);
-
-	unic_uninit_netdev_priv(netdev);
-
-	free_netdev(netdev);
+	unic_uninit_netdev(adev);
 
 	dev_set_drvdata(&adev->dev, NULL);
 }

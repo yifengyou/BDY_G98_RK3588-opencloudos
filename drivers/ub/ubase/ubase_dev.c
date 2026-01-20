@@ -1545,19 +1545,24 @@ EXPORT_SYMBOL(ubase_activate_unregister);
 
 static int ubase_wait_activate_done(struct ubase_dev *udev, u16 bus_ue_id)
 {
+#define UBASE_ACTIVE_DEV_TIMEOUT_SHUTDOWN 1000
 #define UBASE_ACTIVE_DEV_TIMEOUT 10000
 
 	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
 	struct ubase_act_info *info;
+	u32 timeout;
 
 	info = (ue->entity_idx == bus_ue_id) ? &udev->act_ctx.self :
 		&udev->act_ctx.other;
 
+	timeout = ((ubase_shutting_down(udev) || info->shutdown) &&
+		   ubase_is_ctrl_node(udev)) ?
+		   UBASE_ACTIVE_DEV_TIMEOUT_SHUTDOWN : UBASE_ACTIVE_DEV_TIMEOUT;
 	if (!wait_for_completion_timeout(&info->activate_done,
-					 msecs_to_jiffies(UBASE_ACTIVE_DEV_TIMEOUT))) {
+					 msecs_to_jiffies(timeout))) {
 		ubase_err(udev,
-			  "wait activate dev resp timeout, bus_ue_id = %u, msn = %u.\n",
-			  bus_ue_id, info->wait_msn);
+			  "wait activate dev resp timeout(%u ms), bus_ue_id = %u, msn = %u.\n",
+			  timeout, bus_ue_id, info->wait_msn);
 		return -ETIMEDOUT;
 	}
 
@@ -1601,6 +1606,7 @@ static int ubase_send_activate_dev_req(struct ubase_dev *udev, bool activate,
 
 	req.activate = activate ? 1 : 0;
 	req.bus_ue_id = cpu_to_le16(bus_ue_id);
+	req.shutdown = ubase_shutting_down(udev);
 	ubase_alloc_msn(udev, &msn);
 	req.msn = cpu_to_le16(msn);
 	ubase_record_msn(udev, bus_ue_id, msn);
@@ -1874,3 +1880,21 @@ int ubase_get_dev_mac(struct auxiliary_device *adev, u8 *dev_addr, u8 addr_len)
 	return 0;
 }
 EXPORT_SYMBOL(ubase_get_dev_mac);
+
+/**
+ * ubase_adev_shutting_down() - Determine whether the device is shutting down.
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether the device is shutting down.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
+bool ubase_adev_shutting_down(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_shutting_down(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_shutting_down);

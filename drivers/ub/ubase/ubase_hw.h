@@ -32,7 +32,8 @@ struct ubase_res_cmd_resp {
 	__le32	cap_bits[UBASE_CAP_LEN];
 	__le32	rsvd0[3];
 
-	u8	rsvd1[2];
+	u8	node_type;
+	u8	rsvd1;
 	__le16	ceq_vector_num;
 	__le16	aeq_vector_num;
 	__le16	misc_vector_num;

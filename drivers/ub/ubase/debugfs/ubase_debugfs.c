@@ -73,6 +73,7 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 		{"\ttotal_ue_num: %u\n", dev_caps->total_ue_num},
 		{"\tta_extdb_buf_size: %llu\n", udev->ta_ctx.extdb_buf.size},
 		{"\tta_timer_buf_size: %llu\n", udev->ta_ctx.timer_buf.size},
+		{"\tnode_type: %u\n", udev->node_type},
 		{"\tpublic_jetty_cnt: %u\n", dev_caps->public_jetty_cnt},
 		{"\tvl_num: %hhu\n", dev_caps->vl_num},
 		{"\trsvd_jetty_cnt: %hu\n", dev_caps->rsvd_jetty_cnt},

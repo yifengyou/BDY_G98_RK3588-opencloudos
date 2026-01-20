@@ -133,6 +133,7 @@ static void ubase_parse_dev_caps_comm(struct ubase_dev *udev,
 {
 	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
 
+	udev->node_type = resp->node_type;
 	dev_caps->num_ceq_vectors = le16_to_cpu(resp->ceq_vector_num);
 	dev_caps->num_aeq_vectors = le16_to_cpu(resp->aeq_vector_num);
 	dev_caps->num_misc_vectors = le16_to_cpu(resp->misc_vector_num);

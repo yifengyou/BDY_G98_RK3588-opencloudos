@@ -777,6 +777,9 @@ static void unic_free_multi_rq_resource(struct unic_dev *unic_dev, u32 num)
 	struct unic_channel *channel;
 	u32 i;
 
+	if (ubase_adev_shutting_down(unic_dev->comdev.adev))
+		return;
+
 	for (i = 0; i < num; i++) {
 		channel = &unic_dev->channels.c[i];
 		if (!channel->rq) {

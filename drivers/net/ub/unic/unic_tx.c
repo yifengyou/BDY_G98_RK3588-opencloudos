@@ -265,7 +265,7 @@ static void unic_init_jfs_ctx(struct unic_dev *unic_dev, struct unic_sq *sq,
 {
 	struct unic_jfs_ctx *ctx = &sq->jfs_ctx;
 
-	ctx->ta_timeout = UNIC_TIMEOUT_8S;
+	ctx->ta_timeout = UNIC_TIMEOUT_64S;
 	ctx->type = UNIC_RAW_TYPE;
 	ctx->sqe_bb_shift = unic_dev->channels.sqebb_shift;
 	ctx->state = UNIC_JFS_STATE_READY;
@@ -592,11 +592,7 @@ static void unic_destroy_multi_jfs(struct unic_dev *unic_dev, u32 num,
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	u32 timeout_ms;
 
-#if defined(UNIC_FPGA_COMPILE)
 	timeout_ms = unic_get_ta_timeout_ms(UNIC_TIMEOUT_64S);
-#else
-	timeout_ms = unic_get_ta_timeout_ms(UNIC_TIMEOUT_8S);
-#endif
 
 	unic_multi_jfs_flush_prepare(unic_dev, num, timeout_ms, start_idx);
 

@@ -52,6 +52,9 @@ static void unic_remove(struct auxiliary_device *adev)
 		msleep(UNIC_RESET_WAIT_TIME);
 
 	set_bit(UNIC_STATE_REMOVING, &unic_dev->state);
+
+	unic_info(unic_dev, "unic remove start.\n");
+
 	unic_dbg_uninit(adev);
 	unic_dev_uninit(adev);
 }

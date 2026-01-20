@@ -149,6 +149,7 @@ enum ubase_dev_state_bit {
 	UBASE_STATE_CTX_READY_B,
 	UBASE_STATE_PREALLOC_OK_B,
 	UBASE_STATE_RST_WAIT_DEACTIVE_B,
+	UBASE_STATE_SHUTDOWN,
 };
 
 struct ubase_crq_event_nbs {
@@ -240,6 +241,7 @@ struct ubase_stats {
 
 struct ubase_act_info {
 	u16			wait_msn;
+	u8			shutdown;
 	int			result;
 	struct completion	activate_done;
 };
@@ -283,6 +285,14 @@ struct ubase_log_rs {
 	u16 ctrlq_other_seq_invalid_log_cnt;
 };
 
+enum ubase_node_type {
+	UBASE_NODE_TYPE_UNKNOWN,
+	UBASE_NODE_TYPE_INBAND_CTRL,
+	UBASE_NODE_TYPE_INBAND_CTRLED,
+	UBASE_NODE_TYPE_OUTBAND_CTRL,
+	UBASE_NODE_TYPE_OUTBAND_CTRLED,
+};
+
 struct ubase_dev {
 	struct device		*dev;
 	int			dev_id;
@@ -290,6 +300,7 @@ struct ubase_dev {
 	struct ubase_hw		hw;
 
 	bool			use_fixed_rc_num;
+	enum ubase_node_type	node_type;
 	struct ubase_dev_caps	caps;
 	struct ubase_adev_qos	qos;
 	struct ubase_dbgfs	dbgfs;
@@ -465,6 +476,16 @@ static inline bool ubase_mbx_ue_id_is_valid(u16 mbx_ue_id,
 		return false;
 
 	return true;
+}
+
+static inline bool ubase_shutting_down(struct ubase_dev *udev)
+{
+	return test_bit(UBASE_STATE_SHUTDOWN, &udev->state_bits);
+}
+
+static inline bool ubase_is_ctrl_node(struct ubase_dev *udev)
+{
+	return udev->node_type == UBASE_NODE_TYPE_INBAND_CTRL;
 }
 
 int ubase_adev_idx_alloc(void);

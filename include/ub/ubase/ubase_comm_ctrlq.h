@@ -86,6 +86,7 @@ struct ubase_ctrlq_msg {
 	u16	resp_seq; /* must set when the is_resp field is true. */
 	u16	in_size;
 	u16	out_size;
+	u16	timeout; /* 0:use default timeout; otherwise, use the configured timeout*/
 	void	*in;
 	void	*out;
 };
