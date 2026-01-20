@@ -39,6 +39,8 @@ enum {
 	UNIC_SUPPORT_MASK_NBITS
 };
 
+#define be32_to_le32(x) cpu_to_le32(be32_to_cpu(x))
+
 #define unic_get_cap_bit(unic_dev, nr) \
 	test_bit(nr, (unsigned long *)((unic_dev)->cap_bits))
 

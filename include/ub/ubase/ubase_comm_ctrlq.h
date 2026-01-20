@@ -41,6 +41,7 @@ enum ubase_ctrlq_opc_type_tp {
 	UBASE_CTRLQ_OPC_DESTROY_TP	= 0x12,
 	UBASE_CTRLQ_OPC_TP_FLUSH_DONE	= 0x14,
 	UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE	= 0x15,
+	UBASE_CTRLQ_OPC_NOTIFY_BOND_IP	= 0x19,
 };
 
 enum ubase_ctrlq_opc_type_qos {

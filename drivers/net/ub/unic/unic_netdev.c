@@ -7,6 +7,7 @@
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
 #include <net/addrconf.h>
+#include <net/bonding.h>
 #include <net/dsfield.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
@@ -20,6 +21,7 @@
 #include <ub/ubase/ubase_comm_eq.h>
 #include <ub/ubase/ubase_comm_stats.h>
 
+#include "unic_bond.h"
 #include "unic_cmd.h"
 #include "unic_dev.h"
 #include "unic_event.h"
@@ -719,11 +721,37 @@ static bool unic_port_dev_check(const struct net_device *dev)
 	return dev->netdev_ops == &unic_netdev_ops;
 }
 
+static struct unic_dev *unic_get_bond_slave(struct net_device *ndev)
+{
+	struct slave *first_slave;
+	struct bonding *bond;
+
+	if (!netif_is_bond_master(ndev))
+		return NULL;
+
+	rcu_read_lock();
+	bond = netdev_priv(ndev);
+	first_slave = bond_first_slave_rcu(bond);
+	rcu_read_unlock();
+	if (!first_slave || !unic_port_dev_check(first_slave->dev))
+		return NULL;
+
+	return netdev_priv(first_slave->dev);
+}
+
 static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,
 			     u16 ip_mask, unsigned long event)
 {
 	enum UNIC_COMM_ADDR_STATE state;
+	struct unic_dev *unic_dev;
 	int ret = NOTIFY_OK;
+
+	unic_dev = unic_get_bond_slave(ndev);
+	if (!unic_dev)
+		return NOTIFY_DONE;
+
+	if (!unic_bond_ip_sync_supported(unic_dev))
+		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_UP:
@@ -735,6 +763,9 @@ static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,
 	default:
 		return NOTIFY_DONE;
 	}
+
+	if (unic_update_bond_ipaddr(unic_dev, sa, ip_mask, state))
+		ret = NOTIFY_BAD;
 
 	return ret;
 }

@@ -16,6 +16,7 @@
 #include <ub/ubase/ubase_comm_eq.h>
 #include <ub/ubase/ubase_comm_qos.h>
 
+#include "unic_bond.h"
 #include "unic_cmd.h"
 #include "unic_dcbnl.h"
 #include "unic_ethtool.h"
@@ -715,6 +716,7 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 	unic_link_status_update(unic_dev);
 	unic_update_port_info(unic_dev);
 	unic_sync_ip_table(unic_dev);
+	unic_sync_bond_ip_table(unic_dev);
 
 	if (unic_dev_eth_mac_supported(unic_dev))
 		unic_sync_mac_table(unic_dev);
@@ -745,6 +747,8 @@ static void unic_init_vport_info(struct unic_dev *unic_dev)
 	spin_lock_init(&unic_dev->vport.addr_tbl.tmp_ip_lock);
 	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.ip_list);
 	spin_lock_init(&unic_dev->vport.addr_tbl.ip_list_lock);
+	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.bond_ip_list);
+	spin_lock_init(&unic_dev->vport.addr_tbl.bond_ip_list_lock);
 
 	if (unic_dev_eth_mac_supported(unic_dev)) {
 		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.uc_mac_list);
@@ -845,6 +849,7 @@ static int unic_init_vport(struct unic_dev *unic_dev)
 static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
 	unic_uninit_ip_table(unic_dev);
+	unic_uninit_bond_ip_table(unic_dev);
 
 	if (unic_dev_eth_mac_supported(unic_dev)) {
 		unic_uninit_mac_table(unic_dev);

@@ -46,6 +46,7 @@ enum unic_vport_state {
 	UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
 	UNIC_VPORT_STATE_MAC_TBL_CHANGE,
 	UNIC_VPORT_STATE_IP_QUERYING,
+	UNIC_VPORT_STATE_BOND_IP_CHANGE,
 };
 
 enum unic_channel_state {
@@ -215,6 +216,9 @@ struct unic_addr_tbl {
 
 	spinlock_t		tmp_ip_lock; /* protect ip address from controller */
 	struct list_head	tmp_ip_list; /* Store temprary ip table */
+
+	spinlock_t		bond_ip_list_lock; /* protect bond ip address from controller */
+	struct list_head	bond_ip_list; /* Store bond ip table */
 
 	spinlock_t		mac_list_lock; /* protect mac address need to add/detele */
 	struct list_head	uc_mac_list; /* store unicast mac table */

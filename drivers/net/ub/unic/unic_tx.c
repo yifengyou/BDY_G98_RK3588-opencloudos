@@ -925,8 +925,6 @@ static void unic_fill_ctrl_owner(struct unic_sq *sq,
 static void unic_fill_ctrl_l3_info(struct unic_sqe_ctrl_section *ctrl,
 				   struct sk_buff *skb, struct unic_sq *sq)
 {
-#define be32_to_le32(x) cpu_to_le32(be32_to_cpu(x))
-
 	struct ipv6hdr *ip6_hdr;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
