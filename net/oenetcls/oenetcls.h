@@ -133,6 +133,7 @@ extern int match_ip_flag;
 extern int oecls_debug_lvl;
 extern int oecls_netdev_num;
 extern int oecls_numa_num;
+extern int check_nic_feature;
 
 #define oecls_debug(fmt, ...)					\
 	do {							\

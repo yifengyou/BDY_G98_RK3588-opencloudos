@@ -137,7 +137,7 @@ static void set_oecls_cpu(struct net_device *dev, struct sk_buff *skb,
 	int rxq_index, rc;
 
 	if (!skb_rx_queue_recorded(skb) || !dev->rx_cpu_rmap ||
-	    !(dev->features & NETIF_F_NTUPLE))
+	    (!(dev->features & NETIF_F_NTUPLE) && check_nic_feature))
 		return;
 
 	rxq_index = flow_get_queue_idx(dev, cpu_to_node(next_cpu), skb);

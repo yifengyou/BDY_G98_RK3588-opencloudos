@@ -47,6 +47,10 @@ static char irqname[64] = "comp";
 module_param_string(irqname, irqname, sizeof(irqname), 0644);
 MODULE_PARM_DESC(irqname, "nic irq name string, default comp");
 
+int check_nic_feature = 1;
+module_param(check_nic_feature, int, 0444);
+MODULE_PARM_DESC(check_nic_feature, "check nic feature, default 1");
+
 static bool check_params(void)
 {
 	if (mode != 0 && mode != 1)
@@ -401,6 +405,9 @@ static int oecls_filter_enable(const char *dev_name, bool *old_state)
 	struct cmd_context ctx = {0};
 	int ret;
 
+	if (!check_nic_feature)
+		return 0;
+
 	strscpy(ctx.netdev, dev_name, IFNAMSIZ);
 
 	eval.cmd = ETHTOOL_GFLAGS;
@@ -446,6 +453,9 @@ static void oecls_filter_restore(const char *dev_name, bool old_state)
 	struct cmd_context ctx = {0};
 	bool cur_filter_state;
 	int ret;
+
+	if (!check_nic_feature)
+		return;
 
 	strscpy(ctx.netdev, dev_name, IFNAMSIZ);
 
