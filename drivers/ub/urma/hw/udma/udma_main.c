@@ -1039,6 +1039,11 @@ static void check_and_wait_flush_done(struct udma_dev *udma_dev)
 		if (udma_dev->disable_ue_rx_count == 1)
 			break;
 
+		if (ubase_adev_shutting_down(udma_dev->comdev.adev)) {
+			dev_err_ratelimited(udma_dev->dev, "exit flush in shutdown process.\n");
+			break;
+		}
+
 		if (wait_times > WAIT_MAX_TIMES) {
 			dev_warn(udma_dev->dev, "wait flush done timeout.\n");
 			break;
@@ -1123,6 +1128,10 @@ int udma_probe(struct auxiliary_device *adev,
 
 void udma_remove(struct auxiliary_device *adev)
 {
+#define MIN_SLEEP_TIME 100
+#define MAX_SLEEP_TIME 800
+#define TIME_SLEEP_RATE 2
+	uint32_t wait_time = MIN_SLEEP_TIME;
 	struct udma_dev *udma_dev;
 
 	ubase_reset_unregister(adev);
@@ -1135,9 +1144,20 @@ void udma_remove(struct auxiliary_device *adev)
 	}
 
 	ubcore_stop_requests(&udma_dev->ub_dev);
-	if (udma_close_ue_rx(udma_dev, false, false, false, 0))
-		dev_err(&adev->dev, "udma close ue rx failed in remove process.\n");
+	while (true) {
+		if (!udma_close_ue_rx(udma_dev, false, false, false, 0))
+			break;
 
+		if (ubase_adev_shutting_down(adev)) {
+			dev_err_ratelimited(&adev->dev, "enter shutdown process.\n");
+			break;
+		}
+
+		msleep(wait_time);
+		if (wait_time < MAX_SLEEP_TIME)
+			wait_time *= TIME_SLEEP_RATE;
+		dev_err_ratelimited(&adev->dev, "udma close ue rx failed in remove process.\n");
+	}
 	udma_dev->status = UDMA_SUSPEND;
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_unregister_none_crq_event(adev);
