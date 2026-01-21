@@ -2259,9 +2259,8 @@ int block_write_begin(struct address_space *mapping, loff_t pos, unsigned len,
 }
 EXPORT_SYMBOL(block_write_begin);
 
-int block_write_end(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
-			struct page *page, void *fsdata)
+int block_write_end(loff_t pos, unsigned len, unsigned copied,
+			struct page *page)
 {
 	struct folio *folio = page_folio(page);
 	size_t start = pos - folio_pos(folio);
@@ -2301,7 +2300,7 @@ int generic_write_end(struct file *file, struct address_space *mapping,
 	loff_t old_size = inode->i_size;
 	bool i_size_changed = false;
 
-	copied = block_write_end(file, mapping, pos, len, copied, page, fsdata);
+	copied = block_write_end(pos, len, copied, page);
 
 	/*
 	 * No need to use i_size_read() here, the i_size cannot change under us

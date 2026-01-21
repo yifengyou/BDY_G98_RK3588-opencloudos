@@ -844,8 +844,7 @@ static size_t iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 	if (srcmap->type == IOMAP_INLINE) {
 		ret = iomap_write_end_inline(iter, folio, pos, copied);
 	} else if (srcmap->flags & IOMAP_F_BUFFER_HEAD) {
-		ret = block_write_end(NULL, iter->inode->i_mapping, pos, len,
-				copied, &folio->page, NULL);
+		ret = block_write_end(pos, len, copied, &folio->page);
 	} else {
 		ret = __iomap_write_end(iter->inode, pos, len, copied, folio);
 	}
