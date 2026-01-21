@@ -205,7 +205,9 @@ static int cdma_init_dev_param(struct cdma_dev *cdev)
 	idr_init(&cdev->ctx_idr);
 	spin_lock_init(&cdev->ctx_lock);
 	atomic_set(&cdev->cmdcnt, 1);
+	atomic_set(&cdev->kcmdcnt, 1);
 	init_completion(&cdev->cmddone);
+	init_completion(&cdev->kcmddone);
 	dev_set_drvdata(&adev->dev, cdev);
 
 	ret = cdma_ctrlq_query_eu(cdev);
@@ -522,8 +524,7 @@ bool cdma_find_seid_in_eus(struct eu_info *eus, u8 eu_num, struct dev_eid *eid,
 	u32 i;
 
 	for (i = 0; i < eu_num; i++)
-		if (eus[i].eid.dw0 == eid->dw0 && eus[i].eid.dw1 == eid->dw1 &&
-		    eus[i].eid.dw2 == eid->dw2 && eus[i].eid.dw3 == eid->dw3) {
+		if (memcmp(&eus[i].eid, eid, sizeof(*eid)) == 0) {
 			*eu_out = eus[i];
 			return true;
 		}

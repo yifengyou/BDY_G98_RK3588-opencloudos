@@ -231,6 +231,26 @@ void cdma_cmd_dec(struct cdma_dev *cdev)
 void cdma_cmd_flush(struct cdma_dev *cdev)
 {
 	cdma_cmd_dec(cdev);
-	pr_info("cmd flush cmdcnt is %d\n", atomic_read(&cdev->cmdcnt));
+	dev_info(cdev->dev, "cmd flush cmdcnt is %d\n",
+		 atomic_read(&cdev->cmdcnt));
 	wait_for_completion(&cdev->cmddone);
+}
+
+void cdma_kcmd_inc(struct cdma_dev *cdev)
+{
+	atomic_inc(&cdev->kcmdcnt);
+}
+
+void cdma_kcmd_dec(struct cdma_dev *cdev)
+{
+	if (atomic_dec_and_test(&cdev->kcmdcnt))
+		complete(&cdev->kcmddone);
+}
+
+void cdma_kcmd_flush(struct cdma_dev *cdev)
+{
+	cdma_kcmd_dec(cdev);
+	dev_info(cdev->dev, "cmd flush kcmdcnt is %d\n",
+		 atomic_read(&cdev->kcmdcnt));
+	wait_for_completion(&cdev->kcmddone);
 }

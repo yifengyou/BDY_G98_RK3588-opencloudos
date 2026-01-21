@@ -209,7 +209,9 @@ struct cdma_dev {
 	struct list_head file_list;
 	struct page *arm_db_page;
 	atomic_t cmdcnt;
+	atomic_t kcmdcnt;
 	struct completion cmddone;
+	struct completion kcmddone;
 };
 
 struct cdma_jfs_event {

@@ -58,7 +58,7 @@ struct dma_device *dma_get_device_list(u32 *num_devices)
 	xa_for_each(cdma_devs_tbl, index, cdev) {
 		attr = &cdev->base.attr;
 		if (cdev->status >= CDMA_SUSPEND) {
-			pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+			pr_warn("not prepared to get device list, eid = 0x%x.\n",
 				attr->eid.dw0);
 			continue;
 		}
@@ -151,7 +151,7 @@ struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
 	xa_for_each(cdma_devs_tbl, index, cdev) {
 		attr = &cdev->base.attr;
 		if (cdev->status >= CDMA_SUSPEND) {
-			pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+			pr_warn("not prepared to get device, eid = 0x%x.\n",
 				attr->eid.dw0);
 			continue;
 		}
@@ -204,7 +204,7 @@ int dma_create_context(struct dma_device *dma_dev)
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to create context, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return -EINVAL;
 	}
@@ -267,9 +267,11 @@ void dma_delete_context(struct dma_device *dma_dev, int handle)
 		return;
 	}
 
+	cdma_kcmd_inc(cdev);
 	cdma_free_context(cdev, ctx);
 	ctx_res->ctx = NULL;
 	atomic_dec(&dma_dev->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_delete_context);
 
@@ -303,7 +305,7 @@ int dma_alloc_queue(struct dma_device *dma_dev, int ctx_id, struct queue_cfg *cf
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to alloc queue, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return -EINVAL;
 	}
@@ -376,9 +378,10 @@ void dma_free_queue(struct dma_device *dma_dev, int queue_id)
 	xa_erase(&ctx_res->queue_xa, queue_id);
 	ctx = queue->ctx;
 
+	cdma_kcmd_inc(cdev);
 	cdma_delete_queue(cdev, queue_id);
-
 	atomic_dec(&ctx->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_free_queue);
 
@@ -415,7 +418,7 @@ struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to register segment, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return NULL;
 	}
@@ -501,11 +504,12 @@ void dma_unregister_seg(struct dma_device *dma_dev, struct dma_seg *dma_seg)
 	xa_erase(&ctx_res->seg_xa, dma_seg->handle);
 	ctx = seg->ctx;
 
+	cdma_kcmd_inc(cdev);
 	cdma_seg_ungrant(seg);
 	cdma_unregister_seg(cdev, seg);
 	kfree(dma_seg);
-
 	atomic_dec(&ctx->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_unregister_seg);
 
@@ -559,7 +563,7 @@ static int cdma_param_transfer(struct dma_device *dma_dev, int queue_id,
 	}
 
 	if (tmp_dev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n", eid);
+		pr_warn("not prepared to send packet, eid = 0x%x.\n", eid);
 		return -EINVAL;
 	}
 
@@ -847,7 +851,7 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n", eid);
+		pr_warn("not prepared to poll queue, eid = 0x%x.\n", eid);
 		return -EINVAL;
 	}
 

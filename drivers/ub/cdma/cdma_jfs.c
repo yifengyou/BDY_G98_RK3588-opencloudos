@@ -411,9 +411,9 @@ static bool cdma_query_jfs_fd(struct cdma_dev *cdev,
 		if (ctx.flush_cqe_done)
 			return true;
 
-		if (cdma_wait_timeout(&sum_times, times, sq->ta_tmo)) {
+		if (cdma_wait_timeout(&sum_times, times, CDMA_TA_TIMEOUT_64000MS)) {
 			dev_warn(cdev->dev,
-				 "ta timeout, id = %u. PI = %u, CI = %u, next_send_ssn = %u next_rcv_ssn = %u state = %u.\n",
+				 "flush cqe timeout, id = %u. PI = %u, CI = %u, next_send_ssn = %u next_rcv_ssn = %u state = %u.\n",
 				 sq->id, ctx.pi, ctx.ci, ctx.next_send_ssn,
 				 ctx.next_rcv_ssn, ctx.state);
 			break;
@@ -458,7 +458,7 @@ int cdma_modify_jfs_precondition(struct cdma_dev *cdev,
 
 		if (cdma_wait_timeout(&sum_times, times, sq->ta_tmo)) {
 			dev_warn(cdev->dev,
-				 "ta timeout, id = %u. PI = %u, CI = %u, next_send_ssn = %u next_rcv_ssn = %u state = %u.\n",
+				 "modify jfs precondition timeout, id = %u. PI = %u, CI = %u, next_send_ssn = %u next_rcv_ssn = %u state = %u.\n",
 				 sq->id, ctx.pi, ctx.ci, ctx.next_send_ssn,
 				 ctx.next_rcv_ssn, ctx.state);
 			break;

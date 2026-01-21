@@ -52,8 +52,8 @@ enum cdma_jfsc_mode {
 enum cdma_jetty_state {
 	CDMA_JETTY_RESET,
 	CDMA_JETTY_READY,
-	CDMA_JETTY_SUSPENDED,
 	CDMA_JETTY_ERROR,
+	CDMA_JETTY_SUSPENDED,
 };
 
 enum cdma_jetty_type {
