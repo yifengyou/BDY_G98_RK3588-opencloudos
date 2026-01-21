@@ -43,6 +43,10 @@ static int check_cap = 1;
 module_param(check_cap, int, 0444);
 MODULE_PARM_DESC(check_cap, "check_cap, default 1");
 
+static char irqname[64] = "comp";
+module_param_string(irqname, irqname, sizeof(irqname), 0644);
+MODULE_PARM_DESC(irqname, "nic irq name string, default comp");
+
 static bool check_params(void)
 {
 	if (mode != 0 && mode != 1)
@@ -353,7 +357,8 @@ static struct oecls_netdev_info *alloc_oecls_netdev_info(void)
 
 static bool check_irq_name(const char *irq_name, struct oecls_netdev_info *oecls_dev)
 {
-	if (!strstr(irq_name, "TxRx") && !strstr(irq_name, "comp") && !strstr(irq_name, "rx"))
+	if (!strstr(irq_name, "TxRx") && !strstr(irq_name, "comp") && !strstr(irq_name, "rx") &&
+	    strlen(irqname) > 0 && !strstr(irq_name, irqname))
 		return false;
 
 	if (strstr(irq_name, oecls_dev->dev_name))
