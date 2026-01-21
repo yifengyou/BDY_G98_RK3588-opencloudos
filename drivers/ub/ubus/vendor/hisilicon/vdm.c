@@ -394,6 +394,43 @@ ue_rls_rsp:
 	return status;
 }
 
+static u8 ub_vdm_create_bi_bypass_ummu(struct ub_bus_controller *ubc, struct vdm_msg_pkt *pkt)
+{
+	struct create_bi_bypass_pld *pld = &pkt->bi_bypass_pld;
+	struct msg_pkt_header *header = &pkt->header;
+	u8 status = UB_MSG_RSP_SUCCESS;
+	struct msg_info q_info = {};
+	enum eid_type type;
+	bool local;
+	u32 size;
+	int ret;
+
+	if (pld->m)
+		type = EID_NONE;
+	else
+		type = EID_BYPASS;
+
+	ret = ub_msg_bus_instance_create(ubc, pld->guid, pld->eid[0], pld->upi,
+					 type);
+	if (ret) {
+		dev_err(&ubc->dev, "bi create msg failed ret[%d]\n", ret);
+		status = UB_MSG_RSP_EXEC_ENOEXEC;
+	}
+
+	size = (MSG_PKT_HEADER_SIZE + VENDOR_GUID_PLD_SIZE +
+		VDM_MSG_DW0_PLD_SIZE) << MSG_REQ_SIZE_OFFSET;
+	local = ub_rsp_msg_init(header, status,
+				VENDOR_GUID_PLD_SIZE + VDM_MSG_DW0_PLD_SIZE);
+	message_info_init(&q_info, local ? ubc->uent : NULL, pkt, NULL, size);
+	ret = message_response(ubc->mdev, &q_info, header->msgetah.code);
+	if (ret) {
+		dev_err(&ubc->dev, "create bi bypass rsp msg failed, ret=%d\n", ret);
+		status = UB_MSG_RSP_EXEC_ENOEXEC;
+	}
+
+	return status;
+}
+
 struct opcode_func_map idev_func_mapping[] = {
 	{ VDM_SUB_OPCODE_MUE_REG, MSG_IDEV_MUE_REG_SIZE, "MUE register",
 	  ub_idevice_pue_add_handler, IDEV_MUE_REG_PLD_TOTAL_SIZE },
@@ -403,6 +440,8 @@ struct opcode_func_map idev_func_mapping[] = {
 	  ub_idevice_ue_add_handler, IDEV_UE_REG_PLD_TOTAL_SIZE },
 	{ VDM_SUB_OPCODE_UE_RLS, MSG_IDEV_UE_RLS_SIZE, "UE release",
 	  ub_idevice_ue_rls_handler, IDEV_UE_RLS_PLD_TOTAL_SIZE },
+	{ VDM_BI_CREATE_BYPASS_UMMU, VDM_BI_CREATE_BYPASS_SIZE, "Vdm bi create",
+	  ub_vdm_create_bi_bypass_ummu, VDM_BI_CREATE_BYPASS_UMMU_PLD_SIZE },
 };
 
 static int ub_vdm_msg_info_handle(struct ub_bus_controller *ubc,
