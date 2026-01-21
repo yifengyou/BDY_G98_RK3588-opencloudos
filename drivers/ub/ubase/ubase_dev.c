@@ -1726,6 +1726,23 @@ static int ubase_deactivate_wait_reset_done(struct ubase_dev *udev)
 	return 0;
 }
 
+void __ubase_deactivate_dev(struct ubase_dev *udev)
+{
+	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
+	int ret;
+
+	if (!ubase_dev_urma_supported(udev))
+		return;
+
+	if (ubase_activate_proxy_supported(udev))
+		ret = ub_deactivate_entity(ue, ue->entity_idx);
+	else
+		ret = ubase_deactivate_handler(udev, ue->entity_idx);
+
+	if (ret)
+		ubase_warn(udev, "failed to deactivate udev, ret = %d.\n", ret);
+}
+
 /**
  * ubase_deactivate_dev() - deactivate device
  * @adev: auxiliary device

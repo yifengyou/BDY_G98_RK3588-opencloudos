@@ -556,6 +556,8 @@ void ubase_resume_aux_devices(struct ubase_dev *udev);
 
 void ubase_virt_handler(struct ubase_dev *udev, u16 bus_ue_id, bool is_en);
 
+void __ubase_deactivate_dev(struct ubase_dev *udev);
+
 int ubase_activate_handler(struct ubase_dev *udev, u32 bus_ue_id);
 int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id);
 
