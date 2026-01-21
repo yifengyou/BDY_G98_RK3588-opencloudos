@@ -69,6 +69,7 @@ static struct fwnode_handle *logic_ummu_fwnode;
 static void gen_iommu_domain_ops(const struct iommu_domain_ops *src, struct iommu_domain_ops *dst);
 static void gen_iommu_ops(const struct iommu_ops *src, struct iommu_ops *dst);
 static void logic_identity_dev_free(void);
+static int logic_domain_set_ops(struct logic_ummu_domain *logic_domain);
 
 static inline struct logic_ummu_domain *
 base_to_logic_domain(struct ummu_base_domain *dom)
@@ -218,6 +219,7 @@ static int logic_ummu_attach_dev(struct iommu_domain *domain,
 	}
 	/* the domain attributes might be changed, sync to logic domain */
 	logic_domain_update_attr(logic_domain);
+	logic_domain_set_ops(logic_domain);
 	if (domain->type != IOMMU_DOMAIN_NESTED)
 		sync_type = SYNC_DOM_MUTI_CFG;
 
@@ -262,6 +264,7 @@ static int logic_ummu_set_dev_pasid(struct iommu_domain *domain,
 	tid_param.assign_tid = pasid;
 	tid_param.domain_type = IOMMU_DOMAIN_SVA;
 	tid_param.alloc_mode = TID_ALLOC_TRANSPARENT;
+	tid_param.mm = domain->mm;
 	ret = ummu_core_alloc_tid(&agent_ummu->core_dev, &tid_param, &tid);
 	if (ret)
 		return ret;
@@ -1815,6 +1818,16 @@ static bool logic_ummu_device_support_attr(struct ummu_core_device *core_device,
 	return !info->v1.on_chip;
 }
 
+static int logic_ummu_get_hw_cap(struct device *dev, u32 *hw_cap)
+{
+	const struct ummu_core_ops *core_ops = get_agent_core_ops();
+
+	if (!core_ops || !core_ops->get_hw_cap)
+		return -EOPNOTSUPP;
+
+	return core_ops->get_hw_cap(dev, hw_cap);
+}
+
 static struct ummu_core_ops logic_ummu_core_ops = {
 	.cfg_sync_all = logic_ummu_cfg_sync_all,
 	.cfg_sync = logic_ummu_cfg_sync,
@@ -1824,6 +1837,7 @@ static struct ummu_core_ops logic_ummu_core_ops = {
 	.del_eid = logic_ummu_del_eid,
 	.invalidate_cfg = logic_ummu_invalidate_cfg,
 	.tdev_support_attr = logic_ummu_device_support_attr,
+	.get_hw_cap = logic_ummu_get_hw_cap,
 };
 
 /* workaround. should be in macro */

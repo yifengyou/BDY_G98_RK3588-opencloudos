@@ -102,6 +102,16 @@ static int ummu_master_sva_enable_iopf(struct ummu_master *master)
 	return 0;
 }
 
+bool ummu_master_iopf_enabled(struct ummu_master *master)
+{
+	bool enabled;
+
+	mutex_lock(&ummu_sva_mutex);
+	enabled = master->iopf_enabled;
+	mutex_unlock(&ummu_sva_mutex);
+	return enabled;
+}
+
 static void ummu_master_sva_disable_iopf(struct ummu_master *master)
 {
 	struct device *dev = master->dev;
@@ -429,7 +439,7 @@ static void ummu_invalidate_plb(struct iommu_domain *domain,
 		pr_warn("failed to plbi by va!\n");
 }
 
-static const struct iommu_perm_ops ummu_sva_perm_ops = {
+const struct iommu_perm_ops ummu_sva_perm_ops = {
 	.grant = ummu_perm_grant,
 	.ungrant = ummu_perm_ungrant,
 	.plb_sync = ummu_invalidate_plb,

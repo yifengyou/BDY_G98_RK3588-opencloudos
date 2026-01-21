@@ -284,7 +284,7 @@ int ummu_get_tecte_tag_by_eid(eid_t eid, u32 *tecte_tag);
 int ummu_add_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enum eid_type type);
 void ummu_del_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enum eid_type type);
 char *ummu_get_eid_list(void);
-bool ummu_check_dev_to_vm(struct ummu_master *master);
+bool dev_work_on_local(struct ummu_master *master);
 void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 				struct ummu_tecte_data *target);
 int ummu_set_domain_cfgs_tag(struct ummu_domain_cfgs *cfgs,

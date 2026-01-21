@@ -245,8 +245,6 @@ int ummu_alloc_mapt_blk_mem(struct ummu_domain *ummu_domain,
 {
 	int mode;
 
-	guard(mutex)(&ummu_domain->init_mutex);
-
 	mode = ummu_domain->cfgs.s1_cfg.io_pt_cfg.mode;
 	if (mode == MAPT_MODE_TABLE)
 		return ummu_alloc_mapt_mem_for_table(ummu_domain, blk_para);

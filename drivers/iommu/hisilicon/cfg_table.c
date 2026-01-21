@@ -1229,17 +1229,15 @@ void ummu_device_write_tecte(struct ummu_device *ummu, u32 deid,
 	ummu_device_prefetch_cfg(ummu, deid, UMMU_INVALID_TID);
 }
 
-bool ummu_check_dev_to_vm(struct ummu_master *master)
+bool dev_work_on_local(struct ummu_master *master)
 {
 	struct ub_entity *uent;
 
-	if (!dev_is_ub(master->dev))
-		return false;
-
-	uent = to_ub_entity(master->dev);
-	if (!ub_bi_is_dynamic(uent->bi))
-		return false;
-
+	if (dev_is_ub(master->dev)) {
+		uent = to_ub_entity(master->dev);
+		if (ub_bi_is_dynamic(uent->bi))
+			return false;
+	}
 	return true;
 }
 

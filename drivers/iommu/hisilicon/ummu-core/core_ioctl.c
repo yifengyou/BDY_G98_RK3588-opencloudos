@@ -63,7 +63,8 @@ static int get_ummu_cnt(struct ktid_info *entry, u32 *cnt)
 	int ret;
 
 	cnt_args.type = UMMU_CNT;
-	ret = ummu_core_get_resource(entry->sva, &cnt_args);
+	ret = ummu_core_get_resource(entry->sva,
+				     entry->dev, &cnt_args);
 	if (ret)
 		return ret;
 
@@ -78,14 +79,13 @@ static int get_tid_res(struct ktid_info *entry)
 	int ret;
 
 	args.type = UMMU_TID_RES;
-	ret = ummu_core_get_resource(entry->sva, &args);
+	ret = ummu_core_get_resource(entry->sva, entry->dev, &args);
 	if (ret)
 		return ret;
 
 	entry->pcmdq_order = args.tid_res.pcmdq_order;
 	entry->pcplq_order = args.tid_res.pcplq_order;
 	entry->blk_exp_size = args.tid_res.blk_exp_size;
-	entry->hw_cap = args.tid_res.hw_cap;
 
 	return 0;
 }
@@ -155,7 +155,7 @@ static void disable_dev_feat(struct device *dev)
 	(void)iommu_dev_disable_feature(dev, IOMMU_DEV_FEAT_IOPF);
 }
 
-static void clear_tid_src(struct ktid_info *entry)
+static void release_tid_resource(struct ktid_info *entry)
 {
 	if (entry->sva)
 		iommu_sva_unbind_device_isolated(entry->sva);
@@ -186,7 +186,7 @@ static int proc_manager_close(struct inode *inode, struct file *filp)
 	mutex_unlock(&global_proc_mtx);
 	if (!xa_empty(&manager->tid_xa))
 		xa_for_each(&manager->tid_xa, idx, entry) {
-			clear_tid_src(entry);
+			release_tid_resource(entry);
 			cond_resched();
 		}
 
@@ -267,7 +267,7 @@ release:
 		return;
 	}
 
-	ummu_core_put_resource(entry->sva, &release_args);
+	ummu_core_put_resource(entry->sva, entry->dev, &release_args);
 	mutex_unlock(&manager->proc_mtx);
 	kref_put(&map_info->ref, release_tid_mmap_info);
 }
@@ -297,7 +297,7 @@ static int check_map_resource(struct vm_area_struct *vma, unsigned long size)
 }
 
 static int map_block_resource(struct vm_area_struct *vma, size_t blk_size,
-			      unsigned long block_index, struct iommu_sva *sva)
+			      unsigned long block_index, struct ktid_info *entry)
 {
 	unsigned long start_addr = vma->vm_start;
 	struct resource_args args;
@@ -311,7 +311,7 @@ static int map_block_resource(struct vm_area_struct *vma, size_t blk_size,
 	args.block.index = block_index;
 	args.block.block_size_order = get_order(blk_size);
 	args.type = UMMU_BLOCK;
-	ret = ummu_core_get_resource(sva, &args);
+	ret = ummu_core_get_resource(entry->sva, entry->dev, &args);
 	if (ret)
 		return ret;
 
@@ -319,7 +319,7 @@ static int map_block_resource(struct vm_area_struct *vma, size_t blk_size,
 	for (i = 0; i < (1 << args.block.block_size_order); i++) {
 		ret = vm_insert_page(vma, start_addr, pfn_to_page(PFN_DOWN(page_base)));
 		if (ret) {
-			ummu_core_put_resource(sva, &args);
+			ummu_core_put_resource(entry->sva, entry->dev, &args);
 			return ret;
 		}
 		page_base += PAGE_SIZE;
@@ -397,13 +397,13 @@ static int map_mutiq_resource(struct vm_area_struct *vma,
 	if (!args.queues)
 		return -ENOMEM;
 
-	ret = ummu_core_get_resource(entry->sva, &args);
+	ret = ummu_core_get_resource(entry->sva, entry->dev, &args);
 	if (ret)
 		goto free;
 
 	ret = do_map_queues(entry, vma, cnt, &args);
 	if (ret)
-		ummu_core_put_resource(entry->sva, &args);
+		ummu_core_put_resource(entry->sva, entry->dev, &args);
 
 free:
 	kfree(args.queues);
@@ -430,7 +430,7 @@ static int map_mapt_block(struct vm_area_struct *vma, struct ktid_info *entry,
 		return -EINVAL;
 	}
 
-	ret = map_block_resource(vma, blk_size, block_index, entry->sva);
+	ret = map_block_resource(vma, blk_size, block_index, entry);
 	if (ret)
 		return ret;
 
@@ -609,13 +609,58 @@ free_dev:
 	return ret;
 }
 
-static void user_mode_device_uninit(struct ktid_info *entry)
+static int get_hw_cap(u32 *mode, u64 *hw_cap)
 {
-	iommu_sva_unbind_device_isolated(entry->sva);
+	u32 cap;
+	int ret;
+
+	ret = ummu_core_get_hw_cap(NULL, &cap);
+	if (ret < 0)
+		return ret;
+
+	if (cap & HW_CAP_IOPF)
+		*mode = UMMU_SVA_SHARE_MODE;
+	else if (IS_ENABLED(CONFIG_UB_UMMU_SVA_SEPARATED_PAGES))
+		*mode = UMMU_SVA_SEPARATE_MODE;
+	else
+		*mode = UMMU_SVA_SHARE_MODE;
+
+	*hw_cap = cap;
+
+	return 0;
+}
+
+static int sva_separated_mode_dev_init(struct ktid_info *entry)
+{
+	struct tdev_attr attr = {0};
+	int ret;
+
+	tdev_attr_init(&attr);
+	attr.mode = entry->mode;
+	attr.usva = true;
+	entry->dev = ummu_alloc_tdev(&attr, &entry->tid);
+	if (!entry->dev)
+		return -ENODEV;
+
+	ret = enable_dev_feat(entry->dev);
+	if (ret)
+		goto free_dev;
+
+	ret = ummu_get_tid(entry->dev, NULL, &entry->tid);
+	if (ret)
+		goto disable_feat;
+
+	ret = get_tid_res(entry);
+	if (ret)
+		goto disable_feat;
+
+	return 0;
+
+disable_feat:
 	disable_dev_feat(entry->dev);
+free_dev:
 	ummu_core_free_tdev(entry->dev);
-	entry->dev = NULL;
-	entry->sva = NULL;
+	return ret;
 }
 
 static int sva_mode_alloc_tid(struct proc_manager *manager,
@@ -623,6 +668,7 @@ static int sva_mode_alloc_tid(struct proc_manager *manager,
 			      struct ktid_info **entry_out)
 {
 	struct ktid_info *entry;
+	int sva_mode;
 	u32 cnt;
 	int ret;
 
@@ -636,9 +682,20 @@ static int sva_mode_alloc_tid(struct proc_manager *manager,
 	entry->mode = tid_data->mode;
 	entry->tid = UMMU_INVALID_TID;
 
-	ret = user_mode_device_init(entry);
-	if (ret)
-		goto free;
+	ret = get_hw_cap(&sva_mode, &entry->hw_cap);
+	if (ret) {
+		kfree(entry);
+		return ret;
+	}
+
+	if (sva_mode == UMMU_SVA_SHARE_MODE)
+		ret = user_mode_device_init(entry);
+	else
+		ret = sva_separated_mode_dev_init(entry);
+	if (ret) {
+		kfree(entry);
+		return ret;
+	}
 
 	ret = xa_err(xa_store(&manager->tid_xa, entry->tid, entry, GFP_KERNEL));
 	if (ret)
@@ -657,14 +714,14 @@ static int sva_mode_alloc_tid(struct proc_manager *manager,
 	tid_data->hw_cap = entry->hw_cap;
 
 	*entry_out = entry;
+
 	return 0;
 
 xa_erase:
 	xa_erase(&manager->tid_xa, entry->tid);
 uninit_dev:
-	user_mode_device_uninit(entry);
-free:
-	kfree(entry);
+	release_tid_resource(entry);
+
 	return ret;
 }
 
@@ -678,7 +735,7 @@ static int sva_mode_free_tid(struct proc_manager *manager,
 		return -EINVAL;
 
 	xa_erase(&manager->tid_xa, entry->tid);
-	clear_tid_src(entry);
+	release_tid_resource(entry);
 	return 0;
 }
 
@@ -686,18 +743,22 @@ static int sva_mode_plbi(struct proc_manager *manager,
 			 struct ummu_tid_info *tid_data, u32 cmd)
 {
 	struct iommu_plb_gather plb_gather = {0};
+	struct iommu_domain *domain;
 	struct ktid_info *entry;
 
 	entry = xa_load(&manager->tid_xa, tid_data->tid);
 	if (!entry)
 		return -EINVAL;
 
+	domain = entry->sva ? entry->sva->handle.domain :
+		iommu_get_domain_for_dev(entry->dev);
+
 	if (cmd == UMMU_IOCPLBI_VA) {
 		plb_gather.va = (void *)(uintptr_t)tid_data->va;
 		plb_gather.size = tid_data->size;
-		iommu_plb_sync(entry->sva->handle.domain, &plb_gather);
+		iommu_plb_sync(domain, &plb_gather);
 	} else if (cmd == UMMU_IOCPLBI_ALL) {
-		iommu_plb_sync_all(entry->sva->handle.domain);
+		iommu_plb_sync_all(domain);
 	}
 
 	return 0;
@@ -730,10 +791,9 @@ xa_erase:
 	mutex_lock(&manager->proc_mtx);
 	mutex_unlock(&global_proc_mtx);
 	xa_erase(&manager->tid_xa, entry->tid);
-	user_mode_device_uninit(entry);
+	release_tid_resource(entry);
 	mutex_unlock(&manager->proc_mtx);
 
-	kfree(entry);
 	return ret;
 }
 

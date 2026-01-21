@@ -123,10 +123,6 @@ int ummu_get_tid_res(struct tid_args *args)
 		get_order(cap->permq_ent_num.cmdq_num * PCMDQ_ENT_BYTES);
 	args->pcplq_order =
 		get_order(cap->permq_ent_num.cplq_num * PCPLQ_ENT_BYTES);
-	if (cap->options & UMMU_OPT_DOUBLE_PLBI)
-		args->hw_cap |= HW_CAP_DOUBLE_PLBI;
-	if (cap->options & UMMU_OPT_KCMD_PLBI)
-		args->hw_cap |= HW_CAP_KCMD_PLBI;
 
 	return 0;
 }

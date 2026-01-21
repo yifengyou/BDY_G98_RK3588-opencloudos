@@ -206,27 +206,115 @@ void ummu_core_device_unregister(struct ummu_core_device *ummu_core)
 }
 EXPORT_SYMBOL_GPL(ummu_core_device_unregister);
 
-int ummu_core_get_resource(struct iommu_sva *sva, struct resource_args *args)
+int ummu_core_get_resource(struct iommu_sva *sva, struct device *dev,
+			   struct resource_args *args)
 {
 	struct ummu_core_device *core_device;
+	struct iommu_domain *domain;
+	struct device *device;
 
-	core_device = iommu_get_iommu_dev(sva->dev, struct ummu_core_device, iommu);
+	device = sva ? sva->dev : dev;
+	if (!device)
+		return -EINVAL;
+
+	domain = sva ? sva->handle.domain : iommu_get_domain_for_dev(device);
+	if (!domain)
+		return -ENOENT;
+
+	core_device = iommu_get_iommu_dev(device, struct ummu_core_device, iommu);
 	if (!core_device->ops || !core_device->ops->get_resource)
 		return -ENODEV;
 
-	return core_device->ops->get_resource(to_ummu_base_domain(sva->handle.domain), args);
+	return core_device->ops->get_resource(to_ummu_base_domain(domain), args);
 }
 
-void ummu_core_put_resource(struct iommu_sva *sva, struct resource_args *args)
+void ummu_core_put_resource(struct iommu_sva *sva, struct device *dev,
+			    struct resource_args *args)
 {
 	struct ummu_core_device *core_device;
+	struct iommu_domain *domain;
+	struct device *device;
 
-	core_device = iommu_get_iommu_dev(sva->dev, struct ummu_core_device, iommu);
+	device = sva ? sva->dev : dev;
+	if (!device)
+		return;
+
+	domain = sva ? sva->handle.domain : iommu_get_domain_for_dev(device);
+	if (!domain)
+		return;
+
+	core_device = iommu_get_iommu_dev(device, struct ummu_core_device, iommu);
 	if (!core_device->ops || !core_device->ops->put_resource)
 		return;
 
-	core_device->ops->put_resource(to_ummu_base_domain(sva->handle.domain), args);
+	core_device->ops->put_resource(to_ummu_base_domain(domain), args);
 }
+
+int ummu_core_get_hw_cap(struct device *dev, u32 *hw_cap)
+{
+	int ret;
+
+	if (!hw_cap)
+		return -EINVAL;
+
+	mutex_lock(&global_device_lock);
+	if (!global_core_device) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	if (!global_core_device->ops || !global_core_device->ops->get_hw_cap) {
+		ret = -ENOENT;
+		goto out_unlock;
+	}
+	ret = global_core_device->ops->get_hw_cap(dev, hw_cap);
+
+out_unlock:
+	mutex_unlock(&global_device_lock);
+	return ret;
+}
+
+int ummu_get_sva_mode(struct device *dev)
+{
+	u32 hw_cap;
+	int ret;
+
+	if (!dev)
+		return -EINVAL;
+
+	ret = ummu_core_get_hw_cap(dev, &hw_cap);
+	if (ret)
+		return ret;
+
+	if (hw_cap & HW_CAP_IOPF)
+		return UMMU_SVA_SHARE_MODE;
+
+	if (IS_ENABLED(CONFIG_UB_UMMU_SVA_SEPARATED_PAGES))
+		return UMMU_SVA_SEPARATE_MODE;
+
+	return UMMU_SVA_SHARE_MODE;
+}
+EXPORT_SYMBOL_GPL(ummu_get_sva_mode);
+
+u32 ummu_sva_get_features(struct device *dev)
+{
+	u32 features = 0;
+	u32 hw_cap;
+	int ret;
+
+	if (!dev)
+		return 0;
+
+	ret = ummu_core_get_hw_cap(dev, &hw_cap);
+	if (ret)
+		return 0;
+
+	if (hw_cap & HW_CAP_IOPF)
+		features |= HW_CAP_IOPF;
+
+	return features;
+}
+EXPORT_SYMBOL_GPL(ummu_sva_get_features);
 
 struct iommu_sva *ummu_sva_bind_device(struct device *dev, struct mm_struct *mm,
 				       struct ummu_param *drvdata)

@@ -35,8 +35,13 @@ extern struct device tid_bus;
 /* private interfaces */
 void ummu_flush_cached_eid(struct ummu_core_device *core_device);
 struct device *ummu_alloc_tdev(struct tdev_attr *attr, u32 *ptid);
-int ummu_core_get_resource(struct iommu_sva *sva, struct resource_args *args);
-void ummu_core_put_resource(struct iommu_sva *sva, struct resource_args *args);
+int ummu_core_get_resource(struct iommu_sva *sva, struct device *dev,
+			   struct resource_args *args);
+void ummu_core_put_resource(struct iommu_sva *sva, struct device *dev,
+			    struct resource_args *args);
+int ummu_core_get_hw_cap(struct device *dev, u32 *hw_cap);
+struct mm_struct *ummu_core_get_mm(struct ummu_core_device *ummu_core,
+				   u32 tid);
 void setup_tdev_dma_ops(struct device *dev, bool coherent);
 
 #endif /* __UMMU_CORE_PRIV_H__ */
