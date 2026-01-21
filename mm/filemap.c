@@ -1668,10 +1668,16 @@ static void filemap_end_dropbehind_write(struct folio *folio)
 /**
  * folio_end_writeback - End writeback against a folio.
  * @folio: The folio.
+ *
+ * The folio must actually be under writeback.
+ *
+ * Context: May be called from process or interrupt context.
  */
 void folio_end_writeback(struct folio *folio)
 {
 	bool folio_dropbehind = false;
+
+	VM_BUG_ON_FOLIO(!folio_test_writeback(folio), folio);
 
 	/*
 	 * folio_test_clear_reclaim() could be used here but it is an
@@ -1694,8 +1700,7 @@ void folio_end_writeback(struct folio *folio)
 	folio_get(folio);
 	if (!folio_test_dirty(folio))
 		folio_dropbehind = folio_test_clear_dropbehind(folio);
-	if (!__folio_end_writeback(folio))
-		BUG();
+	__folio_end_writeback(folio);
 
 	smp_mb__after_atomic();
 	folio_wake(folio, PG_writeback);
