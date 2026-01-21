@@ -185,4 +185,30 @@ int ubdevshm_register_ops(struct ubdevshm_mem_ops *ops, unsigned long *handle);
  */
 int ubdevshm_unregister_ops(unsigned long *handle);
 
+/**
+ * ubdevshm_register_segment() - Share memory segment registration interface.
+ * @handle: corresponding memory provider handle.
+ * @va: virtual address range of the given VA.
+ *
+ * After applying for memory, the memory applicant invokes this API to bind
+ * the memory applicant, memory provider, and share memory.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure.
+ */
+int ubdevshm_register_segment(unsigned long *handle, struct mem_uva *va);
+
+/**
+ * ubdevshm_unregister_segment() - Share memory segment unregistration interface.
+ * @handle: corresponding memory provider handle.
+ * @va: virtual address range of the given VA.
+ *
+ * Before releasing the share memory, memory applicant need to invoke this
+ * interface to unbind the share memory.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure.
+ */
+int ubdevshm_unregister_segment(unsigned long *handle, struct mem_uva *va);
+
 #endif /* _UB_UBDEVSHM_UBDEVSHM_H_ */

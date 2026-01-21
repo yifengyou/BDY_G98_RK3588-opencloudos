@@ -24,6 +24,11 @@
 
 #define UBDEVSHM_IDR_MIN_ID	0
 #define UBDEVSHM_IDR_MAX_ID	INT_MAX
+#define INVALID_LITE_ROLE ULONG_MAX
+#define LITE_ROLE_TGID_SHIFT 32
+#define LITE_ROLE_AUX_MASK GENMASK(LITE_ROLE_TGID_SHIFT - 1, 0)
+#define LITE_ROLE_TGID(l)  ((l) >> LITE_ROLE_TGID_SHIFT)
+#define LITE_ROLE_AUX(l)  ((l) & LITE_ROLE_AUX_MASK)
 
 static bool ubdevshm_init_state;
 
@@ -141,6 +146,617 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ubdevshm_unregister_ops);
+
+#define fill_role_info(role, task)	\
+({						\
+	role.tgid = task_tgid_nr_ns(task, &init_pid_ns); \
+	role.aux = task->start_time; \
+	role.lite = false; \
+	get_task_comm(role.name, task); \
+	&role; \
+})
+
+static void set_role(struct role_info *role, struct task_struct *task)
+{
+	role->tgid = task_tgid_nr_ns(task, &init_pid_ns);
+	role->aux = task->start_time;
+	get_task_comm(role->name, task);
+}
+
+static bool is_same_role(struct role_info *a, struct role_info *b)
+{
+	if (b->lite)
+		return (a->tgid == b->tgid) &&
+		       ((a->aux & LITE_ROLE_AUX_MASK) == (b->aux & LITE_ROLE_AUX_MASK));
+	return a->tgid == b->tgid && a->aux == b->aux;
+}
+
+static bool is_same_role_cb(struct role_info *a, void *b)
+{
+	return is_same_role(a, (struct role_info *)b);
+}
+
+static bool is_same_role_task(struct role_info *role, void *task)
+{
+	struct task_struct *tsk = (struct task_struct *)task;
+
+	if (role->tgid == task_tgid_nr_ns(tsk, &init_pid_ns) && role->aux == tsk->start_time)
+		return true;
+
+	pr_err("tgid or aux[%d] not match\n", role->aux == tsk->start_time);
+	return false;
+}
+
+static int find_get_shm_provider(unsigned long *handle,
+				 struct mem_provider **rprovider)
+{
+	struct mem_provider *provider;
+	int handle_id;
+	int ret = 0;
+
+	if (!handle) {
+		pr_err("handle is NULL\n");
+		return -EINVAL;
+	}
+	handle_id = (int)*handle;
+
+	down_read(&ubdevshm_rw_semlock);
+	provider = idr_find(&mem_provider_idr, handle_id);
+	if (!provider) {
+		pr_err("invalid handle[%d] without matching provider\n", handle_id);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!refcount_inc_not_zero(&provider->refcnt)) {
+		pr_err("provider[%d] ref is zero\n", handle_id);
+		ret = -EINVAL;
+		goto out;
+	}
+	*rprovider = provider;
+
+out:
+	up_read(&ubdevshm_rw_semlock);
+	return ret;
+}
+
+// paired with find_get_shm_provider
+static inline void shm_provider_put(struct mem_provider *provider)
+{
+	refcount_dec(&provider->refcnt);
+}
+
+// get before use and put after use.
+static struct shm_container *find_get_shm_container(bool (*equal)(struct role_info *, void *),
+						    void *arg)
+{
+	struct shm_container *cntr = NULL, *pos = NULL;
+
+	down_read(&ubdevshm_rw_semlock);
+	list_for_each_entry(pos, &container_list, node)	{
+		if (equal(&pos->owner, arg)) {
+			cntr = pos;
+			break;
+		}
+	}
+	if (cntr) {
+		if (!refcount_inc_not_zero(&cntr->refcnt)) {
+			pr_err("cnt ref is zero\n");
+			cntr = NULL;
+		}
+	}
+	up_read(&ubdevshm_rw_semlock);
+	return cntr;
+}
+
+static inline void shm_container_get(struct shm_container *cntr)
+{
+	refcount_inc(&cntr->refcnt);
+}
+
+static inline void shm_container_put(struct shm_container *cntr)
+{
+	refcount_dec(&cntr->refcnt);
+}
+
+#define __node_2_sa(rb_node)	rb_entry((rb_node), struct shm_area, node)
+
+static inline bool shm_area_less(struct rb_node *a, const struct rb_node *b)
+{
+	struct shm_area *aa = __node_2_sa(a);
+	struct shm_area *ab = __node_2_sa(b);
+
+	return aa->va < ab->va;
+}
+
+struct va_area {
+	u64 va;
+	u64 size;
+};
+
+static inline int shm_area_find_overlap(const void *key, const struct rb_node *node)
+{
+	struct va_area *a = (struct va_area *)key;
+	struct shm_area *b = __node_2_sa(node);
+	u64 end_area = min(a->va + a->size, b->va + b->size);
+	u64 start_area = max(a->va, b->va);
+
+	if (end_area >= start_area)
+		return 0;
+
+	return (a->va < b->va) ? -1 : 1;
+}
+
+static inline int shm_area_cmp(const void *key, const struct rb_node *node)
+{
+	struct va_area *a = (struct va_area *)key;
+	struct shm_area *b = __node_2_sa(node);
+
+	if (a->va != b->va)
+		return (a->va < b->va) ? -1 : 1;
+
+	if (a->size != b->size)
+		return (a->size < b->size) ? -1 : 1;
+
+	return 0;
+}
+
+static struct shm_area *shm_area_find(struct shm_container *cntr, u64 va, u64 size, bool equal)
+{
+	const struct va_area area = {
+		.va = va,
+		.size = size,
+	};
+	struct rb_node *node;
+
+	if (equal)
+		node = rb_find((const void *)&area, &cntr->shm_area_root, shm_area_cmp);
+	else
+		node = rb_find((const void *)&area, &cntr->shm_area_root, shm_area_find_overlap);
+
+	if (!node)
+		return NULL;
+
+	return __node_2_sa(node);
+}
+
+// lock hold by caller, protected by cntr->lock
+static int shm_area_insert(struct shm_container *cntr, u64 va, u64 size,
+				    struct shm_area **rsa)
+{
+	struct shm_area *sa;
+
+	sa = shm_area_find(cntr, va, size, true);
+	if (sa) {
+		pr_err("area[%pK, %llx] already exist\n", (void *)va, size);
+		return -EEXIST;
+	}
+
+	sa = kzalloc(sizeof(*sa), GFP_KERNEL);
+	if (!sa)
+		return -ENOMEM;
+
+	sa->va = va;
+	sa->size = size;
+	INIT_LIST_HEAD(&sa->ctx_list);
+	rb_add(&sa->node, &cntr->shm_area_root, shm_area_less);
+	*rsa = sa;
+	return 0;
+}
+
+static void __shm_area_delete(struct shm_container *cntr, struct shm_area *sa)
+{
+	rb_erase(&sa->node, &cntr->shm_area_root);
+}
+
+static inline void access_ctx_put(struct access_ctx_inner *ctx)
+{
+	refcount_dec(&ctx->refcnt);
+}
+
+struct role_provider {
+	struct role_info *role;
+	struct mem_provider *provider;
+};
+
+static bool role_provider_equal(struct access_ctx_inner *ctx, void *arg)
+{
+	struct role_provider *rp = (struct role_provider *)arg;
+
+	return is_same_role(&ctx->user, rp->role) && ctx->provider == rp->provider;
+}
+
+static struct access_ctx_inner *find_get_access_ctx(struct shm_container *cntr,
+						    struct mem_uva *va, bool unique, bool is_equal,
+						    bool (*equal)(struct access_ctx_inner*, void*),
+						    void *arg)
+{
+	struct access_ctx_inner *ctx = NULL, *pos = NULL, *n = NULL;
+	struct shm_area *sa;
+
+	mutex_lock(&cntr->lock);
+	sa = shm_area_find(cntr, va->va, va->size, is_equal);
+	if (!sa) {
+		pr_err("area with size[%llx] does not exist\n", va->size);
+		mutex_unlock(&cntr->lock);
+		return NULL;
+	}
+
+	if (unique && !list_is_singular(&sa->ctx_list)) {
+		pr_err("ctx matching va not unique, so not allowed to use lite mode\n");
+		mutex_unlock(&cntr->lock);
+		return NULL;
+	}
+
+	list_for_each_entry_safe(pos, n, &sa->ctx_list, node) {
+		if (equal(pos, arg)) {
+			ctx = pos;
+			break;
+		}
+	}
+	if (ctx && !refcount_inc_not_zero(&ctx->refcnt)) {
+		pr_err("ctx refcnt is zero\n");
+		ctx = NULL;
+	}
+
+	mutex_unlock(&cntr->lock);
+	return ctx;
+}
+
+static int create_and_link_access_ctx(struct shm_container *cntr, struct mem_provider *provider,
+	struct task_struct *user, bool sa_exit, u64 va, u64 size, struct access_ctx_inner **rctx)
+{
+	struct access_ctx_inner *ctx;
+	struct shm_area *sa;
+	int ret;
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	ctx->provider = provider;
+	INIT_LIST_HEAD(&ctx->node);
+	set_role(&ctx->user, current);
+	refcount_set(&ctx->refcnt, 1);
+	refcount_set(&ctx->acquire_refcnt, 1);
+
+	down_write(&ubdevshm_rw_semlock);
+	ret = idr_alloc_cyclic(&access_ctx_idr, ctx, UBDEVSHM_IDR_MIN_ID,
+			       UBDEVSHM_IDR_MAX_ID, GFP_ATOMIC);
+	up_write(&ubdevshm_rw_semlock);
+	if (ret < 0) {
+		pr_err("shm access ctx id_alloc err=%d\n", ret);
+		goto fail;
+	}
+	ctx->id = ret;
+	ctx->seg.va = va;
+	ctx->seg.size = size;
+	set_role(&ctx->user, user);
+
+	mutex_lock(&cntr->lock);
+
+	sa = shm_area_find(cntr, va, size, true);
+	if (!sa) {
+		if (sa_exit) {
+			pr_err("expect sa exit\n");
+			ret = -EEXIST;
+			goto fail_idr_remove;
+		}
+		ret = shm_area_insert(cntr, va, size, &sa);
+		if (ret)
+			goto fail_idr_remove;
+	}
+
+	list_add_tail(&ctx->node, &sa->ctx_list);
+	ctx->sa = sa;
+	mutex_unlock(&cntr->lock);
+
+	if (rctx)
+		*rctx = ctx;
+	return 0;
+
+fail_idr_remove:
+	mutex_unlock(&cntr->lock);
+	down_write(&ubdevshm_rw_semlock);
+	(void)idr_remove(&access_ctx_idr, (unsigned long)ctx->id);
+	up_write(&ubdevshm_rw_semlock);
+fail:
+	kfree(ctx);
+	return ret;
+}
+
+static int create_shm_container(struct shm_container **rcntr)
+{
+	struct shm_container *cntr;
+	int ret;
+
+	cntr = kzalloc(sizeof(*cntr), GFP_KERNEL);
+	if (!cntr)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&cntr->node);
+	cntr->shm_area_root = RB_ROOT;
+	mutex_init(&cntr->lock);
+	set_role(&cntr->owner, current);
+	refcount_set(&cntr->refcnt, 1);
+	cntr->mode = USE_MODE_NOGRANT;
+
+	down_write(&ubdevshm_rw_semlock);
+	ret = idr_alloc_cyclic(&shm_container_idr, cntr, UBDEVSHM_IDR_MIN_ID,
+			       UBDEVSHM_IDR_MAX_ID, GFP_ATOMIC);
+	if (ret < 0) {
+		pr_err("shm container id_alloc err=%d\n", ret);
+		up_write(&ubdevshm_rw_semlock);
+		goto fail;
+	} else {
+		cntr->id = ret;
+		ret = 0;
+		list_add_tail(&cntr->node, &container_list);
+		shm_container_get(cntr);
+		*rcntr = cntr;
+	}
+	up_write(&ubdevshm_rw_semlock);
+	return ret;
+
+fail:
+	kfree(cntr);
+	return ret;
+}
+
+static struct task_struct *get_task_by_tgid(pid_t tgid)
+{
+	struct task_struct *tsk;
+
+	rcu_read_lock();
+	tsk = get_pid_task(find_pid_ns(tgid, &init_pid_ns), PIDTYPE_TGID);
+	if (tsk)
+		get_task_struct(tsk);
+
+	rcu_read_unlock();
+
+	return tsk;
+}
+
+static bool extract_lite_role(struct mem_uva *va, struct role_info *role)
+{
+	u64 lite_role = va->invalidate_tag;
+
+	if (lite_role != INVALID_LITE_ROLE) {
+		role->tgid = LITE_ROLE_TGID(lite_role);
+		role->aux = LITE_ROLE_AUX(lite_role);
+		role->lite = true;
+		return true;
+	}
+
+	return false;
+}
+
+// if task exist, get_task_struct otherwise not.
+static bool lite_role_get_task_exist(struct role_info *role, struct task_struct **otask,
+				     bool *task_get)
+{
+	struct task_struct *task = NULL;
+
+	*task_get = false;
+	task = get_task_by_tgid(role->tgid);
+	if (!task)
+		return false;
+
+	if (role->aux != (u32)task->start_time) {
+		put_task_struct(task);
+		return false;
+	}
+	if (otask && task_get) {
+		*otask = task;
+		*task_get = true;
+	} else
+		put_task_struct(task);
+	return true;
+}
+
+int ubdevshm_register_segment(unsigned long *handle, struct mem_uva *va)
+{
+	bool found = false, task_get = false, is_exist = false;
+	struct mem_provider *provider = NULL;
+	struct access_ctx_inner *ctx_inner;
+	struct role_provider rp = {};
+	struct shm_container *cntr;
+	struct task_struct *task = NULL;
+	struct role_info role;
+	int ret;
+
+	if (!handle || !va) {
+		pr_err("invalid param\n");
+		return -EINVAL;
+	}
+
+	if (extract_lite_role(va, &role)) {
+		is_exist = lite_role_get_task_exist(&role, &task, &task_get);
+		if (!is_exist || task != current) {
+			pr_err("register segment can not find task\n");
+			if (task)
+				put_task_struct(task);
+			return -EINVAL;
+		}
+		if (task_get)
+			put_task_struct(task);
+	}
+
+	ret = find_get_shm_provider(handle, &provider);
+	if (ret)
+		return ret;
+
+	cntr = find_get_shm_container(is_same_role_task, current);
+	if (cntr) {
+		found = true;
+	} else {
+		ret = create_shm_container(&cntr);
+		if (ret)
+			goto fail;
+	}
+
+	// check segment register repeatly
+	if (found) {
+		rp.role = fill_role_info(role, current);
+		rp.provider = provider;
+
+		ctx_inner = find_get_access_ctx(cntr, va, false, false, role_provider_equal, &rp);
+		if (ctx_inner) {
+			ret = -EEXIST;
+			access_ctx_put(ctx_inner);
+			goto fail_cntr;
+		}
+	}
+
+	ret = create_and_link_access_ctx(cntr, provider, current, false, va->va, va->size, NULL);
+	if (ret)
+		goto fail_cntr;
+
+	if (found)
+		shm_container_put(cntr);
+
+	return ret;
+
+fail_cntr:
+	if (!found)
+		kfree(cntr);
+	if (cntr)
+		shm_container_put(cntr);
+fail:
+	shm_provider_put(provider);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_register_segment);
+
+static int destroy_access_ctx(struct access_ctx_inner *ctx, struct shm_container *cntr)
+{
+	mutex_lock(&cntr->lock);
+	if (!refcount_dec_if_one(&ctx->acquire_refcnt)) {
+		pr_err("ctx is still used by acquire\n");
+		mutex_unlock(&cntr->lock);
+		return -EBUSY;
+	}
+	if (!refcount_dec_if_one(&ctx->refcnt)) {
+		pr_err("ctx is still used by others\n");
+		refcount_set(&ctx->acquire_refcnt, 1);
+		mutex_unlock(&cntr->lock);
+		return -EBUSY;
+	}
+	list_del(&ctx->node);
+	mutex_unlock(&cntr->lock);
+
+	down_write(&ubdevshm_rw_semlock);
+	(void)idr_remove(&access_ctx_idr, (unsigned long)ctx->id);
+	shm_provider_put(ctx->provider);
+	up_write(&ubdevshm_rw_semlock);
+
+	kfree(ctx);
+	return 0;
+}
+
+static void shm_area_cleanup(struct shm_area *sa, struct shm_container *cntr)
+{
+	mutex_lock(&cntr->lock);
+	if (list_empty(&sa->ctx_list)) {
+		__shm_area_delete(cntr, sa);
+		kfree(sa);
+	}
+	mutex_unlock(&cntr->lock);
+}
+
+static bool is_shm_container_free(struct shm_container *cntr)
+{
+	return RB_EMPTY_ROOT(&cntr->shm_area_root) && refcount_read(&cntr->refcnt) == 1;
+}
+
+static void destroy_shm_container(struct shm_container *cntr)
+{
+	if (!refcount_dec_if_one(&cntr->refcnt)) {
+		pr_err("cntr refcnt dec if one failed\n");
+		return;
+	}
+	list_del(&cntr->node);
+	(void)idr_remove(&shm_container_idr, (unsigned long)cntr->id);
+	kfree(cntr);
+}
+
+static void __shm_container_cleanup(struct shm_container *cntr)
+{
+	if (is_shm_container_free(cntr))
+		destroy_shm_container(cntr);
+}
+
+static void shm_container_cleanup(void)
+{
+	struct shm_container *pos = NULL, *n = NULL;
+
+	down_write(&ubdevshm_rw_semlock);
+	list_for_each_entry_safe(pos, n, &container_list, node) {
+		__shm_container_cleanup(pos);
+	}
+	up_write(&ubdevshm_rw_semlock);
+}
+
+int ubdevshm_unregister_segment(unsigned long *handle, struct mem_uva *va)
+{
+	struct mem_provider *provider = NULL;
+	bool lite = false, task_get = false;
+	struct task_struct *task = current;
+	struct access_ctx_inner *ctx_inner;
+	struct shm_container *cntr;
+	struct role_provider rp;
+	struct role_info role;
+	struct shm_area *sa;
+	int ret;
+
+	if (!handle || !va) {
+		pr_err("invalid param\n");
+		return -EINVAL;
+	}
+
+	if (find_get_shm_provider(handle, &provider))
+		return -EINVAL;
+
+	if (extract_lite_role(va, &role))
+		lite = !lite_role_get_task_exist(&role, &task, &task_get);
+
+	cntr = lite ? find_get_shm_container(is_same_role_cb, &role) :
+	       find_get_shm_container(is_same_role_task, task);
+	if (!cntr) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rp.role = lite ? &role : fill_role_info(role, task);
+	rp.provider = provider;
+	ctx_inner = find_get_access_ctx(cntr, va, false, true, role_provider_equal, &rp);
+	if (!ctx_inner) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (task && !is_same_role_task(&ctx_inner->user, task)) {
+		ret = -EPERM;
+		access_ctx_put(ctx_inner);
+		goto out;
+	}
+	sa = ctx_inner->sa;
+	access_ctx_put(ctx_inner);
+	ret = destroy_access_ctx(ctx_inner, cntr);
+	if (!ret)
+		shm_area_cleanup(sa, cntr);
+
+out:
+	if (cntr)
+		shm_container_put(cntr);
+
+	if (task && task_get)
+		put_task_struct(task);
+	shm_provider_put(provider);
+	shm_container_cleanup();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_unregister_segment);
 
 static int __init ubdevshm_init(void)
 {
