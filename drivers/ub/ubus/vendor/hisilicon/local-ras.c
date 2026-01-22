@@ -19,7 +19,8 @@ struct sub_module_info {
 };
 
 static struct sub_module_info hisi_ubus_sub_module[] = {
-	{0x2, "MISC"},
+	{0x1, "MISC.MISC_SLV"},
+	{0x2, "MISC.IMP"},
 	{0x3, "BA"},
 	{0x4, "NL PORT"},
 	{0x5, "NL DEVICE"},
@@ -62,7 +63,6 @@ static struct sub_module_info hisi_ubus_sub_module[] = {
 	{0x67, "ETH.CORE_RXRSFEC"},
 	{0x68, "ETH.CORE_RXPMACORE"},
 	{0x69, "ETH.CORE_TXPMAL0"},
-	{0x6a, "ETH.CORE_RXPMAL0"},
 	{0x6b, "ETH.CORE_TXBRFEC"},
 	{0x6c, "ETH.CORE_RXBRFEC"},
 };
@@ -172,9 +172,6 @@ static inline bool is_nl_ssu_link_credi_overtime_err(const struct hisi_ubus_erro
 {
 	if (DIV_ROUND_UP(edata->register_array_size, SZ_4) <= LQC_MOUDULE_ERR_MISC)
 		return false;
-	/* only supported device err */
-	if (!!(edata->val_bits & HISI_UBUS_LOCAL_VALID_PORT_ID))
-		return false;
 
 	return !!(edata->err_misc[LQC_MOUDULE_ERR_MISC] & (1U << LQC_MOUDULE_ERR_BIT));
 }
@@ -184,10 +181,13 @@ static bool ubus_need_recover(const struct hisi_ubus_error_data *edata)
 	if (edata->err_severity != HISI_UBUS_ERR_SEV_RECOVERABLE)
 		return false;
 
+	if (!(edata->val_bits & HISI_UBUS_LOCAL_VALID_PORT_ID))
+		return false;
+
 	if (is_nl_local_ras(edata->sub_module_id))
 		return is_nl_ssu_link_credi_overtime_err(edata);
 
-	return !!(edata->val_bits & HISI_UBUS_LOCAL_VALID_PORT_ID);
+	return true;
 }
 
 static int ubus_port_recover(struct ub_entity *uent, u16 port_id)
@@ -223,44 +223,10 @@ static int ubus_port_recover_cluster(struct ub_entity *uent, u16 port_id)
 	return 0;
 }
 
-static int nl_ssu_link_credi_overtime_recover(struct ub_entity *uent, u8 nl_id, bool cluster)
-{
-#define NL_PORTS 2
-	/*
-	 * The shared ports will only be front of exclusive ports,
-	 * so the shared port ind is begin of 0 and serially,
-	 * each nl has 2 ports, recover port ind of this nl should begin of (nl_id)*2
-	 */
-	u16 port_id = nl_id * NL_PORTS;
-	int ret = 0, i;
-
-	for (i = 0; i < NL_PORTS; i++) {
-		port_id += i;
-		if (!cluster)
-			ret = ubus_port_recover(uent, port_id);
-		else
-			ret = ubus_port_recover_cluster(uent, port_id);
-		if (ret) {
-			ub_err(uent, "port[%u] recover failed, ret=%d.\n", port_id, ret);
-			return ret;
-		}
-	}
-
-	ub_info(uent, "nl[%u] recover all ports succeeded.\n", nl_id);
-	return ret;
-}
-
 static int ubus_recover(struct ub_entity *uent,
 			 const struct hisi_ubus_error_data *edata)
 {
 	int port_id;
-	u8 nl_id;
-
-	if (is_nl_local_ras(edata->sub_module_id) &&
-	    is_nl_ssu_link_credi_overtime_err(edata)) {
-		nl_id = edata->core_id;
-		return nl_ssu_link_credi_overtime_recover(uent, nl_id, uent->ubc->cluster);
-	}
 
 	port_id = (int)edata->port_id;
 	if (uent->ubc->cluster)
@@ -285,7 +251,7 @@ static void hisi_ubus_handle_error(struct ub_entity *uent,
 		ub_warn(uent, "register array size is exceed max array size %d, only parts of data were printed.\n",
 			REGISTER_ARRAY_MAX_SIZE);
 
-	if (!ubus_need_recover(edata) || uent->ubc->cluster) {
+	if (!ubus_need_recover(edata)) {
 		ub_info(uent, "ubus no need recover.\n");
 		return;
 	}
