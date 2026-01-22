@@ -5332,33 +5332,47 @@ static bool __maybe_unused state_is_valid(struct lruvec *lruvec)
 	return true;
 }
 
+static bool fill_evictable_lru(struct lruvec *lruvec, enum lru_list lru, int *remaining)
+{
+	int type = is_file_lru(lru);
+	bool active = is_active_lru(lru);
+	struct list_head *head = &lruvec->lists[lru];
+
+	while (!list_empty(head)) {
+		bool success;
+		struct folio *folio = lru_to_folio(head);
+
+		VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
+		VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio) != active, folio);
+		VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
+		VM_WARN_ON_ONCE_FOLIO(folio_lru_gen(folio) != -1, folio);
+
+		lruvec_del_folio(lruvec, folio);
+		success = lru_gen_add_folio(lruvec, folio, false);
+		VM_WARN_ON_ONCE(!success);
+
+		if (!--*remaining)
+			return false;
+	}
+
+	return true;
+}
+
 static bool fill_evictable(struct lruvec *lruvec)
 {
-	enum lru_list lru;
 	int remaining = MAX_LRU_BATCH;
 
-	for_each_evictable_lru(lru) {
-		int type = is_file_lru(lru);
-		bool active = is_active_lru(lru);
-		struct list_head *head = &lruvec->lists[lru];
+	if (!fill_evictable_lru(lruvec, LRU_INACTIVE_FILE, &remaining))
+		return false;
 
-		while (!list_empty(head)) {
-			bool success;
-			struct folio *folio = lru_to_folio(head);
+	if (!fill_evictable_lru(lruvec, LRU_ACTIVE_FILE, &remaining))
+		return false;
 
-			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio) != active, folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_lru_gen(folio) != -1, folio);
+	if (!fill_evictable_lru(lruvec, LRU_INACTIVE_ANON, &remaining))
+		return false;
 
-			lruvec_del_folio(lruvec, folio);
-			success = lru_gen_add_folio(lruvec, folio, false);
-			VM_WARN_ON_ONCE(!success);
-
-			if (!--remaining)
-				return false;
-		}
-	}
+	if (!fill_evictable_lru(lruvec, LRU_ACTIVE_ANON, &remaining))
+		return false;
 
 	return true;
 }
@@ -5368,24 +5382,28 @@ static bool drain_evictable(struct lruvec *lruvec)
 	int gen, type, zone;
 	int remaining = MAX_LRU_BATCH;
 
-	for_each_gen_type_zone(gen, type, zone) {
-		struct list_head *head = &lruvec->lrugen.folios[gen][type][zone];
+	for (type = ANON_AND_FILE - 1; type >= 0; type--) {
+		for (gen = 0; gen < MAX_NR_GENS; gen++) {
+			for (zone = 0; zone < MAX_NR_ZONES; zone++) {
+				struct list_head *head = &lruvec->lrugen.folios[gen][type][zone];
 
-		while (!list_empty(head)) {
-			bool success;
-			struct folio *folio = lru_to_folio(head);
+				while (!list_empty(head)) {
+					bool success;
+					struct folio *folio = lru_to_folio(head);
 
-			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
+					VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
+					VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
+					VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
+					VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
 
-			success = lru_gen_del_folio(lruvec, folio, false);
-			VM_WARN_ON_ONCE(!success);
-			lruvec_add_folio(lruvec, folio);
+					success = lru_gen_del_folio(lruvec, folio, false);
+					VM_WARN_ON_ONCE(!success);
+					lruvec_add_folio(lruvec, folio);
 
-			if (!--remaining)
-				return false;
+					if (!--remaining)
+						return false;
+				}
+			}
 		}
 	}
 
