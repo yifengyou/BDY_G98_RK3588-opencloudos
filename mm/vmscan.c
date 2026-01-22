@@ -2795,24 +2795,30 @@ static inline bool lru_gen_is_migrating(void)
 	return static_branch_unlikely(&lru_gen_migrating);
 }
 
-static inline void shrink_lruvec_migrating(struct lruvec *lruvec)
+static inline bool shrink_lruvec_migrating(struct lruvec *lruvec, struct scan_control *sc)
 {
+	/* Try reclaiming from the current LRU first */
+	if (sc->priority > DEF_PRIORITY / 2)
+		return lruvec->lrugen.enabled;
+
 	if (lru_gen_enabled()) {
 		/*
 		 * Enabling MGLRU. If we see lrugen.enabled == true here, when
 		 * we get the lru_lock, the migrating thread will have filled the
 		 * lruvec with some pages, so we can continue without waiting.
 		 */
-		while (!lruvec->lrugen.enabled) {
+		while (!lruvec->lrugen.enabled && sc->priority <= 1) {
 			/* Not switching this one yet. Wait for a while. */
 			schedule_timeout_uninterruptible(1);
 		}
 	} else {
 		/* Same above */
-		while (lruvec->lrugen.enabled) {
+		while (lruvec->lrugen.enabled && sc->priority <= 1) {
 			schedule_timeout_uninterruptible(1);
 		}
 	}
+
+	return lru_gen_enabled();
 }
 
 #ifdef CONFIG_LRU_GEN_ENABLED
@@ -6031,8 +6037,9 @@ static inline bool lru_gen_is_migrating(void)
 	return false;
 }
 
-static inline void shrink_lruvec_migrating(struct lruvec *lruvec)
+static inline bool shrink_lruvec_migrating(struct lruvec *lruvec, struct scan_control *sc)
 {
+	return false;
 }
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
@@ -6061,10 +6068,11 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	struct blk_plug plug;
 
 	if (lru_gen_is_migrating()) {
-		shrink_lruvec_migrating(lruvec);
-	}
-
-	if (lru_gen_enabled() && !root_reclaim(sc)) {
+		if (shrink_lruvec_migrating(lruvec, sc)) {
+			lru_gen_shrink_lruvec(lruvec, sc);
+			return;
+		}
+	} else if (lru_gen_enabled() && !root_reclaim(sc)) {
 		lru_gen_shrink_lruvec(lruvec, sc);
 		return;
 	}
