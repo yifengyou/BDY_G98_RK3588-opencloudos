@@ -22,8 +22,17 @@
 #define UBMEM_VMMU_PAGE_SIZE_4K (1UL << 12) // 4K
 #define UBMEM_VMMU_ONCE_MAX_MAP_AREA_NUM 262144 // 1G
 #define HASH_BUCKETS  64
+#define POLL_DELAY_TIME_US 100
+#define MAX_POLL_TIME_US 100000000
+#define MAX_COUNT_FOR_GET_SLOT 10000000
 #define MIN_PASIDS 65
 #define MAX_PASIDS ((1UL << 20) - 1)
+
+enum ubmem_vmmu_opcode {
+	UBMEM_VMMU_OPCODE_MAP = 0,
+	UBMEM_VMMU_OPCODE_UNMAP = 1,
+	UBMEM_VMMU_OPCODE_DEFAULT = 2
+};
 
 struct ubm_request {
 	u32 opcode;
@@ -68,6 +77,16 @@ struct ubmem_vmmu_map_info {
 	struct ubm_request req;
 };
 
+struct ubmem_vmmu_map_ctx {
+	struct ubmem_vmmu_map_info *last_map_info;
+	struct list_head info_head;
+	struct list_head link;
+	pid_t pid;
+	u64 uba_start;
+	u64 uba_end;
+	u32 tid;
+};
+
 struct ubmem_vmmu_domain {
 	struct ubmem_vmmu_device *mmu;
 	struct ummu_base_domain base_domain;
@@ -82,6 +101,18 @@ struct ubmem_vmmu_master {
 };
 
 static struct ubmem_vmmu_device *global_ubmem_vmmu_dev;
+
+static inline u32 pid_hash(pid_t pid)
+{
+	return hash_ptr((void *)((unsigned long)pid), ilog2(HASH_BUCKETS)) % HASH_BUCKETS;
+}
+
+static inline struct ubmem_vmmu_domain *to_ubmem_vmmu_domain(struct iommu_domain *dom)
+{
+	struct ummu_base_domain *base_domain =
+		container_of(dom, struct ummu_base_domain, domain);
+	return container_of(base_domain, struct ubmem_vmmu_domain, base_domain);
+}
 
 static bool ubmem_vmmu_support_call_back(struct tdev_attr *attr, bool *select)
 {
@@ -111,6 +142,318 @@ static bool ubmem_vmmu_tdev_support_attr(struct ummu_core_device *core_device,
 
 	pr_info("ubmem vmmu: mismatch, tid %u\n", info->v2.tid);
 	return false;
+}
+
+static int ubmem_vmmu_attach_dev(struct iommu_domain *domain, struct device *dev)
+{
+	struct ubmem_vmmu_device *mmu_device =
+		((struct ubmem_vmmu_master *)dev_iommu_priv_get(dev))->ubmem_vmmu_dev;
+	struct ubmem_vmmu_domain *mmu_domain = to_ubmem_vmmu_domain(domain);
+	u32 tid;
+	int ret;
+
+	pr_info("ubmem vmmu attach device\n");
+	if (mmu_domain->mmu) {
+		dev_err(dev, "attach failed, the domain has been occupied.\n");
+		return -EEXIST;
+	}
+	if (!mmu_device) {
+		dev_err(dev, "attach failed, find no ubmem device.\n");
+		return -ENODEV;
+	}
+
+	ret = device_property_read_u32(dev, "assign-pasid", &tid);
+	if (ret) {
+		dev_err(dev, "attach failed, find no tid.\n");
+		return -EINVAL;
+	}
+
+	mmu_domain->base_domain.tid = tid;
+	mmu_domain->mmu = mmu_device;
+	pr_info("ubmem vmmu attach device base_domain tid %u\n", tid);
+	return 0;
+}
+
+static int ubmem_vmmu_handle_req_vm(struct ubm_request *req, u64 req_buf_size)
+{
+	struct ubmem_vmmu_device *ubmem_vmmu_dev = global_ubmem_vmmu_dev;
+	u32 slot_idx, max_cnt = MAX_COUNT_FOR_GET_SLOT;
+	struct response_slot rsp_info;
+	void __iomem *addr;
+	int ret;
+
+	while (max_cnt) {
+		spin_lock(&ubmem_vmmu_dev->slot_lock);
+		slot_idx = find_first_zero_bit(ubmem_vmmu_dev->slot_bitmap,
+					       ubmem_vmmu_dev->slot_num);
+		if (slot_idx >= ubmem_vmmu_dev->slot_num) {
+			spin_unlock(&ubmem_vmmu_dev->slot_lock);
+			usleep_range(1, 2);
+			max_cnt--;
+			continue;
+		}
+		set_bit(slot_idx, ubmem_vmmu_dev->slot_bitmap);
+		memcpy_toio(ubmem_vmmu_dev->ring, req, req_buf_size);
+		iowrite32(slot_idx, ubmem_vmmu_dev->doorbell);
+		spin_unlock(&ubmem_vmmu_dev->slot_lock);
+		break;
+	}
+	if (!max_cnt) {
+		pr_err("couldn't get slot, timeout!\n");
+		return -ETIMEDOUT;
+	}
+
+	addr = ubmem_vmmu_dev->rsp_slot + slot_idx * sizeof(struct response_slot);
+	ret = readq_relaxed_poll_timeout(addr, rsp_info.val, rsp_info.inner.state != 0,
+					 POLL_DELAY_TIME_US, MAX_POLL_TIME_US);
+	if (ret) {
+		pr_err("couldn't get response status from qemu, timeout, ret %d!\n", ret);
+		ret = -ETIMEDOUT;
+		goto release_slot;
+	}
+
+	ret = rsp_info.inner.res;
+
+release_slot:
+	spin_lock(&ubmem_vmmu_dev->slot_lock);
+	clear_bit(slot_idx, ubmem_vmmu_dev->slot_bitmap);
+	spin_unlock(&ubmem_vmmu_dev->slot_lock);
+
+	return ret;
+}
+
+static struct ubmem_vmmu_map_info *
+ubmem_vmmu_create_map_info(struct ubmem_vmmu_map_ctx *map_ctx, u64 uba)
+{
+	struct ubmem_vmmu_map_info *map_info;
+
+	map_info = vzalloc(global_ubmem_vmmu_dev->map_info_size);
+	if (!map_info)
+		return NULL;
+
+	INIT_LIST_HEAD(&map_info->link);
+	list_add_tail(&map_info->link, &map_ctx->info_head);
+	map_info->start_areas_idx = 0;
+	map_info->req.opcode = UBMEM_VMMU_OPCODE_MAP;
+	map_info->req.tid = map_ctx->tid;
+	map_info->req.uba = uba;
+	map_info->req.size = 0;
+	map_info->req.areas_num = 0;
+	map_ctx->last_map_info = map_info;
+
+	return map_info;
+}
+
+static struct ubmem_vmmu_map_ctx *
+ubmem_vmmu_get_map_ctx(struct ubmem_vmmu_domain *mdom, u64 uba)
+{
+	struct ubmem_vmmu_map_info *map_info;
+	struct ubmem_vmmu_map_ctx *map_ctx;
+	pid_t pid = current->pid;
+	u32 hash_idx = pid_hash(pid);
+
+	spin_lock(&mdom->map_hash[hash_idx].lock);
+	list_for_each_entry(map_ctx, &mdom->map_hash[hash_idx].ctx_head, link) {
+		if (map_ctx->pid == pid && map_ctx->uba_end == uba) {
+			spin_unlock(&mdom->map_hash[hash_idx].lock);
+			return map_ctx;
+		}
+	}
+	spin_unlock(&mdom->map_hash[hash_idx].lock);
+
+	map_ctx = kzalloc(sizeof(struct ubmem_vmmu_map_ctx), GFP_KERNEL);
+	if (!map_ctx)
+		return NULL;
+
+	pr_debug("ubm mmu map ctx, ctx 0x%llx, pid %d, hash_idx %u\n",
+		 (uint64_t)map_ctx, pid, hash_idx);
+	map_ctx->tid = mdom->base_domain.tid;
+	map_ctx->pid = current->pid;
+	map_ctx->uba_start = uba;
+	map_ctx->last_map_info = NULL;
+	INIT_LIST_HEAD(&map_ctx->link);
+	INIT_LIST_HEAD(&map_ctx->info_head);
+
+	map_info = ubmem_vmmu_create_map_info(map_ctx, uba);
+	if (!map_info) {
+		kfree(map_ctx);
+		return NULL;
+	}
+
+	spin_lock(&mdom->map_hash[hash_idx].lock);
+	list_add_tail(&map_ctx->link, &mdom->map_hash[hash_idx].ctx_head);
+	spin_unlock(&mdom->map_hash[hash_idx].lock);
+	return map_ctx;
+}
+
+static u64 ubmem_vmmu_add_map_info(struct ubmem_vmmu_map_ctx *map_ctx, u64 uba,
+				   u64 paddr, u64 need_map_size)
+{
+	struct ubmem_vmmu_map_info *map_info = map_ctx->last_map_info;
+	u64 map_size_per_map_info = need_map_size;
+	u64 release_map_size;
+	u64 cur_map_size = 0;
+	u64 map_size = 0;
+	u32 area_idx;
+
+	while (1) {
+		release_map_size = global_ubmem_vmmu_dev->max_req_size - map_info->req.size;
+		cur_map_size = (release_map_size > map_size_per_map_info) ?
+			       map_size_per_map_info : release_map_size;
+		if (cur_map_size != 0) {
+			area_idx = map_info->req.areas_num;
+			map_info->req.areas[area_idx].gpa = paddr;
+			map_info->req.areas[area_idx].size = cur_map_size;
+			map_info->req.size += cur_map_size;
+			map_info->req.areas_num += 1;
+			map_size_per_map_info =
+				(cur_map_size > map_size_per_map_info) ?
+				0 : (map_size_per_map_info - cur_map_size);
+			map_size += cur_map_size;
+			if (map_size_per_map_info == 0)
+				break;
+
+			paddr += cur_map_size;
+			uba += cur_map_size;
+		}
+
+		map_info = ubmem_vmmu_create_map_info(map_ctx, uba);
+		if (!map_info)
+			return map_size;
+	}
+
+	return map_size;
+}
+
+static int ubmem_vmmu_map_pages(struct iommu_domain *domain, unsigned long iova,
+				   phys_addr_t paddr, size_t pgsize, size_t pgcount,
+				   int prot, gfp_t gfp, size_t *mapped)
+{
+	struct ubmem_vmmu_domain *mdom = to_ubmem_vmmu_domain(domain);
+	struct ubmem_vmmu_map_info *map_info, *tmp_info;
+	struct ubmem_vmmu_map_ctx *map_ctx;
+	size_t expect_size = pgsize * pgcount;
+	pid_t pid = current->pid;
+	u32 hash_idx = pid_hash(pid);
+	u64 map_size;
+
+	map_ctx = ubmem_vmmu_get_map_ctx(mdom, iova);
+	if (!map_ctx)
+		return -ENOMEM;
+
+	map_size = ubmem_vmmu_add_map_info(map_ctx, iova, paddr, expect_size);
+	pr_debug("vmmu map pages, map_size 0x%llx, request map size 0x%zx\n",
+		 map_size, expect_size);
+	if (map_size != expect_size) {
+		*mapped = 0;
+		pr_err("failed to add map info, map_size 0x%llx, request map size 0x%zx\n",
+		       map_size, expect_size);
+		list_for_each_entry_safe(map_info, tmp_info, &map_ctx->info_head, link) {
+			list_del_init(&map_info->link);
+			vfree(map_info);
+		}
+
+		spin_lock(&mdom->map_hash[hash_idx].lock);
+		list_del_init(&map_ctx->link);
+		spin_unlock(&mdom->map_hash[hash_idx].lock);
+		kfree(map_ctx);
+		return -ENOMEM;
+	}
+
+	map_ctx->uba_end = iova + map_size;
+	*mapped = map_size;
+	return 0;
+}
+
+static size_t ubmem_vmmu_unmap_pages(struct iommu_domain *domain,
+					unsigned long iova, size_t pgsize,
+					size_t pgcount,
+					struct iommu_iotlb_gather *gather)
+{
+	struct ubmem_vmmu_domain *mdom = to_ubmem_vmmu_domain(domain);
+	size_t unmap_size = pgsize * pgcount;
+	struct ubm_request *req;
+	int ret;
+
+	u64 req_buf_size = sizeof(struct ubm_request) + sizeof(((struct ubm_request *)0)->areas[0]);
+
+	req = kzalloc(req_buf_size, GFP_KERNEL);
+	if (!req)
+		return 0;
+
+	req->opcode = UBMEM_VMMU_OPCODE_UNMAP;
+	req->tid = mdom->base_domain.tid;
+	req->uba = iova;
+	req->size = unmap_size;
+	req->areas_num = 1;
+	req->areas[0].gpa = 0;
+	req->areas[0].size = req->size;
+
+	ret = ubmem_vmmu_handle_req_vm(req, req_buf_size);
+	if (ret) {
+		pr_err("failed to handle ubm_request, ret %d, tid %u, opcode %u, size 0x%llx\n",
+		       ret, req->tid, req->opcode, req->size);
+		kfree(req);
+		return 0;
+	}
+
+	kfree(req);
+	return unmap_size;
+}
+
+static int ubmem_vmmu_iotlb_sync_map(struct iommu_domain *domain,
+					unsigned long iova, size_t size)
+{
+	struct ubmem_vmmu_domain *mdom = to_ubmem_vmmu_domain(domain);
+	struct ubmem_vmmu_map_info *map_info, *tmp_info;
+	struct ubmem_vmmu_map_ctx *map_ctx, *tmp_ctx;
+	pid_t pid = current->pid;
+	u32 hash_idx = pid_hash(pid);
+	u64 iova_end = iova + size;
+	bool ctx_match = false;
+	u64 req_buf_size;
+	int ret;
+
+	pr_debug("vmmu iotlb sync map, size 0x%zx, pid %d, hash_idx %u\n", size, pid, hash_idx);
+
+	spin_lock(&mdom->map_hash[hash_idx].lock);
+	list_for_each_entry_safe(map_ctx, tmp_ctx, &mdom->map_hash[hash_idx].ctx_head, link) {
+		if (map_ctx->pid == pid && map_ctx->uba_start == iova &&
+		    map_ctx->uba_end == iova_end) {
+			list_del_init(&map_ctx->link);
+			ctx_match = true;
+			break;
+		}
+	}
+	spin_unlock(&mdom->map_hash[hash_idx].lock);
+
+	if (ctx_match) {
+		ret = 0;
+		list_for_each_entry_safe(map_info, tmp_info, &map_ctx->info_head, link) {
+			if (ret == 0) {
+				req_buf_size = sizeof(struct ubm_request) +
+					       sizeof(((struct ubm_request *)0)->areas[0]) *
+					       map_info->req.areas_num;
+				ret = ubmem_vmmu_handle_req_vm(&map_info->req, req_buf_size);
+				if (ret)
+					pr_err("failed to handle ubm_request, ret %d, tid %u, opcode %u, size 0x%llx\n",
+						ret, map_info->req.tid, map_info->req.opcode,
+						map_info->req.size);
+			}
+			list_del_init(&map_info->link);
+			vfree(map_info);
+		}
+		kfree(map_ctx);
+	}
+
+	return ret;
+}
+
+static void ubmem_vmmu_domain_free(struct iommu_domain *domain)
+{
+	struct ubmem_vmmu_domain *mmu_domain = to_ubmem_vmmu_domain(domain);
+
+	kfree(mmu_domain);
 }
 
 static struct ubmem_vmmu_domain *ubmem_vmmu_domain_alloc_helper(unsigned int type)
@@ -199,11 +542,21 @@ static struct ummu_core_ops ubmem_vmmu_core_ops = {
 	.tdev_support_attr = ubmem_vmmu_tdev_support_attr,
 };
 
+const struct iommu_domain_ops ubmem_vmmu_domain_ops = {
+	.attach_dev = ubmem_vmmu_attach_dev,
+	.map_pages = ubmem_vmmu_map_pages,
+	.unmap_pages = ubmem_vmmu_unmap_pages,
+	.iotlb_sync_map = ubmem_vmmu_iotlb_sync_map,
+	.iotlb_sync = NULL,
+	.free = ubmem_vmmu_domain_free,
+};
+
 const struct iommu_ops ubmem_vmmu_iommu_ops = {
 	.domain_alloc = ubmem_vmmu_domain_alloc,
 	.probe_device = ubmem_vmmu_probe_device,
 	.release_device = ubmem_vmmu_release_device,
 	.device_group = ubmem_vmmu_device_group,
+	.default_domain_ops = &ubmem_vmmu_domain_ops,
 	.pgsize_bitmap = -1UL,
 	.owner = THIS_MODULE,
 };
@@ -264,8 +617,8 @@ static int ubmem_vmmu_init_device_resource(struct platform_device *pdev,
 	slot_size = sizeof(struct response_slot) * ubmem_vmmu->slot_num;
 	ubmem_vmmu->ring = ubmem_vmmu->rsp_slot + slot_size;
 	ubmem_vmmu->ring_size = (res->end - res->start) - (slot_size + sizeof(u64));
-	area_num = (ubmem_vmmu->ring_size -
-		    sizeof(struct ubm_request)) / sizeof(((struct ubm_request *)0)->areas[0]);
+	area_num = (ubmem_vmmu->ring_size - sizeof(struct ubm_request)) /
+		   sizeof(((struct ubm_request *)0)->areas[0]);
 	ubmem_vmmu->max_req_area_num = (area_num > UBMEM_VMMU_ONCE_MAX_MAP_AREA_NUM) ?
 				       UBMEM_VMMU_ONCE_MAX_MAP_AREA_NUM : area_num;
 	ubmem_vmmu->max_req_size = ubmem_vmmu->max_req_area_num * UBMEM_VMMU_PAGE_SIZE_4K;
