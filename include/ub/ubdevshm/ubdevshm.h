@@ -287,4 +287,36 @@ int ubdevshm_grant_access(unsigned long *handle, struct shm_user *user,
  */
 int ubdevshm_ungrant_access(struct access_ctx *ctx);
 
+/**
+ * ubdevshm_acquire_uba() - Request to acqurie the address corresponding to
+ * share memory and convert it into a ub address.
+ * @ctx: the context of the segment
+ * @va: virtual address range of the given VA
+ * @attr: request attributes
+ * @func: When require_invalidate in acquire_attr is set to 1,
+ *         this function must not be NULL, and is used as a callback
+ *         for the memory provider to release memory.
+ * @uba: the ub address corresponding to the virtual address va
+ *
+ * Memory user invoke this interface to convert share memory into a ub address.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure
+ */
+int ubdevshm_acquire_uba(struct access_ctx *ctx, struct mem_uva *va,
+			 union acquire_attr *attr, invalidate func, struct mem_uba *uba);
+
+/**
+ * ubdevshm_release_uba() - Request to release the address corresponding to mem_uba
+ * @ctx: the context of the segment
+ * @uba: the ub address to be released
+ *
+ * Before releasing the share memory, memory user invoke this interface to
+ * release mem_uba.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure
+ */
+int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba);
+
 #endif /* _UB_UBDEVSHM_UBDEVSHM_H_ */

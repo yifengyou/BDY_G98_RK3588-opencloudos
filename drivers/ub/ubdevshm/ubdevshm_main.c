@@ -354,6 +354,13 @@ static inline void access_ctx_put(struct access_ctx_inner *ctx)
 	refcount_dec(&ctx->refcnt);
 }
 
+static bool role_equal(struct access_ctx_inner *ctx, void *arg)
+{
+	struct role_info *role = (struct role_info *)arg;
+
+	return is_same_role(&ctx->user, role);
+}
+
 struct role_provider {
 	struct role_info *role;
 	struct mem_provider *provider;
@@ -788,6 +795,188 @@ static struct shm_container *find_get_shm_container_by_id(u32 cntr_id)
 	up_read(&ubdevshm_rw_semlock);
 	return cntr;
 }
+
+static int find_get_shm_context(struct access_ctx *ctx,
+		    struct shm_container **rcntr, struct access_ctx_inner **rctx_inner)
+{
+	struct access_ctx_inner *ctx_inner;
+	struct shm_container *cntr;
+	int ret;
+
+	cntr = find_get_shm_container_by_id(ctx->shm_container_id);
+	if (!cntr) {
+		pr_err("invalid shm_container_id[%d] without matching cntr\n",
+		       ctx->shm_container_id);
+		return -ENOENT;
+	}
+
+	ctx_inner = find_get_access_ctx_by_id(ctx->access_ctx_id);
+	if (!ctx_inner) {
+		pr_err("find access ctx inner[%d] failed\n", ctx->access_ctx_id);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	*rcntr = cntr;
+	*rctx_inner = ctx_inner;
+
+	return 0;
+
+out:
+	shm_container_put(cntr);
+	return ret;
+}
+
+static void mem_uba_cpy(struct mem_uba *dst, struct mem_uba *src)
+{
+	dst->uba = src->uba;
+	dst->size = src->size;
+	dst->token_id = src->token_id;
+	dst->eid = src->eid;
+	dst->attr.value = src->attr.value;
+	dst->mem_handle = src->mem_handle;
+}
+
+/*
+ * if ctx is null, it means that there is only one mem provider,
+ * and sharer and user is the same process.
+ */
+int ubdevshm_acquire_uba(struct access_ctx *ctx, struct mem_uva *va, union acquire_attr *attr,
+			 invalidate func, struct mem_uba *uba)
+{
+	struct access_ctx_inner *ctx_inner;
+	struct shm_container *cntr;
+	struct role_info role;
+	int ret;
+
+	if (!va || !attr || !uba) {
+		pr_err("invalid param\n");
+		return -EINVAL;
+	}
+
+	if (!ctx) { // simple mode
+		cntr = find_get_shm_container(is_same_role_task, current);
+		if (!cntr)
+			return -ENOENT;
+
+		ctx_inner = find_get_access_ctx(cntr, va, true, true, role_equal,
+						fill_role_info(role, current));
+		if (!ctx_inner) {
+			ret = -ENOENT;
+			goto out;
+		}
+	} else { // grant mode
+		ret = find_get_shm_context(ctx, &cntr, &ctx_inner);
+		if (ret)
+			return ret;
+		if (ctx_inner->sa->size != va->size || ctx_inner->sa->va != va->va) {
+			pr_err("area does not exist\n");
+			ret = -EINVAL;
+			access_ctx_put(ctx_inner);
+			goto out;
+		}
+	}
+
+	if (!is_same_role_task(&ctx_inner->user, current)) {
+		ret = -EINVAL;
+		access_ctx_put(ctx_inner);
+		goto out;
+	}
+
+	ret = ctx_inner->provider->ops->acquire(va, attr, func, &ctx_inner->seg.uba);
+	if (!ret) {
+		if (refcount_inc_not_zero(&ctx_inner->acquire_refcnt)) {
+			ctx_inner->seg.uba.mem_handle = (void *)ctx_inner->id;
+			mem_uba_cpy(uba, &ctx_inner->seg.uba);
+		} else {
+			pr_err("ctx acquire ref is zero\n");
+			ctx_inner->provider->ops->release(&ctx_inner->seg.uba);
+		}
+	}
+	access_ctx_put(ctx_inner);
+
+out:
+	shm_container_put(cntr);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_acquire_uba);
+
+static bool is_equal_uba(struct mem_uba *a, struct mem_uba *b)
+{
+	if (a->uba == b->uba && a->size == b->size &&
+		a->token_id == b->token_id &&
+		a->eid.eid == b->eid.eid &&
+		a->attr.bs.readable == b->attr.bs.readable &&
+		a->attr.bs.executeable == b->attr.bs.executeable &&
+		a->attr.bs.token_value_required == b->attr.bs.token_value_required &&
+		a->attr.value == b->attr.value &&
+		a->attr.bs.writeable == b->attr.bs.writeable)
+		return true;
+
+	return false;
+}
+
+int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba)
+{
+	struct access_ctx_inner *ctx_inner;
+	struct shm_container *cntr;
+	int ret, refret;
+
+	if (!uba) {
+		pr_err("uba is NULL\n");
+		return -EINVAL;
+	}
+
+	if (!ctx) { // simple mode
+		ctx_inner = find_get_access_ctx_by_id((u64)uba->mem_handle);
+		if (!ctx_inner) {
+			pr_err("find access ctx inner failed\n");
+			return -ENOENT;
+		}
+	} else { // grant mode
+		ret = find_get_shm_context(ctx, &cntr, &ctx_inner);
+		if (ret)
+			return ret;
+		if (!is_same_role_task(&ctx_inner->user, current)) {
+			ret = -EINVAL;
+			access_ctx_put(ctx_inner);
+			shm_container_put(cntr);
+			goto out;
+		}
+	}
+
+	if (!is_equal_uba(&ctx_inner->seg.uba, uba)) {
+		ret = -EINVAL;
+		pr_err("uba not matching access uba\n");
+		access_ctx_put(ctx_inner);
+		goto out;
+	}
+
+	if (!refcount_dec_not_one(&ctx_inner->acquire_refcnt)) {
+		pr_err("the number of releases is more than acquires.\n");
+		ret = -EINVAL;
+		access_ctx_put(ctx_inner);
+		goto out;
+	}
+
+	ret = ctx_inner->provider->ops->release(uba);
+	if (!ret) {
+		uba->mem_handle = NULL;
+	} else {
+		/* Without this lock, destroy_access_ctx might decrement acquire reference
+		 * counting to zero if it happens to execute the current line of code.
+		 */
+		mutex_lock(&cntr->lock);
+		refret = refcount_inc_not_zero(&ctx_inner->acquire_refcnt);
+		if (refret) // The situation should not have happened
+			pr_err("refcnt is not zero, refcount fail.\n");
+		mutex_unlock(&cntr->lock);
+	}
+	access_ctx_put(ctx_inner);
+out:
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_release_uba);
 
 static struct task_struct *get_task_by_peer_tgid(struct task_struct *peer, pid_t tgid)
 {

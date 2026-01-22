@@ -56,7 +56,7 @@ struct access_ctx_inner {
 	struct role_info user;
 	struct shm_area *sa;
 	struct shm_segment seg;
-	int id;
+	long id;
 	refcount_t refcnt;
 	refcount_t acquire_refcnt;
 };
