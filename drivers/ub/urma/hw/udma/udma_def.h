@@ -9,6 +9,9 @@
 #include <linux/ummu_core.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
+#define UDMA_AE_EVENT_TYPE 4
+#define UDMA_CQE_NUM_PER_TYPE 2
+
 enum {
 	UDMA_CAP_FEATURE_AR		= BIT(0),
 	UDMA_CAP_FEATURE_JFC_INLINE	= BIT(4),
@@ -185,6 +188,11 @@ enum num_elem_in_grp {
 
 enum {
 	RCT_INIT_FLAG,
+};
+
+struct udma_ae_event_type {
+	uint8_t event_type;
+	uint8_t sub_type;
 };
 
 #endif /* __UDMA_DEF_H__ */

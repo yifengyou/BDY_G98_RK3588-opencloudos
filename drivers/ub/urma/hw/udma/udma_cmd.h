@@ -259,6 +259,8 @@ struct udma_cmd_wqebb_va {
 	uint32_t ue_num;
 };
 
+#define UDMA_CMD_QUERY_ALL_AUX_INFO 0xF
+
 struct udma_cmd_query_cqe_aux_info {
 	uint32_t status : 8;
 	uint32_t is_client : 1;

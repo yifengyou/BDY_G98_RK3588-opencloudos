@@ -8,6 +8,7 @@
 
 #define UDMA_BUS_INSTANCE_SEID_SIZE		4
 #define UDMA_EID_PAIRS_COUNT			8
+#define UDMA_QUERY_ALL_AUX_INFO			0xFFFFFFFFU
 
 union udma_k_jfs_flag {
 	struct {
@@ -83,6 +84,10 @@ struct udma_tp_sport_out {
 struct udma_cqe_info_in {
 	enum ubcore_cr_status status;
 	uint8_t s_r;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 enum udma_cqe_aux_info_type {
@@ -135,10 +140,23 @@ struct udma_cqe_aux_info_out {
 	enum udma_cqe_aux_info_type *aux_info_type;
 	uint32_t *aux_info_value;
 	uint32_t aux_info_num;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct udma_ae_info_in {
 	uint32_t event_type;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
+struct udma_cqe_aux_info_type_arr {
+	enum udma_cqe_aux_info_type *type_list;
+	uint8_t type_len; /* 0: invalid type, MAX: dump all type */
 };
 
 enum udma_ae_aux_info_type {
@@ -158,6 +176,11 @@ struct udma_ae_aux_info_out {
 	enum udma_ae_aux_info_type *aux_info_type;
 	uint32_t *aux_info_value;
 	uint32_t aux_info_num;
+};
+
+struct udma_ae_aux_info_type_arr {
+	enum udma_ae_aux_info_type *type_list;
+	uint8_t type_len;
 };
 
 enum udma_user_ctl_opcode {

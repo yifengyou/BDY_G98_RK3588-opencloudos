@@ -529,7 +529,7 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 	udma_jfc = (struct udma_jfc *)xa_load(&udma_dev->jfc_table.xa, jfcn);
 	if (!udma_jfc) {
 		xa_unlock(&udma_dev->jfc_table.xa);
-		dev_warn(udma_dev->dev,
+		dev_warn_ratelimited(udma_dev->dev,
 			 "Completion event for bogus jfcn %lu.\n", jfcn);
 		return -EINVAL;
 	}

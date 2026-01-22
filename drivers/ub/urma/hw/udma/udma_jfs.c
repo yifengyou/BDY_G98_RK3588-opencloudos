@@ -550,8 +550,8 @@ int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	}
 
 	if (udma_jfs->sq.state == attr->state) {
-		dev_info(udma_dev->dev, "jfs state has been %s.\n",
-			 to_state_name(attr->state));
+		dev_info_ratelimited(udma_dev->dev, "jfs state has been %s.\n",
+				     to_state_name(attr->state));
 		return 0;
 	}
 
@@ -1117,7 +1117,7 @@ static void udma_copy_to_sq(struct udma_jetty_queue *sq, uint32_t wqebb_cnt,
 	uint32_t field_l;
 
 	field_h = remain > wqebb_cnt ? wqebb_cnt : remain;
-	field_l = wqebb_cnt > field_h ? wqebb_cnt - field_h : 0;
+	field_l = wqebb_cnt - field_h;
 
 	memcpy(sq->kva_curr, tmp_sq, field_h * sizeof(*tmp_sq));
 
