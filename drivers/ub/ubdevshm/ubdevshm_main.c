@@ -403,6 +403,21 @@ static struct access_ctx_inner *find_get_access_ctx(struct shm_container *cntr,
 	return ctx;
 }
 
+static struct access_ctx_inner *find_get_access_ctx_by_id(u32 access_ctx_id)
+{
+	struct access_ctx_inner *ctx;
+
+	down_read(&ubdevshm_rw_semlock);
+	ctx = idr_find(&access_ctx_idr, access_ctx_id);
+	if (ctx && !refcount_inc_not_zero(&ctx->refcnt)) {
+		pr_err("ctx refcnt is zero\n");
+		ctx = NULL;
+	}
+	up_read(&ubdevshm_rw_semlock);
+
+	return ctx;
+}
+
 static int create_and_link_access_ctx(struct shm_container *cntr, struct mem_provider *provider,
 	struct task_struct *user, bool sa_exit, u64 va, u64 size, struct access_ctx_inner **rctx)
 {
@@ -757,6 +772,196 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ubdevshm_unregister_segment);
+
+static struct shm_container *find_get_shm_container_by_id(u32 cntr_id)
+{
+	struct shm_container *cntr;
+
+	down_read(&ubdevshm_rw_semlock);
+	cntr = idr_find(&shm_container_idr, cntr_id);
+	if (cntr) {
+		if (!refcount_inc_not_zero(&cntr->refcnt)) {
+			pr_err("cnt ref is zero\n");
+			cntr = NULL;
+		}
+	}
+	up_read(&ubdevshm_rw_semlock);
+	return cntr;
+}
+
+static struct task_struct *get_task_by_peer_tgid(struct task_struct *peer, pid_t tgid)
+{
+	struct task_struct *tsk;
+
+	rcu_read_lock();
+	tsk = get_pid_task(find_pid_ns(tgid, task_active_pid_ns(peer)), PIDTYPE_PID);
+	if (tsk == peer) {
+		pr_err("tgid[%d] is same with peer task\n", tgid);
+		tsk = NULL;
+	} else {
+		if (tsk)
+			get_task_struct(tsk);
+	}
+	rcu_read_unlock();
+
+	return tsk;
+}
+
+static inline int user_tgid(struct shm_user *user, pid_t *rtgid)
+{
+	if (user->type != IDENTIY_TGID || user->user_len != sizeof(*rtgid))
+		return -EINVAL;
+
+	*rtgid = *((pid_t *)user->user);
+	return 0;
+}
+
+int ubdevshm_grant_access(unsigned long *handle, struct shm_user *user,
+			  struct mem_uva *va, struct access_ctx *ctx)
+{
+	struct access_ctx_inner *ctx_inner, *ctx_parent;
+	struct mem_provider *provider;
+	struct shm_container *cntr;
+	struct task_struct *utask;
+	struct role_provider rp;
+	struct role_info role;
+	pid_t tgid;
+	int ret;
+
+	if (!handle || !user || !va || !ctx || user->type != IDENTIY_TGID) {
+		pr_err("invalid param\n");
+		return -EINVAL;
+	}
+
+	ret = find_get_shm_provider(handle, &provider);
+	if (ret)
+		return ret;
+
+	ret = user_tgid(user, &tgid);
+	if (ret) {
+		pr_err("user tgid trans failed\n");
+		goto out_put_provider;
+	}
+
+	utask = get_task_by_peer_tgid(current, tgid);
+	if (!utask) {
+		ret = -EINVAL;
+		goto out_put_provider;
+	}
+
+	cntr = find_get_shm_container(is_same_role_task, current);
+	if (!cntr) {
+		ret = -EINVAL;
+		goto out_put_task_provider;
+	}
+
+	rp.role = fill_role_info(role, utask);
+	rp.provider = provider;
+	ctx_inner = find_get_access_ctx(cntr, va, false, true, role_provider_equal, &rp);
+	if (ctx_inner) {
+		ret = -EEXIST;
+		access_ctx_put(ctx_inner);
+		goto out;
+	}
+
+	rp.role = fill_role_info(role, current);
+	ctx_parent = find_get_access_ctx(cntr, va, false, true, role_provider_equal, &rp);
+	if (!ctx_parent) {
+		ret = -EINVAL;
+		goto out;
+	}
+	ret = create_and_link_access_ctx(cntr, provider, utask, true, va->va, va->size, &ctx_inner);
+	if (ret) {
+		access_ctx_put(ctx_parent);
+		goto out;
+	}
+
+	ctx->access_ctx_id = ctx_inner->id;
+	ctx->shm_container_id = cntr->id;
+
+	cntr->mode = USE_MODE_GRANT;
+	put_task_struct(utask);
+	shm_container_put(cntr);
+	pr_info("grant area with size[%llx] success\n", va->size);
+	return 0;
+
+out:
+	shm_container_put(cntr);
+out_put_task_provider:
+	put_task_struct(utask);
+out_put_provider:
+	shm_provider_put(provider);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_grant_access);
+
+static struct access_ctx_inner *find_cntr_owner_access_ctx(struct shm_container *cntr,
+							   struct shm_area *sa)
+{
+	struct access_ctx_inner *ctx = NULL, *pos = NULL;
+
+	mutex_lock(&cntr->lock);
+	list_for_each_entry(pos, &sa->ctx_list, node) {
+		if (is_same_role(&pos->user, &cntr->owner)) {
+			ctx = pos;
+			break;
+		}
+	}
+	mutex_unlock(&cntr->lock);
+	return ctx;
+}
+
+int ubdevshm_ungrant_access(struct access_ctx *ctx)
+{
+	struct access_ctx_inner *ctx_inner, *ctx_parent;
+	struct shm_container *cntr;
+	int ret = 0;
+
+	if (!ctx) {
+		pr_err("invalid param\n");
+		return -EINVAL;
+	}
+
+	cntr = find_get_shm_container_by_id(ctx->shm_container_id);
+	if (!cntr) {
+		pr_err("invalid shm_container_id[%d] without matching cntr\n",
+		       ctx->shm_container_id);
+		return -ENOENT;
+	}
+
+	if (!is_same_role_task(&cntr->owner, current)) {
+		ret = -EPERM;
+		goto out;
+	}
+
+	ctx_inner = find_get_access_ctx_by_id(ctx->access_ctx_id);
+	if (!ctx_inner) {
+		pr_err("find access ctx inner failed\n");
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ctx_parent = find_cntr_owner_access_ctx(cntr, ctx_inner->sa);
+	if (!ctx_parent) {
+		pr_err("FATAL err: find cntr owner access ctx failed\n");
+		ret = -ENOENT;
+		goto out;
+	}
+
+	access_ctx_put(ctx_inner);
+	ret = destroy_access_ctx(ctx_inner, cntr);
+	if (ret) {
+		pr_err("destroy access ctx failed=%d\n", ret);
+		goto out;
+	}
+	access_ctx_put(ctx_parent); // matching with grant
+	pr_info("ungrant area with size[%llx] success\n", ctx_parent->sa->size);
+
+out:
+	shm_container_put(cntr);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ubdevshm_ungrant_access);
 
 static int __init ubdevshm_init(void)
 {

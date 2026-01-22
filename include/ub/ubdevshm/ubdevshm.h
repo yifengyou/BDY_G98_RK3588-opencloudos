@@ -123,6 +123,53 @@ struct mem_uba {
 	KABI_RESERVE(4)
 };
 
+enum identity_type {
+	/*
+	 * IDENTIY_TGID constraint:
+	 * The shared and user processes must reside within the same PID namespace.
+	 */
+	IDENTIY_TGID,
+	IDENTIY_TYPE_MAX,
+};
+
+/**
+ * struct shm_user - share memory user info.
+ * @type: constraint.
+ * @user_len: user info length.
+ * @user: user pid info.
+ */
+struct shm_user {
+	enum identity_type type;
+	u32 user_len;
+	void *user;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+};
+
+/**
+ * struct access_ctx - share memory user access info.
+ * @shm_container_id: container index.
+ * @access_ctx_id: access index.
+ */
+
+struct access_ctx {
+	u32 shm_container_id;
+	u32 access_ctx_id;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+};
+
 typedef int (*invalidate)(u64 invalidate_tag);
 
 #define UBDEV_SHM_DRIVER_NAME_LENGTH 128
@@ -210,5 +257,34 @@ int ubdevshm_register_segment(unsigned long *handle, struct mem_uva *va);
  * return: 0 indicates success, while any other value indicates failure.
  */
 int ubdevshm_unregister_segment(unsigned long *handle, struct mem_uva *va);
+
+/**
+ * ubdevshm_grant_access() - Authorize the share memory to memory user.
+ * @handle: corresponding memory provider handle.
+ * @user: corresponding authorized process information.
+ * @va: virtual address range of the given VA.
+ * @ctx: the context of the segment obtained after authorization.
+ *
+ * After register segment, the memory applicant invokes this API to
+ * Authorize the share memory to memory user.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure
+ */
+int ubdevshm_grant_access(unsigned long *handle, struct shm_user *user,
+			  struct mem_uva *va, struct access_ctx *ctx);
+
+/**
+ * ubdevshm_ungrant_access() - De-authorize the shared memory associated
+ * with access_ctx.
+ * @ctx: the context of the segment obtained after authorization
+ *
+ * Before releasing the share memory, memory applicant need to invoke this
+ * interface to De-authorize the shared memory associated with access_ctx.
+ *
+ * Context: Any context.
+ * return: 0 indicates success, while any other value indicates failure
+ */
+int ubdevshm_ungrant_access(struct access_ctx *ctx);
 
 #endif /* _UB_UBDEVSHM_UBDEVSHM_H_ */
