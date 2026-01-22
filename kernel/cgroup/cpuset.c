@@ -5343,6 +5343,7 @@ static unsigned long cpuset_nr_running(struct cpuset *cs)
 	while ((task = css_task_iter_next(&it))) {
 		if (task_is_running(task))
 			nr_running++;
+		cond_resched();
 	}
 	css_task_iter_end(&it);
 
