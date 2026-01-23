@@ -998,9 +998,6 @@ static enum jfc_poll_state udma_poll_one(struct udma_dev *dev,
 	if (parse_cqe_for_jfc(dev, cqe, cr, tid_list))
 		return JFC_POLL_ERR;
 
-	if (unlikely(cr->status != UBCORE_CR_SUCCESS) && dump_aux_info)
-		dump_cqe_aux_info(dev, cr);
-
 	return JFC_OK;
 }
 
@@ -1037,6 +1034,7 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 	struct list_head tid_list;
 	unsigned long flags;
 	uint32_t ci;
+	uint32_t i;
 	int npolled;
 
 	INIT_LIST_HEAD(&tid_list);
@@ -1057,6 +1055,11 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
 		spin_unlock_irqrestore(&udma_jfc->lock, flags);
+
+	for (i = 0; i < npolled; i++) {
+		if (unlikely(cr[i].status != UBCORE_CR_SUCCESS) && dump_aux_info)
+			dump_cqe_aux_info(dev, &cr[i]);
+	}
 
 	if (!list_empty(&tid_list))
 		udma_inv_tid(dev, &tid_list);
@@ -1086,7 +1089,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 		if (pi > udma_jfc->ci + udma_jfc->buf.entry_cnt)
 			break;
 	}
-	while ((int) --pi - (int) udma_jfc->ci >= 0) {
+	while ((int) --pi - (int)udma_jfc->ci >= 0) {
 		cqe = get_buf_entry(&udma_jfc->buf, pi);
 		/* make sure cqe buffer is valid */
 		rmb();

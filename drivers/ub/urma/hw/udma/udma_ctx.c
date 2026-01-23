@@ -125,6 +125,7 @@ err_init_ctx_resp:
 	udma_put_usva_tid(dev, ctx);
 err_free_ctx:
 	kfree(ctx);
+
 	return NULL;
 }
 
@@ -167,7 +168,7 @@ int udma_free_ucontext(struct ubcore_ucontext *ucontext)
 	}
 	mutex_unlock(&ctx->hugepage_lock);
 	mutex_destroy(&ctx->hugepage_lock);
-
+	mutex_destroy(&ctx->page_lock);
 	kfree(ctx);
 
 	return 0;
@@ -412,7 +413,6 @@ udma_get_page_priv(struct udma_context *ctx, uint64_t va, uint32_t len)
 	if (!priv) {
 		dev_err(ctx->dev->dev, "failed to alloc page priv.\n");
 		ret = -EINVAL;
-		goto err_unlock;
 	}
 err_unlock:
 	mmap_write_unlock(current->mm);
@@ -440,7 +440,9 @@ static void udma_free_page_priv(struct udma_context *ctx, struct udma_page_priv 
 	for (i = 0; i < priv->page_num; i++)
 		__free_page(priv->pages[i]);
 	kfree(priv->pages);
+	priv->pages = NULL;
 	kfree(priv);
+	priv = NULL;
 }
 
 struct udma_page_priv *udma_get_map_page_priv(struct udma_context *ctx, uint64_t va, uint32_t len)
@@ -547,7 +549,7 @@ err_remap_pfn_range:
 err_alloc_pages:
 	udma_unremap_hugepage(vma, priv, i);
 
-	return ret;
+	return -ENOMEM;
 }
 
 static struct udma_hugepage_priv *

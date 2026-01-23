@@ -8,7 +8,7 @@
 
 struct udma_segment {
 	struct ubcore_target_seg core_tseg;
-	struct ubcore_umem *umem;
+	struct udma_umem *umem;
 	uint32_t token_value;
 	bool token_value_valid;
 	bool kernel_mode;

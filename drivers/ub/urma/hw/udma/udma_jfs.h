@@ -127,9 +127,22 @@ static inline uint32_t sq_cal_wqebb_num(uint32_t sqe_ctl_len, uint32_t sge_num)
 		UDMA_JFS_WQEBB_SIZE + 1;
 }
 
+static inline uint32_t get_max_sge_num(uint8_t max_sge, uint32_t max_inline_size)
+{
+	uint32_t size = (max_inline_size == 0) ? 1 :
+		((max_inline_size - (uint32_t)1) / UDMA_JFS_SGE_SIZE + (uint32_t)1);
+	return max(max_sge, size);
+}
+
 static inline uint32_t get_ctl_len(uint8_t opcode)
 {
 	return opcode == UDMA_OPC_WRITE_WITH_IMM ? SQE_WRITE_IMM_CTL_LEN : SQE_NORMAL_CTL_LEN;
+}
+
+static inline void udma_k_update_sq_db(struct udma_jetty_queue *sq)
+{
+	uint32_t *db_addr = sq->db_addr;
+	*db_addr = sq->pi;
 }
 
 struct ubcore_jfs *udma_create_jfs(struct ubcore_device *ub_dev,

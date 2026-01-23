@@ -31,6 +31,8 @@
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 
+#define UDMA_DRV_VER "1.0"
+
 bool cqe_mode = true;
 bool is_rmmod;
 static DEFINE_MUTEX(udma_reset_mutex);
@@ -308,7 +310,7 @@ void udma_destroy_tables(struct udma_dev *udma_dev)
 }
 
 static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_table *table,
-				 uint32_t max, uint32_t min, uint32_t num_per_group)
+				 uint32_t max, uint32_t min)
 {
 	struct udma_group_bitmap *bitmap_table;
 	int i;
@@ -324,8 +326,8 @@ static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_ta
 	bitmap_table->min = min;
 	bitmap_table->grp_next = min;
 	bitmap_table->n_bits = max - min + 1;
-	bitmap_table->bitmap_cnt = ALIGN(bitmap_table->n_bits, num_per_group) /
-				   num_per_group;
+	bitmap_table->bitmap_cnt = ALIGN(bitmap_table->n_bits, NUM_JETTY_PER_GROUP) /
+				   NUM_JETTY_PER_GROUP;
 	bitmap_table->bit = vmalloc(bitmap_table->bitmap_cnt * sizeof(uint32_t));
 	if (!bitmap_table->bit) {
 		dev_err(udma_dev->dev, "failed to alloc jetty bitmap.\n");
@@ -334,6 +336,10 @@ static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_ta
 
 	for (i = 0; i < bitmap_table->bitmap_cnt; ++i)
 		bitmap_table->bit[i] = ~(0U);
+
+	if (bitmap_table->n_bits % NUM_JETTY_PER_GROUP)
+		bitmap_table->bit[bitmap_table->bitmap_cnt - 1] =
+			GENMASK((bitmap_table->n_bits % NUM_JETTY_PER_GROUP) - 1, 0);
 
 	spin_lock_init(&bitmap_table->lock);
 	xa_init(&table->xa);
@@ -355,8 +361,7 @@ int udma_init_tables(struct udma_dev *udma_dev)
 	ret = udma_init_group_table(udma_dev, &udma_dev->jetty_table,
 				    udma_dev->caps.jetty.max_cnt +
 				    udma_dev->caps.jetty.start_idx - 1,
-				    udma_dev->caps.jetty.start_idx,
-				    NUM_JETTY_PER_GROUP);
+				    udma_dev->caps.jetty.start_idx);
 	if (ret) {
 		dev_err(udma_dev->dev,
 			"failed to init jetty table when start_idx = %u, and max_cnt = %u.\n",
@@ -415,6 +420,9 @@ static int udma_set_ubcore_dev(struct udma_dev *udma_dev)
 	scnprintf(udma_dev->dev_name, UBCORE_MAX_DEV_NAME, "udma%hu", udma_dev->adev_id);
 	strscpy(ub_dev->dev_name, udma_dev->dev_name, UBCORE_MAX_DEV_NAME);
 	scnprintf(ub_dev->ops->driver_name, UBCORE_MAX_DRIVER_NAME, "udma");
+
+	if (!ubase_adev_ubl_supported(udma_dev->comdev.adev))
+		ub_dev->netdev = udma_dev->comdev.netdev;
 
 	ret = ubcore_register_device(ub_dev);
 	if (ret)
@@ -632,8 +640,18 @@ static int udma_init_dev_param(struct udma_dev *udma_dev)
 {
 	struct auxiliary_device *adev = udma_dev->comdev.adev;
 	struct ubase_resource_space *mem_base = ubase_get_mem_base(adev);
+	const struct ubase_adev_com *adev_com;
 	int ret;
 	int i;
+
+	if (!ubase_adev_ubl_supported(udma_dev->comdev.adev)) {
+		adev_com = ubase_get_mdrv_data(adev);
+		if (adev_com == NULL) {
+			dev_err(&adev->dev, "Failed to get mdrv data from ubase.\n");
+			return -EINVAL;
+		}
+		udma_dev->comdev.netdev = adev_com->netdev;
+	}
 
 	udma_dev->dev = adev->dev.parent;
 	udma_dev->db_base = mem_base->addr_unmapped;
@@ -798,7 +816,7 @@ static void udma_free_dev_tid(struct udma_dev *udma_dev)
 
 static int udma_create_db_page(struct udma_dev *udev)
 {
-	udev->db_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	udev->db_page = alloc_page(GFP_KERNEL | __GFP_ZERO | GFP_HIGHUSER_MOVABLE);
 	if (!udev->db_page)
 		return -ENOMEM;
 
@@ -1130,6 +1148,7 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
+	/* Crq event should unregister after wait flush done. */
 	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
@@ -1166,7 +1185,7 @@ void udma_remove(struct auxiliary_device *adev)
 		dev_info(&adev->dev, "udma device is not exist.\n");
 		return;
 	}
-
+	udma_dev->status = UDMA_SUSPEND;
 	ubcore_stop_requests(&udma_dev->ub_dev);
 	while (true) {
 		if (!udma_close_ue_rx(udma_dev, false, false, false, 0))
@@ -1182,14 +1201,12 @@ void udma_remove(struct auxiliary_device *adev)
 			wait_time *= TIME_SLEEP_RATE;
 		dev_err_ratelimited(&adev->dev, "udma close ue rx failed in remove process.\n");
 	}
-	udma_dev->status = UDMA_SUSPEND;
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
-	if (is_rmmod)
-		(void)ubase_activate_dev(adev);
+	(void)ubase_activate_dev(adev);
 	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
@@ -1222,6 +1239,7 @@ static void __exit udma_exit(void)
 
 module_init(udma_init);
 module_exit(udma_exit);
+MODULE_VERSION(UDMA_DRV_VER);
 MODULE_LICENSE("GPL");
 
 module_param(cqe_mode, bool, 0444);

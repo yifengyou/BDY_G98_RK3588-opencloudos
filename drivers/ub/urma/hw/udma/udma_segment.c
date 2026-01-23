@@ -37,10 +37,10 @@ static int udma_pin_segment(struct ubcore_device *ub_dev, struct ubcore_seg_cfg 
 	return ret;
 }
 
-static void udma_unpin_seg(struct udma_segment *seg)
+static void udma_unpin_seg(struct udma_segment *seg, bool dirty)
 {
 	if (!seg->core_tseg.seg.attr.bs.non_pin)
-		udma_umem_release(seg->umem, seg->kernel_mode);
+		udma_umem_release(seg->umem, seg->kernel_mode, dirty);
 }
 
 static int udma_check_seg_cfg(struct udma_dev *udma_dev, struct ubcore_seg_cfg *cfg)
@@ -50,11 +50,6 @@ static int udma_check_seg_cfg(struct udma_dev *udma_dev, struct ubcore_seg_cfg *
 		dev_err(udma_dev->dev,
 			"error segment input, access = %d, token_policy = %d, or null key_id.\n",
 			cfg->flag.bs.access, cfg->flag.bs.token_policy);
-		return -EINVAL;
-	}
-
-	if (udma_dev->caps.sva_sep_mode_en && cfg->flag.bs.non_pin) {
-		dev_err(udma_dev->dev, "no support exit sva and non pin.\n");
 		return -EINVAL;
 	}
 
@@ -107,6 +102,7 @@ static int udma_sva_grant(struct ubcore_seg_cfg *cfg, struct iommu_sva *ksva)
 	int ret;
 
 	perm = udma_u_get_seg_perm(cfg);
+
 	seg_attr.e_bit = (enum ummu_ebit_state)cfg->flag.bs.access &
 			  UBCORE_ACCESS_LOCAL_ONLY;
 
@@ -123,44 +119,6 @@ static int udma_sva_grant(struct ubcore_seg_cfg *cfg, struct iommu_sva *ksva)
 
 		return ret;
 	}
-}
-
-static int udma_set_seg_eid(struct udma_dev *udma_dev, uint32_t eid_index,
-			    union ubcore_eid *eid)
-{
-	struct ubase_mbx_attr mbox_attr = {};
-	struct ubase_cmd_mailbox *mailbox;
-	struct udma_seid_upi *seid_upi;
-	int ret;
-
-	if (udma_dev->is_ue) {
-		dev_info(udma_dev->dev,
-			"The ue does not support the delivery of seid(%u) mailbox.\n",
-			eid_index);
-		return 0;
-	}
-
-	mailbox = udma_alloc_cmd_mailbox(udma_dev);
-	if (!mailbox) {
-		dev_err(udma_dev->dev,
-			"failed to alloc mailbox for get tp seid.\n");
-		return -ENOMEM;
-	}
-
-	mbox_attr.tag = eid_index;
-	mbox_attr.op = UDMA_CMD_READ_SEID_UPI;
-	ret = udma_post_mbox(udma_dev, mailbox, &mbox_attr);
-	if (ret) {
-		dev_err(udma_dev->dev,
-			"send tp eid table mailbox cmd failed, ret is %d.\n", ret);
-	} else {
-		seid_upi = (struct udma_seid_upi *)mailbox->buf;
-		*eid = seid_upi->seid;
-	}
-
-	udma_free_cmd_mailbox(udma_dev, mailbox);
-
-	return ret;
 }
 
 static void udma_dfx_store_seg(struct udma_dev *udma_dev,
@@ -184,10 +142,6 @@ static void udma_dfx_store_seg(struct udma_dev *udma_dev,
 	seg->ubva.va = cfg->va;
 	seg->len = cfg->len;
 	seg->token_value = cfg->token_value;
-	if (udma_set_seg_eid(udma_dev, cfg->eid_index, &seg->ubva.eid)) {
-		kfree(seg);
-		return;
-	}
 
 	write_lock(&udma_dev->dfx_info->seg.rwlock);
 	ret = xa_err(xa_store(&udma_dev->dfx_info->seg.table, cfg->token_id->token_id,
@@ -201,41 +155,6 @@ static void udma_dfx_store_seg(struct udma_dev *udma_dev,
 
 	++udma_dev->dfx_info->seg.cnt;
 	write_unlock(&udma_dev->dfx_info->seg.rwlock);
-}
-
-static int pin_pages_and_ioummu_map(struct ubcore_device *ub_dev, struct udma_context *ctx,
-				    struct udma_segment *seg, struct ubcore_seg_cfg *cfg, int tid)
-{
-	int access = seg->core_tseg.seg.attr.bs.access;
-	int prot = IOMMU_WRITE | IOMMU_READ;
-	int ret;
-
-	ret = udma_pin_segment(ub_dev, cfg, seg, true);
-	if (unlikely(ret)) {
-		prot = IOMMU_READ;
-		ret = udma_pin_segment(ub_dev, cfg, seg, false);
-		if (unlikely(ret)) {
-			dev_err(ctx->dev->dev, "pin sva segment failed, ret = %d.\n", ret);
-			return ret;
-		}
-	}
-	ret = udma_ioummu_map(ctx, (access & UBCORE_ACCESS_LOCAL_ONLY) ? UMMU_INVALID_TID : tid,
-			      prot, seg->addr, &(seg->umem->sg_head));
-	if (unlikely(ret)) {
-		udma_umem_release(seg->umem, seg->kernel_mode);
-		dev_err(ctx->dev->dev, "ioummu map failed, ret = %d.\n", ret);
-	}
-	return ret;
-}
-
-static void unpin_pages_and_unioummu_map(struct udma_context *ctx,
-					 struct udma_segment *seg, int tid)
-{
-	int access = seg->core_tseg.seg.attr.bs.access;
-
-	udma_ioummu_unmap(ctx, (access & UBCORE_ACCESS_LOCAL_ONLY) ?
-			  UMMU_INVALID_TID : tid, seg->addr, seg->length);
-	udma_umem_release(seg->umem, seg->kernel_mode);
 }
 
 static void udma_dfx_delete_seg(struct udma_dev *udma_dev, uint32_t token_id,
@@ -253,6 +172,41 @@ static void udma_dfx_delete_seg(struct udma_dev *udma_dev, uint32_t token_id,
 		--udma_dev->dfx_info->seg.cnt;
 	}
 	write_unlock(&udma_dev->dfx_info->seg.rwlock);
+}
+
+static int pin_pages_and_ioummu_map(struct ubcore_device *ub_dev, struct udma_context *ctx,
+				    struct udma_segment *seg, struct ubcore_seg_cfg *cfg, int tid)
+{
+	uint32_t access = seg->core_tseg.seg.attr.bs.access;
+	int prot = IOMMU_WRITE | IOMMU_READ;
+	int ret;
+
+	ret = udma_pin_segment(ub_dev, cfg, seg, true);
+	if (unlikely(ret)) {
+		prot = IOMMU_READ;
+		ret = udma_pin_segment(ub_dev, cfg, seg, false);
+		if (unlikely(ret)) {
+			dev_err(ctx->dev->dev, "pin sva segment failed, ret = %d.\n", ret);
+			return ret;
+		}
+	}
+	ret = udma_ioummu_map(ctx, (access & UBCORE_ACCESS_LOCAL_ONLY) ? UMMU_INVALID_TID : tid,
+						   prot, seg->addr, &(seg->umem->append.sgt));
+	if (unlikely(ret)) {
+		udma_umem_release(seg->umem, seg->kernel_mode, false);
+		dev_err(ctx->dev->dev, "ioummu map failed, ret = %d.\n", ret);
+	}
+	return ret;
+}
+
+static void unpin_pages_and_unioummu_map(struct udma_context *ctx, struct udma_segment *seg,
+					 int tid)
+{
+	uint32_t access = seg->core_tseg.seg.attr.bs.access;
+
+	udma_ioummu_unmap(ctx, (access & UBCORE_ACCESS_LOCAL_ONLY) ? UMMU_INVALID_TID : tid,
+			  seg->addr, PAGE_SIZE * udma_cal_npages(seg->addr, seg->length));
+	udma_umem_release(seg->umem, seg->kernel_mode, true);
 }
 
 struct ubcore_target_seg *udma_register_seg(struct ubcore_device *ub_dev,
@@ -278,8 +232,8 @@ struct ubcore_target_seg *udma_register_seg(struct ubcore_device *ub_dev,
 	udma_tid = to_udma_tid(seg->core_tseg.token_id);
 
 	if (udata && udma_dev->caps.sva_sep_mode_en) {
-		ret = pin_pages_and_ioummu_map(ub_dev, to_udma_context(udata->uctx),
-					       seg, cfg, udma_tid->tid);
+		ret = pin_pages_and_ioummu_map(ub_dev, to_udma_context(udata->uctx), seg,
+					       cfg, udma_tid->tid);
 		if (ret) {
 			dev_err(udma_dev->dev, "ioummu map failed, ret = %d.\n", ret);
 			goto err_pin_seg;
@@ -323,8 +277,9 @@ struct ubcore_target_seg *udma_register_seg(struct ubcore_device *ub_dev,
 
 err_load_ksva:
 	mutex_unlock(&udma_dev->ksva_mutex);
-	udma_unpin_seg(seg);
+	udma_unpin_seg(seg, false);
 err_pin_seg:
+	seg->token_value = 0;
 	kfree(seg);
 	return NULL;
 }
@@ -343,7 +298,6 @@ int udma_unregister_seg(struct ubcore_target_seg *ubcore_seg)
 
 	mutex_lock(&udma_dev->ksva_mutex);
 	ksva = (struct iommu_sva *)xa_load(&udma_dev->ksva_table, udma_tid->tid);
-
 	if (!ksva) {
 		dev_warn(udma_dev->dev,
 			 "unable to get ksva while unregister segment, token maybe is free.\n");
@@ -375,7 +329,7 @@ common_process:
 	if (!seg->kernel_mode && udma_dev->caps.sva_sep_mode_en)
 		unpin_pages_and_unioummu_map(to_udma_context(ubcore_seg->uctx), seg, udma_tid->tid);
 	else
-		udma_unpin_seg(seg);
+		udma_unpin_seg(seg, true);
 	seg->token_value = 0;
 	kfree(seg);
 

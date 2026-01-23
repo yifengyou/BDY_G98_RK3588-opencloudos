@@ -743,7 +743,7 @@ int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_ha
 	uint32_t tp_id = tp_handle.bs.tpid & UDMA_TPHANDLE_TPID_SHIFT;
 	struct udma_ctrlq_deactive_tp_req_data deactive_tp_req = {};
 	struct ubase_ctrlq_msg msg = {};
-	uint32_t tp_num;
+	uint32_t tp_num = 0;
 	int ret;
 
 	ret = udma_k_ctrlq_save_tpn(udev, tp_id, &tp_num);

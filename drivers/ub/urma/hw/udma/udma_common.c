@@ -30,24 +30,13 @@ static int udma_verify_input(struct udma_umem_param *param)
 	return 0;
 }
 
-static void udma_fill_umem(struct ubcore_umem *umem, struct udma_umem_param *param)
+static void udma_fill_umem(struct udma_umem *umem, struct udma_umem_param *param)
 {
 	umem->ub_dev = param->ub_dev;
 	umem->va = param->va;
 	umem->length = param->len;
 	umem->flag = param->flag;
-}
-
-static struct scatterlist *udma_sg_set_page(struct scatterlist *sg_start,
-					    int pinned, struct page **page_list)
-{
-	struct scatterlist *sg;
-	int i;
-
-	for_each_sg(sg_start, sg, pinned, i)
-		sg_set_page(sg, page_list[i], PAGE_SIZE, 0);
-
-	return sg;
+	umem->is_writable = !!param->flag.bs.writable;
 }
 
 static int udma_pin_pages(uint64_t cur_base, uint64_t npages,
@@ -55,40 +44,98 @@ static int udma_pin_pages(uint64_t cur_base, uint64_t npages,
 {
 	return pin_user_pages_fast(cur_base, min_t(unsigned long, (unsigned long)npages,
 				   PAGE_SIZE / sizeof(struct page *)),
-				   gup_flags | FOLL_LONGTERM, page_list);
+				   gup_flags | FOLL_LONGTERM |
+				   FOLL_HONOR_NUMA_FAULT, page_list);
 }
 
-static uint64_t udma_pin_all_pages(struct udma_dev *udma_dev, struct ubcore_umem *umem,
+static inline void udma_unpin_pages_by_sgtable(struct udma_umem *umem, bool dirty)
+{
+	bool make_dirty = umem->is_writable && dirty;
+	struct scatterlist *sg;
+	uint32_t i;
+
+	for_each_sgtable_sg(&umem->append.sgt, sg, i)
+		unpin_user_page_range_dirty_lock(sg_page(sg),
+			DIV_ROUND_UP(sg->length, PAGE_SIZE), make_dirty);
+
+	sg_free_append_table(&umem->append);
+}
+
+static inline void udma_k_unpin_by_sgtable(struct udma_umem *umem, uint64_t nents)
+{
+	struct scatterlist *sg;
+	struct page *page;
+	uint32_t i;
+
+	for_each_sg(umem->append.sgt.sgl, sg, nents, i) {
+		page = sg_page(sg);
+		put_page(page);
+	}
+
+	sg_free_table(&umem->append.sgt);
+}
+
+static void udma_unpin_pages(struct udma_umem *umem, uint64_t nents, bool is_kernel, bool dirty)
+{
+	if (is_kernel)
+		udma_k_unpin_by_sgtable(umem, nents);
+	else
+		udma_unpin_pages_by_sgtable(umem, dirty);
+}
+
+static uint64_t udma_pin_all_pages(struct udma_dev *udma_dev, struct udma_umem *umem,
 				   uint64_t npages, uint32_t gup_flags,
 				   struct page **page_list)
 {
-	struct scatterlist *sg_list_start = umem->sg_head.sgl;
 	uint64_t cur_base = umem->va & PAGE_MASK;
 	uint64_t page_count = npages;
+	uint64_t pinned_count;
 	int pinned;
+	int ret;
 
 	while (page_count != 0) {
 		cond_resched();
 		pinned = udma_pin_pages(cur_base, page_count, gup_flags, page_list);
 		if (pinned <= 0) {
-			dev_err(udma_dev->dev, "failed to pin_user_pages_fast, page_count: %llu, pinned: %d.\n",
+			dev_err(udma_dev->dev,
+				"failed to pin_user_pages_fast, page_count: %llu, pinned: %d.\n",
 				page_count, pinned);
-			return npages - page_count;
+			break;
 		}
 		cur_base += (uint64_t)pinned * PAGE_SIZE;
 		page_count -= (uint64_t)pinned;
-		sg_list_start = udma_sg_set_page(sg_list_start, pinned, page_list);
+		ret = sg_alloc_append_table_from_pages(&umem->append, page_list, pinned, 0,
+						       pinned * PAGE_SIZE, UINT_MAX, page_count,
+						       GFP_KERNEL);
+		if (ret) {
+			dev_err(udma_dev->dev,
+				"failed to sg alloc append table failed, page_count: %llu.\n",
+				page_count);
+			unpin_user_pages_dirty_lock(page_list, pinned, 0);
+			udma_unpin_pages_by_sgtable(umem, false);
+			return 0;
+		}
 	}
-	return npages;
+	pinned_count = npages - page_count;
+
+	return pinned_count;
 }
 
-static uint64_t udma_k_pin_pages(struct udma_dev *dev, struct ubcore_umem *umem,
+static uint64_t udma_k_pin_pages(struct udma_dev *dev, struct udma_umem *umem,
 				 uint64_t npages)
 {
-	struct scatterlist *sg_cur = umem->sg_head.sgl;
 	uint64_t cur_base = umem->va & PAGE_MASK;
+	struct scatterlist *sg_cur;
 	struct page *pg;
 	uint64_t pinned;
+	int ret;
+
+	ret = sg_alloc_table(&umem->append.sgt, (unsigned int)npages, GFP_KERNEL);
+	if (ret) {
+		dev_err(dev->dev, "failed to sg alloc table failed.\n");
+		return 0;
+	}
+	sg_cur = umem->append.sgt.sgl;
 
 	for (pinned = 0; pinned < npages; pinned++) {
 		if (is_vmalloc_addr((void *)(uintptr_t)cur_base))
@@ -110,33 +157,18 @@ static uint64_t udma_k_pin_pages(struct udma_dev *dev, struct ubcore_umem *umem,
 	return pinned;
 }
 
-static void udma_unpin_pages(struct ubcore_umem *umem, uint64_t nents, bool is_kernel)
-{
-	struct scatterlist *sg;
-	uint32_t i;
-
-	for_each_sg(umem->sg_head.sgl, sg, nents, i) {
-		struct page *page = sg_page(sg);
-
-		if (is_kernel)
-			put_page(page);
-		else
-			unpin_user_page(page);
-	}
-}
-
-static struct ubcore_umem *udma_get_target_umem(struct udma_umem_param *param,
-						struct page **page_list)
+static struct udma_umem *udma_get_target_umem(struct udma_umem_param *param)
 {
 	struct udma_dev *udma_dev = to_udma_dev(param->ub_dev);
-	struct ubcore_umem *umem;
+	struct page **page_list;
+	struct udma_umem *umem;
 	uint32_t gup_flags;
 	uint64_t npages;
 	uint64_t pinned;
 	int ret = 0;
 
 	umem = kzalloc(sizeof(*umem), GFP_KERNEL);
-	if (umem == 0) {
+	if (umem == NULL) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -151,16 +183,20 @@ static struct ubcore_umem *udma_get_target_umem(struct udma_umem_param *param,
 		goto umem_kfree;
 	}
 
-	ret = sg_alloc_table(&umem->sg_head, (unsigned int)npages, GFP_KERNEL);
-	if (ret)
-		goto umem_kfree;
-
 	if (param->is_kernel) {
 		pinned = udma_k_pin_pages(udma_dev, umem, npages);
 	} else {
 		gup_flags = (param->flag.bs.writable == 1) ? FOLL_WRITE : 0;
+		page_list = (struct page **)__get_free_page(GFP_KERNEL);
+		if (page_list == 0) {
+			ret = -ENOMEM;
+			goto umem_kfree;
+		}
+
 		pinned = udma_pin_all_pages(udma_dev, umem, npages, gup_flags, page_list);
+		free_page((uintptr_t)page_list);
 	}
+
 	if (pinned != npages) {
 		ret = -ENOMEM;
 		goto umem_release;
@@ -169,71 +205,34 @@ static struct ubcore_umem *udma_get_target_umem(struct udma_umem_param *param,
 	goto out;
 
 umem_release:
-	udma_unpin_pages(umem, pinned, param->is_kernel);
-	sg_free_table(&umem->sg_head);
+	if (pinned)
+		udma_unpin_pages(umem, pinned, param->is_kernel, false);
 umem_kfree:
 	kfree(umem);
 out:
 	return ret != 0 ? ERR_PTR(ret) : umem;
 }
 
-struct ubcore_umem *udma_umem_get(struct udma_umem_param *param)
+struct udma_umem *udma_umem_get(struct udma_umem_param *param)
 {
-	struct ubcore_umem *umem;
-	struct page **page_list;
+	struct udma_umem *umem;
 	int ret;
 
 	ret = udma_verify_input(param);
 	if (ret < 0)
 		return ERR_PTR(ret);
 
-	page_list = (struct page **) __get_free_page(GFP_KERNEL);
-	if (page_list == 0)
-		return ERR_PTR(-ENOMEM);
-
-	umem = udma_get_target_umem(param, page_list);
-
-	free_page((uintptr_t)page_list);
+	umem = udma_get_target_umem(param);
 
 	return umem;
 }
 
-int pin_queue_addr(struct udma_dev *dev, uint64_t addr, uint32_t len,
-		   struct udma_buf *buf)
-{
-	struct ubcore_device *ub_dev = &dev->ub_dev;
-	struct udma_umem_param param;
-
-	param.ub_dev = ub_dev;
-	param.va = addr;
-	param.len = len;
-	param.flag.bs.writable = 1;
-	param.flag.bs.non_pin = 0;
-	param.is_kernel = false;
-
-	buf->umem = udma_umem_get(&param);
-	if (IS_ERR(buf->umem)) {
-		dev_err(dev->dev, "failed to pin queue addr.\n");
-		return PTR_ERR(buf->umem);
-	}
-
-	buf->addr = addr;
-
-	return 0;
-}
-
-void unpin_queue_addr(struct ubcore_umem *umem)
-{
-	udma_umem_release(umem, false);
-}
-
-void udma_umem_release(struct ubcore_umem *umem, bool is_kernel)
+void udma_umem_release(struct udma_umem *umem, bool is_kernel, bool dirty)
 {
 	if (IS_ERR_OR_NULL(umem))
 		return;
 
-	udma_unpin_pages(umem, umem->sg_head.nents, is_kernel);
-	sg_free_table(&umem->sg_head);
+	udma_unpin_pages(umem, umem->append.sgt.nents, is_kernel, dirty);
 	kfree(umem);
 }
 
@@ -331,29 +330,16 @@ int udma_specify_adv_id(struct udma_dev *udma_dev, struct udma_group_bitmap *bit
 	return 0;
 }
 
-static int udma_adv_jetty_id_alloc(struct udma_dev *udma_dev, uint32_t *bit,
-				   uint32_t next_bit, uint32_t start_idx,
-				   struct udma_group_bitmap *bitmap_table)
+static inline uint32_t udma_adv_jetty_id_alloc(struct udma_dev *udma_dev, uint32_t *bit,
+					       uint32_t next_bit, uint32_t start_idx,
+					       struct udma_group_bitmap *bitmap_table)
 {
 	uint32_t bit_idx;
 
 	bit_idx = find_next_bit((unsigned long *)bit, NUM_JETTY_PER_GROUP, next_bit);
-	if (bit_idx == NUM_JETTY_PER_GROUP) {
-		dev_err(udma_dev->dev,
-			"jid is larger than n_bits, bit=0x%x.\n", *bit);
-		return -ENOMEM;
-	}
-
-	start_idx += bit_idx;
-	if (start_idx >= bitmap_table->n_bits) {
-		dev_err(udma_dev->dev,
-			"jid is larger than n_bits, id=%u, n_bits=%u.\n",
-			start_idx, bitmap_table->n_bits);
-		return -ENOMEM;
-	}
-
 	*bit &= ~(1U << bit_idx);
-	return start_idx + bitmap_table->min;
+
+	return bitmap_table->min + start_idx + bit_idx;
 }
 
 int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitmap_table,
@@ -364,7 +350,6 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 	uint32_t bitmap_cnt = bitmap_table->bitmap_cnt;
 	uint32_t *bit = bitmap_table->bit;
 	uint32_t i;
-	int ret;
 
 	spin_lock(&bitmap_table->lock);
 
@@ -376,22 +361,16 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 
 	if (i == bitmap_cnt) {
 		spin_unlock(&bitmap_table->lock);
-		dev_err(udma_dev->dev,
-			"all bitmaps have been used, bitmap_cnt = %u.\n",
-			bitmap_cnt);
 		return -ENOMEM;
 	}
 
 	if (!is_grp) {
-		ret = udma_adv_jetty_id_alloc(udma_dev, bit + i, next_bit,
-					      i * NUM_JETTY_PER_GROUP, bitmap_table);
+		*start_idx =
+			udma_adv_jetty_id_alloc(udma_dev, bit + i, i == next_block ? next_bit : 0,
+						i * NUM_JETTY_PER_GROUP, bitmap_table);
 
 		spin_unlock(&bitmap_table->lock);
-		if (ret >= 0) {
-			*start_idx = (uint32_t)ret;
-			return 0;
-		}
-		return ret;
+		return 0;
 	}
 
 	for (; i < bitmap_cnt && ~bit[i] != 0; ++i)
@@ -399,8 +378,6 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 	if (i == bitmap_cnt ||
 	    (i + 1) * NUM_JETTY_PER_GROUP > bitmap_table->n_bits) {
 		spin_unlock(&bitmap_table->lock);
-		dev_err(udma_dev->dev,
-			"no completely bitmap for Jetty group.\n");
 		return -ENOMEM;
 	}
 
@@ -419,9 +396,9 @@ void udma_adv_id_free(struct udma_group_bitmap *bitmap_table, uint32_t start_idx
 	uint32_t bit_num;
 
 	start_idx -= bitmap_table->min;
+	bitmap_num = start_idx / NUM_JETTY_PER_GROUP;
 	spin_lock(&bitmap_table->lock);
 
-	bitmap_num = start_idx / NUM_JETTY_PER_GROUP;
 	if (bitmap_num >= bitmap_table->bitmap_cnt) {
 		spin_unlock(&bitmap_table->lock);
 		return;
@@ -575,7 +552,7 @@ void udma_dfx_delete_id(struct udma_dev *udma_dev, struct udma_dfx_entity *entit
 	write_unlock(&entity->rwlock);
 }
 
-static struct ubcore_umem *udma_pin_k_addr(struct ubcore_device *ub_dev, uint64_t va,
+static struct udma_umem *udma_pin_k_addr(struct ubcore_device *ub_dev, uint64_t va,
 				    uint64_t len)
 {
 	struct udma_umem_param param;
@@ -590,22 +567,21 @@ static struct ubcore_umem *udma_pin_k_addr(struct ubcore_device *ub_dev, uint64_
 	return udma_umem_get(&param);
 }
 
-static void udma_unpin_k_addr(struct ubcore_umem *umem)
+static void udma_unpin_k_addr(struct udma_umem *umem)
 {
-	udma_umem_release(umem, true);
+	udma_umem_release(umem, true, true);
 }
 
 int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 			  struct udma_buf *buf)
 {
-	size_t aligned_memory_size;
+	size_t aligned_memory_size = PAGE_ALIGN(memory_size);
 	int ret;
 
-	aligned_memory_size = memory_size + UDMA_HW_PAGE_SIZE - 1;
 	buf->aligned_va = vmalloc(aligned_memory_size);
 	if (!buf->aligned_va) {
 		dev_err(udma_dev->dev,
-			"failed to vmalloc kernel buf, size = %lu.",
+			"failed to vmalloc kernel buf, size = %lu.\n",
 			aligned_memory_size);
 		return -ENOMEM;
 	}
@@ -621,9 +597,8 @@ int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 		return ret;
 	}
 
-	buf->addr = ((uint64_t)buf->aligned_va + UDMA_HW_PAGE_SIZE - 1) &
-		    ~(UDMA_HW_PAGE_SIZE - 1);
-	buf->kva = (void *)(uintptr_t)buf->addr;
+	buf->addr = (uintptr_t)buf->aligned_va;
+	buf->kva = buf->aligned_va;
 
 	return 0;
 }
@@ -648,11 +623,10 @@ udma_alloc_hugepage_priv(struct udma_dev *dev, uint32_t len)
 		return NULL;
 
 	priv->va_len = ALIGN(len, UDMA_HUGEPAGE_SIZE);
-
 	priv->left_va_len = priv->va_len;
 	priv->va_base = vmalloc_huge(priv->va_len, GFP_KERNEL);
 	if (!priv->va_base) {
-		dev_err(dev->dev, "failed to vmalloc_huge, size=%u.", priv->va_len);
+		dev_err(dev->dev, "failed to vmalloc_huge, size=%u.\n", priv->va_len);
 		goto err_vmalloc_huge;
 	}
 	memset(priv->va_base, 0, priv->va_len);
@@ -758,7 +732,7 @@ int udma_k_alloc_buf(struct udma_dev *dev, struct udma_buf *buf)
 			buf->is_hugepage = true;
 		} else {
 			dev_warn(dev->dev,
-				 "failed to alloc hugepage buf, switch to alloc normal buf.");
+				 "failed to alloc hugepage buf, switch to alloc normal buf.\n");
 			ret = udma_alloc_normal_buf(dev, size, buf);
 		}
 	} else {
@@ -869,7 +843,7 @@ void udma_dfx_ctx_print(struct udma_dev *udev, const char *name, uint32_t id, ui
 	pr_info("**************************************************\n");
 }
 
-void udma_swap_endian(uint8_t arr[], uint8_t res[], uint32_t res_size)
+void udma_swap_endian(const uint8_t arr[], uint8_t res[], uint32_t res_size)
 {
 	uint32_t i;
 

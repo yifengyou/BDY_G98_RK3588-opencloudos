@@ -8,7 +8,7 @@
 #include "udma_dev.h"
 
 int udma_pin_sw_db(struct udma_context *ctx, struct udma_sw_db *db);
-void udma_unpin_sw_db(struct udma_context *ctx, struct udma_sw_db *db);
+void udma_unpin_sw_db(struct udma_context *ctx, struct udma_sw_db *db, bool dirty);
 int udma_alloc_sw_db(struct udma_dev *dev, struct udma_sw_db *db,
 		     enum udma_db_type type);
 void udma_free_sw_db(struct udma_dev *dev, struct udma_sw_db *db);

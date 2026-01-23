@@ -65,8 +65,8 @@ static int udma_ae_tp_level_error(struct notifier_block *nb,
 	udma_dev = get_udma_dev(adev);
 
 	dev_warn_ratelimited(udma_dev->dev,
-		 "trigger tp level ae, event type is %d, sub type is %d, queue_num is %u.\n",
-		 info->event_type, info->sub_type, queue_num);
+		"trigger tp level ae, event type is %u, sub type is %u, queue_num is %u.\n",
+		info->event_type, info->sub_type, queue_num);
 
 	return udma_ae_tp_ctrlq_msg_deal(udma_dev, info, queue_num);
 }
@@ -86,7 +86,7 @@ static int udma_ae_jfs_check_err(struct auxiliary_device *adev, uint32_t queue_n
 	if (!udma_sq) {
 		xa_unlock(&udma_dev->jetty_table.xa);
 		dev_warn_ratelimited(udma_dev->dev,
-			 "async event for bogus queue number = %u.\n", queue_num);
+			"async event for bogus queue number = %u.\n", queue_num);
 		return -EINVAL;
 	}
 
@@ -240,8 +240,8 @@ static int udma_ae_jetty_level_error(struct notifier_block *nb,
 	queue_num = info->aeqe->event.queue_event.num;
 
 	dev_warn_ratelimited(&adev->dev,
-		 "trigger jetty level ae, event type is %d, sub type is %d, queue_num is %u.\n",
-		 info->event_type, info->sub_type, queue_num);
+		"trigger jetty level ae, event type is %u, sub type is %u, queue_num is %u.\n",
+		info->event_type, info->sub_type, queue_num);
 
 	if (info->event_type == UBASE_EVENT_TYPE_JFR_LIMIT_REACHED)
 		return udma_ae_jfr_check_err(adev, queue_num, UBCORE_EVENT_JFR_LIMIT_REACHED);
@@ -290,8 +290,7 @@ void udma_unregister_ae_event(struct auxiliary_device *adev)
 
 static int
 udma_event_register(struct auxiliary_device *adev, enum ubase_event_type event_type,
-		    int (*call)(struct notifier_block *nb,
-				unsigned long action, void *data))
+		    int (*call)(struct notifier_block *nb, unsigned long action, void *data))
 {
 	struct udma_dev *udma_dev = get_udma_dev(adev);
 	struct ubase_event_nb *cb;

@@ -75,8 +75,7 @@ void udma_free_cmd_mailbox(struct udma_dev *dev,
 	kfree(mailbox);
 }
 
-static void udma_set_mb_flag_or_fd(uint8_t op, struct udma_mbx_op_match *match,
-				   void *buf)
+static void udma_set_mb_flag_or_fd(uint8_t op, void *buf)
 {
 	struct udma_jetty_ctx *jfs_ctx;
 
@@ -112,13 +111,12 @@ static bool udma_op_ignore_eagain(uint8_t op, void *buf)
 		{ UDMA_CMD_MODIFY_RC_CONTEXT, true },
 		{ UDMA_CMD_DESTROY_RC_CONTEXT, true },
 		{ UDMA_CMD_QUERY_RC_CONTEXT, true },
-		{ UDMA_CMD_READ_SEID_UPI, true },
 	};
 	uint32_t i;
 
 	for (i = 0; i < ARRAY_SIZE(matches); i++) {
 		if (op == matches[i].op) {
-			udma_set_mb_flag_or_fd(op, &matches[i], buf);
+			udma_set_mb_flag_or_fd(op, buf);
 			return matches[i].ignore_ret;
 		}
 	}

@@ -33,7 +33,7 @@ static inline uint64_t get_mmap_idx(struct vm_area_struct *vma)
 	return (vma->vm_pgoff >> MAP_INDEX_SHIFT) & MAP_INDEX_MASK;
 }
 
-static inline int get_mmap_cmd(struct vm_area_struct *vma)
+static inline uint32_t get_mmap_cmd(struct vm_area_struct *vma)
 {
 	return (vma->vm_pgoff & MAP_COMMAND_MASK);
 }

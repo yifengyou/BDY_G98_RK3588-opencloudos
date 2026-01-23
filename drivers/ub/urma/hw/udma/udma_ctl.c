@@ -162,7 +162,7 @@ static int udma_get_sq_buf_ex(struct udma_dev *dev, struct udma_jetty_queue *sq,
 		return -ENOMEM;
 	}
 
-	udma_alloc_kernel_db(dev, sq);
+	udma_set_kernel_db_addr(dev, sq);
 	sq->kva_curr = sq->buf.kva;
 
 	sq->trans_mode = jfs_cfg->trans_mode;
@@ -1326,7 +1326,8 @@ static int udma_user_data(struct ubcore_device *dev,
 	}
 
 	in.opcode = k_user_ctl->in.opcode;
-	if (!g_udma_user_ctl_u_ops[in.opcode]) {
+	if (in.opcode >= ARRAY_SIZE(g_udma_user_ctl_u_ops) ||
+		g_udma_user_ctl_u_ops[in.opcode] == NULL) {
 		dev_err(udev->dev, "invalid user opcode: 0x%x.\n", in.opcode);
 		return -EINVAL;
 	}
@@ -1363,7 +1364,7 @@ static int udma_user_data(struct ubcore_device *dev,
 				k_user_ctl->out.len);
 			if (byte) {
 				dev_err(udev->dev,
-					"failed to copy user data out user ctrl, byte = %lu.\n",
+					"failed to copy out user data out user ctrl, byte = %lu.\n",
 					byte);
 				kfree((void *)out.addr);
 				kfree((void *)in.addr);
@@ -1377,12 +1378,15 @@ static int udma_user_data(struct ubcore_device *dev,
 	kfree((void *)in.addr);
 
 	if (out.addr) {
-		byte = copy_to_user((void __user *)(uintptr_t)k_user_ctl->out.addr,
+		if (ret == 0) {
+			byte = copy_to_user((void __user *)(uintptr_t)k_user_ctl->out.addr,
 				    (void *)(uintptr_t)out.addr, min(out.len, k_user_ctl->out.len));
-		if (byte) {
-			dev_err(udev->dev,
-				"copy resp to user failed in user ctrl, byte = %lu.\n", byte);
-			ret = -EFAULT;
+			if (byte) {
+				dev_err(udev->dev,
+					"copy resp to user failed in user ctrl, byte = %lu.\n",
+					byte);
+				ret = -EFAULT;
+			}
 		}
 
 		kfree((void *)out.addr);
@@ -1400,16 +1404,12 @@ int udma_user_ctl(struct ubcore_device *dev, struct ubcore_user_ctl *k_user_ctl)
 
 	udev = to_udma_dev(dev);
 
-	if (k_user_ctl->in.opcode >= UDMA_USER_CTL_MAX) {
-		dev_err(udev->dev, "invalid opcode: 0x%x.\n", k_user_ctl->in.opcode);
-		return -EINVAL;
-	}
-
 	if (k_user_ctl->uctx)
 		return udma_user_data(dev, k_user_ctl);
 
-	if (!g_udma_user_ctl_k_ops[k_user_ctl->in.opcode]) {
-		dev_err(udev->dev, "invalid user opcode: 0x%x.\n", k_user_ctl->in.opcode);
+	if (k_user_ctl->in.opcode >= ARRAY_SIZE(g_udma_user_ctl_k_ops) ||
+		g_udma_user_ctl_k_ops[k_user_ctl->in.opcode] == NULL) {
+		dev_err(udev->dev, "invalid opcode: 0x%x.\n", k_user_ctl->in.opcode);
 		return -EINVAL;
 	}
 
