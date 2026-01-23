@@ -72,6 +72,7 @@ struct udma_caps {
 	uint8_t port_num;
 	uint8_t cqe_size;
 	struct udma_tbl seid;
+	bool sva_sep_mode_en;
 };
 
 struct udma_dfx_jetty {
@@ -124,6 +125,17 @@ struct udma_hugepage_priv {
 	uint32_t left_va_offset;
 	uint32_t left_va_len;
 	refcount_t refcnt;
+	struct sg_table sgt;
+};
+
+struct udma_page_priv {
+	struct list_head list;
+	struct page **pages;
+	uint32_t page_num;
+	void *va_base;
+	uint32_t va_len;
+	struct sg_table sgt;
+	refcount_t refcnt;
 };
 
 struct udma_hugepage {
@@ -148,6 +160,8 @@ struct udma_buf {
 	struct mutex		id_table_mutex;
 	bool			is_hugepage;
 	struct udma_hugepage	*hugepage;
+	uint32_t		len;
+	struct udma_page_priv	*page_priv;
 };
 
 struct udma_k_sw_db_page {
@@ -165,6 +179,7 @@ struct udma_sw_db {
 	uint64_t db_addr;
 	uint32_t *db_record;
 	void *virt_addr;
+	struct udma_page_priv *page_priv;
 };
 
 struct udma_entity_buf {

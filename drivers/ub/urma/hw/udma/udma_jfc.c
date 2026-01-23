@@ -5,6 +5,7 @@
 
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
+#include <linux/iommu.h>
 #include <linux/ummu_core.h>
 #include <ub/urma/ubcore_uapi.h>
 #include <uapi/ub/urma/udma/udma_abi.h>
@@ -123,36 +124,39 @@ static int udma_get_cmd_from_user(struct udma_create_jfc_ucmd *ucmd,
 static int udma_alloc_u_cq(struct udma_dev *dev, struct udma_create_jfc_ucmd *ucmd,
 			   struct udma_jfc *jfc)
 {
-	int ret;
+	struct udma_hugepage_priv *priv;
+	int ret = -EINVAL;
+
+	jfc->tid = jfc->ctx->tid;
+	jfc->buf.addr = ucmd->buf_addr;
+	jfc->buf.len = ucmd->buf_len;
+	jfc->db.db_addr = ucmd->db_addr;
+	jfc->db.page_priv = udma_get_sw_db(jfc->ctx, jfc->db.db_addr);
+	if (jfc->db.page_priv == NULL) {
+		dev_err(dev->dev, "failed to get jfc db page.\n");
+		return ret;
+	}
 
 	if (ucmd->is_hugepage) {
-		jfc->buf.addr = ucmd->buf_addr;
-		if (udma_occupy_u_hugepage(jfc->ctx, (void *)jfc->buf.addr)) {
+		priv = udma_occupy_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
+		if (!priv) {
 			dev_err(dev->dev, "failed to create cq, va not map.\n");
-			return -EINVAL;
+			goto err_get_buf_page;
 		}
 		jfc->buf.is_hugepage = true;
+		jfc->sgt = &(priv->sgt);
 	} else {
-		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &jfc->buf);
-		if (ret) {
-			dev_err(dev->dev, "failed to pin queue for jfc, ret = %d.\n", ret);
-			return ret;
+		jfc->buf.page_priv = udma_get_map_page_priv(jfc->ctx, jfc->buf.addr, jfc->buf.len);
+		if (jfc->buf.page_priv == NULL) {
+			dev_err(dev->dev, "failed to get jfc buf page.\n");
+			goto err_get_buf_page;
 		}
-	}
-	jfc->tid = jfc->ctx->tid;
-
-	ret = udma_pin_sw_db(jfc->ctx, &jfc->db);
-	if (ret) {
-		dev_err(dev->dev, "failed to pin sw db for jfc, ret = %d.\n", ret);
-		goto err_pin_db;
+		jfc->sgt = &(jfc->buf.page_priv->sgt);
 	}
 
 	return 0;
-err_pin_db:
-	if (ucmd->is_hugepage)
-		udma_return_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
-	else
-		unpin_queue_addr(jfc->buf.umem);
+err_get_buf_page:
+	udma_put_sw_db(jfc->ctx, jfc->db.db_addr);
 
 	return ret;
 }
@@ -195,8 +199,8 @@ static void udma_free_cq(struct udma_dev *dev, struct udma_jfc *jfc)
 		if (jfc->buf.is_hugepage)
 			udma_return_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
 		else
-			unpin_queue_addr(jfc->buf.umem);
-		udma_unpin_sw_db(jfc->ctx, &jfc->db);
+			udma_put_map_page_priv(jfc->ctx, jfc->buf.page_priv);
+		udma_put_sw_db(jfc->ctx, jfc->db.db_addr);
 	}
 }
 

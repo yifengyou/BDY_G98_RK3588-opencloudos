@@ -5,6 +5,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/dma-mapping.h>
+#include <linux/iommu.h>
 #include "udma_common.h"
 #include "udma_db.h"
 
@@ -73,6 +74,61 @@ void udma_unpin_sw_db(struct udma_context *ctx, struct udma_sw_db *db)
 	}
 
 	mutex_unlock(&ctx->pgdir_mutex);
+}
+struct udma_page_priv *udma_get_sw_db(struct udma_context *ctx, uint64_t db_addr)
+{
+	uint64_t page_addr = db_addr & PAGE_MASK;
+	struct udma_page_priv *priv = NULL;
+	struct udma_page_priv *tmp;
+
+	mutex_lock(&ctx->page_lock);
+	list_for_each_entry_safe(priv, tmp, &ctx->page_list, list) {
+		if (page_addr == (uintptr_t)priv->va_base)
+			goto found;
+	}
+
+	priv = udma_get_map_page_priv(ctx, page_addr, PAGE_SIZE);
+	if (!priv) {
+		dev_err(ctx->dev->dev, "failed to get page priv.\n");
+		mutex_unlock(&ctx->page_lock);
+		return NULL;
+	}
+
+	refcount_set(&priv->refcnt, 1);
+	list_add(&priv->list, &ctx->page_list);
+	mutex_unlock(&ctx->page_lock);
+
+	return priv;
+
+found:
+	refcount_inc(&priv->refcnt);
+	mutex_unlock(&ctx->page_lock);
+
+	return priv;
+}
+
+void udma_put_sw_db(struct udma_context *ctx, uint64_t db_addr)
+{
+	uint64_t page_addr = db_addr & PAGE_MASK;
+	struct udma_page_priv *priv = NULL;
+	struct udma_page_priv *tmp;
+
+	mutex_lock(&ctx->page_lock);
+	list_for_each_entry_safe(priv, tmp, &ctx->page_list, list) {
+		if (page_addr == (uintptr_t)priv->va_base)
+			goto found;
+	}
+	mutex_unlock(&ctx->page_lock);
+
+	return;
+
+found:
+	if (refcount_dec_and_test(&priv->refcnt)) {
+		list_del(&priv->list);
+		udma_put_map_page_priv(ctx, priv);
+	}
+
+	mutex_unlock(&ctx->page_lock);
 }
 
 static int udma_alloc_db_from_page(struct udma_k_sw_db_page *page,

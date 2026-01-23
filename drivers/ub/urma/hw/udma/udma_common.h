@@ -50,6 +50,7 @@ struct udma_jetty_queue {
 	bool non_pin;
 	struct udma_jetty_grp *jetty_grp;
 	enum udma_jetty_type jetty_type;
+	struct sg_table *sgt;
 };
 
 enum tp_state {
@@ -314,6 +315,9 @@ struct udma_tp_ctx {
 	u32 scc_data[8];
 };
 
+int udma_ioummu_map(struct udma_context *ctx, int r_tid, int prot, uint64_t addr,
+		    struct sg_table *sgt);
+void udma_ioummu_unmap(struct udma_context *ctx, int r_tid, uint64_t addr, size_t size);
 struct ubcore_umem *udma_umem_get(struct udma_umem_param *param);
 void udma_umem_release(struct ubcore_umem *umem, bool is_kernel);
 void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min, bool irq_lock);

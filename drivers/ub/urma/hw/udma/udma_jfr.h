@@ -93,6 +93,7 @@ struct udma_jfr {
 	spinlock_t lock;
 	refcount_t ae_refcount;
 	struct completion ae_comp;
+	bool buff_non_pin;
 };
 
 struct udma_wqe_sge {

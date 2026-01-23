@@ -16,6 +16,7 @@ extern bool cqe_mode;
 extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
+extern bool hugepage_enable;
 
 #define UBCORE_MAX_DEV_NAME 64
 

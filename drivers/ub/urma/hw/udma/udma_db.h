@@ -12,5 +12,7 @@ void udma_unpin_sw_db(struct udma_context *ctx, struct udma_sw_db *db);
 int udma_alloc_sw_db(struct udma_dev *dev, struct udma_sw_db *db,
 		     enum udma_db_type type);
 void udma_free_sw_db(struct udma_dev *dev, struct udma_sw_db *db);
+struct udma_page_priv *udma_get_sw_db(struct udma_context *ctx, uint64_t db_addr);
+void udma_put_sw_db(struct udma_context *ctx, uint64_t db_addr);
 
 #endif /* __UDMA_DB_H__ */

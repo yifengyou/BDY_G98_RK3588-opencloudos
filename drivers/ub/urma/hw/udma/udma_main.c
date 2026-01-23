@@ -37,6 +37,7 @@ static DEFINE_MUTEX(udma_reset_mutex);
 uint32_t jfr_sleep_time = 1000;
 uint32_t jfc_arm_mode;
 bool dump_aux_info;
+bool hugepage_enable = true;
 
 static const struct auxiliary_device_id udma_id_table[] = {
 	{
@@ -687,22 +688,66 @@ static void udma_uninit_dev_param(struct udma_dev *udma_dev)
 	udma_destroy_tables(udma_dev);
 }
 
+static void udma_disable_usva(struct udma_dev *udma_dev)
+{
+	int ret;
+
+	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	if (ret)
+		dev_warn(udma_dev->dev, "disable sva failed, ret = %d.\n", ret);
+
+	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF);
+	if (ret)
+		dev_warn(udma_dev->dev, "disable iopf failed, ret = %d.\n", ret);
+}
+
+static int udma_enable_usva(struct udma_dev *udma_dev)
+{
+	int ret;
+
+	ret = ummu_get_sva_mode(udma_dev->dev);
+	if (ret < 0) {
+		dev_err(udma_dev->dev, "invalid sva mode, ret = %d.\n", ret);
+		return -EINVAL;
+	}
+	udma_dev->caps.sva_sep_mode_en = !!ret;
+
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF);
+	if (ret) {
+		dev_err(udma_dev->dev, "enable iopf failed, ret = %d.\n", ret);
+		return -EINVAL;
+	}
+
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	if (ret) {
+		dev_err(udma_dev->dev, "enable sva failed, ret = %d.\n", ret);
+		goto err_enable_sva;
+	}
+
+	return ret;
+
+err_enable_sva:
+	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF))
+		dev_warn(udma_dev->dev, "disable iopf failed.\n");
+	return ret;
+}
+
 static int udma_alloc_dev_tid(struct udma_dev *udma_dev)
 {
 	struct ummu_seg_attr seg_attr = {.token = NULL, .e_bit = UMMU_EBIT_ON};
 	struct ummu_param param = {.mode = MAPT_MODE_TABLE};
 	int ret;
 
-	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
+	ret = udma_enable_usva(udma_dev);
 	if (ret) {
-		dev_err(udma_dev->dev, "enable ksva failed, ret = %d.\n", ret);
+		dev_err(udma_dev->dev, "Failed to enable usva, ret = %d.\n", ret);
 		return ret;
 	}
 
-	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
 	if (ret) {
-		dev_err(udma_dev->dev, "enable sva failed, ret = %d.\n", ret);
-		goto err_sva_enable_dev;
+		dev_err(udma_dev->dev, "enable ksva failed, ret = %d.\n", ret);
+		goto err_enable_ksva;
 	}
 
 	udma_dev->ksva = ummu_ksva_bind_device(udma_dev->dev, &param);
@@ -731,11 +776,11 @@ err_sva_grant_range:
 err_get_tid:
 	ummu_ksva_unbind_device(udma_dev->ksva);
 err_ksva_bind_device:
-	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA))
-		dev_warn(udma_dev->dev, "disable sva failed.\n");
-err_sva_enable_dev:
 	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA))
 		dev_warn(udma_dev->dev, "disable ksva failed.\n");
+err_enable_ksva:
+	udma_disable_usva(udma_dev);
+
 	return ret;
 }
 
@@ -760,13 +805,11 @@ static void udma_free_dev_tid(struct udma_dev *udma_dev)
 
 	ummu_ksva_unbind_device(udma_dev->ksva);
 
-	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
-	if (ret)
-		dev_warn(udma_dev->dev, "disable sva failed, ret = %d.\n", ret);
-
 	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
 	if (ret)
 		dev_warn(udma_dev->dev, "disable ksva failed, ret = %d.\n", ret);
+
+	udma_disable_usva(udma_dev);
 }
 
 static int udma_create_db_page(struct udma_dev *udev)
@@ -1210,3 +1253,6 @@ MODULE_PARM_DESC(jfc_arm_mode,
 module_param(dump_aux_info, bool, 0644);
 MODULE_PARM_DESC(dump_aux_info,
 		 "Set whether dump aux info, default: false(false:not print, true:print)");
+
+module_param(hugepage_enable, bool, 0644);
+MODULE_PARM_DESC(hugepage_enable, "Set huge page enable, default: 1(0:disable, 1:enable)");

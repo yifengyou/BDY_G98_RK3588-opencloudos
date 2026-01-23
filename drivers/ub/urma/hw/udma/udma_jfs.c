@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
+#include <linux/iommu.h>
 #include <linux/random.h>
 #include <linux/mm.h>
 #include <ub/urma/ubcore_uapi.h>
@@ -21,6 +22,7 @@
 int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct udma_create_jetty_ucmd *ucmd)
 {
+	struct udma_hugepage_priv *priv;
 	int ret = 0;
 
 	if (ucmd->sqe_bb_cnt == 0 || ucmd->buf_len == 0) {
@@ -31,21 +33,30 @@ int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 
 	sq->sqe_bb_cnt = ucmd->sqe_bb_cnt;
 	sq->buf.entry_cnt = ucmd->buf_len >> WQE_BB_SIZE_SHIFT;
+	sq->buf.addr = ucmd->buf_addr;
+	sq->buf.len = ucmd->buf_len;
+
 	if (sq->non_pin) {
-		sq->buf.addr = ucmd->buf_addr;
+		if (dev->caps.sva_sep_mode_en) {
+			dev_err(dev->dev, "sep mode not support non_pin.\n");
+			ret = -EINVAL;
+		}
+		return ret;
 	} else if (ucmd->is_hugepage) {
-		sq->buf.addr = ucmd->buf_addr;
-		if (udma_occupy_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr)) {
+		priv = udma_occupy_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
+		if (!priv) {
 			dev_err(dev->dev, "failed to create sq, va not map.\n");
 			return -EINVAL;
 		}
 		sq->buf.is_hugepage = true;
+		sq->sgt = &(priv->sgt);
 	} else {
-		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &sq->buf);
-		if (ret) {
-			dev_err(dev->dev, "failed to pin sq, ret = %d.\n", ret);
-			return ret;
+		sq->buf.page_priv = udma_get_map_page_priv(sq->udma_ctx, sq->buf.addr, sq->buf.len);
+		if (sq->buf.page_priv == NULL) {
+			dev_err(dev->dev, "failed to get sq page.\n");
+			return -EINVAL;
 		}
+		sq->sgt = &(sq->buf.page_priv->sgt);
 	}
 
 	return ret;
@@ -112,7 +123,7 @@ void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 	if (sq->buf.is_hugepage) {
 		udma_return_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
 	} else {
-		unpin_queue_addr(sq->buf.umem);
+		udma_put_map_page_priv(sq->udma_ctx, sq->buf.page_priv);
 	}
 }
 
