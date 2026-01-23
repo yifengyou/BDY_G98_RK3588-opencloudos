@@ -124,7 +124,6 @@ static int udma_get_cmd_from_user(struct udma_create_jfc_ucmd *ucmd,
 static int udma_alloc_u_cq(struct udma_dev *dev, struct udma_create_jfc_ucmd *ucmd,
 			   struct udma_jfc *jfc)
 {
-	struct udma_hugepage_priv *priv;
 	int ret = -EINVAL;
 
 	jfc->tid = jfc->ctx->tid;
@@ -138,20 +137,18 @@ static int udma_alloc_u_cq(struct udma_dev *dev, struct udma_create_jfc_ucmd *uc
 	}
 
 	if (ucmd->is_hugepage) {
-		priv = udma_occupy_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
-		if (!priv) {
-			dev_err(dev->dev, "failed to create cq, va not map.\n");
+		if (!udma_alloc_u_hugepage(jfc->ctx, jfc->buf.addr, jfc->buf.len)) {
+			dev_err(dev->dev, "failed to create cq.\n");
+
 			goto err_get_buf_page;
 		}
 		jfc->buf.is_hugepage = true;
-		jfc->sgt = &(priv->sgt);
 	} else {
 		jfc->buf.page_priv = udma_get_map_page_priv(jfc->ctx, jfc->buf.addr, jfc->buf.len);
 		if (jfc->buf.page_priv == NULL) {
 			dev_err(dev->dev, "failed to get jfc buf page.\n");
 			goto err_get_buf_page;
 		}
-		jfc->sgt = &(jfc->buf.page_priv->sgt);
 	}
 
 	return 0;
@@ -197,7 +194,7 @@ static void udma_free_cq(struct udma_dev *dev, struct udma_jfc *jfc)
 		udma_free_sw_db(dev, &jfc->db);
 	} else {
 		if (jfc->buf.is_hugepage)
-			udma_return_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
+			udma_free_u_hugepage(jfc->ctx, jfc->buf.addr);
 		else
 			udma_put_map_page_priv(jfc->ctx, jfc->buf.page_priv);
 		udma_put_sw_db(jfc->ctx, jfc->db.db_addr);

@@ -370,6 +370,17 @@ static inline uint64_t udma_cal_npages(uint64_t va, uint64_t len)
 	return (ALIGN(va + len, PAGE_SIZE) - ALIGN_DOWN(va, PAGE_SIZE)) / PAGE_SIZE;
 }
 
+static inline int
+udma_remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
+		     unsigned long pfn, unsigned long size, pgprot_t prot)
+{
+#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
+	if (IS_ALIGNED(size, UDMA_HUGEPAGE_SIZE))
+		return remap_pfn_range_try_pmd(vma, addr, pfn, size, prot);
+#endif
+	return remap_pfn_range(vma, addr, pfn, size, prot);
+}
+
 int udma_query_ue_idx(struct ubcore_device *ub_dev, struct ubcore_devid *devid,
 		      uint16_t *ue_idx);
 void udma_dfx_ctx_print(struct udma_dev *udev, const char *name, uint32_t id, uint32_t len,

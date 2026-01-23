@@ -44,9 +44,8 @@ struct ubcore_ucontext *udma_alloc_ucontext(struct ubcore_device *ub_dev,
 int udma_free_ucontext(struct ubcore_ucontext *ucontext);
 int udma_mmap(struct ubcore_ucontext *uctx, struct vm_area_struct *vma);
 
-int udma_alloc_u_hugepage(struct udma_context *ctx, struct vm_area_struct *vma);
-struct udma_hugepage_priv *udma_occupy_u_hugepage(struct udma_context *ctx, void *va);
-void udma_return_u_hugepage(struct udma_context *ctx, void *va);
+bool udma_alloc_u_hugepage(struct udma_context *ctx, uint64_t buf_addr, uint32_t buf_len);
+void udma_free_u_hugepage(struct udma_context *ctx, uint64_t buf_addr);
 
 struct udma_page_priv *udma_get_map_page_priv(struct udma_context *ctx, uint64_t va, uint32_t len);
 void udma_put_map_page_priv(struct udma_context *ctx, struct udma_page_priv *priv);

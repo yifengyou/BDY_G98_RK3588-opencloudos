@@ -22,7 +22,6 @@
 int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 			struct udma_create_jetty_ucmd *ucmd)
 {
-	struct udma_hugepage_priv *priv;
 	int ret = 0;
 
 	if (ucmd->sqe_bb_cnt == 0 || ucmd->buf_len == 0) {
@@ -43,20 +42,17 @@ int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 		}
 		return ret;
 	} else if (ucmd->is_hugepage) {
-		priv = udma_occupy_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
-		if (!priv) {
-			dev_err(dev->dev, "failed to create sq, va not map.\n");
-			return -EINVAL;
+		if (!udma_alloc_u_hugepage(sq->udma_ctx, sq->buf.addr, sq->buf.len)) {
+			dev_err(dev->dev, "failed to create sq.\n");
+			return -ENOMEM;
 		}
 		sq->buf.is_hugepage = true;
-		sq->sgt = &(priv->sgt);
 	} else {
 		sq->buf.page_priv = udma_get_map_page_priv(sq->udma_ctx, sq->buf.addr, sq->buf.len);
 		if (sq->buf.page_priv == NULL) {
 			dev_err(dev->dev, "failed to get sq page.\n");
 			return -EINVAL;
 		}
-		sq->sgt = &(sq->buf.page_priv->sgt);
 	}
 
 	return ret;
@@ -121,7 +117,7 @@ void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 		return;
 
 	if (sq->buf.is_hugepage) {
-		udma_return_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
+		udma_free_u_hugepage(sq->udma_ctx, sq->buf.addr);
 	} else {
 		udma_put_map_page_priv(sq->udma_ctx, sq->buf.page_priv);
 	}

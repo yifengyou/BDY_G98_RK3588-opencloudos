@@ -576,20 +576,6 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	return 0;
 }
 
-static void cal_max_2m_num(struct udma_dev *dev)
-{
-	uint32_t jfs_pg = ALIGN(dev->caps.jfs.depth * MAX_WQEBB_IN_SQE *
-				UDMA_JFS_WQEBB_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-	uint32_t jfr_pg = ALIGN(dev->caps.jfr.depth * dev->caps.jfr_sge *
-				UDMA_SGE_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-	uint32_t jfc_pg = ALIGN(dev->caps.jfc.depth * dev->caps.cqe_size,
-				UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-
-	dev->total_hugepage_num =
-		(dev->caps.jetty.start_idx + dev->caps.jetty.max_cnt) * jfs_pg +
-		dev->caps.jfr.max_cnt * jfr_pg + dev->caps.jfc.max_cnt * jfc_pg;
-}
-
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
@@ -624,8 +610,6 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
 	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
 	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
-
-	cal_max_2m_num(udma_dev);
 
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)

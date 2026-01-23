@@ -151,7 +151,7 @@ struct udma_dev {
 	struct mutex disable_ue_rx_mutex;
 	struct mutex hugepage_lock;
 	struct list_head hugepage_list;
-	uint32_t total_hugepage_num;
+	atomic_t hugepage_seq;
 	struct udma_tp_cmdq_info *wait_cmdq_info;
 };
 

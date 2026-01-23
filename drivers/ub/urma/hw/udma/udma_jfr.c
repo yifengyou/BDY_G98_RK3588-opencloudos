@@ -128,17 +128,15 @@ static int udma_jfr_get_u_cmd(struct udma_dev *dev, struct ubcore_udata *udata,
 static int udma_u_alloc_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
 				struct udma_create_jetty_ucmd *ucmd)
 {
-	struct udma_hugepage_priv *priv;
 	int ret = 0;
 
 	if (ucmd->is_hugepage) {
-		priv = udma_occupy_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr);
-		if (!priv) {
-			dev_err(dev->dev, "failed to create rq, va not map.\n");
-			return -EINVAL;
+		if (!udma_alloc_u_hugepage(jfr->udma_ctx, jfr->rq.buf.addr, jfr->rq.buf.len)) {
+			dev_err(dev->dev, "failed to create rq.\n");
+			return -ENOMEM;
+
 		}
 		jfr->rq.buf.is_hugepage = true;
-		jfr->rq.sgt = &(priv->sgt);
 	} else {
 		jfr->rq.buf.page_priv =
 			udma_get_map_page_priv(jfr->udma_ctx, jfr->rq.buf.addr, ucmd->buf_len);
@@ -146,7 +144,6 @@ static int udma_u_alloc_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr,
 			dev_err(dev->dev, "failed to get rq page.\n");
 			return -EINVAL;
 		}
-		jfr->rq.sgt = &(jfr->rq.buf.page_priv->sgt);
 	}
 
 	jfr->idx_que.buf.page_priv =
@@ -169,7 +166,7 @@ err_get_sw_db:
 	udma_put_map_page_priv(jfr->udma_ctx, jfr->idx_que.buf.page_priv);
 err_get_idx_buf:
 	if (ucmd->is_hugepage)
-		udma_return_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr);
+		udma_free_u_hugepage(jfr->udma_ctx, jfr->rq.buf.addr);
 	else
 		udma_put_map_page_priv(jfr->udma_ctx, jfr->rq.buf.page_priv);
 
@@ -264,7 +261,7 @@ static void udma_put_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 	udma_put_sw_db(jfr->udma_ctx, jfr->sw_db.db_addr);
 	udma_put_map_page_priv(jfr->udma_ctx, jfr->idx_que.buf.page_priv);
 	if (jfr->rq.buf.is_hugepage)
-		udma_return_u_hugepage(jfr->udma_ctx, (void *)jfr->rq.buf.addr);
+		udma_free_u_hugepage(jfr->udma_ctx, jfr->rq.buf.addr);
 	else
 		udma_put_map_page_priv(jfr->udma_ctx, jfr->rq.buf.page_priv);
 }

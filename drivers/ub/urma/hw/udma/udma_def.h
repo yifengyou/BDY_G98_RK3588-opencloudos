@@ -117,8 +117,10 @@ struct udma_sw_db_page {
 
 struct udma_hugepage_priv {
 	struct list_head list;
+	uint32_t seq;
 	struct page **pages;
 	uint32_t page_num;
+	uint32_t page_size;
 	struct ubcore_umem *umem;
 	void *va_base;
 	uint32_t va_len;
