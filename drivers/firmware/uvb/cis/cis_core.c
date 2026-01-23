@@ -136,7 +136,7 @@ void free_global_vars(void)
 void uninit_uvb(void)
 {
 	uvb_poll_window_thread_stop();
-	msleep(UVB_POLL_TIMEOUT);
+	msleep(1000);
 	free_uvb_window_lock();
 }
 

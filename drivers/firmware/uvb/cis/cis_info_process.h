@@ -15,8 +15,8 @@
 #define CIS_USAGE_UVB                    2
 #define MAX_UVB_LOCK_IN_BITS             8
 #define UVB_POLL_TIME_INTERVAL           (100)                  /* 100us */
-#define UVB_POLL_TIMEOUT                 (1000)                 /* 1000ms */
-#define UVB_TIMEOUT_WINDOW_OBTAIN        (10000)                /* 10000ms */
+#define UVB_POLL_TIMEOUT                 (1200)                 /* 1200ms */
+#define UVB_TIMEOUT_WINDOW_OBTAIN        (10000)                /* 10000us */
 #define UVB_POLL_TIMEOUT_TIMES           (10000)                /* 10000 times */
 
 extern struct cis_message *io_param_sync;

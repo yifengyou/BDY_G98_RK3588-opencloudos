@@ -9,6 +9,7 @@
 #define pr_fmt(fmt) "[UVB]: " fmt
 
 #include <linux/printk.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
@@ -18,6 +19,10 @@
 #include <linux/delay.h>
 #include "cis_info_process.h"
 #include "uvb_info_process.h"
+
+static u32 uvb_poll_timeout = UVB_POLL_TIMEOUT;
+module_param(uvb_poll_timeout, uint, 0644);
+MODULE_PARM_DESC(uvb_poll_timeout, "set uvb poll timeout(ms), default 1200");
 
 LIST_HEAD(g_local_cis_list);
 DEFINE_SPINLOCK(cis_register_lock);
@@ -341,7 +346,7 @@ int uvb_poll_window_call(struct uvb_window *window, u32 call_id)
 
 		now = ktime_get();
 		time_interval = ktime_to_ms(ktime_sub(now, start));
-		if (time_interval > UVB_POLL_TIMEOUT)
+		if (time_interval > uvb_poll_timeout)
 			break;
 	}
 
@@ -355,7 +360,7 @@ int uvb_poll_window_call_sync(struct uvb_window *window, u32 call_id)
 	int i;
 
 	pr_info("start uvb window polling\n");
-	for (i = 0; i < UVB_POLL_TIMEOUT_TIMES; i++) {
+	for (i = 0; i < uvb_poll_timeout * 10; i++) {
 		if (window->message_id == ~call_id)
 			return (int)window->returned_status;
 
