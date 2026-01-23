@@ -28,7 +28,6 @@
 #include "udma_tid.h"
 #include "udma_dfx.h"
 #include "udma_eid.h"
-#include "udma_debugfs.h"
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 
@@ -1008,7 +1007,6 @@ static int udma_init_dev(struct auxiliary_device *adev)
 		dev_err(udma_dev->dev, "init eid table failed.\n");
 		goto err_init_eid;
 	}
-	udma_register_debugfs(udma_dev);
 	udma_dev->status = UDMA_NORMAL;
 	mutex_unlock(&udma_reset_mutex);
 	dev_info(udma_dev->dev, "init udma successfully.\n");
@@ -1103,7 +1101,6 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 
 	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
 	udma_unregister_crq_event(adev);
@@ -1162,7 +1159,6 @@ void udma_remove(struct auxiliary_device *adev)
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
 	if (is_rmmod)
@@ -1184,12 +1180,9 @@ static int __init udma_init(void)
 {
 	int ret;
 
-	udma_init_debugfs();
 	ret = auxiliary_driver_register(&udma_drv);
-	if (ret) {
+	if (ret)
 		pr_err("failed to register auxiliary_driver\n");
-		udma_uninit_debugfs();
-	}
 
 	return ret;
 }
@@ -1198,7 +1191,6 @@ static void __exit udma_exit(void)
 {
 	is_rmmod = true;
 	auxiliary_driver_unregister(&udma_drv);
-	udma_uninit_debugfs();
 }
 
 module_init(udma_init);
