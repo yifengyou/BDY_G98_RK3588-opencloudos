@@ -9,3 +9,4 @@ obj-$(CONFIG_UB_UDMA) += urma/hw/udma/
 obj-y += obmm/
 obj-$(CONFIG_UB_SENTRY) += sentry/
 obj-$(CONFIG_UB_UBDEVSHM) += ubdevshm/
+obj-$(CONFIG_UB_UBMEMPFD) += ubmempfd/
