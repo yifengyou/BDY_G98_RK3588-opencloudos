@@ -282,7 +282,7 @@ static void udma_destroy_tp_ue_idx_table(struct udma_dev *udma_dev)
 
 void udma_destroy_tables(struct udma_dev *udma_dev)
 {
-	udma_ctrlq_destroy_tpid_list(udma_dev, &udma_dev->ctrlq_tpid_table, false);
+	udma_ctrlq_destroy_tpid_list(&udma_dev->ctrlq_tpid_table);
 	udma_destroy_eid_table(udma_dev);
 	mutex_destroy(&udma_dev->disable_ue_rx_mutex);
 	if (!ida_is_empty(&udma_dev->rsvd_jetty_ida_table.ida))

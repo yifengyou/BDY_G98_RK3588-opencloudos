@@ -152,6 +152,7 @@ struct udma_dev {
 	struct mutex hugepage_lock;
 	struct list_head hugepage_list;
 	uint32_t total_hugepage_num;
+	struct udma_tp_cmdq_info *wait_cmdq_info;
 };
 
 #define UDMA_ERR_MSG_LEN	128

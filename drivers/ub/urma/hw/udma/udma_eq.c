@@ -453,26 +453,34 @@ err_save_ue_id:
 	return ret;
 }
 
-static int udma_crq_recv_req_msg(void *dev, void *data, uint32_t len)
+static int udma_crq_recv_msg_from_ue(void *dev, void *data, uint32_t len)
 {
 	struct udma_dev *udma_dev = get_udma_dev((struct auxiliary_device *)dev);
-	struct udma_ue_tp_info *info;
-	struct udma_req_msg *req;
+	struct udma_entity_msg *recv_msg;
+	struct udma_ue_tp_info *tp_info;
+	int ret;
 
-	if (len < sizeof(*req) + sizeof(*info)) {
-		dev_err(udma_dev->dev, "len of crq req is too small, len = %u.\n", len);
+	if (len < sizeof(*recv_msg) + sizeof(*tp_info)) {
+		dev_err(udma_dev->dev, "len of crq recv to mue is too small, len = %u.\n", len);
 		return -EINVAL;
 	}
-	req = (struct udma_req_msg *)data;
+	recv_msg = (struct udma_entity_msg *)data;
 
-	if (req->resp_code != UDMA_CMD_NOTIFY_MUE_SAVE_TP) {
-		dev_err(udma_dev->dev, "ue to mue opcode error, opcode = %u.\n",
-			req->resp_code);
+	if (recv_msg->opcode != UDMA_CMD_NOTIFY_MUE_SAVE_TP) {
+		dev_err(udma_dev->dev, "ue to mue opcode error, opcode = %u.\n", recv_msg->opcode);
 		return -EINVAL;
 	}
-	info = (struct udma_ue_tp_info *)req->req.data;
 
-	return udma_save_tp_info(udma_dev, info, req->dst_ue_idx);
+	tp_info = (struct udma_ue_tp_info *)recv_msg->buf.data;
+	ret = udma_save_tp_info(udma_dev, tp_info, recv_msg->dst_ue_idx);
+	if (ret)
+		dev_err(udma_dev->dev, "udma save tp info failed, ret = %d.\n", ret);
+
+	ret = udma_send_tp_resp_to_ue(udma_dev, recv_msg, ret);
+	if (ret)
+		dev_err(udma_dev->dev, "udma send tp resp failed, ret = %d.\n", ret);
+
+	return ret;
 }
 
 static void udma_activate_dev_work(struct work_struct *work)
@@ -488,41 +496,44 @@ static void udma_activate_dev_work(struct work_struct *work)
 	kfree(flush_work);
 }
 
-static int udma_crq_recv_resp_msg(void *dev, void *data, uint32_t len)
+static int udma_crq_recv_msg_from_mue(void *dev, void *data, uint32_t len)
 {
 	struct udma_dev *udma_dev = get_udma_dev((struct auxiliary_device *)dev);
 	struct udma_flush_work *flush_work;
-	struct udma_resp_msg *udma_resp;
+	struct udma_entity_msg *recv_msg;
 
-	if (len < sizeof(*udma_resp)) {
-		dev_err(udma_dev->dev, "len of crq resp is too small, len = %u.\n", len);
+	if (len < sizeof(*recv_msg)) {
+		dev_err(udma_dev->dev, "len of crq recv to ue is too small, len = %u.\n", len);
 		return -EINVAL;
 	}
-	udma_resp = (struct udma_resp_msg *)data;
-	if (udma_resp->resp_code != UDMA_CMD_NOTIFY_UE_FLUSH_DONE) {
-		dev_err(udma_dev->dev, "mue to ue opcode err, opcode = %u.\n",
-			udma_resp->resp_code);
-		return -EINVAL;
+	recv_msg = (struct udma_entity_msg *)data;
+
+	if (recv_msg->opcode == UDMA_CMD_NOTIFY_UE_FLUSH_DONE) {
+		flush_work = kzalloc(sizeof(*flush_work), GFP_ATOMIC);
+		if (!flush_work)
+			return -ENOMEM;
+
+		flush_work->udev = udma_dev;
+		INIT_WORK(&flush_work->work, udma_activate_dev_work);
+		queue_work(udma_dev->act_workq, &flush_work->work);
+		return 0;
+	} else if (recv_msg->opcode == UDMA_CMD_NOTIFY_MUE_SAVE_TP) {
+		return udma_recv_tp_resp_from_mue(udma_dev, recv_msg, len);
 	}
+	dev_err(udma_dev->dev, "udma receive invalid opcode, opcode = %u.\n",
+		recv_msg->opcode);
 
-	flush_work = kzalloc(sizeof(*flush_work), GFP_ATOMIC);
-	if (!flush_work)
-		return -ENOMEM;
-
-	flush_work->udev = udma_dev;
-	INIT_WORK(&flush_work->work, udma_activate_dev_work);
-	queue_work(udma_dev->act_workq, &flush_work->work);
-
-	return 0;
+	return -EINVAL;
 }
 
 static struct ubase_crq_event_nb udma_crq_opts[] = {
-	{UBASE_OPC_UE_TO_MUE, NULL, udma_crq_recv_req_msg},
-	{UBASE_OPC_MUE_TO_UE, NULL, udma_crq_recv_resp_msg},
+	{UBASE_OPC_UE_TO_MUE, NULL, udma_crq_recv_msg_from_ue},
+	{UBASE_OPC_MUE_TO_UE, NULL, udma_crq_recv_msg_from_mue},
 };
 
 void udma_unregister_crq_event(struct auxiliary_device *adev)
 {
+	struct udma_tp_cmdq_wait_info *wait_completion = NULL;
 	struct udma_dev *udma_dev = get_udma_dev(adev);
 	struct ubase_crq_event_nb *nb = NULL;
 	size_t index;
@@ -533,6 +544,16 @@ void udma_unregister_crq_event(struct auxiliary_device *adev)
 		kfree(nb);
 		nb = NULL;
 	}
+
+	xa_lock(&udma_dev->wait_cmdq_info->seq_tbl);
+	xa_for_each(&udma_dev->wait_cmdq_info->seq_tbl, index, wait_completion) {
+		complete(&wait_completion->ret_completion);
+		__xa_erase(&udma_dev->wait_cmdq_info->seq_tbl, index);
+	}
+	xa_unlock(&udma_dev->wait_cmdq_info->seq_tbl);
+	xa_destroy(&udma_dev->wait_cmdq_info->seq_tbl);
+	mutex_destroy(&udma_dev->wait_cmdq_info->seq_lock);
+	kfree(udma_dev->wait_cmdq_info);
 }
 
 static int udma_register_one_crq_event(struct auxiliary_device *adev,
@@ -578,8 +599,16 @@ err_register_crq_event:
 int udma_register_crq_event(struct auxiliary_device *adev)
 {
 	uint32_t opt_num = sizeof(udma_crq_opts) / sizeof(struct ubase_crq_event_nb);
+	struct udma_dev *udev = get_udma_dev(adev);
 	uint32_t index;
 	int ret = 0;
+
+	udev->wait_cmdq_info = kzalloc(sizeof(*udev->wait_cmdq_info), GFP_KERNEL);
+	if (!udev->wait_cmdq_info)
+		return -ENOMEM;
+
+	mutex_init(&udev->wait_cmdq_info->seq_lock);
+	xa_init(&udev->wait_cmdq_info->seq_tbl);
 
 	for (index = 0; index < opt_num; ++index) {
 		ret = udma_register_one_crq_event(adev, &udma_crq_opts[index], index);

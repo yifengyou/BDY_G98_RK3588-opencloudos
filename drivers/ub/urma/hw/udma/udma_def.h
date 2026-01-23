@@ -167,18 +167,17 @@ struct udma_sw_db {
 	void *virt_addr;
 };
 
-struct udma_req_msg {
-	uint8_t dst_ue_idx;
-	uint8_t resp_code;
-	uint16_t rsv;
-	struct ubcore_req req;
+struct udma_entity_buf {
+	uint32_t len;
+	uint32_t seq_num;
+	uint8_t data[0];
 };
 
-struct udma_resp_msg {
+struct udma_entity_msg {
 	uint8_t dst_ue_idx;
-	uint8_t resp_code;
+	uint8_t opcode;
 	uint16_t rsv;
-	struct ubcore_resp resp;
+	struct udma_entity_buf buf;
 };
 
 enum num_elem_in_grp {
