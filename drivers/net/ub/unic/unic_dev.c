@@ -14,7 +14,6 @@
 #endif
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_eq.h>
-#include <ub/ubase/ubase_comm_hw.h>
 #include <ub/ubase/ubase_comm_qos.h>
 
 #include "unic_cmd.h"

@@ -58,10 +58,14 @@ enum ubase_event_type {
  * @back: arbitrary registered pointer
  */
 struct ubase_event_nb {
-	enum ubase_drv_type	drv_type;
+	int			drv_type; /* see ubase_drv_type */
 	u8			event_type;
 	struct notifier_block	nb;
 	void			*back;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -114,6 +118,10 @@ struct ubase_aeq_notify_info {
 	u8			event_type;
 	u8			sub_type;
 	struct ubase_aeqe	*aeqe;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 int ubase_event_register(struct auxiliary_device *adev,

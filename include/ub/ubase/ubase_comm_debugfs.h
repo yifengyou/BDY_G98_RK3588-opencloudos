@@ -24,6 +24,10 @@ struct ubase_dbg_dentry_info {
 	struct dentry *dentry;
 	u32 property;
 	bool (*support)(struct device *dev, u32 property);
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -46,6 +50,10 @@ struct ubase_dbg_cmd_info {
 	int (*init)(struct device *dev, struct ubase_dbg_dentry_info *dirs,
 		    struct ubase_dbgfs *dbgfs, u32 idx);
 	int (*read_func)(struct seq_file *s, void *data);
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -58,6 +66,10 @@ struct ubase_dbgfs {
 	struct dentry			*dentry;
 	struct ubase_dbg_cmd_info	*cmd_info;
 	int				cmd_info_size;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 int ubase_dbg_seq_file_init(struct device *dev,

@@ -13,20 +13,38 @@
 
 /* UNIC ctrlq msg white list */
 static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_unic[] = {
-	{UBASE_CTRLQ_SER_TYPE_IP_ACL, UBASE_CTRLQ_OPC_NOTIFY_IP, NULL, NULL},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_IP_ACL,
+		.opcode = UBASE_CTRLQ_OPC_NOTIFY_IP,
+	},
 };
 
 /* UDMA ctrlq msg white list */
 static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_udma[] = {
-	{UBASE_CTRLQ_SER_TYPE_TP_ACL, UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE, NULL, NULL},
-	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_UPDATE_SEID, NULL, NULL},
-	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_UPDATE_UE_SEID_GUID, NULL, NULL},
-	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO, NULL, NULL},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_TP_ACL,
+		.opcode = UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE,
+	},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+		.opcode = UBASE_CTRLQ_OPC_UPDATE_SEID,
+	},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+		.opcode = UBASE_CTRLQ_OPC_UPDATE_UE_SEID_GUID,
+	},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+		.opcode = UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO,
+	},
 };
 
 /* CDMA ctrlq msg white list */
 static const struct ubase_ctrlq_event_nb ubase_ctrlq_wlist_cdma[] = {
-	{UBASE_CTRLQ_SER_TYPE_DEV_REGISTER, UBASE_CTRLQ_OPC_UPDATE_SEID, NULL, NULL},
+	{
+		.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
+		.opcode = UBASE_CTRLQ_OPC_UPDATE_SEID,
+	},
 };
 
 static int ubase_ctrlq_alloc_crq_tbl_mem(struct ubase_dev *udev)

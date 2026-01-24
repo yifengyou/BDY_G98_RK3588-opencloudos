@@ -6,7 +6,6 @@
 
 #include <linux/debugfs.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
-#include <ub/ubase/ubase_comm_hw.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
 #include "unic_ctx_debugfs.h"

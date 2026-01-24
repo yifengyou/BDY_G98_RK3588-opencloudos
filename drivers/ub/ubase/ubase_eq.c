@@ -1199,20 +1199,20 @@ int ubase_register_ae_event(struct ubase_dev *udev)
 {
 	struct ubase_event_nb ubase_ae_nbs[UBASE_AE_LEVEL_NUM] = {
 		{
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_TP_FLUSH_DONE,
-			{ ubase_ae_tp_flush_done },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_TP_FLUSH_DONE,
+			.nb = { ubase_ae_tp_flush_done },
+			.back = udev
 		}, {
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_TP_LEVEL_ERROR,
-			{ ubase_ae_tp_level_error },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_TP_LEVEL_ERROR,
+			.nb = { ubase_ae_tp_level_error },
+			.back = udev
 		}, {
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_ENTITY_LEVEL_ERROR,
-			{ ubase_ae_entity_level_error },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_ENTITY_LEVEL_ERROR,
+			.nb = { ubase_ae_entity_level_error },
+			.back = udev
 		}
 	};
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;

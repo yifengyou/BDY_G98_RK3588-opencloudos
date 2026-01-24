@@ -73,22 +73,28 @@ enum ubase_ctrlq_opc_type_dev_register {
  * @out_size: output data buffer size
  * @in: input data buffer
  * @out: output data buffer
+ * @timeout: ctrlq msg timeout time, in ms
  */
 struct ubase_ctrlq_msg {
-	enum ubase_ctrlq_ser_ver	service_ver;
-	enum ubase_ctrlq_ser_type	service_type;
+	u32	service_ver; /* see ubase_ctrlq_ser_ver */
+	u32	service_type; /* see ubase_ctrlq_ser_type */
 	u8	opcode;
 	u8	need_resp : 1;
-	u8	is_resp : 1;
-	u8	is_async : 1;
-	u8	resv : 5;
+	u8	is_resp   : 1;
+	u8	is_async  : 1;
+	u8	resv      : 5;
 	u8	resp_ret; /* must set when the is_resp field is true. */
 	u16	resp_seq; /* must set when the is_resp field is true. */
 	u16	in_size;
 	u16	out_size;
-	u16	timeout; /* 0:use default timeout; otherwise, use the configured timeout*/
 	void	*in;
 	void	*out;
+	u16	timeout; /* 0:use default timeout; otherwise, use the configured timeout*/
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -104,6 +110,10 @@ struct ubase_ctrlq_event_nb {
 	void	*back;
 	int	(*crq_handler)(struct auxiliary_device *adev, u8 service_ver,
 			       void *data, u16 len, u16 seq);
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,

@@ -91,6 +91,10 @@ enum ubase_reset_stage {
  * @upi: ub entity upi
  * @ctl_no: ub controller id
  * @fw_version: firmware version
+ * @dtu_pa_base: dtu table's physical base address
+ * @dtu_va_base: dtu table's virtual base address
+ * @dtu_iova_base: dtu table's I/O virtual base address
+ * @dtu_pa_size: dtu table's physical address size
  */
 struct ubase_caps {
 	u16	num_ceq_vectors;
@@ -137,6 +141,23 @@ struct ubase_caps {
 	u32	ctl_no;
 
 	u32	fw_version;
+	u64	dtu_pa_base;
+	u64	dtu_va_base;
+	u64	dtu_iova_base;
+	u64	dtu_pa_size;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
+	KABI_RESERVE(9)
+	KABI_RESERVE(10)
+	KABI_RESERVE(11)
+	KABI_RESERVE(12)
 };
 
 /**
@@ -149,6 +170,8 @@ struct ubase_res_caps {
 	u32	max_cnt;
 	u32	start_idx;
 	u32	depth;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
 };
 
 /**
@@ -162,12 +185,35 @@ struct ubase_pmem_caps {
 };
 
 /**
+ * struct ubase_rc_que_addr - ubase rc queue memory address
+ * @iova: iova address
+ * @va: va address
+ */
+struct ubase_rc_que_addr {
+	dma_addr_t	iova;
+	void		*va;
+};
+
+/**
+ * struct ubase_rct_caps - ubase rc queue capabilities
+ * @depth: depth of each rc queue
+ * @max_cnt: max cnt of rc queue
+ * @addrs: rc queues' memory address
+ */
+struct ubase_rct_caps {
+	u32 depth;
+	u32 max_cnt;
+	struct ubase_rc_que_addr *addrs;
+};
+
+/**
  * struct ubase_adev_caps - ubase auxiliary device capabilities
  * @jfs: jfs resource capabilities
  * @jfr: jfr resource capabilities
  * @jfc: jfc resource capabilities
  * @tpg: tp group resource capabilities
  * @pmem: physical memory capabilities
+ * @rc: rc queue resource capabilities
  * @jtg_max_cnt: jetty group max count
  * @rc_max_cnt: rc max count
  * @rc_que_depth: rc queue depth
@@ -179,15 +225,30 @@ struct ubase_adev_caps {
 	struct ubase_res_caps	jfc;
 	struct ubase_res_caps	tpg;
 	struct ubase_pmem_caps	pmem;
+	struct ubase_rct_caps	rc;
 	u32			jtg_max_cnt;
 	u32			rc_max_cnt;
 	u32			rc_que_depth;
 	u16			cqe_size;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
+	KABI_RESERVE(9)
+	KABI_RESERVE(10)
+	KABI_RESERVE(11)
+	KABI_RESERVE(12)
 };
 
 /**
  * struct ubase_ctx_buf_cap - ubase context buffer capabilities
  * @dma_ctx_buf_ba: context buffer iova address
+ * @page: dtu memory pages
  * @slot: iova slot
  * @entry_size: context entry size
  * @entry_cnt: context entry count
@@ -197,28 +258,17 @@ struct ubase_adev_caps {
  */
 struct ubase_ctx_buf_cap {
 	dma_addr_t		dma_ctx_buf_ba; /* pass to hw */
+	struct page		*page; /* dtu only */
 	struct iova_slot	*slot;
 	u32			entry_size;
 	u32			entry_cnt;
 	u32			cnt_per_page_shift;
 	struct xarray		ctx_xa;
 	struct mutex		ctx_mutex;
-};
-
-/**
- * struct ubase_ctx_buf - ubase context buffer information
- * @jfs: jfs context buffer capability
- * @jfr: jfr context buffer capability
- * @jfc: jfc context buffer capability
- * @jtg: jetty group context buffer capability
- * @rc: rc context buffer capability
- */
-struct ubase_ctx_buf {
-	struct ubase_ctx_buf_cap jfs;
-	struct ubase_ctx_buf_cap jfr;
-	struct ubase_ctx_buf_cap jfc;
-	struct ubase_ctx_buf_cap jtg;
-	struct ubase_ctx_buf_cap rc;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct net_device;
@@ -231,6 +281,10 @@ struct net_device;
 struct ubase_adev_com {
 	struct auxiliary_device	*adev;
 	struct net_device	*netdev;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -241,6 +295,8 @@ struct ubase_adev_com {
 struct ubase_resource_space {
 	resource_size_t addr_unmapped;
 	void __iomem *addr;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
 };
 
 /**
@@ -292,16 +348,13 @@ struct ubase_adev_qos {
 	/* common resource */
 	u8	ue_max_vl_id;
 	u8	ue_sl_vl[UBASE_MAX_SL_NUM];
-};
 
-/**
- * struct ubase_ue_node - ubase ub entity list node
- * @list: list head
- * @bus_ue_id: bus ub entity id
- */
-struct ubase_ue_node {
-	struct list_head	list;
-	u16			bus_ue_id;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
 };
 
 #define UBASE_BUS_EID_LEN 4

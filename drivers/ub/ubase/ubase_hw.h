@@ -7,8 +7,9 @@
 #ifndef __UBASE_HW_H__
 #define __UBASE_HW_H__
 
-#include <ub/ubase/ubase_comm_hw.h>
+#include <ub/ubase/ubase_comm_mbx.h>
 
+#include "ubase_dev.h"
 #include "ubase_cmd.h"
 
 #define UBASE_CTX_REMOVE_ALL		(-2)

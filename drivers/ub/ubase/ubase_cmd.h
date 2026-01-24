@@ -38,6 +38,43 @@
 #define UBASE_MOVE_CRQ_RING_PTR(crq) \
 	((crq)->ci = ((crq)->ci + 1) % (crq)->desc_num)
 
+union ubase_mbox {
+	struct {
+		/* MB 0 */
+		__le32 in_param_l;
+		/* MB 1 */
+		__le32 in_param_h;
+		/* MB 2 */
+		__le32 cmd : 8;
+		__le32 tag : 24;
+		/* MB 3 */
+		__le32 seq_num : 16;
+		__le32 event_en : 1;
+		__le32 mbx_ue_id : 8;
+		__le32 rsv : 7;
+		/* MB 4 */
+		__le32 status : 1;
+		__le32 hw_run : 1;
+		__le32 rsv1 : 30;
+	};
+
+	struct {
+		__le32 query_status : 1;
+		__le32 query_hw_run : 1;
+		__le32 query_rsv : 30;
+	};
+};
+
+#define UBASE_DESC_DATA_LEN	6
+struct ubase_cmdq_desc {
+	__le16 opcode;
+	u8 flag;
+	u8 bd_num;
+	__le16 ret;
+	__le16 rsv;
+	__le32 data[UBASE_DESC_DATA_LEN];
+};
+
 enum ubase_cmd_state {
 	UBASE_STATE_CMD_DISABLE
 };

@@ -10,6 +10,8 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/types.h>
 
+#define UBASE_CMDQ_MAX_DATA_SIZE	(1024 - 8)
+
 #define UBASE_FW_VERSION_BYTE3_MASK	GENMASK(31, 24)
 #define UBASE_FW_VERSION_BYTE2_MASK	GENMASK(23, 16)
 #define UBASE_FW_VERSION_BYTE1_MASK	GENMASK(15, 8)
@@ -123,50 +125,6 @@ enum ubase_opcode_type {
 };
 
 /**
- * union ubase_mbox - ubase mailbox structure
- * @in_param_l: input data storage address lower 32 bits
- * @in_param_h: input data storage address high 32 bits
- * @cmd: mailbox command
- * @tag: queue id
- * @seq_num: sequence number
- * @event_en: 0-poll mode, 1-event mode
- * @mbx_ue_id: mailbox ub entity id
- * @rsv: reserved bits
- * @status: mailbox command execution completion status, 0-success, 1-fail
- * @hw_run: hardware running status, 0-not running, 1-running
- * @rsv1: reserved bits
- * @query_status:execution result of the mailbox query command, 0-success, 1-fail
- * @query_hw_run: hardware running status of the mailbox query command, 0-not running, 1-running
- * @query_rsv: reserved bits
- */
-union ubase_mbox {
-	struct {
-		/* MB 0 */
-		__le32 in_param_l;
-		/* MB 1 */
-		__le32 in_param_h;
-		/* MB 2 */
-		__le32 cmd : 8;
-		__le32 tag : 24;
-		/* MB 3 */
-		__le32 seq_num : 16;
-		__le32 event_en : 1;
-		__le32 mbx_ue_id : 8;
-		__le32 rsv : 7;
-		/* MB 4 */
-		__le32 status : 1;
-		__le32 hw_run : 1;
-		__le32 rsv1 : 30;
-	};
-
-	struct {
-		__le32 query_status : 1;
-		__le32 query_hw_run : 1;
-		__le32 query_rsv : 30;
-	};
-};
-
-/**
  * struct ubase_cmd_buf - ubase cmd buffer structure
  * @opcode: cmdq opcode
  * @is_read: read or write, true for read, false for write
@@ -178,6 +136,10 @@ struct ubase_cmd_buf {
 	bool	is_read;
 	u32	data_size;
 	void	*data;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -191,6 +153,10 @@ struct ubase_crq_event_nb {
 	u16 opcode;
 	void *back;
 	int (*crq_handler)(void *dev, void *data, u32 len);
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 static inline void ubase_fill_inout_buf(struct ubase_cmd_buf *buf, u16 opcode,

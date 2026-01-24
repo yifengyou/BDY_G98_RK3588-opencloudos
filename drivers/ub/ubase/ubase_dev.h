@@ -15,7 +15,7 @@
 #include <ub/ubase/ubase_comm_debugfs.h>
 #include <ub/ubase/ubase_comm_dev.h>
 #include <ub/ubase/ubase_comm_eq.h>
-#include <ub/ubase/ubase_comm_hw.h>
+#include <ub/ubase/ubase_comm_mbx.h>
 #include <ub/ubase/ubase_comm_stats.h>
 
 #include "ubase.h"
@@ -65,6 +65,50 @@
 	else                                                                  \
 		(log_cnt)++;                                                  \
 } while (0)
+
+struct ubase_ctx_buf {
+	struct ubase_ctx_buf_cap jfs;
+	struct ubase_ctx_buf_cap jfr;
+	struct ubase_ctx_buf_cap jfc;
+	struct ubase_ctx_buf_cap jtg;
+	struct ubase_ctx_buf_cap rc;
+};
+
+struct ubase_ue_node {
+	struct list_head	list;
+	u16			bus_ue_id;
+};
+
+struct ubase_cmdq_desc;
+struct ubase_cmdq_ring {
+	u32 ci;
+	u32 pi;
+	u32 desc_num;
+	u32 tx_timeout;
+	dma_addr_t desc_dma_addr;
+	struct ubase_cmdq_desc *desc;
+	spinlock_t lock;
+};
+
+struct ubase_cmdq {
+	struct ubase_cmdq_ring csq;
+	struct ubase_cmdq_ring crq;
+};
+
+struct ubase_hw {
+	struct ubase_resource_space rs0_base;
+	struct ubase_resource_space io_base;
+	struct ubase_resource_space mem_base;
+	struct ubase_cmdq cmdq;
+	unsigned long state;
+};
+
+struct ubase_mbx_event_context {
+	struct completion	done;
+	int			result;
+	u64			out_param;
+	u16			seq_num;
+};
 
 struct ubase_adev {
 	struct auxiliary_device adev;
