@@ -25,8 +25,6 @@ static void cdma_get_ctx_info(struct cdma_dev *cdev,
 			      enum cdma_dbg_ctx_type ctx_type,
 			      struct cdma_ctx_info *ctx_info)
 {
-	struct auxiliary_device *adev = cdev->adev;
-
 #define CDMA_DBG_CTX_SIZE_256 256
 #define UBASE_CTX_SIZE_128 128
 	switch (ctx_type) {
@@ -43,8 +41,6 @@ static void cdma_get_ctx_info(struct cdma_dev *cdev,
 		ctx_info->ctx_name = "sq_jfc";
 		break;
 	default:
-		dev_err(&adev->dev, "get ctx info failed, ctx_type = %d.\n",
-			ctx_type);
 		break;
 	}
 }
@@ -237,7 +233,7 @@ static int cdma_dbg_dump_ctx(struct seq_file *s, enum cdma_dbg_ctx_type ctx_type
 	return 0;
 }
 
-int cdma_dbg_dump_jfs_ctx(struct seq_file *s, void *data)
+static int cdma_dbg_dump_jfs_ctx(struct seq_file *s, void *data)
 {
 	if (!s || !s->private)
 		return -EINVAL;
@@ -245,7 +241,7 @@ int cdma_dbg_dump_jfs_ctx(struct seq_file *s, void *data)
 	return cdma_dbg_dump_ctx(s, CDMA_DBG_JFS_CTX);
 }
 
-int cdma_dbg_dump_sq_jfc_ctx(struct seq_file *s, void *data)
+static int cdma_dbg_dump_sq_jfc_ctx(struct seq_file *s, void *data)
 {
 	if (!s || !s->private)
 		return -EINVAL;

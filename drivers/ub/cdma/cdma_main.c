@@ -110,7 +110,7 @@ static void cdma_free_cfile_uobj(struct cdma_dev *cdev)
 		cdma_cleanup_context_uobj(cfile, CDMA_REMOVE_DRIVER_REMOVE);
 		cfile->cdev = NULL;
 		if (cfile->uctx) {
-			jfae = (struct cdma_jfae *)cfile->uctx->jfae;
+			jfae = cfile->uctx->jfae;
 			if (jfae)
 				wake_up_interruptible(&jfae->jfe.poll_wait);
 			cdma_cleanup_context_res(cfile->uctx);

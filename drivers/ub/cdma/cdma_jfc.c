@@ -520,7 +520,7 @@ struct cdma_base_jfc *cdma_create_jfc(struct cdma_dev *cdev,
 	jfc->base.jfce_handler = cdma_jfc_comp_event_cb;
 	jfc->base.dev = cdev;
 
-	dev_dbg(cdev->dev, "create jfc id = %u, queue id = %u.\n",
+	dev_info(cdev->dev, "create jfc, id = %u, queue id = %u.\n",
 		jfc->jfcn, cfg->queue_id);
 
 	return &jfc->base;
@@ -580,7 +580,7 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		arg->out.async_events_reported = jfc_event->async_events_reported;
 	}
 
-	pr_debug("Leave %s, jfcn: %u.\n", __func__, jfc->jfcn);
+	dev_info(cdev->dev, "delete jfc, id = %u.\n", jfc->jfcn);
 
 	cdma_release_jfc_event(jfc);
 	kfree(jfc);

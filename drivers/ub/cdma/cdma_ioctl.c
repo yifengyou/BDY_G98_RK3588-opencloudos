@@ -97,7 +97,7 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 		goto free_context;
 	}
 
-	jfae = (struct cdma_jfae *)ctx->jfae;
+	jfae = ctx->jfae;
 	jfae->ctx = ctx;
 	args.out.cqe_size = cdev->caps.cqe_size;
 	args.out.dwqe_enable =
@@ -116,7 +116,7 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 
 free_jfae:
 	cfile->uctx = NULL;
-	cdma_free_jfae((struct cdma_jfae *)ctx->jfae);
+	cdma_free_jfae(ctx->jfae);
 free_context:
 	cdma_free_context(cdev, ctx);
 
@@ -127,7 +127,6 @@ static int cdma_delete_ucontext(struct cdma_ioctl_hdr *hdr,
 				struct cdma_file *cfile)
 {
 	struct cdma_dev *cdev = cfile->cdev;
-	struct cdma_jfae *jfae;
 
 	if (!cfile->uctx) {
 		dev_err(cdev->dev, "cdma context has not been created.\n");
@@ -140,10 +139,6 @@ static int cdma_delete_ucontext(struct cdma_ioctl_hdr *hdr,
 			cfile->uctx->handle);
 		return -EBUSY;
 	}
-
-	jfae = cfile->uctx->jfae;
-	if (jfae)
-		jfae->ctx = NULL;
 
 	cdma_free_context(cdev, cfile->uctx);
 	cfile->uctx = NULL;

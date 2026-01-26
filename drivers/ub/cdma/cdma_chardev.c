@@ -386,7 +386,7 @@ int cdma_create_chardev(struct cdma_dev *cdev)
 	}
 
 	chardev->dev = device_create(cdma_cdev_class, NULL, chardev->devno,
-				     NULL, chardev->name);
+				     NULL, "%s", chardev->name);
 	if (IS_ERR(chardev->dev)) {
 		ret = PTR_ERR(chardev->dev);
 		dev_err(cdev->dev, "create device failed, ret = %d\n", ret);
