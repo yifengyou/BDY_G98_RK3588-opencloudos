@@ -6004,6 +6004,126 @@ static int __init parse_cmdlinelru_gen(char *s)
 __setup("lru_gen=", parse_cmdlinelru_gen);
 #endif
 
+static void lru_gen_seq_format_seq(struct lruvec *lruvec, struct seq_buf *sb,
+				   unsigned long max_seq, unsigned long *min_seq,
+				   unsigned long seq)
+{
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	int i, type, tier, zone, gen = lru_gen_from_seq(seq);
+	int hist = lru_hist_from_seq(seq);
+	unsigned long birth = READ_ONCE(lrugen->timestamps[gen]);
+
+	seq_buf_printf(sb, " %10lu %10u", seq, jiffies_to_msecs(jiffies - birth));
+	for (type = 0; type < ANON_AND_FILE; type++) {
+		unsigned long size = 0;
+
+		if (seq < min_seq[type]) {
+			seq_buf_printf(sb, " %10c ", 'x');
+			continue;
+		}
+
+		for (zone = 0; zone < MAX_NR_ZONES; zone++)
+			size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+
+		seq_buf_printf(sb, " %10lu ", size);
+	}
+
+	seq_buf_putc(sb, '\n');
+
+	for (tier = 0; tier < MAX_NR_TIERS; tier++) {
+		seq_buf_printf(sb, " %10c %10d", ' ', tier);
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			const char *s = "   ";
+			unsigned long n[3] = {};
+
+			if (seq < min_seq[type]) {
+				seq_buf_printf(sb, " %10c  %10c  %10c ", 'x', 'x', 'x');
+				continue;
+			}
+
+			if (seq == max_seq) {
+				s = "RT ";
+				n[0] = atomic_long_read(&lrugen->avg_refaulted[type][tier]);
+				n[1] = atomic_long_read(&lrugen->avg_total[type][tier]);
+			} else if (seq == min_seq[type] || NR_HIST_GENS > 1) {
+				s = "rep";
+				n[0] = atomic_long_read(&lrugen->refaulted[hist][type][tier]);
+				n[1] = atomic_long_read(&lrugen->evicted[hist][type][tier]);
+				if (tier)
+					n[2] = READ_ONCE(lrugen->protected[hist][type][tier - 1]);
+			}
+
+			for (i = 0; i < 3; i++)
+				seq_buf_printf(sb, " %10lu%c", n[i], s[i]);
+		}
+
+		seq_buf_putc(sb, '\n');
+	}
+
+	seq_buf_puts(sb, "                      ");
+	for (i = 0; i < NR_MM_STATS; i++) {
+		const char *s = "      ";
+		unsigned long n = 0;
+
+		if (seq == max_seq && NR_HIST_GENS == 1) {
+			s = "LOYNFA";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		} else if (seq != max_seq && NR_HIST_GENS > 1) {
+			s = "loynfa";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		}
+
+		seq_buf_printf(sb, " %10lu%c", n, s[i]);
+	}
+
+	seq_buf_putc(sb, '\n');
+}
+
+static void lru_gen_seq_format_node(int nid, struct lruvec *lruvec, struct seq_buf *s)
+{
+	unsigned long seq;
+
+	DEFINE_MAX_SEQ(lruvec);
+	DEFINE_MIN_SEQ(lruvec);
+
+	for (seq = max_seq - MAX_NR_GENS + 1; seq <= max_seq; seq++)
+		lru_gen_seq_format_seq(lruvec, s, max_seq, min_seq, seq);
+}
+
+/* Works just like get_swappiness(), but don't consider flags in scan_control */
+static int lru_gen_oom_get_swappiness(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
+		return 0;
+
+	return mem_cgroup_swappiness(memcg);
+}
+
+#define LRU_GEN_OOM_INFO_PATH_MAX 512
+
+void lru_gen_oom_info_format(struct mem_cgroup *memcg_oom, struct seq_buf *s)
+{
+	int nid;
+	char buf[LRU_GEN_OOM_INFO_PATH_MAX];
+	struct mem_cgroup *memcg = NULL;
+
+	while ((memcg = mem_cgroup_iter(memcg_oom, memcg, NULL))) {
+		int swappiness = lru_gen_oom_get_swappiness(memcg);
+
+		cgroup_path(memcg->css.cgroup, buf, LRU_GEN_OOM_INFO_PATH_MAX);
+		seq_buf_printf(s, "memcg %5hu %s\n", mem_cgroup_id(memcg), buf);
+		seq_buf_printf(s, " swappiness %10d\n", swappiness);
+
+		for_each_node_state(nid, N_MEMORY) {
+			struct pglist_data *pgdat = NODE_DATA(nid);
+			struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
+			seq_buf_printf(s, " node %5d\n", nid);
+			lru_gen_seq_format_node(nid, lruvec, s);
+		}
+	}
+}
+
 #else /* !CONFIG_LRU_GEN */
 
 static inline bool lru_gen_is_migrating(void)
