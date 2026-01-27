@@ -156,6 +156,7 @@ static void ummu_device_hw_probe_iidr(struct ummu_device *ummu)
 		ummu->cap.options |= UMMU_OPT_CHK_MAPT_CONTINUITY;
 		ummu->cap.options |= UMMU_OPT_MCMDQ_DECREASE;
 		ummu->cap.options |= UMMU_OPT_SYNC_WITH_PLBI;
+		ummu->cap.options |= UMMU_OPT_KV_CAM_CONTINUITY;
 		ummu->cap.features &= ~UMMU_FEAT_STALLS;
 	}
 

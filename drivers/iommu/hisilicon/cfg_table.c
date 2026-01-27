@@ -1331,16 +1331,35 @@ int ummu_device_init_hash_table(struct ummu_device *ummu)
 	kv_size = PAGE_ALIGN(ents * HASH_ENTRY_SIZE_BYTES);
 	cam_size = PAGE_ALIGN(CAM_TABLE_DEPTH * HASH_ENTRY_SIZE_BYTES);
 
-	kv_addr = (void *)devm_get_free_pages(
-		ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size + cam_size));
-	if (!kv_addr) {
-		dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
-			kv_size + cam_size);
-		return -ENOMEM;
+	if (!(ummu->cap.options & UMMU_OPT_KV_CAM_CONTINUITY)) {
+		kv_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size));
+		if (!kv_addr) {
+			dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
+				kv_size);
+			return -ENOMEM;
+		}
+		kv_phys = virt_to_phys(kv_addr);
+		cam_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(cam_size));
+		if (!cam_addr) {
+			dev_err(ummu->dev, "allocate cam table failed(%zu bytes).\n",
+				cam_size);
+			return -ENOMEM;
+		}
+		cam_phys = virt_to_phys(cam_addr);
+	} else {
+		kv_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size + cam_size));
+		if (!kv_addr) {
+			dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
+				kv_size + cam_size);
+			return -ENOMEM;
+		}
+		kv_phys = virt_to_phys(kv_addr);
+		cam_addr = kv_addr + kv_size;
+		cam_phys = kv_phys + kv_size;
 	}
-	kv_phys = virt_to_phys(kv_addr);
-	cam_addr = kv_addr + kv_size;
-	cam_phys = kv_phys + kv_size;
 
 	ummu->hash_tbl_cfg.bank_depth = KV_TABLE_DEPTH;
 	ummu->hash_tbl_cfg.bank_num = KV_TABLE_BANK_NUM;

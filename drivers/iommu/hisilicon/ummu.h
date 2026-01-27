@@ -179,6 +179,7 @@ struct ummu_capability {
 #define UMMU_OPT_CHK_MAPT_CONTINUITY	(1UL << 3)
 #define UMMU_OPT_MCMDQ_DECREASE		(1UL << 4)
 #define UMMU_OPT_SYNC_WITH_PLBI		(1UL << 5)
+#define UMMU_OPT_KV_CAM_CONTINUITY	(1UL << 6)
 	u32 options;
 
 #define UMMU_MAX_ASIDS			(1UL << 16)
