@@ -274,15 +274,14 @@ static void free_os_meta(struct kref *ref)
 	kfree(meta);
 }
 
-static int os_meta_get_kv_index(struct os_meta *meta, eid_t eid, int type,
-				u32 *kv_index)
+static int os_meta_get_kv_index(struct os_meta *meta, eid_t eid, u32 *kv_index)
 {
 	struct eid_info *info;
 	int ret = -ENOENT;
 
 	guard(spinlock)(&ummu_global);
 	list_for_each_entry(info, &meta->eids, node)
-		if (info->eid == eid && info->eid_type == type) {
+		if (info->eid == eid) {
 			*kv_index = info->kv_index;
 			ret = 0;
 			break;
@@ -1296,7 +1295,7 @@ void ummu_del_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, en
 		return;
 	}
 
-	ret = os_meta_get_kv_index(meta, eid, type, &kv_index);
+	ret = os_meta_get_kv_index(meta, eid, &kv_index);
 	if (ret) {
 		dev_err(ummu->dev, "invalid eid:eid_high(0x%llx), eid_low(0x%llx)",
 			(u64)(eid >> EID_HIGH_SZ_SHIFT), (u64)eid);
