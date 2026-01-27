@@ -131,10 +131,8 @@ void udma_init_jfsc(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 	ctx->jfs_mode = JFS;
 	ctx->type = to_udma_type(cfg->trans_mode);
 	ctx->sl = dev->udma_sl[UDMA_DEFAULT_SL_NUM];
-	if (ctx->type == JETTY_RM || ctx->type == JETTY_RC) {
-		for (i = 0; i < dev->udma_total_sl_num; i++)
-			if (cfg->priority == dev->udma_sl[i])
-				ctx->sl = cfg->priority;
+	if (ctx->type == JETTY_RM) {
+		ctx->sl = dev->priority_info[cfg->priority].SL;
 	} else if (ctx->type == JETTY_UM) {
 		ctx->sl = dev->unic_sl[UDMA_DEFAULT_SL_NUM];
 		for (i = 0; i < dev->unic_sl_num; i++)

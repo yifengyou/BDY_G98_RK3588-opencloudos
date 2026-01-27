@@ -149,6 +149,11 @@ static void udma_set_dev_caps(struct ubcore_device_attr *attr, struct udma_dev *
 	attr->dev_cap.max_cas_size = udma_dev->caps.max_cas_size;
 	attr->dev_cap.max_fetch_and_add_size = udma_dev->caps.max_fetch_and_add_size;
 	attr->dev_cap.atomic_feat.value = udma_dev->caps.atomic_feat;
+	(void)memcpy(attr->dev_cap.priority_info,
+		     udma_dev->priority_info,
+		     sizeof(struct ubcore_sl_info) * UDMA_MAX_SL_NUM);
+	attr->dev_cap.feature.bs.ipourma_en = udma_dev->caps.ipourma_en;
+	attr->dev_cap.feature.bs.ctp_en = udma_dev->caps.ctp_en;
 }
 
 static int udma_query_device_attr(struct ubcore_device *dev,
@@ -162,6 +167,35 @@ static int udma_query_device_attr(struct ubcore_device *dev,
 	attr->reserved_jetty_id_max = udma_dev->caps.public_jetty.max_cnt - 1;
 
 	return 0;
+}
+
+static int udma_set_sl(struct ubcore_device *dev, uint32_t priority, uint32_t SL)
+{
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+
+	if (priority >= UDMA_MAX_PRIORITY || SL >= UDMA_MAX_SL_NUM) {
+		dev_err(udma_dev->dev,
+			"invalid priority(%d) or SL(%d)\n", priority, SL);
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < udma_dev->udma_total_sl_num; i++) {
+		if (udma_dev->udma_sl[i] == SL) {
+			udma_dev->priority_info[priority].SL = SL;
+			if (i < udma_dev->udma_tp_sl_num) {
+				udma_dev->priority_info[priority].tp_type.bs.rtp = 1;
+				udma_dev->priority_info[priority].tp_type.bs.ctp = 0;
+			} else {
+				udma_dev->priority_info[priority].tp_type.bs.rtp = 0;
+				udma_dev->priority_info[priority].tp_type.bs.ctp = 1;
+			}
+			return 0;
+		}
+	}
+
+	dev_err(udma_dev->dev, "SL(%d) to set is not in rtp or ctp range.\n", SL);
+
+	return -EINVAL;
 }
 
 static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *key,
@@ -252,6 +286,7 @@ static struct ubcore_ops g_dev_ops = {
 	.query_stats = udma_query_stats,
 	.query_ue_idx = udma_query_ue_idx,
 	.disassociate_ucontext = udma_disassociate_ucontext,
+	.set_sl = udma_set_sl,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)
@@ -581,6 +616,20 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	for (i = 0; i < qos_info->ctp_sl_num; i++)
 		dev->udma_sl[qos_info->tp_sl_num + i] = qos_info->ctp_sl[i];
 
+	for (i = 0; i < UDMA_MAX_SL_NUM; i++) {
+		dev->priority_info[i].SL = dev->udma_tp_sl[UDMA_DEFAULT_SL_NUM];
+		dev->priority_info[i].tp_type.bs.rtp = 1;
+	}
+
+	for (i = 0; i < dev->udma_tp_sl_num; i++)
+		dev->priority_info[dev->udma_tp_sl[i]].SL = dev->udma_tp_sl[i];
+
+	for (i = 0; i < dev->udma_ctp_sl_num; i++) {
+		dev->priority_info[dev->udma_ctp_sl[i]].SL = dev->udma_ctp_sl[i];
+		dev->priority_info[dev->udma_ctp_sl[i]].tp_type.bs.rtp = 0;
+		dev->priority_info[dev->udma_ctp_sl[i]].tp_type.bs.ctp = 1;
+	}
+
 	return 0;
 }
 
@@ -618,6 +667,8 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
 	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
 	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
+	udma_dev->caps.ipourma_en = ubase_adev_ip_over_urma_supported(udma_dev->comdev.adev);
+	udma_dev->caps.ctp_en = !(ubase_adev_ip_over_urma_utp_supported(udma_dev->comdev.adev));
 
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)

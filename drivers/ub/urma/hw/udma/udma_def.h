@@ -73,6 +73,8 @@ struct udma_caps {
 	uint8_t port_num;
 	uint8_t cqe_size;
 	struct udma_tbl seid;
+	bool ctp_en;
+	bool ipourma_en;
 	bool sva_sep_mode_en;
 };
 

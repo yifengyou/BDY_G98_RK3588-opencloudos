@@ -156,6 +156,7 @@ struct udma_dev {
 	u8 udma_ctp_sl[UDMA_MAX_SL_NUM];
 	u8 unic_sl[UDMA_MAX_SL_NUM];
 	u8 udma_sl[UDMA_MAX_SL_NUM];
+	struct ubcore_sl_info priority_info[UDMA_MAX_SL_NUM];
 	int disable_ue_rx_count;
 	struct mutex disable_ue_rx_mutex;
 	struct mutex hugepage_lock;
