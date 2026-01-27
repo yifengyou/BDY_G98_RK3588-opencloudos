@@ -4826,7 +4826,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	int type;
 	int scanned;
 	int tier = -1;
-	int isolated;
+	int isolated = 0;
 	DEFINE_MIN_SEQ(lruvec);
 
 #ifdef CONFIG_EMM_RECLAIM
