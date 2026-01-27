@@ -66,11 +66,13 @@ union { \
 #define KABI_DEPRECATE_FN(_type, _orig, _args...)	_KABI_ARGS(_type(*_orig)(_args))
 #define KABI_REPLACE(_orig, _new)			_orig
 #define KABI_EXCLUDE(_elem)
+#define KABI_EXTEND_ENUM(_new)
 
 #else
 
 #define KABI_ADD(_new)					_new
 #define KABI_EXTEND(_new)				_KABI_ARGS(_new;)
+#define KABI_EXTEND_ENUM(_new)				_new,
 #define KABI_FILL_HOLE(_new)				_new
 #define KABI_RENAME(_orig, _new)			_new
 #define KABI_DEPRECATE(_type, _orig) \
@@ -122,8 +124,7 @@ union { \
 #define _KABI_USE11(n, ...)	_KABI_ARGS(_KABI_RESERVE(n); _KABI_USE10(__VA_ARGS__))
 #define _KABI_USE12(n, ...)	_KABI_ARGS(_KABI_RESERVE(n); _KABI_USE11(__VA_ARGS__))
 #define _KABI_USE(...)		KABI_REPLACE(__VA_ARGS__)
-#define KABI_USE(n, ...) \
-	_KABI_USE(__PASTE(_KABI_USE, COUNT_ARGS(__VA_ARGS__))(n, __VA_ARGS__))
+#define KABI_USE(n, _new)	KABI_REPLACE(_KABI_RESERVE(n), _new)
 #define KABI_USE_SPLIT(n, ...) \
 	KABI_REPLACE_SPLIT(_KABI_RESERVE(n), __VA_ARGS__)
 
