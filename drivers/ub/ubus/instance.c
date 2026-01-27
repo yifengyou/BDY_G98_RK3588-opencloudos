@@ -23,6 +23,8 @@ static DEFINE_MUTEX(dynamic_mutex);
 static u32 instance_count;
 static u32 instance_start;
 
+typedef bool (*instance_match)(struct ub_bus_instance *bi, void *arg);
+
 static ssize_t instance_store(const struct bus_type *bus, const char *buf,
 			      size_t count)
 {
@@ -116,14 +118,13 @@ static struct ub_bus_instance *ub_bus_instance_get(struct ub_bus_instance *bi)
 	return bi;
 }
 
-void ub_bus_instance_put(struct ub_bus_instance *bi)
+static void ub_bus_instance_put(struct ub_bus_instance *bi)
 {
 	if (bi)
 		kref_put(&bi->kref, ub_release_bus_instance);
 }
-EXPORT_SYMBOL_GPL(ub_bus_instance_put);
 
-bool eid_match(struct ub_bus_instance *bi, void *arg)
+static bool eid_match(struct ub_bus_instance *bi, void *arg)
 {
 	if (bi == NULL || arg == NULL)
 		return false;
@@ -132,7 +133,6 @@ bool eid_match(struct ub_bus_instance *bi, void *arg)
 
 	return bi->info.eid == *eid;
 }
-EXPORT_SYMBOL_GPL(eid_match);
 
 static struct ub_bus_instance *ub_alloc_bus_instance(void)
 {
@@ -157,14 +157,10 @@ static bool guid_match(struct ub_bus_instance *bi, void *arg)
 	return guid_equal(&bi->info.guid.id, guid);
 }
 
-struct ub_bus_instance *ub_find_bus_instance(instance_match match, void *arg)
+static struct ub_bus_instance *ub_find_bus_instance(instance_match match,
+						    void *arg)
 {
 	struct ub_bus_instance *bi;
-
-	if (!match || !arg) {
-		pr_err("instance match or arg is null\n");
-		return NULL;
-	}
 
 	mutex_lock(&ubi_list_mutex);
 	list_for_each_entry(bi, &ubi_list, node)
@@ -178,7 +174,19 @@ out:
 
 	return bi;
 }
-EXPORT_SYMBOL_GPL(ub_find_bus_instance);
+
+bool ub_bus_instance_exist(u32 eid)
+{
+	struct ub_bus_instance *bi;
+
+	bi = ub_find_bus_instance(eid_match, &eid);
+	if (!bi)
+		return false;
+
+	ub_bus_instance_put(bi);
+	return true;
+}
+EXPORT_SYMBOL_GPL(ub_bus_instance_exist);
 
 static int bi_duplicate_check(struct ub_bus_instance_info *n)
 {

@@ -438,32 +438,30 @@ static int hi_msg_queue_init(struct hi_message_device *hmd)
 	size_t size;
 	int ret;
 
-	ret = hi_msg_core_init(hmc, MSGQ_USER_BUS_DRV);
-	if (ret)
-		return ret;
-
-	size = HI_CQE_STATE_SZ * hmc->queue[MSG_CQ].depth;
+	size = HI_CQE_STATE_SZ * HI_CQ_CFG_DEPTH;
 	hmd->cqe_state = kzalloc(size, GFP_KERNEL);
 	if (!hmd->cqe_state) {
 		dev_err(hmc->dev, "cqe state memory failed\n");
-		ret = -ENOMEM;
-		goto cqe_state_fail;
+		return -ENOMEM;
+	}
+
+	ret = hi_msg_core_init(hmc, MSGQ_USER_BUS_DRV);
+	if (ret) {
+		kfree(hmd->cqe_state);
+		hmd->cqe_state = NULL;
+		return ret;
 	}
 
 	hi_msg_cq_poller_init(hmd);
 
 	return 0;
-
-cqe_state_fail:
-	hi_msg_core_uninit(hmc);
-	return ret;
 }
 
 static void hi_msg_queue_uninit(struct hi_message_device *hmd)
 {
 	hi_msg_cq_poller_uninit(hmd);
-	kfree(hmd->cqe_state);
 	hi_msg_core_uninit(&hmd->hmc);
+	kfree(hmd->cqe_state);
 }
 
 static bool pkt_plen_valid(void *pkt, u16 pkt_size, int task_type)

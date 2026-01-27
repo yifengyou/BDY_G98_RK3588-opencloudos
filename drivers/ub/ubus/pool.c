@@ -254,13 +254,26 @@ static void ub_fad_para_init(struct pool_fad *fad, struct entity_reg_msg_pld *pl
 static int ub_entity_reg_check(struct ub_bus_controller *ubc,
 			     struct entity_reg_msg_pld *pld, bool ers_valid)
 {
-	struct entity_rs_info *ers;
+	struct ub_guid *guid = (struct ub_guid *)pld->base.guid;
 	struct device *dev = &ubc->dev;
+	struct entity_rs_info *ers;
 	int i;
 
 	if (pld->base.eid[0] == 0 || pld->base.ueid[0] == 0) {
 		dev_err(dev, "entity reg eid=%#x u_eid=%#x is invalid\n",
 			pld->base.eid[0], pld->base.ueid[0]);
+		return -EINVAL;
+	}
+
+	if (!ub_bus_instance_exist(pld->base.ueid[0])) {
+		dev_err(dev, "entity reg u_eid=%#x not exist\n",
+			pld->base.ueid[0]);
+		return -EINVAL;
+	}
+
+	if (guid->bits.type != UB_TYPE_CONTROLLER) {
+		dev_err(dev, "entity reg guid type %u is invalid\n",
+			guid->bits.type);
 		return -EINVAL;
 	}
 
@@ -309,7 +322,7 @@ static u8 ub_entity_reg_handle(struct ub_bus_controller *ubc,
 	if (ret) {
 		dev_err(&ubc->dev, "fad idx[%u] add failed\n", fad->base.entity_idx);
 		kfree(fad);
-		return UB_MSG_RSP_EXEC_ENOEXEC;
+		return err_to_msg_rsp(ret);
 	}
 
 	spin_lock(&ub_fad_lock);

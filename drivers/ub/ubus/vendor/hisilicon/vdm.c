@@ -151,22 +151,6 @@ static int ub_idevice_enable_handle(struct ub_entity *pue, u16 idx, u8 is_mue,
 	return 0;
 }
 
-static int check_pld_ueid_valid(u32 user_eid)
-{
-	struct ub_bus_instance *bi;
-
-	bi = ub_find_bus_instance(eid_match, &user_eid);
-	if (!bi) {
-		pr_err("vdm payload user eid is invalid, user_eid = 0x%x\n",
-		       user_eid);
-		return -EINVAL;
-	}
-
-	ub_bus_instance_put(bi);
-
-	return 0;
-}
-
 /**
  * ub_idevice_pue_add_handler - add mue to the bus
  *
@@ -203,8 +187,9 @@ static u8 ub_idevice_pue_add_handler(struct ub_bus_controller *ubc, struct vdm_m
 		goto pue_reg_rsp;
 	}
 
-	ret = check_pld_ueid_valid(pld->user_eid[0]);
-	if (ret) {
+	if (!ub_bus_instance_exist(pld->user_eid[0])) {
+		dev_err(&ubc->dev, "pue add msg user eid[%#x] not exist\n",
+			pld->user_eid[0]);
 		status = UB_MSG_RSP_EXEC_EINVAL;
 		goto pue_reg_rsp;
 	}
@@ -300,8 +285,9 @@ static u8 ub_idevice_ue_add_handler(struct ub_bus_controller *ubc, struct vdm_ms
 			"The pue of this vdm ue to be enabled is normal\n");
 	}
 
-	ret = check_pld_ueid_valid(pld->user_eid[0]);
-	if (ret) {
+	if (!ub_bus_instance_exist(pld->user_eid[0])) {
+		dev_err(&ubc->dev, "ue add msg user eid[%#x] not exist\n",
+			pld->user_eid[0]);
 		status = UB_MSG_RSP_EXEC_EINVAL;
 		goto ue_reg_rsp;
 	}

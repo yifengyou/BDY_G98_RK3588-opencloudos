@@ -341,6 +341,7 @@ void ublc_link_down_handle(struct ub_port *port)
 	device_lock(&uent->dev);
 
 	if (ublc_device_is_down(port)) {
+		ub_entity_assign_priv_flag(port->r_uent, UB_ENTITY_DISCONNECTED, true);
 		ub_info(uent, "port%u link down\n", port->index);
 		ublc_handle_all_link_down(port, port->r_uent);
 		ub_info(uent, "all port link down and remove device\n");
