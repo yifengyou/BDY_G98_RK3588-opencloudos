@@ -1148,6 +1148,7 @@ void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 		core_to_ummu_device(u_domain->base_domain.core_dev);
 	u64 ent0, ent2, ent3;
 
+	memset(target, 0, sizeof(*target));
 	ent0 = TECT_ENT0_V |
 		FIELD_PREP(TECT_ENT0_ST_MODE, TECT_ENT0_ST_MODE_S2) |
 		FIELD_PREP(TECT_ENT0_PRIV_SEL, TECT_ENT0_PRIV_SEL_PRIV) |
@@ -1164,11 +1165,9 @@ void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 		ent2 |= TECT_ENT2_S2_HDF;
 
 	ent3 = u_domain->cfgs.s2_cfg.vttbr & TECT_ENT3_S2_TTBR;
-	 *target = (struct ummu_tecte_data) {
-		.data[0] = cpu_to_le64(ent0),
-		.data[2] = cpu_to_le64(ent2),
-		.data[3] = cpu_to_le64(ent3),
-	};
+	target->data[0] = cpu_to_le64(ent0);
+	target->data[2] = cpu_to_le64(ent2);
+	target->data[3] = cpu_to_le64(ent3);
 }
 
 static bool check_tecte_can_set(const struct ummu_tecte_data *tecte,
@@ -1244,6 +1243,7 @@ bool dev_work_on_local(struct ummu_master *master)
 int ummu_add_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enum eid_type type)
 {
 	struct ummu_device *ummu = core_to_ummu_device(core_dev);
+	const struct ummu_capability *cap;
 	struct ummu_tecte_data target;
 	struct os_meta *meta = NULL;
 	u32 kv_index;
@@ -1251,11 +1251,14 @@ int ummu_add_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enu
 
 	meta = ummu_get_os_meta_by_guid((const guid_t *)guid);
 	if (!meta) {
+		cap = ummu_get_cap();
+		if (!cap)
+			return -EINVAL;
 		/*
 		 * os_meta is a singleton, and its release time is
 		 * when no EID is attached to it.
 		 */
-		ret = ummu_alloc_os_meta(ummu_get_cap(), guid, &meta);
+		ret = ummu_alloc_os_meta(cap, guid, &meta);
 		if (ret)
 			return ret;
 	}

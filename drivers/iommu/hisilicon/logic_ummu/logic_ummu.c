@@ -1156,7 +1156,7 @@ static void logic_ummu_release_device(struct device *dev)
 	ops->release_device(dev);
 
 	domain = iommu_get_domain_for_dev(dev);
-	if (WARN_ON(!domain)) {
+	if (!domain) {
 		pr_err("find domain failed.\n");
 		return;
 	}
@@ -2137,7 +2137,7 @@ int logic_ummu_device_init(void)
 {
 	int ret;
 
-	logic_ummu_dev = platform_device_alloc("logic-ummu", -1);
+	logic_ummu_dev = platform_device_alloc("logic-ummu", PLATFORM_DEVID_NONE);
 	if (!logic_ummu_dev) {
 		pr_err("alloc logic ummu device failed.\n");
 		return -ENOMEM;
@@ -2151,6 +2151,7 @@ int logic_ummu_device_init(void)
 	}
 	logic_ummu_dev->dev.fwnode = logic_ummu_fwnode;
 	logic_ummu_dev->dev.fwnode->dev = &logic_ummu_dev->dev;
+	device_set_pm_not_required(&logic_ummu_dev->dev);
 
 	ret = platform_device_add(logic_ummu_dev);
 	if (ret) {

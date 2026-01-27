@@ -79,7 +79,7 @@ void ummu_device_init_permq_ctrl_page(struct ummu_device *ummu)
 
 	ctrl_base_pa = ((vmalloc_to_pfn(ummu->base) << PAGE_SHIFT) +
 			UMMU_PERMQ_CTRL_PAGE_BASE);
-	ummu->ucmdq_ctrl_page = devm_ioremap(ummu->dev, ctrl_base_pa,
+	ummu->permq_ctrl_page = devm_ioremap(ummu->dev, ctrl_base_pa,
 					     UMMU_CTRL_PAGE_SIZE * ummu->cap.permq_num);
 	/*
 	 * we don't return error code even if ioremap failed, since some times
@@ -105,7 +105,7 @@ int ummu_get_permq_resource(struct ummu_device *ummu, u32 qid,
 	queue->pcplq_base = permq->pcplq.pa;
 
 	/* pcmdq_pi is head of the page specified by qid */
-	ctrl_page_pa = vmalloc_to_pfn(ummu->ucmdq_ctrl_page) << PAGE_SHIFT;
+	ctrl_page_pa = vmalloc_to_pfn(ummu->permq_ctrl_page) << PAGE_SHIFT;
 	queue->ctrl_page = ctrl_page_pa + PERMQ_PCMDQ_PI(qid);
 
 	return 0;
@@ -146,7 +146,7 @@ static int ummu_device_release_ucmdq(struct ummu_device *ummu, u32 qid)
 
 static bool perm_queue_empty(struct ummu_device *ummu, u32 qid)
 {
-	void __iomem *ctrl_base = ummu->ucmdq_ctrl_page;
+	void __iomem *ctrl_base = ummu->permq_ctrl_page;
 	u32 pi_idx, ci_idx, size;
 
 	size = ummu->cap.permq_ent_num.cmdq_num;
@@ -286,7 +286,7 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 	u32 qid;
 	int ret;
 
-	if (!ummu->permq_ctx_cfg.tbl_va || !ummu->ucmdq_ctrl_page) {
+	if (!ummu->permq_ctx_cfg.tbl_va || !ummu->permq_ctrl_page) {
 		dev_err(ummu->dev, "permqs resource is unavailable!\n");
 		return -EINVAL;
 	}
@@ -331,7 +331,7 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 	domain->qid = qid;
 	ummu_init_permq_ctxtbl_ent(domain, permq);
 	dma_wmb();
-	ummu_init_permq_ctrltbl_ent(ummu->ucmdq_ctrl_page, qid);
+	ummu_init_permq_ctrltbl_ent(ummu->permq_ctrl_page, qid);
 	return 0;
 
 e_free_xa:

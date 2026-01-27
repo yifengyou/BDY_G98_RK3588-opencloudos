@@ -360,26 +360,6 @@ static void ummu_device_get_httu(struct ummu_device *ummu, u32 reg)
 	}
 }
 
-static int ummu_device_get_ttendian(struct ummu_device *ummu, u32 reg)
-{
-	switch (FIELD_GET(CAP3_TTENDIAN_MASK, reg)) {
-	case CAP3_TTENDIAN_MIXED:
-		ummu->cap.features |= UMMU_FEAT_TT_LE | UMMU_FEAT_TT_BE;
-		break;
-#ifdef __BIG_ENDIAN
-	case CAP3_TTENDIAN_BE:
-		break;
-#else
-	case CAP3_TTENDIAN_LE:
-		break;
-#endif
-	default:
-		dev_err(ummu->dev, "unknown/unsupported TT endianness!\n");
-		return -ENXIO;
-	}
-	return 0;
-}
-
 static void ummu_device_get_bbm_level(struct ummu_device *ummu, u32 reg)
 {
 	switch (FIELD_GET(CAP3_BBML_MASK, reg)) {
@@ -399,7 +379,6 @@ static void ummu_device_get_bbm_level(struct ummu_device *ummu, u32 reg)
 static int ummu_device_hw_probe_cap3(struct ummu_device *ummu)
 {
 	u32 reg = readl_relaxed(ummu->base + UMMU_CAP3);
-	int ret;
 
 	ummu_device_get_stall_model(ummu, reg);
 
@@ -418,10 +397,6 @@ static int ummu_device_hw_probe_cap3(struct ummu_device *ummu)
 
 	if (reg & CAP3_MTM_BIT)
 		ummu->cap.features |= UMMU_FEAT_MTM;
-
-	ret = ummu_device_get_ttendian(ummu, reg);
-	if (ret)
-		return ret;
 
 	if (reg & CAP3_COHACC_BIT) {
 		ummu->cap.features |= UMMU_FEAT_COHERENCY;
@@ -761,7 +736,6 @@ static int ummu_device_remove(struct platform_device *pdev)
 		ummu->impl_ops->dev_remove(ummu);
 
 	ummu_device_disable(ummu);
-	ummu_global_identity_pgtbl_free();
 	ummu_device_unregister(ummu);
 
 	ummu_put_tct_table(ummu->local_tct_cfg);
@@ -826,6 +800,7 @@ static void __exit ummu_driver_unregister(struct platform_driver *drv)
 {
 	platform_driver_unregister(drv);
 	ummu_free_global_meta();
+	ummu_global_identity_pgtbl_free();
 	logic_ummu_device_exit();
 }
 
