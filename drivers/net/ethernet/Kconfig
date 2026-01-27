@@ -57,6 +57,7 @@ source "drivers/net/ethernet/chelsio/Kconfig"
 source "drivers/net/ethernet/cirrus/Kconfig"
 source "drivers/net/ethernet/cisco/Kconfig"
 source "drivers/net/ethernet/cortina/Kconfig"
+source "drivers/net/ethernet/dapustor/Kconfig"
 source "drivers/net/ethernet/davicom/Kconfig"
 
 config DNET
