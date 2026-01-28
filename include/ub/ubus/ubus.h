@@ -6,6 +6,7 @@
 #ifndef _UB_UBUS_UBUS_H_
 #define _UB_UBUS_UBUS_H_
 
+#include <linux/kabi.h>
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/iommu.h>
@@ -19,6 +20,14 @@
 #define UB_ENTITY(v, d) \
 	.vendor = (v), .device = (d), \
 	.mod_vendor = (u32)UB_ANY_ID, .module = (u32)UB_ANY_ID
+
+#define UB_ENTITY_DRIVER_OVERRIDE(v, d, driver_override) \
+	.vendor = (v), .device = (d), \
+	.mod_vendor = (u32)UB_ANY_ID, .module = (u32)UB_ANY_ID, \
+	.override_only = (driver_override)
+
+#define UB_DRIVER_OVERRIDE_ENTITY_VFIO(v, d) \
+	UB_ENTITY_DRIVER_OVERRIDE(v, d, UB_ID_F_VFIO_DRIVER_OVERRIDE)
 
 #define UB_ENTITY_MODULE(v, d, m_v, m) \
 	.vendor = (v), .device = (d), \
@@ -149,6 +158,9 @@ struct ub_port {
 	struct work_struct link_work;
 	enum ub_link_state link_state;
 	u8 link_event;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
 };
 
 struct ue_map {
@@ -188,6 +200,7 @@ struct ub_entity {
 	struct ue_map uem;
 	struct list_head mue_list; /* management ub entity list */
 	struct list_head ue_list; /* entity list in management ub entity */
+	u8 is_vdm_idev;
 
 	/* entity topology info */
 	struct list_head node;
@@ -253,6 +266,23 @@ struct ub_entity {
 	u32 support_feature;
 
 	u16 upi;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
+	KABI_RESERVE(9)
+	KABI_RESERVE(10)
+	KABI_RESERVE(11)
+	KABI_RESERVE(12)
+	KABI_RESERVE(13)
+	KABI_RESERVE(14)
+	KABI_RESERVE(15)
+	KABI_RESERVE(16)
 };
 
 /* UB bus error event callbacks */
@@ -262,6 +292,11 @@ struct ub_error_handlers {
 	void (*ub_reset_done)(struct ub_entity *uent);
 	ub_ers_result_t (*ub_error_detected)(struct ub_entity *uent, ub_channel_state_t state);
 	ub_ers_result_t (*ub_resource_enabled)(struct ub_entity *uent);
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct ub_dynids {
@@ -340,6 +375,15 @@ struct ub_driver {
 	struct device_driver driver;
 	struct ub_dynids dynids;
 	bool driver_managed_dma;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
 };
 
 struct ubc_common_attr {
@@ -379,6 +423,12 @@ struct ub_bus_controller {
 	struct ub_bus_instance *cluster_bi;
 
 	void *data;
+	struct dentry *debug_root;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct ub_bus_instance_info {
@@ -400,6 +450,9 @@ struct ub_bus_instance {
 
 	struct list_head uents;
 	struct mutex lock;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
 };
 
 #define ub_bi_is_dynamic(bi) ((bi)->info.type == UBUS_INSTANCE_DYNAMIC_SERVER \
@@ -432,6 +485,18 @@ struct ub_share_port_ops {
 	void (*reset_prepare)(struct ub_entity *uent, u16 port_id);
 	void (*reset_done)(struct ub_entity *uent, u16 port_id);
 	void (*event_notify)(struct ub_entity *uent, u16 port_id, int event);
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+};
+
+struct ub_vdm_pld {
+	void *req_pld;
+	u16 req_pld_len;
+	void *rsp_pld;
+	u16 rsp_pld_len;
+	u16 rsp_buf_len;
+	u8 sub_msg_code;
 };
 
 #ifdef CONFIG_UB_UBUS
@@ -697,6 +762,20 @@ int ub_reset_entity(struct ub_entity *ent);
  * or %-EIO if device can't reset now, can try later.
  */
 int ub_device_reset(struct ub_entity *ent);
+
+/**
+ * ub_vdm_message() - Send vendor private message.
+ * @uent: UB entity.
+ * @vdm_pld: Vendor private message payload context.
+ *
+ * Send a vendor private message to the entity. Response will put in
+ * vdm_pld->rsp_pld, and will fill in vdm->rsp_pld_len.
+ *
+ * Context: Any context, It will take spin_lock_irqsave()/spin_unlock_restore()
+ * Return: 0 if success, or %-EINVAL if parameters invalid,
+ * or %-ENOMEM if system out of memory, or other failed negative values.
+ */
+int ub_vdm_message(struct ub_entity *uent, struct ub_vdm_pld *vdm_pld);
 
 /* Only for ubus module */
 unsigned int ub_irq_calc_affinity_vectors(unsigned int minvec,
@@ -1027,6 +1106,9 @@ static inline void ub_unregister_share_port(struct ub_entity *uent, u16 port_id,
 static inline int ub_reset_entity(struct ub_entity *uent)
 { return -ENODEV; }
 static inline int ub_device_reset(struct ub_entity *uent)
+{ return -ENODEV; }
+static inline int ub_vdm_message(struct ub_entity *uent,
+				 struct ub_vdm_pld *vdm_pld)
 { return -ENODEV; }
 static inline unsigned int
 ub_irq_calc_affinity_vectors(unsigned int minvec, unsigned int maxvec,

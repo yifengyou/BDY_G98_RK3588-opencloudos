@@ -273,7 +273,7 @@ struct iommu_domain {
 			struct mm_struct *mm;
 			int users;
 #ifdef CONFIG_IOMMU_KSVA
-			KABI_FILL_HOLE(u32 isolated_pasid)
+			KABI_FILL_HOLE(u32 isolated_pasid);
 #endif
 			/*
 			 * Next iommu_domain in mm->iommu_mm->sva-domains list
@@ -375,12 +375,15 @@ struct iommu_iort_rmr_data {
  *			 Faults themselves instead of relying on the IOMMU. When
  *			 supported, this feature must be enabled before and
  *			 disabled after %IOMMU_DEV_FEAT_SVA.
+ * @IOMMU_DEV_FEAT_KSVA: Shared Virtual Addresses of the kernel. When
+ *			 enabled, %IOMMU_DEV_FEAT_IOPF must be disabled.
  *
  * Device drivers enable a feature using iommu_dev_enable_feature().
  */
 enum iommu_dev_features {
 	IOMMU_DEV_FEAT_SVA,
 	IOMMU_DEV_FEAT_IOPF,
+	KABI_EXTEND_ENUM(IOMMU_DEV_FEAT_KSVA)
 };
 
 #define IOMMU_NO_PASID	(0U) /* Reserved for DMA w/o PASID */

@@ -196,6 +196,7 @@ typedef void (*rx_msg_handler_t)(struct ub_bus_controller *ubc, void *pkt, u16 l
  * @send: send message to target ub_entity but not wait response
  * @response: send response message to target
  * @sync_enum: send enum message to target ub_entity and wait response
+ * @vdm_rx_handler: send vdm response message to target
  * @owner: Driver module providing these ops
  */
 struct message_ops {
@@ -209,6 +210,7 @@ struct message_ops {
 			u8 code);
 	int (*sync_enum)(struct message_device *mdev, struct msg_info *info,
 			 u8 cmd);
+	rx_msg_handler_t vdm_rx_handler;
 	struct module *owner;
 };
 
@@ -248,6 +250,25 @@ static inline void message_info_init(struct msg_info *info, struct ub_entity *ue
 	/* High 16bits for req size, low 16bits for rsp size */
 	info->req_pkt_size = (u16)(size >> MSG_REQ_SIZE_OFFSET);
 	info->rsp_pkt_size = (u16)size;
+}
+
+static inline void __message_device_set_ops(struct message_device *mdev,
+					    const struct message_ops *ops)
+{
+	mdev->ops = ops;
+}
+
+#define message_device_set_ops(mdev, ops)                               \
+do {                                                                    \
+	struct message_ops *__ops = (struct message_ops *)(ops);        \
+	__ops->owner = THIS_MODULE;                                     \
+	__message_device_set_ops(mdev, __ops);                          \
+} while (0)
+
+static inline void message_device_set_fwnode(struct message_device *mdev,
+					     struct fwnode_handle *fwnode)
+{
+	mdev->fwnode = fwnode;
 }
 
 void ub_msg_pkt_header_init(struct msg_pkt_header *header, struct ub_entity *uent,
