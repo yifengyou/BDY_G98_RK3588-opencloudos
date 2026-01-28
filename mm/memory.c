@@ -6205,7 +6205,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else
 		#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	{	
+	{
 		if (haoc_enabled)
 		{
 			ptp_disable_iee(&reg);
@@ -6938,7 +6938,7 @@ void clear_huge_page(struct page *page,
 	const unsigned long base_addr = ALIGN_DOWN(addr_hint, pages_per_huge_page * PAGE_SIZE);
 	const long fault_idx = (addr_hint - base_addr) / PAGE_SIZE;
 	const struct range pg = DEFINE_RANGE(0, pages_per_huge_page - 1);
-	const int radius = FOLIO_ZERO_LOCALITY_RADIUS;
+	const long radius = FOLIO_ZERO_LOCALITY_RADIUS;
 	struct range r[3];
 	int i;
 
@@ -6946,18 +6946,18 @@ void clear_huge_page(struct page *page,
 	 * Faulting page and its immediate neighbourhood. Will be cleared at the
 	 * end to keep its cachelines hot.
 	 */
-	r[2] = DEFINE_RANGE(clamp_t(s64, fault_idx - radius, pg.start, pg.end),
-		clamp_t(s64, fault_idx + radius, pg.start, pg.end));
+	r[2] = DEFINE_RANGE(fault_idx - radius < (long)pg.start ? pg.start : fault_idx - radius,
+		fault_idx + radius > (long)pg.end   ? pg.end   : fault_idx + radius);
 
 	/* Region to the left of the fault */
-	r[1] = DEFINE_RANGE(pg.start, clamp_t(s64, r[2].start - 1, pg.start - 1, r[2].start));
+	r[1] = DEFINE_RANGE(pg.start, r[2].start - 1);
 
 	/* Region to the right of the fault: always valid for the common fault_idx=0 case. */
-	r[0] = DEFINE_RANGE(clamp_t(s64, r[2].end + 1, r[2].end, pg.end + 1), pg.end);
+	r[0] = DEFINE_RANGE(r[2].end + 1, pg.end);
 
 	for (i = 0; i < ARRAY_SIZE(r); i++) {
 		const unsigned long addr = base_addr + r[i].start * PAGE_SIZE;
-		const unsigned int nr_pages = range_len(&r[i]);
+		const long nr_pages = (long)range_len(&r[i]);
 
 		if (nr_pages > 0)
 			clear_contig_highpages(page + r[i].start, addr, nr_pages);
