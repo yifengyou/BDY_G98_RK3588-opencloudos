@@ -16,6 +16,9 @@ int iommu_dma_init_fq(struct iommu_domain *domain);
 
 void iommu_dma_get_resv_regions(struct device *dev, struct list_head *list);
 
+#ifdef CONFIG_UB_UMMU_CORE
+struct iova_domain *iommu_get_iova_domain(struct iommu_domain *domain);
+#endif
 extern bool iommu_dma_forcedac;
 static inline void iommu_dma_set_pci_32bit_workaround(struct device *dev)
 {
@@ -53,6 +56,13 @@ static inline int iova_reserve_domain_addr(struct iommu_domain *domain, dma_addr
 {
 	return -EINVAL;
 }
+
+#ifndef CONFIG_UB_UMMU_CORE
+static inline struct iova_domain *iommu_get_iova_domain(struct iommu_domain *domain)
+{
+	return NULL;
+}
+#endif
 
 #endif	/* CONFIG_IOMMU_DMA */
 #endif	/* __DMA_IOMMU_H */

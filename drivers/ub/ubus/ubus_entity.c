@@ -22,6 +22,7 @@
 #include "ubus_inner.h"
 #include "cap.h"
 #include "eu.h"
+#include "instance.h"
 #include "ubus_entity.h"
 
 /*
@@ -48,6 +49,8 @@ struct ub_entity *ub_alloc_ent(void)
 	INIT_LIST_HEAD(&uent->mue_list);
 	INIT_LIST_HEAD(&uent->ue_list);
 	INIT_LIST_HEAD(&uent->cna_list);
+	INIT_LIST_HEAD(&uent->slot_list);
+	INIT_LIST_HEAD(&uent->instance_node);
 
 	uent->dev.type = &ub_dev_type;
 	uent->cna = 0;
@@ -101,6 +104,9 @@ static void ub_config_upi(struct ub_entity *uent)
 	struct device *dev;
 	int ret;
 	u16 upi;
+
+	if (is_p_device(uent))
+		return;
 
 	if (is_ibus_controller(uent) && uent->ubc->cluster) {
 		dev = &uent->ubc->dev;
@@ -194,6 +200,22 @@ static int ub_setup_ent_normal(struct ub_entity *uent)
 	return 0;
 }
 
+static int ub_fad_cfg_access_check(struct ub_entity *uent)
+{
+	u32 feature;
+	int ret = 0;
+
+	if (is_p_device(uent)) {
+		ret = ub_cfg_read_dword(uent, UB_CFG1_SUPPORT_FEATURE_L,
+					&feature);
+		if (ret)
+			ub_err(uent, "fad cfg access failed, eid=%#x, ret=%d\n",
+			       uent->eid, ret);
+	}
+
+	return ret;
+}
+
 static int ub_uent_cfg(struct ub_entity *uent, u32 uent_num)
 {
 	struct ub_guid *guid = &uent->guid;
@@ -220,6 +242,9 @@ static int ub_uent_cfg(struct ub_entity *uent, u32 uent_num)
 
 static void ub_config_eid(struct ub_entity *uent)
 {
+	if (is_p_device(uent))
+		return;
+
 	if (is_ibus_controller(uent) && uent->ubc->cluster)
 		return;
 
@@ -273,6 +298,9 @@ int ub_setup_ent(struct ub_entity *uent)
 	}
 
 	ub_config_upi(uent);
+	ret = ub_fad_cfg_access_check(uent);
+	if (ret)
+		goto err_alloc;
 
 	/* common setup */
 	ret = ub_eid_alloc(uent);
@@ -401,10 +429,22 @@ void ub_start_ent(struct ub_entity *uent)
 	if (!uent)
 		return;
 
-	uent->match_driver = true;
-	ret = device_attach(&uent->dev);
-	if (ret < 0 && ret != -EPROBE_DEFER)
-		ub_err(uent, "device attach failed, ret=%d\n", ret);
+	if (is_ibus_controller(uent)) {
+		ret = ub_static_bus_instance_init(uent->ubc);
+		WARN_ON(ret);
+	}
+
+	ret = ub_default_bus_instance_init(uent);
+	WARN_ON(ret);
+
+	ub_create_sysfs_dev_files(uent);
+
+	if (!((is_p_device(uent) || is_p_idevice(uent)) && is_dynamic(uent->bi))) {
+		uent->match_driver = true;
+		ret = device_attach(&uent->dev);
+		if (ret < 0 && ret != -EPROBE_DEFER)
+			ub_err(uent, "device attach failed, ret=%d\n", ret);
+	}
 
 	if (is_primary(uent) && !is_p_device(uent)) {
 		ret = ub_mue_enable_and_map(uent);
@@ -460,6 +500,12 @@ void ub_stop_ent(struct ub_entity *uent)
 
 	device_release_driver(&uent->dev);
 	uent->match_driver = false;
+	ub_remove_sysfs_ent_files(uent);
+
+	ub_default_bus_instance_uninit(uent);
+
+	if (is_ibus_controller(uent))
+		ub_static_bus_instance_uninit(uent->ubc);
 }
 EXPORT_SYMBOL_GPL(ub_stop_ent);
 
@@ -954,6 +1000,8 @@ int ub_set_user_info(struct ub_entity *uent)
 		goto cfg1;
 
 	/* set dsteid to device */
+	if (uent->bi)
+		eid = uent->bi->info.eid;
 	ub_cfg_write_dword(uent, UB_UEID_0, eid);
 	ub_cfg_write_dword(uent, UB_UEID_1, 0);
 	ub_cfg_write_dword(uent, UB_UEID_2, 0);

@@ -18,6 +18,7 @@ struct iommu_domain;
 struct iommu_group;
 struct iommu_option;
 struct iommufd_device;
+struct kvm;
 
 struct iommufd_ctx {
 	struct file *file;
@@ -29,6 +30,8 @@ struct iommufd_ctx {
 	/* Compatibility with VFIO no iommu */
 	u8 no_iommu_mode;
 	struct iommufd_ioas *vfio_ioas;
+	/* Associated KVM pointer */
+	struct kvm *kvm;
 };
 
 /*
