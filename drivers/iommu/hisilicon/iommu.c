@@ -29,6 +29,7 @@
 #include "regs.h"
 #include "sva.h"
 #include "nested.h"
+#include "iommu.h"
 
 static bool ummu_capable(struct device *dev, enum iommu_cap cap)
 {

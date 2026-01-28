@@ -18,6 +18,7 @@
 #include "cfg_table.h"
 #include "queue.h"
 #include "flush.h"
+#include "sva.h"
 
 static DEFINE_MUTEX(ummu_sva_mutex);
 

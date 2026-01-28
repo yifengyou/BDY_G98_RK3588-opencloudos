@@ -663,7 +663,7 @@ err_free_blk:
 	return ERR_PTR(ret);
 }
 
-struct ummu_mapt_table_node *ummu_alloc_level_block(struct ummu_mapt_info *mapt_info,
+static struct ummu_mapt_table_node *ummu_alloc_level_block(struct ummu_mapt_info *mapt_info,
 						    struct ummu_mapt_table_node *pre_node,
 						    struct ummu_mapt_block *pre_node_mapt_blk)
 {
@@ -1133,9 +1133,9 @@ static int ummu_table_op(struct ummu_mapt_info *mapt_info,
 			 struct ummu_data_info *data_info)
 {
 	struct ummu_mapt_table_node node = {0};
+	int ret;
 
 	data_info->mapt_info = mapt_info;
-	int ret;
 
 	switch (data_info->op) {
 	case UMMU_GRANT:
