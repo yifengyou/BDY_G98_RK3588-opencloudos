@@ -191,8 +191,8 @@ static int ub_sync_cfg_rsp_check(struct ub_entity *uent,
 				     rsp_header->msgetah.code);
 }
 
-void ub_sync_cfg_rsp_handle(struct cfg_msg_pld_rsp *rsp, u8 size,
-			    u64 pos, bool write, u32 *val)
+static void ub_sync_cfg_rsp_handle(struct cfg_msg_pld_rsp *rsp, u8 size,
+				   u64 pos, bool write, u32 *val)
 {
 #define UB_CFG_REG_SIZE 4
 	u8 pos_in_reg = pos % UB_CFG_REG_SIZE;

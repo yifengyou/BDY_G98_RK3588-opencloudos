@@ -8,6 +8,7 @@
 #include "ubus.h"
 #include "decoder.h"
 #include "interrupt.h"
+#include "cap.h"
 
 #define DW_CHECK 3
 

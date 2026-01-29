@@ -55,7 +55,7 @@ static int ub_component_service_init(struct ub_entity *uent, int service)
 	dev = &sdev->device;
 	dev->bus = &ub_service_bus_type;
 	dev->release = release_service_device;
-	dev_set_name(dev, "%s:service%03x", ub_name(uent), service);
+	dev_set_name(dev, "%s:service%03x", ub_name(uent), (u32)service);
 	dev->parent = &uent->dev;
 
 	ret = device_register(dev);

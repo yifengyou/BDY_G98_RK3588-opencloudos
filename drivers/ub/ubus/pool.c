@@ -143,9 +143,8 @@ static int ub_fad_res_init(struct pool_fad *fad, struct ub_entity *uent)
 			goto fail;
 		}
 
-		ub_info(uent, "MMIO[%d]: ubba=%dx, size=%#llx, hpa=%#llx, wr_attr=%01u, prefetchable=%01u, order_type=%01u\n",
-			i, 0, ub_resource_len(uent, i),
-			uent->zone[i].res.start, 0, 0, 0);
+		ub_info(uent, "MMIO[%d]: ubba=0x0, size=%#llx, hpa=%#llx, wr_attr=0, prefetchable=0, order_type=0\n",
+			i, ub_resource_len(uent, i), uent->zone[i].res.start);
 		uent->zone[i].init_succ = 1;
 	}
 
