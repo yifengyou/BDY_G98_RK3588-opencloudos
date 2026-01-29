@@ -233,7 +233,7 @@ static size_t conti_alloc_memory_slow(struct conti_mem_allocator *allocator, siz
 
 	atomic64_add(allocated, &allocator->pooled_mem_size);
 	atomic64_add(allocated, &allocator->used_mem_size);
-	pr_info("%s: slow allocated %#zx from node %d\n", current->comm, allocated, allocator->nid);
+	pr_debug("%s: slow allocate %#zx from node %d\n", current->comm, allocated, allocator->nid);
 	return allocated;
 }
 
@@ -298,7 +298,7 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 		pr_debug("allocator: allocated: %d: 0x%llx + 0x%lx\n", allocator->nid, node->addr,
 			 node->size);
 	}
-	pr_info("%s: allocated %#zx from node %d\n", current->comm, allocated, allocator->nid);
+	pr_debug("%s: allocated %#zx from node %d\n", current->comm, allocated, allocator->nid);
 
 out_continue_pool:
 	atomic_dec(&pool_thread_should_pause);

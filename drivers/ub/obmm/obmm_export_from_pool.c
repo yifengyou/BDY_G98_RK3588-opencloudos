@@ -194,8 +194,8 @@ int alloc_export_memory_pool(struct obmm_export_region *e_reg)
 static int calculate_export_region_size(unsigned long *total_size,
 					struct obmm_cmd_export *cmd_export)
 {
-	uint64_t i;
 	nodemask_t nodes = NODE_MASK_NONE;
+	int i, min_numa_id = NUMA_NO_NODE, max_numa_id = 0;
 
 	if (cmd_export->length > OBMM_MAX_LOCAL_NUMA_NODES) {
 		pr_err("Size list is too long: max=%d, actual_length=%lld\n",
@@ -224,6 +224,10 @@ static int calculate_export_region_size(unsigned long *total_size,
 				pr_err("Memory size overflowed!\n");
 				return -EOVERFLOW;
 			}
+			if (min_numa_id == NUMA_NO_NODE)
+				min_numa_id = i;
+
+			max_numa_id = i;
 			*total_size += cmd_export->size[i];
 			node_set(i, nodes);
 		}
@@ -235,6 +239,8 @@ static int calculate_export_region_size(unsigned long *total_size,
 	node_set(cmd_export->pxm_numa, nodes);
 	if (!nodes_on_same_package(&nodes)) {
 		pr_err("Cannot use memory from multiple sockets or memory and ub controller is from different sockets.\n");
+		pr_err("memory numa id ranges: [%d, %d], ub controller pxm: %d.\n", min_numa_id,
+			max_numa_id, cmd_export->pxm_numa);
 		return -EINVAL;
 	}
 
@@ -287,18 +293,9 @@ static struct obmm_export_region *alloc_region_from_cmd(struct obmm_cmd_export *
 
 static void print_export_param(const struct obmm_cmd_export *cmd_export)
 {
-	unsigned int i;
-
-	pr_info("obmm_export: len(sizes)=%#llx sizes={", cmd_export->length);
-	for (i = 0; i < cmd_export->length && i < OBMM_MAX_LOCAL_NUMA_NODES; i++)
-		if (cmd_export->size[i])
-			pr_cont(" [%u]:%#llx", i, cmd_export->size[i]);
-	if (i < cmd_export->length)
-		pr_cont(" ...");
-
-	pr_cont(" } flags=%#llx deid=" EID_FMT64 " priv_len=%u\n", cmd_export->flags,
-		EID_ARGS64_H(cmd_export->deid), EID_ARGS64_L(cmd_export->deid),
-		cmd_export->priv_len);
+	pr_debug("obmm_export: len(sizes)=%#llx flags=%#llx deid=" EID_FMT64 " priv_len=%u\n",
+		 cmd_export->length, cmd_export->flags, EID_ARGS64_H(cmd_export->deid),
+		 EID_ARGS64_L(cmd_export->deid), cmd_export->priv_len);
 }
 
 /* obmm_export_from_pool: create an OBMM-exported memory region. The region is
@@ -338,7 +335,7 @@ int obmm_export_from_pool(struct obmm_cmd_export *cmd_export)
 	cmd_export->uba = uba;
 	cmd_export->mem_id = mem_id;
 
-	pr_info("obmm_export: mem_id=%llu online.\n", mem_id);
+	pr_debug("obmm_export: mem_id=%llu online.\n", mem_id);
 	return 0;
 
 out_unexport:

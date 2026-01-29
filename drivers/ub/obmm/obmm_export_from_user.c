@@ -313,7 +313,7 @@ alloc_export_region_from_obmm_cmd_export_pid(const struct obmm_cmd_export_pid *e
 
 static void print_export_pid_param(const struct obmm_cmd_export_pid *cmd_export_pid)
 {
-	pr_info("obmm_export_useraddr: pid=%d length=%#llx priv_len=%u deid="
+	pr_debug("obmm_export_useraddr: pid=%d length=%#llx priv_len=%u deid="
 		EID_FMT64 " vendor_len=%u\n",
 		cmd_export_pid->pid, cmd_export_pid->length, cmd_export_pid->priv_len,
 		EID_ARGS64_H(cmd_export_pid->deid), EID_ARGS64_L(cmd_export_pid->deid),
@@ -357,7 +357,7 @@ int obmm_export_pid(struct obmm_cmd_export_pid *export_pid)
 	export_pid->uba = uba;
 	export_pid->mem_id = mem_id;
 
-	pr_info("obmm_export_useraddr: mem_id=%llu online.\n", mem_id);
+	pr_debug("obmm_export_useraddr: mem_id=%llu online.\n", mem_id);
 	return 0;
 
 out_unexport:
