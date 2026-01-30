@@ -63,3 +63,7 @@
 #include <linux/bpf.h>
 # include "ext.c"
 #endif
+
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+#include "soft_domain.c"
+#endif
