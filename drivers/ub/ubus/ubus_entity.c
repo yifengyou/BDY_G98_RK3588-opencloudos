@@ -811,28 +811,6 @@ static void ub_disable_mues(struct ub_entity *pue)
 		ub_disable_ent(mue);
 }
 
-void ub_disable_ues(struct ub_entity *mue);
-static int ub_enable_ues(struct ub_entity *mue, int nums)
-{
-	int ret;
-	int i;
-
-	if (nums > mue->total_ues)
-		return -EINVAL;
-
-	for (i = 0; i < nums; i++) {
-		ret = ub_enable_ent(mue, mue->uem.start_entity_idx + i, 0,
-				     NULL);
-		if (ret)
-			goto failed;
-	}
-	mue->num_ues = nums;
-	return 0;
-failed:
-	ub_disable_ues(mue);
-	return ret;
-}
-
 void ub_disable_ues(struct ub_entity *mue)
 {
 	struct ub_entity *ue, *tmp;
@@ -919,26 +897,6 @@ int ub_disable_ue(struct ub_entity *pue, int entity_idx)
 	return -ENODEV;
 }
 EXPORT_SYMBOL_GPL(ub_disable_ue);
-
-bool ub_get_entity_flex_en(void)
-{
-	return entity_flex_en;
-}
-EXPORT_SYMBOL_GPL(ub_get_entity_flex_en);
-
-int ub_enable_entities(struct ub_entity *uent, int nums)
-{
-	if (!uent)
-		return -EINVAL;
-
-	if (!uent->is_mue) {
-		ub_err(uent, "It's not mue.\n");
-		return -EINVAL;
-	}
-
-	return ub_enable_ues(uent, nums);
-}
-EXPORT_SYMBOL_GPL(ub_enable_entities);
 
 void ub_disable_entities(struct ub_entity *uent)
 {

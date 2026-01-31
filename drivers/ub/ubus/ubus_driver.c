@@ -180,28 +180,6 @@ ub_get_dev_by_id_inner(struct ub_entity *from, const void *data,
 	return fdev;
 }
 
-static int ub_entity_match_by_id(struct device *dev, const void *data)
-{
-	const struct ub_device_id *id = (const struct ub_device_id *)data;
-	struct ub_entity *pue = to_ub_entity(dev);
-
-	if (ub_match_one_device(id, pue))
-		return 1;
-	return 0;
-}
-
-struct ub_entity *ub_get_entity(unsigned int vendor, unsigned int device,
-			     struct ub_entity *from)
-{
-	struct ub_device_id id = {
-		.vendor = vendor,
-		.device = device,
-	};
-
-	return ub_get_dev_by_id_inner(from, &id, ub_entity_match_by_id);
-}
-EXPORT_SYMBOL_GPL(ub_get_entity);
-
 static int ub_entity_match_by_guid(struct device *dev, const void *data)
 {
 	const struct ub_guid *guid = (const struct ub_guid *)data;
