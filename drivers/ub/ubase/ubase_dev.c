@@ -416,13 +416,16 @@ static int ubase_wq_init(struct ubase_dev *udev)
 {
 #define UBASE_ALLOC_WQ(name)	alloc_workqueue("%s", WQ_UNBOUND, 0, name)
 
+	struct ub_entity *ue = to_ub_entity(udev->dev);
+
 	udev->ubase_wq = UBASE_ALLOC_WQ("ubase");
 	if (!udev->ubase_wq) {
 		ubase_err(udev, "failed to alloc ubase workqueue.\n");
 		goto err_alloc_ubase_wq;
 	}
 
-	udev->ubase_ctrlq_wq = UBASE_ALLOC_WQ("ubase_ctrlq_service");
+	udev->ubase_ctrlq_wq = alloc_ordered_workqueue("ubase_ctrlq_service_%u",
+						       0, ue->eid);
 	if (!udev->ubase_ctrlq_wq) {
 		ubase_err(udev, "failed to alloc ubase ctrlq workqueue.\n");
 		goto err_alloc_ubase_ctrlq_wq;
@@ -690,8 +693,8 @@ static int ubase_notify_drv_capbilities(struct ubase_dev *udev)
 
 static int ubase_log_rs_init(struct ubase_dev *udev)
 {
-#define UBASE_RATELIMIT_INTERVAL (2 * HZ)
-#define UBASE_RATELIMIT_BURST 40
+#define UBASE_RATELIMIT_INTERVAL (1 * HZ)
+#define UBASE_RATELIMIT_BURST 5
 
 	raw_spin_lock_init(&udev->log_rs.rs.lock);
 	udev->log_rs.rs.interval = UBASE_RATELIMIT_INTERVAL;
@@ -1639,6 +1642,7 @@ int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id)
 void ubase_flush_workqueue(struct ubase_dev *udev)
 {
 	flush_workqueue(udev->ubase_wq);
+	flush_workqueue(udev->ubase_ctrlq_wq);
 	flush_workqueue(udev->ubase_async_wq);
 	flush_workqueue(udev->ubase_period_wq);
 	flush_workqueue(udev->ubase_arq_wq);

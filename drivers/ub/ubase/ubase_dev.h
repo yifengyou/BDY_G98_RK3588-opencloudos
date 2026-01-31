@@ -43,27 +43,30 @@
 		 current->pid, ##__VA_ARGS__)
 
 #define ubase_err_rl(_udev, log_cnt, fmt, ...) do {                           \
-	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
-		dev_err(_udev->dev, "(pid %d) " fmt,                          \
-			 current->pid, ##__VA_ARGS__);                        \
-	else                                                                  \
+	if (__ratelimit(&(_udev->log_rs.rs))) {                               \
+		ubase_err(_udev, fmt, ##__VA_ARGS__);                         \
+	} else {                                                              \
 		(log_cnt)++;                                                  \
+		ubase_dbg(_udev, fmt, ##__VA_ARGS__);                         \
+	}                                                                     \
 } while (0)
 
 #define ubase_info_rl(_udev, log_cnt, fmt, ...) do {                          \
-	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
-		dev_info(_udev->dev, "(pid %d) " fmt,                         \
-			 current->pid, ##__VA_ARGS__);                        \
-	else                                                                  \
+	if (__ratelimit(&(_udev->log_rs.rs))) {                               \
+		ubase_info(_udev, fmt, ##__VA_ARGS__);                        \
+	} else {                                                              \
 		(log_cnt)++;                                                  \
+		ubase_dbg(_udev, fmt, ##__VA_ARGS__);                         \
+	}                                                                     \
 } while (0)
 
 #define ubase_warn_rl(_udev, log_cnt, fmt, ...) do {                          \
-	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
-		dev_warn(_udev->dev, "(pid %d) " fmt,                         \
-			 current->pid, ##__VA_ARGS__);                        \
-	else                                                                  \
+	if (__ratelimit(&(_udev->log_rs.rs))) {                               \
+		ubase_warn(_udev, fmt, ##__VA_ARGS__);                        \
+	} else {                                                              \
 		(log_cnt)++;                                                  \
+		ubase_dbg(_udev, fmt, ##__VA_ARGS__);                         \
+	}                                                                     \
 } while (0)
 
 struct ubase_ctx_buf {
@@ -325,7 +328,6 @@ struct ubase_prealloc_mem_info {
 
 struct ubase_log_rs {
 	struct ratelimit_state rs;
-	u16 ctrlq_self_seq_invalid_log_cnt;
 	u16 ctrlq_other_seq_invalid_log_cnt;
 };
 

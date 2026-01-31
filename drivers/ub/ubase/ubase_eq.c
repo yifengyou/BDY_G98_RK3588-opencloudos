@@ -210,13 +210,13 @@ static void ubase_errhandle_task_schedule(struct ubase_dev *udev)
 				 &udev->service_task.service_task, 0);
 }
 
-void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
+void ubase_ctrlq_task_schedule(struct ubase_dev *udev, unsigned long delay)
 {
 	if (!test_and_set_bit(UBASE_STATE_CTRLQ_SERVICE_SCHED,
 			      &udev->ctrlq_service_task.state)) {
 		udev->ctrlq.crq_table.last_crq_scheduled = jiffies;
 		mod_delayed_work(udev->ubase_ctrlq_wq,
-				 &udev->ctrlq_service_task.service_task, 0);
+				 &udev->ctrlq_service_task.service_task, delay);
 	}
 }
 
@@ -234,7 +234,7 @@ static int ubase_reg_event_handler(struct ubase_dev *udev)
 		ubase_errhandle_task_schedule(udev);
 
 	if (test_bit(UBASE_ASYNC_EVENT_CTRLQ_B, &event_cause))
-		ubase_ctrlq_task_schedule(udev);
+		ubase_ctrlq_task_schedule(udev, 0);
 
 	ubase_clear_event_cause(udev, event_cause);
 	ubase_enable_misc_vector(udev, true);
