@@ -862,10 +862,10 @@ static const struct mm_walk_ops hwpoison_walk_ops = {
  * is proper in most cases, but it could be wrong when the application
  * process has multiple entries mapping the error page.
  */
-static int kill_accessing_process(struct task_struct *p, unsigned long pfn,
-				  int flags)
+int kill_accessing_process(unsigned long pfn, int flags, bool force_kill)
 {
-	int ret;
+	int ret, ret_kill = -EINVAL;
+	struct task_struct *p = current;
 	struct hwpoison_walk priv = {
 		.pfn = pfn,
 	};
@@ -884,7 +884,15 @@ static int kill_accessing_process(struct task_struct *p, unsigned long pfn,
 	 * SIGBUS is needed.
 	 */
 	if (ret == 1 && priv.tk.addr)
-		kill_proc(&priv.tk, pfn, flags);
+		ret_kill = kill_proc(&priv.tk, pfn, flags);
+
+	if (force_kill && (ret_kill < 0)) {
+		pr_err("%#lx: Sending force SIGBUS to %s:%d due to hardware memory corruption\n",
+				pfn, p->comm, task_pid_nr(p));
+		force_sig(SIGBUS);
+	}
+
+
 	mmap_read_unlock(p->mm);
 
 	return ret > 0 ? -EHWPOISON : 0;
@@ -2065,7 +2073,7 @@ retry:
 		pr_err("%#lx: already hardware poisoned\n", pfn);
 		if (flags & MF_ACTION_REQUIRED) {
 			folio = page_folio(p);
-			res = kill_accessing_process(current, folio_pfn(folio), flags);
+			res = kill_accessing_process(folio_pfn(folio), flags, false);
 		}
 		return res;
 	} else if (res == -EBUSY) {
@@ -2188,9 +2196,13 @@ out:
  * Must run in process context (e.g. a work queue) with interrupts
  * enabled and no spinlocks held.
  *
- * Return: 0 for successfully handled the memory error,
- *         -EOPNOTSUPP for hwpoison_filter() filtered the error event,
- *         < 0(except -EOPNOTSUPP) on failure.
+ * Return:
+ *   0             - success,
+ *   -ENXIO        - memory not managed by the kernel
+ *   -EOPNOTSUPP   - hwpoison_filter() filtered the error event,
+ *   -EHWPOISON    - the page was already poisoned, potentially
+ *                   kill process,
+ *   other negative values - failure.
  */
 int memory_failure(unsigned long pfn, int flags)
 {
@@ -2239,7 +2251,7 @@ try_again:
 		pr_err("%#lx: already hardware poisoned\n", pfn);
 		res = -EHWPOISON;
 		if (flags & MF_ACTION_REQUIRED)
-			res = kill_accessing_process(current, pfn, flags);
+			res = kill_accessing_process(pfn, flags, false);
 		if (flags & MF_COUNT_INCREASED)
 			put_page(p);
 		goto unlock_mutex;
@@ -2472,19 +2484,6 @@ static void memory_failure_work_func(struct work_struct *work)
 		else
 			memory_failure(entry.pfn, entry.flags);
 	}
-}
-
-/*
- * Process memory_failure work queued on the specified CPU.
- * Used to avoid return-to-userspace racing with the memory_failure workqueue.
- */
-void memory_failure_queue_kick(int cpu)
-{
-	struct memory_failure_cpu *mf_cpu;
-
-	mf_cpu = &per_cpu(memory_failure_cpu, cpu);
-	cancel_work_sync(&mf_cpu->work);
-	memory_failure_work_func(&mf_cpu->work);
 }
 
 static int __init memory_failure_init(void)

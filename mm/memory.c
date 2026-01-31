@@ -664,11 +664,10 @@ struct page *vm_normal_page_pmd(struct vm_area_struct *vma, unsigned long addr,
 {
 	unsigned long pfn = pmd_pfn(pmd);
 
-	/*
-	 * There is no pmd_special() but there may be special pmds, e.g.
-	 * in a direct-access (dax) mapping, so let's just replicate the
-	 * !CONFIG_ARCH_HAS_PTE_SPECIAL case from vm_normal_page() here.
-	 */
+	/* Currently it's only used for huge pfnmaps */
+	if (unlikely(pmd_special(pmd)))
+		return NULL;
+
 	if (unlikely(vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP))) {
 		if (vma->vm_flags & VM_MIXEDMAP) {
 			if (!pfn_valid(pfn))
@@ -2651,9 +2650,59 @@ static int remap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	return err;
 }
 
+#if defined(CONFIG_ARM64) && defined(CONFIG_ARCH_SUPPORTS_PMD_PFNMAP)
+bool __ro_after_init nohugepfnmap;
+
+static int __init set_nohugepfnmap(char *str)
+{
+	nohugepfnmap = true;
+	return 0;
+}
+early_param("nohugepfnmap", set_nohugepfnmap);
+
+static int remap_try_huge_pmd(struct mm_struct *mm, pmd_t *pmd,
+			unsigned long addr, unsigned long end,
+			unsigned long pfn, pgprot_t prot,
+			unsigned int page_shift)
+{
+	pgtable_t pgtable;
+	spinlock_t *ptl;
+
+	if (nohugepfnmap)
+		return 0;
+
+	if (page_shift < PMD_SHIFT)
+		return 0;
+
+	if ((end - addr) != PMD_SIZE)
+		return 0;
+
+	if (!IS_ALIGNED(addr, PMD_SIZE))
+		return 0;
+
+	if (!IS_ALIGNED(pfn, HPAGE_PMD_NR))
+		return 0;
+
+	if (pmd_present(*pmd) && !pmd_free_pte_page(pmd, addr))
+		return 0;
+
+	pgtable = pte_alloc_one(mm);
+	if (unlikely(!pgtable))
+		return 0;
+
+	mm_inc_nr_ptes(mm);
+	ptl = pmd_lock(mm, pmd);
+	set_pmd_at(mm, addr, pmd, pmd_mkspecial(pmd_mkhuge(pfn_pmd(pfn, prot))));
+	pgtable_trans_huge_deposit(mm, pmd, pgtable);
+	spin_unlock(ptl);
+
+	return 1;
+}
+#endif
+
 static inline int remap_pmd_range(struct mm_struct *mm, pud_t *pud,
 			unsigned long addr, unsigned long end,
-			unsigned long pfn, pgprot_t prot)
+			unsigned long pfn, pgprot_t prot, unsigned int page_shift)
 {
 	pmd_t *pmd;
 	unsigned long next;
@@ -2666,6 +2715,12 @@ static inline int remap_pmd_range(struct mm_struct *mm, pud_t *pud,
 	VM_BUG_ON(pmd_trans_huge(*pmd));
 	do {
 		next = pmd_addr_end(addr, end);
+#if defined(CONFIG_ARM64) && defined(CONFIG_ARCH_SUPPORTS_PMD_PFNMAP)
+		if (remap_try_huge_pmd(mm, pmd, addr, next,
+				pfn + (addr >> PAGE_SHIFT), prot, page_shift)) {
+			continue;
+		}
+#endif
 		err = remap_pte_range(mm, pmd, addr, next,
 				pfn + (addr >> PAGE_SHIFT), prot);
 		if (err)
@@ -2676,7 +2731,7 @@ static inline int remap_pmd_range(struct mm_struct *mm, pud_t *pud,
 
 static inline int remap_pud_range(struct mm_struct *mm, p4d_t *p4d,
 			unsigned long addr, unsigned long end,
-			unsigned long pfn, pgprot_t prot)
+			unsigned long pfn, pgprot_t prot, unsigned int page_shift)
 {
 	pud_t *pud;
 	unsigned long next;
@@ -2689,7 +2744,7 @@ static inline int remap_pud_range(struct mm_struct *mm, p4d_t *p4d,
 	do {
 		next = pud_addr_end(addr, end);
 		err = remap_pmd_range(mm, pud, addr, next,
-				pfn + (addr >> PAGE_SHIFT), prot);
+				pfn + (addr >> PAGE_SHIFT), prot, page_shift);
 		if (err)
 			return err;
 	} while (pud++, addr = next, addr != end);
@@ -2698,7 +2753,7 @@ static inline int remap_pud_range(struct mm_struct *mm, p4d_t *p4d,
 
 static inline int remap_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 			unsigned long addr, unsigned long end,
-			unsigned long pfn, pgprot_t prot)
+			unsigned long pfn, pgprot_t prot, unsigned int page_shift)
 {
 	p4d_t *p4d;
 	unsigned long next;
@@ -2711,7 +2766,7 @@ static inline int remap_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 	do {
 		next = p4d_addr_end(addr, end);
 		err = remap_pud_range(mm, p4d, addr, next,
-				pfn + (addr >> PAGE_SHIFT), prot);
+				pfn + (addr >> PAGE_SHIFT), prot, page_shift);
 		if (err)
 			return err;
 	} while (p4d++, addr = next, addr != end);
@@ -2719,7 +2774,7 @@ static inline int remap_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 }
 
 static int remap_pfn_range_internal(struct vm_area_struct *vma, unsigned long addr,
-		unsigned long pfn, unsigned long size, pgprot_t prot)
+		unsigned long pfn, unsigned long size, pgprot_t prot, unsigned int page_shift)
 {
 	pgd_t *pgd;
 	unsigned long next;
@@ -2763,7 +2818,7 @@ static int remap_pfn_range_internal(struct vm_area_struct *vma, unsigned long ad
 	do {
 		next = pgd_addr_end(addr, end);
 		err = remap_p4d_range(mm, pgd, addr, next,
-				pfn + (addr >> PAGE_SHIFT), prot);
+				pfn + (addr >> PAGE_SHIFT), prot, page_shift);
 		if (err)
 			return err;
 	} while (pgd++, addr = next, addr != end);
@@ -2771,15 +2826,10 @@ static int remap_pfn_range_internal(struct vm_area_struct *vma, unsigned long ad
 	return 0;
 }
 
-/*
- * Variant of remap_pfn_range that does not call track_pfn_remap.  The caller
- * must have pre-validated the caching bits of the pgprot_t.
- */
-int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
-		unsigned long pfn, unsigned long size, pgprot_t prot)
+static int __remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
+		unsigned long pfn, unsigned long size, pgprot_t prot, unsigned int page_shift)
 {
-	int error = remap_pfn_range_internal(vma, addr, pfn, size, prot);
-
+	int error = remap_pfn_range_internal(vma, addr, pfn, size, prot, page_shift);
 	if (!error)
 		return 0;
 
@@ -2790,6 +2840,16 @@ int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
 	 */
 	zap_page_range_single(vma, addr, size, NULL);
 	return error;
+}
+
+/*
+ * Variant of remap_pfn_range that does not call track_pfn_remap.  The caller
+ * must have pre-validated the caching bits of the pgprot_t.
+ */
+int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
+		unsigned long pfn, unsigned long size, pgprot_t prot)
+{
+	return __remap_pfn_range_notrack(vma, addr, pfn, size, prot, PAGE_SHIFT);
 }
 
 /**
@@ -2804,8 +2864,9 @@ int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
  *
  * Return: %0 on success, negative error code otherwise.
  */
-int remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
-		    unsigned long pfn, unsigned long size, pgprot_t prot)
+int __remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
+		    unsigned long pfn, unsigned long size, pgprot_t prot,
+			unsigned int page_shift)
 {
 	int err;
 
@@ -2813,12 +2874,27 @@ int remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 	if (err)
 		return -EINVAL;
 
-	err = remap_pfn_range_notrack(vma, addr, pfn, size, prot);
+	err = __remap_pfn_range_notrack(vma, addr, pfn, size, prot, page_shift);
 	if (err)
 		untrack_pfn(vma, pfn, PAGE_ALIGN(size), true);
 	return err;
 }
+
+int remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
+		    unsigned long pfn, unsigned long size, pgprot_t prot)
+{
+	return __remap_pfn_range(vma, addr, pfn, size, prot, PAGE_SHIFT);
+}
 EXPORT_SYMBOL(remap_pfn_range);
+
+#if defined(CONFIG_ARM64) && defined(CONFIG_ARCH_SUPPORTS_PMD_PFNMAP)
+int remap_pfn_range_try_pmd(struct vm_area_struct *vma, unsigned long addr,
+			unsigned long pfn, unsigned long size, pgprot_t prot)
+{
+	return __remap_pfn_range(vma, addr, pfn, size, prot, PMD_SHIFT);
+}
+EXPORT_SYMBOL_GPL(remap_pfn_range_try_pmd);
+#endif
 
 /**
  * vm_iomap_memory - remap memory to userspace
@@ -3126,10 +3202,8 @@ static inline int __wp_page_copy_user(struct page *dst, struct page *src,
 	unsigned long addr = vmf->address;
 
 	if (likely(src)) {
-		if (copy_mc_user_highpage(dst, src, addr, vma)) {
-			memory_failure_queue(page_to_pfn(src), 0);
+		if (copy_mc_user_highpage(dst, src, addr, vma))
 			return -EHWPOISON;
-		}
 		return 0;
 	}
 
@@ -4953,7 +5027,7 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 	 * Archs like ppc64 need additional space to store information
 	 * related to pte entry. Use the preallocated table for that.
 	 */
-	if (arch_needs_pgtable_deposit() && !vmf->prealloc_pte) {
+	if (arch_needs_pgtable_deposit(vma) && !vmf->prealloc_pte) {
 		vmf->prealloc_pte = pte_alloc_one(vma->vm_mm);
 		if (!vmf->prealloc_pte)
 			return VM_FAULT_OOM;
@@ -4975,7 +5049,7 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 	/*
 	 * deposit and withdraw with pmd lock held
 	 */
-	if (arch_needs_pgtable_deposit())
+	if (arch_needs_pgtable_deposit(vma))
 		deposit_prealloc_pte(vmf);
 
 	set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
@@ -6845,10 +6919,8 @@ static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
 
 		cond_resched();
 		if (copy_mc_user_highpage(dst_page, src_page,
-					  addr + i*PAGE_SIZE, vma)) {
-			memory_failure_queue(page_to_pfn(src_page), 0);
+					  addr + i*PAGE_SIZE, vma))
 			return -EHWPOISON;
-		}
 	}
 	return 0;
 }
@@ -6864,10 +6936,8 @@ static int copy_subpage(unsigned long addr, int idx, void *arg)
 	struct copy_subpage_arg *copy_arg = arg;
 
 	if (copy_mc_user_highpage(copy_arg->dst + idx, copy_arg->src + idx,
-				  addr, copy_arg->vma)) {
-		memory_failure_queue(page_to_pfn(copy_arg->src + idx), 0);
+				  addr, copy_arg->vma))
 		return -EHWPOISON;
-	}
 	return 0;
 }
 

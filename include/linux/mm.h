@@ -1345,6 +1345,7 @@ void put_pages_list(struct list_head *pages);
 
 void split_page(struct page *page, unsigned int order);
 void folio_copy(struct folio *dst, struct folio *src);
+int folio_mc_copy(struct folio *dst, struct folio *src);
 
 unsigned long nr_free_buffer_pages(void);
 
@@ -2803,6 +2804,30 @@ static inline pte_t pte_mkspecial(pte_t pte)
 }
 #endif
 
+#ifndef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
+static inline bool pmd_special(pmd_t pmd)
+{
+	return false;
+}
+
+static inline pmd_t pmd_mkspecial(pmd_t pmd)
+{
+	return pmd;
+}
+#endif	/* CONFIG_ARCH_SUPPORTS_PMD_PFNMAP */
+
+#ifndef CONFIG_ARCH_SUPPORTS_PUD_PFNMAP
+static inline bool pud_special(pud_t pud)
+{
+	return false;
+}
+
+static inline pud_t pud_mkspecial(pud_t pud)
+{
+	return pud;
+}
+#endif	/* CONFIG_ARCH_SUPPORTS_PUD_PFNMAP */
+
 #ifndef CONFIG_ARCH_HAS_PTE_DEVMAP
 static inline int pte_devmap(pte_t pte)
 {
@@ -3678,6 +3703,8 @@ struct vm_area_struct *find_extend_vma_locked(struct mm_struct *,
 		unsigned long addr);
 int remap_pfn_range(struct vm_area_struct *, unsigned long addr,
 			unsigned long pfn, unsigned long size, pgprot_t);
+int remap_pfn_range_try_pmd(struct vm_area_struct *vma, unsigned long addr,
+			unsigned long pfn, unsigned long size, pgprot_t prot);
 int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
 		unsigned long pfn, unsigned long size, pgprot_t prot);
 int vm_insert_page(struct vm_area_struct *, unsigned long addr, struct page *);
@@ -4058,11 +4085,11 @@ enum mf_flags {
 int mf_dax_kill_procs(struct address_space *mapping, pgoff_t index,
 		      unsigned long count, int mf_flags);
 extern int memory_failure(unsigned long pfn, int flags);
-extern void memory_failure_queue_kick(int cpu);
 extern int unpoison_memory(unsigned long pfn);
 extern void shake_page(struct page *p);
 extern atomic_long_t num_poisoned_pages __read_mostly;
 extern int soft_offline_page(unsigned long pfn, int flags);
+int kill_accessing_process(unsigned long pfn, int flags, bool force_kill);
 #ifdef CONFIG_MEMORY_FAILURE
 /*
  * Sysfs entries for memory failure handling statistics.
@@ -4315,4 +4342,89 @@ static inline bool pfn_is_unaccepted_memory(unsigned long pfn)
 	return range_contains_unaccepted_memory(paddr, paddr + PAGE_SIZE);
 }
 
+enum reclaim_reason {
+	RR_KSWAPD,
+	RR_DIRECT_RECLAIM,
+	RR_TYPES
+};
+
+#ifdef CONFIG_RECLAIM_NOTIFY
+
+struct reclaim_notify_data {
+	int nr_nid;		/* Number of nodes in nid[] */
+	int nid[MAX_NUMNODES];	/* Nodes who getting trouble in reclaiming */
+
+	/*
+	 * Indicates whether notification caller is required to return
+	 * synchronously.
+	 * @true:  the caller do related works first, then return.
+	 * @false: the caller return first and then do related works.
+	 */
+	bool sync;
+
+	/*
+	 * Indicates at which situation the notifier is called, notified
+	 * module could take different action according to the reason.
+	 */
+	enum reclaim_reason reason;
+
+	/*
+	 * Number of pages released by the notified module, which is
+	 * returned after the notification is executed.
+	 */
+	unsigned long nr_freed;
+};
+
+int register_reclaim_notifier(struct notifier_block *nb);
+int unregister_reclaim_notifier(struct notifier_block *nb);
+unsigned long do_reclaim_notify(enum reclaim_reason reason,
+				const void *reclaim_context);
+#else
+static inline int register_reclaim_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+static inline int unregister_reclaim_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+static inline unsigned long do_reclaim_notify(enum reclaim_reason reason,
+				const void *reclaim_context)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_PFN_RANGE_ALLOC
+#define PFN_RANGE_ALLOC_SIZE PMD_SIZE
+#define PFN_RANGE_ALLOC_ORDER PMD_ORDER
+#define PFN_RANGE_ALLOC_NR_PAGES (1 << PFN_RANGE_ALLOC_ORDER)
+
+extern unsigned long contig_mem_pool_percent;
+struct folio *pfn_range_alloc(unsigned int nr_pages, int nid);
+int pfn_range_free(struct folio *folio);
+int set_linear_mapping_nc(unsigned long start_pfn, unsigned long end_pfn, bool set_nc);
+int set_linear_mapping_invalid(unsigned long start_pfn, unsigned long end_pfn,
+										bool set_invalid);
+#else
+static inline struct folio *pfn_range_alloc(unsigned int nr_pages, int nid)
+{
+	return ERR_PTR(-EINVAL);
+}
+static inline int pfn_range_free(struct folio *folio)
+{
+	return -EINVAL;
+}
+static inline
+int set_linear_mapping_nc(unsigned long start_pfn, unsigned long end_pfn, bool set_nc)
+{
+	return -EINVAL;
+}
+static inline
+int set_linear_mapping_invalid(unsigned long start_pfn, unsigned long end_pfn,
+										bool set_invalid)
+{
+	return -EINVAL;
+}
+#endif
 #endif /* _LINUX_MM_H */

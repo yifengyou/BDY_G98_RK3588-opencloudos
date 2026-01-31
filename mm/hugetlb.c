@@ -35,6 +35,7 @@
 #include <linux/delayacct.h>
 #include <linux/memory.h>
 #include <linux/mm_inline.h>
+#include <trace/events/kmem.h>
 
 #include <asm/page.h>
 #include <asm/pgalloc.h>
@@ -45,6 +46,7 @@
 #include <linux/hugetlb_cgroup.h>
 #include <linux/node.h>
 #include <linux/page_owner.h>
+#include <linux/numa_remote.h>
 #include "internal.h"
 #include "hugetlb_vmemmap.h"
 #include <linux/page-isolation.h>
@@ -2235,7 +2237,13 @@ static int alloc_pool_huge_page(struct hstate *h, nodemask_t *nodes_allowed,
 	gfp_t gfp_mask = htlb_alloc_mask(h) | __GFP_THISNODE;
 
 	for_each_node_mask_to_alloc(h, nr_nodes, node, nodes_allowed) {
-		folio = alloc_fresh_hugetlb_folio(h, gfp_mask, node,
+		gfp_t gfp = 0;
+
+		/* Use __GFP_MEMALLOC to make sure all pages can be allocated */
+		if (numa_remote_hugetlb_nowatermark(node))
+			gfp |= __GFP_MEMALLOC;
+
+		folio = alloc_fresh_hugetlb_folio(h, gfp_mask | gfp, node,
 					nodes_allowed, node_alloc_noretry);
 		if (folio) {
 			free_huge_folio(folio); /* free it into the hugepage allocator */
@@ -2312,6 +2320,8 @@ retry:
 
 	if (!folio_ref_count(folio)) {
 		struct hstate *h = folio_hstate(folio);
+		bool adjust_surplus = false;
+
 		if (!available_huge_pages(h))
 			goto out;
 
@@ -2334,7 +2344,9 @@ retry:
 			goto retry;
 		}
 
-		remove_hugetlb_folio(h, folio, false);
+		if (h->surplus_huge_pages_node[folio_nid(folio)])
+			adjust_surplus = true;
+		remove_hugetlb_folio(h, folio, adjust_surplus);
 		h->max_huge_pages--;
 		spin_unlock_irq(&hugetlb_lock);
 
@@ -2351,7 +2363,7 @@ retry:
 			update_and_free_hugetlb_folio(h, folio, false);
 		} else {
 			spin_lock_irq(&hugetlb_lock);
-			add_hugetlb_folio(h, folio, false);
+			add_hugetlb_folio(h, folio, adjust_surplus);
 			h->max_huge_pages++;
 			spin_unlock_irq(&hugetlb_lock);
 		}
@@ -3538,14 +3550,33 @@ found:
 	return 1;
 }
 
+#ifdef CONFIG_ZONE_EXTMEM
+static void hugetlb_drain_remote_pcp(struct hstate *h, int nid)
+{
+	pg_data_t *pgdat = NODE_DATA(nid);
+	struct zone *zone;
+
+	zone = &pgdat->node_zones[ZONE_EXTMEM];
+
+	if (zone_managed_pages(zone))
+		drain_all_pages(zone);
+}
+#else
+static inline void hugetlb_drain_remote_pcp(struct hstate *h, int nid)
+{
+}
+#endif
+
 #define persistent_huge_pages(h) (h->nr_huge_pages - h->surplus_huge_pages)
 static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 			      nodemask_t *nodes_allowed)
 {
+	unsigned long persistent_free_count;
 	unsigned long min_count, ret;
 	struct page *page;
 	LIST_HEAD(page_list);
 	NODEMASK_ALLOC(nodemask_t, node_alloc_noretry, GFP_KERNEL);
+	bool drained = false;
 
 	/*
 	 * Bit mask controlling how hard we retry per-node allocations.
@@ -3629,6 +3660,11 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 		/* yield cpu to avoid soft lockup */
 		cond_resched();
 
+		if ((nid != NUMA_NO_NODE) && numa_remote_hugetlb_nowatermark(nid) && !drained) {
+			hugetlb_drain_remote_pcp(h, nid);
+			drained = true;
+		}
+
 		ret = alloc_pool_huge_page(h, nodes_allowed,
 						node_alloc_noretry);
 		spin_lock_irq(&hugetlb_lock);
@@ -3654,8 +3690,24 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 	 * though, we'll note that we're not allowed to exceed surplus
 	 * and won't grow the pool anywhere else. Not until one of the
 	 * sysctls are changed, or the surplus pages go out of use.
+	 *
+	 * min_count is the expected number of persistent pages, we
+	 * shouldn't calculate min_count by using
+	 * resv_huge_pages + persistent_huge_pages() - free_huge_pages,
+	 * because there may exist free surplus huge pages, and this will
+	 * lead to subtracting twice. Free surplus huge pages come from HVO
+	 * failing to restore vmemmap, see comments in the callers of
+	 * hugetlb_vmemmap_restore_folio(). Thus, we should calculate
+	 * persistent free count first.
 	 */
-	min_count = h->resv_huge_pages + h->nr_huge_pages - h->free_huge_pages;
+	persistent_free_count = h->free_huge_pages;
+	if (h->free_huge_pages > persistent_huge_pages(h)) {
+		if (h->free_huge_pages > h->surplus_huge_pages)
+			persistent_free_count -= h->surplus_huge_pages;
+		else
+			persistent_free_count = 0;
+	}
+	min_count = h->resv_huge_pages + persistent_huge_pages(h) - persistent_free_count;
 	min_count = max(count, min_count);
 	try_to_free_low(h, min_count, nodes_allowed);
 
@@ -7636,3 +7688,81 @@ static void __init hugetlb_cma_check(void)
 }
 
 #endif /* CONFIG_CMA */
+
+struct folio *alloc_hugetlb_folio_size(int nid, unsigned long size)
+{
+	gfp_t gfp_mask;
+	struct hstate *h;
+	nodemask_t nodemask;
+	unsigned long flags;
+	struct folio *folio = NULL;
+
+	h = size_to_hstate(size);
+	if (!h)
+		return NULL;
+
+	nodes_clear(nodemask);
+	node_set(nid, nodemask);
+	gfp_mask = htlb_alloc_mask(h);
+	spin_lock_irqsave(&hugetlb_lock, flags);
+	if (h->free_huge_pages - h->resv_huge_pages > 0)
+		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, &nodemask);
+	spin_unlock_irqrestore(&hugetlb_lock, flags);
+
+	return folio;
+}
+EXPORT_SYMBOL(alloc_hugetlb_folio_size);
+
+#ifdef CONFIG_PFN_RANGE_ALLOC
+struct folio *hugetlb_pool_alloc(int nid)
+{
+	struct folio *folio = ERR_PTR(-EINVAL);
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		goto out;
+
+	folio = alloc_hugetlb_folio_size(nid, PFN_RANGE_ALLOC_SIZE);
+	if (!folio)
+		folio = ERR_PTR(-ENOMEM);
+
+out:
+	trace_hugetlb_pool_alloc(folio, nid);
+	return folio;
+}
+EXPORT_SYMBOL_GPL(hugetlb_pool_alloc);
+
+int hugetlb_pool_free(struct folio *folio)
+{
+	int ret = -EINVAL;
+
+	if (!folio_test_hugetlb(folio))
+		goto out;
+
+	ret = 0;
+	folio_put(folio);
+out:
+	trace_hugetlb_pool_free(folio, ret);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(hugetlb_pool_free);
+
+struct folio *hugetlb_pool_alloc_size(int nid, unsigned long size)
+{
+	struct folio *folio = ERR_PTR(-EINVAL);
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		goto out;
+
+	if ((size != PMD_SIZE) && (size != PUD_SIZE))
+		goto out;
+
+	folio = alloc_hugetlb_folio_size(nid, size);
+	if (!folio)
+		folio = ERR_PTR(-ENOMEM);
+
+out:
+	trace_hugetlb_pool_alloc_size(folio, nid, size);
+	return folio;
+}
+EXPORT_SYMBOL_GPL(hugetlb_pool_alloc_size);
+#endif

@@ -1394,7 +1394,7 @@ extern int pmd_move_must_withdraw(struct spinlock *new_pmd_ptl,
  * slot information.
  */
 #define arch_needs_pgtable_deposit arch_needs_pgtable_deposit
-static inline bool arch_needs_pgtable_deposit(void)
+static inline bool arch_needs_pgtable_deposit(struct vm_area_struct *vma)
 {
 	if (radix_enabled())
 		return false;

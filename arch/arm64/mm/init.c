@@ -50,6 +50,7 @@
 #include <asm/tlb.h>
 #include <asm/alternative.h>
 #include <asm/xen/swiotlb-xen.h>
+#include "internal.h"
 
 /*
  * We need to be able to catch inadvertent references to memstart_addr
@@ -516,6 +517,11 @@ void __init mem_init(void)
 		is_phytium_ps_socs())
 		pswiotlb_init(1, PSWIOTLB_VERBOSE);
 #endif
+
+	/* Must be placed before buddy is initialized, to avoid reserved
+	 * memory is reserved by memblock.
+	 */
+	pmd_mapping_reserve_and_remap();
 
 	/* this will put all unused low memory onto the freelists */
 	memblock_free_all();

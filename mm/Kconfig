@@ -862,6 +862,19 @@ endif # TRANSPARENT_HUGEPAGE
 config PGTABLE_HAS_HUGE_LEAVES
 	def_bool TRANSPARENT_HUGEPAGE || HUGETLB_PAGE
 
+# TODO: Allow to be enabled without THP
+config ARCH_SUPPORTS_HUGE_PFNMAP
+	def_bool n
+	depends on TRANSPARENT_HUGEPAGE
+
+config ARCH_SUPPORTS_PMD_PFNMAP
+	def_bool y
+	depends on ARCH_SUPPORTS_HUGE_PFNMAP && HAVE_ARCH_TRANSPARENT_HUGEPAGE
+
+config ARCH_SUPPORTS_PUD_PFNMAP
+	def_bool y
+	depends on ARCH_SUPPORTS_HUGE_PFNMAP && HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+
 #
 # UP and nommu archs use km based percpu allocator
 #
@@ -1037,6 +1050,18 @@ config ZONE_DEVICE
 	  mapping in an O_DIRECT operation, among other things.
 
 	  If FS_DAX is enabled, then say Y.
+
+config ZONE_EXTMEM
+	bool "Extension memory hotplug support"
+	default n
+	depends on MEMORY_HOTPLUG
+	depends on MEMORY_HOTREMOVE
+	depends on ARM64
+	help
+	  Extension memory hotplug support allows for customizing memory
+	  policy such as UB or CXL memory, mirroring memory, etc.
+
+	  If unsure, say N.
 
 config ASYNC_FORK
 	bool "Support copy mm asynchronously when fork"
@@ -1228,6 +1253,15 @@ config PTE_MARKER_UFFD_WP
 	  Allows to create marker PTEs for userfaultfd write protection
 	  purposes.  It is required to enable userfaultfd write protection on
 	  file-backed memory types like shmem and hugetlbfs.
+
+config RECLAIM_NOTIFY
+	bool "notify call for memory recliam"
+	depends on NUMA_REMOTE
+	default n
+	help
+	  Add a notifer chain to the memory reclaim.  If one of the registered
+	  callbacks could release some memory, do not reclaim anymore and avoid
+	  possible oom.
 
 # multi-gen LRU {
 config LRU_GEN
