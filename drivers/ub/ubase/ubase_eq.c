@@ -146,16 +146,20 @@ static unsigned long ubase_check_event_cause(struct ubase_dev *udev)
 	if (cmdq_src_reg & BIT(UBASE_VECTOR0_RX_CMDQ_INT_B))
 		event_cause |= BIT(UBASE_ASYNC_EVENT_CRQ_B);
 
-	sw_handshake_0_reg = ubase_read_dev(&udev->hw,
-					    UBASE_SW_HANDSHAKE_0_REG);
-	if (sw_handshake_0_reg & BIT(UBASE_SW_HANDSHAKE_0_RAS_B)) {
-		ubase_save_ras_type(udev, sw_handshake_0_reg);
-		event_cause |= BIT(UBASE_ASYNC_EVENT_RAS_B);
+	if (ubase_dev_err_handle_supported(udev)) {
+		sw_handshake_0_reg = ubase_read_dev(&udev->hw,
+						    UBASE_SW_HANDSHAKE_0_REG);
+		if (sw_handshake_0_reg & BIT(UBASE_SW_HANDSHAKE_0_RAS_B)) {
+			ubase_save_ras_type(udev, sw_handshake_0_reg);
+			event_cause |= BIT(UBASE_ASYNC_EVENT_RAS_B);
+		}
 	}
 
-	ctrlq_src_reg = ubase_read_dev(&udev->hw, UBASE_VECTOR0_CTRLQ_SRC_REG);
-	if (ctrlq_src_reg & BIT(UBASE_VECTOR0_RX_CTRLQ_INT_B))
-		event_cause |= BIT(UBASE_ASYNC_EVENT_CTRLQ_B);
+	if (ubase_dev_ctrlq_supported(udev)) {
+		ctrlq_src_reg = ubase_read_dev(&udev->hw, UBASE_VECTOR0_CTRLQ_SRC_REG);
+		if (ctrlq_src_reg & BIT(UBASE_VECTOR0_RX_CTRLQ_INT_B))
+			event_cause |= BIT(UBASE_ASYNC_EVENT_CTRLQ_B);
+	}
 
 	return event_cause;
 }

@@ -23,6 +23,8 @@
 #define UBASE_CTRLQ_CRQ_TAIL_REG	0x18824
 #define UBASE_CTRLQ_CRQ_HEAD_REG	0x18828
 
+#define UBASE_CTRLQ_HANDLE_UE_MSG	1
+
 enum ubase_ctrlq_ser_ver {
 	UBASE_CTRLQ_SER_VER_01 = 0x01,
 };
@@ -116,11 +118,42 @@ struct ubase_ctrlq_event_nb {
 	KABI_RESERVE(4)
 };
 
+/**
+ * ubase_ctrlq_ue_msg_nb - ubase ctrlq ue msg notification block structure
+ * @service_type: ctrlq ue msg service type
+ * @opcode: ctrlq ue msg opcode
+ * @back: arbitrary registered pointer
+ * @msg_handler: ctrlq ue msg handle function
+ */
+struct ubase_ctrlq_ue_msg_nb {
+	u8	service_type;
+	u8	opcode;
+	void	*back;
+	int	(*msg_handler)(struct auxiliary_device *adev, void *data, u16 len);
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,
 			 struct ubase_ctrlq_msg *msg);
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 				   struct ubase_ctrlq_event_nb *nb);
 void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,
 				      u8 service_type, u8 opcode);
+int ubase_ctrlq_register_ue_req_event(struct auxiliary_device *aux_dev,
+				      struct ubase_ctrlq_ue_msg_nb *nb);
+void ubase_ctrlq_unregister_ue_req_event(struct auxiliary_device *aux_dev,
+					 u8 service_type, u8 opcode);
+int ubase_ctrlq_register_ue_resp_event(struct auxiliary_device *aux_dev,
+				       struct ubase_ctrlq_ue_msg_nb *nb);
+void ubase_ctrlq_unregister_ue_resp_event(struct auxiliary_device *aux_dev,
+					  u8 service_type, u8 opcode);
+int ubase_ctrlq_send_mue2ue_resp(struct auxiliary_device *adev, void *data, u16 len,
+				 u8 result);
+int ubase_ctrlq_send_ue_req(struct auxiliary_device *adev, void *data, u16 len);
+u16 ubase_ctrlq_ue_msg_header_len(void);
 
 #endif

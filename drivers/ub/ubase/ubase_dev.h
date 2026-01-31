@@ -258,6 +258,26 @@ struct ubase_ctrlq_crq_table {
 	struct ubase_ctrlq_event_nb	*crq_nbs;
 };
 
+struct ubase_ctrlq_ue_req_event_nbs {
+	struct list_head			list;
+	struct ubase_ctrlq_ue_msg_nb		msg_nb;
+};
+
+struct ubase_ctrlq_ue_resp_event_nbs {
+	struct list_head			list;
+	struct ubase_ctrlq_ue_msg_nb		msg_nb;
+};
+
+struct ubase_ctrlq_ue_req_table {
+	struct mutex				lock;
+	struct ubase_ctrlq_ue_req_event_nbs	ue_req_nbs;
+};
+
+struct ubase_ctrlq_ue_resp_table {
+	struct mutex				lock;
+	struct ubase_ctrlq_ue_resp_event_nbs	ue_resp_nbs;
+};
+
 struct ubase_ctrlq {
 	u16				csq_next_seq;
 	unsigned long			state;
@@ -266,6 +286,8 @@ struct ubase_ctrlq {
 	struct ubase_ctrlq_ring		crq;
 	struct ubase_ctrlq_msg_ctx	*msg_queue;
 	struct ubase_ctrlq_crq_table	crq_table;
+	struct ubase_ctrlq_ue_req_table		ue_req_table;
+	struct ubase_ctrlq_ue_resp_table	ue_resp_table;
 };
 
 #define UBASE_ACT_STAT_MAX_NUM 10U

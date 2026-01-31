@@ -490,7 +490,7 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 	u16 mbx_ue_id = le16_to_cpu(cmd->head.mbx_ue_id);
 	struct ubase_ctrlq_ue_info ue_info;
 	struct ubase_ctrlq_msg msg = {0};
-	int ret;
+	int ret = 0, async;
 
 	if (!ubase_mbx_ue_id_is_valid(mbx_ue_id, udev)) {
 		ubase_err(udev, "ubase ue2ue ctrlq req mbx ue id = %u error.\n",
@@ -502,6 +502,10 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 		ubase_err(udev, "ubase ue2ue cmd len = %u error.\n", cmd->in_size);
 		return -EINVAL;
 	}
+
+	async = ubase_ctrlq_ue_req_event_callback(udev, cmd);
+	if (async)
+		return 0;
 
 	msg.service_ver = head->service_ver;
 	msg.service_type = head->service_type;

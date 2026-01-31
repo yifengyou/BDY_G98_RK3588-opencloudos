@@ -8,7 +8,6 @@
 
 #include "ubase_dev.h"
 #include "ubase_trace.h"
-#include "ubase_cmd.h"
 #include "ubase_ctrlq.h"
 
 /* UNIC ctrlq msg white list */
@@ -103,8 +102,10 @@ static void ubase_ctrlq_init_crq_wlist(struct ubase_dev *udev)
 	}
 }
 
-static int ubase_ctrlq_crq_table_init(struct ubase_dev *udev)
+static int ubase_ctrlq_table_init(struct ubase_dev *udev)
 {
+	struct ubase_ctrlq_ue_resp_table *ue_resp_tab = &udev->ctrlq.ue_resp_table;
+	struct ubase_ctrlq_ue_req_table *ue_req_tab = &udev->ctrlq.ue_req_table;
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
 	int ret;
 
@@ -115,14 +116,22 @@ static int ubase_ctrlq_crq_table_init(struct ubase_dev *udev)
 	ubase_ctrlq_init_crq_wlist(udev);
 
 	mutex_init(&crq_tab->lock);
+	mutex_init(&ue_req_tab->lock);
+	mutex_init(&ue_resp_tab->lock);
+	INIT_LIST_HEAD(&ue_req_tab->ue_req_nbs.list);
+	INIT_LIST_HEAD(&ue_resp_tab->ue_resp_nbs.list);
 
 	return 0;
 }
 
-static void ubase_ctrlq_crq_table_uninit(struct ubase_dev *udev)
+static void ubase_ctrlq_table_uninit(struct ubase_dev *udev)
 {
+	struct ubase_ctrlq_ue_resp_table *ue_resp_tab = &udev->ctrlq.ue_resp_table;
+	struct ubase_ctrlq_ue_req_table *ue_req_tab = &udev->ctrlq.ue_req_table;
 	struct ubase_ctrlq_crq_table *crq_tab = &udev->ctrlq.crq_table;
 
+	mutex_destroy(&ue_resp_tab->lock);
+	mutex_destroy(&ue_req_tab->lock);
 	mutex_destroy(&crq_tab->lock);
 
 	ubase_ctrlq_free_crq_tbl_mem(udev);
@@ -335,9 +344,9 @@ int ubase_ctrlq_init(struct ubase_dev *udev)
 	if (ret)
 		goto err_msg_queue_init;
 
-	ret = ubase_ctrlq_crq_table_init(udev);
+	ret = ubase_ctrlq_table_init(udev);
 	if (ret)
-		goto err_crq_table_init;
+		goto err_table_init;
 
 	udev->ctrlq.csq_next_seq = 1;
 	atomic_set(&udev->ctrlq.req_cnt, 0);
@@ -346,7 +355,7 @@ success:
 	set_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state);
 	return 0;
 
-err_crq_table_init:
+err_table_init:
 	ubase_ctrlq_msg_queue_uninit(udev);
 err_msg_queue_init:
 	ubase_ctrlq_queue_uninit(udev);
@@ -440,7 +449,7 @@ void ubase_ctrlq_uninit(struct ubase_dev *udev)
 		ubase_ctrlq_disable(udev);
 
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
-		ubase_ctrlq_crq_table_uninit(udev);
+		ubase_ctrlq_table_uninit(udev);
 		ubase_ctrlq_msg_queue_uninit(udev);
 		ubase_ctrlq_queue_uninit(udev);
 	} else {
@@ -1026,6 +1035,57 @@ bool ubase_ctrlq_check_seq(struct ubase_dev *udev, u16 seq)
 	return is_pushed || (seq && seq <= max_seq);
 }
 
+int ubase_ctrlq_ue_req_event_callback(struct ubase_dev *udev,
+				      struct ubase_ue2ue_ctrlq_head *cmd)
+{
+	struct ubase_ctrlq_base_block *head = (struct ubase_ctrlq_base_block *)(cmd + 1);
+	struct ubase_ctrlq_ue_req_table *ue_req_tab = &udev->ctrlq.ue_req_table;
+	struct ubase_ctrlq_ue_req_event_nbs *nbs;
+	u16 bus_ue_id, len;
+	int ret = 0;
+
+	len = le16_to_cpu(cmd->in_size) + ubase_ctrlq_ue_msg_header_len();
+	bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
+	mutex_lock(&ue_req_tab->lock);
+	list_for_each_entry(nbs, &ue_req_tab->ue_req_nbs.list, list) {
+		if (nbs->msg_nb.service_type == head->service_type &&
+		    nbs->msg_nb.opcode == head->opcode) {
+			trace_ubase_ue_req_callback(udev->dev, bus_ue_id, cmd, len);
+			ret = nbs->msg_nb.msg_handler(nbs->msg_nb.back, cmd, len);
+			break;
+		}
+	}
+	mutex_unlock(&ue_req_tab->lock);
+
+	return ret;
+}
+
+static int ubase_ctrlq_ue_resp_event_callback(struct ubase_dev *udev, void *resp,
+					      u16 resp_len)
+{
+	struct ubase_ctrlq_ue_resp_table *ue_resp_tab = &udev->ctrlq.ue_resp_table;
+	struct ubase_ctrlq_ue_resp_event_nbs *nbs;
+	struct ubase_ue2ue_ctrlq_head *cmd = resp;
+	struct ubase_ctrlq_base_block *head;
+	u16 bus_ue_id;
+	int ret = 0;
+
+	head = (struct ubase_ctrlq_base_block *)(cmd + 1);
+	bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
+	mutex_lock(&ue_resp_tab->lock);
+	list_for_each_entry(nbs, &ue_resp_tab->ue_resp_nbs.list, list) {
+		if (nbs->msg_nb.service_type == head->service_type &&
+		    nbs->msg_nb.opcode == head->opcode) {
+			trace_ubase_ue_resp_callback(udev->dev, bus_ue_id, resp, resp_len);
+			ret = nbs->msg_nb.msg_handler(nbs->msg_nb.back, resp, resp_len);
+			break;
+		}
+	}
+	mutex_unlock(&ue_resp_tab->lock);
+
+	return ret;
+}
+
 void ubase_ctrlq_handle_crq_msg(struct ubase_dev *udev,
 				struct ubase_ctrlq_base_block *head,
 				u16 seq, void *msg_data, u16 data_len)
@@ -1094,8 +1154,8 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 	struct ubase_ue2ue_ctrlq_head *ue2ue_head;
 	struct ubase_ctrlq_msg_ctx ctx = {0};
 	struct ubase_cmd_buf in;
+	int ret = 0, async;
 	void *resp, *msg;
-	int ret;
 
 	if (!is_pushed) {
 		spin_lock_bh(&csq->lock);
@@ -1128,6 +1188,11 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 	ue2ue_head->head.bus_ue_id = is_pushed ? head->bus_ue_id :
 				     cpu_to_le16(ctx.bus_ue_id);
 	ue2ue_head->seq = is_pushed ? seq : ctx.ue_seq;
+
+	async = ubase_ctrlq_ue_resp_event_callback(udev, resp, resp_len);
+	if (async)
+		goto out;
+
 	__ubase_fill_inout_buf(&in, UBASE_OPC_UE2UE_UBASE, false, resp_len, resp);
 	ret = __ubase_cmd_send_in(udev, &in);
 	if (ret)
@@ -1135,6 +1200,7 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 			   "failed to send ue ctrlq msg, opc = 0x%x, service_type = 0x%x, ret = %d.\n",
 			   head->opcode, head->service_type, ret);
 
+out:
 	kfree(resp);
 }
 
@@ -1331,3 +1397,333 @@ void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,
 	mutex_unlock(&crq_tab->lock);
 }
 EXPORT_SYMBOL(ubase_ctrlq_unregister_crq_event);
+
+/**
+ * ubase_ctrlq_register_ue_req_event() - register ctrlq ue request event processing function
+ * @aux_dev: auxiliary device
+ * @nb: the ctrlq ue request event notification block
+ *
+ * Register the ctrlq ue request handler function. When the ue reports a ctrlq
+ * request event to mue, if the registered 'nb->opcode' and 'nb->service_type'
+ * match the ue request event, the 'nb->msg_handler' function will be called by
+ * mue to process it.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_ctrlq_register_ue_req_event(struct auxiliary_device *aux_dev,
+				      struct ubase_ctrlq_ue_msg_nb *nb)
+{
+	struct ubase_ctrlq_ue_req_event_nbs *nbs, *tmp, *new_nbs;
+	struct ubase_ctrlq_ue_req_table *ue_req_tab;
+	struct ubase_dev *udev;
+	int ret;
+
+	if (!aux_dev || !nb || !nb->msg_handler)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(aux_dev);
+	ue_req_tab = &udev->ctrlq.ue_req_table;
+	mutex_lock(&ue_req_tab->lock);
+	list_for_each_entry_safe(nbs, tmp, &ue_req_tab->ue_req_nbs.list, list) {
+		if (nbs->msg_nb.service_type == nb->service_type &&
+		    nbs->msg_nb.opcode == nb->opcode) {
+			ret = -EEXIST;
+			goto err_ue_req_register;
+		}
+	}
+
+	new_nbs = kzalloc(sizeof(*new_nbs), GFP_KERNEL);
+	if (!new_nbs) {
+		ret = -ENOMEM;
+		goto err_ue_req_register;
+	}
+
+	new_nbs->msg_nb = *nb;
+	list_add_tail(&new_nbs->list, &ue_req_tab->ue_req_nbs.list);
+	mutex_unlock(&ue_req_tab->lock);
+
+	return 0;
+
+err_ue_req_register:
+	mutex_unlock(&ue_req_tab->lock);
+	ubase_err(udev,
+		  "failed to register ctrlq ue req event, opcode = 0x%x, service_type = 0x%x, ret = %d.\n",
+		  nb->opcode, nb->service_type, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubase_ctrlq_register_ue_req_event);
+
+/**
+ * ubase_ctrlq_unregister_ue_req_event() - unregister ctrlq ue request event processing function
+ * @aux_dev: auxiliary device
+ * @service_type: the ctrlq ue msg service type
+ * @opcode: the ctrlq ue msg opcode
+ *
+ * Unregisters the ctrlq ue request event processing function. This function is
+ * called when user no longer wants to handle the 'service_type' and 'opcode'
+ * ctrlq ue request events.
+ *
+ * Context: Any context.
+ */
+void ubase_ctrlq_unregister_ue_req_event(struct auxiliary_device *aux_dev,
+					 u8 service_type, u8 opcode)
+{
+	struct ubase_ctrlq_ue_req_event_nbs *nbs, *tmp;
+	struct ubase_ctrlq_ue_req_table *ue_req_tab;
+	struct ubase_dev *udev;
+
+	if (!aux_dev)
+		return;
+
+	udev = __ubase_get_udev_by_adev(aux_dev);
+	ue_req_tab = &udev->ctrlq.ue_req_table;
+	mutex_lock(&ue_req_tab->lock);
+	list_for_each_entry_safe(nbs, tmp, &ue_req_tab->ue_req_nbs.list, list) {
+		if (nbs->msg_nb.service_type == service_type &&
+		    nbs->msg_nb.opcode == opcode) {
+			list_del(&nbs->list);
+			kfree(nbs);
+			break;
+		}
+	}
+	mutex_unlock(&ue_req_tab->lock);
+}
+EXPORT_SYMBOL(ubase_ctrlq_unregister_ue_req_event);
+
+/**
+ * ubase_ctrlq_register_ue_resp_event() - register ctrlq ue response event processing function
+ * @aux_dev: auxiliary device
+ * @nb: the ctrlq ue response event notification block
+ *
+ * Register the ctrlq ue response handler function. When the management software
+ * reports a ctrlq ue response event, if the registered 'nb->opcode' and 'nb->service_type'
+ * match the ue response event, the 'nb->msg_handler' function will be called by
+ * mue to process it.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_ctrlq_register_ue_resp_event(struct auxiliary_device *aux_dev,
+				       struct ubase_ctrlq_ue_msg_nb *nb)
+{
+	struct ubase_ctrlq_ue_resp_event_nbs *nbs, *tmp, *new_nbs;
+	struct ubase_ctrlq_ue_resp_table *ue_resp_tab;
+	struct ubase_dev *udev;
+	int ret;
+
+	if (!aux_dev || !nb || !nb->msg_handler)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(aux_dev);
+	ue_resp_tab = &udev->ctrlq.ue_resp_table;
+	mutex_lock(&ue_resp_tab->lock);
+	list_for_each_entry_safe(nbs, tmp, &ue_resp_tab->ue_resp_nbs.list, list) {
+		if (nbs->msg_nb.service_type == nb->service_type &&
+		    nbs->msg_nb.opcode == nb->opcode) {
+			ret = -EEXIST;
+			goto err_ue_resp_register;
+		}
+	}
+
+	new_nbs = kzalloc(sizeof(*new_nbs), GFP_KERNEL);
+	if (!new_nbs) {
+		ret = -ENOMEM;
+		goto err_ue_resp_register;
+	}
+
+	new_nbs->msg_nb = *nb;
+	list_add_tail(&new_nbs->list, &ue_resp_tab->ue_resp_nbs.list);
+	mutex_unlock(&ue_resp_tab->lock);
+
+	return 0;
+
+err_ue_resp_register:
+	mutex_unlock(&ue_resp_tab->lock);
+	ubase_err(udev,
+		  "failed to register ctrlq ue resp event, opcode = 0x%x, service_type = 0x%x, ret = %d.\n",
+		  nb->opcode, nb->service_type, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubase_ctrlq_register_ue_resp_event);
+
+/**
+ * ubase_ctrlq_unregister_ue_resp_event() - unregister ctrlq ue response event processing function
+ * @aux_dev: auxiliary device
+ * @service_type: the ctrlq ue msg service type
+ * @opcode: the ctrlq ue msg opcode
+ *
+ * Unregisters the ctrlq ue response event processing function. This function is
+ * called when user no longer wants to handle the 'service_type' and 'opcode'
+ * ctrlq ue response events.
+ *
+ * Context: Any context.
+ */
+void ubase_ctrlq_unregister_ue_resp_event(struct auxiliary_device *aux_dev,
+					  u8 service_type, u8 opcode)
+{
+	struct ubase_ctrlq_ue_resp_event_nbs *nbs, *tmp;
+	struct ubase_ctrlq_ue_resp_table *ue_resp_tab;
+	struct ubase_dev *udev;
+
+	if (!aux_dev)
+		return;
+
+	udev = __ubase_get_udev_by_adev(aux_dev);
+	ue_resp_tab = &udev->ctrlq.ue_resp_table;
+	mutex_lock(&ue_resp_tab->lock);
+	list_for_each_entry_safe(nbs, tmp, &ue_resp_tab->ue_resp_nbs.list, list) {
+		if (nbs->msg_nb.service_type == service_type &&
+		    nbs->msg_nb.opcode == opcode) {
+			list_del(&nbs->list);
+			kfree(nbs);
+			break;
+		}
+	}
+	mutex_unlock(&ue_resp_tab->lock);
+}
+EXPORT_SYMBOL(ubase_ctrlq_unregister_ue_resp_event);
+
+/**
+ * ubase_ctrlq_ue_msg_header_len() - ctrlq ue message header length
+ *
+ * This function is called when user wants to get ue message header length.
+ *
+ * Context: Any context.
+ */
+u16 ubase_ctrlq_ue_msg_header_len(void)
+{
+	return UBASE_CTRLQ_UE_MSG_HDR_LEN;
+}
+EXPORT_SYMBOL(ubase_ctrlq_ue_msg_header_len);
+
+/**
+ * ubase_ctrlq_send_mue2ue_resp() - mue send ctrlq response message to ue
+ * @aux_dev: auxiliary device
+ * @data: the message
+ * @len: the message length
+ * @result: result returned to ue
+ *
+ * The driver uses this function to send ctrlq response message to the ue.
+ * The mue needs to parse the data, fill the result into the corresponding
+ * fields, calculate the required bb_num, and send the message to the ue.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. May sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_ctrlq_send_mue2ue_resp(struct auxiliary_device *adev, void *data,
+				 u16 len, u8 result)
+{
+	struct ubase_ue2ue_ctrlq_head *cmd = data;
+	struct ubase_ctrlq_base_block *head;
+	struct ubase_cmd_buf in;
+	struct ubase_dev *udev;
+	u16 bus_ue_id;
+	int ret;
+
+	if (!adev || !data)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (len < UBASE_CTRLQ_UE_MSG_HDR_LEN) {
+		ubase_err(udev, "invalid mue2ue ctrlq resp len(%u).\n", len);
+		return -EINVAL;
+	}
+
+	bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
+	trace_ubase_send_mue2ue_resp(udev->dev, bus_ue_id, data, len);
+
+	head = (struct ubase_ctrlq_base_block *)(cmd + 1);
+	head->ret = result;
+	head->bb_num = ubase_ctrlq_calc_bb_num(len - UBASE_CTRLQ_UE_MSG_HDR_LEN);
+
+	__ubase_fill_inout_buf(&in, UBASE_OPC_UE2UE_UBASE, false, len, data);
+	ret = __ubase_cmd_send_in(udev, &in);
+	if (ret)
+		ubase_warn(udev,
+			   "failed to send mue2ue ctrlq msg, opc = 0x%x, service_type = 0x%x, ret = %d.\n",
+			   head->opcode, head->service_type, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubase_ctrlq_send_mue2ue_resp);
+
+/**
+ * ubase_ctrlq_send_ue_req() - mue send ue ctrlq request message
+ * @aux_dev: auxiliary device
+ * @data: the message
+ * @len: the message length
+ *
+ * The driver uses this function to send ue ctrlq request message to the management
+ * software. This function fills the data content into the ctrlq message interaction
+ * structure and sends the structure to the management software.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. May sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_ctrlq_send_ue_req(struct auxiliary_device *adev, void *data, u16 len)
+{
+	struct ubase_ue2ue_ctrlq_head *cmd = data;
+	struct ubase_ctrlq_base_block *head;
+	struct ubase_ctrlq_ue_info ue_info;
+	struct ubase_ctrlq_msg msg = {0};
+	u16 mbx_ue_id, bus_ue_id;
+	struct ubase_dev *udev;
+	int ret;
+
+	if (!adev || !data)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (len < UBASE_CTRLQ_UE_MSG_HDR_LEN) {
+		ubase_err(udev,
+			  "ubase ctrlq send ue req len invalid, len = %u.\n",
+			  len);
+		return -EINVAL;
+	}
+
+	if (cmd->in_size > (len - UBASE_CTRLQ_UE_MSG_HDR_LEN)) {
+		ubase_err(udev,
+			  "ubase ctrlq send ue req len error, len = %u, size = %u.\n",
+			  len, cmd->in_size);
+		return -EINVAL;
+	}
+
+	mbx_ue_id = le16_to_cpu(cmd->head.mbx_ue_id);
+	if (!ubase_mbx_ue_id_is_valid(mbx_ue_id, udev)) {
+		ubase_err(udev,
+			  "ubase ctrlq send ue req mbx ue id = %u error.\n",
+			  mbx_ue_id);
+		return -EINVAL;
+	}
+
+	bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
+	trace_ubase_send_ue_req(udev->dev, bus_ue_id, cmd, len);
+
+	head = (struct ubase_ctrlq_base_block *)(cmd + 1);
+	msg.service_ver = head->service_ver;
+	msg.service_type = head->service_type;
+	msg.opcode = head->opcode;
+	msg.need_resp = cmd->need_resp;
+	msg.is_resp = cmd->is_resp;
+	msg.resp_seq = cmd->seq;
+	msg.in = (u8 *)head + UBASE_CTRLQ_HDR_LEN;
+	msg.in_size = cmd->in_size;
+	msg.out = NULL;
+	msg.out_size = 0;
+
+	ue_info.bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
+	ue_info.seq = cmd->seq;
+	ue_info.mbx_ue_id = mbx_ue_id;
+
+	ret = __ubase_ctrlq_send(udev, &msg, &ue_info);
+	if (ret)
+		ubase_err(udev,
+			  "failed to send opc(0x%x) ue req ctrlq, ret = %d.\n",
+			  head->opcode, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubase_ctrlq_send_ue_req);

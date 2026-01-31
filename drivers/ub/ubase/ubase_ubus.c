@@ -132,6 +132,23 @@ static struct ub_share_port_ops ubase_share_port_ops = {
 	.event_notify = ubase_port_event_notify
 };
 
+static bool ubase_dev_reg_share_port_must_succ(struct ubase_dev *udev)
+{
+	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
+
+	switch (uent_device(ue)) {
+	case UBASE_DEV_ID_K_0_URMA_MUE:
+	case UBASE_DEV_ID_K_0_CDMA_MUE:
+	case UBASE_DEV_ID_A_0_URMA_MUE:
+	case UBASE_DEV_ID_A_0_CDMA_MUE:
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
 static int ubase_ubus_reg_share_port(struct ubase_dev *udev)
 {
 	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
@@ -143,9 +160,11 @@ static int ubase_ubus_reg_share_port(struct ubase_dev *udev)
 
 	ret = ub_register_share_port(ue, caps->ub_port_logic_id,
 				     &ubase_share_port_ops);
+
+	ret = ubase_dev_reg_share_port_must_succ(udev) ? ret : 0;
 	if (ret)
 		ubase_err(udev,
-			  "failed to register share logical port %u, ret = %d.\n",
+			  "failed to register share logical port %hu, ret = %d.\n",
 			  caps->ub_port_logic_id, ret);
 
 	return ret;
