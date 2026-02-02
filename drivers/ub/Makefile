@@ -3,3 +3,4 @@
 obj-y += ubus/
 obj-y += ubfi/
 obj-$(CONFIG_UB_URMA) += urma/
+obj-$(CONFIG_UB_UBASE) += ubase/
