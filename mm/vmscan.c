@@ -8440,13 +8440,12 @@ int memcg_emm_reclaim(struct mem_cgroup *memcg, int mode,
 		.emm_aging = mode == EMM_AGE,
 	};
 
+	set_task_reclaim_state(current, &sc.reclaim_state);
 again:
 	/*
 	 * Copy & paste from try_to_free_mem_cgroup_pages
 	 */
 	zonelist = node_zonelist(numa_node_id(), sc.gfp_mask);
-
-	set_task_reclaim_state(current, &sc.reclaim_state);
 
 	noreclaim_flag = memalloc_noreclaim_save();
 
