@@ -261,6 +261,23 @@ struct tdev_attr {
 };
 
 /**
+ * struct ummu_invalid_cfg_param - param of invalid tid config
+ * @mm: mm of the process that creates tid
+ * @tid: tid to invalidate
+ */
+struct ummu_invalid_cfg_param {
+	struct mm_struct *mm;
+	u32 tid;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+};
+
+/**
  * struct ummu_core_ops - ummu ops for normal use, expand from iommu_ops.
  * @get_resource: Get resource for SVA.
  * @put_resource: Put resource for SVA.
@@ -749,10 +766,18 @@ void ummu_core_device_unregister(struct ummu_core_device *dev);
 
 /**
  * ummu_core_invalidate_cfg_table() - Invalidate ummu global configuration by tid.
+ * @Deprecated: use ummu_core_invalidate_cfg instead.
  * @tid: tid
  * Return: 0 on success, or an error.
  */
 int ummu_core_invalidate_cfg_table(u32 tid);
+
+/**
+ * ummu_core_invalidate_cfg() - Invalidate ummu global configuration by param.
+ * @param: tid index parameter to invalidate.
+ * Return: 0 on success, or an error.
+ */
+int ummu_core_invalidate_cfg(struct ummu_invalid_cfg_param *param);
 
 /* UMMU TID API */
 /**
@@ -911,6 +936,11 @@ static inline void ummu_core_device_unregister(struct ummu_core_device *dev)
 {
 }
 static inline int ummu_core_invalidate_cfg_table(u32 tid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ummu_core_invalidate_cfg(struct ummu_invalid_cfg_param *param);
 {
 	return -EOPNOTSUPP;
 }
