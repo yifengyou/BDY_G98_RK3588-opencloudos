@@ -1092,6 +1092,7 @@ struct fuse_ioctl_recovery {
 #define FUSE_DEV_IOC_BACKING_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 1, \
 					     struct fuse_backing_map)
 #define FUSE_DEV_IOC_BACKING_CLOSE	_IOW(FUSE_DEV_IOC_MAGIC, 2, uint32_t)
+#define FUSE_DEV_IOC_BACKING_CLOSE_ALL	_IO(FUSE_DEV_IOC_MAGIC, 4)
 #define FUSE_DEV_IOC_RECOVERY _IOW(FUSE_DEV_IOC_MAGIC, 3, struct fuse_ioctl_recovery)
 
 struct fuse_lseek_in {

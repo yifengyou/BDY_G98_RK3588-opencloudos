@@ -946,7 +946,7 @@ struct fuse_conn {
 
 #ifdef CONFIG_FUSE_PASSTHROUGH
 	/** IDR for backing files ids */
-	struct idr backing_files_map;
+	struct idr __rcu *backing_files_map;
 #endif
 
 #ifdef CONFIG_FUSE_CONN_ALIVE
@@ -1537,10 +1537,11 @@ static inline void fuse_backing_put(struct fuse_backing *fb)
 }
 #endif
 
-void fuse_backing_files_init(struct fuse_conn *fc);
+int fuse_backing_files_init(struct fuse_conn *fc);
 void fuse_backing_files_free(struct fuse_conn *fc);
 int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map);
 int fuse_backing_close(struct fuse_conn *fc, int backing_id);
+int fuse_backing_close_all(struct fuse_conn *fc);
 
 struct fuse_backing *fuse_passthrough_open(struct file *file,
 					   struct inode *inode,
