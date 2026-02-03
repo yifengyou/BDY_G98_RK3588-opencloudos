@@ -4345,6 +4345,7 @@ static inline bool pfn_is_unaccepted_memory(unsigned long pfn)
 enum reclaim_reason {
 	RR_KSWAPD,
 	RR_DIRECT_RECLAIM,
+	RR_HUGEPAGE_RECLAIM,
 	RR_TYPES
 };
 

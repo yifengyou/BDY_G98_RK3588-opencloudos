@@ -3110,6 +3110,78 @@ int isolate_or_dissolve_huge_page(struct page *page, struct list_head *list)
 	return ret;
 }
 
+static struct mutex *reclaim_notify_mutex_table;
+
+static void hugetlb_reclaim_notify_init(void)
+{
+	int i;
+
+	if (!IS_ENABLED(CONFIG_RECLAIM_NOTIFY))
+		return;
+
+	if (!IS_ENABLED(CONFIG_KVM))
+		return;
+
+	if (!numa_remote_enabled)
+		return;
+
+	reclaim_notify_mutex_table = kmalloc_array(MAX_NUMNODES, sizeof(struct mutex), GFP_KERNEL);
+	if (!reclaim_notify_mutex_table)
+		return;
+
+	for (i = 0; i < MAX_NUMNODES; i++)
+		mutex_init(&reclaim_notify_mutex_table[i]);
+}
+
+static bool try_hugetlb_reclaim_notify(struct hstate *h, struct mm_struct *mm,
+						struct vm_area_struct *vma, unsigned long address)
+{
+	struct mempolicy *mpol;
+	gfp_t gfp_mask;
+	int nid;
+	nodemask_t *nodemask;
+
+	if (!IS_ENABLED(CONFIG_RECLAIM_NOTIFY))
+		return false;
+
+	if (!IS_ENABLED(CONFIG_KVM))
+		return false;
+
+	if (!numa_remote_enabled)
+		return false;
+
+	if (!reclaim_notify_mutex_table)
+		return false;
+
+	if (hstate_is_gigantic(h))
+		return false;
+
+	if (h->surplus_huge_pages >= h->nr_overcommit_huge_pages) {
+		gfp_mask = htlb_alloc_mask(h);
+		nid = huge_node(vma, address, gfp_mask, &mpol, &nodemask);
+		mpol_cond_put(mpol);
+
+		if (!mutex_trylock(&reclaim_notify_mutex_table[nid])) {
+			/* release mm lock for VM_FAULT_RETRY */
+			mmap_read_unlock(mm);
+
+			/* wait for others reclaim notify complete */
+			mutex_lock(&reclaim_notify_mutex_table[nid]);
+			mutex_unlock(&reclaim_notify_mutex_table[nid]);
+			return true;
+		}
+
+		/* release mm lock for VM_FAULT_RETRY */
+		mmap_read_unlock(mm);
+
+		do_reclaim_notify(RR_HUGEPAGE_RECLAIM, &nid);
+
+		mutex_unlock(&reclaim_notify_mutex_table[nid]);
+		return true;
+	}
+	return false;
+}
+
 struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 				    unsigned long addr, int avoid_reserve)
 {
@@ -4424,6 +4496,8 @@ static int __init hugetlb_init(void)
 	hugetlb_sysfs_init();
 	hugetlb_cgroup_file_init();
 	hugetlb_sysctl_init();
+
+	hugetlb_reclaim_notify_init();
 
 #ifdef CONFIG_SMP
 	num_fault_mutexes = roundup_pow_of_two(8 * num_possible_cpus());
@@ -6069,6 +6143,19 @@ static vm_fault_t hugetlb_no_page(struct mm_struct *mm,
 				ret = vmf_error(PTR_ERR(folio));
 			else
 				ret = 0;
+
+			if (ret && PTR_ERR(folio) == -ENOSPC &&
+				(flags & FAULT_FLAG_ALLOW_RETRY) &&
+				!(flags & FAULT_FLAG_TRIED) &&
+				!(flags & FAULT_FLAG_RETRY_NOWAIT)) {
+				hugetlb_vma_unlock_read(vma);
+				mutex_unlock(&hugetlb_fault_mutex_table[hash]);
+
+				if (try_hugetlb_reclaim_notify(h, mm, vma, address))
+					return VM_FAULT_RETRY;
+				return ret;
+			}
+
 			goto out;
 		}
 		clear_huge_page(&folio->page, address, pages_per_huge_page(h));
