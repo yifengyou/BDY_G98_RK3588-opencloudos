@@ -186,8 +186,11 @@ static void ubase_parse_dev_caps(struct ubase_dev *udev,
 {
 	int i;
 
-	for (i = 0; i < UBASE_CAP_LEN; i++)
+	for (i = 0; i < UBASE_CAP_LEN; i++) {
 		udev->cap_bits[i] = le32_to_cpu(resp->cap_bits[i]);
+		ubase_info(udev, "udev cap_bits[%d] = 0x%x\n", i,
+			   udev->cap_bits[i]);
+	}
 
 	ubase_parse_dev_caps_comm(udev, resp);
 	ubase_parse_dev_caps_unic(udev, resp);

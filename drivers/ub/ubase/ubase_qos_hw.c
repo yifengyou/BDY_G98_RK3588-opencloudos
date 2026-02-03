@@ -941,6 +941,7 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	}
 
 	vl_bitmap = le16_to_cpu(resp.vl_bitmap);
+	ubase_dbg(udev, "ctrlq query vl_bitmap = %lx.\n", vl_bitmap);
 
 	/* NOTE: ctp_req_vl array temporarily saves both ctp req vl and ctp resp vl */
 	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
@@ -953,8 +954,6 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	}
 
 	udev->qos.ctp_vl_num = cdma_vl_cnt;
-
-	ubase_dbg(udev, "ctrlq query vl_bitmap = %lx.\n", vl_bitmap);
 
 	return 0;
 }
@@ -1012,6 +1011,11 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 	udma_tp_sl_bitmap = le16_to_cpu(resp.udma_tp_sl_bitmap);
 	udma_ctp_sl_bitmap = le16_to_cpu(resp.udma_ctp_sl_bitmap);
 
+	ubase_dbg(udev, "ctrlq query rc_max_cnt = %u, unic_sl_bitmap = 0x%lx\n",
+		  rc_max_cnt, unic_sl_bitmap);
+	ubase_dbg(udev, "udma_tp_sl_bitmap = 0x%lx, udma_ctp_sl_bitmap = 0x%lx.\n",
+		  udma_tp_sl_bitmap, udma_ctp_sl_bitmap);
+
 	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
 		if (test_bit(i, &unic_sl_bitmap))
 			udev->qos.nic_sl[unic_sl_cnt++] = i;
@@ -1034,10 +1038,6 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 	udev->qos.nic_sl_num = unic_sl_cnt;
 	udev->qos.tp_sl_num = udma_tp_sl_cnt;
 	udev->qos.ctp_sl_num = udma_ctp_sl_cnt;
-
-	ubase_dbg(udev,
-		  "ctrlq query unic_sl_bitmap = 0x%lx, udma_tp_sl_bitmap = 0x%lx, udma_ctp_sl_bitmap = 0x%lx.\n",
-		  unic_sl_bitmap, udma_tp_sl_bitmap, udma_ctp_sl_bitmap);
 
 	return 0;
 }

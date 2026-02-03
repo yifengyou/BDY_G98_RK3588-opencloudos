@@ -97,6 +97,7 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 		{"\tdie_id: %u\n", dev_caps->die_id},
 		{"\tue_id: %u\n", dev_caps->ue_id},
 		{"\tnl_id: %u\n", dev_caps->nl_id},
+		{"\ttid: %u\n", dev_caps->tid},
 	};
 	int i;
 

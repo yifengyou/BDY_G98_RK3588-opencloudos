@@ -8,9 +8,9 @@
 #include <ub/ubase/ubase_comm_debugfs.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
-#include "unic_ctx_debugfs.h"
 #include "unic_debugfs.h"
 #include "unic_dev.h"
+#include "unic_ctx_debugfs.h"
 
 static inline void unic_jfs_ctx_titles_print(struct seq_file *s)
 {
@@ -72,6 +72,82 @@ static void unic_dump_jfc_ctx_info_sw(struct unic_cq *cq, struct seq_file *s,
 	seq_printf(s, "%-6u", ctx->ceqn);
 	seq_printf(s, "%-14u", ctx->record_db_en);
 	seq_printf(s, "%-18u\n", ctx->cqe_coalesce_period);
+}
+
+static inline void unic_jfs_sq_info_print(struct seq_file *s)
+{
+	seq_puts(s, "SQ_ID  PI  CI  LAST_PI  START_CI  ");
+	seq_puts(s, "CHECK_CI_LATE  QUEUE_INDEX  QUEUE_STATE  ");
+	seq_puts(s, "TX_BUFF_NUM  TX_BUFF_PI  TX_BUFF_CI\n");
+}
+
+static inline void unic_jfr_rq_info_print(struct seq_file *s)
+{
+	seq_puts(s, "RQ_ID  PI  CI  QUEUE_INDEX  PENDING_BUF\n");
+}
+
+static inline void unic_jfc_sq_cq_info_print(struct seq_file *s)
+{
+	seq_puts(s, "SQ_CQ_ID  JFCN  CI\n");
+}
+
+static inline void unic_jfc_rq_cq_info_print(struct seq_file *s)
+{
+	seq_puts(s, "RQ_CQ_ID  JFCN  CI\n");
+}
+
+static void unic_get_jfs_sq_info(struct unic_dev *unic_dev,
+				 struct seq_file *s, u32 index)
+{
+	struct unic_sq *sq = unic_dev->channels.c[index].sq;
+	struct net_device *netdev = unic_dev->comdev.netdev;
+	struct netdev_queue *queue;
+
+	queue = netdev_get_tx_queue(netdev, sq->queue_index);
+
+	seq_printf(s, "%-7u", index);
+	seq_printf(s, "%-4u", sq->pi);
+	seq_printf(s, "%-4u", sq->ci);
+	seq_printf(s, "%-9u", sq->last_pi);
+	seq_printf(s, "%-10u", sq->start_pi);
+	seq_printf(s, "%-15d", sq->check_ci_late);
+	seq_printf(s, "%-13u", sq->queue_index);
+	seq_printf(s, "%-13lu", queue->state);
+	seq_printf(s, "%-13u", sq->tx_buff->num);
+	seq_printf(s, "%-12u", sq->tx_buff->pi);
+	seq_printf(s, "%-10u\n", sq->tx_buff->ci);
+}
+
+static void unic_get_jfr_rq_info(struct unic_dev *unic_dev,
+				 struct seq_file *s, u32 index)
+{
+	struct unic_rq *rq = unic_dev->channels.c[index].rq;
+
+	seq_printf(s, "%-7u", index);
+	seq_printf(s, "%-4u", rq->pi);
+	seq_printf(s, "%-4u", rq->ci);
+	seq_printf(s, "%-13u", rq->queue_index);
+	seq_printf(s, "%-11u\n", rq->pending_buf);
+}
+
+static void unic_get_jfc_sq_cq_info(struct unic_dev *unic_dev,
+				    struct seq_file *s, u32 index)
+{
+	struct unic_cq *sq_cq = unic_dev->channels.c[index].sq_cq;
+
+	seq_printf(s, "%-10u", index);
+	seq_printf(s, "%-6u", sq_cq->jfcn);
+	seq_printf(s, "%-2u\n", sq_cq->ci);
+}
+
+static void unic_get_jfc_rq_cq_info(struct unic_dev *unic_dev,
+				    struct seq_file *s, u32 index)
+{
+	struct unic_cq *rq_cq = unic_dev->channels.c[index].rq_cq;
+
+	seq_printf(s, "%-10u", index);
+	seq_printf(s, "%-6u", rq_cq->jfcn);
+	seq_printf(s, "%-2u\n", rq_cq->ci);
 }
 
 static void unic_get_jfs_ctx_sw(struct unic_channels *channels,
@@ -186,6 +262,55 @@ struct unic_ctx_info {
 	u8 op;
 	const char *ctx_name;
 };
+
+int unic_dbg_dump_sq_rq_cq_info(struct seq_file *s, void *data)
+{
+	struct unic_dbg_context {
+		void (*print_titles)(struct seq_file *s);
+		void (*get_info)(struct unic_dev *priv, struct seq_file *s, u32 index);
+	} dbg_ctx[] = {
+		{
+			.print_titles = unic_jfs_sq_info_print,
+			.get_info = unic_get_jfs_sq_info,
+		},
+		{
+			.print_titles = unic_jfr_rq_info_print,
+			.get_info = unic_get_jfr_rq_info,
+		},
+		{
+			.print_titles = unic_jfc_sq_cq_info_print,
+			.get_info = unic_get_jfc_sq_cq_info,
+		},
+		{
+			.print_titles = unic_jfc_rq_cq_info_print,
+			.get_info = unic_get_jfc_rq_cq_info,
+		},
+	};
+	struct unic_dev *priv = dev_get_drvdata(s->private);
+	u32 ctx_num = ARRAY_SIZE(dbg_ctx);
+	int ret = 0;
+	u32 i, j;
+
+	if (!mutex_trylock(&priv->channels.mutex))
+		return -EBUSY;
+
+	if (__unic_resetting(priv) || !priv->channels.c) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	for (i = 0; i < ctx_num; i++) {
+		dbg_ctx[i].print_titles(s);
+		for (j = 0; j < priv->channels.num; j++)
+			dbg_ctx[i].get_info(priv, s, j);
+
+		seq_puts(s, "\n");
+	}
+
+out:
+	mutex_unlock(&priv->channels.mutex);
+	return ret;
+}
 
 static int unic_get_ctx_info(struct unic_dev *unic_dev,
 			     enum unic_dbg_ctx_type ctx_type,

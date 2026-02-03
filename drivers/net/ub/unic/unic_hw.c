@@ -552,8 +552,11 @@ static void unic_parse_dev_caps(struct unic_dev *unic_dev,
 	struct unic_caps *caps = &unic_dev->caps;
 	int i;
 
-	for (i = 0; i < UNIC_CAP_LEN; i++)
+	for (i = 0; i < UNIC_CAP_LEN; i++) {
 		unic_dev->cap_bits[i] = le32_to_cpu(resp->cap_bits[i]);
+		unic_info(unic_dev, "unic_dev cap_bits[%d] = 0x%x\n", i,
+			  unic_dev->cap_bits[i]);
+	}
 
 	caps->rx_buff_len = le16_to_cpu(resp->rx_buff_len);
 	caps->total_ip_tbl_size = le16_to_cpu(resp->total_ip_tbl_size);
