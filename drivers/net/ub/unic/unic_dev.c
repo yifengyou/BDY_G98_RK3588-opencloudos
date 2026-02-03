@@ -708,6 +708,16 @@ static void unic_task_schedule(struct unic_dev *unic_dev,
 		mod_delayed_work(unic_wq, &unic_dev->service_task, delay_time);
 }
 
+static void unic_sync_bond_port(struct unic_dev *unic_dev)
+{
+	struct net_device *netdev = unic_dev->comdev.netdev;
+
+	if (test_and_clear_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state)) {
+		if (unic_sync_bond_status(netdev))
+			set_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state);
+	}
+}
+
 static void unic_periodic_service_task(struct unic_dev *unic_dev)
 {
 #define UNIC_UPDATE_STATS_TIMER_INTERVAL	300UL
@@ -718,8 +728,10 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 	unic_sync_ip_table(unic_dev);
 	unic_sync_bond_ip_table(unic_dev);
 
-	if (unic_dev_eth_mac_supported(unic_dev))
+	if (unic_dev_eth_mac_supported(unic_dev)) {
 		unic_sync_mac_table(unic_dev);
+		unic_sync_bond_port(unic_dev);
+	}
 
 	unic_sync_promisc_mode(unic_dev);
 	unic_sync_vlan_filter(unic_dev);

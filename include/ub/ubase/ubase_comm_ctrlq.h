@@ -34,6 +34,7 @@ enum ubase_ctrlq_ser_type {
 	UBASE_CTRLQ_SER_TYPE_DEV_REGISTER	= 0x02,
 	UBASE_CTRLQ_SER_TYPE_IP_ACL		= 0x03,
 	UBASE_CTRLQ_SER_TYPE_QOS		= 0x04,
+	UBASE_CTRLQ_SER_TYPE_PORT		= 0x06,
 };
 
 enum ubase_ctrlq_opc_type_tp {
@@ -60,6 +61,10 @@ enum ubase_ctrlq_opc_type_dev_register {
 	UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO	= 0x13,
 	UBASE_CTRLQ_OPC_CTRLQ_CTRL		= 0x14,
 	UBASE_CTRLQ_OPC_UE_RESET_CTRL		= 0x15,
+};
+
+enum ubase_ctrlq_opc_type_port {
+	UBASE_CTRLQ_OPC_BOND_PORT	= 0x01,
 };
 
 /**

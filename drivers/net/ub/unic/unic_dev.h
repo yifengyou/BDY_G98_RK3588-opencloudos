@@ -37,6 +37,7 @@ enum unic_dev_state {
 	UNIC_STATE_MAC_STATS_UPDATING,
 	UNIC_STATE_CHANNEL_INVALID,
 	UNIC_STATE_DEACTIVATE,
+	UNIC_STATE_SYNC_BOND_PORT,
 };
 
 enum unic_vport_state {

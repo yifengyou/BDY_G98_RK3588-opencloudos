@@ -872,6 +872,40 @@ void unic_unregister_ipaddr_notifier(void)
 	unregister_inet6addr_notifier(&unic_inet6addr_notifier);
 }
 
+static int unic_netdev_event(struct notifier_block *nb,
+			     unsigned long event, void *ptr)
+{
+	struct net_device *netdev;
+	struct unic_dev *unic_dev;
+
+	netdev = netdev_notifier_info_to_dev(ptr);
+	if (!netdev || !unic_port_dev_check(netdev))
+		return NOTIFY_DONE;
+
+	unic_dev = netdev_priv(netdev);
+
+	if (!unic_dev_eth_mac_supported(unic_dev) || event != NETDEV_CHANGEUPPER)
+		return NOTIFY_DONE;
+
+	set_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block unic_netdev_notifier = {
+	.notifier_call = unic_netdev_event,
+};
+
+int unic_register_netdevice_notifier(void)
+{
+	return register_netdevice_notifier(&unic_netdev_notifier);
+}
+
+void unic_unregister_netdevice_notifier(void)
+{
+	unregister_netdevice_notifier(&unic_netdev_notifier);
+}
+
 int unic_query_link_status(struct unic_dev *unic_dev, u8 *link_status)
 {
 	struct unic_link_status_cmd_resp resp = {0};

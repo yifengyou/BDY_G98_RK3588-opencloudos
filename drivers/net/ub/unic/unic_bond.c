@@ -203,3 +203,50 @@ void unic_uninit_bond_ip_table(struct unic_dev *unic_dev)
 
 	spin_unlock_bh(&vport->addr_tbl.bond_ip_list_lock);
 }
+
+static int unic_send_bond_status_change_notify(struct auxiliary_device *adev,
+					       enum unic_bond_port_change_cmd bonding_cmd)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
+	struct unic_ctrlq_bond_status_notify_req req = {0};
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	struct ubase_ctrlq_msg msg = {0};
+	int ret, tmp_resp;
+
+	req.bonding_cmd = bonding_cmd;
+	req.port_id = caps->io_port_id;
+	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	msg.service_type = UBASE_CTRLQ_SER_TYPE_PORT;
+	msg.opcode = UBASE_CTRLQ_OPC_BOND_PORT;
+	msg.need_resp = 1;
+	msg.is_resp = 0;
+	msg.in_size = sizeof(req);
+	msg.in = &req;
+	msg.out_size = sizeof(tmp_resp);
+	msg.out = &tmp_resp;
+
+	ret = ubase_ctrlq_send_msg(adev, &msg);
+	if (ret)
+		unic_err(unic_dev, "failed to notify bond status change, port id = %u, bonding_cmd = %s, ret = %d.\n",
+			 req.port_id, req.bonding_cmd == UNIC_CTRLQ_BOND_ADD_PORT ?
+			 "ADD" : "DEL", ret);
+
+	return ret;
+}
+
+int unic_sync_bond_status(struct net_device *netdev)
+{
+	struct unic_dev *unic_dev = netdev_priv(netdev);
+	enum unic_bond_port_change_cmd bonding_cmd;
+	struct net_device *master;
+
+	rcu_read_lock();
+	master = netdev_master_upper_dev_get_rcu(netdev);
+	rcu_read_unlock();
+
+	bonding_cmd = master && netif_is_bond_master(master) ?
+		      UNIC_CTRLQ_BOND_ADD_PORT : UNIC_CTRLQ_BOND_DEL_PORT;
+
+	return unic_send_bond_status_change_notify(unic_dev->comdev.adev,
+						   bonding_cmd);
+}
