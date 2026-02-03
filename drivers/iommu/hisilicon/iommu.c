@@ -800,7 +800,8 @@ static int ummu_device_get_hw_cap(struct device *dev, u32 *hw_cap)
 		feature |= HW_CAP_KCMD_PLBI;
 	if (ummu_get_mapt_blk_exp())
 		feature |= HW_CAP_EXPAN;
-	if (iopf_enabled && (cap->features & UMMU_FEAT_STALLS))
+	if (!ummu_sva_indep_page_table_enable() ||
+		(iopf_enabled && (cap->features & UMMU_FEAT_STALLS)))
 		feature |= HW_CAP_IOPF;
 
 	*hw_cap = feature;

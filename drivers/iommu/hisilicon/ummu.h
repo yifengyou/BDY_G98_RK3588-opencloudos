@@ -31,6 +31,8 @@ struct ummu_l1_tct_desc {
 	phys_addr_t	l2ptr_phys;
 };
 
+bool ummu_sva_indep_page_table_enable(void);
+
 enum ummu_device_msi_index {
 	EVTQ_MSI_INDEX,
 	GERROR_MSI_INDEX,
