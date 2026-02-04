@@ -548,8 +548,8 @@ static int unic_set_mac_address(struct net_device *netdev, void *addr)
 		return -EADDRNOTAVAIL;
 	}
 
-	unic_comm_format_mac_addr(format_mac, mac_addr->sa_data);
 	if (ether_addr_equal(netdev->dev_addr, mac_addr->sa_data)) {
+		unic_comm_format_mac_addr(format_mac, mac_addr->sa_data);
 		unic_info(unic_dev, "already using mac(%s).\n", format_mac);
 		return 0;
 	}

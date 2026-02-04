@@ -353,6 +353,7 @@ struct ubase_prealloc_mem_info {
 struct ubase_log_rs {
 	struct ratelimit_state rs;
 	u16 ctrlq_other_seq_invalid_log_cnt;
+	u64 aeq_event_type_exceed_max_cnt;
 };
 
 enum ubase_node_type {

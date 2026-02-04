@@ -14,61 +14,6 @@
 #include "unic_cmd.h"
 #include "unic_mac.h"
 
-int unic_cfg_mac_address(struct unic_dev *unic_dev, u8 *mac_addr)
-{
-	struct unic_comm_addr_node *new_node, *old_node;
-	struct unic_vport *vport = &unic_dev->vport;
-	u8 *old_mac = unic_dev->hw.mac.mac_addr;
-	u8 unic_addr[UNIC_ADDR_LEN] = {0};
-	struct list_head *list;
-
-	list = &vport->addr_tbl.uc_mac_list;
-	spin_lock_bh(&vport->addr_tbl.mac_list_lock);
-	new_node = unic_comm_find_addr_node(list, mac_addr,
-					    UNIC_COMM_ADDR_NO_MASK);
-	if (new_node) {
-		if (new_node->state == UNIC_COMM_ADDR_TO_DEL)
-			new_node->state = UNIC_COMM_ADDR_ACTIVE;
-
-		/* make sure the new addr is in the list head, avoid dev
-		 * addr may be not re-added into mac table for the umv space
-		 * limitation after reset.
-		 */
-		new_node->is_pfc = 1;
-		list_move(&new_node->node, list);
-	} else {
-		new_node = kzalloc(sizeof(*new_node), GFP_ATOMIC);
-		if (!new_node) {
-			spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
-			return -ENOMEM;
-		}
-
-		new_node->state = UNIC_COMM_ADDR_TO_ADD;
-		new_node->is_pfc = 1;
-		ether_addr_copy(new_node->mac_addr, mac_addr);
-		list_add_tail(&new_node->node, list);
-	}
-
-	ether_addr_copy(unic_addr, old_mac);
-	old_node = unic_comm_find_addr_node(list, unic_addr,
-					    UNIC_COMM_ADDR_NO_MASK);
-	if (old_node) {
-		if (old_node->state == UNIC_COMM_ADDR_TO_ADD) {
-			list_del(&old_node->node);
-			kfree(old_node);
-		} else {
-			old_node->state = UNIC_COMM_ADDR_TO_DEL;
-			old_node->is_pfc = 0;
-		}
-	}
-
-	set_bit(UNIC_VPORT_STATE_MAC_TBL_CHANGE, &vport->state);
-	ether_addr_copy(unic_dev->hw.mac.mac_addr, mac_addr);
-	spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
-
-	return 0;
-}
-
 static int unic_add_mac_addr_common(struct unic_vport *vport, u8 *mac_addr,
 				    enum unic_mac_addr_type mac_type,
 				    u8 is_pfc)
@@ -145,19 +90,92 @@ static int unic_del_mac_addr_common(struct unic_vport *vport, u8 *mac_addr,
 	return ret;
 }
 
+int unic_cfg_mac_address(struct unic_dev *unic_dev, u8 *mac_addr)
+{
+	struct unic_comm_addr_node *new_node, *old_node;
+	struct unic_vport *vport = &unic_dev->vport;
+	u8 *old_mac = unic_dev->hw.mac.mac_addr;
+	u8 unic_addr[UNIC_ADDR_LEN] = {0};
+	struct list_head *list;
+	int ret;
+
+	list = &vport->addr_tbl.uc_mac_list;
+	spin_lock_bh(&vport->addr_tbl.mac_list_lock);
+	new_node = unic_comm_find_addr_node(list, mac_addr,
+					    UNIC_COMM_ADDR_NO_MASK);
+	if (new_node) {
+		if (new_node->state != UNIC_COMM_ADDR_TO_ADD) {
+			ret = unic_del_mac_addr_common(vport, mac_addr,
+						       UNIC_MAC_ADDR_UC, 0);
+			if (ret) {
+				spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
+				return ret;
+			}
+		}
+
+		/* make sure the new addr is in the list head, avoid dev
+		 * addr may be not re-added into mac table for the umv space
+		 * limitation after reset.
+		 */
+		new_node->is_pfc = 1;
+		new_node->state = UNIC_COMM_ADDR_TO_ADD;
+		list_move(&new_node->node, list);
+	} else {
+		new_node = kzalloc(sizeof(*new_node), GFP_ATOMIC);
+		if (!new_node) {
+			spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
+			return -ENOMEM;
+		}
+
+		new_node->state = UNIC_COMM_ADDR_TO_ADD;
+		new_node->is_pfc = 1;
+		ether_addr_copy(new_node->mac_addr, mac_addr);
+		list_add(&new_node->node, list);
+	}
+
+	ether_addr_copy(unic_addr, old_mac);
+	old_node = unic_comm_find_addr_node(list, unic_addr,
+					    UNIC_COMM_ADDR_NO_MASK);
+	if (old_node) {
+		if (old_node->state == UNIC_COMM_ADDR_TO_ADD) {
+			list_del(&old_node->node);
+			kfree(old_node);
+		} else {
+			old_node->state = UNIC_COMM_ADDR_TO_DEL;
+			old_node->is_pfc = 0;
+		}
+	}
+
+	set_bit(UNIC_VPORT_STATE_MAC_TBL_CHANGE, &vport->state);
+	ether_addr_copy(unic_dev->hw.mac.mac_addr, mac_addr);
+	spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
+
+	return 0;
+}
+
 static void unic_sync_mac_list(struct unic_vport *vport, struct list_head *list,
 			       enum unic_mac_addr_type mac_type)
 {
-	struct unic_comm_addr_node *mac_node, *tmp;
+	struct unic_comm_addr_node *mac_node;
 	int ret;
 
-	list_for_each_entry_safe(mac_node, tmp, list, node) {
+	list_for_each_entry(mac_node, list, node) {
 		ret = unic_add_mac_addr_common(vport, mac_node->mac_addr, mac_type,
 					       mac_node->is_pfc);
 		if (!ret) {
 			mac_node->state = UNIC_COMM_ADDR_ACTIVE;
 		} else {
 			set_bit(UNIC_VPORT_STATE_MAC_TBL_CHANGE, &vport->state);
+
+			/* UC MAC addition: -EEXIST indicates the address already
+			 * exists in hardware. This entry cannot be added, but we
+			 * can continue to try adding the next UC MAC in the list
+			 * without breaking the loop.
+			 * MC MAC addition: -ENOSPC indicates the hardware table
+			 * is full for new entries. However, we can still continue
+			 * to process MC MACs that may already exist in hardware
+			 * without breaking.
+			 */
 			if ((mac_type == UNIC_MAC_ADDR_UC && ret != -EEXIST) ||
 			    (mac_type == UNIC_MAC_ADDR_MC && ret != -ENOSPC))
 				break;
@@ -377,11 +395,9 @@ int unic_init_mac_addr(struct unic_dev *unic_dev)
 		unic_comm_format_mac_addr(format_mac, unic_addr);
 		dev_warn(unic_dev->comdev.adev->dev.parent,
 			 "using random MAC address %s.\n", format_mac);
-	} else if (!ether_addr_equal(netdev->dev_addr, unic_addr)) {
+	} else {
 		dev_addr_set(netdev, unic_addr);
 		ether_addr_copy(netdev->perm_addr, unic_addr);
-	} else {
-		return 0;
 	}
 
 	if (!unic_dev_cfg_mac_supported(unic_dev)) {

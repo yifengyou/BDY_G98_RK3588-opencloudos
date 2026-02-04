@@ -246,6 +246,27 @@ DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_ue_req,
 	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
 	TP_ARGS(dev, bus_ue_id, buf, len));
 
+TRACE_EVENT(ubase_misc_event_cause,
+	TP_PROTO(struct device *dev, unsigned long event_cause),
+	TP_ARGS(dev, event_cause),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, event_cause)
+		__dynamic_array(char, devname, TRACE_DEV_NAME_MAX_LEN)
+	),
+
+	TP_fast_assign(
+		__entry->event_cause = event_cause;
+		if (dev) {
+			(void)snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
+				       "%s %s", dev_driver_string(dev),
+				       dev_name(dev));
+		}
+	),
+
+	TP_printk("%s event_cause: 0x%lx", __get_str(devname), __entry->event_cause)
+);
+
 #endif /* __UBASE_TRACE_H__ */
 
 /* This must be outside ifdef __UBASE_TRACE_H__ */

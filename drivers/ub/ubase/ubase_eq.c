@@ -231,6 +231,7 @@ static int ubase_reg_event_handler(struct ubase_dev *udev)
 	ubase_enable_misc_vector(udev, false);
 
 	event_cause = ubase_check_event_cause(udev);
+	trace_ubase_misc_event_cause(udev->dev, event_cause);
 	if (test_bit(UBASE_ASYNC_EVENT_CRQ_B, &event_cause))
 		ubase_crq_task_schedule(udev);
 
@@ -352,8 +353,8 @@ static void ubase_aeq_event_handler(struct ubase_dev *udev,
 	u8 idx;
 
 	if (event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev, "event type wrong, event_type = %u.\n",
-			  event_type);
+		ubase_err_rl(udev, udev->log_rs.aeq_event_type_exceed_max_cnt,
+			     "event type wrong, event_type = %u.\n", event_type);
 		return;
 	}
 
@@ -458,8 +459,6 @@ static irqreturn_t ubase_misc_int_handler(int irq, void *data)
 static irqreturn_t ubase_aeq_int_handler(int irq, void *data)
 {
 	struct ubase_dev *udev = (struct ubase_dev *)data;
-
-	ubase_dbg(udev, "ubase enter aeq handler.\n");
 
 	return IRQ_RETVAL(ubase_async_event_handler(udev));
 }
@@ -1010,13 +1009,14 @@ static int __ubase_event_register(struct ubase_dev *udev,
 	int ret;
 
 	if (cb->drv_type >= UBASE_DRV_MAX) {
-		ubase_err(udev, "unsupported drv_type(%u).\n", cb->drv_type);
+		ubase_err(udev, "register unsupported drv_type(%u).\n",
+			  cb->drv_type);
 		return -EINVAL;
 	}
 
 	if (cb->event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev,
-			  "unsupported event type(%u).\n", cb->event_type);
+		ubase_err(udev, "register unsupported event type(%u).\n",
+			  cb->event_type);
 		return -EINVAL;
 	}
 
@@ -1060,13 +1060,14 @@ static void __ubase_event_unregister(struct ubase_dev *udev,
 	int ret;
 
 	if (cb->drv_type >= UBASE_DRV_MAX) {
-		ubase_err(udev, "unsupported drv_type(%u).\n", cb->drv_type);
+		ubase_err(udev, "unregister unsupported drv_type(%u).\n",
+			  cb->drv_type);
 		return;
 	}
 
 	if (cb->event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev,
-			  "unsupported event type(%u).\n", cb->event_type);
+		ubase_err(udev, "unregister unsupported event type(%u).\n",
+			  cb->event_type);
 		return;
 	}
 

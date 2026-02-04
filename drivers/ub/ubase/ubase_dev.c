@@ -320,6 +320,16 @@ static void ubase_update_stats_for_all(struct ubase_dev *udev)
 	}
 }
 
+static void ubase_report_rate_limited_log_cnt(struct ubase_dev *udev)
+{
+	if (udev->log_rs.aeq_event_type_exceed_max_cnt) {
+		ubase_warn(udev,
+			   "rate limited log: aeq_event_type_exceed_max_cnt = %llu.\n",
+			   udev->log_rs.aeq_event_type_exceed_max_cnt);
+		udev->log_rs.aeq_event_type_exceed_max_cnt = 0;
+	}
+}
+
 static void ubase_cancel_period_service_task(struct ubase_dev *udev)
 {
 	if (udev->period_service_task.service_task.work.func)
@@ -342,6 +352,7 @@ static int ubase_enable_period_service_task(struct ubase_dev *udev)
 static void ubase_period_service_task(struct work_struct *work)
 {
 #define UBASE_STATS_TIMER_INTERVAL		(300000 / (UBASE_PERIOD_100MS))
+#define UBASE_RL_LOG_TIMER_INTERVAL		(180000 / (UBASE_PERIOD_100MS))
 #define UBASE_CTRLQ_TIMER_INTERVAL		(3000 / (UBASE_PERIOD_100MS))
 
 	struct ubase_delay_work *ubase_work =
@@ -361,6 +372,10 @@ static void ubase_period_service_task(struct work_struct *work)
 	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
 	    !(udev->serv_proc_cnt % UBASE_CTRLQ_TIMER_INTERVAL))
 		ubase_ctrlq_clean_service_task(udev);
+
+	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
+	    !(udev->serv_proc_cnt % UBASE_RL_LOG_TIMER_INTERVAL))
+		ubase_report_rate_limited_log_cnt(udev);
 
 	udev->serv_proc_cnt++;
 	ubase_enable_period_service_task(udev);
