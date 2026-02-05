@@ -368,6 +368,7 @@ int smh_message_init(void)
  */
 void smh_message_exit(void)
 {
+	int ret;
 	struct smh_msg_handler *handle, *tmp;
 
 	/* Clean up acknowledgment list */
@@ -386,5 +387,14 @@ void smh_message_exit(void)
 	}
 	spin_unlock(&msg_ctx.msgbuf_get_lock);
 
+	do {
+		ret = kfifo_out_spinlocked(&msg_ctx.msgbuf_send, &handle,
+				sizeof(handle), &msg_ctx.msgbuf_send_lock);
+		if (ret) {
+			kfree(handle);
+			continue;
+		}
+		break;
+	} while (1);
 	kfifo_free(&msg_ctx.msgbuf_send);
 }
