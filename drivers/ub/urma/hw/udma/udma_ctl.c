@@ -816,7 +816,48 @@ static int send_cmd_query_single_cqe_aux_info(struct udma_dev *udma_dev,
 static int send_cmd_query_all_cqe_aux_info(struct udma_dev *udma_dev,
 					   struct udma_cmd_query_cqe_aux_info *info)
 {
-	return -EINVAL;
+	struct udma_cmd_query_cqe_aux_info **info_arr;
+	uint32_t k, i, j;
+	int size;
+	int type;
+	int ret;
+
+	size = ARRAY_SIZE(cqe_type_arr) * UDMA_CQE_NUM_PER_TYPE *
+	       sizeof(struct udma_cmd_query_cqe_aux_info);
+	info_arr = kzalloc(size, GFP_KERNEL);
+
+	for (i = 0; i < ARRAY_SIZE(cqe_type_arr); i++) {
+		for (j = 0; j < UDMA_CQE_NUM_PER_TYPE; j++) {
+			if (cqe_type_arr[i][j].type_list == NULL)
+				continue;
+
+			info_arr[i][j].status = i;
+			info_arr[i][j].is_client = j;
+
+			ret = send_cmd_query_single_cqe_aux_info(udma_dev, &info_arr[i][j]);
+			if (ret) {
+				dev_err(udma_dev->dev,
+					"failed to query cqe aux info, ret = %d.\n", ret);
+				kfree(info_arr);
+				return ret;
+			}
+		}
+	}
+
+	for (i = ARRAY_SIZE(cqe_type_arr) - 1; i >= 0; i--) {
+		for (j = UDMA_CQE_NUM_PER_TYPE - 1; j >= 0; j--) {
+			if (cqe_type_arr[i][j].type_list == NULL)
+				continue;
+
+			for (k = 0; k < cqe_type_arr[i][j].type_len; k++) {
+				type = cqe_type_arr[i][j].type_list[k];
+				info->cqe_aux_info[type] = info_arr[i][j].cqe_aux_info[type];
+			}
+		}
+	}
+
+	kfree(info_arr);
+	return ret;
 }
 
 static int send_cmd_query_cqe_aux_info(struct udma_dev *udma_dev,

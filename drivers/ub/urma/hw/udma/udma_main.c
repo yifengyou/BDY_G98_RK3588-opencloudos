@@ -35,6 +35,8 @@
 #define UDMA_DRV_VER "1.0"
 
 bool cqe_mode = true;
+uint32_t batch_flush_query_freq = 10;
+uint32_t batch_flush_query_timeout = 64000;
 bool is_rmmod;
 static DEFINE_MUTEX(udma_reset_mutex);
 uint32_t jfr_sleep_time = 1000;
@@ -1320,6 +1322,12 @@ MODULE_LICENSE("GPL");
 
 module_param(cqe_mode, bool, 0444);
 MODULE_PARM_DESC(cqe_mode, "Set cqe reporting mode, default: 1 (0:BY_COUNT, 1:BY_CI_PI_GAP)");
+
+module_param(batch_flush_query_freq, uint, 0444);
+MODULE_PARM_DESC(batch_flush_query_freq, "Set flush query frequency, default: 10ms");
+
+module_param(batch_flush_query_timeout, uint, 0444);
+MODULE_PARM_DESC(batch_flush_query_timeout, "Set flush query timeout, default: 64000ms");
 
 module_param(jfr_sleep_time, uint, 0444);
 MODULE_PARM_DESC(jfr_sleep_time, "Set the destroy jfr sleep time, default: 1000 us.\n");

@@ -13,6 +13,8 @@
 
 extern bool dfx_switch;
 extern bool cqe_mode;
+extern uint32_t batch_flush_query_freq;
+extern uint32_t batch_flush_query_timeout;
 extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;

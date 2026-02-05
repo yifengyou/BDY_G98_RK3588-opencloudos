@@ -1035,14 +1035,14 @@ static bool udma_batch_query_jetty_fd(struct udma_dev *dev,
 				      struct udma_jetty_queue **sq_list,
 				      uint32_t jetty_cnt, int *bad_jetty_index)
 {
-	uint32_t ta_timeout = get_max_jetty_ta_timeout(sq_list, jetty_cnt);
+	uint32_t ta_timeout = batch_flush_query_timeout;
+	uint32_t times = batch_flush_query_freq;
 	struct udma_jetty_ctx ctx = {};
 	struct udma_jetty_queue *sq;
 	uint16_t rcv_send_diff = 0;
 	uint32_t sum_times = 0;
 	uint32_t flush_cnt = 0;
 	bool all_query_done;
-	uint32_t times = 0;
 	bool *jetty_flag;
 	uint32_t i;
 
