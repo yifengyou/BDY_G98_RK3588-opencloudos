@@ -45,8 +45,12 @@ int uvb_send(const char *str, uint32_t dst_cna, bool is_sync)
 {
     int res, cnt = 0;
 
-    struct cis_message msg;
+    if (!str) {
+		pr_err("%s: Invalid param, failed to send data\n", __func__);
+		return -EINVAL;
+    }
 
+    struct cis_message msg;
     msg.input = (char *)str;
     msg.input_size = strlen(str) + 1;
     msg.output = NULL;

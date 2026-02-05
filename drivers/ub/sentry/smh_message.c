@@ -145,6 +145,11 @@ int smh_message_send(struct sentry_msg_helper_msg *msg, bool ack)
 	int ret = 0;
 	struct smh_msg_handler *handle;
 
+	if (!msg) {
+		pr_err("%s: Invalid param, failed to send data\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!msg->msgid) {
 		RM_LOG_ERR("please set the correct msgid by 'smh_get_new_msg_id', stop to send this msg\n");
 		return -EINVAL;
@@ -303,6 +308,11 @@ int smh_message_get_ack(struct sentry_msg_helper_msg *msg)
 {
 	struct smh_msg_handler *handle;
 	bool found = false;
+
+	if (!msg) {
+		pr_err("%s: Invalid param, failed to get data\n", __func__);
+		return found;
+	}
 
 	FIND_AND_REMOVE_TIMEOUT_FROM_LIST(handle, &msg_ctx.msgbuf_get_lock,
 					  &msg_ctx.msgbuf_get, get_list,

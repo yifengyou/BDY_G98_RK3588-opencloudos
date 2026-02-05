@@ -566,7 +566,7 @@ static void release_all_resource(void)
  */
 int str_to_eid(const char *eid_str, union ubcore_eid *eid)
 {
-	if (strlen(eid_str) != EID_MAX_LEN - 1) {
+	if (!eid_str || !eid || strlen(eid_str) != EID_MAX_LEN - 1) {
 		pr_err("eid str %s len is invalid, failed to transfer\n", eid_str);
 		return -EINVAL;
 	}
@@ -1084,6 +1084,11 @@ int match_index_by_remote_ub_eid(union ubcore_eid remote_eid, int *node_index, i
 {
 	int i, j;
 
+	if (!node_index || !die_index) {
+		pr_err("Invalid param, failed to match index\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < sentry_urma_ctx.local_eid_num_configured; i++) {
 		if (!sentry_urma_dev[i].is_created) {
 			pr_err("invalid value for sentry_urma_dev[%d].is_created\n", i);
@@ -1123,8 +1128,12 @@ EXPORT_SYMBOL(match_index_by_remote_ub_eid);
  */
 int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 {
-	int ret;
-	int i;
+	int ret, i;
+
+	if (eid_num > MAX_DIE_NUM) {
+		pr_err("Invalid eid num, failed to create urma resource\n");
+		return -EINVAL;
+	}
 
 	/* Prepare for new device matching by cleaning up old resources */
 	release_all_resource();
@@ -1226,6 +1235,11 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 	int ret;
 	int eid_num = 0;
 	char *eid_part;
+
+	if (!eid_buf || !sepstr || eid_max_num > MAX_DIE_NUM) {
+		pr_err("Invalid param, failed to process multi eid string\n");
+		return -EINVAL;
+	}
 
 	while ((eid_part = strsep(&eid_buf, sepstr)) != NULL) {
 		if (eid_num >= eid_max_num) {
@@ -2070,6 +2084,11 @@ int urma_send(const char *buf, size_t len, const char *dst_eid, int die_index)
 	if (!g_is_created_ubcore_resource)
 		return -ENODEV;
 
+	if (!buf || !dst_eid || len > URMA_SEND_DATA_MAX_LEN || strlen(buf) > len) {
+		pr_err("%s: Invalid param, failed to send data\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!dst_eid && die_index >= 0) {
 		/* Broadcast mode: send to all nodes */
 		cnt = urma_send_to_all_nodes(buf, len, die_index);
@@ -2146,8 +2165,8 @@ int urma_recv(char **buf_arr, size_t len)
 			int tmp_die_index = die_index;
 
 			/* Extract message from completion context */
-			ret = snprintf(recv_msg, len, "%s", (char *)sentry_urma_ctx.urma_recv_cr[i].user_ctx);
-			if ((size_t)ret >= len) {
+			ret = snprintf(recv_msg, sizeof(recv_msg), "%s", (char *)sentry_urma_ctx.urma_recv_cr[i].user_ctx);
+			if ((size_t)ret >= sizeof(recv_msg)) {
 				pr_warn("urma recv: msg size exceeds max len %lu\n", len);
 				continue;
 			}
