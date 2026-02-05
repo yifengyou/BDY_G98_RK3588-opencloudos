@@ -94,6 +94,11 @@ static int convert_server_cna_str_to_u32_array(const char *server_cna)
     char *token;
 
     char *server_cna_copy = kstrdup(server_cna, GFP_KERNEL);
+    if (!server_cna_copy) {
+		pr_err("%s: kstrdup failed!\n", __func__);
+		return -ENOMEM;
+    }
+
     char *rest = server_cna_copy;
 
     while ((token = strsep(&rest, ";"))) {
