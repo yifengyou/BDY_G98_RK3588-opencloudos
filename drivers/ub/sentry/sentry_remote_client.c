@@ -144,7 +144,7 @@ int remote_event_handler(enum sentry_msg_helper_msg_type remote_type,
 	bool uvb_send_success = false;
 	bool urma_send_success = false;
 	enum sentry_msg_helper_msg_type remote_ack_type;
-	char send_data[MAX_DIE_NUM][URMA_SEND_DATA_MAX_LEN];
+	char send_data[MAX_DIE_NUM][URMA_SEND_DATA_MAX_LEN] = {0};
 	uint64_t start_count, current_count;
 	uint64_t code_run_count, code_run_times_ms;
 	uint64_t counts_per_sec = arch_timer_get_cntfrq();
@@ -805,8 +805,8 @@ static ssize_t proc_reporter_eid_write(struct file *file, const char __user *ubu
 {
 	int ret;
 	int eid_num = 0;
-	char eid_str_buf[LOCAL_EID_MAX_LEN];
-	char eid_str_buf_tmp[LOCAL_EID_MAX_LEN];
+	char eid_str_buf[LOCAL_EID_MAX_LEN] = {0};
+	char eid_str_buf_tmp[LOCAL_EID_MAX_LEN] = {0};
 	char eid_str_array[MAX_DIE_NUM][EID_MAX_LEN] = {0};
 	union ubcore_eid eid_ub_buf[MAX_DIE_NUM] = {0};
 

@@ -90,7 +90,7 @@ EXPORT_SYMBOL(uvb_send);
 static int convert_server_cna_str_to_u32_array(const char *server_cna)
 {
     int server_cna_valid_num = 0, ret = 0;
-    uint32_t server_cna_array[MAX_NODE_NUM];
+    uint32_t server_cna_array[MAX_NODE_NUM] = {0};
     char *token;
 
     char *server_cna_copy = kstrdup(server_cna, GFP_KERNEL);
@@ -143,7 +143,7 @@ static ssize_t proc_uvb_server_cna_write(struct file *file, const char __user *u
     size_t count, loff_t *ppos)
 {
     int ret = 0;
-    char server_cna_buf[(MAX_NODE_NUM + 1) * INTEGER_TO_STR_MAX_LEN];
+    char server_cna_buf[(MAX_NODE_NUM + 1) * INTEGER_TO_STR_MAX_LEN] = {0};
 
     if (count > (MAX_NODE_NUM + 1) * INTEGER_TO_STR_MAX_LEN - 1) {
 		pr_err("invalid value for server_cna mode.\n");

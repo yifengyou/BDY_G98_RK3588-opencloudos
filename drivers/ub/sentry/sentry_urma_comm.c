@@ -1248,7 +1248,7 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 			return -EINVAL;
 		}
 
-		if (strlen(eid_part) > EID_MAX_LEN) {
+		if (strlen(eid_part) >= EID_MAX_LEN) {
 			pr_err("Invalid eid format: str too long: %s\n", eid_part);
 			return -EINVAL;
 		}
@@ -1259,7 +1259,8 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 			return -EINVAL;
 		}
 
-		memcpy(eid_array[eid_num], eid_part, EID_MAX_LEN);
+		memset(eid_array[eid_num], 0, EID_MAX_LEN);
+		memcpy(eid_array[eid_num], eid_part, strnlen(eid_part, EID_MAX_LEN));
 		eid_num++;
 	}
 
