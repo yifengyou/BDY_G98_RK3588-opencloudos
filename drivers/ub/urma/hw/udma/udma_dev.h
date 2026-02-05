@@ -137,6 +137,8 @@ struct udma_dev {
 	struct mutex ksva_mutex;
 	struct xarray eid_table;
 	struct mutex eid_mutex;
+	struct xarray eid_guid_table;
+	struct mutex eid_guid_mutex;
 	uint32_t tid;
 	struct iommu_sva *ksva;
 	struct list_head db_list[UDMA_DB_TYPE_NUM];

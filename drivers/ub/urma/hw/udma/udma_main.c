@@ -30,6 +30,7 @@
 #include "udma_eid.h"
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
+#include "udma_mue.h"
 
 #define UDMA_DRV_VER "1.0"
 
@@ -319,7 +320,11 @@ static void udma_destroy_tp_ue_idx_table(struct udma_dev *udma_dev)
 
 void udma_destroy_tables(struct udma_dev *udma_dev)
 {
+	if (!udma_dev->is_ue)
+		udma_destroy_eid_guid_table(udma_dev);
+
 	udma_ctrlq_destroy_tpid_list(&udma_dev->ctrlq_tpid_table);
+
 	udma_destroy_eid_table(udma_dev);
 	mutex_destroy(&udma_dev->disable_ue_rx_mutex);
 	if (!ida_is_empty(&udma_dev->rsvd_jetty_ida_table.ida))
@@ -418,6 +423,12 @@ int udma_init_tables(struct udma_dev *udma_dev)
 	ida_init(&udma_dev->rsvd_jetty_ida_table.ida);
 	mutex_init(&udma_dev->disable_ue_rx_mutex);
 	udma_init_managed_by_ctrl_cpu_table(udma_dev);
+
+	if (udma_dev->is_ue)
+		return 0;
+
+	mutex_init(&udma_dev->eid_guid_mutex);
+	xa_init(&udma_dev->eid_guid_table);
 
 	return 0;
 }
@@ -972,10 +983,22 @@ static int udma_register_event(struct auxiliary_device *adev)
 	if (ret)
 		goto err_ctrlq_register;
 
+	ret = udma_register_ue_msg_req_event(adev);
+	if (ret)
+		goto err_ue_msg_req_reg;
+
+	ret = udma_register_ue_msg_rsp_event(adev);
+	if (ret)
+		goto err_ue_msg_rsp_reg;
+
 	ubase_port_register(adev, udma_port_handler);
 
 	return 0;
 
+err_ue_msg_rsp_reg:
+	udma_unregister_ue_msg_req_event(adev);
+err_ue_msg_req_reg:
+	udma_unregister_ctrlq_event(adev);
 err_ctrlq_register:
 	udma_unregister_crq_event(adev);
 err_crq_register:
@@ -989,6 +1012,8 @@ err_ce_register:
 static void udma_unregister_none_crq_event(struct auxiliary_device *adev)
 {
 	ubase_port_unregister(adev);
+	udma_unregister_ue_msg_rsp_event(adev);
+	udma_unregister_ue_msg_req_event(adev);
 	udma_unregister_ctrlq_event(adev);
 	udma_unregister_ce_event(adev);
 	udma_unregister_ae_event(adev);

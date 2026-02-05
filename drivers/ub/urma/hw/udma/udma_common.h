@@ -12,6 +12,7 @@
 
 #define TP_ACK_UDP_SPORT_H_OFFSET 8
 #define UDMA_TPHANDLE_TPID_SHIFT 0xFFFFFF
+#define UDMA_EID_GUID_INDEX_OFFSET 24
 
 struct udma_jetty_grp {
 	struct ubcore_jetty_group ubcore_jetty_grp;
@@ -385,5 +386,6 @@ void udma_swap_endian(const uint8_t arr[], uint8_t res[], uint32_t res_size);
 
 void udma_init_hugepage(struct udma_dev *dev);
 void udma_destroy_hugepage(struct udma_dev *dev);
+void udma_destroy_eid_guid_table(struct udma_dev *udma_dev);
 
 #endif /* __UDMA_COMM_H__ */

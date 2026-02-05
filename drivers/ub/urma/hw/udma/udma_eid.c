@@ -168,3 +168,96 @@ err_add_ummu_eid:
 
 	return ret;
 }
+
+int udma_add_one_eid_guid(struct udma_dev *udma_dev,
+			  struct udma_ctrlq_ue_eid_guid_out *eid_guid_info)
+{
+	struct udma_ctrlq_ue_eid_guid_out *eid_guid_entry;
+	uint32_t eid_guid_idx;
+	eid_t ummu_eid = 0;
+	guid_t guid = {};
+	int ret;
+
+	eid_guid_idx = eid_guid_info->ue_id << UDMA_EID_GUID_INDEX_OFFSET |
+		       eid_guid_info->eid_info.eid_idx;
+
+	eid_guid_entry = (struct udma_ctrlq_ue_eid_guid_out *)
+		xa_load(&udma_dev->eid_guid_table, eid_guid_idx);
+	if (eid_guid_entry) {
+		dev_err(udma_dev->dev, "eid-guid exist, index = %u.\n",
+				eid_guid_idx);
+		return 0;
+	}
+
+	eid_guid_entry = kzalloc(sizeof(*eid_guid_entry), GFP_KERNEL);
+	if (!eid_guid_entry)
+		return -ENOMEM;
+
+	memcpy(eid_guid_entry, eid_guid_info, sizeof(*eid_guid_entry));
+
+	ret = xa_err(xa_store(&udma_dev->eid_guid_table, eid_guid_idx,
+			     eid_guid_entry, GFP_KERNEL));
+	if (ret) {
+		dev_err(udma_dev->dev,
+				"save eid_guid failed, ret = %d, eid_guid_index = %u.\n",
+				ret, eid_guid_idx);
+		goto store_err;
+	}
+
+	(void)memcpy(&ummu_eid, eid_guid_info->eid_info.eid.raw, sizeof(ummu_eid));
+	(void)memcpy(&guid, &eid_guid_info->ue_guid, sizeof(guid));
+	ret = ummu_core_add_eid(&guid, ummu_eid, EID_NONE);
+	if (ret) {
+		dev_err(udma_dev->dev,
+				"set ummu eid entry failed, ret is %d.\n", ret);
+		goto err_add_ummu_eid;
+	}
+
+	return ret;
+err_add_ummu_eid:
+	xa_erase(&udma_dev->eid_guid_table, eid_guid_idx);
+store_err:
+	kfree(eid_guid_entry);
+
+	return ret;
+}
+
+int udma_del_one_eid_guid(struct udma_dev *udma_dev,
+			  struct udma_ctrlq_ue_eid_guid_out *eid_guid_info)
+{
+	struct udma_ctrlq_ue_eid_guid_out *eid_guid_entry;
+	uint32_t eid_guid_idx;
+	eid_t ummu_eid = 0;
+	guid_t guid = {};
+
+	eid_guid_idx = eid_guid_info->ue_id << UDMA_EID_GUID_INDEX_OFFSET |
+		       eid_guid_info->eid_info.eid_idx;
+	eid_guid_entry = (struct udma_ctrlq_ue_eid_guid_out *)
+		xa_load(&udma_dev->eid_guid_table, eid_guid_idx);
+	if (!eid_guid_entry) {
+		dev_err(udma_dev->dev, "get ue eid-guid failed, index = %u.\n",
+			eid_guid_idx);
+		return -EINVAL;
+	}
+	if (memcmp(eid_guid_entry->eid_info.eid.raw, eid_guid_info->eid_info.eid.raw,
+		   sizeof(eid_guid_entry->eid_info.eid.raw))) {
+		dev_err(udma_dev->dev, "ue eid is not match, index = %u.\n",
+			eid_guid_idx);
+		return -EINVAL;
+	}
+	if (memcmp(&eid_guid_entry->ue_guid, &eid_guid_info->ue_guid,
+		   sizeof(eid_guid_entry->ue_guid))) {
+		dev_err(udma_dev->dev, "ue guid is not match, index = %u.\n",
+			eid_guid_idx);
+		return -EINVAL;
+	}
+	xa_erase(&udma_dev->eid_guid_table, eid_guid_idx);
+
+	(void)memcpy(&guid, &eid_guid_entry->ue_guid, sizeof(guid));
+	(void)memcpy(&ummu_eid, eid_guid_entry->eid_info.eid.raw, sizeof(ummu_eid));
+	ummu_core_del_eid(&guid, ummu_eid, EID_NONE);
+
+	kfree(eid_guid_entry);
+
+	return 0;
+}
