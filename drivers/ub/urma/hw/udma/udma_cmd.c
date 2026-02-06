@@ -12,7 +12,7 @@
 #include "udma_jfr.h"
 #include "udma_jetty.h"
 
-bool debug_switch = true;
+bool debug_switch;
 
 int udma_cmd_init(struct udma_dev *udma_dev)
 {
@@ -277,4 +277,4 @@ int udma_open_ue_rx(struct udma_dev *dev, bool check_feature_enable, bool check_
 }
 
 module_param(debug_switch, bool, 0444);
-MODULE_PARM_DESC(debug_switch, "set debug print ON, default: true");
+MODULE_PARM_DESC(debug_switch, "set debug print ON, default: false");
