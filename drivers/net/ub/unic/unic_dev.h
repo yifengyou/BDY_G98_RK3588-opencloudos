@@ -272,7 +272,6 @@ struct unic_dev {
 	struct ubase_event_nb	ae_nbs[UNIC_AE_LEVEL_NUM];
 	struct unic_stats	stats;
 	u8			netdev_flags;
-	u8			loopback_flags;
 	struct unic_vport	vport;
 	struct unic_vport_buf	vbuf[UNIC_MAX_VPORT_BUF_NUM];
 	unsigned long		serv_processed_cnt;
