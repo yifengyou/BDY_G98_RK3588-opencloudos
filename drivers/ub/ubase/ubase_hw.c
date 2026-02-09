@@ -739,8 +739,11 @@ int ubase_query_chip_info(struct ubase_dev *udev)
 
 static void ubase_destroy_ctx_res(struct ubase_dev *udev)
 {
-#define UBASE_DESTROY_RES_WAIT_TIME	20
-#define UBASE_DESTROY_RES_WAIT_COUNT	5
+#define DESTROY_RETRY_MIN_TIME	50000
+#define DESTROY_RETRY_MAX_TIME	150000
+#define DESTROY_RETRY_COUNT	5
+#define QUERY_WAIT_TIME		20
+#define QUERY_RETRY_COUNT	10
 
 	struct ubase_destroy_res_cmd resp;
 	struct ubase_cmd_buf in, out;
@@ -748,29 +751,39 @@ static void ubase_destroy_ctx_res(struct ubase_dev *udev)
 	int ret;
 
 	__ubase_fill_inout_buf(&in, UBASE_OPC_DESTROY_CTX_RESOURCE, false, 0, NULL);
-	ret = __ubase_cmd_send_in(udev, &in);
+
+	do {
+		ret = __ubase_cmd_send_in(udev, &in);
+		if (ret) {
+			ubase_err(udev, "failed to send destroy resource, ret = %d.\n",
+				  ret);
+			usleep_range(DESTROY_RETRY_MIN_TIME,
+				     DESTROY_RETRY_MAX_TIME);
+		}
+		try_cnt++;
+	} while (ret && try_cnt < DESTROY_RETRY_COUNT);
+
 	if (ret) {
-		ubase_err(udev, "failed to send destroy resource, ret = %d.\n",
-			  ret);
+		ubase_warn(udev, "retry destroy resource failed, ret = %d.\n",
+			   ret);
 		return;
 	}
 
+	try_cnt = 0;
 	__ubase_fill_inout_buf(&in, UBASE_OPC_DESTROY_CTX_RESOURCE, true, 0, NULL);
 	__ubase_fill_inout_buf(&out, UBASE_OPC_DESTROY_CTX_RESOURCE, false,
 			       sizeof(resp), &resp);
 	do {
 		memset(&resp, 0, sizeof(resp));
-		msleep(UBASE_DESTROY_RES_WAIT_TIME);
+		msleep(QUERY_WAIT_TIME);
 		ret = __ubase_cmd_send_inout(udev, &in, &out);
-		if (ret) {
+		if (ret)
 			ubase_err(udev,
 				  "failed to query destroy resource, ret = %d.\n",
 				  ret);
-			return;
-		}
 
 		try_cnt++;
-	} while (!resp.destroy_done && try_cnt < UBASE_DESTROY_RES_WAIT_COUNT);
+	} while (!resp.destroy_done && try_cnt < QUERY_RETRY_COUNT);
 
 	if (!resp.destroy_done)
 		ubase_warn(udev, "wait ue destroy res timeout!\n");
@@ -893,22 +906,6 @@ err_init_ta_ext_buf:
 	ubase_uninit_ctx_buf(udev);
 
 	return ret;
-}
-
-void ubase_hw_uninit(struct ubase_dev *udev)
-{
-	clear_bit(UBASE_STATE_CTX_READY_B, &udev->state_bits);
-
-	ubase_dev_uninit_tp_tpg(udev);
-	ubase_uninit_ta_ext_buf(udev);
-
-	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
-		ubase_ctrlq_disable_remote(udev);
-		__ubase_deactivate_dev(udev);
-		ubase_destroy_ctx_res(udev);
-	}
-
-	ubase_uninit_ctx_buf(udev);
 }
 
 static int ubase_start_perf_stats(struct ubase_dev *udev, u32 period,
@@ -1052,3 +1049,19 @@ int ubase_perf_stats(struct auxiliary_device *adev, u64 port_bitmap, u32 period,
 	return __ubase_perf_stats(udev, port_bitmap, period, data, data_size);
 }
 EXPORT_SYMBOL(ubase_perf_stats);
+
+void ubase_hw_uninit(struct ubase_dev *udev)
+{
+	clear_bit(UBASE_STATE_CTX_READY_B, &udev->state_bits);
+
+	ubase_dev_uninit_tp_tpg(udev);
+	ubase_uninit_ta_ext_buf(udev);
+
+	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+		ubase_ctrlq_disable_remote(udev);
+		__ubase_deactivate_dev(udev);
+		ubase_destroy_ctx_res(udev);
+	}
+
+	ubase_uninit_ctx_buf(udev);
+}
