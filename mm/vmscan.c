@@ -3960,8 +3960,11 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 	 * Keep tracking of Anon gen even if swappiness is not set for EMM,
 	 * because EMM can adjust swappiness dynamically and may drop to 0
 	 * from time to time, we can't lose hotness info here.
+	 *
+	 * TODO: Skip force anon aging for now to prevent OOM freezes under
+	 * high memory pressure with no swap.
 	 */
-	if (IS_ENABLED(CONFIG_EMM_RECLAIM))
+	if (false && IS_ENABLED(CONFIG_EMM_RECLAIM))
 		goto scan;
 
 	if (type == LRU_GEN_FILE && swappiness == 201)
