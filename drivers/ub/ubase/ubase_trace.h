@@ -19,6 +19,16 @@
 
 #define TRACE_DEV_NAME_MAX_LEN		16
 
+#ifndef __UBASE_TRACE_INFO_STRUCT__
+#define __UBASE_TRACE_INFO_STRUCT__
+struct ubase_ctrlq_trace_info {
+	u16 bus_ue_id;
+	u8 num;
+	u16 pi;
+	u16 ci;
+};
+#endif
+
 DECLARE_EVENT_CLASS(ubase_cmdq_template,
 	TP_PROTO(const struct device *dev, int idx, u32 pi, u32 ci,
 		 struct ubase_cmdq_desc *desc),
@@ -160,11 +170,13 @@ TRACE_EVENT(ubase_ceqe,
 );
 
 DECLARE_EVENT_CLASS(ubase_ctrlq_template,
-	TP_PROTO(const struct device *dev, u16 bb_num, u16 pi, u16 ci,
+	TP_PROTO(const struct device *dev,
+		 struct ubase_ctrlq_trace_info *trace_info,
 		 const void *buf, u16 len),
-	TP_ARGS(dev, bb_num, pi, ci, buf, len),
+	TP_ARGS(dev, trace_info, buf, len),
 
 	TP_STRUCT__entry(
+		__field(u16, bus_ue_id)
 		__field(u16, bb_num)
 		__field(u16, pi)
 		__field(u16, ci)
@@ -174,9 +186,10 @@ DECLARE_EVENT_CLASS(ubase_ctrlq_template,
 	),
 
 	TP_fast_assign(
-		__entry->bb_num = bb_num;
-		__entry->pi = pi;
-		__entry->ci = ci;
+		__entry->bus_ue_id = trace_info->bus_ue_id;
+		__entry->bb_num = trace_info->num;
+		__entry->pi = trace_info->pi;
+		__entry->ci = trace_info->ci;
 		__entry->len = len;
 		memcpy(__get_dynamic_array(data), buf, len);
 		if (dev) {
@@ -186,21 +199,23 @@ DECLARE_EVENT_CLASS(ubase_ctrlq_template,
 	),
 
 	TP_printk(
-		"%s %u-%u-%u data: %s", __get_str(devname),
-		__entry->bb_num, __entry->pi, __entry->ci,
+		"%s ue_id: %u %u-%u-%u data: %s", __get_str(devname),
+		__entry->bus_ue_id, __entry->bb_num, __entry->pi, __entry->ci,
 		__print_array(__get_dynamic_array(data), __entry->len, sizeof(__u8))
 	)
 );
 
 DEFINE_EVENT(ubase_ctrlq_template, ubase_ctrlq_csq,
-	TP_PROTO(const struct device *dev, u16 bb_num, u16 pi, u16 ci,
+	TP_PROTO(const struct device *dev,
+		 struct ubase_ctrlq_trace_info *trace_info,
 		 const void *buf, u16 len),
-	TP_ARGS(dev, bb_num, pi, ci, buf, len));
+	TP_ARGS(dev, trace_info, buf, len));
 
 DEFINE_EVENT(ubase_ctrlq_template, ubase_ctrlq_crq,
-	TP_PROTO(const struct device *dev, u16 bb_num, u16 pi, u16 ci,
+	TP_PROTO(const struct device *dev,
+		 struct ubase_ctrlq_trace_info *trace_info,
 		 const void *buf, u16 len),
-	TP_ARGS(dev, bb_num, pi, ci, buf, len));
+	TP_ARGS(dev, trace_info, buf, len));
 
 DECLARE_EVENT_CLASS(ubase_ctrlq_ue_msg_template,
 	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
