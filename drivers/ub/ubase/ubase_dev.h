@@ -96,6 +96,7 @@ struct ubase_cmdq_ring {
 struct ubase_cmdq {
 	struct ubase_cmdq_ring csq;
 	struct ubase_cmdq_ring crq;
+	atomic_t csq_cnt;
 };
 
 struct ubase_hw {
