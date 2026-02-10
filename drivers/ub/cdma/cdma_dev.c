@@ -191,7 +191,7 @@ static int cdma_init_iopf_feature(struct cdma_dev *cdev)
 	}
 
 	ummu_features = ummu_sva_get_features(cdev->dev);
-	cdev->iopf_feature = ummu_features & 1;
+	cdev->iopf_feature = ummu_features & HW_CAP_IOPF;
 	cdev->sva_mode = sva_mode;
 
 	dev_info(cdev->dev, "get sva features = %u, sva_mode = %d.\n",

@@ -4,6 +4,7 @@
 #define dev_fmt(fmt) "CDMA: " fmt
 
 #include <linux/idr.h>
+#include <linux/iommu.h>
 #include <linux/ummu_core.h>
 #include "cdma.h"
 #include "cdma_queue.h"
@@ -54,8 +55,8 @@ static int cdma_ctx_ksva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
 	struct ummu_param drvdata = { .mode = MAPT_MODE_TABLE };
 	int ret;
 
-	ctx->sva = ummu_ksva_bind_device(cdev->dev, &drvdata);
-	if (!ctx->sva) {
+	ctx->sva = iommu_ksva_bind_device(cdev->dev, &drvdata);
+	if (IS_ERR(ctx->sva)) {
 		dev_err(cdev->dev, "ksva bind device failed.\n");
 		return -EFAULT;
 	}
@@ -63,7 +64,7 @@ static int cdma_ctx_ksva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
 	ret = ummu_get_tid(cdev->dev, ctx->sva, &ctx->tid);
 	if (ret) {
 		dev_err(cdev->dev, "get ksva tid failed, ret = %d.\n", ret);
-		ummu_ksva_unbind_device(ctx->sva);
+		iommu_ksva_unbind_device(ctx->sva);
 	}
 
 	return ret;
@@ -87,7 +88,7 @@ static int cdma_ctx_sva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
 		if (ret) {
 			dev_err(cdev->dev, "get sva tid failed, ret = %d.\n",
 				ret);
-			ummu_sva_unbind_device(ctx->sva);
+			iommu_sva_unbind_device_isolated(ctx->sva);
 			return ret;
 		}
 	} else if (sva_mode == UMMU_SVA_SEPARATE_MODE) {
@@ -124,7 +125,7 @@ static int cdma_ctx_alloc_tid(struct cdma_dev *cdev, struct cdma_context *ctx)
 
 static void cdma_ctx_ksva_unbind(struct cdma_context *ctx)
 {
-	ummu_ksva_unbind_device(ctx->sva);
+	iommu_ksva_unbind_device(ctx->sva);
 }
 
 static void cdma_ctx_sva_unbind(struct cdma_dev *cdev, struct cdma_context *ctx)
@@ -133,7 +134,7 @@ static void cdma_ctx_sva_unbind(struct cdma_dev *cdev, struct cdma_context *ctx)
 
 	sva_mode = cdev->sva_mode;
 	if (sva_mode == UMMU_SVA_SHARE_MODE)
-		ummu_sva_unbind_device(ctx->sva);
+		iommu_sva_unbind_device_isolated(ctx->sva);
 	else if (sva_mode == UMMU_SVA_SEPARATE_MODE)
 		ummu_core_free_tdev(ctx->vdev);
 	else

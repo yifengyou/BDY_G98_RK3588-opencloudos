@@ -27,7 +27,7 @@ DECLARE_RWSEM(g_device_rwsem);
  * Users can perform subsequent resource creation operations using a pointer
  * to a DMA device in the list.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: address of the first device in the list
  */
 struct dma_device *dma_get_device_list(u32 *num_devices)
@@ -63,14 +63,17 @@ struct dma_device *dma_get_device_list(u32 *num_devices)
 			continue;
 		}
 
+		mutex_lock(&cdev->eu_mutex);
 		if (!attr->eu_num) {
 			pr_warn("no eu in cdma dev eid = 0x%x.\n", cdev->eid);
+			mutex_unlock(&cdev->eu_mutex);
 			continue;
 		}
 
 		memcpy(&attr->eu, &attr->eus[0], sizeof(attr->eu));
 		attr->eid.dw0 = cdev->eid;
 		memcpy(&ret_list[count], &cdev->base, sizeof(*ret_list));
+		mutex_unlock(&cdev->eu_mutex);
 		ret_list[count].private_data = kzalloc(
 			sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_list[count].private_data)
@@ -90,7 +93,7 @@ EXPORT_SYMBOL_GPL(dma_get_device_list);
  *
  * It can be called after using dev_list and must be called.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_free_device_list(struct dma_device *dev_list, u32 num_devices)
@@ -123,7 +126,7 @@ EXPORT_SYMBOL_GPL(dma_free_device_list);
  *
  * Choose one to use with the dma_get_device_list function.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA device structure pointer
  */
 struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
@@ -156,11 +159,15 @@ struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
 			continue;
 		}
 
+		mutex_lock(&cdev->eu_mutex);
 		if (!cdma_find_seid_in_eus(attr->eus, attr->eu_num, eid,
-					   &attr->eu))
+					   &attr->eu)) {
+			mutex_unlock(&cdev->eu_mutex);
 			continue;
+		}
 
 		memcpy(ret_dev, &cdev->base, sizeof(*ret_dev));
+		mutex_unlock(&cdev->eu_mutex);
 		ret_dev->private_data = kzalloc(
 			sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_dev->private_data) {
@@ -182,7 +189,7 @@ EXPORT_SYMBOL_GPL(dma_get_device_by_eid);
  * The context is used to store resources such as Queue and Segment, and
  * returns a pointer to the context information.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA context ID value
  */
 int dma_create_context(struct dma_device *dma_dev)
@@ -232,7 +239,7 @@ EXPORT_SYMBOL_GPL(dma_create_context);
  * dma_delete_context - Delete DMA context
  * @dma_dev: DMA device pointe
  * @handle: DMA context ID value
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_delete_context(struct dma_device *dma_dev, int handle)
@@ -283,7 +290,7 @@ EXPORT_SYMBOL_GPL(dma_delete_context);
  *
  * The user uses the queue for DMA read and write operations.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA queue ID value
  */
 int dma_alloc_queue(struct dma_device *dma_dev, int ctx_id, struct queue_cfg *cfg)
@@ -348,7 +355,7 @@ EXPORT_SYMBOL_GPL(dma_alloc_queue);
  * dma_free_queue - Free DMA queue
  * @dma_dev: DMA device pointer
  * @queue_id: DMA queue ID
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_free_queue(struct dma_device *dma_dev, int queue_id)
@@ -394,7 +401,7 @@ EXPORT_SYMBOL_GPL(dma_free_queue);
  * The segment stores local payload information for operations such as DMA
  * read and write, and returns a pointer to the segment information.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA segment structure pointer
  */
 struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
@@ -473,7 +480,7 @@ EXPORT_SYMBOL_GPL(dma_register_seg);
  * dma_unregister_seg - Unregister local segment
  * @dma_dev: DMA device pointer
  * @dma_seg: DMA segment pointer
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unregister_seg(struct dma_device *dma_dev, struct dma_seg *dma_seg)
@@ -520,7 +527,7 @@ EXPORT_SYMBOL_GPL(dma_unregister_seg);
  * The segment stores the remote payload information for operations such as
  * DMA read and write, and returns the segment information pointer.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA segment structure pointer
  */
 struct dma_seg *dma_import_seg(struct dma_seg_cfg *cfg)
@@ -535,7 +542,7 @@ EXPORT_SYMBOL_GPL(dma_import_seg);
 /**
  * dma_unimport_seg - Unimport the remote segment
  * @dma_seg: DMA segment pointer
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unimport_seg(struct dma_seg *dma_seg)
@@ -884,7 +891,7 @@ EXPORT_SYMBOL_GPL(dma_poll_queue);
  * using the DMA channel, and then call the remove interface to notify the
  * management software to delete the DMA resources.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: operation result, 0 on success, others on failed
  */
 int dma_register_client(struct dma_client *client)
@@ -931,7 +938,7 @@ EXPORT_SYMBOL_GPL(dma_register_client);
  *
  * Unregister the management software interface, and delete client resources
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unregister_client(struct dma_client *client)

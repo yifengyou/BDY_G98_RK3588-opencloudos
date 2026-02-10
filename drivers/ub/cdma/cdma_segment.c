@@ -3,6 +3,7 @@
 
 #define dev_fmt(fmt) "CDMA: " fmt
 
+#include <linux/iommu.h>
 #include <linux/ummu_core.h>
 #include "cdma_segment.h"
 #include "cdma_context.h"
@@ -94,8 +95,8 @@ int cdma_seg_grant(struct cdma_dev *cdev, struct cdma_segment *seg,
 	seg_attr.token = &token_info;
 	seg_attr.e_bit = UMMU_EBIT_OFF;
 
-	ret = ummu_sva_grant_range(seg->ksva, (void *)cfg->sva, cfg->len,
-				   MAPT_PERM_RW, (void *)&seg_attr);
+	ret = iommu_sva_grant(seg->ksva, (void *)cfg->sva, cfg->len,
+			      MAPT_PERM_RW, (void *)&seg_attr);
 	if (ret)
 		dev_err(cdev->dev, "grant seg failed, ret = %d.\n", ret);
 
@@ -108,8 +109,8 @@ void cdma_seg_ungrant(struct cdma_segment *seg)
 
 	token_info.tokenVal = seg->base.token_value;
 
-	ummu_sva_ungrant_range(seg->ksva, (void *)seg->base.sva,
-				     seg->base.len, &token_info);
+	iommu_sva_ungrant(seg->ksva, (void *)seg->base.sva,
+			  seg->base.len, &token_info);
 }
 
 struct dma_seg *cdma_import_seg(struct dma_seg_cfg *cfg)

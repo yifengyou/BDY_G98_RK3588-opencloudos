@@ -45,9 +45,11 @@ static int cdma_query_dev(struct cdma_ioctl_hdr *hdr, struct cdma_file *cfile)
 		return -EINVAL;
 
 	args.out.attr.eid.dw0 = cdev->eid;
+	mutex_lock(&cdev->eu_mutex);
 	args.out.attr.eu_num = cdev->base.attr.eu_num;
 	memcpy(args.out.attr.eus, cdev->base.attr.eus,
 	       sizeof(struct eu_info) * cdev->base.attr.eu_num);
+	mutex_unlock(&cdev->eu_mutex);
 	cdma_fill_device_attr(cdev, &args.out.attr.dev_cap);
 
 	ret = copy_to_user((void __user *)(uintptr_t)hdr->args_addr, &args,

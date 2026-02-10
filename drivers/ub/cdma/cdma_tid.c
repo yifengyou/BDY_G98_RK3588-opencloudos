@@ -65,8 +65,8 @@ int cdma_alloc_dev_tid(struct cdma_dev *cdev)
 	if (ret)
 		return ret;
 
-	cdev->ksva = ummu_ksva_bind_device(cdev->dev, &drvdata);
-	if (!cdev->ksva) {
+	cdev->ksva = iommu_ksva_bind_device(cdev->dev, &drvdata);
+	if (IS_ERR(cdev->ksva)) {
 		dev_err(cdev->dev, "ksva bind device failed.\n");
 		ret = -EINVAL;
 		goto disable_sva_feature;
@@ -79,9 +79,8 @@ int cdma_alloc_dev_tid(struct cdma_dev *cdev)
 		goto unbind_device;
 	}
 
-	ret = ummu_sva_grant_range(cdev->ksva, 0, CDMA_MAX_GRANT_SIZE,
-				   UMMU_DEV_WRITE | UMMU_DEV_READ,
-				   &seg_attr);
+	ret = iommu_sva_grant(cdev->ksva, 0, CDMA_MAX_GRANT_SIZE,
+			      UMMU_DEV_WRITE | UMMU_DEV_READ, &seg_attr);
 	if (ret) {
 		dev_err(cdev->dev,
 			"sva grant range for cdma device failed, ret = %d.\n",
@@ -92,7 +91,7 @@ int cdma_alloc_dev_tid(struct cdma_dev *cdev)
 	return 0;
 
 unbind_device:
-	ummu_ksva_unbind_device(cdev->ksva);
+	iommu_ksva_unbind_device(cdev->ksva);
 disable_sva_feature:
 	cdma_disable_sva_feature(cdev);
 
@@ -103,12 +102,12 @@ void cdma_free_dev_tid(struct cdma_dev *cdev)
 {
 	int ret;
 
-	ret = ummu_sva_ungrant_range(cdev->ksva, 0, CDMA_MAX_GRANT_SIZE, NULL);
+	ret = iommu_sva_ungrant(cdev->ksva, 0, CDMA_MAX_GRANT_SIZE, NULL);
 	if (ret)
 		dev_warn(cdev->dev,
 			 "sva ungrant range for cdma device failed, ret = %d.\n",
 			 ret);
 
-	ummu_ksva_unbind_device(cdev->ksva);
+	iommu_ksva_unbind_device(cdev->ksva);
 	cdma_disable_sva_feature(cdev);
 }

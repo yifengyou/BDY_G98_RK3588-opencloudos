@@ -257,9 +257,11 @@ static int cdma_dbg_dump_dev_info(struct seq_file *s, void *data)
 		return -EINVAL;
 
 	struct cdma_dev *cdev = dev_get_drvdata(s->private);
-	u8 eu_num = cdev->base.attr.eu_num;
 	u32 seid_idx, seid, upi, i;
+	u8 eu_num;
 
+	mutex_lock(&cdev->eu_mutex);
+	eu_num = cdev->base.attr.eu_num;
 	seq_printf(s, "EU_ENTRY_NUM: %u\n", eu_num);
 	for (i = 0; i < eu_num; i++) {
 		seid_idx = cdev->base.attr.eus[i].eid_idx;
@@ -267,6 +269,7 @@ static int cdma_dbg_dump_dev_info(struct seq_file *s, void *data)
 		upi = cdev->base.attr.eus[i].upi;
 		seq_printf(s, "SEID_IDX: %u, SEID: %u, UPI: %u\n", seid_idx, seid, upi);
 	}
+	mutex_unlock(&cdev->eu_mutex);
 
 	return 0;
 }
@@ -459,8 +462,10 @@ static int cdma_dbg_dump_eu(struct seq_file *s, void *data)
 	if (ret)
 		return ret;
 
+	mutex_lock(&cdev->eu_mutex);
 	for (i = 0; i < cdev->base.attr.eu_num; i++)
 		cdma_dbg_dum_eu(cdev, i, s);
+	mutex_unlock(&cdev->eu_mutex);
 
 	return 0;
 }
