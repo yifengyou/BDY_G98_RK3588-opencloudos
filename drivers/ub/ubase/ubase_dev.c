@@ -554,7 +554,10 @@ struct ubase_ue2ue_event_handler {
 	u16 sub_cmd;
 	int (*event_handler)(struct ubase_dev *udev, void *data, u32 len);
 } ubase_ue2ue_events[] = {
-	{ UBASE_UE2UE_CTRLQ_MSG, ubase_handle_ue2ue_ctrlq_event },
+	{
+		.sub_cmd = UBASE_UE2UE_CTRLQ_MSG,
+		.event_handler = ubase_handle_ue2ue_ctrlq_event,
+	},
 };
 
 static int ubase_handle_ue2ue_event(void *dev, void *data, u32 len)

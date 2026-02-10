@@ -44,11 +44,16 @@ static u32 ctrlq_regs_addr[] = {
 
 static const struct unic_res_regs_group unic_res_reg_arr[] = {
 	{
-		UNIC_TAG_CMDQ, cmdq_regs_addr, ARRAY_SIZE(cmdq_regs_addr),
-		NULL
-	}, {
-		UNIC_TAG_CTRLQ, ctrlq_regs_addr, ARRAY_SIZE(ctrlq_regs_addr),
-		ubase_adev_ctrlq_supported
+		.tag = UNIC_TAG_CMDQ,
+		.regs_addr = cmdq_regs_addr,
+		.regs_count = ARRAY_SIZE(cmdq_regs_addr),
+		.is_supported = NULL
+	},
+	{
+		.tag = UNIC_TAG_CTRLQ,
+		.regs_addr = ctrlq_regs_addr,
+		.regs_count = ARRAY_SIZE(ctrlq_regs_addr),
+		.is_supported = ubase_adev_ctrlq_supported
 	},
 };
 
@@ -63,20 +68,39 @@ static bool unic_dfx_reg_support(struct unic_dev *unic_dev, u32 property)
 
 static struct unic_dfx_regs_group unic_dfx_reg_arr[] = {
 	{
-		UNIC_REG_NUM_IDX_TA, UNIC_TAG_TA, UBASE_OPC_DFX_TA_REG,
-		UBASE_SUP_UBL_ETH, unic_dfx_reg_support
-	}, {
-		UNIC_REG_NUM_IDX_TP, UNIC_TAG_TP, UBASE_OPC_DFX_TP_REG,
-		UBASE_SUP_UBL_ETH, unic_dfx_reg_support
-	}, {
-		UNIC_REG_NUM_IDX_BA, UNIC_TAG_BA, UBASE_OPC_DFX_BA_REG,
-		UBASE_SUP_UBL_ETH, unic_dfx_reg_support
-	}, {
-		UNIC_REG_NUM_IDX_NL, UNIC_TAG_NL, UBASE_OPC_DFX_NL_REG,
-		UBASE_SUP_UBL_ETH, unic_dfx_reg_support
-	}, {
-		UNIC_REG_NUM_IDX_DL, UNIC_TAG_DL, UBASE_OPC_DFX_DL_REG,
-		UBASE_SUP_UBL, unic_dfx_reg_support
+		.regs_idx = UNIC_REG_NUM_IDX_TA,
+		.tag = UNIC_TAG_TA,
+		.opcode = UBASE_OPC_DFX_TA_REG,
+		.property = UBASE_SUP_UBL_ETH,
+		.is_supported = unic_dfx_reg_support
+	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_TP,
+		.tag = UNIC_TAG_TP,
+		.opcode = UBASE_OPC_DFX_TP_REG,
+		.property = UBASE_SUP_UBL_ETH,
+		.is_supported = unic_dfx_reg_support
+	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_BA,
+		.tag = UNIC_TAG_BA,
+		.opcode = UBASE_OPC_DFX_BA_REG,
+		.property = UBASE_SUP_UBL_ETH,
+		.is_supported = unic_dfx_reg_support
+	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_NL,
+		.tag = UNIC_TAG_NL,
+		.opcode = UBASE_OPC_DFX_NL_REG,
+		.property = UBASE_SUP_UBL,
+		.is_supported = unic_dfx_reg_support
+	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_DL,
+		.tag = UNIC_TAG_DL,
+		.opcode = UBASE_OPC_DFX_DL_REG,
+		.property = UBASE_SUP_UBL,
+		.is_supported = unic_dfx_reg_support
 	},
 };
 

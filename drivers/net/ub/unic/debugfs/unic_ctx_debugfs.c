@@ -121,10 +121,22 @@ static int unic_dbg_dump_ctx_sw(struct seq_file *s, void *data,
 		void (*print_ctx_titles)(struct seq_file *s);
 		void (*get_ctx)(struct unic_channels *channels, struct seq_file *s, u32 index);
 	} dbg_ctx[] = {
-		{unic_jfs_ctx_titles_print, unic_get_jfs_ctx_sw},
-		{unic_jfr_ctx_titles_print, unic_get_jfr_ctx_sw},
-		{unic_jfc_ctx_titles_print, unic_get_sq_jfc_ctx_sw},
-		{unic_jfc_ctx_titles_print, unic_get_rq_jfc_ctx_sw},
+		{
+			.print_ctx_titles = unic_jfs_ctx_titles_print,
+			.get_ctx = unic_get_jfs_ctx_sw,
+		},
+		{
+			.print_ctx_titles = unic_jfr_ctx_titles_print,
+			.get_ctx = unic_get_jfr_ctx_sw,
+		},
+		{
+			.print_ctx_titles = unic_jfc_ctx_titles_print,
+			.get_ctx = unic_get_sq_jfc_ctx_sw,
+		},
+		{
+			.print_ctx_titles = unic_jfc_ctx_titles_print,
+			.get_ctx = unic_get_rq_jfc_ctx_sw,
+		},
 	};
 	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
 	int ret = 0;

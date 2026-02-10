@@ -96,8 +96,14 @@ static int ubase_dbg_dump_context(struct seq_file *s,
 		void (*print_ctx_titles)(struct seq_file *s);
 		void (*get_ctx)(struct seq_file *s, struct ubase_dev *udev, u32 idx);
 	} dbg_ctx[] = {
-		{ubase_eq_ctx_titles_print, ubase_dump_aeq_ctx},
-		{ubase_eq_ctx_titles_print, ubase_dump_ceq_ctx},
+		{
+			.print_ctx_titles = ubase_eq_ctx_titles_print,
+			.get_ctx = ubase_dump_aeq_ctx,
+		},
+		{
+			.print_ctx_titles = ubase_eq_ctx_titles_print,
+			.get_ctx = ubase_dump_ceq_ctx,
+		},
 	};
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
 	u32 i;
