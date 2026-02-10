@@ -889,10 +889,11 @@ int __ubase_ctrlq_send(struct ubase_dev *udev, struct ubase_ctrlq_msg *msg,
  * to a ctrlq message from the management software. 'msg->resp_seq' and 'msg->resp_ret'
  * represent the sequence number and processing result of the ctrlq message from
  * the management software.
- * When 'msg->need_resp' is set to 1, it indicates that the management software needs
- * to respond to the driver's ctrlq message. If 'msg->out_size' is not zero and
- * 'msg->out' is not empty, this function will wait synchronously for the management
- * software's response, and the response information will be stored in 'msg->out'.
+ * When 'msg->is_async' is set to 1, it indicates that the message is an asynchronous
+ * request. When 'msg->need_resp' is set to 1, it indicates that the management software
+ * needs to respond to the driver's ctrlq message. If 'msg->is_async' is set to 0 and
+ * 'msg->need_resp' is set to 1, this function will wait synchronously for the management
+ * software's response. The response information will be stored in 'msg->out'.
  *
  * Context: Process context. Takes and releases <lock>, BH-safe. May sleep.
  * Return: 0 on success, negative error code otherwise

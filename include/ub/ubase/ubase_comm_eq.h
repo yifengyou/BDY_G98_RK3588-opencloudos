@@ -76,6 +76,7 @@ struct ubase_event_nb {
  * @owner: owner bit
  * @num: jfsn/jettyn/jfrn/jfcn/jtgn/tpn
  * @rsv1: reserved bits
+ * @rsv2: reserved bits
  * @out_param: mailbox output parameter
  * @seq_num: mailbox sequence number
  * @status: mailbox status

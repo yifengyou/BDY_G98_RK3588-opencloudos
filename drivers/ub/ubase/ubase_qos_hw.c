@@ -1079,7 +1079,7 @@ static bool ubase_is_udma_tp_vl(struct ubase_adev_qos *qos, u8 vl)
  * @dscp_num: dscp number
  *
  * The function updates the dscp to vl mapping based on 'dscp_vl' and saves it
- * to 'udma_dscp_vl' in 'truct ubase_adev_qos'.
+ * to 'udma_dscp_vl' in 'struct ubase_adev_qos'.
  *
  * Context: Any context.
  */

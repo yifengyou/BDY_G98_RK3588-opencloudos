@@ -159,6 +159,19 @@ struct ubase_crq_event_nb {
 	KABI_RESERVE(4)
 };
 
+/**
+ * ubase_fill_inout_buf() - fill ubase cmd buffer
+ * @buf: ubase cmd buffer
+ * @opcode: cmdq opcode
+ * @is_read: read or write, true for read, false for write
+ * @data_size: valid length of data
+ * @data: data buffer
+ *
+ * The function is used to assign 'opcode', 'is_read', 'data_size' and 'data'
+ * to 'struct ubase_cmd_buf'.
+ *
+ * Context: Process context.
+ */
 static inline void ubase_fill_inout_buf(struct ubase_cmd_buf *buf, u16 opcode,
 					bool is_read, u32 data_size, void *data)
 {
