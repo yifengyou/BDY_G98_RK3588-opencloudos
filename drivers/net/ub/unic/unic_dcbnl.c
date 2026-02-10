@@ -334,17 +334,17 @@ static int unic_dcbnl_ieee_setpfc(struct net_device *ndev, struct ieee_pfc *pfc)
 	if (!(pfc_info->fc_mode & UNIC_FC_PFC_EN)) {
 		ret = unic_mac_pause_en_cfg(unic_dev, false, false);
 		if (ret) {
-			unic_info(unic_dev, "failed to disable pause, ret = %d.\n",
-				  ret);
+			unic_err(unic_dev, "failed to disable pause, ret = %d.\n",
+				 ret);
 			return ret;
 		}
 	}
 
 	ret = unic_pfc_pause_cfg(unic_dev, pfc->pfc_en);
 	if (ret) {
-		unic_info(unic_dev,
-			  "failed to set pfc tx rx enable or priority, ret = %d.\n",
-			  ret);
+		unic_err(unic_dev,
+			 "failed to set pfc tx rx enable or priority, ret = %d.\n",
+			 ret);
 		return ret;
 	}
 

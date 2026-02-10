@@ -90,8 +90,8 @@ int unic_mac_pause_en_cfg(struct unic_dev *unic_dev, u32 tx_pause, u32 rx_pause)
 	req.tx_en = cpu_to_le32(tx_pause);
 	req.rx_en = cpu_to_le32(rx_pause);
 
-	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_MAC_PAUSE_EN, false, sizeof(req), &req);
-
+	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_MAC_PAUSE_EN, false,
+			     sizeof(req), &req);
 	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
 	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,

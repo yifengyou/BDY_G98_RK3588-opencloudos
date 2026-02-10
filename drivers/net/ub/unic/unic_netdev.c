@@ -724,6 +724,7 @@ static bool unic_port_dev_check(const struct net_device *dev)
 static struct unic_dev *unic_get_bond_slave(struct net_device *ndev)
 {
 	struct slave *first_slave;
+	struct unic_dev *unic_dev;
 	struct bonding *bond;
 
 	if (!netif_is_bond_master(ndev))
@@ -732,11 +733,15 @@ static struct unic_dev *unic_get_bond_slave(struct net_device *ndev)
 	rcu_read_lock();
 	bond = netdev_priv(ndev);
 	first_slave = bond_first_slave_rcu(bond);
-	rcu_read_unlock();
-	if (!first_slave || !unic_port_dev_check(first_slave->dev))
+	if (!first_slave || !unic_port_dev_check(first_slave->dev)) {
+		rcu_read_unlock();
 		return NULL;
+	}
 
-	return netdev_priv(first_slave->dev);
+	unic_dev = netdev_priv(first_slave->dev);
+	rcu_read_unlock();
+
+	return unic_dev;
 }
 
 static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,

@@ -220,14 +220,12 @@ static void unic_record_user_pauseparam(struct unic_dev *unic_dev,
 static void unic_get_pauseparam(struct net_device *ndev,
 				struct ethtool_pauseparam *eth_pauseparam)
 {
-#define PAUSE_AUTONEG_OFF 0
-
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 
 	if (!unic_dev_pause_supported(unic_dev))
 		return;
 
-	eth_pauseparam->autoneg = PAUSE_AUTONEG_OFF;
+	eth_pauseparam->autoneg = unic_dev->hw.mac.autoneg;
 
 	if (unic_dev->channels.vl.pfc_info.fc_mode & UNIC_FC_PFC_EN) {
 		eth_pauseparam->rx_pause = UNIC_RX_TX_PAUSE_OFF;
@@ -248,15 +246,25 @@ static int unic_set_pauseparam(struct net_device *ndev,
 	if (!unic_dev_pause_supported(unic_dev))
 		return -EOPNOTSUPP;
 
-	if (eth_pauseparam->autoneg) {
-		unic_warn(unic_dev,
-			  "failed to set pause, set autoneg not supported.\n");
+	if (unic_resetting(ndev))
+		return -EBUSY;
+
+	if (eth_pauseparam->autoneg && !unic_dev->hw.mac.support_autoneg) {
+		unic_err(unic_dev,
+			 "failed to set pause, autoneg not supported.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (unic_dev->hw.mac.autoneg != eth_pauseparam->autoneg &&
+	    unic_dev->hw.mac.support_autoneg) {
+		unic_err(unic_dev,
+			 "to change autoneg, please use: ethtool -s <dev> autoneg <on|off>\n");
 		return -EOPNOTSUPP;
 	}
 
 	if (unic_dev->channels.vl.pfc_info.fc_mode & UNIC_FC_PFC_EN) {
-		unic_warn(unic_dev,
-			  "failed to set pause, priority flow control enabled.\n");
+		unic_err(unic_dev,
+			 "failed to set pause, priority flow control enabled.\n");
 		return -EOPNOTSUPP;
 	}
 
