@@ -7,6 +7,7 @@
 #ifndef __UBASE_DEV_H__
 #define __UBASE_DEV_H__
 
+#include <linux/atomic.h>
 #include <linux/auxiliary_bus.h>
 #include <linux/dma-mapping.h>
 #include <linux/if_ether.h>
@@ -149,6 +150,7 @@ struct ubase_mbox_cmd {
 	struct dma_pool *pool;
 	struct semaphore sem;
 	struct ubase_mbx_event_context ctx;
+	atomic_t mbx_cnt;
 };
 
 struct ubase_destroy_res_cmd {

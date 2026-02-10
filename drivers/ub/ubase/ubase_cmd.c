@@ -677,13 +677,18 @@ static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 					union ubase_mbox *mbx)
 {
 	struct ubase_mbx_event_context *ctx = &udev->mb_cmd.ctx;
+	struct ubase_irq_table *irq_table = &udev->irq_table;
+	struct ubase_aeq *aeq = &irq_table->aeq;
 	int ret;
 
+	atomic_inc(&udev->mb_cmd.mbx_cnt);
+	complete(&aeq->poll);
 	if (!wait_for_completion_timeout(&ctx->done,
 					 msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT))) {
 		ubase_err(udev,
 			  "cmd seq_num 0x%x mailbox cmd code 0x%x timeout.\n",
 			  ctx->seq_num, mbx->cmd);
+		atomic_dec(&udev->mb_cmd.mbx_cnt);
 		return -EBUSY;
 	}
 
@@ -692,6 +697,8 @@ static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 		ubase_err(udev,
 			  "cmd seq_num(0x%x) mailbox cmd code(0x%x) error, ret = %d.\n",
 			  ctx->seq_num, mbx->cmd, ret);
+
+	atomic_dec(&udev->mb_cmd.mbx_cnt);
 
 	return ret;
 }

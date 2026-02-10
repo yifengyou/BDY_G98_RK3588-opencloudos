@@ -326,6 +326,7 @@ static int ubase_use_buf_ctx_page(struct ubase_dev *udev,
 	refcount_inc(&ctx_page->refcount);
 	mutex_unlock(&ctx_buf->ctx_mutex);
 
+	atomic_set(&udev->mb_cmd.mbx_cnt, 0);
 	return 0;
 err_store:
 	ubase_destroy_ctx_page(udev, ctx_page, ctx_buf);

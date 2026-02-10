@@ -7,6 +7,8 @@
 #ifndef __UBASE_EQ_H__
 #define __UBASE_EQ_H__
 
+#include <linux/sched.h>
+#include <linux/spinlock_types_raw.h>
 #include <ub/ubase/ubase_comm_eq.h>
 
 #include "ubase.h"
@@ -171,6 +173,9 @@ struct ubase_aeq {
 	struct ubase_dev	*udev;
 	struct ubase_eq		eq;
 	struct ubase_event_nb	cb[UBASE_AE_LEVEL_NUM];
+	struct completion	poll;
+	struct task_struct	*ae_task;
+	raw_spinlock_t		aeq_lock;
 };
 
 struct ubase_ceqs {
