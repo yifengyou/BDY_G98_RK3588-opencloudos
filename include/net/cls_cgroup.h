@@ -219,6 +219,20 @@ static inline struct cgroup_cls_state *sock_get_css(const struct sock *sk)
 	return cs;
 }
 
+static inline
+struct cgroup_cls_state *net_cgroup_get_parent(struct cgroup_cls_state *cs)
+{
+	struct cgroup_subsys_state *parent;
+
+	rcu_read_lock();
+	parent = READ_ONCE(cs->css.parent);
+	if (!parent || unlikely(!css_tryget_online(parent)))
+		parent = NULL;
+	rcu_read_unlock();
+
+	return css_cls_state(parent);
+}
+
 #else /* !CONFIG_CGROUP_NET_CLASSID */
 static inline void sock_update_classid(struct sock_cgroup_data *skcd)
 {
