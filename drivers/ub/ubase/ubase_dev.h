@@ -9,6 +9,7 @@
 
 #include <linux/auxiliary_bus.h>
 #include <linux/dma-mapping.h>
+#include <linux/if_ether.h>
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
@@ -41,6 +42,30 @@
 	dev_warn(_udev->dev, "(pid %d) " fmt,                                 \
 		 current->pid, ##__VA_ARGS__)
 
+#define ubase_err_rl(_udev, log_cnt, fmt, ...) do {                           \
+	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
+		dev_err(_udev->dev, "(pid %d) " fmt,                          \
+			 current->pid, ##__VA_ARGS__);                        \
+	else                                                                  \
+		(log_cnt)++;                                                  \
+} while (0)
+
+#define ubase_info_rl(_udev, log_cnt, fmt, ...) do {                          \
+	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
+		dev_info(_udev->dev, "(pid %d) " fmt,                         \
+			 current->pid, ##__VA_ARGS__);                        \
+	else                                                                  \
+		(log_cnt)++;                                                  \
+} while (0)
+
+#define ubase_warn_rl(_udev, log_cnt, fmt, ...) do {                          \
+	if (__ratelimit(&(_udev->log_rs.rs)))                                   \
+		dev_warn(_udev->dev, "(pid %d) " fmt,                         \
+			 current->pid, ##__VA_ARGS__);                        \
+	else                                                                  \
+		(log_cnt)++;                                                  \
+} while (0)
+
 struct ubase_adev {
 	struct auxiliary_device adev;
 	struct ubase_dev *udev;
@@ -69,7 +94,6 @@ struct ubase_dev_caps {
 	struct ubase_adev_caps	udma_caps;
 	struct ubase_adev_caps	unic_caps;
 	struct ubase_caps	dev_caps;
-	struct ubase_ue_caps	ue_caps;
 };
 
 struct ubase_mbox_cmd {
@@ -124,6 +148,7 @@ enum ubase_dev_state_bit {
 	UBASE_STATE_HIMAC_RESETTING_B,
 	UBASE_STATE_CTX_READY_B,
 	UBASE_STATE_PREALLOC_OK_B,
+	UBASE_STATE_RST_WAIT_DEACTIVE_B,
 };
 
 struct ubase_crq_event_nbs {
@@ -178,15 +203,11 @@ struct ubase_ctrlq_msg_ctx {
 	struct completion	done;
 };
 
-struct ubase_ctrlq_crq_event_nbs {
-	struct list_head		list;
-	struct ubase_ctrlq_event_nb	crq_nb;
-};
-
 struct ubase_ctrlq_crq_table {
 	struct mutex	lock;
 	unsigned long	last_crq_scheduled;
-	struct ubase_ctrlq_crq_event_nbs	crq_nbs;
+	u16				crq_nb_cnt;
+	struct ubase_ctrlq_event_nb	*crq_nbs;
 };
 
 struct ubase_ctrlq {
@@ -256,12 +277,19 @@ struct ubase_prealloc_mem_info {
 	struct ubase_pmem_ctx	udma;
 };
 
+struct ubase_log_rs {
+	struct ratelimit_state rs;
+	u16 ctrlq_self_seq_invalid_log_cnt;
+	u16 ctrlq_other_seq_invalid_log_cnt;
+};
+
 struct ubase_dev {
 	struct device		*dev;
 	int			dev_id;
 	struct ubase_priv	priv;
 	struct ubase_hw		hw;
 
+	bool			use_fixed_rc_num;
 	struct ubase_dev_caps	caps;
 	struct ubase_adev_qos	qos;
 	struct ubase_dbgfs	dbgfs;
@@ -272,12 +300,14 @@ struct ubase_dev {
 	struct ubase_irq_table	irq_table;
 	struct ubase_mbox_cmd	mb_cmd;
 	struct workqueue_struct	*ubase_wq;
+	struct workqueue_struct	*ubase_ctrlq_wq;
 	struct workqueue_struct	*ubase_async_wq;
 	struct workqueue_struct	*ubase_reset_wq;
 	struct workqueue_struct	*ubase_period_wq;
 	struct workqueue_struct	*ubase_arq_wq;
 	unsigned long		serv_proc_cnt;
 	struct ubase_delay_work	service_task;
+	struct ubase_delay_work	ctrlq_service_task;
 	struct ubase_delay_work	reset_service_task;
 	struct ubase_delay_work	period_service_task;
 	struct ubase_delay_work	arq_service_task;
@@ -295,6 +325,8 @@ struct ubase_dev {
 	struct ubase_act_ctx	act_ctx;
 	struct ubase_arq_msg_ring	arq;
 	struct ubase_prealloc_mem_info	pmem_info;
+	u8			dev_mac[ETH_ALEN];
+	struct ubase_log_rs	log_rs;
 };
 
 #define UBASE_ERR_MSG_LEN	128
@@ -429,7 +461,6 @@ static inline u32 ubase_ta_timer_align_size(struct ubase_dev *udev)
 static inline bool ubase_mbx_ue_id_is_valid(u16 mbx_ue_id,
 					    struct ubase_dev *udev)
 {
-
 	if (!mbx_ue_id || (mbx_ue_id > udev->caps.dev_caps.ue_num - 1))
 		return false;
 
@@ -455,5 +486,7 @@ void ubase_virt_handler(struct ubase_dev *udev, u16 bus_ue_id, bool is_en);
 
 int ubase_activate_handler(struct ubase_dev *udev, u32 bus_ue_id);
 int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id);
+
+void ubase_flush_workqueue(struct ubase_dev *udev);
 
 #endif

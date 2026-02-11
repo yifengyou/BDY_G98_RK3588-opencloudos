@@ -235,11 +235,14 @@ static int unic_modify_channels(struct unic_dev *unic_dev,
 	int ret;
 
 	mutex_lock(&channels->mutex);
+	set_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 	unic_uninit_changed_channels(unic_dev);
 
 	unic_dev_change_channels_param(unic_dev, new_param);
 
 	ret = unic_init_changed_channels(unic_dev);
+	if (!ret)
+		clear_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 
 	mutex_unlock(&channels->mutex);
 	return ret;

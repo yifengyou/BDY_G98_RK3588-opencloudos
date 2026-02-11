@@ -16,6 +16,13 @@ enum ubase_sl_sched_mode {
 	UBASE_SL_DWRR = IEEE_8021QAZ_TSA_ETS,
 };
 
+/**
+ * struct ubase_sl_priqos - priority qos
+ * @port_bitmap: port bitmap
+ * @sl_bitmap: sl bitmap
+ * @weight: bandwidth weight
+ * @sch_mode: schedule mode
+ */
 struct ubase_sl_priqos {
 	u32 port_bitmap;
 	u32 sl_bitmap;

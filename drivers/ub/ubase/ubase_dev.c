@@ -4,6 +4,7 @@
  *
  */
 
+#include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <ub/ubus/ubus.h>
 
@@ -16,6 +17,7 @@
 #include "ubase_mailbox.h"
 #include "ubase_pmem.h"
 #include "ubase_reset.h"
+#include "ubase_stats.h"
 #include "ubase_dev.h"
 
 #define UBASE_PERIOD_100MS 100
@@ -298,6 +300,21 @@ static void ubase_uninit_aux_devices(struct ubase_dev *udev)
 	mutex_destroy(&udev->priv.uadev_lock);
 }
 
+static void ubase_update_stats_for_all(struct ubase_dev *udev)
+{
+	int ret;
+
+	if (ubase_dev_unic_supported(udev) &&
+	    ubase_dev_eth_mac_supported(udev) &&
+	    ubase_dev_mac_stats_supported(udev)) {
+		ret = ubase_update_eth_stats_trylock(udev);
+		if (ret)
+			ubase_err(udev,
+				  "failed to update stats for eth, ret = %d.\n",
+				  ret);
+	}
+}
+
 static void ubase_cancel_period_service_task(struct ubase_dev *udev)
 {
 	if (udev->period_service_task.service_task.work.func)
@@ -320,7 +337,7 @@ static int ubase_enable_period_service_task(struct ubase_dev *udev)
 static void ubase_period_service_task(struct work_struct *work)
 {
 #define UBASE_STATS_TIMER_INTERVAL		(300000 / (UBASE_PERIOD_100MS))
-#define UBASE_QUERY_SL_TIMER_INTERVAL		(1000 / (UBASE_PERIOD_100MS))
+#define UBASE_CTRLQ_TIMER_INTERVAL		(3000 / (UBASE_PERIOD_100MS))
 
 	struct ubase_delay_work *ubase_work =
 		container_of(work, struct ubase_delay_work, service_task.work);
@@ -331,6 +348,14 @@ static void ubase_period_service_task(struct work_struct *work)
 		ubase_enable_period_service_task(udev);
 		return;
 	}
+
+	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
+	    !(udev->serv_proc_cnt % UBASE_STATS_TIMER_INTERVAL))
+		ubase_update_stats_for_all(udev);
+
+	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
+	    !(udev->serv_proc_cnt % UBASE_CTRLQ_TIMER_INTERVAL))
+		ubase_ctrlq_clean_service_task(udev);
 
 	udev->serv_proc_cnt++;
 	ubase_enable_period_service_task(udev);
@@ -359,13 +384,21 @@ static void ubase_service_task(struct work_struct *work)
 
 	ubase_crq_service_task(ubase_work);
 	ubase_errhandle_service_task(ubase_work);
-	ubase_ctrlq_service_task(ubase_work);
-	ubase_ctrlq_clean_service_task(ubase_work);
+}
+
+static void ubase_ctrlq_service_task(struct work_struct *work)
+{
+	struct ubase_delay_work *ubase_work =
+		container_of(work, struct ubase_delay_work, service_task.work);
+
+	ubase_ctrlq_crq_service_task(ubase_work);
 }
 
 static void ubase_init_delayed_work(struct ubase_dev *udev)
 {
 	INIT_DELAYED_WORK(&udev->service_task.service_task, ubase_service_task);
+	INIT_DELAYED_WORK(&udev->ctrlq_service_task.service_task,
+			  ubase_ctrlq_service_task);
 	INIT_DELAYED_WORK(&udev->reset_service_task.service_task,
 			  ubase_reset_service_task);
 	INIT_DELAYED_WORK(&udev->period_service_task.service_task,
@@ -382,6 +415,12 @@ static int ubase_wq_init(struct ubase_dev *udev)
 	if (!udev->ubase_wq) {
 		ubase_err(udev, "failed to alloc ubase workqueue.\n");
 		goto err_alloc_ubase_wq;
+	}
+
+	udev->ubase_ctrlq_wq = UBASE_ALLOC_WQ("ubase_ctrlq_service");
+	if (!udev->ubase_ctrlq_wq) {
+		ubase_err(udev, "failed to alloc ubase ctrlq workqueue.\n");
+		goto err_alloc_ubase_ctrlq_wq;
 	}
 
 	udev->ubase_async_wq = UBASE_ALLOC_WQ("ubase_async_service");
@@ -418,6 +457,8 @@ err_alloc_ubase_period_wq:
 err_alloc_ubase_reset_wq:
 	destroy_workqueue(udev->ubase_async_wq);
 err_alloc_ubase_async_wq:
+	destroy_workqueue(udev->ubase_ctrlq_wq);
+err_alloc_ubase_ctrlq_wq:
 	destroy_workqueue(udev->ubase_wq);
 err_alloc_ubase_wq:
 	return -ENOMEM;
@@ -429,6 +470,7 @@ static void ubase_wq_uninit(struct ubase_dev *udev)
 	destroy_workqueue(udev->ubase_period_wq);
 	destroy_workqueue(udev->ubase_reset_wq);
 	destroy_workqueue(udev->ubase_async_wq);
+	destroy_workqueue(udev->ubase_ctrlq_wq);
 	destroy_workqueue(udev->ubase_wq);
 }
 
@@ -453,21 +495,19 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 		return -EINVAL;
 	}
 
-	if (cmd->in_size > (len - (sizeof(*cmd) + UBASE_CTRLQ_HDR_LEN))) {
-		ubase_err(udev, "ubase e2e cmd len = %u error.\n", cmd->in_size);
-		return -EINVAL;
-	}
-
 	msg.service_ver = head->service_ver;
 	msg.service_type = head->service_type;
 	msg.opcode = head->opcode;
 	msg.need_resp = cmd->need_resp;
 	msg.is_resp = cmd->is_resp;
+	msg.is_async = cmd->is_async;
 	msg.resp_seq = cmd->seq;
-	msg.in = (u8 *)head + UBASE_CTRLQ_HDR_LEN;
+	msg.in = cmd->in_size ? (u8 *)head + UBASE_CTRLQ_HDR_LEN : NULL;
 	msg.in_size = cmd->in_size;
 	msg.out = NULL;
 	msg.out_size = 0;
+	if (ubase_ctrlq_msg_is_sync_req(&msg))
+		msg.is_async = 1;
 
 	ue_info.bus_ue_id = le16_to_cpu(cmd->head.bus_ue_id);
 	ue_info.seq = cmd->seq;
@@ -475,8 +515,9 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 
 	ret = __ubase_ctrlq_send(udev, &msg, &ue_info);
 	if (ret)
-		ubase_err(udev, "failed to send opc(0x%x) ctrlq, ret = %d.\n",
-			  head->opcode, ret);
+		ubase_err(udev,
+			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, ret = %d.\n",
+			  head->service_type, head->opcode, ret);
 
 	return ret;
 }
@@ -496,6 +537,11 @@ static int ubase_handle_ue2ue_ctrlq_event(struct ubase_dev *udev, void *data,
 	if (ubase_dev_ctrlq_supported(udev))
 		return ubase_handle_ue2ue_ctrlq_req(udev, cmd, len);
 
+	if (!ubase_ctrlq_check_seq(udev, cmd->seq)) {
+		ubase_err(udev, "invalid ue2ue ctrlq seq(%u).\n", cmd->seq);
+		return -EINVAL;
+	}
+
 	head = (struct ubase_ctrlq_base_block *)(cmd + 1);
 	data_len = len - sizeof(*cmd) - UBASE_CTRLQ_HDR_LEN;
 	ubase_ctrlq_handle_crq_msg(udev, head, cmd->seq,
@@ -508,7 +554,10 @@ struct ubase_ue2ue_event_handler {
 	u16 sub_cmd;
 	int (*event_handler)(struct ubase_dev *udev, void *data, u32 len);
 } ubase_ue2ue_events[] = {
-	{ UBASE_UE2UE_CTRLQ_MSG, ubase_handle_ue2ue_ctrlq_event },
+	{
+		.sub_cmd = UBASE_UE2UE_CTRLQ_MSG,
+		.event_handler = ubase_handle_ue2ue_ctrlq_event,
+	},
 };
 
 static int ubase_handle_ue2ue_event(void *dev, void *data, u32 len)
@@ -620,7 +669,36 @@ err_reg_event:
 	return ret;
 }
 
+static int ubase_notify_drv_capbilities(struct ubase_dev *udev)
+{
+	struct ubase_notify_drv_cap_cmd req = {0};
+	struct ubase_cmd_buf in;
+
+	set_bit(UBASE_CAP_SUP_ACTIVATE_B, (unsigned long *)req.cap_bits);
+
+	__ubase_fill_inout_buf(&in, UBASE_OPC_NOTIFY_DRV_CAPS, false,
+			       sizeof(req), &req);
+
+	return __ubase_cmd_send_in(udev, &in);
+}
+
+static int ubase_log_rs_init(struct ubase_dev *udev)
+{
+#define UBASE_RATELIMIT_INTERVAL (2 * HZ)
+#define UBASE_RATELIMIT_BURST 40
+
+	raw_spin_lock_init(&udev->log_rs.rs.lock);
+	udev->log_rs.rs.interval = UBASE_RATELIMIT_INTERVAL;
+	udev->log_rs.rs.burst = UBASE_RATELIMIT_BURST;
+
+	return 0;
+}
+
 static const struct ubase_init_function ubase_init_func_map[] = {
+	{
+		"init log rs", UBASE_SUP_ALL, 0,
+		ubase_log_rs_init, NULL
+	},
 	{
 		"init work queue", UBASE_SUP_ALL, 0,
 		ubase_wq_init, ubase_wq_uninit
@@ -628,6 +706,10 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 	{
 		"init cmd queue", UBASE_SUP_ALL, 1,
 		ubase_cmd_init, ubase_cmd_uninit
+	},
+	{
+		"notify drv capbilities", UBASE_SUP_ALL, 0,
+		ubase_notify_drv_capbilities, NULL
 	},
 	{
 		"query dev res", UBASE_SUP_ALL, 0,
@@ -861,6 +943,15 @@ void ubase_resume_aux_devices(struct ubase_dev *udev)
 	mutex_unlock(&priv->uadev_lock);
 }
 
+/**
+ * ubase_adev_ubl_supported() - determine whether ub link is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether ub link is supported.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_ubl_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -870,6 +961,15 @@ bool ubase_adev_ubl_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_ubl_supported);
 
+/**
+ * ubase_adev_ctrlq_supported() - determine whether to support ctrlq
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support ctrlq.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -879,6 +979,15 @@ bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_ctrlq_supported);
 
+/**
+ * ubase_adev_eth_mac_supported() - determine whether eth link is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether eth link is supported.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -888,6 +997,15 @@ bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_eth_mac_supported);
 
+/**
+ * ubase_get_io_base() - get io space base address
+ * @adev: auxiliary device
+ *
+ * The function is used to get io space base address.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_resource_space
+ */
 struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -897,6 +1015,15 @@ struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_io_base);
 
+/**
+ * ubase_get_mem_base() - get memory space base address
+ * @adev: auxiliary device
+ *
+ * The function is used to get memory space base address.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_resource_space
+ */
 struct ubase_resource_space *ubase_get_mem_base(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -906,6 +1033,15 @@ struct ubase_resource_space *ubase_get_mem_base(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_mem_base);
 
+/**
+ * ubase_get_dev_caps() - get ubase capabilities
+ * @adev: auxiliary device
+ *
+ * The function is used to get ubase capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_caps
+ */
 struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev)
 {
 	if (!adev)
@@ -915,6 +1051,45 @@ struct ubase_caps *ubase_get_dev_caps(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_dev_caps);
 
+/**
+ * ubase_get_mdrv_data() - get unic netdev
+ * @adev: auxiliary device
+ *
+ * The function is used to get unic netdev.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty or does not support the unic device,
+ * otherwise the pointer to struct ubase_adev_com
+ */
+const struct ubase_adev_com *ubase_get_mdrv_data(struct auxiliary_device *adev)
+{
+	struct auxiliary_device *unic_adev;
+	struct ubase_priv *priv;
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return NULL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (!ubase_dev_unic_supported(udev))
+		return NULL;
+
+	priv = &udev->priv;
+	unic_adev = &priv->uadev[UBASE_DRV_UNIC]->adev;
+
+	return dev_get_drvdata(&unic_adev->dev);
+}
+EXPORT_SYMBOL(ubase_get_mdrv_data);
+
+/**
+ * ubase_get_udma_caps() - get udma auxiliary device capabilities
+ * @adev: udma auxiliary device pointer
+ *
+ * The function is used to get udma auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_udma_caps(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -928,12 +1103,30 @@ struct ubase_adev_caps *ubase_get_udma_caps(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_udma_caps);
 
+/**
+ * ubase_get_cdma_caps() - get cdma auxiliary device capabilities
+ * @adev: cdma auxiliary device pointer
+ *
+ * The function is used to get cdma auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_cdma_caps(struct auxiliary_device *adev)
 {
 	return ubase_get_udma_caps(adev);
 }
 EXPORT_SYMBOL(ubase_get_cdma_caps);
 
+/**
+ * ubase_get_reset_stage() - get current reset stage
+ * @adev: auxiliary device
+ *
+ * The function is used to get current reset stage.
+ *
+ * Context: Any context.
+ * Return: enum ubase_reset_stage
+ */
 enum ubase_reset_stage ubase_get_reset_stage(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -947,6 +1140,17 @@ enum ubase_reset_stage ubase_get_reset_stage(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_reset_stage);
 
+/**
+ * ubase_virt_register() - register auxiliary device virtualization handling function
+ * @adev: auxiliary device
+ * @virt_handler: the function pointer to handle virtualization. adev: the same as the
+ * parameter 'adev', bus_ue_id: bus ub entity id, is_en: true - enable virtualization,
+ * false - disable virtualization.
+ *
+ * The function is used to register auxiliary device virtualization handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_virt_register(struct auxiliary_device *adev,
 			 void (*virt_handler)(struct auxiliary_device *adev,
 					      u16 bus_ue_id, bool is_en))
@@ -965,6 +1169,14 @@ void ubase_virt_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_virt_register);
 
+/**
+ * ubase_virt_unregister() - unregister auxiliary device virtualization handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device virtualization handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_virt_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -980,6 +1192,16 @@ void ubase_virt_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_virt_unregister);
 
+/**
+ * ubase_port_register() - register auxiliary device port handling function
+ * @adev: auxiliary device
+ * @port_handler: the function pointer to port handling. adev: the same as the
+ * parameter 'adev', link_up: true - link up, false - link down.
+ *
+ * The function is used to register auxiliary device port handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_port_register(struct auxiliary_device *adev,
 			 void (*port_handler)(struct auxiliary_device *adev,
 					      bool link_up))
@@ -998,6 +1220,14 @@ void ubase_port_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_port_register);
 
+/**
+ * ubase_port_unregister() - unregister auxiliary device port handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device port handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_port_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1013,6 +1243,16 @@ void ubase_port_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_port_unregister);
 
+/**
+ * ubase_reset_register() - register auxiliary device reset function
+ * @adev: auxiliary device
+ * @reset_handler: the function pointer to reset. adev: the same as the parameter
+ * 'adev', stage: enum ubase_reset_stage.
+ *
+ * The function is used to register auxiliary device reset function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_reset_register(struct auxiliary_device *adev,
 			  void (*reset_handler)(struct auxiliary_device *adev,
 						enum ubase_reset_stage stage))
@@ -1031,6 +1271,14 @@ void ubase_reset_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_reset_register);
 
+/**
+ * ubase_reset_unregister() - unregister auxiliary device reset function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device reset function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_reset_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1046,6 +1294,15 @@ void ubase_reset_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_reset_unregister);
 
+/**
+ * ubase_get_unic_caps() - get unic auxiliary device capabilities
+ * @adev: unic auxiliary device pointer
+ *
+ * The function is used to get unic auxiliary device capabilities.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_caps
+ */
 struct ubase_adev_caps *ubase_get_unic_caps(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1141,6 +1398,15 @@ bool ubase_dbg_default(void)
 	return ubase_debug;
 }
 
+/**
+ * ubase_get_adev_qos() - get auxiliary device qos information
+ * @adev: auxiliary device
+ *
+ * The function is used to get auxiliary device qos information.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_adev_qos
+ */
 struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1152,6 +1418,54 @@ struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 	return &udev->qos;
 }
 EXPORT_SYMBOL(ubase_get_adev_qos);
+
+bool ubase_adev_mac_stats_supported(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_dev_mac_stats_supported(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_mac_stats_supported);
+
+/**
+ * ubase_adev_ip_over_urma_supported() - determine whether to support IP over
+ * urma
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support IP over urma.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
+bool ubase_adev_ip_over_urma_supported(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_ip_over_urma_supported(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_ip_over_urma_supported);
+
+/**
+ * ubase_adev_ip_over_urma_utp_supported() - determine whether to support utp
+ * when IP over urma is supported
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to support utp when IP over urma
+ * is supported
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
+bool ubase_adev_ip_over_urma_utp_supported(struct auxiliary_device *adev)
+{
+	if (!adev)
+		return false;
+
+	return ubase_ip_over_urma_utp_supported(__ubase_get_udev_by_adev(adev));
+}
+EXPORT_SYMBOL(ubase_adev_ip_over_urma_utp_supported);
 
 static void ubase_activate_notify(struct ubase_dev *udev,
 				  struct auxiliary_device *adev, bool activate)
@@ -1178,6 +1492,16 @@ static void ubase_activate_notify(struct ubase_dev *udev,
 		mutex_unlock(&udev->priv.uadev_lock);
 }
 
+/**
+ * ubase_activate_register() - register auxiliary device activate handling function
+ * @adev: auxiliary device
+ * @activate_handler: the function pointer to activate handling. adev: the same
+ * as the parameter 'adev', activate: true - activate, false - deactivate.
+ *
+ * The function is used to register auxiliary device activate handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_activate_register(struct auxiliary_device *adev,
 			     void (*activate_handler)(struct auxiliary_device *adev,
 						      bool activate))
@@ -1196,6 +1520,14 @@ void ubase_activate_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_activate_register);
 
+/**
+ * ubase_activate_unregister() - unregister auxiliary device activate handling function
+ * @adev: auxiliary device
+ *
+ * The function is used to unregister auxiliary device activate handling function.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
 void ubase_activate_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1296,36 +1628,103 @@ int ubase_deactivate_handler(struct ubase_dev *udev, u32 bus_ue_id)
 	return ubase_send_activate_dev_req(udev, false, (u16)bus_ue_id);
 }
 
+void ubase_flush_workqueue(struct ubase_dev *udev)
+{
+	flush_workqueue(udev->ubase_wq);
+	flush_workqueue(udev->ubase_async_wq);
+	flush_workqueue(udev->ubase_period_wq);
+	flush_workqueue(udev->ubase_arq_wq);
+}
+
+/**
+ * ubase_activate_dev() - activate device
+ * @adev: auxiliary device
+ *
+ * The auxiliary device actively initializes the activate device process.
+ * This function will call the activate handling functions registered by all
+ * auxiliary devices under the same ub entity.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_activate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
 	struct ub_entity *ue;
-	int ret;
+	int ret = 0;
 
 	if (!adev)
 		return 0;
 
 	udev = __ubase_get_udev_by_adev(adev);
 
+	ubase_info(udev, "ubase activate dev, state_bits = 0x%lx.\n",
+		   udev->state_bits);
+
+	if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+		ubase_info(udev, "skip activate dev while resetting.\n");
+		goto skip_activate_dev;
+	}
+
 	ue = container_of(udev->dev, struct ub_entity, dev);
-	if (ubase_activate_proxy_supported(udev) &&
-	    !test_bit(UBASE_STATE_DISABLED_B, &udev->state_bits))
+	if (ubase_activate_proxy_supported(udev))
 		ret = ub_activate_entity(ue, ue->entity_idx);
 	else
 		ret = ubase_activate_handler(udev, ue->entity_idx);
 
 	if (ret) {
+		if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+			ubase_info(udev, "skip activate dev while resetting.\n");
+			ret = 0;
+			goto skip_activate_dev;
+		}
 		ubase_err(udev,
 			  "failed to activate ubase dev, ret = %d.\n", ret);
-		return ret;
+		goto activate_dev_err;
 	}
 
+skip_activate_dev:
 	ubase_activate_notify(udev, adev, true);
 
-	return 0;
+activate_dev_err:
+	ubase_update_activate_stats(udev, true, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL(ubase_activate_dev);
 
+static int ubase_deactivate_wait_reset_done(struct ubase_dev *udev)
+{
+#define UBASE_MAX_WAIT_RST_CNT	1000
+#define UBASE_WAIT_RST_TIME	10
+
+	u16 cnt = 0;
+
+	while (test_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits)) {
+		if (!cnt)
+			ubase_info(udev,
+				   "waitting for reset done in deactivate process.\n");
+		msleep(UBASE_WAIT_RST_TIME);
+		if (++cnt >= UBASE_MAX_WAIT_RST_CNT) {
+			ubase_err(udev, "wait reset done timeout.\n");
+			return -EBUSY;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * ubase_deactivate_dev() - deactivate device
+ * @adev: auxiliary device
+ *
+ * The auxiliary device actively initializes the deactivate device process.
+ * This function will call the activate handling functions registered by all
+ * auxiliary devices under the same ub entity.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_deactivate_dev(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
@@ -1337,20 +1736,38 @@ int ubase_deactivate_dev(struct auxiliary_device *adev)
 
 	udev = __ubase_get_udev_by_adev(adev);
 
-	ue = container_of(udev->dev, struct ub_entity, dev);
+	ubase_info(udev, "ubase deactivate dev, state_bits = 0x%lx.\n",
+		   udev->state_bits);
+
+	if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
+		ret = ubase_deactivate_wait_reset_done(udev);
+		if (ret) {
+			ubase_update_activate_stats(udev, false, ret);
+			return ret;
+		}
+		ubase_activate_notify(udev, adev, false);
+		goto out;
+	}
+
 	ubase_activate_notify(udev, adev, false);
 
-	if (ubase_activate_proxy_supported(udev) &&
-	    !test_bit(UBASE_STATE_DISABLED_B, &udev->state_bits))
+	ue = container_of(udev->dev, struct ub_entity, dev);
+	if (ubase_activate_proxy_supported(udev))
 		ret = ub_deactivate_entity(ue, ue->entity_idx);
 	else
 		ret = ubase_deactivate_handler(udev, ue->entity_idx);
+
+	if (ret && test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		ret = ubase_deactivate_wait_reset_done(udev);
 
 	if (ret) {
 		ubase_err(udev,
 			  "failed to deactivate ubase dev, ret = %d.\n", ret);
 		ubase_activate_notify(udev, adev, true);
 	}
+
+out:
+	ubase_update_activate_stats(udev, false, ret);
 
 	return ret;
 }
@@ -1383,6 +1800,16 @@ static int __ubase_get_bus_eid(struct ubase_dev *udev, struct ubase_bus_eid *eid
 	return ubase_query_bus_eid(udev, eid);
 }
 
+/**
+ * ubase_get_bus_eid() - get bus entity id
+ * @adev: auxiliary device
+ * @eid: save the bus entity id
+ *
+ * The function is used to get bus entity id.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_get_bus_eid(struct auxiliary_device *adev, struct ubase_bus_eid *eid)
 {
 	struct ubase_dev *udev;
@@ -1395,3 +1822,55 @@ int ubase_get_bus_eid(struct auxiliary_device *adev, struct ubase_bus_eid *eid)
 	return __ubase_get_bus_eid(udev, eid);
 }
 EXPORT_SYMBOL(ubase_get_bus_eid);
+
+/**
+ * ubase_set_dev_mac() - Record the MAC address of the device
+ * @adev: auxiliary device
+ * @dev_addr: MAC address of the device
+ * @addr_len: MAC address length
+ *
+ * This function is used to record the MAC address of the device, and store the
+ * MAC address in the ubase_dev structure.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
+		      u8 addr_len)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !dev_addr || addr_len < ETH_ALEN)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	ether_addr_copy(udev->dev_mac, dev_addr);
+
+	return 0;
+}
+EXPORT_SYMBOL(ubase_set_dev_mac);
+
+/**
+ * ubase_get_dev_mac() - Obtain the device MAC address and output it.
+ * @adev: auxiliary device
+ * @dev_addr: Output parameter, save the obtained MAC address array.
+ * @addr_len: Length of the array for storing MAC addresses
+ *
+ * This function is used to get the device MAC address from ubase_dev.
+ *
+ * Context: Any context.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_get_dev_mac(struct auxiliary_device *adev, u8 *dev_addr, u8 addr_len)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !dev_addr || addr_len < ETH_ALEN)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	ether_addr_copy(dev_addr, udev->dev_mac);
+
+	return 0;
+}
+EXPORT_SYMBOL(ubase_get_dev_mac);

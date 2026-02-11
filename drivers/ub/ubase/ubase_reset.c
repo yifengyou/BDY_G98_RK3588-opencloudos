@@ -86,6 +86,15 @@ void __ubase_reset_event(struct ubase_dev *udev,
 	}
 }
 
+/**
+ * ubase_reset_event() - reset event processing
+ * @adev: auxiliary device
+ * @reset_type: reset type
+ *
+ * The function performs corresponding reset processing based on different 'reset_type'.
+ *
+ * Context: Any context.
+ */
 void ubase_reset_event(struct auxiliary_device *adev,
 		       enum ubase_reset_type reset_type)
 {
@@ -208,6 +217,7 @@ void ubase_suspend(struct ubase_dev *udev)
 	}
 
 	set_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
+	set_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 
 	if (ubase_dev_pmu_supported(udev)) {
 		__ubase_cmd_disable(udev);
@@ -229,6 +239,7 @@ void ubase_suspend(struct ubase_dev *udev)
 	ubase_ctrlq_disable_remote(udev);
 	ubase_ctrlq_disable(udev);
 	ubase_irq_table_free(udev);
+	ubase_flush_workqueue(udev);
 }
 
 void ubase_resume(struct ubase_dev *udev)
@@ -247,11 +258,13 @@ void ubase_resume(struct ubase_dev *udev)
 		__ubase_cmd_enable(udev);
 		udev->reset_stat.reset_done_cnt++;
 		udev->reset_stat.hw_reset_done_cnt++;
+		clear_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 		clear_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
 		clear_bit(UBASE_STATE_DISABLED_B, &udev->state_bits);
 		return;
 	}
 
+	clear_bit(UBASE_STATE_RST_WAIT_DEACTIVE_B, &udev->state_bits);
 	udev->reset_stat.hw_reset_done_cnt++;
 	ubase_suspend_aux_devices(udev);
 	ubase_dev_reset_uninit(udev);

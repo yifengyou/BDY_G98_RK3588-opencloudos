@@ -210,6 +210,17 @@ struct ubase_eth_mac_stats {
 	u64	rx_merge_frame_smd_error_pkts;
 };
 
+/**
+ * struct ubase_perf_stats_result - traffic bandwidth statistics results
+ * @valid: data valid flag, 0-invalid, 1-valid
+ * @resv0: reserved bits
+ * @port_id: port id
+ * @resv1: reserved bits
+ * @tx_port_bw: tx port bandwidth
+ * @rx_port_bw: rx port bandwidth
+ * @tx_vl_bw: tx vl bandwidth
+ * @rx_vl_bw: rx vl bandwidth
+ */
 struct ubase_perf_stats_result {
 	u8	valid : 1;
 	u8	resv0 : 7;
@@ -221,8 +232,11 @@ struct ubase_perf_stats_result {
 	u32	rx_vl_bw[UBASE_STATS_MAX_VL_NUM];
 };
 
+void ubase_clear_eth_port_stats(struct auxiliary_device *adev);
 int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 			    struct ubase_ub_dl_stats *data);
+int ubase_get_eth_port_stats(struct auxiliary_device *adev,
+			     struct ubase_eth_mac_stats *data);
 int ubase_perf_stats(struct auxiliary_device *adev, u64 port_bitmap, u32 period,
 		     struct ubase_perf_stats_result *data, u32 data_size);
 

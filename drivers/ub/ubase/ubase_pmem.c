@@ -336,6 +336,15 @@ void ubase_prealloc_mem_uninit(struct ubase_dev *udev)
 		ubase_pmem_init_map[i].uninit(udev);
 }
 
+/**
+ * ubase_adev_prealloc_supported() - determine whether to prealloc buffer
+ * @adev: auxiliary device
+ *
+ * This function is used to determine whether to prealloc buffer.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_prealloc_supported(struct auxiliary_device *adev)
 {
 	struct ubase_dev *udev;
