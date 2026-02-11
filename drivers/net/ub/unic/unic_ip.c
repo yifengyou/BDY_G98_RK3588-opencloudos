@@ -473,7 +473,8 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 
 	if (len < sizeof(*req)) {
 		unic_err(priv, "failed to verify ip info size, len = %u.\n", len);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto send_resp;
 	}
 
 	req = (struct unic_ctrlq_ip_notify_req *)data;
@@ -484,7 +485,7 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 	if (test_bit(UNIC_VPORT_STATE_IP_QUERYING, &vport->state)) {
 		ret = unic_update_tmp_ip_list(priv, &vport->addr_tbl.tmp_ip_list,
 					      &st_ip);
-		goto out;
+		goto unlock;
 	}
 
 	if (st_ip.ip_cmd == UNIC_CTRLQ_ADD_IP) {
@@ -500,9 +501,9 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 					    (u8 *)&st_ip.ip_addr,
 					    st_ip.ip_mask);
 	} else {
-		ret = -EINVAL;
 		unic_err(priv, "invalid ip cmd by ctrlq, cmd = %u.\n", st_ip.ip_cmd);
-		goto out;
+		ret = -EINVAL;
+		goto unlock;
 	}
 
 	if (ret == -ENOENT) {
@@ -510,14 +511,15 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 		unic_err(priv, "failed to delete IP %s from ip list.\n",
 			 format_ip);
 		ret = 0;
-		goto out;
+		goto unlock;
 	}
 
 	if (!ret)
 		set_bit(UNIC_VPORT_STATE_IP_TBL_CHANGE, &vport->state);
 
-out:
+unlock:
 	spin_unlock_bh(&vport->addr_tbl.tmp_ip_lock);
+send_resp:
 	unic_send_notify_ip_resp(adev, seq, (u8)(-ret));
 
 	return ret;
@@ -624,13 +626,28 @@ static void unic_update_ip_list(struct unic_vport *vport,
 
 	spin_lock_bh(&vport->addr_tbl.ip_list_lock);
 
+	/* If the ip exists in ip list but does not exist in tmp list, the ip has
+	 * been deleted from the manager. If the ip has not been added to the
+	 * protocol stack, the node is directly removed. If the ip has been added
+	 * to the protocol stack, the node status is set to TO_DEL.
+	 */
 	list_for_each_entry_safe(ip_node, tmp, &vport->addr_tbl.ip_list, node) {
 		new_node = unic_comm_find_addr_node(list, ip_node->unic_addr,
 						    ip_node->node_mask);
-		if (!new_node)
-			ip_node->state = UNIC_COMM_ADDR_TO_DEL;
+		if (!new_node) {
+			if (ip_node->state == UNIC_COMM_ADDR_ACTIVE) {
+				ip_node->state = UNIC_COMM_ADDR_TO_DEL;
+			} else if (ip_node->state == UNIC_COMM_ADDR_TO_ADD) {
+				list_del(&ip_node->node);
+				kfree(ip_node);
+			}
+		}
 	}
 
+	/* During the query, the ip added or deleted by the manager are saved in
+	 * the tmp ip list. After the query is complete, the tmp ip list is
+	 * synchronized to the ip list.
+	 */
 	list_for_each_entry_safe(ip_node, tmp, &vport->addr_tbl.tmp_ip_list, node) {
 		new_node = unic_comm_find_addr_node(&vport->addr_tbl.ip_list,
 						    ip_node->unic_addr,

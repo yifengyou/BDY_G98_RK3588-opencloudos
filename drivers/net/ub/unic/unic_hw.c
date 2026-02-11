@@ -384,17 +384,14 @@ int unic_get_promisc_mode(struct unic_dev *unic_dev,
 	return ret;
 }
 
-int unic_set_promisc_mode(struct unic_dev *unic_dev,
-			  struct unic_promisc_en *promisc_en)
+static int unic_send_cfg_promisc_req(struct unic_dev *unic_dev,
+				     struct unic_promisc_en *promisc_en)
 {
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct unic_promisc_cfg_cmd req = {0};
 	struct ubase_cmd_buf in;
 	u32 time_out;
 	int ret;
-
-	if (!unic_dev_ubl_supported(unic_dev))
-		promisc_en->en_bc = 1;
 
 	unic_setup_promisc_req(&req, promisc_en);
 
@@ -410,6 +407,15 @@ int unic_set_promisc_mode(struct unic_dev *unic_dev,
 	return ret;
 }
 
+int unic_set_promisc_mode(struct unic_dev *unic_dev,
+			  struct unic_promisc_en *promisc_en)
+{
+	if (!unic_dev_ubl_supported(unic_dev))
+		promisc_en->en_bc = 1;
+
+	return unic_send_cfg_promisc_req(unic_dev, promisc_en);
+}
+
 void unic_fill_promisc_en(struct unic_promisc_en *promisc_en, u8 flags)
 {
 	promisc_en->en_uc_ip = !!(flags & UNIC_UPE);
@@ -423,14 +429,14 @@ int unic_activate_promisc_mode(struct unic_dev *unic_dev, bool activate)
 	struct unic_promisc_en promisc_en = {0};
 	u8 flags;
 
-	flags = unic_dev->netdev_flags | unic_dev->vport.last_promisc_flags;
-	if (!flags)
-		return 0;
-
-	if (activate)
+	if (activate) {
+		flags = unic_dev->netdev_flags | unic_dev->vport.last_promisc_flags;
 		unic_fill_promisc_en(&promisc_en, flags);
+		if (!unic_dev_ubl_supported(unic_dev))
+			promisc_en.en_bc = 1;
+	}
 
-	return unic_set_promisc_mode(unic_dev, &promisc_en);
+	return unic_send_cfg_promisc_req(unic_dev, &promisc_en);
 }
 
 int unic_sync_promisc_mode(struct unic_dev *unic_dev)
