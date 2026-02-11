@@ -102,6 +102,13 @@ static struct unic_dfx_regs_group unic_dfx_reg_arr[] = {
 		.property = UBASE_SUP_UBL,
 		.is_supported = unic_dfx_reg_support
 	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_HIMAC,
+		.tag = UNIC_TAG_HIMAC,
+		.opcode = UBASE_OPC_DFX_HIMAC_REG,
+		.property = UBASE_SUP_ETH,
+		.is_supported = unic_dfx_reg_support
+	}
 };
 
 static const struct unic_stats_desc unic_sq_stats_str[] = {
@@ -286,6 +293,9 @@ static int unic_get_dfx_regs_len(struct unic_dev *unic_dev,
 		if (!reg_arr[i].is_supported(unic_dev, reg_arr[i].property))
 			continue;
 
+		if (!reg_num[reg_arr[i].regs_idx])
+			continue;
+
 		count += sizeof(struct unic_tlv_hdr) + sizeof(u32) *
 			 reg_num[reg_arr[i].regs_idx];
 	}
@@ -405,6 +415,9 @@ static int unic_get_dfx_regs(struct unic_dev *unic_dev, u8 *data,
 			continue;
 
 		idx = reg_arr[i].regs_idx;
+		if (!reg_num[idx])
+			continue;
+
 		ret = unic_query_regs_data(unic_dev, data, reg_num[idx],
 					   reg_arr[i].opcode);
 		if (ret) {

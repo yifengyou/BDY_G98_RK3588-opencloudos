@@ -46,6 +46,7 @@ enum ubase_opcode_type {
 	UBASE_OPC_DFX_TP_REG		= 0x0044,
 	UBASE_OPC_DFX_TA_REG		= 0x0045,
 	UBASE_OPC_QUERY_BUS_EID		= 0x0047,
+	UBASE_OPC_DFX_HIMAC_REG		= 0x0048,
 	UBASE_OPC_QUERY_UBCL_CONFIG	= 0x0050,
 
 	/* NL commands */
@@ -136,6 +137,7 @@ struct ubase_cmd_buf {
 	bool	is_read;
 	u32	data_size;
 	void	*data;
+
 	KABI_RESERVE(1)
 	KABI_RESERVE(2)
 	KABI_RESERVE(3)

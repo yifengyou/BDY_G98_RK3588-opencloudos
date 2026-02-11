@@ -58,6 +58,7 @@ enum unic_reg_num_idx {
 	UNIC_REG_NUM_IDX_BA,
 	UNIC_REG_NUM_IDX_TP,
 	UNIC_REG_NUM_IDX_TA,
+	UNIC_REG_NUM_IDX_HIMAC,
 	UNIC_REG_NUM_IDX_MAX,
 };
 
@@ -69,6 +70,7 @@ enum unic_reg_tag {
 	UNIC_TAG_BA,
 	UNIC_TAG_TP,
 	UNIC_TAG_TA,
+	UNIC_TAG_HIMAC,
 	UNIC_TAG_MAX,
 };
 
