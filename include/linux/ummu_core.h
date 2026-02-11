@@ -673,14 +673,16 @@ bool ummu_is_sva(struct iommu_domain *domain);
 /**
  * ummu_get_sva_mode() - Get the device SVA working mode
  * @dev: device with SVA feature enabled
- * Return: 0-sva share mode; 1- sva independent mode; other- invalid mode
+ * Return: UMMU_SVA_SHARE_MODE - sva share mode
+ *	   UMMU_SVA_SEPARATE_MODE - sva separate mode
+ *	   other - invalid mode
  */
 int ummu_get_sva_mode(struct device *dev);
 
 /**
  * ummu_sva_get_features() - Get the sva feature of a peripheral.
  * @dev: the device that work on sva mode
- * Return: 32-bit value. bit0: 0- no IOPF cap; 1- with IOPF cap
+ * Return: 32-bit value. bit HW_CAP_IOPF: 0- no IOPF cap; 1- with IOPF cap
  */
 u32 ummu_sva_get_features(struct device *dev);
 
