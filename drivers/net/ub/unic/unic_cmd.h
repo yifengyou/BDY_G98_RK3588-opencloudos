@@ -190,13 +190,6 @@ struct unic_config_vl_map_cmd {
 	u8 resv1[12];
 };
 
-struct unic_config_vl_speed_cmd {
-	u8 resv0[2];
-	__le16 vl_bitmap;
-	__le32 max_speed[UBASE_MAX_VL_NUM];
-	u8 resv1[20];
-};
-
 enum unic_lb_en_sub_cmd {
 	UNIC_LB_APP = 0,
 	UNIC_LB_SERIAL_SERDES,

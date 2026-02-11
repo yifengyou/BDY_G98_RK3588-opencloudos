@@ -293,6 +293,13 @@ struct ubase_query_tm_port_cmd {
 	u8 resv1[12];
 };
 
+struct ubase_config_vl_speed_cmd {
+	u8 resv0[2];
+	__le16 vl_bitmap;
+	__le32 max_speed[UBASE_MAX_VL_NUM];
+	u8 resv1[20];
+};
+
 struct ubase_activate_req {
 	__le16	bus_ue_id;
 	__le16	msn;

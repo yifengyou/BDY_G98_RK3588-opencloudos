@@ -16,6 +16,7 @@
 #include <ub/ubase/ubase_comm_dev.h>
 #include <ub/ubase/ubase_comm_eq.h>
 #include <ub/ubase/ubase_comm_mbx.h>
+#include <ub/ubase/ubase_comm_qos.h>
 #include <ub/ubase/ubase_comm_stats.h>
 
 #include "ubase.h"
@@ -362,6 +363,11 @@ enum ubase_node_type {
 	UBASE_NODE_TYPE_OUTBAND_CTRLED,
 };
 
+struct ubase_dev_qos {
+	struct ubase_adev_qos		adev_qos;
+	struct ubase_initial_qset_qos	initial_qos;
+};
+
 struct ubase_dev {
 	struct device		*dev;
 	int			dev_id;
@@ -371,7 +377,7 @@ struct ubase_dev {
 	bool			use_fixed_rc_num;
 	enum ubase_node_type	node_type;
 	struct ubase_dev_caps	caps;
-	struct ubase_adev_qos	qos;
+	struct ubase_dev_qos	qos;
 	struct ubase_dbgfs	dbgfs;
 	struct ubase_ctx_buf	ctx_buf;
 	struct ubase_ta_layer_ctx	ta_ctx;

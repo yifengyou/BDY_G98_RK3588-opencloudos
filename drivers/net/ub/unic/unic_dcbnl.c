@@ -529,7 +529,8 @@ static int unic_ieee_getmaxrate(struct net_device *ndev,
 static int unic_check_maxrate(struct unic_dev *unic_dev,
 			      struct ieee_maxrate *maxrate)
 {
-	u32 max_speed = unic_dev->hw.mac.max_speed;
+	u32 max_speed = max(unic_dev->channels.vl.maxrate,
+			    unic_dev->hw.mac.max_speed);
 	int i;
 
 	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
@@ -554,6 +555,7 @@ static int unic_ieee_setmaxrate(struct net_device *ndev,
 {
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 	struct unic_vl *vl = &unic_dev->channels.vl;
+	u64 tc_maxrate[IEEE_8021QAZ_MAX_TCS];
 	int ret;
 
 	if (!unic_dev_ets_supported(unic_dev) ||
@@ -567,13 +569,12 @@ static int unic_ieee_setmaxrate(struct net_device *ndev,
 	if (ret)
 		return ret;
 
-	ret = unic_config_vl_rate_limit(unic_dev, maxrate->tc_maxrate,
-					vl->vl_bitmap);
+	memcpy(tc_maxrate, maxrate->tc_maxrate, sizeof(maxrate->tc_maxrate));
+	ret = unic_config_vl_rate_limit(unic_dev, tc_maxrate, vl->vl_bitmap);
 	if (ret)
 		return ret;
 
-	memcpy(vl->vl_maxrate, maxrate->tc_maxrate,
-	       sizeof(maxrate->tc_maxrate));
+	memcpy(vl->vl_maxrate, tc_maxrate, sizeof(tc_maxrate));
 
 	return 0;
 }

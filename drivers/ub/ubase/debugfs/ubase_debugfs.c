@@ -674,6 +674,14 @@ static struct ubase_dbg_cmd_info ubase_dbg_cmd[] = {
 		.init = __ubase_dbg_seq_file_init,
 		.read_func = ubase_dbg_dump_prealloc_mem_info,
 	},
+	{
+		.name = "initial_qset_info",
+		.dentry_index = UBASE_DBG_DENTRY_QOS,
+		.property = UBASE_SUP_URMA | UBASE_SUP_CDMA | UBASE_SUP_UBL_ETH,
+		.support = __ubase_dbg_dentry_support,
+		.init = __ubase_dbg_seq_file_init,
+		.read_func = ubase_dbg_dump_initial_qset_info,
+	},
 };
 
 static int ubase_dbg_create_dir(struct device *dev,

@@ -22,5 +22,6 @@ int ubase_dbg_dump_tm_qset_info(struct seq_file *s, void *data);
 int ubase_dbg_dump_tm_pri_info(struct seq_file *s, void *data);
 int ubase_dbg_dump_tm_pg_info(struct seq_file *s, void *data);
 int ubase_dbg_dump_tm_port_info(struct seq_file *s, void *data);
+int ubase_dbg_dump_initial_qset_info(struct seq_file *s, void *data);
 
 #endif

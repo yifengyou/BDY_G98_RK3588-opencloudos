@@ -43,7 +43,7 @@ static inline unsigned long ubase_convert_sl_vl_bitmap(struct ubase_dev *udev,
 		if (!test_bit(i, &sl_bitmap))
 			continue;
 
-		vl_bitmap |= 1 << udev->qos.ue_sl_vl[i];
+		vl_bitmap |= 1 << udev->qos.adev_qos.ue_sl_vl[i];
 	}
 
 	return vl_bitmap;
@@ -62,8 +62,8 @@ static void ubase_get_vl_sche_info(struct ubase_dev *udev,
 		if (!test_bit(i, &sl_bitmap))
 			continue;
 
-		vl_bw[udev->qos.ue_sl_vl[i]] = sl_priqos->weight[i];
-		vl_tsa[udev->qos.ue_sl_vl[i]] = sl_priqos->sch_mode[i];
+		vl_bw[udev->qos.adev_qos.ue_sl_vl[i]] = sl_priqos->weight[i];
+		vl_tsa[udev->qos.adev_qos.ue_sl_vl[i]] = sl_priqos->sch_mode[i];
 	}
 }
 
@@ -79,8 +79,8 @@ static void ubase_prase_tm_vl_sch_resp(struct ubase_dev *udev,
 		if (!test_bit(i, &sl_bitmap))
 			continue;
 
-		sl_priqos->weight[i] = resp->vl_bw[udev->qos.ue_sl_vl[i]];
-		sl_priqos->sch_mode[i] = test_bit(udev->qos.ue_sl_vl[i],
+		sl_priqos->weight[i] = resp->vl_bw[udev->qos.adev_qos.ue_sl_vl[i]];
+		sl_priqos->sch_mode[i] = test_bit(udev->qos.adev_qos.ue_sl_vl[i],
 						  &tsa_bitmap) ?
 					 UBASE_SL_DWRR : UBASE_SL_SP;
 	}
@@ -97,7 +97,7 @@ static void ubase_prase_ets_vl_sch_resp(struct ubase_dev *udev,
 		if (!test_bit(i, &sl_bitmap))
 			continue;
 
-		sl_priqos->weight[i] = resp->vl_bw[udev->qos.ue_sl_vl[i]];
+		sl_priqos->weight[i] = resp->vl_bw[udev->qos.adev_qos.ue_sl_vl[i]];
 		sl_priqos->sch_mode[i] = sl_priqos->weight[i] ?
 					 UBASE_SL_DWRR : UBASE_SL_SP;
 	}
@@ -408,7 +408,7 @@ int ubase_query_fst_fvt_rqmt(struct ubase_dev *udev,
 
 static unsigned long ubase_get_sl_bitmap(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	unsigned long sl_bitmap = 0;
 	u8 i;
 
@@ -572,6 +572,70 @@ int ubase_get_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos)
 }
 EXPORT_SYMBOL(ubase_get_priqos_info);
 
+static void ubase_get_vl_sl(struct ubase_dev *udev, u8 vl, u8 *sl, u8 *sl_num)
+{
+	u8 i;
+
+	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
+		if (udev->qos.adev_qos.ue_sl_vl[i] == vl)
+			sl[(*sl_num)++] = i;
+	}
+}
+
+static void ubase_gather_udma_req_resp_vl(struct ubase_dev *udev, u8 *req_vl,
+					  u8 req_vl_num, u8 resp_vl_off)
+{
+	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
+	u8 i, j;
+
+	for (i = 0; i < req_vl_num; i++) {
+		for (j = 0; j < qos->nic_vl_num; j++) {
+			if (req_vl[i] == dev_caps->req_vl[j]) {
+				dev_caps->resp_vl[j] = req_vl[i] + resp_vl_off;
+				break;
+			}
+		}
+
+		if (j < qos->nic_vl_num)
+			continue;
+
+		dev_caps->req_vl[dev_caps->vl_num] = req_vl[i];
+		dev_caps->resp_vl[dev_caps->vl_num] = req_vl[i] + resp_vl_off;
+		dev_caps->vl_num++;
+	}
+}
+
+static void ubase_gather_urma_req_resp_vl(struct ubase_dev *udev)
+{
+	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
+
+	memcpy(dev_caps->req_vl, qos->nic_vl, qos->nic_vl_num);
+	memcpy(dev_caps->resp_vl, qos->nic_vl, qos->nic_vl_num);
+	dev_caps->vl_num = qos->nic_vl_num;
+
+	/* Restriction: The unic vl can't be used as the dma resp vl. */
+	ubase_gather_udma_req_resp_vl(udev, qos->tp_req_vl, qos->tp_vl_num,
+				      qos->tp_resp_vl_offset);
+	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl, qos->ctp_vl_num,
+				      qos->ctp_resp_vl_offset);
+
+	/* dev_caps->vl_num is used for DCB tool configuration. Therefore,
+	 * dev_caps->vl_num cannot exceed IEEE_8021QAZ_MAX_TCS.
+	 */
+	dev_caps->vl_num = min(dev_caps->vl_num, IEEE_8021QAZ_MAX_TCS);
+}
+
+static inline void ubase_gather_cdma_req_resp_vl(struct ubase_dev *udev)
+{
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
+
+	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl,
+				      qos->ctp_vl_num,
+				      qos->ctp_resp_vl_offset);
+}
+
 static int ubase_query_ctp_vl_offset(struct ubase_dev *udev, u8 *ctp_vl_offset)
 {
 	struct ubase_query_ctp_vl_offset_cmd resp = {0};
@@ -600,7 +664,7 @@ static int ubase_query_ctp_vl_offset(struct ubase_dev *udev, u8 *ctp_vl_offset)
 
 static int ubase_check_ctp_resp_vl(struct ubase_dev *udev, u8 ctp_vl_offset)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i, ctp_resp_vl_off;
 
 	for (i = 0; i < qos->ctp_vl_num; i++) {
@@ -618,7 +682,7 @@ static int ubase_check_ctp_resp_vl(struct ubase_dev *udev, u8 ctp_vl_offset)
 
 static int ubase_parse_ctp_resp_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 ctp_vl_offset;
 	int ret;
 
@@ -633,70 +697,6 @@ static int ubase_parse_ctp_resp_vl(struct ubase_dev *udev)
 	qos->ctp_resp_vl_offset = ctp_vl_offset;
 
 	return 0;
-}
-
-static void ubase_get_vl_sl(struct ubase_dev *udev, u8 vl, u8 *sl, u8 *sl_num)
-{
-	u8 i;
-
-	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
-		if (udev->qos.ue_sl_vl[i] == vl)
-			sl[(*sl_num)++] = i;
-	}
-}
-
-static void ubase_gather_udma_req_resp_vl(struct ubase_dev *udev, u8 *req_vl,
-					  u8 req_vl_num, u8 resp_vl_off)
-{
-	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
-	struct ubase_adev_qos *qos = &udev->qos;
-	u8 i, j;
-
-	for (i = 0; i < req_vl_num; i++) {
-		for (j = 0; j < qos->nic_vl_num; j++) {
-			if (req_vl[i] == dev_caps->req_vl[j]) {
-				dev_caps->resp_vl[j] = req_vl[i] + resp_vl_off;
-				break;
-			}
-		}
-
-		if (j < qos->nic_vl_num)
-			continue;
-
-		dev_caps->req_vl[dev_caps->vl_num] = req_vl[i];
-		dev_caps->resp_vl[dev_caps->vl_num] = req_vl[i] + resp_vl_off;
-		dev_caps->vl_num++;
-	}
-}
-
-static void ubase_gather_urma_req_resp_vl(struct ubase_dev *udev)
-{
-	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
-	struct ubase_adev_qos *qos = &udev->qos;
-
-	memcpy(dev_caps->req_vl, qos->nic_vl, qos->nic_vl_num);
-	memcpy(dev_caps->resp_vl, qos->nic_vl, qos->nic_vl_num);
-	dev_caps->vl_num = qos->nic_vl_num;
-
-	/* Restriction: The unic vl can't be used as the dma resp vl. */
-	ubase_gather_udma_req_resp_vl(udev, qos->tp_req_vl, qos->tp_vl_num,
-				      qos->tp_resp_vl_offset);
-	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl, qos->ctp_vl_num,
-				      qos->ctp_resp_vl_offset);
-
-	/* dev_caps->vl_num is used for DCB tool configuration. Therefore,
-	 * dev_caps->vl_num cannot exceed IEEE_8021QAZ_MAX_TCS.
-	 */
-	dev_caps->vl_num = min(dev_caps->vl_num, IEEE_8021QAZ_MAX_TCS);
-}
-
-static inline void ubase_gather_cdma_req_resp_vl(struct ubase_dev *udev)
-{
-	struct ubase_adev_qos *qos = &udev->qos;
-
-	ubase_gather_udma_req_resp_vl(udev, qos->ctp_req_vl,
-				      qos->ctp_vl_num,
-				      qos->ctp_resp_vl_offset);
 }
 
 static inline int ubase_parse_udma_resp_vl(struct ubase_dev *udev)
@@ -715,7 +715,7 @@ static int ubase_assign_urma_vl(struct ubase_dev *udev, u8 *urma_sl,
 	int index = 0;
 
 	for (i = 0; i < urma_sl_num; i++) {
-		current_vl = udev->qos.ue_sl_vl[urma_sl[i]];
+		current_vl = udev->qos.adev_qos.ue_sl_vl[urma_sl[i]];
 		if (current_vl >= UBASE_MAX_VL_NUM) {
 			ubase_err(udev,
 				  "urma vl(%u) exceeds the maximum(%u).\n",
@@ -735,13 +735,15 @@ static int ubase_assign_urma_vl(struct ubase_dev *udev, u8 *urma_sl,
 
 static int ubase_parse_nic_vl(struct ubase_dev *udev)
 {
-	return ubase_assign_urma_vl(udev, udev->qos.nic_sl, udev->qos.nic_sl_num,
-				    udev->qos.nic_vl, &udev->qos.nic_vl_num);
+	struct ubase_adev_qos *adev_qos = &udev->qos.adev_qos;
+
+	return ubase_assign_urma_vl(udev, adev_qos->nic_sl, adev_qos->nic_sl_num,
+				    adev_qos->nic_vl, &adev_qos->nic_vl_num);
 }
 
 static int ubase_parse_udma_req_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	int ret;
 
 	ret = ubase_assign_urma_vl(udev, qos->tp_sl, qos->tp_sl_num,
@@ -774,7 +776,7 @@ static int ubase_parse_cdma_resp_vl(struct ubase_dev *udev)
 
 static int ubase_parse_cdma_req_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 
 	qos->ctp_vl_num = 0;
 	memset(qos->ctp_req_vl, 0, sizeof(u8) * UBASE_MAX_VL_NUM);
@@ -784,7 +786,7 @@ static int ubase_parse_cdma_req_vl(struct ubase_dev *udev)
 
 static int ubase_parse_cdma_sl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i;
 
 	for (i = 0; i < qos->ctp_vl_num; i++)
@@ -850,7 +852,7 @@ static int ubase_parse_adev_sl_vl(struct ubase_dev *udev)
 
 static void ubase_init_udma_dscp_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i;
 
 	for (i = 0; i < UBASE_MAX_DSCP; i++)
@@ -860,7 +862,7 @@ static void ubase_init_udma_dscp_vl(struct ubase_dev *udev)
 static void ubase_parse_max_vl(struct ubase_dev *udev)
 {
 	struct ubase_adev_caps *udma_caps = &udev->caps.udma_caps;
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i, ue_max_vl_id = 0;
 
 	for (i = 0; i < qos->nic_vl_num; i++)
@@ -880,9 +882,9 @@ static void ubase_parse_max_vl(struct ubase_dev *udev)
 		udma_caps->rc_max_cnt *= (ue_max_vl_id + 1);
 }
 
-static int ubase_get_nic_max_vl(struct ubase_dev *udev)
+static u8 ubase_get_nic_max_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i, nic_max_vl = 0;
 
 	for (i = 0; i < qos->nic_vl_num; i++)
@@ -895,7 +897,7 @@ static int ubase_parse_sl_vl(struct ubase_dev *udev)
 {
 	int ret;
 
-	ret = ubase_query_sl_vl_map(udev, udev->qos.ue_sl_vl);
+	ret = ubase_query_sl_vl_map(udev, udev->qos.adev_qos.ue_sl_vl);
 	if (ret)
 		return ret;
 
@@ -946,14 +948,14 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	/* NOTE: ctp_req_vl array temporarily saves both ctp req vl and ctp resp vl */
 	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
 		if (test_bit(i, &vl_bitmap))
-			udev->qos.ctp_req_vl[cdma_vl_cnt++] = i;
+			udev->qos.adev_qos.ctp_req_vl[cdma_vl_cnt++] = i;
 
 	if (!cdma_vl_cnt) {
 		ubase_err(udev, "cdma doesn't have any vl.\n");
 		return -EIO;
 	}
 
-	udev->qos.ctp_vl_num = cdma_vl_cnt;
+	udev->qos.adev_qos.ctp_vl_num = cdma_vl_cnt;
 
 	return 0;
 }
@@ -1018,11 +1020,11 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 
 	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
 		if (test_bit(i, &unic_sl_bitmap))
-			udev->qos.nic_sl[unic_sl_cnt++] = i;
+			udev->qos.adev_qos.nic_sl[unic_sl_cnt++] = i;
 		if (test_bit(i, &udma_tp_sl_bitmap))
-			udev->qos.tp_sl[udma_tp_sl_cnt++] = i;
+			udev->qos.adev_qos.tp_sl[udma_tp_sl_cnt++] = i;
 		if (test_bit(i, &udma_ctp_sl_bitmap))
-			udev->qos.ctp_sl[udma_ctp_sl_cnt++] = i;
+			udev->qos.adev_qos.ctp_sl[udma_ctp_sl_cnt++] = i;
 	}
 
 	if (!unic_sl_cnt) {
@@ -1035,11 +1037,154 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 		return -EIO;
 	}
 
-	udev->qos.nic_sl_num = unic_sl_cnt;
-	udev->qos.tp_sl_num = udma_tp_sl_cnt;
-	udev->qos.ctp_sl_num = udma_ctp_sl_cnt;
+	udev->qos.adev_qos.nic_sl_num = unic_sl_cnt;
+	udev->qos.adev_qos.tp_sl_num = udma_tp_sl_cnt;
+	udev->qos.adev_qos.ctp_sl_num = udma_ctp_sl_cnt;
 
 	return 0;
+}
+
+static int
+ubase_check_tm_queue_qset_configuration(struct ubase_dev *udev,
+					struct ubase_query_tm_qset_cmd *tm_qset,
+					struct ubase_query_tm_queue_cmd *tm_queue)
+{
+	u8 i;
+
+	if (tm_qset->qset_num != tm_queue->queue_num) {
+		ubase_err(udev,
+			  "the number of tm_queue(%u) and tm_qsets(%u) are different.\n",
+			  tm_queue->queue_num, tm_qset->qset_num);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < tm_qset->qset_num; i++) {
+		if (tm_qset->qset_id[i] != tm_queue->queue_id[i] ||
+		    tm_queue->queue_id[i] != tm_queue->qset_id[i]) {
+			ubase_err(udev,
+				  "tm_qset id(%u, %u) and tm_queue id(%u) are not equal.\n",
+				  tm_qset->qset_id[i], tm_queue->qset_id[i],
+				  tm_queue->queue_id[i]);
+			return -EINVAL;
+		}
+
+		if (tm_queue->queue_vl[i] >= UBASE_MAX_VL_NUM) {
+			ubase_err(udev,
+				  "vl(%u) corresponding to tm_queue(%u) exceeds the maximum value of vl (%u).\n",
+				  tm_queue->queue_vl[i], tm_queue->queue_id[i],
+				  UBASE_MAX_VL_NUM);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int ubase_save_initial_qos_configuration(struct ubase_dev *udev)
+{
+	struct ubase_initial_qset_qos *initial_qos = &udev->qos.initial_qos;
+	struct ubase_query_tm_queue_cmd tm_queue = {0};
+
+	struct ubase_query_tm_qset_cmd tm_qset = {0};
+	int ret;
+	u8 i;
+
+	ret = ubase_query_tm_qset(udev, 0, &tm_qset);
+	if (ret)
+		return ret == -EOPNOTSUPP ? 0 : ret;
+
+	ret = ubase_query_tm_queue(udev, 0, &tm_queue);
+	if (ret)
+		return ret == -EOPNOTSUPP ? 0 : ret;
+
+	ret = ubase_check_tm_queue_qset_configuration(udev, &tm_qset, &tm_queue);
+	if (ret)
+		return ret;
+
+	initial_qos->num = tm_qset.qset_num;
+	for (i = 0; i < tm_qset.qset_num; i++) {
+		initial_qos->qset_id[i] = tm_qset.qset_id[i];
+		initial_qos->qset_weight[i] = tm_qset.qset_weight[i];
+		initial_qos->rate[i] = le32_to_cpu(tm_qset.rate[i]);
+		initial_qos->vl[i] = tm_queue.queue_vl[i];
+	}
+
+	return 0;
+}
+
+static int __ubase_config_tm_vl_rate_limit(struct ubase_dev *udev, u16 vl_bitmap,
+					   u32 *vl_maxrate)
+{
+	struct ubase_config_vl_speed_cmd req = {0};
+	struct ubase_cmd_buf in;
+	int ret;
+	u8 i;
+
+	req.vl_bitmap = cpu_to_le16(vl_bitmap);
+	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
+		req.max_speed[i] = cpu_to_le32(vl_maxrate[i]);
+
+	ubase_fill_inout_buf(&in, UBASE_OPC_VL_RATE_LIMIT_CONFIG, false,
+			     sizeof(req), &req);
+
+	ret = __ubase_cmd_send_in(udev, &in);
+	if (ret && ret != -EPERM)
+		ubase_err(udev,
+			  "failed to config tm vl rate limit, ret = %d.\n", ret);
+
+	return ret;
+}
+
+/**
+ * ubase_config_tm_vl_rate_limit() - config tm vl rate limit
+ * @adev: auxiliary device
+ * @vl_bitmap: vl bitmap
+ * @vl_maxrate: vl max rate
+ *
+ * The function is used to config tm vl rate limit. Configure the vl max rate
+ * 'vl_maxrate' corresponding to the valid vl in 'vl_bitmap'.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_config_tm_vl_rate_limit(struct auxiliary_device *adev, u16 vl_bitmap,
+				  u32 *vl_maxrate)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !vl_maxrate)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	return __ubase_config_tm_vl_rate_limit(udev, vl_bitmap, vl_maxrate);
+}
+EXPORT_SYMBOL(ubase_config_tm_vl_rate_limit);
+
+static int __ubase_restore_initial_qset_qos(struct ubase_dev *udev)
+{
+	struct ubase_initial_qset_qos *initial_qos = &udev->qos.initial_qos;
+	u32 vl_maxrate[UBASE_MAX_VL_NUM] = {0};
+	u8 vl_tsa[UBASE_MAX_VL_NUM] = {0};
+	u8 vl_bw[UBASE_MAX_VL_NUM] = {0};
+	u16 vl_bitmap = 0;
+	int ret;
+	u8 i;
+
+	if (!initial_qos->num)
+		return 0;
+
+	for (i = 0; i < initial_qos->num; i++) {
+		set_bit(initial_qos->vl[i], (unsigned long *)&vl_bitmap);
+		vl_bw[i] = initial_qos->qset_weight[i];
+		vl_tsa[i] = vl_bw[i] ? UBASE_SL_DWRR : UBASE_SL_SP;
+		vl_maxrate[i] = initial_qos->rate[i];
+	}
+
+	ret = __ubase_config_tm_vl_sch(udev, vl_bitmap, vl_bw, vl_tsa);
+	if (ret)
+		return ret;
+
+	return __ubase_config_tm_vl_rate_limit(udev, vl_bitmap, vl_maxrate);
 }
 
 int ubase_qos_init(struct ubase_dev *udev)
@@ -1054,10 +1199,16 @@ int ubase_qos_init(struct ubase_dev *udev)
 	if (ret)
 		return ret;
 
-	if (ubase_dev_pmu_supported(udev))
-		return 0;
+	ret = ubase_parse_sl_vl(udev);
+	if (ret)
+		return ret;
 
-	return ubase_parse_sl_vl(udev);
+	return ubase_save_initial_qos_configuration(udev);
+}
+
+void ubase_qos_uninit(struct ubase_dev *udev)
+{
+	(void)__ubase_restore_initial_qset_qos(udev);
 }
 
 static bool ubase_is_udma_tp_vl(struct ubase_adev_qos *qos, u8 vl)
@@ -1216,3 +1367,47 @@ int ubase_query_tm_port(struct ubase_dev *udev,
 		ubase_err(udev, "failed to query tm port info, ret = %d.\n", ret);
 	return ret;
 }
+
+/**
+ * ubase_restore_initial_qset_qos() - restore initial tm qset configuration
+ * @adev: auxiliary device
+ *
+ * This function is called to restore the initial configuration of the
+ * corresponding module driver to prevent residual user configurations.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_restore_initial_qset_qos(struct auxiliary_device *adev)
+{
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	return __ubase_restore_initial_qset_qos(udev);
+}
+EXPORT_SYMBOL(ubase_restore_initial_qset_qos);
+
+/**
+ * ubase_get_initial_qset_qos() - get initial tm qset configuration
+ * @adev: auxiliary device
+ *
+ * The function is used to get initial tm qset configuration.
+ *
+ * Context: Any context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_initial_qset_qos
+ */
+struct ubase_initial_qset_qos *
+ubase_get_initial_qset_qos(struct auxiliary_device *adev)
+{
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return NULL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	return &udev->qos.initial_qos;
+}
+EXPORT_SYMBOL(ubase_get_initial_qset_qos);

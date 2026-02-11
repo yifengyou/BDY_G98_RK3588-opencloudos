@@ -143,8 +143,9 @@ struct unic_vl {
 	u16	queue_count[UBASE_MAX_VL_NUM];
 	u16	queue_offset[UBASE_MAX_VL_NUM];
 	u8	vl_sl[UBASE_MAX_VL_NUM];
-	u64	vl_maxrate[UBASE_MAX_VL_NUM];
+	u64	vl_maxrate[UBASE_MAX_VL_NUM]; /* unit: bps */
 	u16	vl_bitmap;
+	u32	maxrate; /* unit: Mbps */
 	struct	unic_pfc_info	pfc_info;
 };
 

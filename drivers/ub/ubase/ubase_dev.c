@@ -769,8 +769,8 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 		NULL, NULL
 	},
 	{
-		"init qos", UBASE_SUP_ALL, 0,
-		ubase_qos_init, NULL
+		"init qos", UBASE_SUP_NO_PMU, 0,
+		ubase_qos_init, ubase_qos_uninit
 	},
 	{
 		"prealloc memory", UBASE_SUP_UDMA, 1,
@@ -1424,7 +1424,7 @@ struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 		return NULL;
 
 	udev = __ubase_get_udev_by_adev(adev);
-	return &udev->qos;
+	return &udev->qos.adev_qos;
 }
 EXPORT_SYMBOL(ubase_get_adev_qos);
 

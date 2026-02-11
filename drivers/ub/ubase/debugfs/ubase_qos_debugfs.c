@@ -30,7 +30,7 @@ int ubase_dbg_dump_sl_vl_map(struct seq_file *s, void *data)
 	seq_puts(s, "sl  sw_vl  hw_vl\n");
 	for (i = 0; i < UBASE_MAX_SL_NUM; i++) {
 		seq_printf(s, "%-4u", i);
-		seq_printf(s, "%-7u", udev->qos.ue_sl_vl[i]);
+		seq_printf(s, "%-7u", udev->qos.adev_qos.ue_sl_vl[i]);
 		seq_printf(s, "%-7u", sl_vl[i]);
 		seq_puts(s, "\n");
 	}
@@ -50,7 +50,7 @@ int ubase_dbg_dump_udma_dscp_vl_map(struct seq_file *s, void *data)
 	seq_puts(s, "dscp   vl\n");
 	for (i = 0; i < UBASE_MAX_DSCP; i++) {
 		seq_printf(s, "%-7d", i);
-		seq_printf(s, "%-4u", udev->qos.dscp_vl[i]);
+		seq_printf(s, "%-4u", udev->qos.adev_qos.dscp_vl[i]);
 		seq_puts(s, "\n");
 	}
 
@@ -218,7 +218,7 @@ static void ubase_dbg_dump_adev_sl_info(struct seq_file *s,
 int ubase_dbg_dump_adev_qos_info(struct seq_file *s, void *data)
 {
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
-	struct ubase_adev_qos *qos = &udev->qos;
+	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	struct ubase_dbg_adev_qos_info {
 		const char *format;
 		u8 qos_info;
@@ -690,6 +690,27 @@ int ubase_dbg_dump_tm_port_info(struct seq_file *s, void *data)
 
 	ubase_dbg_fill_tm_port_sharper_seq(&resp, s);
 	seq_puts(s, "\n");
+
+	return 0;
+}
+
+int ubase_dbg_dump_initial_qset_info(struct seq_file *s, void *data)
+{
+	struct ubase_dev *udev = dev_get_drvdata(s->private);
+	struct ubase_initial_qset_qos *initial_qos = &udev->qos.initial_qos;
+	u8 i;
+
+	if (!initial_qos->num)
+		return -EOPNOTSUPP;
+
+	seq_puts(s, "vl   qset_id   weight   rate(Mbps)\n");
+
+	for (i = 0; i < initial_qos->num; i++) {
+		seq_printf(s, "%-7u", initial_qos->vl[i]);
+		seq_printf(s, "%-10u", initial_qos->qset_id[i]);
+		seq_printf(s, "%-9u", initial_qos->qset_weight[i]);
+		seq_printf(s, "%-7u\n", initial_qos->rate[i]);
+	}
 
 	return 0;
 }
