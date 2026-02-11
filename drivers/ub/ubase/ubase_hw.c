@@ -1001,6 +1001,8 @@ int __ubase_perf_stats(struct ubase_dev *udev, u64 port_bitmap, u32 period,
 
 		data[k].tx_port_bw = le32_to_cpu(resp.tx_port_bw);
 		data[k].rx_port_bw = le32_to_cpu(resp.rx_port_bw);
+		data[k].tx_max_port_bw = le32_to_cpu(resp.tx_max_port_bw);
+		data[k].rx_max_port_bw = le32_to_cpu(resp.rx_max_port_bw);
 		data[k].port_id = i;
 		data[k].valid = 1;
 

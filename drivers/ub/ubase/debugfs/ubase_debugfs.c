@@ -312,6 +312,8 @@ static void ubase_dbg_fill_single_port(struct seq_file *s,
 	seq_printf(s, "\tport_id: %u\n", stats->port_id);
 	seq_printf(s, "\tport_tx_bw: %u(kbps)\n", le32_to_cpu(stats->tx_port_bw));
 	seq_printf(s, "\tport_rx_bw: %u(kbps)\n", le32_to_cpu(stats->rx_port_bw));
+	seq_printf(s, "\tport_tx_max_bw: %u(kbps)\n", le32_to_cpu(stats->tx_max_port_bw));
+	seq_printf(s, "\tport_rx_max_bw: %u(kbps)\n", le32_to_cpu(stats->rx_max_port_bw));
 	seq_puts(s, "\tvl   tx_bw(kbps)          rx_bw(kbps)\n");
 
 	for (i = 0; i < UBASE_STATS_MAX_VL_NUM; i++) {
@@ -326,7 +328,7 @@ static void ubase_dbg_fill_single_port(struct seq_file *s,
 static int ubase_dbg_dump_perf_stats_ub(struct seq_file *s,
 					struct ubase_dev *udev)
 {
-#define UBASE_UB_PERF_STATS_PERIOD	10
+#define UBASE_UB_PERF_STATS_PERIOD	100
 #define UBASE_QUERY_ALL_BITMAP	0
 
 	struct ubase_perf_stats_result *stats;

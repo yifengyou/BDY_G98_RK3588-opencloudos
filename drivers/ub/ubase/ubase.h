@@ -73,5 +73,6 @@ static inline u32 ubase_read_reg(u8 __iomem *base, u32 reg)
 	ubase_read_reg((a)->io_base.addr, reg)
 
 #define ubase_addr_gen(addr_h, addr_l) ((u64)(addr_h) << 32 | (addr_l))
+#define ubase_size_gen(size_h, size_l) ((u64)(size_h) << 32 | (size_l))
 
 #endif

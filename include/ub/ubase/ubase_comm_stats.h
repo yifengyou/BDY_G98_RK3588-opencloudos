@@ -267,6 +267,32 @@ struct ubase_perf_stats_result {
 	KABI_RESERVE(4)
 };
 
+/**
+ * struct ubase_ub_dl_pkt_stats_result - ub dl packet bytes statistics results
+ * @valid: data valid flag, 0-invalid, 1-valid
+ * @resv0: reserved bits
+ * @port_id: port id
+ * @resv1: reserved bits
+ * @tx_pkt_bytes: tx dl packet bytes
+ * @rx_pkt_bytes: rx dl packet bytes
+ */
+struct ubase_ub_dl_pkt_stats_result {
+	u8	valid : 1;
+	u8	resv0 : 7;
+	u8	port_id;
+	u8	resv1[2];
+
+	u64	tx_pkt_bytes;
+	u64	rx_pkt_bytes;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+};
+
 void ubase_clear_eth_port_stats(struct auxiliary_device *adev);
 int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 			    struct ubase_ub_dl_stats *data);
@@ -274,5 +300,8 @@ int ubase_get_eth_port_stats(struct auxiliary_device *adev,
 			     struct ubase_eth_mac_stats *data);
 int ubase_perf_stats(struct auxiliary_device *adev, u64 port_bitmap, u32 period,
 		     struct ubase_perf_stats_result *data, u32 data_size);
+int ubase_get_ub_dl_pkt_stats(struct auxiliary_device *adev, u64 port_bitmap,
+			      struct ubase_ub_dl_pkt_stats_result *data,
+			      u32 data_size);
 
 #endif /* _UBASE_COMM_STATS_H */
