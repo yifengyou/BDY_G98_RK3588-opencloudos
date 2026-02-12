@@ -193,7 +193,7 @@ struct ub_entity {
 	u32 token_id;
 	u32 token_value;
 
-	/* mue & ue info */
+	/* MUE & UE info */
 	u8 is_mue;
 	u16 total_ues;
 	u16 num_ues;
@@ -205,7 +205,7 @@ struct ub_entity {
 	/* entity topology info */
 	struct list_head node;
 	struct ub_bus_controller *ubc;
-	struct ub_entity *pue; /* ue/mue connected to their mue */
+	struct ub_entity *pue; /* UE/MUE connected to their MUE */
 	int topo_rank; /* The levels of Breadth-First Search */
 
 	/* entity port info */
@@ -334,10 +334,10 @@ struct ub_dynids {
  * @shutdown:	Hook into reboot_notifier_list (kernel/sys.c).
  *		Intended to stop any idling operations.
  * @virt_configure: Optional driver callback to allow configuration of
- *		ues. This function is called to enable or disable ues.
+ *		UEs. This function is called to enable or disable UEs.
  * @virt_notify: Optional driver callback to notify the driver about
- *		changes in ue status. This function is called
- *		when the status of a ue changes.
+ *		changes in UE status. This function is called
+ *		when the status of a UE changes.
  * @activate:	Activate a specific entity. This function is called to
  *		activate an entity by its index.
  * @deactivate:	Deactivate a specific entity. This function is called to
@@ -510,14 +510,14 @@ void ub_bus_type_iommu_ops_set(const struct iommu_ops *ops);
 const struct iommu_ops *ub_bus_type_iommu_ops_get(void);
 
 /**
- * ub_get_ent_by_eid() - Searching for UB Devices by EID.
+ * ub_get_ent_by_eid() - Searching for UB entity by EID.
  * @eid: entity EID.
  *
  * Traverse the UB bus device linked list and search for the device with
  * the target EID. You need to call ub_entity_put() after using it.
  *
  * Context: Any context.
- * Return: The device found, or NULL if not found.
+ * Return: The entity found, or NULL if not found.
  */
 struct ub_entity *ub_get_ent_by_eid(unsigned int eid);
 
@@ -566,8 +566,7 @@ struct ub_entity *ub_get_entity(unsigned int vendor, unsigned int entity,
  * @uent: UB entity.
  * @enable: Enable or disable.
  *
- * Enables or disables the entity access bus and the path through which
- * the bus accesses the entity.
+ * Enable or disable the communication channel between entity and user host.
  *
  * Context: Any context.
  */
@@ -588,31 +587,31 @@ int ub_set_user_info(struct ub_entity *uent);
  * ub_unset_user_info() - Deinitialize host information for the entity.
  * @uent: UB entity.
  *
- * Clearing the Host Information of a entity.
+ * Clearing the host information of an entity.
  *
  * Context: Any context.
  */
 void ub_unset_user_info(struct ub_entity *uent);
 
 /**
- * ub_enable_entities() - Enable ues of mue in batches.
- * @pue: UB mue.
+ * ub_enable_entities() - Enable UEs of MUE in batches.
+ * @pue: UB MUE.
  * @nums: Number of enabled entities.
  *
- * Create ues in batches, initialize them, and add them to the system.
+ * Create and initialize UEs in batches and add to the system.
  *
  * Context: Any context.
- * Return: 0 if success, or %-EINVAL if @pue type is not mue or nums over
- * mue's total ue nums, or %-ENOMEM if the system is out of memory,
+ * Return: 0 if success, or %-EINVAL if @pue type is not MUE or nums over
+ * MUE's total UE nums, or %-ENOMEM if the system is out of memory,
  * or other failed negative values.
  */
 int ub_enable_entities(struct ub_entity *pue, int nums);
 
 /**
- * ub_disable_entities() - Disable ues of mue in batches.
- * @pue: UB mue.
+ * ub_disable_entities() - Disable UEs of MUE in batches.
+ * @pue: UB MUE.
  *
- * Remove all enabled ues under the mue from the system.
+ * Remove all enabled UEs under the MUE from the system.
  *
  * Context: Any context.
  */
@@ -620,29 +619,29 @@ void ub_disable_entities(struct ub_entity *pue);
 
 /**
  * ub_enable_ue() - Enable a single ue.
- * @pue: UB mue.
+ * @pue: UB MUE.
  * @entity_idx: Number of the entity to be enabled.
  *
- * Create a specified ue under mue, initialize the ue,
+ * Create a specified UE under MUE, initialize the ue,
  * and add it to the system.
  *
  * Context: Any context.
- * Return: 0 if success, or %-EINVAL if @pue type is not mue or @entity_idx
- * is no longer in the ue range of mue, or %-EEXIST if entity has been
+ * Return: 0 if success, or %-EINVAL if @pue type is not MUE or @entity_idx
+ * is no longer in the UE range of MUE, or %-EEXIST if entity has been
  * enabled, or other failed negative values.
  */
 int ub_enable_ue(struct ub_entity *pue, int entity_idx);
 
 /**
  * ub_disable_ue() - Disable a single ue.
- * @pue: UB mue.
+ * @pue: UB MUE.
  * @entity_idx: Number of the entity to be disabled.
  *
- * Remove a specified ue.
+ * Remove a specified UE.
  *
  * Context: Any context.
- * Return: 0 if success, or %-EINVAL if @pue type is not mue or @entity_idx
- * is no longer in the ue range of mue, or %-ENODEV if entity hasn't
+ * Return: 0 if success, or %-EINVAL if @pue type is not MUE or @entity_idx
+ * is no longer in the UE range of MUE, or %-ENODEV if entity hasn't
  * been enabled.
  */
 int ub_disable_ue(struct ub_entity *pue, int entity_idx);
@@ -662,7 +661,7 @@ bool ub_get_entity_flex_en(void);
  * @uent: UB entity.
  *
  * Return the EID of bus instance if the entity has already been bound,
- * or controller's EID.
+ * otherwise return controller's EID.
  *
  * Context: Any context.
  * Return: positive number if success, or %-EINVAL if @dev is %NULL,
@@ -743,7 +742,7 @@ void ub_unregister_share_port(struct ub_entity *uent, u16 port_id,
  * ub_reset_entity() - Function entity level reset.
  * @ent: UB entity.
  *
- * Reset a single entity without affecting other entities, If you want to reuse
+ * Reset a single entity without affecting other entities. If you want to reuse
  * the entity after reset, you need to re-initialize it.
  *
  * Context: Any context
@@ -757,7 +756,7 @@ int ub_reset_entity(struct ub_entity *ent);
  * ub_device_reset() - Device level reset.
  * @ent: UB entity.
  *
- * Reset Device, include all entities under the device, If you want to reuse
+ * Reset device, including all entities under the device. If you want to reuse
  * the device after reset, you need to re-initialize it.
  *
  * Context: Any context
@@ -771,10 +770,10 @@ int ub_device_reset(struct ub_entity *ent);
  * @uent: UB entity.
  * @vdm_pld: Vendor private message payload context.
  *
- * Send a vendor private message to the entity. Response will put in
- * vdm_pld->rsp_pld, and will fill in vdm->rsp_pld_len.
+ * Send a vendor private message to the entity. Response will be put in
+ * vdm_pld->rsp_pld, and response length is stored in vdm->rsp_pld_len.
  *
- * Context: Any context, It will take spin_lock_irqsave()/spin_unlock_restore()
+ * Context: Any context, it will take spin_lock_irqsave()/spin_unlock_restore()
  * Return: 0 if success, or %-EINVAL if parameters invalid,
  * or %-ENOMEM if system out of memory, or other failed negative values.
  */
@@ -796,10 +795,10 @@ unsigned int ub_irq_calc_affinity_vectors(unsigned int minvec,
 void ub_disable_intr(struct ub_entity *uent);
 
 /**
- * ub_intr_vec_count() - Interrupt Vectors Supported by a entity.
+ * ub_intr_vec_count() - Interrupt Vectors Supported by an entity.
  * @uent: UB entity.
  *
- * Querying the Number of Interrupt Vectors Supported by a entity.
+ * Querying the Number of Interrupt Vectors Supported by an entity.
  * For interrupt type 2.
  *
  * Context: Any context.
@@ -808,10 +807,10 @@ void ub_disable_intr(struct ub_entity *uent);
 u32 ub_intr_vec_count(struct ub_entity *uent);
 
 /**
- * ub_int_type1_vec_count() - Interrupt Vectors Supported by a entity.
+ * ub_int_type1_vec_count() - Interrupt Vectors Supported by an entity.
  * @uent: UB entity.
  *
- * Querying the Number of Interrupt Vectors Supported by a entity.
+ * Querying the Number of Interrupt Vectors Supported by an entity.
  * For interrupt type 1.
  *
  * Context: Any context.
@@ -864,7 +863,7 @@ static inline int ub_alloc_irq_vectors(struct ub_entity *uent,
 int ub_irq_vector(struct ub_entity *uent, unsigned int nr);
 
 /**
- * ub_irq_get_affinity() - Get a entity interrupt vector affinity
+ * ub_irq_get_affinity() - Get an entity interrupt vector affinity
  * @uent: the UB entity to operate on
  * @nr:  entity-relative interrupt vector index (0-based); has different
  *       meanings, depending on interrupt mode:
@@ -884,7 +883,7 @@ const struct cpumask *ub_irq_get_affinity(struct ub_entity *uent, int nr);
  * @uent: UB entity.
  * @entity_idx: Number of the entity to be activated.
  *
- * Context: Any context, It will take device_trylock()/device_unlock()
+ * Context: Any context, it will take device_trylock()/device_unlock()
  * Return: 0 if success, or %-EINVAL if the device doesn't match the driver,
  * or %-EBUSY if can't get device_trylock(), or other failed negative values.
  */
@@ -895,7 +894,7 @@ int ub_activate_entity(struct ub_entity *uent, u32 entity_idx);
  * @uent: UB entity.
  * @entity_idx: Number of the entity to be deactivated.
  *
- * Context: Any context, It will take device_trylock()/device_unlock()
+ * Context: Any context, it will take device_trylock()/device_unlock()
  * Return: 0 if success, or %-EINVAL if the entity doesn't match the driver,
  * or %-EBUSY if can't get device_trylock(), or other failed negative values.
  */
@@ -910,7 +909,7 @@ int ub_deactivate_entity(struct ub_entity *uent, u32 entity_idx);
  * Initiate configuration access to the specified address of the entity
  * configuration space and read 1 byte.
  *
- * Context: Any context, It will take spin_lock_irqsave()/spin_unlock_restore()
+ * Context: Any context, it will take spin_lock_irqsave()/spin_unlock_restore()
  * Return: 0 if success, or negative value if failed.
  */
 int ub_cfg_read_byte(struct ub_entity *uent, u64 pos, u8 *val);
@@ -925,7 +924,7 @@ int ub_cfg_read_dword(struct ub_entity *uent, u64 pos, u32 *val);
  * Initiate configuration access to the specified address of the entity
  * configuration space and write 1 byte.
  *
- * Context: Any context, It will take spin_lock_irqsave()/spin_unlock_restore()
+ * Context: Any context, it will take spin_lock_irqsave()/spin_unlock_restore()
  * Return: 0 if success, or negative value if failed.
  */
 int ub_cfg_write_byte(struct ub_entity *uent, u64 pos, u8 val);
@@ -937,7 +936,7 @@ int ub_cfg_write_dword(struct ub_entity *uent, u64 pos, u32 val);
  * @uent: UB entity pointer.
  *
  * Context: Any context.
- * Return: uent, or NULL if @uent is NULL.
+ * Return: @uent itself, or NULL if @uent is NULL.
  */
 struct ub_entity *ub_entity_get(struct ub_entity *uent);
 
@@ -955,9 +954,9 @@ void ub_entity_put(struct ub_entity *uent);
  * @max_num: Buffer size.
  * @real_num: Real entities num.
  *
- * All ub bus controllers in the system are returned. Increase the reference
- * counting of all entities by 1. Remember to call ub_put_bus_controller() after
- * using it.
+ * All ub bus controllers in the system are collected in @uents. Increase the
+ * reference counting of all entities by 1. Remember to call
+ * ub_put_bus_controller() after using it.
  *
  * Context: Any context.
  * Return: 0 if success, or %-EINVAL if input parameter is NULL,
@@ -1020,8 +1019,8 @@ void ub_unregister_driver(struct ub_driver *drv);
  * ub_stop_ent() - Stop the entity.
  * @uent: UB entity.
  *
- * Call device_release_driver(), user can't use it again, if it's a mue,
- * will stop all ues under it, if it's entity0, will stop all entity under it.
+ * Call device_release_driver(), user can't use it again. If it's a MUE,
+ * will stop all UEs under it. If it's entity0, will stop all entities under it.
  *
  * Context: Any context.
  */
@@ -1031,8 +1030,9 @@ void ub_stop_ent(struct ub_entity *uent);
  * ub_stop_and_remove_ent() - Stop and remove the entity from system.
  * @uent: UB entity.
  *
- * Call device_release_driver() and device_unregister(), if it's a mue,
- * will remove all ues under it, if it's entity0, will remove all entity under it.
+ * Call device_release_driver() and device_unregister(). If it's a MUE,
+ * will remove all UEs under it. If it's entity0, will remove all entities
+ * under it.
  *
  * Context: Any context.
  */

@@ -53,10 +53,6 @@ static int __init hisi_ubus_driver_register(struct platform_driver *drv)
 	if (ret)
 		return ret;
 
-	ret = ub_host_probe();
-	if (ret)
-		goto host_probe_fail;
-
 	ret = platform_driver_register(drv);
 	if (ret)
 		goto platform_driver_register_fail;
@@ -64,8 +60,6 @@ static int __init hisi_ubus_driver_register(struct platform_driver *drv)
 	return 0;
 
 platform_driver_register_fail:
-	ub_host_remove();
-host_probe_fail:
 	unregister_ub_manage_subsystem_ops(&hisi_ub_manage_subsystem_ops);
 	return ret;
 }
@@ -73,7 +67,6 @@ host_probe_fail:
 static void __exit hisi_ubus_driver_unregister(struct platform_driver *drv)
 {
 	platform_driver_unregister(drv);
-	ub_host_remove();
 	unregister_ub_manage_subsystem_ops(&hisi_ub_manage_subsystem_ops);
 }
 

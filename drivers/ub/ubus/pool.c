@@ -456,6 +456,18 @@ int ub_fm_flush_ubc_info(struct ub_bus_controller *ubc)
 	if (!buf)
 		goto out;
 
+	ret = ub_query_ent_na(ubc->uent, buf);
+	if (ret) {
+		dev_err(dev, "update cluster ubc cna failed, ret=%d\n", ret);
+		goto free_buf;
+	}
+
+	ret = ub_query_port_na(ubc->uent, buf);
+	if (ret) {
+		dev_err(dev, "update cluster ubc port cna failed, ret=%d\n", ret);
+		goto free_buf;
+	}
+
 	ret = ub_cfg_read_word(ubc->uent, UB_UPI, &upi);
 	if (ret) {
 		dev_err(dev, "update cluster upi failed, ret=%d\n", ret);
@@ -488,14 +500,6 @@ int ub_fm_flush_ubc_info(struct ub_bus_controller *ubc)
 
 	ubc->uent->fm_cna = fm_cna & UB_FM_CNA_MASK;
 	dev_info(dev, "update cluster ubc fm cna to %#x\n", ubc->uent->fm_cna);
-
-	ret = ub_query_ent_na(ubc->uent, buf);
-	if (ret) {
-		dev_err(dev, "update cluster ubc cna failed, ret=%d\n", ret);
-		goto free_buf;
-	}
-
-	ret = ub_query_port_na(ubc->uent, buf);
 
 free_buf:
 	kfree(buf);
