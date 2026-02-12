@@ -208,8 +208,14 @@ static int cdma_dbg_dump_ctx(struct seq_file *s, enum cdma_dbg_ctx_type ctx_type
 		void (*get_title)(struct seq_file *s);
 		void (*get_cfg)(struct cdma_queue *queue, struct seq_file *s);
 	} dbg_ctx[] = {
-		{cdma_get_jfs_title, cdma_get_jfs_cfg},
-		{cdma_get_jfc_title, cdma_get_jfc_cfg},
+		{
+			.get_title = cdma_get_jfs_title,
+			.get_cfg = cdma_get_jfs_cfg,
+		},
+		{
+			.get_title = cdma_get_jfc_title,
+			.get_cfg = cdma_get_jfc_cfg,
+		},
 	};
 	struct cdma_dev *cdev = dev_get_drvdata(s->private);
 	u32 queue_id = cdev->cdbgfs.cfg.queue_id;
