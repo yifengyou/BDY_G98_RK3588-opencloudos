@@ -675,21 +675,13 @@ static bool stage2_has_fwb(struct kvm_pgtable *pgt)
 void kvm_tlb_flush_vmid_range(struct kvm_s2_mmu *mmu,
 				phys_addr_t addr, size_t size)
 {
-	unsigned long pages, inval_pages;
+	unsigned long pages = size >> PAGE_SHIFT;
 
-	if (!system_supports_tlb_range()) {
+	if (!system_supports_tlb_range() || pages > MAX_TLBI_RANGE_PAGES) {
 		kvm_call_hyp(__kvm_tlb_flush_vmid, mmu);
 		return;
 	}
-
-	pages = size >> PAGE_SHIFT;
-	while (pages > 0) {
-		inval_pages = min(pages, MAX_TLBI_RANGE_PAGES);
-		kvm_call_hyp(__kvm_tlb_flush_vmid_range, mmu, addr, inval_pages);
-
-		addr += inval_pages << PAGE_SHIFT;
-		pages -= inval_pages;
-	}
+	kvm_call_hyp(__kvm_tlb_flush_vmid_range, mmu, addr, pages);
 }
 
 #define KVM_S2_MEMATTR(pgt, attr) PAGE_S2_MEMATTR(attr, stage2_has_fwb(pgt))
