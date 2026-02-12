@@ -3,7 +3,7 @@
 mlnx_version="24.10-3.2.5.0"
 
 mlnx_tgz_name="MLNX_OFED_LINUX-${mlnx_version}-rhel9.4-x86_64.tgz"
-mlnx_tgz_sha256="0fbca6060014b97cb06b87c0dc865903923e46be74d9558c436f540776e14b9f"
+mlnx_tgz_sha256="a04cba2bd669a95a5e61699da8b6c201474b3bb44c1e3379d383fd81acbdd8b9"
 
 if [[ $1 == mlnx_url0 ]]; then
 	echo "https://content.mellanox.com/ofed/MLNX_OFED-${mlnx_version}/${mlnx_tgz_name}"
