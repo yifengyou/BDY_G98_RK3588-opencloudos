@@ -502,6 +502,10 @@ static int init_mem_allocator_granu(enum allocator_id aid)
 		pr_err("unsupported mem_allocator_granu: %s\n", mem_allocator_granu);
 		return -EINVAL;
 	}
+	if (!is_power_of_2(__obmm_memseg_size)) {
+		pr_err("mem_allocator_granu must be power of 2: %s\n", mem_allocator_granu);
+		return -EINVAL;
+	}
 	if (aid == ALLOCATOR_HUGETLB_PUD && __obmm_memseg_size != PUD_SIZE) {
 		pr_err("unsupported mem_allocator_granu for hugetlb_pud allocator: %s\n",
 		       mem_allocator_granu);
