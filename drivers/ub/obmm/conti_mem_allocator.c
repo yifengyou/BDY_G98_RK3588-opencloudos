@@ -251,29 +251,28 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 {
 	struct list_head *first, *second, *entry, temp_list;
 	struct memseg_node *node;
-	size_t allocated = 0, available;
+	size_t allocated = 0;
 	size_t first_allocated = 0, second_allocated = 0;
 	unsigned long flags;
 
 	atomic_inc(&pool_thread_should_pause);
 	INIT_LIST_HEAD(&temp_list);
+
+	/* Determine which lists to allocate from based on clear requirement.
+	 * clear=true: prefer ready list, uncleared requires sync clearing (slow)
+	 * clear=false: prefer uncleared list, ready is also usable
+	 */
 	if (clear) {
 		first = &allocator->memseg_ready;
-		second = &allocator->memseg_uncleared;
+		second = allow_slow ? &allocator->memseg_uncleared : NULL;
 	} else {
 		second = &allocator->memseg_ready;
 		first = &allocator->memseg_uncleared;
 	}
 
 	spin_lock_irqsave(&allocator->lock, flags);
-	available = conti_get_avail(allocator);
-	if (!allow_slow && available < size) {
-		pr_err("%s:fast alloc failed. nid: %d, request: 0x%lx, available: 0x%lx\n",
-			__func__, allocator->nid, size, available);
-		spin_unlock_irqrestore(&allocator->lock, flags);
-		goto out_continue_pool;
-	}
 
+	/* Allocate from first list */
 	list_for_each(entry, first) {
 		if (allocated >= size)
 			break;
@@ -283,35 +282,44 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 	}
 	list_cut_before(head, first, entry);
 
-	list_for_each(entry, second) {
-		if (allocated >= size)
-			break;
-		allocated += allocator->granu;
-		second_allocated += allocator->granu;
-		pr_debug("alloc 1 node from %s list.\n", !clear ? "cleared" : "uncleared");
+	/* Allocate from second list if it exists (allow_slow=true for clear=true case) */
+	if (second) {
+		list_for_each(entry, second) {
+			if (allocated >= size)
+				break;
+			allocated += allocator->granu;
+			second_allocated += allocator->granu;
+			pr_debug("alloc 1 node from %s list.\n", !clear ? "cleared" : "uncleared");
+		}
+		list_cut_before(&temp_list, second, entry);
 	}
-	list_cut_before(&temp_list, second, entry);
 	spin_unlock_irqrestore(&allocator->lock, flags);
 
-	if (clear) {
+	/* Update statistics counters based on actual list sources */
+	if (first == &allocator->memseg_ready)
 		atomic64_sub(first_allocated, &allocator->ready_mem_size);
-		atomic64_sub(second_allocated, &allocator->uncleared_mem_size);
-	} else {
+	else
 		atomic64_sub(first_allocated, &allocator->uncleared_mem_size);
-		atomic64_sub(second_allocated, &allocator->ready_mem_size);
+
+	if (second) {
+		if (second == &allocator->memseg_ready)
+			atomic64_sub(second_allocated, &allocator->ready_mem_size);
+		else
+			atomic64_sub(second_allocated, &allocator->uncleared_mem_size);
 	}
 	atomic64_add(allocated, &allocator->used_mem_size);
 
-	/* now: head collects elements from the first list, temp_list holds elements form the
-	 * second list and clearing node. When the caller requests for cleared data, all nodes in
-	 * temp_list should be cleared synchronously.
+	/* Synchronously clear memory from uncleared list when clear=true.
+	 * head: memory from first list
+	 * temp_list: memory from second list (uncleared), needs clearing
 	 */
 	if (clear)
 		list_for_each_entry(node, &temp_list, list)
 			conti_clear_memseg(allocator, node);
 	list_splice(&temp_list, head);
 
-	if (allocated < size)
+	/* Slow path: allocate new memory via ops when pools are exhausted */
+	if (allow_slow && allocated < size)
 		allocated += conti_alloc_memory_slow(allocator, size - allocated, head, clear);
 
 	list_for_each_entry(node, head, list) {
@@ -320,10 +328,9 @@ size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
 	}
 	pr_debug("%s: allocated %#zx from node %d\n", current->comm, allocated, allocator->nid);
 
-out_continue_pool:
 	atomic_dec(&pool_thread_should_pause);
 
-	/* not aligned */
+	/* Sanity check: allocated size should never exceed requested size */
 	WARN_ON(allocated > size);
 
 	return allocated;
