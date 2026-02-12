@@ -949,70 +949,6 @@ int ne6x_reg_e2prom_read(struct ne6x_pf *pf, u32 offset, void *pbuf, int size)
 	return status;
 }
 
-int ne6x_reg_e2prom_write(struct ne6x_pf *pf, u32 offset, void *pbuf, int size)
-{
-	struct axia_mbus_msg *msg;
-	int status;
-
-	msg = kzalloc(1040, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	if (size > 1024)
-		size = 1024;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_E2PROM_WRITE_COMMAND;
-	msg->hdr.bits.data_len = 12 + (size / 4) * 4;
-	msg->data[0] = (offset);
-	msg->data[1] = (size);
-	memcpy((void *)&msg->data[2], (void *)pbuf, (ssize_t)size);
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, NULL, 3 + (size / 4), 0);
-	kfree(msg);
-
-	return status;
-}
-
-int ne6x_reg_get_fan_speed(struct ne6x_pf *pf, u32 *speed)
-{
-	struct axia_mbus_msg *msg;
-	int status;
-
-	msg = kzalloc(32, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_GET_FAN_SPEED_COMMAND;
-	msg->hdr.bits.data_len = 4;
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, (u32 *)speed, 1, 1);
-	kfree(msg);
-
-	return status;
-}
-
-int ne6x_reg_set_fan_speed(struct ne6x_pf *pf, u32 speed)
-{
-	struct axia_mbus_msg *msg;
-	int status;
-
-	msg = kzalloc(32, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_SET_FAN_SPEED_COMMAND;
-	msg->hdr.bits.data_len = 8;
-	msg->data[0] = speed;
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, NULL, 2, 0);
-	kfree(msg);
-
-	return status;
-}
-
 int ne6x_reg_sub_cmd(struct ne6x_pf *pf, u32 subcmd, u32 *indata, u32 inlen,
 		     u32 *outdata, u32 outlen)
 {
@@ -1030,28 +966,6 @@ int ne6x_reg_sub_cmd(struct ne6x_pf *pf, u32 subcmd, u32 *indata, u32 inlen,
 	if (inlen)
 		memcpy(&msg->data[1], indata, inlen);
 	status = ne6x_reg_perform(pf, (u32 *)msg, outdata, (8 + inlen) >> 2, outlen >> 2);
-	kfree(msg);
-
-	return status;
-}
-
-int ne6x_reg_send_bit(struct ne6x_pf *pf, u32 port, u32 mode)
-{
-	struct axia_mbus_msg *msg;
-	int status;
-
-	msg = kzalloc(32, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_COMMON_COMMAND;
-	msg->hdr.bits.data_len = 16;
-	msg->data[0] = NE6X_SUB_CMD_SERDES_SEND_BIT;
-	msg->data[1] = port;
-	msg->data[2] = mode;
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, NULL, 4, 0);
 	kfree(msg);
 
 	return status;
@@ -1094,27 +1008,6 @@ err_upgrade:
 	/* scile end */
 	NE6X_ACCESS_TIMEOUT = 999;
 	ne6x_reg_unlock(pf);
-	kfree(msg);
-
-	return status;
-}
-
-int ne6x_reg_get_ver(struct ne6x_pf *pf, struct ne6x_firmware_ver_info *version)
-{
-	struct axia_mbus_msg *msg;
-	u32 *out_buffer = (u32 *)version;
-	int status;
-
-	msg = kzalloc(40, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_GET_VER_COMMAND;
-	msg->hdr.bits.data_len = 4;
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, out_buffer, 1,
-				  sizeof(struct ne6x_firmware_ver_info) / sizeof(u32));
 	kfree(msg);
 
 	return status;
@@ -1185,25 +1078,6 @@ int ne6x_reg_nic_stop(struct ne6x_pf *pf, u32 flag)
 	msg->data[0] = flag;
 
 	status = ne6x_reg_perform(pf, (u32 *)msg, NULL, 2, 0);
-	kfree(msg);
-
-	return status;
-}
-
-int ne6x_reg_get_nic_state(struct ne6x_pf *pf, u32 *state)
-{
-	struct axia_mbus_msg *msg;
-	int status;
-
-	msg = kzalloc(32, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->hdr.uint = 0;
-	msg->hdr.bits.opcode = AXIA_MBUS_GET_NIC_STATE_COMMAND;
-	msg->hdr.bits.data_len = 4;
-
-	status = ne6x_reg_perform(pf, (u32 *)msg, (u32 *)state, 1, 1);
 	kfree(msg);
 
 	return status;

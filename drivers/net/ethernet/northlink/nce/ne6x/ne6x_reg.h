@@ -204,9 +204,6 @@ int ne6x_reg_table_search(struct ne6x_pf *pf, enum ne6x_reg_table table,
 			  u32 *data, int size, u32 *ret_data, int ret_size);
 
 int ne6x_reg_e2prom_read(struct ne6x_pf *pf, u32 offset, void *pbuf, int size);
-int ne6x_reg_e2prom_write(struct ne6x_pf *pf, u32 offset, void *pbuf, int size);
-int ne6x_reg_set_fan_speed(struct ne6x_pf *pf, u32 speed);
-int ne6x_reg_get_fan_speed(struct ne6x_pf *pf, u32 *speed);
 
 int ne6x_reg_sub_cmd(struct ne6x_pf *pf, u32 subcmd, u32 *indata, u32 inlen,
 		     u32 *outdata, u32 outlen);
@@ -215,15 +212,11 @@ int ne6x_reg_talk_port(struct ne6x_pf *pf, enum ne6x_reg_talk_port talk,
 		       void *pbuf, int size);
 int ne6x_reg_upgrade_firmware(struct ne6x_pf *pf, u8 region, u8 *data, int size);
 
-int ne6x_reg_get_ver(struct ne6x_pf *pf, struct ne6x_firmware_ver_info *version);
-
 int ne6x_reg_get_sfp_eeprom(struct ne6x_pf *pf, int port, void *pbuf,
 			    u32 offset, int size);
 
 int ne6x_reg_nic_start(struct ne6x_pf *pf, u32 flag);
 int ne6x_reg_nic_stop(struct ne6x_pf *pf, u32 flag);
-
-int ne6x_reg_get_nic_state(struct ne6x_pf *pf, u32 *state);
 
 int ne6x_reg_set_user_data(struct ne6x_pf *pf, enum np_user_data type, u32 data);
 int ne6x_reg_get_user_data(struct ne6x_pf *pf, enum np_user_data type, u32 *data);
@@ -232,8 +225,6 @@ int ne6x_reg_set_led(struct ne6x_pf *pf, int port, bool state);
 int ne6x_reg_config_meter(struct ne6x_pf *pf, u32 meter_id, u32 *data, int size);
 
 int ne6x_reg_set_vf_number(struct ne6x_pf *pf, int num_vfs);
-
-int ne6x_reg_send_bit(struct ne6x_pf *pf, u32 port, u32 mode);
 
 int ne6x_reg_set_unicast_for_spoofchk(struct ne6x_pf *pf, u32 index,
 				      u32 *data, u32 size);

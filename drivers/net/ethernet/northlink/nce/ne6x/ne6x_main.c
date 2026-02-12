@@ -283,8 +283,8 @@ static void ne6x_link_event(struct ne6x_pf *pf)
 		/* add sfp online state begin */
 		ne6x_dev_get_sfp_status(adpt, &phy_info->link_info.ext_info);
 		if (phy_info->link_info.ext_info != phy_info->link_info_old.ext_info) {
-			if ((phy_info->link_info.ext_info & MEDIA_ONLINE_BIT)
-				!= (phy_info->link_info_old.ext_info & MEDIA_ONLINE_BIT)) {
+			if ((phy_info->link_info.ext_info & MEDIA_ONLINE_BIT) !=
+			    (phy_info->link_info_old.ext_info & MEDIA_ONLINE_BIT)) {
 				if (!(phy_info->link_info.ext_info & MEDIA_ONLINE_BIT)) {
 					netdev_info(adpt->netdev, "adpt->id= %d,optical module unplugged\n",
 						    adpt->idx);
@@ -2040,8 +2040,8 @@ int ne6x_adpt_del_vlan(struct ne6x_adapter *adpt, struct ne6x_vlan vlan)
 	return 0;
 }
 
-int ne6x_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id,
-			  u8 qos, __be16 vlan_proto)
+static int ne6x_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id,
+				 u8 qos, __be16 vlan_proto)
 {
 	struct ne6x_netdev_priv *np = netdev_priv(netdev);
 	struct ne6x_pf *pf = ne6x_netdev_to_pf(netdev);

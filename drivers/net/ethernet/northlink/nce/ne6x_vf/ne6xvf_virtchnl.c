@@ -179,19 +179,6 @@ int ne6xvf_request_reset(struct ne6xvf_adapter *adapter)
 	return status;
 }
 
-int ne6xvf_send_api_ver(struct ne6xvf_adapter *adapter)
-{
-	struct ne6xvf_arq_event_info event = {.buf_len = 0, .msg_buf = NULL};
-	struct ne6xvf_virtchnl_version_info vvi;
-
-	vvi.major = NE6XVF_VIRTCHNL_VERSION_MAJOR;
-	vvi.minor = NE6XVF_VIRTCHNL_VERSION_MINOR;
-
-	ne6xvf_send_pf_msg(adapter, VIRTCHNL_OP_VERSION, (u8 *)&vvi, sizeof(vvi));
-	usleep_range(10, 12);
-	return ne6xvf_poll_virtchnl_msg(adapter, &event, VIRTCHNL_OP_VERSION);
-}
-
 /**
  * ne6xvf_vf_parse_hw_config
  * @hw: pointer to the hardware structure
@@ -265,23 +252,6 @@ int ne6xvf_get_vf_config(struct ne6xvf_adapter *adapter)
 	adapter->current_op  = VIRTCHNL_OP_UNKNOWN;
 
 	return err;
-}
-
-int ne6xvf_config_default_vlan(struct ne6xvf_adapter *adapter)
-{
-	struct ne6xvf_arq_event_info event;
-	struct ne6x_vf_vlan vlan;
-
-	adapter->current_op = VIRTCHNL_OP_ADD_VLAN;
-
-	event.buf_len = 0;
-	event.msg_buf = NULL;
-
-	vlan = NE6X_VF_VLAN(0xfff, ETH_P_8021Q);
-	ne6xvf_send_pf_msg(adapter, VIRTCHNL_OP_ADD_VLAN, (u8 *)&vlan, sizeof(struct ne6x_vf_vlan));
-	ne6xvf_poll_virtchnl_msg(adapter, &event, VIRTCHNL_OP_ADD_VLAN);
-
-	return 0;
 }
 
 /**
