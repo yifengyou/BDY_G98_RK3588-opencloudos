@@ -504,10 +504,8 @@ static inline struct device *pci_dev_to_dev(struct pci_dev *pdev)
 	return &pdev->dev;
 }
 
-int ne6xvf_send_api_ver(struct ne6xvf_adapter *adapter);
 int ne6xvf_send_vf_config_msg(struct ne6xvf_adapter *adapter, bool b_init);
 int ne6xvf_send_vf_offload_msg(struct ne6xvf_adapter *adapter);
-int ne6xvf_send_vf_feature_msg(struct ne6xvf_adapter *adapter);
 int ne6xvf_get_vf_config(struct ne6xvf_adapter *adapter);
 int ne6xvf_request_reset(struct ne6xvf_adapter *adapter);
 void ne6xvf_free_all_tg_resources(struct ne6xvf_adapter *adapter);
@@ -524,7 +522,6 @@ enum ne6xvf_status ne6xvf_clean_arq_element(struct ne6xvf_hw *hw, struct ne6xvf_
 void ne6xvf_virtchnl_completion(struct ne6xvf_adapter *adapter, enum virtchnl_ops v_opcode,
 				enum ne6xvf_status v_retval, u8 *msg, u16 msglen);
 int ne6xvf_request_feature(struct ne6xvf_adapter *adapter);
-int ne6xvf_config_default_vlan(struct ne6xvf_adapter *adapter);
 void ne6xvf_config_rss_info(struct ne6xvf_adapter *adapter);
 void ne6xvf_changed_rss(struct ne6xvf_adapter *adapter);
 
@@ -546,7 +543,6 @@ void ne6xvf_set_vf_addr(struct ne6xvf_adapter *adapter);
 int ne6xvf_close(struct net_device *netdev);
 int ne6xvf_open(struct net_device *netdev);
 void ne6xvf_fill_rss_lut(struct ne6xvf_adapter *adapter);
-void ne6xvf_tail_update(struct ne6x_ring *ring, int val);
 int ne6xvf_register_netdev(struct ne6xvf_adapter *adapter);
 
 #endif /* _NE6XVF_H */
