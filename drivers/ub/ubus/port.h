@@ -8,10 +8,9 @@
 #define for_each_uent_port(p, d) \
 	for ((p) = (d)->ports; ((p) - (d)->ports) < (d)->port_nums; (p)++)
 
-enum ub_share_port_notify_type {
+enum ub_port_reset_notify_type {
 	RESET_PREPARE,
-	RESET_DONE,
-	NOTIFY_TYPE_MAX
+	RESET_DONE
 };
 
 struct ub_port;
@@ -24,7 +23,7 @@ void ub_ports_del(struct ub_entity *uent);
 int ub_ports_setup(struct ub_entity *uent);
 void ub_ports_unset(struct ub_entity *uent);
 void ub_notify_share_port(struct ub_port *port,
-			  enum ub_share_port_notify_type type);
+			  enum ub_port_event type);
 
 int ub_port_write_dword(struct ub_port *port, u32 pos, u32 val);
 bool ub_port_check_link_up(struct ub_port *port);

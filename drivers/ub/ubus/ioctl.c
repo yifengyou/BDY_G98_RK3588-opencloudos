@@ -10,6 +10,7 @@
 
 #include "ubus.h"
 #include "instance.h"
+#include "ioctl.h"
 
 #define UBUS_MAX_DEVICES 1
 #define UBUS_DEVICE_NAME "unified_bus"

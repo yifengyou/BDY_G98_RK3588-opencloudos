@@ -285,13 +285,13 @@ static void port_link_state_change(struct ub_port *port, struct ub_port *r_port)
 void ublc_link_up_handle(struct ub_port *port)
 {
 	struct ub_entity *uent = port->uent;
-	struct ub_port *r_port;
 	struct ub_entity *r_uent;
+	struct ub_port *r_port;
 	int ret;
 
 	if (port->r_uent) {
-		ub_err(uent, "port%u is already up\n", port->index);
-		return;
+		ub_warn(uent, "port%u is already up\n", port->index);
+		goto link_up_notify;
 	}
 
 	device_lock(&uent->dev);
@@ -324,6 +324,8 @@ void ublc_link_up_handle(struct ub_port *port)
 	ub_info(uent, "port%u link up\n", port->index);
 out:
 	device_unlock(&uent->dev);
+link_up_notify:
+	ub_notify_share_port(port, UB_PORT_EVENT_LINK_UP);
 }
 
 void ublc_link_down_handle(struct ub_port *port)
@@ -332,8 +334,8 @@ void ublc_link_down_handle(struct ub_port *port)
 	struct ub_port *r_port;
 
 	if (!port->r_uent) {
-		ub_err(uent, "port%u is already down\n", port->index);
-		return;
+		ub_warn(uent, "port%u is already down\n", port->index);
+		goto link_down_notify;
 	}
 
 	device_lock(&uent->dev);
@@ -355,6 +357,8 @@ void ublc_link_down_handle(struct ub_port *port)
 	device_unlock(&uent->dev);
 
 	ub_info(uent, "port%u link down\n", port->index);
+link_down_notify:
+	ub_notify_share_port(port, UB_PORT_EVENT_LINK_DOWN);
 }
 
 void ub_link_change_handler(struct work_struct *work)

@@ -49,9 +49,23 @@ enum udma_ctrlq_eid_update_op {
 	UDMA_CTRLQ_EID_DEL,
 };
 
+enum udma_ctrlq_eid_guid_update_op {
+	UDMA_CTRLQ_EID_GUID_ADD = 0,
+	UDMA_CTRLQ_EID_GUID_DEL,
+};
+
+struct udma_ctrlq_ue_eid_guid_out {
+	struct udma_ctrlq_eid_info eid_info;
+	uint32_t op_type : 4;
+	uint32_t rsv : 28;
+	uint32_t ue_id;
+	guid_t ue_guid;
+} __packed;
+
 enum udma_ctrlq_dev_mgmt_opcode {
 	UDMA_CTRLQ_GET_SEID_INFO = 0x1,
 	UDMA_CTRLQ_UPDATE_SEID_INFO = 0x2,
+	UDMA_CTRLQ_OPC_UPDATE_UE_SEID_GUID = 0x3,
 	UDMA_CTRLQ_GET_DEV_RESOURCE_COUNT = 0x11,
 	UDMA_CTRLQ_GET_DEV_RESOURCE_RATIO = 0x12,
 	UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO = 0x13,

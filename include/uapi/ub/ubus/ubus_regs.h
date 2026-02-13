@@ -81,6 +81,7 @@ enum ub_port_cap_id {
 #define  UB_SLOT_WLPS 0x2
 #define  UB_SLOT_PLPS 0x4
 #define  UB_SLOT_PDSS 0x8
+#define  UB_SLOT_PWCS 0x10
 #define UB_SLOT_PORT UB_ADDR_TO_POS(0x3)
 #define  UB_SLOT_START_PORT 0x0000ffff
 #define UB_SLOT_PP_CTRL UB_ADDR_TO_POS(0x4)
@@ -270,10 +271,5 @@ enum ub_port_cap_id {
 #define RX_WIDTH_OFFSET 24
 #define QDLWS_EXEC_STATUS_MASK GENMASK(2, 0)
 #define QDLWS_EXEC_STATUS_MAX 4
-
-/* Error Message Queue Capability */
-#define EMQ_CAP_START 0x00001400
-#define UB_CAP_ERR_MSG_QUE_CTL 0x8
-#define  UB_CAP_INTERRUPT_GEN_ENA 0x100
 
 #endif /* _UAPI_UB_UBUS_UBUS_REGS_H_ */

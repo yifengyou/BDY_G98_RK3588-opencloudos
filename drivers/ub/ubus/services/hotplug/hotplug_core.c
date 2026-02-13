@@ -397,6 +397,102 @@ static void ubhp_disconnect_slot(struct ub_slot *slot)
 	slot->r_uent = NULL;
 }
 
+static void ubhp_clear_port(struct ub_slot *slot)
+{
+	struct ub_port *port;
+
+	for_each_slot_port(port, slot) {
+		port->r_index = 0;
+		guid_copy(&port->r_guid, &guid_null);
+	}
+}
+
+/**
+ * ubhp_enum_at_slot() - enum at slot to find new devices
+ * @slot: the slot that has new device plugged in
+ * @dev_list: a list to store the new found devices
+ *
+ * this func use bfs to enum devices and put them into dev_list,
+ * which means the previous device in dev_list is enumerated previous
+ */
+static int ubhp_enum_at_slot(struct ub_slot *slot, struct list_head *dev_list)
+{
+	void *buf;
+	int ret;
+
+#define UB_TOPO_BUF_SZ SZ_4K
+	buf = kzalloc(UB_TOPO_BUF_SZ, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	ret = ub_enum_topo_scan_ports(slot->uent, slot->port_start, slot->port_num,
+				      dev_list, buf);
+	if (ret)
+		ubhp_clear_port(slot);
+
+	kfree(buf);
+	return ret;
+}
+
+/**
+ * a simple example for link up
+ * for a given topo like
+ * +-------------+         +---------+                 +---------+         +--------+
+ * | controller0 |p0:---:p0| switch0 |p1:---slot0---:p0| switch1 |p1:---:p0| device0|
+ * +-------------+         +---------+                 +---------+         +--------+
+ * when slot0 is calling handle link up
+ * 1. enum at slot0 to create switch1 and device0, put them in dev_list
+ * 2. route dev_list to set up route between these two devices
+ * 3. handle route link up at slot0, add route of left(controller0 & switch0)
+ *	into right(switch1 & device0) and route of right into left
+ * 4. start switch1 and device0
+ */
+static int ubhp_handle_link_up(struct ub_slot *slot)
+{
+	struct list_head dev_list;
+	int ret;
+
+	INIT_LIST_HEAD(&dev_list);
+
+	ret = ubhp_enum_at_slot(slot, &dev_list);
+	if (ret) {
+		ub_err(slot->uent, "enum at slot%u failed, ret=%d\n", slot->slot_id, ret);
+		return ret;
+	}
+
+	if (list_empty(&dev_list)) {
+		ub_warn(slot->uent, "link up without remote dev\n");
+		return -ENXIO;
+	}
+
+	ret = ub_route_entities(&dev_list);
+	if (ret) {
+		ub_err(slot->uent, "hotplug cal route failed, ret=%d\n", ret);
+		goto err_route;
+	}
+
+	slot->r_uent = slot->ports->r_uent;
+	ret = ubhp_update_route_link_up(slot);
+	if (ret) {
+		ub_err(slot->uent, "hotplug update route failed, ret=%d\n", ret);
+		goto err_link_up;
+	}
+
+	ret = ub_enum_entities_active(&dev_list);
+	if (ret) {
+		ub_err(slot->uent, "hotplug start devices failed, ret=%d\n", ret);
+		goto err_link_up;
+	}
+
+	return 0;
+err_link_up:
+	ubhp_update_route_link_down(slot);
+	slot->r_uent = NULL;
+err_route:
+	ub_enum_clear_ent_list(&dev_list);
+	return ret;
+}
+
 /**
  * a simple example for link down
  * for a given topo like
@@ -471,7 +567,7 @@ static void ubhp_button_handler(struct work_struct *work)
 
 void ubhp_handle_power(struct ub_slot *slot, bool power_on)
 {
-	if (!slot)
+	if (!slot || !PWR(slot))
 		return;
 
 	mutex_lock(&slot->state_lock);
@@ -531,11 +627,22 @@ static void ubhp_handle_present(struct ub_slot *slot)
 
 	ubhp_set_slot_power(slot, POWER_ON);
 
-	mutex_unlock(&slot->state_lock);
-	ubhp_get_slot(slot);
-	queue_delayed_work(get_rx_msg_wq(UB_MSG_CODE_LINK),
-			   &slot->power_work, HP_LINK_WAIT_DELAY * HZ);
-	return;
+	/* If support power ctrl, wait link up process */
+	if (PWR(slot)) {
+		mutex_unlock(&slot->state_lock);
+		ubhp_get_slot(slot);
+		queue_delayed_work(get_rx_msg_wq(UB_MSG_CODE_LINK),
+				   &slot->power_work, HP_LINK_WAIT_DELAY * HZ);
+		return;
+	}
+
+	if (ubhp_handle_link_up(slot))
+		goto poweroff;
+
+	ubhp_set_indicators(slot, INDICATOR_ON, INDICATOR_NOOP);
+	slot->state = SLOT_ON;
+	ub_info(slot->uent, "slot%u on\n", slot->slot_id);
+
 out:
 	/**
 	 * why cancel button work here:
@@ -559,6 +666,8 @@ out:
 
 	ub_info(slot->uent, "slot%u handle hotplug succeeded\n", slot->slot_id);
 	return;
+poweroff:
+	ubhp_set_slot_power(slot, POWER_OFF);
 clear_state:
 	slot->state = SLOT_OFF;
 	ubhp_set_indicators(slot, INDICATOR_OFF, INDICATOR_NOOP);

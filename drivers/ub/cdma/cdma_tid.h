@@ -13,4 +13,4 @@ struct cdma_dev;
 int cdma_alloc_dev_tid(struct cdma_dev *cdev);
 void cdma_free_dev_tid(struct cdma_dev *cdev);
 
-#endif
+#endif /* __CDMA_TID_H__ */

@@ -9,9 +9,19 @@
 #include "cdma_segment.h"
 
 #define MAX_WQEBB_NUM 4
+#define CDMA_SQE_RMT_EID_SIZE 4
 #define CDMA_JFS_WQEBB_SIZE 64
+#define SQE_NORMAL_CTL_LEN 48
+#define CDMA_JFS_MAX_SGE_NOTIFY 11
 #define CDMA_JFS_SGE_SIZE 16
 #define SQE_WRITE_NOTIFY_CTL_LEN 80
+#define CDMA_ATOMIC_SGE_NUM 1
+#define CDMA_ATOMIC_SGE_NUM_ATOMIC 2
+#define SQE_CTL_RMA_ADDR_OFFSET 32
+#define SQE_CTL_RMA_ADDR_BIT GENMASK(31, 0)
+#define SQE_NOTIFY_TOKEN_ID_FIELD 48
+#define SQE_NOTIFY_ADDR_FIELD 56
+#define SQE_ATOMIC_DATA_FIELD 64
 
 #define CDMA_TA_TIMEOUT_128MS 128
 #define CDMA_TA_TIMEOUT_1000MS 1000
@@ -19,6 +29,159 @@
 #define CDMA_TA_TIMEOUT_64000MS 64000
 
 #define CDMA_RCV_SEND_MAX_DIFF 512U
+
+struct cdma_jfs_wqebb {
+	u32 value[16];
+};
+
+struct cdma_token_info {
+	u32 token_id : 20;
+	u32 rsv : 12;
+	u32 token_value;
+};
+
+struct cdma_sqe_ctl {
+	/* DW0 */
+	u32 sqe_bb_idx : 16;
+	u32 place_odr : 2;
+	u32 comp_order : 1;
+	u32 fence : 1;
+	u32 se : 1;
+	u32 cqe : 1;
+	u32 inline_en : 1;
+	u32 rsv : 5;
+	u32 token_en : 1;
+	u32 rmt_jetty_type : 2;
+	u32 owner : 1;
+	/* DW1 */
+	u32 target_hint : 8;
+	u32 opcode : 8;
+	u32 rsv1 : 6;
+	u32 inline_msg_len : 10;
+	/* DW2 */
+	u32 tpn : 24;
+	u32 sge_num : 8;
+	/* DW3 */
+	u32 toid : 20;
+	u32 rsv2 : 12;
+	/* DW4~7 */
+	u32 rmt_eid[CDMA_SQE_RMT_EID_SIZE];
+	/* DW8 */
+	u32 rmt_token_value;
+	/* DW9~11 */
+	u32 rsv3;
+	u32 rmt_addr_l_or_token_id;
+	u32 rmt_addr_h_or_token_value;
+};
+
+union cdma_jfs_wr_flag {
+	struct {
+		/* 0: There is no order with other WR.
+		 * 1: relax order.
+		 * 2: strong order.
+		 * 3: reserve.
+		 */
+		u32 place_order : 2;
+		/* 0: There is no completion order with other WR
+		 * 1: Completion order with previous WR.
+		 */
+		u32 comp_order : 1;
+		/* 0: There is no fence.
+		 * 1: Fence with previous read and atomic WR
+		 */
+		u32 fence : 1;
+		/* 0: not solicited.
+		 * 1: solicited. It will trigger an event
+		 * on remote side
+		 */
+		u32 solicited_enable : 1;
+		/* 0: Do not notify local process
+		 * after the task is complete.
+		 * 1: Notify local process
+		 * after the task is completed.
+		 */
+		u32 complete_enable : 1;
+		/* 0: No inline.
+		 * 1: Inline data.
+		 */
+		u32 inline_flag : 1;
+		u32 reserved : 25;
+	} bs;
+	u32 value;
+};
+
+struct cdma_sge_info {
+	u64 addr;
+	u32 len;
+	struct dma_seg *seg;
+};
+
+struct cdma_normal_sge {
+	u32 length;
+	u32 token_id;
+	u64 va;
+};
+
+struct cdma_sg {
+	struct cdma_sge_info *sge;
+	u32 num_sge;
+};
+
+struct cdma_rw_wr {
+	struct cdma_sg src;
+	struct cdma_sg dst;
+	u8 target_hint; /* hint of jetty in a target jetty group */
+	u64 notify_data; /* notify data or immeditate data in host byte order */
+	u64 notify_addr;
+	u32 notify_tokenid;
+	u32 notify_tokenvalue;
+};
+
+struct cdma_cas_wr {
+	struct cdma_sge_info *dst; /* len in the sge is the length of CAS
+				    * operation, only support 8/16/32B
+				    */
+	struct cdma_sge_info *src; /* local address for destination original
+				    * value written back
+				    */
+	union {
+		u64 cmp_data; /* when the len is 8B, it indicates the compare value. */
+		u64 cmp_addr; /* when the len is 16/32B, it indicates the data address. */
+	};
+	union {
+		/* if destination value is the same as cmp_data,
+		 * destination value will be change to swap_data.
+		 */
+		u64 swap_data;
+		u64 swap_addr;
+	};
+};
+
+struct cdma_faa_wr {
+	struct cdma_sge_info *dst; /* len in the sge is the length of FAA
+				    * operation, only support 4/8B
+				    */
+	struct cdma_sge_info *src; /* local address for destination original
+				    * value written back
+				    */
+	union {
+		u64 operand; /* Addend */
+		u64 operand_addr;
+	};
+};
+
+struct cdma_jfs_wr {
+	enum cdma_wr_opcode opcode;
+	union cdma_jfs_wr_flag flag;
+	u32 tpn;
+	u32 rmt_eid;
+	union {
+		struct cdma_rw_wr rw;
+		struct cdma_cas_wr cas;
+		struct cdma_faa_wr faa;
+	};
+	struct cdma_jfs_wr *next;
+};
 
 struct cdma_jfs {
 	struct cdma_base_jfs base_jfs;
@@ -151,9 +314,16 @@ struct cdma_jfs_ctx {
 	u32 taack_nack_bm[32];
 };
 
+static inline struct cdma_jfs *to_cdma_jfs(struct cdma_base_jfs *jfs)
+{
+	return container_of(jfs, struct cdma_jfs, base_jfs);
+}
+
 struct cdma_base_jfs *cdma_create_jfs(struct cdma_dev *cdev,
 				      struct cdma_jfs_cfg *cfg,
 				      struct cdma_udata *udata);
 int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id);
+int cdma_post_jfs_wr(struct cdma_jfs *jfs, struct cdma_jfs_wr *wr,
+		     struct cdma_jfs_wr **bad_wr);
 
-#endif
+#endif /* __CDMA_JFS_H__ */

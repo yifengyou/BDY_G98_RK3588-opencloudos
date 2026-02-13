@@ -29,7 +29,7 @@ enum ras_err_level {
 	RAS_ERR_DEVICE_LEVEL,
 };
 
-int cper_severity_to_ub_ras(int cper_severity)
+static int cper_severity_to_ub_ras(int cper_severity)
 {
 	switch (cper_severity) {
 	case CPER_SEV_FATAL:
@@ -269,7 +269,7 @@ static inline void ras_recover_entry_init(struct ras_recover_entry *entry,
 static DEFINE_SPINLOCK(ub_ras_recover_ring_lock);
 static DECLARE_WORK(ub_ras_recover_work, ub_ras_recover_work_func);
 
-void ub_ras_recover_queue(struct cper_sec_ubus *ubus_err, int severity)
+static void ub_ras_recover_queue(struct cper_sec_ubus *ubus_err, int severity)
 {
 #define PORT_VALID_BIT 0b100ULL
 #define OVERFLOW_FLAG_BIT 0b10000ULL

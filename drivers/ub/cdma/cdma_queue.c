@@ -16,8 +16,7 @@ struct cdma_queue *cdma_find_queue(struct cdma_dev *cdev, u32 queue_id)
 	struct cdma_queue *queue;
 
 	spin_lock(&cdev->queue_table.lock);
-	queue = (struct cdma_queue *)idr_find(&cdev->queue_table.idr_tbl.idr,
-					      queue_id);
+	queue = idr_find(&cdev->queue_table.idr_tbl.idr, queue_id);
 	spin_unlock(&cdev->queue_table.lock);
 
 	return queue;
@@ -101,7 +100,7 @@ static int cdma_create_queue_res(struct cdma_dev *cdev, struct queue_cfg *cfg,
 	return 0;
 
 delete_tp:
-	cdma_delete_ctp(cdev, queue->tp->tp_id);
+	cdma_delete_ctp(cdev, queue->tp->tp_id, false);
 delete_jfc:
 	cdma_delete_jfc(cdev, queue->jfc->id, NULL);
 
@@ -113,7 +112,7 @@ static void cdma_delete_queue_res(struct cdma_dev *cdev,
 {
 	cdma_delete_jfs(cdev, queue->jfs->id);
 	queue->jfs = NULL;
-	cdma_delete_ctp(cdev, queue->tp->tp_id);
+	cdma_delete_ctp(cdev, queue->tp->tp_id, false);
 	queue->tp = NULL;
 	cdma_delete_jfc(cdev, queue->jfc->id, NULL);
 	queue->jfc = NULL;

@@ -165,12 +165,18 @@ static const struct file_operations hi_eu_table_info_ops = {
 
 static void hi_eu_table_debugfs_init(struct ub_bus_controller *ubc)
 {
+	if (ubc->cluster)
+		return;
+
 	debugfs_create_file("eu_table", 0600, ubc->debug_root,
 			    ubc, &hi_eu_table_info_ops);
 }
 
 static void hi_eu_table_debugfs_uninit(struct ub_bus_controller *ubc)
 {
+	if (ubc->cluster)
+		return;
+
 	debugfs_lookup_and_remove("eu_table", ubc->debug_root);
 }
 

@@ -516,6 +516,7 @@ static size_t ubmem_mmu_unmap_pages(struct iommu_domain *domain,
 {
 	struct ubmem_mmu_domain *mdom = to_ubmem_mmu_domain(domain);
 	struct maple_tree *mt = (struct maple_tree *)mdom->cached_pa_list;
+	unsigned long unmapped = 0;
 	struct pa_info *info;
 
 	MA_STATE(mas, mt, 0, 0);
@@ -539,10 +540,11 @@ static size_t ubmem_mmu_unmap_pages(struct iommu_domain *domain,
 		mdom->pte_valid = false;
 	}
 
+	unmapped = mdom->iova_len;
 	clear_cached_pa_list(mt);
 	mmu_domain_cfg_clear(mdom);
 
-	return mdom->iova_len;
+	return unmapped;
 }
 
 static int ubmem_mmu_iotlb_sync_map(struct iommu_domain *domain,

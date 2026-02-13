@@ -263,6 +263,8 @@ struct ub_entity {
 	u32 user_eid;
 	struct ub_eu_table *eu_table;
 
+	struct mutex active_mutex;
+
 	u32 support_feature;
 
 	u16 upi;
@@ -568,7 +570,7 @@ struct ub_entity *ub_get_entity(unsigned int vendor, unsigned int entity,
  *
  * Enable or disable the communication channel between entity and user host.
  *
- * Context: Any context.
+ * Context: Any context, it will take mutex_lock()/mutex_unlock().
  */
 void ub_entity_enable(struct ub_entity *uent, u8 enable);
 
@@ -883,9 +885,9 @@ const struct cpumask *ub_irq_get_affinity(struct ub_entity *uent, int nr);
  * @uent: UB entity.
  * @entity_idx: Number of the entity to be activated.
  *
- * Context: Any context, it will take device_trylock()/device_unlock()
+ * Context: Any context, it will take mutex_lock()/mutex_unlock()
  * Return: 0 if success, or %-EINVAL if the device doesn't match the driver,
- * or %-EBUSY if can't get device_trylock(), or other failed negative values.
+ * or other failed negative values.
  */
 int ub_activate_entity(struct ub_entity *uent, u32 entity_idx);
 
@@ -894,9 +896,9 @@ int ub_activate_entity(struct ub_entity *uent, u32 entity_idx);
  * @uent: UB entity.
  * @entity_idx: Number of the entity to be deactivated.
  *
- * Context: Any context, it will take device_trylock()/device_unlock()
+ * Context: Any context, it will take mutex_lock()/mutex_unlock()
  * Return: 0 if success, or %-EINVAL if the entity doesn't match the driver,
- * or %-EBUSY if can't get device_trylock(), or other failed negative values.
+ * or other failed negative values.
  */
 int ub_deactivate_entity(struct ub_entity *uent, u32 entity_idx);
 

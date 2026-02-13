@@ -190,8 +190,6 @@ typedef void (*rx_msg_handler_t)(struct ub_bus_controller *ubc, void *pkt, u16 l
 
 /**
  * struct message_ops - message ops and capabilities
- * @probe_dev: probe ub_entity to init message
- * @remove_dev: remove ub_entity to uninit message
  * @sync_request: send message to target ub_entity and wait response
  * @send: send message to target ub_entity but not wait response
  * @response: send response message to target
@@ -200,8 +198,6 @@ typedef void (*rx_msg_handler_t)(struct ub_bus_controller *ubc, void *pkt, u16 l
  * @owner: Driver module providing these ops
  */
 struct message_ops {
-	int (*probe_dev)(struct ub_entity *uent);
-	void (*remove_dev)(struct ub_entity *uent);
 	int (*sync_request)(struct message_device *mdev, struct msg_info *info,
 			    u8 code);
 	int (*send)(struct message_device *mdev, struct msg_info *info,

@@ -109,14 +109,15 @@ static int __init ummu_add_resources(struct platform_device *pdev,
 
 static int ummu_rename_device(struct platform_device *pdev, enum ubrt_node_type type)
 {
-	static int device_count;
+	static int device_ummu_count;
+	static int device_pmu_count;
 	char new_name[32];
 	int ret;
 
 	if (type == UBRT_UMMU)
-		ret = snprintf(new_name, sizeof(new_name), "ummu.%d", device_count);
+		ret = snprintf(new_name, sizeof(new_name), "ummu.%d", device_ummu_count++);
 	else
-		ret = snprintf(new_name, sizeof(new_name), "ummu_pmu.%d", device_count);
+		ret = snprintf(new_name, sizeof(new_name), "ummu_pmu.%d", device_pmu_count++);
 
 	if (ret < 0 || ret >= sizeof(new_name)) {
 		dev_err(&pdev->dev, "failed to generate new device name\n");
@@ -129,8 +130,6 @@ static int ummu_rename_device(struct platform_device *pdev, enum ubrt_node_type 
 		return ret;
 	}
 	pdev->name = pdev->dev.kobj.name;
-
-	device_count++;
 
 	return 0;
 }
@@ -173,6 +172,7 @@ static int ummu_config_update(struct platform_device *pdev,
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
 static acpi_status acpi_processor_ummu(acpi_handle handle, u32 lvl,
 				      void *context, void **rv)
 {
@@ -239,7 +239,6 @@ out:
 	return status;
 }
 
-#ifdef CONFIG_ACPI
 static int acpi_update_ummu_config(struct ummu_node *ummu_node, u32 index)
 {
 	acpi_status status;

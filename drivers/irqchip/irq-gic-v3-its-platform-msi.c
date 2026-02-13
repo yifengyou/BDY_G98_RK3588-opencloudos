@@ -80,13 +80,10 @@ static int its_pmsi_prepare(struct irq_domain *domain, struct device *dev,
 	}
 #endif
 
-	if (dev->of_node) {
+	if (dev->of_node)
 		ret = of_pmsi_get_dev_id(domain, dev, &dev_id);
-	} else {
+	else
 		ret = iort_pmsi_get_dev_id(dev, &dev_id);
-		if (ret)
-			ret = ubrt_pmsi_get_interrupt_id(dev, &dev_id);
-	}
 	if (ret)
 		return ret;
 
