@@ -488,7 +488,7 @@ static int init_single_oecls_dev(char *if_name, unsigned int length)
 	struct oecls_netdev_info *oecls_dev;
 	char dev_name[IFNAMSIZ] = { 0 };
 	struct net_device *netdev;
-	int cpy_len = length < IFNAMSIZ ? length : IFNAMSIZ;
+	int cpy_len = length < IFNAMSIZ ? length + 1 : IFNAMSIZ;
 	bool old_state = false;
 	int ret;
 
