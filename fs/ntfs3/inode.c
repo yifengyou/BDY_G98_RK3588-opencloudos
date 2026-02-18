@@ -1030,7 +1030,7 @@ int reset_log_file(struct inode *inode)
 		kunmap_atomic(kaddr);
 		flush_dcache_page(page);
 
-		err = block_write_end(NULL, mapping, pos, len, len, page, NULL);
+		err = block_write_end(pos, len, len, page);
 		if (err < 0)
 			goto out;
 		pos += len;

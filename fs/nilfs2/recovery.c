@@ -530,8 +530,7 @@ static int nilfs_recover_dsync_blocks(struct the_nilfs *nilfs,
 		if (unlikely(err))
 			goto failed_page;
 
-		block_write_end(NULL, inode->i_mapping, pos, blocksize,
-				blocksize, page, NULL);
+		block_write_end(pos, blocksize, blocksize, page);
 
 		unlock_page(page);
 		put_page(page);

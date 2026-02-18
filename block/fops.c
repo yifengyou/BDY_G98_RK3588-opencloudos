@@ -436,7 +436,7 @@ static int blkdev_write_end(struct file *file, struct address_space *mapping,
 		void *fsdata)
 {
 	int ret;
-	ret = block_write_end(file, mapping, pos, len, copied, page, fsdata);
+	ret = block_write_end(pos, len, copied, page);
 
 	unlock_page(page);
 	put_page(page);
