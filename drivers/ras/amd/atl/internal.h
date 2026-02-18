@@ -28,8 +28,12 @@
 /* PCI ID for Zen4 Server DF Function 0. */
 #define DF_FUNC0_ID_ZEN4_SERVER		0x14AD1022
 
+/* PCI IDs for MI300 DF Function 0. */
+#define DF_FUNC0_ID_MI300		0x15281022
+
 /* Shift needed for adjusting register values to true values. */
 #define DF_DRAM_BASE_LIMIT_LSB		28
+#define MI300_DRAM_LIMIT_LSB		20
 
 enum df_revisions {
 	UNKNOWN,
@@ -60,6 +64,9 @@ enum intlv_modes {
 	DF4_NPS1_12CHAN_HASH		= 0x15,
 	DF4_NPS2_5CHAN_HASH		= 0x16,
 	DF4_NPS1_10CHAN_HASH		= 0x17,
+	MI3_HASH_8CHAN			= 0x18,
+	MI3_HASH_16CHAN			= 0x19,
+	MI3_HASH_32CHAN			= 0x1A,
 	DF2_2CHAN_HASH			= 0x21,
 	/* DF4.5 modes are all IntLvNumChan + 0x20 */
 	DF4p5_NPS1_16CHAN_1K_HASH	= 0x2C,
@@ -87,7 +94,9 @@ enum intlv_modes {
 struct df_flags {
 	__u8	legacy_ficaa		: 1,
 		socket_id_shift_quirk	: 1,
-		__reserved_0		: 6;
+		heterogeneous		: 1,
+		prm_only		: 1,
+		__reserved_0		: 4;
 };
 
 struct df_config {
@@ -225,6 +234,19 @@ int dehash_address(struct addr_ctx *ctx);
 
 unsigned long norm_to_sys_addr(u8 socket_id, u8 die_id, u8 coh_st_inst_id, unsigned long addr);
 unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err);
+
+/* GUIDs for PRM handlers */
+extern const guid_t norm_to_sys_guid;
+
+#ifdef CONFIG_AMD_ATL_PRM
+unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 umc_bank_inst_id, unsigned long addr);
+#else
+static inline unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 umc_bank_inst_id,
+						     unsigned long addr)
+{
+       return -ENODEV;
+}
+#endif
 
 /*
  * Make a gap in @data that is @num_bits long starting at @bit_num.
