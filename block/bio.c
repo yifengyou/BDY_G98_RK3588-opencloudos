@@ -348,6 +348,62 @@ void bio_chain(struct bio *bio, struct bio *parent)
 }
 EXPORT_SYMBOL(bio_chain);
 
+
+struct bio_cb_chain_t {
+	void *private;
+	struct bio *parent;
+	bio_end_io_t *bi_chain_end_io;
+} bio_cb_chain_t;
+
+static struct bio *__bio_cb_chain_endio(struct bio *bio)
+{
+	struct bio_cb_chain_t *chain_data = bio->bi_private;
+	struct bio *parent = chain_data->parent;
+
+	if (bio->bi_status && !parent->bi_status)
+		parent->bi_status = bio->bi_status;
+
+	bio->bi_private = chain_data->private;
+	chain_data->bi_chain_end_io(bio);
+
+	kfree(chain_data);
+
+	return parent;
+}
+
+static void bio_cb_chain_endio(struct bio *bio)
+{
+	bio_endio(__bio_cb_chain_endio(bio));
+}
+
+/**
+ * bio_cb_chain - chain bio completions
+ * @bio: the target bio
+ * @parent: the parent bio of @bio
+ *
+ * Unlike bio_chain, the caller can have bi_end_io and bi_private,
+ * they are used like normal bio. Also user need to free the bio
+ * after it finished.
+ *
+ * But the caller must not change bi_private or bi_end_io after
+ * calling this function.
+ */
+void bio_cb_chain(struct bio *bio, struct bio *parent, gfp_t gfp_mask)
+{
+	struct bio_cb_chain_t *chain_data;
+
+	/* Can't afford a allocation failure here, make it NOFAIL */
+	chain_data = kmalloc(sizeof(bio_cb_chain_t), gfp_mask | __GFP_NOFAIL);
+	chain_data->parent = parent;
+	chain_data->private = bio->bi_private;
+	chain_data->bi_chain_end_io = bio->bi_end_io;
+
+	bio->bi_private = chain_data;
+	bio->bi_end_io = bio_cb_chain_endio;
+	bio_inc_remaining(parent);
+}
+EXPORT_SYMBOL(bio_cb_chain);
+
 struct bio *blk_next_bio(struct bio *bio, struct block_device *bdev,
 		unsigned int nr_pages, blk_opf_t opf, gfp_t gfp)
 {
@@ -1599,6 +1655,11 @@ again:
 	 */
 	if (bio->bi_end_io == bio_chain_endio) {
 		bio = __bio_chain_endio(bio);
+		goto again;
+	}
+
+	if (bio->bi_end_io == bio_cb_chain_endio) {
+		bio = __bio_cb_chain_endio(bio);
 		goto again;
 	}
 

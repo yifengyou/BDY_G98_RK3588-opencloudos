@@ -372,7 +372,9 @@ int bdev_swapout_folio(struct block_device *bdev, sector_t sector,
 	folio_start_writeback(folio);
 	result = ops->swap_folio(bdev, sector + get_start_sect(bdev), folio,
 			REQ_OP_WRITE);
-	if (result) {
+	if (result == -EINPROGRESS) {
+		result = 0;
+	} else if (result) {
 		folio_end_writeback(folio);
 	} else {
 		folio_unlock(folio);
