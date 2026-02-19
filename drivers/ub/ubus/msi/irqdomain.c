@@ -95,7 +95,7 @@ static bool ub_create_device_domain(struct ub_entity *uent,
 		return true;
 
 	if (WARN_ON_ONCE(1))
-		pr_info("TODO: create device irq domain.\n");
+		pr_err("Create device irq domain failed.\n");
 
 	return false;
 }

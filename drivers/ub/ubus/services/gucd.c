@@ -71,6 +71,9 @@ static int ub_component_service_register(struct ub_entity *uent)
 	int capabilities;
 	int i;
 
+	if (is_ibus_controller(uent) && uent->ubc->cluster)
+		return 0;
+
 	/* Get and check component services */
 	capabilities = get_component_service_capability(uent);
 	if (!capabilities)
@@ -91,36 +94,15 @@ static int ub_component_service_register(struct ub_entity *uent)
 	return 0;
 }
 
-static void ub_enable_err_msq_ctrl(struct ub_entity *uent)
-{
-	int ret;
-
-	ret = ub_cfg_write_dword(uent, EMQ_CAP_START + UB_CAP_ERR_MSG_QUE_CTL,
-				 UB_CAP_INTERRUPT_GEN_ENA);
-	if (ret)
-		ub_err(uent, "enable error msq controller failed\n");
-}
-
-static void ub_disable_err_msq_ctrl(struct ub_entity *uent)
-{
-	int ret;
-
-	ret = ub_cfg_write_dword(uent, EMQ_CAP_START + UB_CAP_ERR_MSG_QUE_CTL,
-				 0x0);
-	if (ret)
-		ub_err(uent, "disable error msq controller failed\n");
-}
-
 static void ub_setup_bus_controller(struct ub_entity *uent)
 {
 	u32 vec_num_max;
 	int usi_count;
 
-	if (ub_cc_supported(uent))
+	if (ub_cc_supported(uent) && !uent->ubc->cluster)
 		ub_cc_enable(uent);
 
 	ub_set_user_info(uent);
-	ub_enable_err_msq_ctrl(uent);
 	vec_num_max = ub_int_type1_vec_count(uent);
 	usi_count = ub_alloc_irq_vectors(uent, vec_num_max, vec_num_max);
 	if (usi_count < 0) {
@@ -143,10 +125,9 @@ static void ub_unset_bus_controller(struct ub_entity *uent)
 	ub_mem_uninit_usi(uent);
 	ub_uninit_decoder_usi(uent);
 	ub_disable_intr(uent);
-	ub_disable_err_msq_ctrl(uent);
 	ub_unset_user_info(uent);
 
-	if (ub_cc_supported(uent))
+	if (ub_cc_supported(uent) && !uent->ubc->cluster)
 		ub_cc_disable(uent);
 }
 

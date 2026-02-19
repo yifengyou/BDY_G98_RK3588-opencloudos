@@ -95,12 +95,17 @@ set_wl:
 
 void ubhp_set_slot_power(struct ub_slot *slot, enum power_state power)
 {
-	ub_slot_write_byte(slot, UB_SLOT_PW_CTRL, power);
+	if (PWR(slot))
+		ub_slot_write_byte(slot, UB_SLOT_PW_CTRL, power);
 }
 
 bool ubhp_card_present(struct ub_slot *slot)
 {
 	u8 val;
+
+	/* always present if no present ctrl */
+	if (!PRESENT(slot))
+		return true;
 
 	ub_slot_read_byte(slot, UB_SLOT_PD_STA, &val);
 
@@ -153,54 +158,52 @@ bool ubhp_confirm_event(struct ub_slot *slot, enum hotplug_event event)
 	return true;
 }
 
-static void ubhp_start_slot(struct ub_slot *slot)
+static void ubhp_enable(struct ub_slot *slot, u32 pos, u32 mask, bool flag)
 {
 	u8 val;
 
+	if (!flag)
+		return;
+
+	ub_slot_read_byte(slot, pos, &val);
+	val |= mask;
+	ub_slot_write_byte(slot, pos, val);
+}
+
+static void ubhp_disable(struct ub_slot *slot, u32 pos, u32 mask, bool flag)
+{
+	u8 val;
+
+	if (!flag)
+		return;
+
+	ub_slot_read_byte(slot, pos, &val);
+	val &= ~mask;
+	ub_slot_write_byte(slot, pos, val);
+}
+
+static void ubhp_start_slot(struct ub_slot *slot)
+{
 	/* enable PP */
-	ub_slot_read_byte(slot, UB_SLOT_PP_CTRL, &val);
-	val |= UB_SLOT_PP_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PP_CTRL, val);
-
+	ubhp_enable(slot, UB_SLOT_PP_CTRL, UB_SLOT_PP_CTRL_MASK, BUTTON(slot));
 	/* enable PD */
-	ub_slot_read_byte(slot, UB_SLOT_PD_CTRL, &val);
-	val |= UB_SLOT_PD_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PD_CTRL, val);
-
+	ubhp_enable(slot, UB_SLOT_PD_CTRL, UB_SLOT_PD_CTRL_MASK, PRESENT(slot));
 	/* enable PDS */
-	ub_slot_read_byte(slot, UB_SLOT_PDS_CTRL, &val);
-	val |= UB_SLOT_PDS_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PDS_CTRL, val);
-
+	ubhp_enable(slot, UB_SLOT_PDS_CTRL, UB_SLOT_PDS_CTRL_MASK, PRESENT(slot));
 	/* enable MS */
-	ub_slot_read_byte(slot, UB_SLOT_MS_CTRL, &val);
-	val |= UB_SLOT_MS_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_MS_CTRL, val);
+	ubhp_enable(slot, UB_SLOT_MS_CTRL, UB_SLOT_MS_CTRL_MASK, true);
 }
 
 static void ubhp_stop_slot(struct ub_slot *slot)
 {
-	u8 val;
-
 	/* disable MS */
-	ub_slot_read_byte(slot, UB_SLOT_MS_CTRL, &val);
-	val &= ~UB_SLOT_MS_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_MS_CTRL, val);
-
+	ubhp_disable(slot, UB_SLOT_MS_CTRL, UB_SLOT_MS_CTRL_MASK, true);
 	/* disable PDS */
-	ub_slot_read_byte(slot, UB_SLOT_PDS_CTRL, &val);
-	val &= ~UB_SLOT_PDS_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PDS_CTRL, val);
-
+	ubhp_disable(slot, UB_SLOT_PDS_CTRL, UB_SLOT_PDS_CTRL_MASK, PRESENT(slot));
 	/* disable PD */
-	ub_slot_read_byte(slot, UB_SLOT_PD_CTRL, &val);
-	val &= ~UB_SLOT_PD_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PD_CTRL, val);
-
+	ubhp_disable(slot, UB_SLOT_PD_CTRL, UB_SLOT_PD_CTRL_MASK, PRESENT(slot));
 	/* disable PP */
-	ub_slot_read_byte(slot, UB_SLOT_PP_CTRL, &val);
-	val &= ~UB_SLOT_PP_CTRL_MASK;
-	ub_slot_write_byte(slot, UB_SLOT_PP_CTRL, val);
+	ubhp_disable(slot, UB_SLOT_PP_CTRL, UB_SLOT_PP_CTRL_MASK, BUTTON(slot));
 }
 
 void ubhp_start_slots(struct ub_entity *uent)

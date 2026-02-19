@@ -43,4 +43,4 @@ int cdma_post_mailbox_ctx(struct cdma_dev *cdev, void *ctx, u32 size,
 struct ubase_cmd_mailbox *cdma_mailbox_query_ctx(struct cdma_dev *cdev,
 						 struct ubase_mbx_attr *attr);
 
-#endif /* CDMA_MBOX_H */
+#endif /* __CDMA_MBOX_H__ */

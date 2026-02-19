@@ -4,6 +4,8 @@
 #ifndef __CDMA_CHARDEV_H__
 #define __CDMA_CHARDEV_H__
 
+#include <linux/kref.h>
+
 #define CDMA_TEST_NAME "cdma_dev"
 #define CDMA_MAX_DEVICES 1
 #define CDMA_JETTY_DSQE_OFFSET 0x1000
@@ -16,4 +18,4 @@ void cdma_destroy_chardev(struct cdma_dev *cdev);
 int cdma_create_chardev(struct cdma_dev *cdev);
 void cdma_release_file(struct kref *ref);
 
-#endif /* _CDMA_CHARDEV_H_ */
+#endif /* __CDMA_CHARDEV_H__ */

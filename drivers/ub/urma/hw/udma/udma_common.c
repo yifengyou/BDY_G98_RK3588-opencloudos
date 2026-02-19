@@ -249,8 +249,8 @@ int udma_id_alloc_auto_grow(struct udma_dev *udma_dev, struct udma_ida *ida_tabl
 		id = ida_alloc_range(&ida_table->ida, ida_table->min, ida_table->max,
 				     GFP_ATOMIC);
 		if (id < 0) {
-			dev_err(udma_dev->dev, "failed to alloc id, ret = %d.\n", id);
 			spin_unlock(&ida_table->lock);
+			dev_err(udma_dev->dev, "failed to alloc id, ret = %d.\n", id);
 			return id;
 		}
 	}
@@ -291,9 +291,9 @@ int udma_specify_adv_id(struct udma_dev *udma_dev, struct udma_group_bitmap *bit
 
 	spin_lock(&bitmap_table->lock);
 	if ((bit[block] & (1U << bit_idx)) == 0) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"user specify id %u been used.\n", user_id);
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -347,10 +347,10 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 		;
 
 	if (i == bitmap_cnt) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"all bitmaps have been used, bitmap_cnt = %u.\n",
 			bitmap_cnt);
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -370,9 +370,9 @@ int udma_adv_id_alloc(struct udma_dev *udma_dev, struct udma_group_bitmap *bitma
 		;
 	if (i == bitmap_cnt ||
 	    (i + 1) * NUM_JETTY_PER_GROUP > bitmap_table->n_bits) {
+		spin_unlock(&bitmap_table->lock);
 		dev_err(udma_dev->dev,
 			"no completely bitmap for Jetty group.\n");
-		spin_unlock(&bitmap_table->lock);
 		return -ENOMEM;
 	}
 
@@ -418,15 +418,21 @@ static void udma_init_ida_table(struct udma_ida *ida_table, uint32_t max, uint32
 	ida_table->next = min;
 }
 
-void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min)
+void udma_init_udma_table(struct udma_table *table, uint32_t max, uint32_t min, bool irq_lock)
 {
 	udma_init_ida_table(&table->ida_table, max, min);
-	xa_init(&table->xa);
+	if (irq_lock)
+		xa_init_flags(&table->xa, XA_FLAGS_LOCK_IRQ);
+	else
+		xa_init(&table->xa);
 }
 
-void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex)
+void udma_init_udma_table_mutex(struct xarray *table, struct mutex *udma_mutex, bool irq_lock)
 {
-	xa_init(table);
+	if (irq_lock)
+		xa_init_flags(table, XA_FLAGS_LOCK_IRQ);
+	else
+		xa_init(table);
 	mutex_init(udma_mutex);
 }
 
@@ -582,6 +588,7 @@ int udma_alloc_normal_buf(struct udma_dev *udma_dev, size_t memory_size,
 	if (IS_ERR(buf->umem)) {
 		ret = PTR_ERR(buf->umem);
 		vfree(buf->aligned_va);
+		buf->aligned_va = NULL;
 		dev_err(udma_dev->dev, "pin kernel buf failed, ret = %d.\n", ret);
 		return ret;
 	}
@@ -858,9 +865,11 @@ void udma_init_hugepage(struct udma_dev *dev)
 void udma_destroy_hugepage(struct udma_dev *dev)
 {
 	struct udma_hugepage_priv *priv;
+	struct udma_hugepage_priv *tmp;
 
 	mutex_lock(&dev->hugepage_lock);
-	list_for_each_entry(priv, &dev->hugepage_list, list) {
+	list_for_each_entry_safe(priv, tmp, &dev->hugepage_list, list) {
+		list_del(&priv->list);
 		dev_info(dev->dev, "unmap_hugepage, 2m_page_num=%u.\n",
 			 priv->va_len >> UDMA_HUGEPAGE_SHIFT);
 		udma_unpin_k_addr(priv->umem);

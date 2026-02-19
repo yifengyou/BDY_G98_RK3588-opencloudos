@@ -5,6 +5,8 @@
  * Monitor Counter Groups (PMCG) associated with an UMMU node to monitor that node.
  */
 
+#include <linux/acpi.h>
+#include <linux/of.h>
 #include <linux/cpuhotplug.h>
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
@@ -1029,17 +1031,21 @@ static void ummu_pmu_shutdown(struct platform_device *pdev)
 	ummu_pmu_disable(&ummu_pmu->pmu);
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id hisi_ummu_pmu_of_match[] = {
 	{ .compatible = "ub,ummu_pmu", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, hisi_ummu_pmu_of_match);
+#endif
 
+#ifdef CONFIG_ACPI
 static const struct acpi_device_id hisi_ummu_pmu_acpi_match[] = {
 	{"HISI0571", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, hisi_ummu_pmu_acpi_match);
+#endif
 
 static ssize_t partid_store(struct device *kobj, struct device_attribute *attr,
 			    const char *buf, size_t count)
@@ -1143,8 +1149,8 @@ static struct platform_driver ummu_pmu_driver = {
 	.driver = {
 		.name = UMMU_PMU_DRV_NAME,
 		.suppress_bind_attrs = true,
-		.of_match_table = hisi_ummu_pmu_of_match,
-		.acpi_match_table = hisi_ummu_pmu_acpi_match,
+		.of_match_table = of_match_ptr(hisi_ummu_pmu_of_match),
+		.acpi_match_table = ACPI_PTR(hisi_ummu_pmu_acpi_match),
 		.dev_groups = ummu_pmu_groups
 	},
 	.probe = ummu_pmu_probe,

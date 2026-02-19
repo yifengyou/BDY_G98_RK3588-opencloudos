@@ -39,4 +39,4 @@ int cdma_alloc_sw_db(struct cdma_dev *dev, struct cdma_sw_db *db);
 
 void cdma_free_sw_db(struct cdma_dev *dev, struct cdma_sw_db *db);
 
-#endif /* CDMA_DB_H */
+#endif /* __CDMA_DB_H__ */

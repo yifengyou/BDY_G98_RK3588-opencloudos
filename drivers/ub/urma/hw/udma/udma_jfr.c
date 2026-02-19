@@ -81,7 +81,7 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 		goto err_alloc_db;
 	}
 
-	udma_init_udma_table(&jfr->idx_que.jfr_idx_table, jfr->idx_que.buf.entry_cnt - 1, 0);
+	udma_init_udma_table(&jfr->idx_que.jfr_idx_table, jfr->idx_que.buf.entry_cnt - 1, 0, false);
 
 	jfr->rq.tid = dev->tid;
 
@@ -393,10 +393,10 @@ static int udma_alloc_jfr_id(struct udma_dev *udma_dev, uint32_t cfg_id, uint32_
 			id = ida_alloc_range(&ida_table->ida, min = ida_table->min,
 					     max, GFP_ATOMIC);
 		if (id < 0) {
+			spin_unlock(&ida_table->lock);
 			dev_err(udma_dev->dev,
 				"alloc jfr id range (%u - %u) failed, ret = %d.\n",
 				min, max, id);
-			spin_unlock(&ida_table->lock);
 
 			return id;
 		}
@@ -894,11 +894,12 @@ int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
 {
 	struct udma_dev *dev = to_udma_dev(ubcore_jfr->ub_dev);
 	struct udma_jfr *jfr = to_udma_jfr(ubcore_jfr);
+	unsigned long flags;
 	uint32_t nreq;
 	int ret = 0;
 
 	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
-		spin_lock(&jfr->lock);
+		spin_lock_irqsave(&jfr->lock, flags);
 
 	for (nreq = 0; wr; ++nreq, wr = wr->next) {
 		ret = post_recv_one(dev, jfr, wr);
@@ -919,7 +920,7 @@ int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
 	}
 
 	if (!ubcore_jfr->jfr_cfg.flag.bs.lock_free)
-		spin_unlock(&jfr->lock);
+		spin_unlock_irqrestore(&jfr->lock, flags);
 
 	return ret;
 }

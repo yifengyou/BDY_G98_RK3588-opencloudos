@@ -23,9 +23,26 @@
 #define CDMA_RANGE_INDEX_ENTRY_CNT 0x100000
 #define CDMA_SEGMENT_ENTRY_CNT 0x10000
 
+#define CDMA_ENABLE_FLAG 1
+#define CDMA_DISABLE_FLAG 0
+
 #define CDMA_DB_SIZE 64
 
+#define CDMA_ATOMIC_LEN_4 4
+#define CDMA_ATOMIC_LEN_8 8
+#define CDMA_ATOMIC_LEN_16 16
+
 #define SQE_PLD_TOKEN_ID_MASK GENMASK(19, 0)
+
+/* thanks to include/rdma/ib_verbs.h */
+enum cdma_sq_opcode {
+	CDMA_OPC_WRITE = 0x3,
+	CDMA_OPC_WRITE_WITH_NOTIFY = 0x5,
+	CDMA_OPC_READ = 0x6,
+	CDMA_OPC_CAS,
+	CDMA_OPC_FAA = 0xb,
+	CDMA_OPC_INVALID = 0x12,
+};
 
 enum cdma_jfsc_mode {
 	CDMA_JFS_MODE,
@@ -91,4 +108,4 @@ int cdma_pin_queue_addr(struct cdma_dev *cdev, u64 addr, u32 len,
 			struct cdma_buf *buf);
 void cdma_unpin_queue_addr(struct cdma_umem *umem);
 
-#endif
+#endif /* __CDMA_COMMON_H__ */

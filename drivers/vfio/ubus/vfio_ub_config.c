@@ -588,6 +588,9 @@ static int vfio_ub_cfg1_basic_write(struct vfio_ub_core_device *vdev, u64 pos,
 	if (count < 0)
 		return count;
 
+	if (pos == UB_ENTITY_RS_ACCESS_EN)
+		ub_entity_enable(vdev->uent, val & 0x1);
+
 	buf = vfio_ub_find_cfg_buf(vdev, UB_CFG1_BASIC_CAP);
 	if (!buf)
 		return -EFAULT;

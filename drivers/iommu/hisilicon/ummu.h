@@ -31,11 +31,6 @@ struct ummu_l1_tct_desc {
 	phys_addr_t	l2ptr_phys;
 };
 
-enum ummu_ver {
-	NO_PROD_ID = 0,
-	MAX_VER,
-};
-
 enum ummu_device_msi_index {
 	EVTQ_MSI_INDEX,
 	GERROR_MSI_INDEX,
@@ -172,7 +167,6 @@ struct ummu_capability {
 #define UMMU_FEAT_TOKEN_CHK		BIT(26)
 #define UMMU_FEAT_PERMQ			BIT(27)
 #define UMMU_FEAT_NESTING		BIT(28)
-
 	u32 features;
 	u32 deid_bits;
 	u32 tid_bits;
@@ -183,6 +177,9 @@ struct ummu_capability {
 #define UMMU_OPT_MSIPOLL		(1UL << 0)
 #define UMMU_OPT_DOUBLE_PLBI		(1UL << 1)
 #define UMMU_OPT_KCMD_PLBI		(1UL << 2)
+#define UMMU_OPT_CHK_MAPT_CONTINUITY	(1UL << 3)
+#define UMMU_OPT_MCMDQ_DECREASE		(1UL << 4)
+#define UMMU_OPT_SYNC_WITH_PLBI		(1UL << 5)
 	u32 options;
 
 #define UMMU_MAX_ASIDS			(1UL << 16)
@@ -190,7 +187,6 @@ struct ummu_capability {
 #define UMMU_MAX_VMIDS			(1UL << 16)
 	unsigned int vmid_bits;
 
-	bool support_mapt;
 	u32 mcmdq_log2num;
 	u32 mcmdq_log2size;
 	u32 evtq_log2num;
@@ -202,7 +198,6 @@ struct ummu_capability {
 	} permq_ent_num;
 	u32 mtm_gp_max;
 	u32 mtm_id_max;
-	u16 prod_ver;
 };
 
 struct ummu_permq_addr {
@@ -240,9 +235,9 @@ struct ummu_hash_table_cfg {
 
 /* ummu device inner helper functions */
 enum ummu_dom_cfg_sync_type {
+	SYNC_TYPE_NONE,
 	SYNC_DOM_ALL_CFG,
 	SYNC_DOM_MUTI_CFG,
-	SYNC_NESTED_DOM_MUTI_CFG,
 	SYNC_CLEAR_DOM_ALL_CFG,
 };
 

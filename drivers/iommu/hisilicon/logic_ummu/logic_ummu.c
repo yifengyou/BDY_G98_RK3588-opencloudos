@@ -21,11 +21,6 @@
 #include "../ummu_cfg_v1.h"
 #include "logic_ummu.h"
 
-struct logic_ummu_domain {
-	struct ummu_base_domain base_domain;
-	struct ummu_base_domain *agent_domain;
-};
-
 struct logic_ummu_device {
 	struct ummu_core_device core_dev;
 	struct ummu_device *agent_device;
@@ -39,6 +34,12 @@ struct logic_ummu_viommu {
 	struct ummu_core_device *core_dev;
 	struct iommu_domain *parent;
 	struct iommu_domain *nested;
+};
+
+struct logic_ummu_domain {
+	struct ummu_base_domain base_domain;
+	struct ummu_base_domain *agent_domain;
+	struct logic_ummu_viommu *logic_viommu;
 };
 
 struct eid_info {
@@ -192,11 +193,11 @@ static int logic_ummu_attach_dev(struct iommu_domain *domain,
 				 struct device *dev)
 {
 	struct logic_ummu_domain *logic_domain = iommu_to_logic_domain(domain);
+	const struct ummu_device_helper *helper = get_agent_helper();
 	const struct ummu_core_ops *core_ops = get_agent_core_ops();
 	struct ummu_base_domain *ummu_base_domain, *agent_domain;
-	const struct ummu_device_helper *helper = get_agent_helper();
+	enum ummu_dom_cfg_sync_type sync_type = SYNC_TYPE_NONE;
 	const struct iommu_domain_ops *ops;
-	enum ummu_dom_cfg_sync_type sync_type;
 	int ret;
 
 	agent_domain = logic_domain->agent_domain;
@@ -217,9 +218,7 @@ static int logic_ummu_attach_dev(struct iommu_domain *domain,
 	}
 	/* the domain attributes might be changed, sync to logic domain */
 	logic_domain_update_attr(logic_domain);
-	if (domain->type == IOMMU_DOMAIN_NESTED)
-		sync_type = SYNC_NESTED_DOM_MUTI_CFG;
-	else
+	if (domain->type != IOMMU_DOMAIN_NESTED)
 		sync_type = SYNC_DOM_MUTI_CFG;
 
 	list_for_each_entry(ummu_base_domain, &logic_domain->base_domain.list,
@@ -516,10 +515,12 @@ static void logic_ummu_free(struct iommu_domain *domain)
 		return;
 	}
 
-	if (domain->type != IOMMU_DOMAIN_NESTED)
+	if (domain->type != IOMMU_DOMAIN_NESTED) {
 		logic_domain_free(logic_domain, ops);
-	else
+	} else {
 		logic_nested_domain_free(logic_domain, ops);
+		logic_domain->logic_viommu->nested = NULL;
+	}
 
 	kfree(logic_domain);
 }
@@ -1003,6 +1004,7 @@ logic_ummu_viommu_alloc_domain_nested(struct iommufd_viommu *viommu,
 		if (!domain->pgsize_bitmap)
 			domain->pgsize_bitmap = drv_ops->pgsize_bitmap;
 		nested_base_domain = to_ummu_base_domain(domain);
+		nested_base_domain->core_dev = &ummu->core_dev;
 		nested_base_domain->parent = logic_vummu->parent;
 		if (!domain->ops) {
 			ret = -EOPNOTSUPP;
@@ -1019,6 +1021,7 @@ logic_ummu_viommu_alloc_domain_nested(struct iommufd_viommu *viommu,
 		}
 	}
 	logic_vummu->nested = &logic_domain->base_domain.domain;
+	logic_domain->logic_viommu = logic_vummu;
 	return &logic_domain->base_domain.domain;
 error_handle:
 	list_for_each_entry_safe(nested_base_domain, iter, &logic_domain->base_domain.list, list) {
@@ -1041,8 +1044,10 @@ logic_ummu_viommu_cache_invalidate(struct iommufd_viommu *viommu,
 	u32 cmd_num, succ_cnt;
 	int err, ret = 0;
 
-	if (!logic_vummu->nested || !array)
+	if (!logic_vummu->nested || !array) {
+		pr_debug("invalid viommu.\n");
 		return -EINVAL;
+	}
 
 	if (!helper || !helper->cache_invalidate_user)
 		return -EOPNOTSUPP;
@@ -1286,6 +1291,7 @@ static int logic_ummu_def_domain_type(struct device *dev)
 	return ops->def_domain_type(dev);
 }
 
+#ifdef CONFIG_UB_UMMU_SVA
 static void logic_ummu_remove_dev_pasid(struct device *dev, ioasid_t pasid,
 					struct iommu_domain *domain)
 {
@@ -1321,6 +1327,7 @@ static void logic_ummu_remove_dev_pasid(struct device *dev, ioasid_t pasid,
 	/* release the tid */
 	ummu_core_free_tid(&logic_ummu.core_dev, tid);
 }
+#endif
 
 /* depend on MPAM
 static int logic_ummu_set_group_qos_params(struct iommu_group *group,
@@ -2057,6 +2064,61 @@ static inline struct fwnode_handle *logic_ummu_alloc_fwnode_static(void)
 	return handle;
 }
 
+static const char *get_domain_type_str(u32 domain_type)
+{
+	switch (domain_type) {
+	case IOMMU_DOMAIN_DMA:
+		return "IOMMU_DOMAIN_DMA";
+	case IOMMU_DOMAIN_IDENTITY:
+		return "IOMMU_DOMAIN_IDENTITY";
+	case IOMMU_DOMAIN_SVA:
+		return "IOMMU_DOMAIN_SVA";
+	default:
+		return "UNKNOWN DOMAIN TYPE";
+	}
+}
+
+static ssize_t tid_type_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct ummu_core_device *ummu_core;
+	u32 tid = 0, tid_type;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &tid);
+	if (ret < 0 || tid >= UMMU_INVALID_TID)
+		return -EINVAL;
+
+	ummu_core = to_ummu_core(dev_to_iommu_device(dev));
+	ret = ummu_core_get_tid_type(ummu_core, tid, &tid_type);
+	if (ret) {
+		pr_err("Invalid tid = 0x%x, ret = %d.\n", tid, ret);
+		return ret;
+	}
+
+	pr_info("tid = 0x%x, domain_type = %s.\n", tid,
+		get_domain_type_str(tid_type));
+
+	return (ssize_t)count;
+}
+static DEVICE_ATTR_WO(tid_type);
+
+static struct attribute *logic_ummu_attrs[] = {
+	&dev_attr_tid_type.attr,
+	NULL,
+};
+
+static struct attribute_group logic_ummu_group = {
+	.name = NULL,
+	.attrs = logic_ummu_attrs,
+};
+
+const struct attribute_group *logic_ummu_groups[] = {
+	&logic_ummu_group,
+	NULL,
+};
+
 int logic_ummu_device_init(void)
 {
 	int ret;
@@ -2081,7 +2143,7 @@ int logic_ummu_device_init(void)
 		pr_err("add logic ummu device failed\n");
 		goto out_free_fwnode;
 	}
-	ret = iommu_device_sysfs_add(&logic_ummu.core_dev.iommu, NULL, NULL,
+	ret = iommu_device_sysfs_add(&logic_ummu.core_dev.iommu, NULL, logic_ummu_groups,
 				     "%s", "logic_ummu");
 	if (ret) {
 		pr_err("register logic ummu to sysfs failed.\n");

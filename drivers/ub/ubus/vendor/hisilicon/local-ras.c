@@ -9,7 +9,9 @@
 #include "../../ubus.h"
 #include "../../ubus_driver.h"
 #include "../../reset.h"
+#include "../../port.h"
 #include "local-ras.h"
+#include "hisi-ubus.h"
 
 struct sub_module_info {
 	u32 sub_module_id;
@@ -197,7 +199,31 @@ static int ubus_port_recover(struct ub_entity *uent, u16 port_id)
 	return 0;
 }
 
-static int nl_ssu_link_credi_overtime_recover(struct ub_entity *uent, u8 nl_id)
+static int ubus_port_recover_cluster(struct ub_entity *uent, u16 port_id)
+{
+	struct ub_port *port;
+	int ret;
+
+	if (port_id >= uent->port_nums || uent->ports[port_id].type != PHYSICAL) {
+		pr_err("port id is over port nums or port type is not physical\n");
+		return -EINVAL;
+	}
+
+	port = uent->ports + port_id;
+	ub_notify_share_port(port, UB_PORT_EVENT_RESET_PREPARE);
+
+	ret = hi_send_port_reset_msg(uent, port_id);
+	if (ret) {
+		pr_err("ub vdm port reset failed, ret:%d\n", ret);
+		return ret;
+	}
+
+	ub_notify_share_port(port, UB_PORT_EVENT_RESET_DONE);
+
+	return 0;
+}
+
+static int nl_ssu_link_credi_overtime_recover(struct ub_entity *uent, u8 nl_id, bool cluster)
 {
 #define NL_PORTS 2
 	/*
@@ -210,7 +236,10 @@ static int nl_ssu_link_credi_overtime_recover(struct ub_entity *uent, u8 nl_id)
 
 	for (i = 0; i < NL_PORTS; i++) {
 		port_id += i;
-		ret = ubus_port_recover(uent, port_id);
+		if (!cluster)
+			ret = ubus_port_recover(uent, port_id);
+		else
+			ret = ubus_port_recover_cluster(uent, port_id);
 		if (ret) {
 			ub_err(uent, "port[%u] recover failed, ret=%d.\n", port_id, ret);
 			return ret;
@@ -230,11 +259,14 @@ static int ubus_recover(struct ub_entity *uent,
 	if (is_nl_local_ras(edata->sub_module_id) &&
 	    is_nl_ssu_link_credi_overtime_err(edata)) {
 		nl_id = edata->core_id;
-		return nl_ssu_link_credi_overtime_recover(uent, nl_id);
+		return nl_ssu_link_credi_overtime_recover(uent, nl_id, uent->ubc->cluster);
 	}
 
 	port_id = (int)edata->port_id;
-	return ubus_port_recover(uent, port_id);
+	if (uent->ubc->cluster)
+		return ubus_port_recover_cluster(uent, port_id);
+	else
+		return ubus_port_recover(uent, port_id);
 }
 
 static void hisi_ubus_handle_error(struct ub_entity *uent,

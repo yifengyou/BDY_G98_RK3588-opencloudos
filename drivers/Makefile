@@ -23,7 +23,7 @@ obj-$(CONFIG_GPIOLIB)		+= gpio/
 obj-y				+= pwm/
 
 obj-y				+= pci/
-obj-y				+= ub/
+obj-$(CONFIG_UB)		+= ub/
 
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/

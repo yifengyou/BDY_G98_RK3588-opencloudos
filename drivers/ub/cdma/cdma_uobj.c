@@ -2,6 +2,7 @@
 /* Copyright (c) 2025 HiSilicon Technologies Co., Ltd. All rights reserved. */
 
 #include <linux/slab.h>
+#include "cdma_mmap.h"
 #include "cdma_uobj.h"
 #include "cdma_chardev.h"
 
@@ -104,10 +105,13 @@ struct cdma_uobj *cdma_uobj_get(struct cdma_file *cfile, int id,
 	return uobj;
 }
 
-void cdma_cleanup_context_uobj(struct cdma_file *cfile)
+void cdma_cleanup_context_uobj(struct cdma_file *cfile, enum cdma_remove_reason why)
 {
 	struct cdma_uobj *uobj;
 	int id;
+
+	if (why == CDMA_REMOVE_DRIVER_REMOVE)
+		cdma_unmap_vma_pages(cfile);
 
 	spin_lock(&cfile->idr_lock);
 	idr_for_each_entry(&cfile->idr, uobj, id)

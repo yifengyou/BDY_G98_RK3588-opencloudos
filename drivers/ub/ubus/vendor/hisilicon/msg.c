@@ -249,14 +249,14 @@ static int hi_msg_sync_wait(struct hi_message_device *hmd, int task_type,
 	unsigned long flags;
 	int idx;
 
-	while (!time_after64(get_jiffies_64(), end_time)) {
+	do {
 		idx = hi_msg_cq_poll(hmc, task_type, msn);
 		if (idx >= 0)
 			return idx;
 
 		if (flag)
 			usleep_range(SLEEP_MIN_US, SLEEP_MAX_US);
-	}
+	} while (!time_after64(get_jiffies_64(), end_time));
 
 	timeout_msg = kzalloc(TIMEOUT_MSG_INFO_SZ, GFP_ATOMIC);
 	if (!timeout_msg)
@@ -463,15 +463,6 @@ static void hi_msg_queue_uninit(struct hi_message_device *hmd)
 	hi_msg_core_uninit(&hmd->hmc);
 }
 
-static int hi_message_probe_dev(struct ub_entity *uent)
-{
-	return 0;
-}
-
-static void hi_message_remove_dev(struct ub_entity *uent)
-{
-}
-
 static bool pkt_plen_valid(void *pkt, u16 pkt_size, int task_type)
 {
 	struct msg_pkt_header *header = (struct msg_pkt_header *)pkt;
@@ -638,8 +629,6 @@ int hi_message_private(struct message_device *mdev, struct msg_info *info,
 }
 
 static struct message_ops hi_message_ops = {
-	.probe_dev = hi_message_probe_dev,
-	.remove_dev = hi_message_remove_dev,
 	.sync_request = hi_message_sync_request,
 	.response = hi_message_response,
 	.sync_enum = hi_message_sync_enum,

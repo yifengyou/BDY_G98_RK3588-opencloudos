@@ -12,6 +12,7 @@
 #include "enum.h"
 #include "port.h"
 #include "ubus_driver.h"
+#include "route.h"
 
 #define UB_ROUTE_TABLE_ENTRY_START (UB_ROUTE_TABLE_SLICE_START + (0x10 << 2))
 #define EBW(port_nums) ((((port_nums) - 1) >> 5) + 1) /* Entry Bit Width */
@@ -502,6 +503,10 @@ static void ub_set_route_table_entry(struct ub_entity *uent, u32 dst_cna,
 
 	/* Routing Table Block is not required for single-port devices. */
 	if (uent->port_nums == 1)
+		return;
+
+	/* In a cluster scenario, do not configure the UBC routing table. */
+	if (is_ibus_controller(uent) && uent->ubc->cluster)
 		return;
 
 	pr_info("cna %#x uent set dstcna %#x route\n", uent->cna, dst_cna);

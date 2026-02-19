@@ -61,8 +61,6 @@ UB Message Core Driver
 Hisi UBUS implements a message device that provides a set of operations::
 
 	static struct message_ops hi_message_ops = {
-		.probe_dev = hi_message_probe_dev,
-		.remove_dev = hi_message_remove_dev,
 		.sync_request = hi_message_sync_request,
 		.response = hi_message_response,
 		.sync_enum = hi_message_sync_enum,

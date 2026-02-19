@@ -114,26 +114,22 @@ static void ubase_ubus_uninit(struct ub_entity *ue)
 	ub_entity_enable(ue, 0);
 }
 
-static void ubase_port_reset_prepare(struct ub_entity *ue, u16 port_id)
+static void ubase_port_event_notify(struct ub_entity *ue, u16 port_id, int event)
 {
 	struct ubase_dev *udev = dev_get_drvdata(&ue->dev);
 
-	ubase_info(udev, "port %u reset prepare.\n", port_id);
-	ubase_port_down(udev);
-}
-
-static void ubase_port_reset_done(struct ub_entity *ue, u16 port_id)
-{
-	struct ubase_dev *udev = dev_get_drvdata(&ue->dev);
-
-	ubase_port_up(udev);
-	ubase_info(udev, "port %u reset done.\n", port_id);
-	udev->reset_stat.port_reset_cnt++;
+	if (event == UB_PORT_EVENT_RESET_PREPARE) {
+		ubase_info(udev, "port %u reset prepare.\n", port_id);
+		ubase_port_down(udev);
+	} else if (event == UB_PORT_EVENT_RESET_DONE) {
+		ubase_port_up(udev);
+		ubase_info(udev, "port %u reset done.\n", port_id);
+		udev->reset_stat.port_reset_cnt++;
+	}
 }
 
 static struct ub_share_port_ops ubase_share_port_ops = {
-	.reset_prepare = ubase_port_reset_prepare,
-	.reset_done = ubase_port_reset_done
+	.event_notify = ubase_port_event_notify
 };
 
 static int ubase_ubus_reg_share_port(struct ubase_dev *udev)

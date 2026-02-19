@@ -73,7 +73,6 @@ static struct udma_ue_idx_table *udma_find_ue_idx_by_tpn(struct udma_dev *udev,
 	xa_lock(&udev->tpn_ue_idx_table);
 	tp_ue_idx_info = xa_load(&udev->tpn_ue_idx_table, tpn);
 	if (!tp_ue_idx_info) {
-		dev_warn(udev->dev, "ue idx info not exist, tpn %u.\n", tpn);
 		xa_unlock(&udev->tpn_ue_idx_table);
 
 		return NULL;
@@ -169,6 +168,11 @@ static int udma_dev_res_ratio_ctrlq_handler(struct auxiliary_device *adev,
 	struct udma_dev *udev = (struct udma_dev *)get_udma_dev(adev);
 	struct udma_ctrlq_event_nb *udma_cb;
 	int ret;
+
+	if (service_ver != UBASE_CTRLQ_SER_VER_01) {
+		dev_err(udev->dev, "Unsupported server version (%u).\n", service_ver);
+		return -EOPNOTSUPP;
+	}
 
 	mutex_lock(&udev->npu_nb_mutex);
 	udma_cb = xa_load(&udev->npu_nb_table, UDMA_CTRLQ_NOTIFY_DEV_RESOURCE_RATIO);
@@ -327,7 +331,8 @@ static int udma_ctrlq_store_one_tpid(struct udma_dev *udev, struct xarray *ctrlq
 	int ret;
 
 	if (debug_switch)
-		dev_info(udev->dev, "udma ctrlq store one tpid start. tpid %u\n", tpid->tpid);
+		dev_info_ratelimited(udev->dev, "udma ctrlq store one tpid start. tpid %u\n",
+				     tpid->tpid);
 
 	if (xa_load(ctrlq_tpid_table, tpid->tpid)) {
 		dev_warn(udev->dev,
@@ -414,7 +419,7 @@ static int udma_ctrlq_store_tpid_list(struct udma_dev *udev,
 	int i;
 
 	if (debug_switch)
-		dev_info(udev->dev, "udma ctrlq store tpid list tp_list_cnt = %u.\n",
+		dev_info_ratelimited(udev->dev, "udma ctrlq store tpid list tp_list_cnt = %u.\n",
 			 tpid_list_resp->tp_list_cnt);
 
 	for (i = 0; i < (int)tpid_list_resp->tp_list_cnt; i++) {
@@ -646,6 +651,14 @@ int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	tp_attr_req.tp_attr.tp_attr_bitmap = tp_attr_bitmap;
 	memcpy(&tp_attr_req.tp_attr.tp_attr_value, (void *)tp_attr, sizeof(*tp_attr));
 
+	udma_swap_endian((uint8_t *)tp_attr->sip, tp_attr_req.tp_attr.tp_attr_value.sip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->dip, tp_attr_req.tp_attr.tp_attr_value.dip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->sma, tp_attr_req.tp_attr.tp_attr_value.sma,
+			 UBCORE_MAC_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr->dma, tp_attr_req.tp_attr.tp_attr_value.dma,
+			 UBCORE_MAC_BYTES);
 	udma_ctrlq_set_tp_msg(&msg, &tp_attr_req, sizeof(tp_attr_req), NULL, 0);
 	msg.opcode = UDMA_CMD_CTRLQ_SET_TP_ATTR;
 
@@ -687,6 +700,14 @@ int udma_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	*tp_attr_bitmap = tp_attr_resp.tp_attr.tp_attr_bitmap;
 	memcpy((void *)tp_attr, &tp_attr_resp.tp_attr.tp_attr_value,
 	       sizeof(tp_attr_resp.tp_attr.tp_attr_value));
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.sip, tp_attr->sip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.dip, tp_attr->dip,
+			 UBCORE_IP_ADDR_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.sma, tp_attr->sma,
+			 UBCORE_MAC_BYTES);
+	udma_swap_endian((uint8_t *)tp_attr_resp.tp_attr.tp_attr_value.dma, tp_attr->dma,
+			 UBCORE_MAC_BYTES);
 
 	return 0;
 }
@@ -755,10 +776,6 @@ int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *activ
 	struct udma_dev *udma_dev = to_udma_dev(dev);
 	int ret;
 
-	if (debug_switch)
-		udma_dfx_ctx_print(udma_dev, "udma active tp ex", active_cfg->tp_handle.bs.tpid,
-				   sizeof(struct ubcore_active_tp_cfg) / sizeof(uint32_t),
-				   (uint32_t *)active_cfg);
 	ret = udma_ctrlq_set_active_tp_ex(udma_dev, active_cfg);
 	if (ret)
 		dev_err(udma_dev->dev, "Failed to set active tp msg, ret %d.\n", ret);
@@ -772,7 +789,8 @@ int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle
 	struct udma_dev *udma_dev = to_udma_dev(dev);
 
 	if (debug_switch)
-		dev_info(udma_dev->dev, "udma deactivate tp ex tp_id = %u\n", tp_handle.bs.tpid);
+		dev_info_ratelimited(udma_dev->dev, "udma deactivate tp ex tp_id = %u\n",
+				     tp_handle.bs.tpid);
 
 	return udma_k_ctrlq_deactive_tp(udma_dev, tp_handle, udata);
 }

@@ -24,6 +24,7 @@ enum vdm_fm2ub_sub_opcode {
 
 enum vdm_ub2fm_sub_opcode {
 	VDM_SUB_OPCODE_ENTITY_ENABLE = 0x1,
+	VDM_SUB_OPCODE_PORT_RESET = 0x2,
 };
 
 struct msg_pkt_dw0 {
@@ -103,6 +104,13 @@ struct idev_ue_rls_pld {
 };
 #define IDEV_UE_RLS_PLD_TOTAL_SIZE 36
 
+struct port_reset_pld {
+	/* DW1 */
+	u16 rsvd;
+	u16 port_idx;
+};
+#define VDM_PORT_RESET_PLD_SIZE 16
+
 #define MSG_IDEV_MUE_REG_SIZE \
 	(MSG_PKT_HEADER_SIZE + IDEV_MUE_REG_PLD_TOTAL_SIZE)
 #define MSG_IDEV_MUE_RLS_SIZE \
@@ -111,6 +119,8 @@ struct idev_ue_rls_pld {
 	(MSG_PKT_HEADER_SIZE + IDEV_UE_REG_PLD_TOTAL_SIZE)
 #define MSG_IDEV_UE_RLS_SIZE \
 	(MSG_PKT_HEADER_SIZE + IDEV_UE_RLS_PLD_TOTAL_SIZE)
+#define VDM_PORT_RESET_SIZE \
+	(MSG_PKT_HEADER_SIZE + VDM_PORT_RESET_PLD_SIZE)
 
 #define VENDOR_GUID_PLD_SIZE 8
 
@@ -119,6 +129,7 @@ struct vdm_msg_pkt {
 	u64 guid_high;
 	struct msg_pkt_dw0 pld_dw0;
 	union {
+		struct port_reset_pld reset_pld;
 		struct entity_enable_pld enable_pld;
 		struct idev_pue_reg_pld pd_reg_pld;
 		struct idev_pue_rls_pld pd_rls_pld;

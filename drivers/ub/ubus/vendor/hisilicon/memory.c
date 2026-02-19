@@ -301,8 +301,8 @@ static u8 get_mem_decoder_number(struct hi_ubc_private_data *data)
 
 int hi_mem_decoder_create(struct ub_bus_controller *ubc)
 {
+	struct hi_ubc_private_data *data = ubc->data;
 	struct ub_mem_device *mem_device;
-	struct hi_ubc_private_data *data;
 	void *priv_data;
 	int ret;
 

@@ -528,9 +528,9 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 	xa_lock(&udma_dev->jfc_table.xa);
 	udma_jfc = (struct udma_jfc *)xa_load(&udma_dev->jfc_table.xa, jfcn);
 	if (!udma_jfc) {
+		xa_unlock(&udma_dev->jfc_table.xa);
 		dev_warn(udma_dev->dev,
 			 "Completion event for bogus jfcn %lu.\n", jfcn);
-		xa_unlock(&udma_dev->jfc_table.xa);
 		return -EINVAL;
 	}
 
@@ -1034,13 +1034,14 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
 	enum jfc_poll_state err = JFC_OK;
 	struct list_head tid_list;
+	unsigned long flags;
 	uint32_t ci;
 	int npolled;
 
 	INIT_LIST_HEAD(&tid_list);
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_lock(&udma_jfc->lock);
+		spin_lock_irqsave(&udma_jfc->lock, flags);
 
 	for (npolled = 0; npolled < cr_cnt; ++npolled) {
 		err = udma_poll_one(dev, udma_jfc, cr + npolled, &tid_list);
@@ -1054,7 +1055,7 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 	}
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_unlock(&udma_jfc->lock);
+		spin_unlock_irqrestore(&udma_jfc->lock, flags);
 
 	if (!list_empty(&tid_list))
 		udma_inv_tid(dev, &tid_list);
@@ -1067,6 +1068,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 	struct udma_jfc *udma_jfc = to_udma_jfc(jfc);
 	struct udma_jfc_cqe *dest;
 	struct udma_jfc_cqe *cqe;
+	unsigned long flags;
 	struct ubcore_cr cr;
 	uint32_t nfreed = 0;
 	uint32_t local_id;
@@ -1077,7 +1079,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 		return;
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_lock(&udma_jfc->lock);
+		spin_lock_irqsave(&udma_jfc->lock, flags);
 
 	for (pi = udma_jfc->ci; get_next_cqe(udma_jfc, pi) != NULL; ++pi) {
 		if (pi > udma_jfc->ci + udma_jfc->buf.entry_cnt)
@@ -1112,5 +1114,5 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 	}
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
-		spin_unlock(&udma_jfc->lock);
+		spin_unlock_irqrestore(&udma_jfc->lock, flags);
 }

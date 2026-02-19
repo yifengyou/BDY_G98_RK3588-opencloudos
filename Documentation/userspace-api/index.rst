@@ -33,6 +33,7 @@ place where this information is gathered.
    sysfs-platform_profile
    vduse
    futex2
+   ub/index
 
 .. only::  subproject and html
 
