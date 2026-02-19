@@ -234,6 +234,7 @@ config ARM64
 	select HAVE_FUNCTION_ARG_ACCESS_API
 	select MMU_GATHER_RCU_TABLE_FREE
 	select HAVE_RSEQ
+	select HAVE_RUST if CPU_LITTLE_ENDIAN
 	select HAVE_STACKPROTECTOR
 	select HAVE_SYSCALL_TRACEPOINTS
 	select HAVE_KPROBES
@@ -1267,6 +1268,28 @@ config HISILICON_ERRATUM_162102203
 	  be lost.
 
 	  If unsure, say N.
+config HISILICON_ERRATUM_162100801
+       bool "Hip09 162100801 erratum support"
+       default y
+       help
+         When enabled GICv4.1 in hip09, there are some invalid vPE config
+         in configuration tables for some situation, which will cause vSGI
+         interrupts lost. So fix it by sending vinvall commands after vmovp.
+
+         If unsure, say Y.
+
+config HISILICON_ERRATUM_162100803
+	bool "Hip09/10/10c/12 162100803/162200807/162400807/165010802 erratum support"
+	default y
+	help
+	  There is a hardware conflict between vSGI and vLPI, fix it by
+	  configure a max ITS ITT size 0xf when doing MAPD with V = 1, clear V
+	  field in ITS device table and clear ITS cache to implement MAPD with
+	  V = 0 instead. Hip09/10/10c/12 have this same problem, just use
+	  HISILICON_ERRATUM_162100803 as the compile macro and
+	  ITS_FLAGS_WORKAROUND_HISILICON_162100803 as ITS flag for convenience
+
+	  If unsure, say Y.
 
 config QCOM_FALKOR_ERRATUM_1003
 	bool "Falkor E1003: Incorrect translation due to ASID change"
@@ -2283,6 +2306,17 @@ config ARM64_HAFT
 	  support this feature. If unsure, say Y.
 
 endmenu # "ARMv8.8 architectural features"
+menu "ARMv9.5 architectural features"
+
+config ARM64_HDBSS
+	bool "Enable support for Hardware Dirty state tracking Structure (HDBSS)"
+	default y
+	help
+	  Hardware Dirty state tracking Structure(HDBSS) enhances tracking
+	  translation table descriptors’ dirty state to reduce the cost of
+	  surveying for dirtied granules.
+
+endmenu # "ARMv9.5 architectural features"
 
 config ARM64_SVE
 	bool "ARM Scalable Vector Extension support"

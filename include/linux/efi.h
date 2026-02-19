@@ -26,6 +26,9 @@
 #include <linux/uuid.h>
 
 #include <asm/page.h>
+#if defined(CONFIG_PTP) && defined(CONFIG_ARM64)
+#include <asm/haoc/iee-ptp-init.h>
+#endif
 
 struct screen_info;
 

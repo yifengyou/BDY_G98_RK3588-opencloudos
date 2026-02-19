@@ -133,7 +133,7 @@ static int kvm_vcpu_finalize_sve(struct kvm_vcpu *vcpu)
 		kfree(buf);
 		return ret;
 	}
-	
+
 	vcpu->arch.sve_state = buf;
 	vcpu_set_flag(vcpu, VCPU_SVE_FINALIZED);
 	return 0;
@@ -176,6 +176,7 @@ bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu)
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu)
 {
 	void *sve_state = vcpu->arch.sve_state;
+	struct page *hdbss_pg;
 
 	kvm_vcpu_unshare_task_fp(vcpu);
 	kvm_unshare_hyp(vcpu, vcpu + 1);
@@ -184,6 +185,14 @@ void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kfree(sve_state);
 	kfree(vcpu->arch.ccsidr);
 	kvm_destroy_rec(vcpu);
+
+#ifdef CONFIG_ARM64_HDBSS
+	if (vcpu->arch.hdbss.br_el2) {
+		hdbss_pg = phys_to_page(HDBSSBR_BADDR(vcpu->arch.hdbss.br_el2));
+		if (hdbss_pg)
+			__free_pages(hdbss_pg, HDBSSBR_SZ(vcpu->arch.hdbss.br_el2));
+	}
+#endif
 }
 
 static void kvm_vcpu_reset_sve(struct kvm_vcpu *vcpu)

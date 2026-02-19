@@ -36,11 +36,15 @@ void __init iee_prepare_init_task_token(void)
 					| __phys_to_pte_val(init_token_page));
 		/* Manaully go through IEE gates to bypass PTP checks. */
 		#ifdef CONFIG_PTP
-		write_sysreg(read_sysreg(TCR_EL1) | TCR_HPD1 | TCR_A1, tcr_el1);
-		isb();
-		WRITE_ONCE(*__ptr_to_iee(ptep), pte);
-		write_sysreg(read_sysreg(TCR_EL1) & ~(TCR_HPD1 | TCR_A1), tcr_el1);
-		isb();
+		if (haoc_enabled){
+			write_sysreg(read_sysreg(TCR_EL1) | TCR_HPD1 | TCR_A1, tcr_el1);
+			isb();
+			WRITE_ONCE(*__ptr_to_iee(ptep), pte);
+			write_sysreg(read_sysreg(TCR_EL1) & ~(TCR_HPD1 | TCR_A1), tcr_el1);
+			isb();
+		}
+		else
+			set_pte(ptep, pte);
 		#else
 		set_pte(ptep, pte);
 		#endif

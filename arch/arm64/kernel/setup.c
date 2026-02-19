@@ -363,6 +363,11 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 		unflatten_device_tree();
 
 	bootmem_init();
+#ifdef CONFIG_PTP
+	if (haoc_enabled)
+	/* Prepare page pool for page tables. */
+	ptp_pg_cache_init(&pg_cache, 0, CONFIG_PGTABLE_LEVELS, "pg_cache");
+#endif
 
 	kasan_init();
 

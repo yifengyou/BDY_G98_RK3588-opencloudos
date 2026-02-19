@@ -69,6 +69,7 @@ extern bool haoc_enabled;
 void iee_init_mappings(pgd_t *pgdp);
 void iee_init_post(void);
 void iee_stack_init(void);
+void iee_init_tcr_ptp(void);
 void iee_init_tcr(void);
 void iee_setup_asid(void);
 

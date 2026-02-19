@@ -1,13 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Copyright (C) 2012 ARM Ltd.
- */
-#ifndef __ASM_PGTABLE_H
-#define __ASM_PGTABLE_H
-
-#ifdef CONFIG_PTP
-#include <asm/haoc/iee-pgtable.h>
-#else
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef __ASM_IEE_PGTABLE_H
+#define __ASM_IEE_PGTABLE_H
 
 #include <asm/bug.h>
 #include <asm/proc-fns.h>
@@ -17,7 +10,6 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/pgtable-prot.h>
 #include <asm/tlbflush.h>
-
 /*
  * VMALLOC range.
  *
@@ -38,6 +30,177 @@
 #include <linux/mm_types.h>
 #include <linux/sched.h>
 #include <linux/page_table_check.h>
+#include <asm/haoc/iee-fixmap.h>
+#include <asm/haoc/haoc-def.h>
+
+extern bool haoc_enabled;
+extern pgd_t tramp_pg_dir[];
+extern pgd_t idmap_pg_dir[];
+
+extern int __pmdp_set_access_flags(struct vm_area_struct *vma,
+				 unsigned long address, pmd_t *pmdp,
+				 pmd_t entry, int dirty);
+
+static inline bool in_swapper_pgdir(void *addr);
+static void iee_set_swapper_pgd_pre_init(pgd_t *pgdp, pgd_t pgd);
+
+static inline bool in_tramp_pgdir(void *addr)
+{
+	return ((unsigned long)addr & PAGE_MASK) ==
+			((unsigned long)tramp_pg_dir & PAGE_MASK);
+}
+
+static inline bool in_idmap_pgdir(void *addr)
+{
+	return ((unsigned long)addr & PAGE_MASK) ==
+			((unsigned long)idmap_pg_dir & PAGE_MASK);
+}
+
+static inline void iee_set_pte_pre_init(pte_t *ptep, pte_t pte)
+{
+	WRITE_ONCE(*ptep, pte);
+
+	/*
+	 * Only if the new pte is valid and kernel, otherwise TLB maintenance
+	 * or update_mmu_cache() have the necessary barriers.
+	 */
+	dsb(ishst);
+	isb();
+}
+
+static inline void iee_set_pmd_pre_init(pmd_t *pmdp, pmd_t pmd)
+{
+#ifdef __PAGETABLE_PMD_FOLDED
+	if (in_swapper_pgdir(pmdp)) {
+		iee_set_swapper_pgd_pre_init((pgd_t *)pmdp, __pgd(pmd_val(pmd)));
+		return;
+	}
+#endif /* __PAGETABLE_PMD_FOLDED */
+
+	WRITE_ONCE(*pmdp, pmd);
+
+	dsb(ishst);
+	isb();
+}
+
+static inline void iee_set_pud_pre_init(pud_t *pudp, pud_t pud)
+{
+	#ifdef __PAGETABLE_PUD_FOLDED
+	if (in_swapper_pgdir(pudp)) {
+		iee_set_swapper_pgd_pre_init((pgd_t *)pudp, __pgd(pud_val(pud)));
+		return;
+	}
+	#endif
+
+	WRITE_ONCE(*pudp, pud);
+
+	dsb(ishst);
+	isb();
+}
+
+static inline void __maybe_unused iee_set_p4d_pre_init(p4d_t *p4dp, p4d_t p4d)
+{
+	if (in_swapper_pgdir(p4dp)) {
+		iee_set_swapper_pgd_pre_init((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
+		return;
+	}
+
+	WRITE_ONCE(*p4dp, p4d);
+	dsb(ishst);
+	isb();
+}
+
+static inline void iee_set_pgd_pre_init(pgd_t *pgdp, pgd_t pgd)
+{
+	if (in_swapper_pgdir(pgdp)) {
+		iee_set_swapper_pgd_pre_init(pgdp, __pgd(pgd_val(pgd)));
+		return;
+	}
+
+	WRITE_ONCE(*pgdp, pgd);
+	dsb(ishst);
+	isb();
+}
+
+#define pte_set_fixmap_pre_init(addr)	\
+	((pte_t *)iee_set_fixmap_offset_pre_init(FIX_PTE, addr))
+#define pte_set_fixmap_offset_pre_init(pmd, addr)	\
+	pte_set_fixmap_pre_init(pte_offset_phys(pmd, addr))
+#define pte_clear_fixmap_pre_init()		clear_fixmap_pre_init(FIX_PTE)
+
+#define pmd_set_fixmap_pre_init(addr)	\
+	((pmd_t *)iee_set_fixmap_offset_pre_init(FIX_PMD, addr))
+#define pmd_set_fixmap_offset_pre_init(pud, addr)	\
+	pmd_set_fixmap_pre_init(pmd_offset_phys(pud, addr))
+#define pmd_clear_fixmap_pre_init()		clear_fixmap_pre_init(FIX_PMD)
+
+#define pud_set_fixmap_pre_init(addr)	\
+	((pud_t *)iee_set_fixmap_offset_pre_init(FIX_PUD, addr))
+#define pud_set_fixmap_offset_pre_init(p4d, addr)\
+	pud_set_fixmap_pre_init(pud_offset_phys(p4d, addr))
+#define pud_clear_fixmap_pre_init()		clear_fixmap_pre_init(FIX_PUD)
+
+#define pgd_set_fixmap_pre_init(addr)	\
+	((pgd_t *)iee_set_fixmap_offset_pre_init(FIX_PGD, addr))
+#define pgd_clear_fixmap_pre_init()		clear_fixmap_pre_init(FIX_PGD)
+
+static void iee_set_swapper_pgd_pre_init(pgd_t *pgdp, pgd_t pgd)
+{
+	WRITE_ONCE(*pgdp, pgd);
+	dsb(ishst);
+	isb();
+}
+
+static inline pteval_t iee_set_xchg_relaxed(pte_t *ptep, pteval_t pteval)
+{
+	pteval_t ret;
+
+	ret = iee_rw_gate(IEE_OP_SET_XCHG, ptep, pteval);
+	return (pteval_t)ret;
+}
+
+static inline pmdval_t iee_set_pmd_xchg_relaxed(pmd_t *pmdp, pmdval_t pmdval)
+{
+	pmdval_t ret;
+
+	ret = iee_rw_gate(IEE_OP_SET_PMD_XCHG, pmdp, pmdval);
+	return (pmdval_t)ret;
+}
+
+static inline pteval_t iee_set_cmpxchg_relaxed(pte_t *ptep, pteval_t old_pteval,
+			pteval_t new_pteval)
+{
+	pteval_t ret;
+
+	ret = iee_rw_gate(IEE_OP_SET_CMPXCHG, ptep, old_pteval, new_pteval);
+	return ret;
+}
+
+static inline pmdval_t iee_set_pmd_cmpxchg_relaxed(pmd_t *pmdp, pmdval_t old_pmdval,
+			pmdval_t new_pmdval)
+{
+	pmdval_t ret;
+
+	ret = iee_rw_gate(IEE_OP_SET_PMD_CMPXCHG, pmdp, old_pmdval, new_pmdval);
+	return ret;
+}
+
+static inline void iee_set_static_pgd(pgd_t *pgdp, pgd_t pgd)
+{
+	iee_rw_gate(IEE_OP_SET_TRAMP_PGD, pgdp, pgd);
+}
+
+static inline void iee_set_bm_pte(pte_t *ptep, pte_t pte)
+{
+	iee_rw_gate(IEE_OP_SET_BM_PTE, ptep, pte);
+
+	/*
+	 * Only if the new pte is valid and kernel, otherwise TLB maintenance
+	 * or update_mmu_cache() have the necessary barriers.
+	 */
+	dsb(ishst);
+	isb();
+}
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define __HAVE_ARCH_FLUSH_PMD_TLB_RANGE
@@ -187,8 +350,7 @@ static inline pmd_t set_pmd_bit(pmd_t pmd, pgprot_t prot)
 static inline pte_t pte_mkwrite_novma(pte_t pte)
 {
 	pte = set_pte_bit(pte, __pgprot(PTE_WRITE));
-	if (pte_sw_dirty(pte))
-		pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
+	pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
 	return pte;
 }
 
@@ -262,15 +424,21 @@ static inline pte_t pte_mkdevmap(pte_t pte)
 
 static inline void __set_pte(pte_t *ptep, pte_t pte)
 {
-	WRITE_ONCE(*ptep, pte);
-
-	/*
-	 * Only if the new pte is valid and kernel, otherwise TLB maintenance
-	 * or update_mmu_cache() have the necessary barriers.
-	 */
-	if (pte_valid_not_user(pte)) {
+	if (haoc_enabled){
+		iee_rw_gate(IEE_OP_SET_PTE, ptep, pte);
 		dsb(ishst);
 		isb();
+	} else {
+		WRITE_ONCE(*ptep, pte);
+
+		/*
+		* Only if the new pte is valid and kernel, otherwise TLB maintenance
+		* or update_mmu_cache() have the necessary barriers.
+		*/
+		if (pte_valid_not_user(pte)) {
+			dsb(ishst);
+			isb();
+		}
 	}
 }
 
@@ -604,7 +772,7 @@ static inline void set_pud_at(struct mm_struct *mm, unsigned long addr,
 			PTE_ATTRINDX(MT_NORMAL_NC) | PTE_PXN | PTE_UXN)
 
 #ifdef CONFIG_ALTRA_ERRATUM_82288
-extern bool __read_mostly have_altra_erratum_82288;
+extern bool have_altra_erratum_82288;
 extern bool range_is_pci(phys_addr_t, size_t);
 #endif
 
@@ -678,7 +846,10 @@ static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 	}
 #endif /* __PAGETABLE_PMD_FOLDED */
 
-	WRITE_ONCE(*pmdp, pmd);
+	if (haoc_enabled)
+		iee_rw_gate(IEE_OP_SET_PMD, pmdp, pmd);
+	else
+		WRITE_ONCE(*pmdp, pmd);
 
 	if (pmd_valid(pmd)) {
 		dsb(ishst);
@@ -742,7 +913,10 @@ static inline void set_pud(pud_t *pudp, pud_t pud)
 	}
 #endif /* __PAGETABLE_PUD_FOLDED */
 
-	WRITE_ONCE(*pudp, pud);
+	if (haoc_enabled)
+		iee_rw_gate(IEE_OP_SET_PUD, pudp, pud);
+	else
+		WRITE_ONCE(*pudp, pud);
 
 	if (pud_valid(pud)) {
 		dsb(ishst);
@@ -799,15 +973,31 @@ static inline pmd_t *pud_pgtable(pud_t pud)
 #define p4d_none(p4d)		(!p4d_val(p4d))
 #define p4d_bad(p4d)		(!(p4d_val(p4d) & 2))
 #define p4d_present(p4d)	(p4d_val(p4d))
+extern bool check_addr_in_iee_valid(unsigned long addr);
 
 static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
 {
+
 	if (in_swapper_pgdir(p4dp)) {
 		set_swapper_pgd((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
 		return;
 	}
+	if (haoc_enabled){
+		if (in_tramp_pgdir(p4dp)) {
+			iee_set_static_pgd((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
+			return;
+		}
 
-	WRITE_ONCE(*p4dp, p4d);
+		if (in_idmap_pgdir(p4dp)) {
+			iee_set_static_pgd((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
+			return;
+		}
+
+		iee_rw_gate(IEE_OP_SET_P4D, p4dp, p4d);
+	} else {
+		WRITE_ONCE(*p4dp, p4d);
+	}
+
 	dsb(ishst);
 	isb();
 }
@@ -897,7 +1087,11 @@ static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
 					unsigned long address, pmd_t *pmdp,
 					pmd_t entry, int dirty)
 {
-	return __ptep_set_access_flags(vma, address, (pte_t *)pmdp,
+	if (haoc_enabled)
+		return __pmdp_set_access_flags(vma, address, pmdp,
+								entry, dirty);
+	else
+		return __ptep_set_access_flags(vma, address, (pte_t *)pmdp,
 							pmd_pte(entry), dirty);
 }
 
@@ -942,8 +1136,12 @@ static inline int __ptep_test_and_clear_young(struct vm_area_struct *vma,
 	do {
 		old_pte = pte;
 		pte = pte_mkold(pte);
-		pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
-					       pte_val(old_pte), pte_val(pte));
+		if (haoc_enabled)
+			pte_val(pte) = iee_set_cmpxchg_relaxed(ptep,
+								pte_val(old_pte), pte_val(pte));
+		else
+			pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
+						pte_val(old_pte), pte_val(pte));
 	} while (pte_val(pte) != pte_val(old_pte));
 
 	return pte_young(pte);
@@ -969,22 +1167,60 @@ static inline int __ptep_clear_flush_young(struct vm_area_struct *vma,
 	return young;
 }
 
-#if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG)
+static inline int __pmdp_test_and_clear_young(struct vm_area_struct *vma,
+					      unsigned long address,
+					      pmd_t *pmdp)
+{
+	pmd_t old_pmd, pmd;
+
+	pmd = READ_ONCE(*pmdp);
+	do {
+		old_pmd = pmd;
+		pmd = __pmd(pmd_val(pmd) & ~PTE_AF);
+		pmd_val(pmd) = iee_set_pmd_cmpxchg_relaxed(pmdp,
+					       pmd_val(old_pmd), pmd_val(pmd));
+	} while (pmd_val(pmd) != pmd_val(old_pmd));
+
+	return pmd_young(pmd);
+}
+
+static inline void __pmdp_set_wrprotect(struct mm_struct *mm,
+					unsigned long address, pmd_t *pmdp,
+					pmd_t pmd)
+{
+	pmd_t old_pmd;
+
+	do {
+		old_pmd = pmd;
+		pmd = pmd_wrprotect(pmd);
+		pmd_val(pmd) = iee_set_pmd_cmpxchg_relaxed(pmdp, pmd_val(old_pmd), pmd_val(pmd));
+	} while (pmd_val(pmd) != pmd_val(old_pmd));
+}
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
 static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 					    unsigned long address,
 					    pmd_t *pmdp)
 {
-	/* Operation applies to PMD table entry only if FEAT_HAFT is enabled */
-	VM_WARN_ON(pmd_table(READ_ONCE(*pmdp)) && !system_supports_haft());
-	return __ptep_test_and_clear_young(vma, address, (pte_t *)pmdp);
+	if (haoc_enabled)
+		return __pmdp_test_and_clear_young(vma, address, pmdp);
+	else
+		return __ptep_test_and_clear_young(vma, address, (pte_t *)pmdp);
 }
-#endif /* CONFIG_TRANSPARENT_HUGEPAGE || CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG */
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 static inline pte_t __ptep_get_and_clear(struct mm_struct *mm,
 				       unsigned long address, pte_t *ptep)
 {
-	pte_t pte = __pte(xchg_relaxed(&pte_val(*ptep), 0));
+	pte_t pte;
+	
+	if (haoc_enabled){
+		pteval_t pteval = iee_set_xchg_relaxed((pte_t *)&pte_val(*ptep), (pteval_t)0);
+		pte = __pte(pteval);
+	} else{
+		pte = __pte(xchg_relaxed(&pte_val(*ptep), 0));
+	}
 
 	page_table_check_pte_clear(mm, pte);
 
@@ -1027,7 +1263,14 @@ static inline pte_t __get_and_clear_full_ptes(struct mm_struct *mm,
 static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
 					    unsigned long address, pmd_t *pmdp)
 {
-	pmd_t pmd = __pmd(xchg_relaxed(&pmd_val(*pmdp), 0));
+	pmd_t pmd;
+	
+	if (haoc_enabled){
+		pteval_t pteval = iee_set_xchg_relaxed((pte_t *)&pmd_val(*pmdp), (pteval_t)0);
+		pmd = __pmd(pteval);
+	} else {
+		pmd = __pmd(xchg_relaxed(&pmd_val(*pmdp), 0));
+	}
 
 	page_table_check_pmd_clear(mm, pmd);
 
@@ -1044,8 +1287,11 @@ static inline void ___ptep_set_wrprotect(struct mm_struct *mm,
 	do {
 		old_pte = pte;
 		pte = pte_wrprotect(pte);
-		pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
-					       pte_val(old_pte), pte_val(pte));
+		if (haoc_enabled)
+			pte_val(pte) = iee_set_cmpxchg_relaxed(ptep, pte_val(old_pte), pte_val(pte));
+		else 
+			pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
+						pte_val(old_pte), pte_val(pte));
 	} while (pte_val(pte) != pte_val(old_pte));
 }
 
@@ -1073,7 +1319,10 @@ static inline void __wrprotect_ptes(struct mm_struct *mm, unsigned long address,
 static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 				      unsigned long address, pmd_t *pmdp)
 {
-	__ptep_set_wrprotect(mm, address, (pte_t *)pmdp);
+	if (haoc_enabled)
+		__pmdp_set_wrprotect(mm, address, pmdp, READ_ONCE(*pmdp));
+	else
+		__ptep_set_wrprotect(mm, address, (pte_t *)pmdp);
 }
 
 #define pmdp_establish pmdp_establish
@@ -1081,7 +1330,10 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
-	return __pmd(xchg_relaxed(&pmd_val(*pmdp), pmd_val(pmd)));
+	if (haoc_enabled)
+		return __pmd(iee_set_pmd_xchg_relaxed((pmd_t *)&pmd_val(*pmdp), pmd_val(pmd)));
+	else
+		return __pmd(xchg_relaxed(&pmd_val(*pmdp), pmd_val(pmd)));
 }
 #endif
 
@@ -1172,10 +1424,6 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
  * hardware-managed access flag on arm64.
  */
 #define arch_has_hw_pte_young		cpu_has_hw_af
-
-#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
-#define arch_has_hw_nonleaf_pmd_young	system_supports_haft
-#endif
 
 /*
  * Experimentally, it's cheap to set the access flag in hardware and we
@@ -1475,7 +1723,5 @@ static inline int ptep_set_access_flags(struct vm_area_struct *vma,
 #endif /* CONFIG_ARM64_CONTPTE */
 
 #endif /* !__ASSEMBLY__ */
-
-#endif /* !CONFIG_PTP */
 
 #endif /* __ASM_PGTABLE_H */
