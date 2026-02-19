@@ -73,6 +73,7 @@ source "net/iucv/Kconfig"
 source "net/smc/Kconfig"
 source "net/xdp/Kconfig"
 source "net/toa/Kconfig"
+source "net/oenetcls/Kconfig"
 
 config NET_HANDSHAKE
 	bool
