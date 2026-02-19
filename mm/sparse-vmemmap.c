@@ -30,6 +30,9 @@
 #include <linux/pgalloc.h>
 
 #include <asm/dma.h>
+#ifdef CONFIG_PTP
+extern void *__ptp_vmemmap_alloc_block(unsigned long size, int node);
+#endif
 
 /*
  * Allocate a block of memory to be used to back the virtual memory map
@@ -150,6 +153,32 @@ pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,
 		pte_t entry;
 		void *p;
 
+		#if defined(CONFIG_PTP) && defined(CONFIG_ARM64)
+		if (haoc_enabled){
+			WARN_ONCE(reuse, "PTP: reuse in vmemmap.");
+			p = __ptp_vmemmap_alloc_block(PAGE_SIZE, node);
+			if (!p)
+				return NULL;
+		} else {
+			if (!reuse) {
+				p = vmemmap_alloc_block_buf(PAGE_SIZE, node, altmap);
+				if (!p)
+					return NULL;
+			} else {
+				/*
+				* When a PTE/PMD entry is freed from the init_mm
+				* there's a free_pages() call to this page allocated
+				* above. Thus this get_page() is paired with the
+				* put_page_testzero() on the freeing path.
+				* This can only called by certain ZONE_DEVICE path,
+				* and through vmemmap_populate_compound_pages() when
+				* slab is available.
+				*/
+				get_page(reuse);
+				p = page_to_virt(reuse);
+			}
+		}
+		#else
 		if (!reuse) {
 			p = vmemmap_alloc_block_buf(PAGE_SIZE, node, altmap);
 			if (!p)
@@ -167,6 +196,7 @@ pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,
 			get_page(reuse);
 			p = page_to_virt(reuse);
 		}
+		#endif
 		entry = pfn_pte(__pa(p) >> PAGE_SHIFT, PAGE_KERNEL);
 		set_pte_at(&init_mm, addr, pte, entry);
 	}
@@ -175,11 +205,28 @@ pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,
 
 static void * __meminit vmemmap_alloc_block_zero(unsigned long size, int node)
 {
-	void *p = vmemmap_alloc_block(size, node);
+	void *p = NULL;
+
+	#if defined(CONFIG_PTP) && defined(CONFIG_ARM64)
+	if (haoc_enabled){
+		p = __ptp_vmemmap_alloc_block(size, node);
+
+		if (!p)
+			return NULL;
+	} else {
+		p = vmemmap_alloc_block(size, node);
+
+		if (!p)
+			return NULL;
+		memset(p, 0, size);
+	}
+	#else
+	p = vmemmap_alloc_block(size, node);
 
 	if (!p)
 		return NULL;
 	memset(p, 0, size);
+	#endif
 
 	return p;
 }

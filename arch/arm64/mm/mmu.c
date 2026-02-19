@@ -44,8 +44,12 @@
 #include <asm/haoc/iee.h>
 #include <asm/haoc/iee-mmu.h>
 #include <asm/haoc/iee-init.h>
+#include <asm/haoc/iee-access.h>
 #ifdef CONFIG_IEE_SIP
 #include <asm/haoc/iee-si.h>
+#endif
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-ptp-init.h>
 #endif
 #endif
 
@@ -81,6 +85,7 @@ long __section(".mmuoff.data.write") __early_cpu_boot_status;
 unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_bss;
 EXPORT_SYMBOL(empty_zero_page);
 
+#ifndef CONFIG_IEE
 static DEFINE_SPINLOCK(swapper_pgdir_lock);
 static DEFINE_MUTEX(fixmap_lock);
 
@@ -460,6 +465,7 @@ static phys_addr_t pgd_pgtable_alloc(int shift)
 
 	return pa;
 }
+#endif
 
 /*
  * This function can only be used to modify existing table entries,
@@ -474,8 +480,13 @@ void __init create_mapping_noalloc(phys_addr_t phys, unsigned long virt,
 			&phys, virt);
 		return;
 	}
+	#ifdef CONFIG_PTP
+	__create_pgd_mapping_pre_init(init_mm.pgd, phys, virt, size, prot, NULL,
+			     NO_CONT_MAPPINGS);
+	#else
 	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot, NULL,
 			     NO_CONT_MAPPINGS);
+	#endif
 }
 
 void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
@@ -512,8 +523,17 @@ static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
 static void __init __map_memblock(pgd_t *pgdp, phys_addr_t start,
 				  phys_addr_t end, pgprot_t prot, int flags)
 {
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		__create_pgd_mapping_pre_init(pgdp, start, __phys_to_virt(start), end - start,
+			     prot, early_pgtable_alloc, flags);
+	else
+		__create_pgd_mapping(pgdp, start, __phys_to_virt(start), end - start,
+				 prot, early_pgtable_alloc, flags);
+	#else
 	__create_pgd_mapping(pgdp, start, __phys_to_virt(start), end - start,
 			     prot, early_pgtable_alloc, flags);
+	#endif
 }
 
 void __init mark_linear_text_alias_ro(void)
@@ -666,8 +686,17 @@ static void __init map_kernel_segment(pgd_t *pgdp, void *va_start, void *va_end,
 	BUG_ON(!PAGE_ALIGNED(pa_start));
 	BUG_ON(!PAGE_ALIGNED(size));
 
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		__create_pgd_mapping_pre_init(pgdp, pa_start, (unsigned long)va_start, size, prot,
+			     early_pgtable_alloc, flags);
+	else
+		__create_pgd_mapping(pgdp, pa_start, (unsigned long)va_start, size, prot,
+				 early_pgtable_alloc, flags);
+	#else
 	__create_pgd_mapping(pgdp, pa_start, (unsigned long)va_start, size, prot,
 			     early_pgtable_alloc, flags);
+	#endif
 
 	if (!(vm_flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
@@ -698,7 +727,14 @@ static int __init map_entry_trampoline(void)
 	pgprot_val(prot) &= ~PTE_NG;
 
 	/* Map only the text into the trampoline page table */
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		iee_memset(__va(__pa_symbol(tramp_pg_dir)), 0, PGD_SIZE);
+	else
+		memset(tramp_pg_dir, 0, PGD_SIZE);
+	#else
 	memset(tramp_pg_dir, 0, PGD_SIZE);
+	#endif
 	__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS,
 			     entry_tramp_text_size(), prot,
 			     __pgd_pgtable_alloc, NO_BLOCK_MAPPINGS);
@@ -799,8 +835,14 @@ static void __init map_kernel(pgd_t *pgdp)
 #else	
 		map_kernel_segment(pgdp, _data, _end, PAGE_KERNEL, &vmlinux_data, 0, 0);
 #endif
-		
-		fixmap_copy(pgdp);
+#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			fixmap_copy_ptp(pgdp);
+		else
+			fixmap_copy(pgdp);
+#else
+			fixmap_copy(pgdp);
+#endif
 		kasan_copy_shadow(pgdp);
 }
 
@@ -836,7 +878,15 @@ static void __init create_idmap(void)
 
 void __init paging_init(void)
 {
+	#ifdef CONFIG_PTP
+	pgd_t *pgdp;
+	if (haoc_enabled)
+		pgdp = pgd_set_fixmap_pre_init(__pa_symbol(swapper_pg_dir));
+	else
+		pgdp = pgd_set_fixmap(__pa_symbol(swapper_pg_dir));
+	#else
 	pgd_t *pgdp = pgd_set_fixmap(__pa_symbol(swapper_pg_dir));
+	#endif
 	extern pgd_t init_idmap_pg_dir[];
 
 	idmap_t0sz = 63UL - __fls(__pa_symbol(_end) | GENMASK(VA_BITS_MIN - 1, 0));
@@ -852,7 +902,14 @@ void __init paging_init(void)
 	iee_init_mappings(pgdp);
 	#endif
 
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		pgd_clear_fixmap_pre_init();
+	else
+		pgd_clear_fixmap();
+	#else
 	pgd_clear_fixmap();
+	#endif
 
 	cpu_replace_ttbr1(lm_alias(swapper_pg_dir), init_idmap_pg_dir);
 	init_mm.pgd = swapper_pg_dir;

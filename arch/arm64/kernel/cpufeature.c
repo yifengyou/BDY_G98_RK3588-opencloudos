@@ -93,6 +93,9 @@
 #include <asm/traps.h>
 #include <asm/vectors.h>
 #include <asm/virt.h>
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-mmu.h>
+#endif
 
 /* Kernel representation of AT_HWCAP and AT_HWCAP2 */
 static DECLARE_BITMAP(elf_hwcap, MAX_CPU_FEATURES) __read_mostly;
@@ -1852,7 +1855,14 @@ kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
 	remap_fn = (void *)__pa_symbol(idmap_kpti_install_ng_mappings);
 
 	if (!cpu) {
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			alloc = __va(early_iee_pgtable_alloc(0));
+		else
+			alloc = __get_free_pages(GFP_ATOMIC | __GFP_ZERO, order);
+		#else
 		alloc = __get_free_pages(GFP_ATOMIC | __GFP_ZERO, order);
+		#endif
 		kpti_ng_temp_pgd = (pgd_t *)(alloc + (levels - 1) * PAGE_SIZE);
 		kpti_ng_temp_alloc = kpti_ng_temp_pgd_pa = __pa(kpti_ng_temp_pgd);
 

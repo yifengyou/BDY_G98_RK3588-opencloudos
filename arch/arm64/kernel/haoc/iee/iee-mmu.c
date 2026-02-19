@@ -16,6 +16,9 @@
 #include <asm/haoc/iee.h>
 #include <asm/haoc/iee-asm.h>
 #include <asm/haoc/iee-init.h>
+#ifdef CONFIG_PTP
+#include <asm/haoc/iee-ptp-init.h>
+#endif
 
 #define IEE_EARLY_BLOCK_NR	64
 
@@ -43,7 +46,15 @@ static struct iee_early_alloc iee_stack = {
 	.curr_block_nr = -1
 };
 
-static DEFINE_MUTEX(fixmap_lock);
+#ifdef CONFIG_PTP
+static struct iee_early_alloc iee_pgtable = {
+	.name = "iee_early_pgtable",
+	.curr_block_nr = -1
+};
+#endif
+
+DEFINE_SPINLOCK(swapper_pgdir_lock);
+DEFINE_MUTEX(fixmap_lock);
 
 __aligned(PAGE_SIZE) DECLARE_PER_CPU(u64*[(PAGE_SIZE/8)],
 				iee_cpu_stack_ptr);
@@ -54,6 +65,17 @@ __aligned(IEE_STACK_SIZE) __initdata u64 iee_init_stack[IEE_STACK_SIZE/8];
 /* Setup global values used in verifications of TCR_EL1 to protect IEE switch gate.
  * Use fixmap functions as these globals are put inside IEE text section.
  */
+#ifdef CONFIG_PTP
+void __init iee_init_tcr_ptp(void)
+{
+	unsigned long ptr = pte_set_fixmap_pre_init(__pa_symbol(&kernel_tcr));
+	*((u64 *)ptr) = read_sysreg(tcr_el1) & IEE_TCR_MASK & ~(TCR_HPD1 | TCR_A1);
+	pte_clear_fixmap_pre_init();
+	ptr = pte_set_fixmap_pre_init(__pa_symbol(&iee_tcr));
+	*((u64 *)ptr) = kernel_tcr | TCR_HPD1 | TCR_A1;
+	pte_clear_fixmap_pre_init();
+}
+#else
 void __init iee_init_tcr(void)
 {
 	unsigned long ptr = (unsigned long)(fix_to_virt(FIX_PTE));
@@ -68,6 +90,7 @@ void __init iee_init_tcr(void)
 	*((u64 *)ptr) = kernel_tcr | TCR_HPD1 | TCR_A1;
 	clear_fixmap(FIX_PTE);
 }
+#endif
 
 static void __init iee_setup_bootcpu_stack(void)
 {
@@ -105,7 +128,14 @@ static phys_addr_t __init iee_mem_pool_early_alloc(struct iee_early_alloc *cache
 	 * any level of table.
 	 */
 	for (i = 0; i < (1 << (order)); i++) {
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+		ptr = pte_set_fixmap_pre_init(phys + i * PAGE_SIZE);
+		else
 		ptr = pte_set_fixmap(phys + i * PAGE_SIZE);
+		#else
+		ptr = pte_set_fixmap(phys + i * PAGE_SIZE);
+		#endif
 
 		memset(ptr, 0, PAGE_SIZE);
 
@@ -113,7 +143,14 @@ static phys_addr_t __init iee_mem_pool_early_alloc(struct iee_early_alloc *cache
 		 * Implicit barriers also ensure the zeroed page is visible to the page
 		 * table walker
 		 */
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			pte_clear_fixmap_pre_init();
+		else
+			pte_clear_fixmap();
+		#else
 		pte_clear_fixmap();
+		#endif
 	}
 
 	cache->begin = phys;
@@ -157,6 +194,9 @@ void __init early_iee_data_cache_init(void)
 	iee_mem_pool_early_alloc(&iee_stack, IEE_DATA_ORDER);
 	/* Calculate IEE data alloc block size. */
 	iee_mem_pool_early_alloc(&iee_data, get_iee_alloc_order(1));
+	#ifdef CONFIG_PTP
+	iee_mem_pool_early_alloc(&iee_pgtable, get_iee_alloc_order(0));
+	#endif
 }
 
 phys_addr_t __init iee_early_alloc(struct iee_early_alloc *cache,
@@ -201,8 +241,73 @@ phys_addr_t __init early_iee_data_alloc(int shift)
 	return iee_early_alloc(&iee_data, 0);
 }
 
-static phys_addr_t __init early_pgtable_alloc(int shift)
+#ifdef CONFIG_PTP
+phys_addr_t __init early_iee_pgtable_alloc(int shift)
 {
+	return iee_early_alloc(&iee_pgtable, 0);
+}
+#endif
+
+void set_swapper_pgd(pgd_t *pgdp, pgd_t pgd)
+{
+	pgd_t *fixmap_pgdp;
+
+	spin_lock(&swapper_pgdir_lock);
+	fixmap_pgdp = pgd_set_fixmap(__pa_symbol(pgdp));
+	WRITE_ONCE(*fixmap_pgdp, pgd);
+	/*
+	 * We need dsb(ishst) here to ensure the page-table-walker sees
+	 * our new entry before set_p?d() returns. The fixmap's
+	 * flush_tlb_kernel_range() via clear_fixmap() does this for us.
+	 */
+	pgd_clear_fixmap();
+	spin_unlock(&swapper_pgdir_lock);
+}
+
+pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
+			      unsigned long size, pgprot_t vma_prot)
+{
+	if (!pfn_is_map_memory(pfn))
+		return pgprot_noncached(vma_prot);
+	else if (file->f_flags & O_SYNC)
+		return pgprot_writecombine(vma_prot);
+	return vma_prot;
+}
+EXPORT_SYMBOL(phys_mem_access_prot);
+
+phys_addr_t __init early_pgtable_alloc(int shift)
+{
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		return early_iee_pgtable_alloc(shift);
+	else
+	{
+		phys_addr_t phys;
+		void *ptr;
+
+		phys = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
+						MEMBLOCK_ALLOC_NOLEAKTRACE);
+		if (!phys)
+			panic("Failed to allocate page table page\n");
+
+		/*
+		* The FIX_{PGD,PUD,PMD} slots may be in active use, but the FIX_PTE
+		* slot will be free, so we can (ab)use the FIX_PTE slot to initialise
+		* any level of table.
+		*/
+		ptr = pte_set_fixmap(phys);
+
+		memset(ptr, 0, PAGE_SIZE);
+
+		/*
+		* Implicit barriers also ensure the zeroed page is visible to the page
+		* table walker
+		*/
+		pte_clear_fixmap();
+
+		return phys;
+	}
+	#else
 	phys_addr_t phys;
 	void *ptr;
 
@@ -227,6 +332,45 @@ static phys_addr_t __init early_pgtable_alloc(int shift)
 	pte_clear_fixmap();
 
 	return phys;
+	#endif
+}
+
+bool pgattr_change_is_safe(u64 old, u64 new)
+{
+	/*
+	 * The following mapping attributes may be updated in live
+	 * kernel mappings without the need for break-before-make.
+	 */
+	pteval_t mask = PTE_PXN | PTE_RDONLY | PTE_WRITE | PTE_NG;
+
+	/* creating or taking down mappings is always safe */
+	if (!pte_valid(__pte(old)) || !pte_valid(__pte(new)))
+		return true;
+
+	/* A live entry's pfn should not change */
+	if (pte_pfn(__pte(old)) != pte_pfn(__pte(new)))
+		return false;
+
+	/* live contiguous mappings may not be manipulated at all */
+	if ((old | new) & PTE_CONT)
+		return false;
+
+	/* Transitioning from Non-Global to Global is unsafe */
+	if (old & ~new & PTE_NG)
+		return false;
+
+	/*
+	 * Changing the memory type between Normal and Normal-Tagged is safe
+	 * since Tagged is considered a permission attribute from the
+	 * mismatched attribute aliases perspective.
+	 */
+	if (((old & PTE_ATTRINDX_MASK) == PTE_ATTRINDX(MT_NORMAL) ||
+	     (old & PTE_ATTRINDX_MASK) == PTE_ATTRINDX(MT_NORMAL_TAGGED)) &&
+	    ((new & PTE_ATTRINDX_MASK) == PTE_ATTRINDX(MT_NORMAL) ||
+	     (new & PTE_ATTRINDX_MASK) == PTE_ATTRINDX(MT_NORMAL_TAGGED)))
+		mask |= PTE_ATTRINDX_MASK;
+
+	return ((old ^ new) & ~mask) == 0;
 }
 
 static void iee_init_pte(pmd_t *pmdp, unsigned long addr, unsigned long end,
@@ -410,6 +554,92 @@ static void iee_alloc_init_pud(pgd_t *pgdp, unsigned long addr, unsigned long en
 	pud_clear_fixmap();
 }
 
+static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
+					unsigned long virt, phys_addr_t size,
+					pgprot_t prot,
+					phys_addr_t (*pgtable_alloc)(int),
+					int flags)
+{
+	unsigned long addr, end, next;
+	pgd_t *pgdp = pgd_offset_pgd(pgdir, virt);
+
+	/*
+	 * If the virtual and physical address don't have the same offset
+	 * within a page, we cannot map the region as the caller expects.
+	 */
+	if (WARN_ON((phys ^ virt) & ~PAGE_MASK))
+		return;
+
+	phys &= PAGE_MASK;
+	addr = virt & PAGE_MASK;
+	end = PAGE_ALIGN(virt + size);
+
+	do {
+		next = pgd_addr_end(addr, end);
+		iee_alloc_init_pud(pgdp, addr, next, phys, prot, pgtable_alloc,
+			       flags);
+		phys += next - addr;
+	} while (pgdp++, addr = next, addr != end);
+}
+
+void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
+				 unsigned long virt, phys_addr_t size,
+				 pgprot_t prot,
+				 phys_addr_t (*pgtable_alloc)(int),
+				 int flags)
+{
+	mutex_lock(&fixmap_lock);
+	__create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
+				    pgtable_alloc, flags);
+	mutex_unlock(&fixmap_lock);
+}
+
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+extern __alias(__create_pgd_mapping_locked)
+void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
+			     phys_addr_t size, pgprot_t prot,
+			     phys_addr_t (*pgtable_alloc)(int), int flags);
+#endif
+
+phys_addr_t __pgd_pgtable_alloc(int shift)
+{
+	void *ptr;
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+		ptr = ptp_pg_alloc(&pg_cache, GFP_PGTABLE_KERNEL);
+	else
+		ptr = (void *)__get_free_page(GFP_PGTABLE_KERNEL);
+	#else
+	ptr = (void *)__get_free_page(GFP_PGTABLE_KERNEL);
+	#endif
+	IEE_CHECK(!ptr);
+
+	/* Ensure the zeroed page is visible to the page table walker */
+	dsb(ishst);
+	return __pa(ptr);
+}
+
+phys_addr_t pgd_pgtable_alloc(int shift)
+{
+	phys_addr_t pa = __pgd_pgtable_alloc(shift);
+	struct ptdesc *ptdesc = page_ptdesc(phys_to_page(pa));
+
+	/*
+	 * Call proper page table ctor in case later we need to
+	 * call core mm functions like apply_to_page_range() on
+	 * this pre-allocated page table.
+	 *
+	 * We don't select ARCH_ENABLE_SPLIT_PMD_PTLOCK if pmd is
+	 * folded, and if so pagetable_pte_ctor() becomes nop.
+	 */
+	if (shift == PAGE_SHIFT)
+		IEE_CHECK(!pagetable_pte_ctor(ptdesc));
+	else if (shift == PMD_SHIFT)
+		IEE_CHECK(!pagetable_pmd_ctor(ptdesc));
+
+	return pa;
+}
+
 /* This function is almost the same with __create_pgd_mapping_locked()
  * but not permitting block descriptors larger than pmd block to simplify
  * page table opeartions like splitting blocks.
@@ -473,15 +703,34 @@ static void __init __create_pgd_mapping_for_iee_locked(pgd_t *pgdir, phys_addr_t
 			phys += next - addr;
 			continue;
 		}
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			iee_alloc_init_pud_pre_init(pgdp, addr, next, phys, prot, pgtable_alloc,
+					flags);
+		else
+			iee_alloc_init_pud(pgdp, addr, next, phys, prot, pgtable_alloc,
+					flags);
+		#else
 		iee_alloc_init_pud(pgdp, addr, next, phys, prot, pgtable_alloc,
 			       flags);
+		#endif
 
 		/* Set APTable RO on pgd entries of IEE mappings to prevent kernel access
 		 * when TCR.HPD1 == 0.
 		 */
 		p4d = READ_ONCE(*p4dp);
+		#ifdef CONFIG_PTP
+		if (haoc_enabled)
+			iee_set_pgtable_pre_init((unsigned long *)p4dp,
+					(unsigned long)(__phys_to_p4d_val(__p4d_to_phys(p4d))
+					| (PGD_APTABLE_RO | PGD_PXNTABLE | PGD_UXNTABLE | PUD_TYPE_TABLE)));
+		else
+				__p4d_populate(p4dp, __p4d_to_phys(p4d), (PGD_APTABLE_RO | PGD_PXNTABLE |
+				PGD_UXNTABLE | PUD_TYPE_TABLE));
+		#else
 		__p4d_populate(p4dp, __p4d_to_phys(p4d), (PGD_APTABLE_RO | PGD_PXNTABLE |
 				PGD_UXNTABLE | PUD_TYPE_TABLE));
+		#endif
 
 		phys += next - addr;
 	} while (pgdp++, addr = next, addr != end);
@@ -545,10 +794,52 @@ void __init iee_init_mappings(pgd_t *pgdp)
 		__map_memblock_for_iee(pgdp, start, end, SET_NG(SET_INVALID(PAGE_KERNEL)),
 					flags);
 	}
-
+	#ifdef CONFIG_PTP
+	iee_init_tcr_ptp();
+	#else
 	iee_init_tcr();
+	#endif
 	iee_setup_bootcpu_stack();
+	#ifdef CONFIG_PTP
+	pr_info("HAOC: CONFIG_PTP enabled.");
+	#endif
 }
+
+static void setup_iee_data_cache_bitmap(struct iee_early_alloc *cache,
+				enum HAOC_BITMAP_TYPE type)
+{
+	int block_nr = cache->curr_block_nr + 1;
+
+	for (int j = 0; j < block_nr; j++) {
+		iee_set_bitmap_type((unsigned long)__va(cache->blocks[j].start),
+				1 << cache->blocks[j].order, type);
+	}
+	#ifdef DEBUG
+	pr_info("IEE: Mark bitmap of %s block nr %d", cache->name, block_nr);
+	#endif
+}
+
+void __init setup_iee_early_data_bitmap(void)
+{
+	setup_iee_data_cache_bitmap(&iee_data, IEE_DATA);
+	setup_iee_data_cache_bitmap(&iee_stack, IEE_DATA);
+	#ifdef CONFIG_PTP
+	if (haoc_enabled)
+	setup_iee_data_cache_bitmap(&iee_pgtable, IEE_PGTABLE);
+	#endif
+}
+
+#ifdef CONFIG_PTP
+static void setup_iee_early_address(struct iee_early_alloc *cache)
+{
+	for (int j = 0; j < cache->curr_block_nr+1; j++) {
+		for (int i = 0; i < (1 << cache->blocks[j].order); i++) {
+			set_iee_address_pre_init(__phys_to_iee(cache->blocks[j].start
+						+ i * PAGE_SIZE), true);
+		}
+	}
+}
+#endif
 
 static void prot_iee_early_data_cache(struct iee_early_alloc *cache)
 {
@@ -567,8 +858,108 @@ void __init init_early_iee_data(void)
 	if (!haoc_enabled)
 		return;
 
+	#ifdef CONFIG_PTP
+	if (haoc_enabled){
+		/* Setup iee mappings of early allocated IEE objects to enable IEE. */
+		for (i = 0; ((unsigned long)idmap_pg_dir + i * PAGE_SIZE) <
+						(unsigned long)iee_init_data_end; i++) {
+			set_iee_address_pre_init(__phys_to_iee(__pa_symbol((unsigned long)idmap_pg_dir
+						+ i * PAGE_SIZE)), true);
+		}
+		setup_iee_early_address(&iee_pgtable);
+		setup_iee_early_address(&iee_data);
+
+		prot_iee_early_data_cache(&iee_pgtable);
+	}
+	#endif
+
 	for (i = 0; (iee_init_data_begin + i * PAGE_SIZE) < iee_init_data_end; i++)
 		set_iee_address(__phys_to_iee(__pa_symbol(iee_init_data_begin + i * PAGE_SIZE)),
 					0, true);
 	prot_iee_early_data_cache(&iee_stack);
 }
+
+#ifdef CONFIG_PTP
+void __init fixmap_copy_ptp(pgd_t *pgdir)
+{
+	if (!READ_ONCE(pgd_val(*pgd_offset_pgd(pgdir, FIXADDR_TOT_START)))) {
+		/*
+		 * The fixmap falls in a separate pgd to the kernel, and doesn't
+		 * live in the carveout for the swapper_pg_dir. We can simply
+		 * re-use the existing dir for the fixmap.
+		 */
+		iee_set_pgd_pre_init(pgd_offset_pgd(pgdir, FIXADDR_TOT_START),
+			READ_ONCE(*pgd_offset_k(FIXADDR_TOT_START)));
+	} else if (CONFIG_PGTABLE_LEVELS > 3) {
+		pgd_t *bm_pgdp;
+		p4d_t *bm_p4dp;
+		pud_t *bm_pudp;
+		pudval_t pudval;
+		/*
+		 * The fixmap shares its top level pgd entry with the kernel
+		 * mapping. This can really only occur when we are running
+		 * with 16k/4 levels, so we can simply reuse the pud level
+		 * entry instead.
+		 */
+		IEE_CHECK(!IS_ENABLED(CONFIG_ARM64_16K_PAGES));
+		bm_pgdp = pgd_offset_pgd(pgdir, FIXADDR_TOT_START);
+		bm_p4dp = p4d_offset(bm_pgdp, FIXADDR_TOT_START);
+		bm_pudp = pud_set_fixmap_offset(bm_p4dp, FIXADDR_TOT_START);
+		pudval = PUD_TYPE_TABLE | PUD_TABLE_AF;
+		pudval |= PUD_TABLE_UXN;
+		iee_set_pgtable_pre_init((unsigned long *)bm_pudp,
+				(unsigned long)(__phys_to_pud_val(__pa_symbol(bm_pmd)) | pudval));
+		pud_clear_fixmap_pre_init();
+	} else {
+		BUG();
+	}
+}
+
+int __pmdp_set_access_flags(struct vm_area_struct *vma,
+			    unsigned long address, pmd_t *pmdp,
+			    pmd_t entry, int dirty)
+{
+	pmdval_t old_pmdval, pmdval;
+	pmd_t pmd = READ_ONCE(*pmdp);
+
+	if (pmd_same(pmd, entry))
+		return 0;
+
+	/* only preserve the access flags and write permission */
+	pmd_val(entry) &= PTE_RDONLY | PTE_AF | PTE_WRITE | PTE_DIRTY;
+
+	/*
+	 * Setting the flags must be done atomically to avoid racing with the
+	 * hardware update of the access/dirty state. The PTE_RDONLY bit must
+	 * be set to the most permissive (lowest value) of *ptep and entry
+	 * (calculated as: a & b == ~(~a | ~b)).
+	 */
+	pmd_val(entry) ^= PTE_RDONLY;
+	pmdval = pmd_val(pmd);
+	do {
+		old_pmdval = pmdval;
+		pmdval ^= PTE_RDONLY;
+		pmdval |= pmd_val(entry);
+		pmdval ^= PTE_RDONLY;
+		pmdval = iee_set_pmd_cmpxchg_relaxed(pmdp, old_pmdval, pmdval);
+	} while (pmdval != old_pmdval);
+
+	/* Invalidate a stale read-only entry */
+	if (dirty)
+		flush_tlb_page(vma, address);
+	return 1;
+}
+
+void * __ref __ptp_vmemmap_alloc_block(unsigned long size, int node)
+{
+	int order = get_order(size);
+
+	/* If the main allocator is up use that, fallback to bootmem. */
+	if (slab_is_available())
+		return ptp_pg_alloc(&pg_cache, GFP_KERNEL | __GFP_ZERO);
+
+	if (order != 0)
+		panic("PTP: Unsupport vmemmap alloc.");
+	return __va(early_iee_pgtable_alloc(0));
+}
+#endif

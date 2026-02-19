@@ -15,6 +15,7 @@
 #ifdef CONFIG_IEE_PTRP
 #include <asm/haoc/iee-token.h>
 #endif
+#include <asm/haoc/haoc-bitmap.h>
 #include <asm/haoc/iee-asm.h>
 
 __aligned(PAGE_SIZE) DEFINE_PER_CPU(u64*[(PAGE_SIZE/8)],
@@ -61,7 +62,7 @@ void iee_setup_asid(void)
 static void iee_setup_init_data(void){
 	for (u64 addr = (u64)iee_init_data_begin; addr < (u64)iee_init_data_end;
 			addr += PAGE_SIZE)
-		iee_set_logical_mem(addr, 0, true);
+		iee_set_logical_mem(addr, 0, false);
 }
 
 void __init iee_init_post(void)
