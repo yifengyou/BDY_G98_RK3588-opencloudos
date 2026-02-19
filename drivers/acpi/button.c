@@ -436,6 +436,22 @@ static void acpi_lid_notify(acpi_handle handle, u32 event, void *data)
 	acpi_lid_update_state(device, true);
 }
 
+#if IS_ENABLED(CONFIG_ACPI_POWER_NOTIFIER_CHAIN)
+static BLOCKING_NOTIFIER_HEAD(acpi_power_chain_head);
+
+int register_acpi_power_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&acpi_power_chain_head, nb);
+}
+EXPORT_SYMBOL(register_acpi_power_notifier);
+
+int unregister_acpi_power_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&acpi_power_chain_head, nb);
+}
+EXPORT_SYMBOL(unregister_acpi_power_notifier);
+#endif
+
 static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct acpi_device *device = data;
@@ -448,6 +464,13 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 				  event);
 		return;
 	}
+
+#if IS_ENABLED(CONFIG_ACPI_POWER_NOTIFIER_CHAIN)
+	if (blocking_notifier_call_chain(&acpi_power_chain_head, 0, 0) == NOTIFY_BAD) {
+		pr_info("acpi power notifier chain: receive bad result, stop poweroff\n");
+		return;
+	}
+#endif
 
 	acpi_pm_wakeup_event(&device->dev);
 
