@@ -457,6 +457,8 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 #ifdef CONFIG_ARM64_HDBSS
 	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
 		r = system_supports_hdbss();
+		break;
+#endif
 #ifdef CONFIG_VIRT_PLAT_DEV
 	case KVM_CAP_ARM_VIRT_MSI_BYPASS:
 		r = sdev_enable;
