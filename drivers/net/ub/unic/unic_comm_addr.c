@@ -180,6 +180,7 @@ bool unic_comm_sync_addr_table(struct unic_vport *vport,
 			memcpy(new_node->unic_addr, addr_node->unic_addr,
 			       UNIC_ADDR_LEN);
 			new_node->state = addr_node->state;
+			new_node->is_pfc = addr_node->is_pfc;
 			new_node->node_mask = addr_node->node_mask;
 			list_add_tail(&new_node->node, &tmp_add_list);
 			break;

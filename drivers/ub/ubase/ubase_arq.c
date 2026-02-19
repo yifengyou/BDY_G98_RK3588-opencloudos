@@ -52,8 +52,6 @@ static int ubase_activate_ue(struct ubase_dev *udev, struct ub_entity *ue,
 	int ret;
 
 	ret = ub_activate_entity(ue, bus_ue_id);
-	if (ret == -EBUSY)
-		ret = ubase_activate_handler(udev, bus_ue_id);
 	if (ret)
 		dev_err(udev->dev,
 			"failed to activate ue dev, ue id = %u, msn = %u, ret = %d.\n",
@@ -68,8 +66,6 @@ static int ubase_deactivate_ue(struct ubase_dev *udev, struct ub_entity *ue,
 	int ret;
 
 	ret = ub_deactivate_entity(ue, bus_ue_id);
-	if (ret == -EBUSY)
-		ret = ubase_deactivate_handler(udev, bus_ue_id);
 	if (ret)
 		dev_err(udev->dev,
 			"failed to deactivate ue dev, ue id=%u, msn=%u, ret=%d.\n",

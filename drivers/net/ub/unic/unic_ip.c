@@ -13,12 +13,12 @@
 
 #include "unic_comm_addr.h"
 #include "unic_trace.h"
-#include "unic_rack_ip.h"
+#include "unic_ip.h"
 
-static void unic_update_rack_addr_state(struct unic_vport *vport,
-					struct unic_comm_addr_node *addr_node,
-					enum UNIC_COMM_ADDR_STATE state,
-					const u8 *addr)
+static void unic_update_addr_state(struct unic_vport *vport,
+				   struct unic_comm_addr_node *addr_node,
+				   enum UNIC_COMM_ADDR_STATE state,
+				   const u8 *addr)
 {
 	struct auxiliary_device *adev = vport->back->comdev.adev;
 	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
@@ -26,7 +26,7 @@ static void unic_update_rack_addr_state(struct unic_vport *vport,
 
 	/* update the state of address node by stack in rack server.
 	 * if ip node exist in ip_list and receive the ack form stack,
-	 * update_rack_addr_state and handle accidental deletion.
+	 * update_addr_state and handle accidental deletion.
 	 */
 	switch (state) {
 	case UNIC_COMM_ADDR_TO_ADD:
@@ -41,7 +41,7 @@ static void unic_update_rack_addr_state(struct unic_vport *vport,
 			addr_node->state = UNIC_COMM_ADDR_TO_ADD;
 			unic_format_masked_ip_addr(format_masked_ip_addr, addr);
 			unic_info(unic_dev,
-				  "deleted an existing ip %s by accident and need to add it.\n",
+				  "stack deleted an planned ip %s, need to re-add it.\n",
 				  format_masked_ip_addr);
 		}
 		break;
@@ -68,7 +68,7 @@ static int unic_update_stack_ip_addr(struct unic_vport *vport,
 
 	addr_node = unic_comm_find_addr_node(list, addr, ip_mask);
 	if (addr_node) {
-		unic_update_rack_addr_state(vport, addr_node, state, addr);
+		unic_update_addr_state(vport, addr_node, state, addr);
 		goto finish_update_state;
 	}
 
@@ -90,7 +90,7 @@ static int unic_update_stack_ip_addr(struct unic_vport *vport,
 	list_add_tail(&addr_node->node, list);
 	unic_format_masked_ip_addr(format_masked_ip_addr, addr);
 	unic_info(unic_dev,
-		  "added a new ip %s by accident and need to delete it.\n",
+		  "stack added a non-planned ip %s, need to delete it.\n",
 		  format_masked_ip_addr);
 	set_bit(UNIC_VPORT_STATE_IP_TBL_CHANGE, &vport->state);
 	goto unlock_and_exit;
@@ -274,9 +274,8 @@ static int unic_sync_stack_ip(struct unic_vport *vport,
 	return ret;
 }
 
-static void unic_sync_rack_ip_list(struct unic_vport *vport,
-				   struct list_head *list,
-				   enum unic_ctrlq_ip_event state)
+static void unic_sync_ip_list(struct unic_vport *vport, struct list_head *list,
+			      enum unic_ctrlq_ip_event state)
 {
 	struct unic_comm_addr_node *ip_node, *tmp;
 	int ret;
@@ -291,9 +290,9 @@ static void unic_sync_rack_ip_list(struct unic_vport *vport,
 	}
 }
 
-static void unic_rack_sync_addr_table(struct unic_vport *vport,
-				      struct list_head *list,
-				      spinlock_t *addr_list_lock)
+static void unic_sync_addr_table(struct unic_vport *vport,
+				 struct list_head *list,
+				 spinlock_t *addr_list_lock)
 {
 	struct auxiliary_device *adev = vport->back->comdev.adev;
 	struct unic_comm_addr_node *addr_node, *tmp, *new_node;
@@ -330,19 +329,19 @@ static void unic_rack_sync_addr_table(struct unic_vport *vport,
 stop_traverse:
 	spin_unlock_bh(addr_list_lock);
 
-	unic_sync_rack_ip_list(vport, &tmp_del_list, UNIC_CTRLQ_DEL_IP);
-	unic_sync_rack_ip_list(vport, &tmp_add_list, UNIC_CTRLQ_ADD_IP);
+	unic_sync_ip_list(vport, &tmp_del_list, UNIC_CTRLQ_DEL_IP);
+	unic_sync_ip_list(vport, &tmp_add_list, UNIC_CTRLQ_ADD_IP);
 }
 
-void unic_sync_rack_ip_table(struct unic_dev *unic_dev)
+void unic_sync_ip_table(struct unic_dev *unic_dev)
 {
 	struct unic_vport *vport = &unic_dev->vport;
 
 	if (!test_bit(UNIC_VPORT_STATE_IP_TBL_CHANGE, &vport->state))
 		return;
 
-	unic_rack_sync_addr_table(vport, &vport->addr_tbl.ip_list,
-				  &vport->addr_tbl.ip_list_lock);
+	unic_sync_addr_table(vport, &vport->addr_tbl.ip_list,
+			     &vport->addr_tbl.ip_list_lock);
 }
 
 static void unic_build_stack_ip_info(struct unic_ctrlq_ip_notify_req *req,
@@ -358,10 +357,10 @@ static void unic_build_stack_ip_info(struct unic_ctrlq_ip_notify_req *req,
 	st_ip->ip_addr[3] = le32_to_be32(req->ip_addr[0]);
 }
 
-static int unic_update_rack_addr_list(struct list_head *list,
-				      spinlock_t *addr_list_lock,
-				      enum UNIC_COMM_ADDR_STATE state,
-				      const u8 *addr, u16 ip_mask)
+static int unic_update_addr_list(struct list_head *list,
+				 spinlock_t *addr_list_lock,
+				 enum UNIC_COMM_ADDR_STATE state,
+				 const u8 *addr, u16 ip_mask)
 {
 	struct unic_comm_addr_node *addr_node;
 
@@ -469,6 +468,9 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 	struct unic_stack_ip_info st_ip;
 	int ret;
 
+	if (service_ver != UBASE_CTRLQ_SER_VER_01)
+		return -EOPNOTSUPP;
+
 	if (len < sizeof(*req)) {
 		unic_err(priv, "failed to verify ip info size, len = %u.\n", len);
 		return -EINVAL;
@@ -486,17 +488,17 @@ int unic_handle_notify_ip_event(struct auxiliary_device *adev, u8 service_ver,
 	}
 
 	if (st_ip.ip_cmd == UNIC_CTRLQ_ADD_IP) {
-		ret = unic_update_rack_addr_list(&vport->addr_tbl.ip_list,
-						 &vport->addr_tbl.ip_list_lock,
-						 UNIC_COMM_ADDR_TO_ADD,
-						 (u8 *)&st_ip.ip_addr,
-						 st_ip.ip_mask);
+		ret = unic_update_addr_list(&vport->addr_tbl.ip_list,
+					    &vport->addr_tbl.ip_list_lock,
+					    UNIC_COMM_ADDR_TO_ADD,
+					    (u8 *)&st_ip.ip_addr,
+					    st_ip.ip_mask);
 	} else if (st_ip.ip_cmd == UNIC_CTRLQ_DEL_IP) {
-		ret = unic_update_rack_addr_list(&vport->addr_tbl.ip_list,
-						 &vport->addr_tbl.ip_list_lock,
-						 UNIC_COMM_ADDR_TO_DEL,
-						 (u8 *)&st_ip.ip_addr,
-						 st_ip.ip_mask);
+		ret = unic_update_addr_list(&vport->addr_tbl.ip_list,
+					    &vport->addr_tbl.ip_list_lock,
+					    UNIC_COMM_ADDR_TO_DEL,
+					    (u8 *)&st_ip.ip_addr,
+					    st_ip.ip_mask);
 	} else {
 		ret = -EINVAL;
 		unic_err(priv, "invalid ip cmd by ctrlq, cmd = %u.\n", st_ip.ip_cmd);
@@ -615,8 +617,8 @@ out:
 	return ret;
 }
 
-static void unic_update_rack_ip_list(struct unic_vport *vport,
-				     struct list_head *list)
+static void unic_update_ip_list(struct unic_vport *vport,
+				struct list_head *list)
 {
 	struct unic_comm_addr_node *ip_node, *tmp, *new_node;
 
@@ -652,7 +654,7 @@ static void unic_update_rack_ip_list(struct unic_vport *vport,
 	spin_unlock_bh(&vport->addr_tbl.ip_list_lock);
 }
 
-void unic_query_rack_ip(struct auxiliary_device *adev)
+void unic_query_ip_addr(struct auxiliary_device *adev)
 {
 #define UNIC_LOOP_COUNT(total_size, size) ((total_size) / (size) + 1)
 
@@ -687,7 +689,7 @@ void unic_query_rack_ip(struct auxiliary_device *adev)
 
 	spin_lock_bh(&vport->addr_tbl.tmp_ip_lock);
 
-	unic_update_rack_ip_list(vport, &tmp_list);
+	unic_update_ip_list(vport, &tmp_list);
 	clear_bit(UNIC_VPORT_STATE_IP_QUERYING, &vport->state);
 
 	list_for_each_entry_safe(ip_node, tmp, &vport->addr_tbl.tmp_ip_list, node) {
@@ -703,7 +705,7 @@ void unic_query_rack_ip(struct auxiliary_device *adev)
 	}
 }
 
-void unic_uninit_rack_ip_table(struct unic_dev *unic_dev)
+void unic_uninit_ip_table(struct unic_dev *unic_dev)
 {
 	struct unic_vport *vport = &unic_dev->vport;
 	struct list_head *list = &vport->addr_tbl.ip_list;

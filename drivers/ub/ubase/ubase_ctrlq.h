@@ -21,6 +21,8 @@
 #define UBASE_CTRLQ_DEAD_TIME		40000
 #define UBASE_CTRLQ_CHAN_DISABLE_OPC	0x1
 #define UBASE_CTRL_PLANE_INIT_RES	BIT(0)
+#define UBASE_CTRLQ_RETRY_TIMES		3
+#define UBASE_CTRLQ_RETRY_INTERVAL	100
 
 enum ubase_ctrlq_state {
 	UBASE_CTRLQ_STATE_ENABLE,
@@ -69,8 +71,10 @@ struct ubase_ctrlq_query_vl_req {
 
 struct ubase_ctrlq_query_sl_resp {
 	__le16 unic_sl_bitmap;
-	__le16 udma_sl_bitmap;
-	u8 rsv[16];
+	__le16 rc_max_cnt;
+	__le16 udma_tp_sl_bitmap;
+	__le16 udma_ctp_sl_bitmap;
+	u8 rsv1[12];
 };
 
 struct ubase_ctrlq_query_sl_req {
@@ -87,6 +91,26 @@ struct ubase_ctrlq_reset_ctrl_req {
 	u8 rsv[3];
 };
 
+static inline bool ubase_ctrlq_msg_is_sync_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && !msg->is_async && msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_async_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && msg->is_async && msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_notify_req(struct ubase_ctrlq_msg *msg)
+{
+	return !msg->is_resp && !msg->is_async && !msg->need_resp;
+}
+
+static inline bool ubase_ctrlq_msg_is_resp(struct ubase_ctrlq_msg *msg)
+{
+	return msg->is_resp && !msg->is_async && !msg->need_resp;
+}
+
 int ubase_ctrlq_init(struct ubase_dev *udev);
 void ubase_ctrlq_uninit(struct ubase_dev *udev);
 void ubase_ctrlq_disable(struct ubase_dev *udev);
@@ -94,11 +118,12 @@ void ubase_ctrlq_disable(struct ubase_dev *udev);
 int __ubase_ctrlq_send(struct ubase_dev *udev, struct ubase_ctrlq_msg *msg,
 		       struct ubase_ctrlq_ue_info *ue_info);
 
-void ubase_ctrlq_service_task(struct ubase_delay_work *ubase_work);
+bool ubase_ctrlq_check_seq(struct ubase_dev *udev, u16 seq);
+void ubase_ctrlq_crq_service_task(struct ubase_delay_work *ubase_work);
 void ubase_ctrlq_handle_crq_msg(struct ubase_dev *udev,
 				struct ubase_ctrlq_base_block *head,
 				u16 seq, void *msg, u16 data_len);
-void ubase_ctrlq_clean_service_task(struct ubase_delay_work *ubase_work);
+void ubase_ctrlq_clean_service_task(struct ubase_dev *udev);
 void ubase_ctrlq_disable_remote(struct ubase_dev *udev);
 
 #endif

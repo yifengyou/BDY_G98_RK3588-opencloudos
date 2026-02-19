@@ -11,6 +11,14 @@
 
 struct ubase_dbgfs;
 
+/**
+ * struct ubase_dbg_dentry_info - ubase debugfs dentry information
+ * @name: dentry name
+ * @dentry: the dentry for this file
+ * @property: property supported by this dentry
+ * @support: function to determine whether to create this dentry. dev: struct device,
+ * property: the struct number variable 'property'.
+ */
 struct ubase_dbg_dentry_info {
 	const char *name;
 	struct dentry *dentry;
@@ -18,6 +26,18 @@ struct ubase_dbg_dentry_info {
 	bool (*support)(struct device *dev, u32 property);
 };
 
+/**
+ * struct ubase_dbg_cmd_info - ubase debugfs cmd information
+ * @name: file name
+ * @dentry_index: dentry index
+ * @property: property supported by this file.
+ * @support: function to determine whether to create this file. dev: struct device,
+ * property: the struct number variable 'property.
+ * @init: init debugfs cmd file function. dev: struct device, dirs: struct
+ * ubase_dbg_dentry_info, dbgfs: struct ubase_dbgfs, idx: idxth file.
+ * @read_func: reading debugfs detailed implementation function. s: struct seq_file,
+ * data: data buffer
+ */
 struct ubase_dbg_cmd_info {
 	const char *name;
 	int dentry_index;
@@ -28,8 +48,14 @@ struct ubase_dbg_cmd_info {
 	int (*read_func)(struct seq_file *s, void *data);
 };
 
+/**
+ * struct ubase_dbgfs - ubase debugfs data structure
+ * @dentry: debugfs root path
+ * @cmd_info: ubase debugfs cmd information
+ * @cmd_info_size: the size of cmd_info
+ */
 struct ubase_dbgfs {
-	struct dentry			*dentry; /* dbgfs root path */
+	struct dentry			*dentry;
 	struct ubase_dbg_cmd_info	*cmd_info;
 	int				cmd_info_size;
 };

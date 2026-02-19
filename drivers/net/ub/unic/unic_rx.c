@@ -1024,15 +1024,11 @@ static int unic_create_skb(struct unic_rq *rq, struct napi_struct *napi,
 
 static void unic_fix_rq_ci(struct unic_rq *rq, union unic_cqe *cqe)
 {
-	struct unic_dev *unic_dev = netdev_priv(rq->netdev);
 	u32 start_rqe_idx = cqe->rx.start_rqe_idx;
 	u32 put_page_num;
 
 	if (unlikely(rq->ci != cqe->rx.start_rqe_idx)) {
-		if (net_ratelimit())
-			unic_warn(unic_dev,
-				  "queue_index(%u) sw_rq_ci(%hu) hw_rq_ci(%u) do not match.\n",
-				  rq->queue_index, rq->ci, start_rqe_idx);
+		trace_unic_rq_ci_mismatch(rq, start_rqe_idx);
 		if (start_rqe_idx < rq->ci)
 			start_rqe_idx += UNIC_RQ_CI_REVERSE;
 		put_page_num = start_rqe_idx - rq->ci;

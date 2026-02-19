@@ -15,4 +15,10 @@ struct ubase_query_mac_stats_cmd {
 	__le64 stats_val[];
 };
 
+int __ubase_get_eth_port_stats(struct ubase_dev *udev,
+			       struct ubase_eth_mac_stats *data);
+int ubase_update_eth_stats_trylock(struct ubase_dev *udev);
+void ubase_update_activate_stats(struct ubase_dev *udev, bool activate,
+				 int result);
+
 #endif /* _UBASE_STATS_H */

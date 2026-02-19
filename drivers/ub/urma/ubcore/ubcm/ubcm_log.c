@@ -12,4 +12,4 @@
 #include <linux/types.h>
 #include "ubcm_log.h"
 
-uint32_t g_ubcm_log_level = UBCM_LOG_LEVEL_INFO;
+uint32_t g_ubcm_log_level = UBCM_LOG_LEVEL_WARNING;

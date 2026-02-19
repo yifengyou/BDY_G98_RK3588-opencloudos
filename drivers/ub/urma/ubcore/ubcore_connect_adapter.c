@@ -52,7 +52,7 @@ static int ubcore_active_tp(struct ubcore_device *dev,
 {
 	int ret;
 
-	if (!dev || !dev->ops || dev->ops->active_tp ||
+	if (!dev || !dev->ops || !dev->ops->active_tp ||
 	    active_cfg == NULL) {
 		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
@@ -76,7 +76,7 @@ static int ubcore_deactive_tp(struct ubcore_device *dev,
 {
 	int ret;
 
-	if (!dev || !dev->ops || dev->ops->active_tp) {
+	if (!dev || !dev->ops || !dev->ops->deactive_tp) {
 		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}

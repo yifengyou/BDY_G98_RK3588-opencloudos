@@ -121,7 +121,7 @@ static void ubmad_rt_work_handler(struct work_struct *work)
 		ubcm_log_err("repost send failed. msg type %d msn %llu\n",
 			     msg->msg_type, msg->msn);
 	}
-	ubcm_log_info("Do not repost, found: %u, rt_work->rt_cnt: %u.\n",
+	ubcm_log_info_rl("Do not repost, found: %u, rt_work->rt_cnt: %u.\n",
 		      (uint32_t)found, rt_work->rt_cnt);
 
 	/* not found OR repost failed
@@ -369,7 +369,7 @@ static int ubmad_do_post_send_conn_data(struct ubcore_jetty *jetty,
 		goto destroy_msn_node;
 	}
 
-	ubcm_log_info("send conn data successfully. msn %llu eid " EID_FMT "\n",
+	ubcm_log_info_rl("send conn data successfully. msn %llu eid " EID_FMT "\n",
 		      msn, EID_ARGS(*dst_eid));
 	return 0;
 
@@ -587,7 +587,7 @@ int ubmad_repost_send_conn_data(struct ubcore_jetty *jetty,
 		return -1;
 	}
 
-	ubcm_log_info("send conn data successfully. msn %llu eid " EID_FMT "\n",
+	ubcm_log_info_rl("send conn data successfully. msn %llu eid " EID_FMT "\n",
 		      msn, EID_ARGS(*dst_eid));
 	return 0;
 }
@@ -603,7 +603,7 @@ int ubmad_repost_send(struct ubmad_msg *msg, struct ubmad_tjetty *tjetty,
 	struct ubcore_jfs_wr jfs_wr = { 0 };
 	int ret;
 
-	ubcm_log_info("timeout and repost. msn %llu eid " EID_FMT "\n",
+	ubcm_log_info_rl("timeout and repost. msn %llu eid " EID_FMT "\n",
 		      msg->msn, EID_ARGS(*dst_eid));
 
 	// prepare wr
@@ -802,7 +802,7 @@ static int ubmad_process_conn_data(struct ubcore_cr *cr,
 		}
 	}
 
-	ubcm_log_info(
+	ubcm_log_info_rl(
 		"Finish to recv request. msn %llu right_end %llu, seid " EID_FMT
 		"\n",
 		msg->msn, seid_node->rx_bitmap->right_end, EID_ARGS(*seid));
@@ -854,12 +854,12 @@ static void ubmad_process_conn_ack(struct ubcore_cr *cr,
 	}
 	spin_unlock_irqrestore(&msn_mgr->msn_hlist_lock, flag);
 	// msn_node not in msn_hlist, indicates already removed by previous ack with same msn
-	ubcm_log_info("redundant ack. msn %llu seid " EID_FMT "\n", msg->msn,
+	ubcm_log_info_rl("redundant ack. msn %llu seid " EID_FMT "\n", msg->msn,
 		      EID_ARGS(*seid));
 
 put_tjetty:
 	ubmad_put_tjetty(tjetty);
-	ubcm_log_info("recv conn ack. msn %llu seid " EID_FMT "\n", msg->msn,
+	ubcm_log_info_rl("recv conn ack. msn %llu seid " EID_FMT "\n", msg->msn,
 		      EID_ARGS(*seid));
 }
 
@@ -887,7 +887,7 @@ static inline void ubmad_process_close_req(struct ubcore_cr *cr,
 	ubmad_remove_tjetty(&cr->remote_id.eid, rsrc);
 	ubmad_delete_seid_node(&cr->remote_id.eid, rsrc);
 
-	ubcm_log_info("Finish to process close request, remote eid: " EID_FMT
+	ubcm_log_info_rl("Finish to process close request, remote eid: " EID_FMT
 		      ", remote id: %u.\n",
 		      EID_ARGS(cr->remote_id.eid), cr->remote_id.id);
 }
@@ -965,7 +965,7 @@ int ubmad_ubc_send(struct ubcore_device *device,
 	send_buf->src_eid = dev_priv->eid_info.eid;
 	ubmad_put_device_priv(dev_priv);
 
-	ubcm_log_info("ubc dev: %s, s_eid: " EID_FMT ", d_eid: " EID_FMT " ",
+	ubcm_log_info_rl("ubc dev: %s, s_eid: " EID_FMT ", d_eid: " EID_FMT " ",
 		      device->dev_name, EID_ARGS(send_buf->src_eid),
 		      EID_ARGS(send_buf->dst_eid));
 
@@ -1043,7 +1043,7 @@ static void ubmad_send_work_handler(struct ubmad_device_priv *dev_priv,
 	} while (cr_cnt > 0);
 
 	ret = ubcore_rearm_jfc(jfc, false);
-	ubcm_log_info("Rearm send jfc, jfc_id: %u, ret: %d.\n", jfc->id, ret);
+	ubcm_log_info_rl("Rearm send jfc, jfc_id: %u, ret: %d.\n", jfc->id, ret);
 }
 
 // polling here indicates if recv msg
@@ -1106,7 +1106,7 @@ static void ubmad_recv_work_handler(struct ubmad_device_priv *dev_priv,
 	} while (cr_cnt > 0);
 
 	ret = ubcore_rearm_jfc(jfc, false);
-	ubcm_log_info("Rearm recv jfc, jfc_id: %u, ret: %d.\n", jfc->id, ret);
+	ubcm_log_info_rl("Rearm recv jfc, jfc_id: %u, ret: %d.\n", jfc->id, ret);
 }
 
 // continue from ubmad_jfce_handler()
@@ -1164,7 +1164,7 @@ static void ubmad_jfce_handler(struct ubcore_jfc *jfc,
 			     jfc->ub_dev->dev_name);
 		return;
 	}
-	ubcm_log_info("Start to handle jfce, type: %d, jfc_id: %u.\n", type, jfc->id);
+	ubcm_log_info_rl("Start to handle jfce, type: %d, jfc_id: %u.\n", type, jfc->id);
 
 	// free in ubmad_jfce_work_handler()
 	jfce_work = kzalloc(sizeof(struct ubmad_jfce_work), GFP_ATOMIC);

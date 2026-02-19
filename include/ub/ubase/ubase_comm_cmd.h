@@ -30,21 +30,36 @@ enum ubase_opcode_type {
 	/* Generic commands */
 	UBASE_OPC_QUERY_FW_VER		= 0x0001,
 	UBASE_OPC_QUERY_CTL_INFO	= 0x0003,
+	UBASE_OPC_NOTIFY_DRV_CAPS	= 0x0007,
 	UBASE_OPC_QUERY_COMM_RSRC_PARAM	= 0x0030,
 	UBASE_OPC_QUERY_NIC_RSRC_PARAM	= 0x0031,
 	UBASE_OPC_QUERY_LINK_STATUS	= 0x0032,
 	UBASE_OPC_CFG_MTU		= 0x0033,
 	UBASE_OPC_QUERY_NET_GUID	= 0x0035,
 	UBASE_OPC_STATS_MAC_ALL		= 0x0038,
+	UBASE_OPC_DFX_REG_NUM		= 0x0039,
+	UBASE_OPC_DFX_DL_REG		= 0x0040,
+	UBASE_OPC_DFX_NL_REG		= 0x0042,
+	UBASE_OPC_DFX_BA_REG		= 0x0043,
+	UBASE_OPC_DFX_TP_REG		= 0x0044,
+	UBASE_OPC_DFX_TA_REG		= 0x0045,
 	UBASE_OPC_QUERY_BUS_EID		= 0x0047,
+	UBASE_OPC_QUERY_UBCL_CONFIG	= 0x0050,
 
 	/* NL commands */
+	UBASE_OPC_VLAN_FILTER_CTRL	= 0x2100,
+	UBASE_OPC_VLAN_FILTER_CFG	= 0x2101,
+	UBASE_OPC_QUERY_VLAN_TBL	= 0x2102,
 	UBASE_OPC_CFG_VL_MAP		= 0x2206,
 	UBASE_OPC_CFG_ETS_TC_INFO	= 0x2340,
 	UBASE_OPC_QUERY_ETS_TCG_INFO	= 0x2341,
 	UBASE_OPC_QUERY_ETS_PORT_INFO	= 0x2342,
 	UBASE_OPC_QUERY_VL_AGEING_EN	= 0x2343,
 	UBASE_OPC_CFG_PROMISC_MODE	= 0x240A,
+	UBASE_OPC_QUERY_MAC		= 0x241A,
+	UBASE_OPC_ADD_MAC_TBL		= 0x241B,
+	UBASE_OPC_DEL_MAC_TBL		= 0x241C,
+	UBASE_OPC_QUERY_MAC_TBL		= 0x241E,
 
 	/* TP commands */
 	UBASE_OPC_TP_TIMER_VA_CONFIG	= 0x3007,
@@ -68,9 +83,11 @@ enum ubase_opcode_type {
 
 	/* DL commands */
 	UBASE_OPC_DL_CONFIG_MODE	= 0x5100,
+	UBASE_OPC_DL_CONFIG_LB		= 0x5101,
 	UBASE_OPC_QUERY_FLUSH_STATUS	= 0x5102,
 	UBASE_OPC_START_PERF_STATS	= 0x5103,
 	UBASE_OPC_STOP_PERF_STATS	= 0x5104,
+	UBASE_OPC_QUERY_UB_PORT_BITMAP	= 0x5105,
 
 	/* PHY commands */
 	UBASE_OPC_CONFIG_SPEED_DUP	= 0x6100,
@@ -79,6 +96,10 @@ enum ubase_opcode_type {
 	UBASE_OPC_QUERY_PORT_INFO	= 0x6200,
 	UBASE_OPC_QUERY_CHIP_INFO	= 0x6201,
 	UBASE_OPC_QUERY_FEC_STATS	= 0x6202,
+	UBASE_OPC_QUERY_LINK_DIAGNOSIS	= 0x6203,
+	UBASE_OPC_CFG_MAC_PAUSE_EN	= 0x6300,
+	UBASE_OPC_CFG_PFC_PAUSE_EN	= 0x6301,
+	UBASE_OPC_HIMAC_RESET		= 0x6302,
 
 	/* Mailbox commands */
 	UBASE_OPC_POST_MB		= 0x7000,
@@ -94,12 +115,30 @@ enum ubase_opcode_type {
 	UBASE_OPC_NOTIFY_UE_RESET	= 0xF006,
 	UBASE_OPC_QUERY_UE_RST_RDY	= 0xF007,
 	UBASE_OPC_RESET_DONE		= 0xF008,
+	UBASE_OPC_VPORT_CTX		= 0xF009,
 	UBASE_OPC_DESTROY_CTX_RESOURCE	= 0xF00D,
 	UBASE_OPC_UE2UE_UBASE		= 0xF00E,
 	UBASE_OPC_ACTIVATE_REQ		= 0xF00F,
 	UBASE_OPC_ACTIVATE_RESP		= 0xF010,
 };
 
+/**
+ * union ubase_mbox - ubase mailbox structure
+ * @in_param_l: input data storage address lower 32 bits
+ * @in_param_h: input data storage address high 32 bits
+ * @cmd: mailbox command
+ * @tag: queue id
+ * @seq_num: sequence number
+ * @event_en: 0-poll mode, 1-event mode
+ * @mbx_ue_id: mailbox ub entity id
+ * @rsv: reserved bits
+ * @status: mailbox command execution completion status, 0-success, 1-fail
+ * @hw_run: hardware running status, 0-not running, 1-running
+ * @rsv1: reserved bits
+ * @query_status:execution result of the mailbox query command, 0-success, 1-fail
+ * @query_hw_run: hardware running status of the mailbox query command, 0-not running, 1-running
+ * @query_rsv: reserved bits
+ */
 union ubase_mbox {
 	struct {
 		/* MB 0 */
@@ -127,6 +166,13 @@ union ubase_mbox {
 	};
 };
 
+/**
+ * struct ubase_cmd_buf - ubase cmd buffer structure
+ * @opcode: cmdq opcode
+ * @is_read: read or write, true for read, false for write
+ * @data_size: valid length of data
+ * @data: data buffer
+ */
 struct ubase_cmd_buf {
 	u16	opcode;
 	bool	is_read;
@@ -134,6 +180,13 @@ struct ubase_cmd_buf {
 	void	*data;
 };
 
+/**
+ * struct ubase_crq_event_nb - ubase crq event notification block structure
+ * @opcode: cmdq crq opcode
+ * @back: arbitrary registered pointer
+ * @crq_handler: cmdq crq handle function. dev: the struct member variable 'back',
+ * data: the crq message data, len: the crq message data length.
+ */
 struct ubase_crq_event_nb {
 	u16 opcode;
 	void *back;

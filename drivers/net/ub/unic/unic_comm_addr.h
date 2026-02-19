@@ -22,15 +22,31 @@ enum UNIC_COMM_ADDR_STATE {
 #define UNIC_IPV4_PREFIX		0xffff0000
 
 #define UNIC_ADDR_LEN			16
+
 struct unic_comm_addr_node {
 	struct list_head node;
 	enum UNIC_COMM_ADDR_STATE state;
 	union {
 		u8 unic_addr[UNIC_ADDR_LEN];
 		struct in6_addr ip_addr;
+		u8 mac_addr[ETH_ALEN];
 	};
+	u8 is_pfc;
 	u16 node_mask;
 };
+
+#define	UNIC_FORMAT_MAC_LEN		18
+#define UNIC_FORMAT_MAC_OFFSET_0	0
+#define UNIC_FORMAT_MAC_OFFSET_4	4
+#define UNIC_FORMAT_MAC_OFFSET_5	5
+static inline void unic_comm_format_mac_addr(char *format_mac, const u8 *mac)
+{
+	(void)snprintf(format_mac, UNIC_FORMAT_MAC_LEN,
+		       "%02x:**:**:**:%02x:%02x",
+		       mac[UNIC_FORMAT_MAC_OFFSET_0],
+		       mac[UNIC_FORMAT_MAC_OFFSET_4],
+		       mac[UNIC_FORMAT_MAC_OFFSET_5]);
+}
 
 static inline bool unic_comm_addr_equal(const u8 *addr1, const u8 *addr2,
 					u16 mask1, u16 mask2)

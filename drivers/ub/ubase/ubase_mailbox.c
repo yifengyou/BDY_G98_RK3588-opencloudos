@@ -66,6 +66,15 @@ failed_alloc_mailbox:
 	return NULL;
 }
 
+/**
+ * ubase_alloc_cmd_mailbox() - Alloc mailbox buffer
+ * @aux_dev: auxiliary device
+ *
+ * The function is used to alloc mailbox buffer.
+ *
+ * Context: Process context.
+ * Return: NULL if the adev is empty, otherwise the pointer to struct ubase_cmd_mailbox
+ */
 struct ubase_cmd_mailbox *ubase_alloc_cmd_mailbox(struct auxiliary_device *aux_dev)
 {
 	struct ubase_dev *udev;
@@ -91,6 +100,15 @@ void __ubase_free_cmd_mailbox(struct ubase_dev *udev,
 	kfree(mailbox);
 }
 
+/**
+ * ubase_free_cmd_mailbox() - Free mailbox buffer
+ * @aux_dev: auxiliary device
+ * @mailbox: mailbox command address
+ *
+ * The function is used to free mailbox buffer.
+ *
+ * Context: Process context.
+ */
 void ubase_free_cmd_mailbox(struct auxiliary_device *aux_dev,
 			    struct ubase_cmd_mailbox *mailbox)
 {
@@ -383,8 +401,8 @@ static bool ubase_is_jfs_opcode(u8 op)
 }
 
 static struct ubase_ctx_buf_cap*
-ubase_parse_ta_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
-			  enum ubase_mb_type *type)
+ubase_parse_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
+		       enum ubase_mb_type *type)
 {
 	struct mbx_op_match ta_matches[] = {
 		{UBASE_MB_CREATE_JFS_CONTEXT, UBASE_MB_CREATE, &udev->ctx_buf.jfs},
@@ -410,18 +428,11 @@ ubase_parse_ta_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
 	};
 	u32 size = ARRAY_SIZE(ta_matches);
 
-	return ubase_parse_common_buf(attr, ta_matches, type, size);
-}
-
-static struct ubase_ctx_buf_cap*
-ubase_parse_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
-		       enum ubase_mb_type *type)
-{
 	if (ubase_is_jfs_opcode(attr->op) &&
 	    test_bit(UBASE_STATE_PREALLOC_OK_B, &udev->state_bits))
 		return NULL;
 
-	return ubase_parse_ta_opcode_buf(udev, attr, type);
+	return ubase_parse_common_buf(attr, ta_matches, type, size);
 }
 
 static int ubase_check_buf_ctx_page(struct ubase_dev *udev,
@@ -517,13 +528,23 @@ int __ubase_hw_upgrade_ctx_ex(struct ubase_dev *udev,
 	}
 
 	ret = __ubase_hw_upgrade_ctx(udev, attr, mailbox);
-	if ((ret && type == UBASE_MB_CREATE) ||
-	    (!ret && type == UBASE_MB_DESTROY))
+	if (ret && type == UBASE_MB_CREATE)
 		ubase_free_buf_ctx_page(udev, ctx_buf, attr->tag);
 
 	return ret;
 }
 
+/**
+ * ubase_hw_upgrade_ctx_ex() - upgrade hardware context
+ * @aux_dev: auxiliary device
+ * @attr: the mailbox attribute pointer
+ * @mailbox: mailbox command address
+ *
+ * The function is used to upgrade hardware context.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. May sleep
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_hw_upgrade_ctx_ex(struct auxiliary_device *aux_dev,
 			    struct ubase_mbx_attr *attr,
 			    struct ubase_cmd_mailbox *mailbox)

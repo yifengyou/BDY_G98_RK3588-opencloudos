@@ -907,6 +907,14 @@ enum ubcore_cmd_set_topo_type {
 	SET_TOPO_IN_NUM /* Only for calculating number of types */
 };
 
+enum ubcore_get_route_list_type {
+	GET_ROUTE_LIST_IN_ROUTE_PAIR,
+	GET_ROUTE_LIST_IN_NUM,
+
+	GET_ROUTE_LIST_OUT_ROUTE_LIST = UBCORE_CMD_OUT_TYPE_INIT,
+	GET_ROUTE_LIST_OUT_NUM,
+};
+
 int ubcore_mue_tlv_parse(struct ubcore_cmd_hdr *hdr, void *arg);
 int ubcore_mue_tlv_append(struct ubcore_cmd_hdr *hdr, void *arg);
 int ubcore_global_tlv_parse(struct ubcore_cmd_hdr *hdr, void *arg);

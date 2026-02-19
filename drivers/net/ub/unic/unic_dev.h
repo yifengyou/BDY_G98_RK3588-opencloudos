@@ -43,6 +43,8 @@ enum unic_vport_state {
 	UNIC_VPORT_STATE_ALIVE,
 	UNIC_VPORT_STATE_PROMISC_CHANGE,
 	UNIC_VPORT_STATE_IP_TBL_CHANGE,
+	UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
+	UNIC_VPORT_STATE_MAC_TBL_CHANGE,
 	UNIC_VPORT_STATE_IP_QUERYING,
 };
 
@@ -124,6 +126,11 @@ struct unic_coal_txrx {
 	struct unic_coalesce	rx_coal;
 };
 
+struct unic_pfc_info {
+	u8	fc_mode;
+	u8	pfc_en;
+};
+
 struct unic_vl {
 	u8	vl_num;
 	u8	dscp_app_cnt;
@@ -136,6 +143,7 @@ struct unic_vl {
 	u8	vl_sl[UBASE_MAX_VL_NUM];
 	u64	vl_maxrate[UBASE_MAX_VL_NUM];
 	u16	vl_bitmap;
+	struct	unic_pfc_info	pfc_info;
 };
 
 struct unic_channels {
@@ -161,7 +169,10 @@ struct unic_channels {
 struct unic_caps {
 	u16	rx_buff_len;
 	u16	total_ip_tbl_size;
-	u32	rsvd0[5];
+	u32	uc_mac_tbl_size;
+	u32	mc_mac_tbl_size;
+	u32	vlan_tbl_size;
+	u32	mng_tbl_size;
 	u16	max_trans_unit;
 	u16	min_trans_unit;
 	u32	vport_buf_size; /* unit: byte */
@@ -182,8 +193,20 @@ struct unic_fec_stats {
 	struct unic_fec_stats_item	lane[UNIC_FEC_STATS_MAX_LANE];
 };
 
+#define LINK_STAT_MAX_IDX 10U
+struct unic_link_stats {
+	u64			link_up_cnt;
+	u64			link_down_cnt;
+	struct {
+		bool		link_status;
+		time64_t	link_tv_sec;
+	} stats[LINK_STAT_MAX_IDX];
+	struct mutex		lock; /* protects link record */
+};
+
 struct unic_stats {
 	struct unic_fec_stats			fec_stats;
+	struct unic_link_stats			link_record;
 };
 
 struct unic_addr_tbl {
@@ -192,6 +215,22 @@ struct unic_addr_tbl {
 
 	spinlock_t		tmp_ip_lock; /* protect ip address from controller */
 	struct list_head	tmp_ip_list; /* Store temprary ip table */
+
+	spinlock_t		mac_list_lock; /* protect mac address need to add/detele */
+	struct list_head	uc_mac_list; /* store unicast mac table */
+	struct list_head	mc_mac_list; /* store multicast mac table */
+};
+
+struct unic_vlan_tbl {
+	bool			cur_vlan_fltr_en;
+	unsigned long		vlan_del_fail_bmap[BITS_TO_LONGS(VLAN_N_VID)];
+	struct list_head	vlan_list; /* Store vlan table */
+	spinlock_t		vlan_lock; /* protect vlan list */
+};
+
+struct unic_vlan_cfg {
+	struct list_head	node;
+	u16			vlan_id;
 };
 
 struct unic_vport_buf {
@@ -202,6 +241,7 @@ struct unic_vport_buf {
 struct unic_vport {
 	struct unic_dev		*back;
 	struct unic_addr_tbl	addr_tbl;
+	struct unic_vlan_tbl	vlan_tbl;
 	u8			overflow_promisc_flags;
 	u8			last_promisc_flags;
 	unsigned long		state;
@@ -245,14 +285,18 @@ int unic_init_channels(struct unic_dev *unic_dev, u32 channels_num);
 void unic_uninit_channels(struct unic_dev *unic_dev);
 void unic_start_period_task(struct net_device *netdev);
 void unic_remove_period_task(struct unic_dev *unic_dev);
+void unic_update_queue_info(struct unic_dev *unic_dev);
 int unic_init_wq(void);
 void unic_destroy_wq(void);
+u16 unic_cqe_period_round_down(u16 cqe_period);
 int unic_init_rx(struct unic_dev *unic_dev, u32 num);
 int unic_init_tx(struct unic_dev *unic_dev, u32 num);
 void unic_destroy_rx(struct unic_dev *unic_dev, u32 num);
 void unic_destroy_tx(struct unic_dev *unic_dev, u32 num);
+bool unic_rss_vl_num_changed(struct unic_dev *unic_dev, u8 vl_num);
 int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 			 u32 org_rss_size);
+int unic_update_channels(struct unic_dev *unic_dev, u8 vl_num);
 int unic_set_vl_map(struct unic_dev *unic_dev, u8 *dscp_prio, u8 *prio_vl,
 		    u8 map_type);
 int unic_dbg_log(void);
@@ -260,6 +304,16 @@ int unic_dbg_log(void);
 static inline bool unic_dev_ubl_supported(struct unic_dev *unic_dev)
 {
 	return ubase_adev_ubl_supported(unic_dev->comdev.adev);
+}
+
+static inline bool unic_dev_eth_mac_supported(struct unic_dev *unic_dev)
+{
+	return ubase_adev_eth_mac_supported(unic_dev->comdev.adev);
+}
+
+static inline bool unic_dev_pfc_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PFC_B);
 }
 
 static inline bool unic_dev_ets_supported(struct unic_dev *unic_dev)
@@ -272,9 +326,19 @@ static inline bool unic_dev_fec_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_B);
 }
 
-static inline bool unic_dev_rss_supported(struct unic_dev *unic_dev)
+static inline bool unic_dev_pause_supported(struct unic_dev *unic_dev)
 {
-	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_RSS_B);
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PAUSE_B);
+}
+
+static inline bool unic_dev_eth_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_ETH_B);
+}
+
+static inline bool unic_dev_serial_serdes_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_SERIAL_SERDES_LB_B);
 }
 
 static inline bool unic_dev_tc_speed_limit_supported(struct unic_dev *unic_dev)
@@ -292,9 +356,34 @@ static inline bool unic_dev_rx_csum_offload_supported(struct unic_dev *unic_dev)
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_RX_CSUM_OFFLOAD_B);
 }
 
+static inline bool unic_dev_app_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_APP_LB_B);
+}
+
 static inline bool unic_dev_fec_stats_supported(struct unic_dev *unic_dev)
 {
 	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_FEC_STATS_B);
+}
+
+static inline bool unic_dev_external_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_EXTERNAL_LB_B);
+}
+
+static inline bool unic_dev_parallel_serdes_lb_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_PARALLEL_SERDES_LB_B);
+}
+
+static inline bool unic_dev_cfg_vlan_filter_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_CFG_VLAN_FILTER_B);
+}
+
+static inline bool unic_dev_cfg_mac_supported(struct unic_dev *unic_dev)
+{
+	return unic_get_cap_bit(unic_dev, UNIC_SUPPORT_CFG_MAC_B);
 }
 
 static inline bool __unic_removing(struct unic_dev *unic_dev)
@@ -325,6 +414,27 @@ static inline bool unic_initing(struct net_device *netdev)
 static inline bool unic_is_initing_or_resetting(struct unic_dev *unic_dev)
 {
 	return __unic_resetting(unic_dev) || __unic_initing(unic_dev);
+}
+
+static inline u32 unic_read_reg(struct unic_dev *unic_dev, u32 reg)
+{
+	struct ubase_resource_space *io_base = ubase_get_io_base(unic_dev->comdev.adev);
+	u8 __iomem *reg_addr;
+
+	if (!io_base)
+		return 0;
+
+	reg_addr = READ_ONCE(io_base->addr);
+	return readl(reg_addr + reg);
+}
+
+static inline u8 unic_get_rss_vl_num(struct unic_dev *unic_dev, u8 max_vl)
+{
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_adev_qos *qos = ubase_get_adev_qos(adev);
+	u8 vl_num = min(UNIC_RSS_MAX_VL_NUM, qos->nic_vl_num);
+
+	return max_vl < vl_num ? max_vl : vl_num;
 }
 
 static inline u32 unic_get_sq_cqe_mask(struct unic_dev *unic_dev)

@@ -10,11 +10,23 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/types.h>
 
+/**
+ * struct ubase_cmd_mailbox - mailbox cmmand address
+ * @buf: virtual address
+ * @dma: dma address
+ */
 struct ubase_cmd_mailbox {
 	void *buf;
 	dma_addr_t dma;
 };
 
+/**
+ * struct ubase_mbx_attr - mailbox attribute
+ * @tag: queue id
+ * @rsv: reserved bits
+ * @op: mailbox opcode
+ * @mbx_ue_id: mailbox ub entity id
+ */
 struct ubase_mbx_attr {
 	__le32 tag : 24;
 	__le32 rsv : 8;
@@ -78,11 +90,21 @@ enum ubase_mbox_opcode {
 struct ubase_cmd_mailbox *ubase_alloc_cmd_mailbox(struct auxiliary_device *aux_dev);
 void ubase_free_cmd_mailbox(struct auxiliary_device *aux_dev,
 			    struct ubase_cmd_mailbox *mailbox);
-
 int ubase_hw_upgrade_ctx_ex(struct auxiliary_device *aux_dev,
 			    struct ubase_mbx_attr *attr,
 			    struct ubase_cmd_mailbox *mailbox);
 
+/**
+ * ubase_fill_mbx_attr() - fill mailbox attribute
+ * @attr: mailbox attribute
+ * @tag: queue id
+ * @op: mailbox opcode
+ * @mbx_ue_id: mailbox ub entity id
+ *
+ * The function is used to assign 'tag', 'op', and 'mbx_ue_id' to 'struct ubase_mbx_attr'.
+ *
+ * Context: Process context.
+ */
 static inline void ubase_fill_mbx_attr(struct ubase_mbx_attr *attr, u32 tag,
 				       u8 op, u8 mbx_ue_id)
 {

@@ -210,13 +210,13 @@ static void ubase_errhandle_task_schedule(struct ubase_dev *udev)
 				 &udev->service_task.service_task, 0);
 }
 
-static void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
+void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
 {
 	if (!test_and_set_bit(UBASE_STATE_CTRLQ_SERVICE_SCHED,
-			      &udev->service_task.state)) {
+			      &udev->ctrlq_service_task.state)) {
 		udev->ctrlq.crq_table.last_crq_scheduled = jiffies;
-		mod_delayed_work(udev->ubase_wq,
-				 &udev->service_task.service_task, 0);
+		mod_delayed_work(udev->ubase_ctrlq_wq,
+				 &udev->ctrlq_service_task.service_task, 0);
 	}
 }
 
@@ -402,6 +402,19 @@ static void ubase_init_aeq_work(struct ubase_dev *udev, struct ubase_aeqe *aeqe)
 	queue_work(udev->ubase_async_wq, &aeq_work->work);
 }
 
+static void ubase_mbx_complete(struct ubase_dev *udev, struct ubase_aeqe *aeqe)
+{
+	struct ubase_mbx_event_context *ctx = &udev->mb_cmd.ctx;
+
+	if (aeqe->event.cmd.seq_num != ctx->seq_num)
+		return;
+
+	ctx->result = aeqe->event.cmd.status == 0 ? 0 : -EIO;
+	ctx->out_param = aeqe->event.cmd.out_param;
+
+	complete(&ctx->done);
+}
+
 static int ubase_async_event_handler(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
@@ -415,14 +428,12 @@ static int ubase_async_event_handler(struct ubase_dev *udev)
 
 		trace_ubase_aeqe(udev->dev, aeqe, eq);
 
-		ubase_dbg(udev,
-			  "event_type = 0x%x, sub_type = 0x%x, owner = %u, seq_num = %u, cons_index = %u.\n",
-			  aeqe->event_type, aeqe->sub_type, aeqe->owner,
-			  aeqe->event.cmd.seq_num, eq->cons_index);
-
 		ret = IRQ_HANDLED;
 
-		ubase_init_aeq_work(udev, aeqe);
+		if (aeqe->event_type == UBASE_EVENT_TYPE_MB)
+			ubase_mbx_complete(udev, aeqe);
+		else
+			ubase_init_aeq_work(udev, aeqe);
 
 		++aeq->eq.cons_index;
 		aeqe = ubase_next_aeqe(udev, aeq);
@@ -1003,6 +1014,19 @@ static int __ubase_event_register(struct ubase_dev *udev,
 	return ret;
 }
 
+/**
+ * ubase_event_register() - register asynchronous event processing function
+ * @adev: auxiliary device
+ * @cb: asynchronous event notification block
+ *
+ * This function uses `blocking_notifier_chain_register` to register the
+ * asynchronous event handling function. When the ubase driver receives an
+ * asynchronous event and matches it with the registered event notification
+ * block, it calls the registered function via `blocking_notifier_call_chain`.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_event_register(struct auxiliary_device *adev,
 			 struct ubase_event_nb *cb)
 {
@@ -1038,6 +1062,16 @@ static void __ubase_event_unregister(struct ubase_dev *udev,
 			  cb->event_type, ret);
 }
 
+/**
+ * ubase_event_unregister() - unregister asynchronous event processing function
+ * @adev: auxiliary device
+ * @cb: ubase asynchronous event notification block
+ *
+ * This function uses `blocking_notifier_chain_unregister` to unregister the
+ * asynchronous event handling function.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ */
 void ubase_event_unregister(struct auxiliary_device *adev,
 			    struct ubase_event_nb *cb)
 {
@@ -1048,6 +1082,20 @@ void ubase_event_unregister(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_event_unregister);
 
+/**
+ * ubase_comp_register() - register completion event processing function
+ * @adev: auxiliary device
+ * @comp_handler: completion event processing function. nb: struct notifier_block,
+ * jfcn: jfc index, data: self-defined data pointer.
+ *
+ * This function uses `atomic_notifier_chain_register` to register the
+ * completion event handling function. When the ubase driver receives a
+ * completion event that matches a registered auxiliary device, it calls the
+ * registered function via `atomic_notifier_call_chain`.
+ *
+ * Context: Process context, may sleep
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_comp_register(struct auxiliary_device *adev,
 			int (*comp_handler)(struct notifier_block *nb,
 					    unsigned long jfcn, void *data))
@@ -1071,6 +1119,15 @@ int ubase_comp_register(struct auxiliary_device *adev,
 }
 EXPORT_SYMBOL(ubase_comp_register);
 
+/**
+ * ubase_comp_unregister() - unregister completion event processing function
+ * @adev: auxiliary device
+ *
+ * This function uses `atomic_notifier_chain_unregister` to unregister the
+ * completion event handling function.
+ *
+ * Context: Process context, Takes and releases the RCU lock.
+ */
 void ubase_comp_unregister(struct auxiliary_device *adev)
 {
 	struct ubase_adev *uadev;
@@ -1124,11 +1181,6 @@ int ubase_register_ae_event(struct ubase_dev *udev)
 {
 	struct ubase_event_nb ubase_ae_nbs[UBASE_AE_LEVEL_NUM] = {
 		{
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_MB,
-			{ ubase_cmd_mbx_event_cb },
-			udev
-		}, {
 			UBASE_DRV_UNIC,
 			UBASE_EVENT_TYPE_TP_FLUSH_DONE,
 			{ ubase_ae_tp_flush_done },

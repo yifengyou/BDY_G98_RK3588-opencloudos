@@ -33,54 +33,43 @@ void uburma_umap_priv_init(struct uburma_umap_priv *priv,
 void uburma_unmap_vma_pages(struct uburma_file *ufile)
 {
 	struct uburma_umap_priv *priv, *next_priv;
-	struct mm_struct *mm;
+	struct mm_struct *mm = NULL;
+	struct vm_area_struct *vma;
 	int ret;
 
 	if (list_empty(&ufile->umaps_list))
 		return;
 
 	lockdep_assert_held(&ufile->cleanup_rwsem);
-	while (1) {
-		struct list_head local_list;
 
-		INIT_LIST_HEAD(&local_list);
+	while (1) {
 		mm = NULL;
 		mutex_lock(&ufile->umap_mutex);
 		list_for_each_entry_safe(priv, next_priv, &ufile->umaps_list,
 					 node) {
-			struct mm_struct *curr_mm = priv->vma->vm_mm;
-			ret = mmget_not_zero(curr_mm);
+			mm = priv->vma->vm_mm;
+			ret = mmget_not_zero(mm);
 			if (!ret) {
 				list_del_init(&priv->node);
+				mm = NULL;
 				continue;
 			}
-			if (!mm) {
-				mm = curr_mm;
-				list_move_tail(&priv->node, &local_list);
-			} else if (curr_mm == mm) {
-				list_move_tail(&priv->node, &local_list);
-			}
+			break;
 		}
 		mutex_unlock(&ufile->umap_mutex);
-
-		if (list_empty(&local_list)) {
-			if (mm)
-				mmput(mm);
+		if (!mm)
 			return;
-		}
 
 		mmap_read_lock(mm);
-
-		list_for_each_entry_safe(priv, next_priv, &local_list, node) {
-			struct vm_area_struct *vma = priv->vma;
-
+		mutex_lock(&ufile->umap_mutex);
+		list_for_each_entry_safe(priv, next_priv, &ufile->umaps_list, node) {
+			vma = priv->vma;
+			if (vma->vm_mm != mm)
+				continue;
 			list_del_init(&priv->node);
-			if (vma->vm_mm == mm) {
-				vma->vm_private_data = NULL;
-				zap_vma_ptes(vma, vma->vm_start,
-					     vma->vm_end - vma->vm_start);
-			}
+			zap_vma_ptes(vma, vma->vm_start, vma->vm_end - vma->vm_start);
 		}
+		mutex_unlock(&ufile->umap_mutex);
 		mmap_read_unlock(mm);
 
 		mmput(mm);
@@ -114,18 +103,14 @@ out_zap:
 static void uburma_umap_close(struct vm_area_struct *vma)
 {
 	struct uburma_file *ufile = vma->vm_file->private_data;
-	struct uburma_umap_priv *next_priv = NULL;
-	struct uburma_umap_priv *priv = NULL;
+	struct uburma_umap_priv *priv = vma->vm_private_data;
+
+	if (!priv)
+		return;
 
 	mutex_lock(&ufile->umap_mutex);
-	list_for_each_entry_safe(priv, next_priv, &ufile->umaps_list, node) {
-		if (priv->vma == vma) {
-			list_del_init(&priv->node);
-			break;
-		}
-	}
+	list_del(&priv->node);
 	mutex_unlock(&ufile->umap_mutex);
-
 	kfree(priv);
 	vma->vm_private_data = NULL;
 }
@@ -134,9 +119,9 @@ static vm_fault_t uburma_umap_fault(struct vm_fault *vmf)
 {
 	struct uburma_file *ufile = vmf->vma->vm_file->private_data;
 	struct uburma_umap_priv *priv = vmf->vma->vm_private_data;
-	struct page *page;
+	vm_fault_t ret = 0;
 
-	if (unlikely(!priv))
+	if (!priv)
 		return VM_FAULT_SIGBUS;
 
 	if (!(vmf->vma->vm_flags & (VM_WRITE | VM_MAYWRITE))) {
@@ -145,26 +130,19 @@ static vm_fault_t uburma_umap_fault(struct vm_fault *vmf)
 		return 0;
 	}
 
-	page = READ_ONCE(ufile->fault_page);
-	if (likely(page)) {
-		vmf->page = page;
-		get_page(vmf->page);
-		return 0;
-	}
-
 	mutex_lock(&ufile->umap_mutex);
-	if (!ufile->fault_page) {
+	if (!ufile->fault_page)
 		ufile->fault_page = alloc_pages(vmf->gfp_mask | __GFP_ZERO, 0);
-		if (!ufile->fault_page) {
-			mutex_unlock(&ufile->umap_mutex);
-			return VM_FAULT_SIGBUS;
-		}
+
+	if (ufile->fault_page) {
+		vmf->page = ufile->fault_page;
+		get_page(vmf->page);
+	} else {
+		ret = VM_FAULT_SIGBUS;
 	}
-	vmf->page = ufile->fault_page;
-	get_page(vmf->page);
 	mutex_unlock(&ufile->umap_mutex);
 
-	return 0;
+	return ret;
 }
 
 static const struct vm_operations_struct g_urma_umap_ops = {

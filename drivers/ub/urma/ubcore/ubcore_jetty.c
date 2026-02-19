@@ -1938,7 +1938,7 @@ int ubcore_bind_jetty_ex(struct ubcore_jetty *jetty,
 			 struct ubcore_active_tp_cfg *active_tp_cfg,
 			 struct ubcore_udata *udata)
 {
-	if (!jetty || !tjetty || jetty->ub_dev ||
+	if (!jetty || !tjetty || !jetty->ub_dev ||
 	    !jetty->ub_dev->ops || !active_tp_cfg) {
 		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;

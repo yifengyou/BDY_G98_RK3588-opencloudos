@@ -2990,6 +2990,68 @@ free_arg:
 	return ret;
 }
 
+static int uburma_cmd_set_tp_attr(struct ubcore_device *ubc_dev,
+				  struct uburma_file *file,
+				  struct uburma_cmd_hdr *hdr)
+{
+	struct ubcore_tp_attr_value tp_attr = { 0 };
+	struct uburma_cmd_set_tp_attr arg = { 0 };
+	struct ubcore_udata udata = { 0 };
+	int ret;
+
+	ret = uburma_tlv_parse(hdr, &arg);
+	if (ret != 0)
+		return ret;
+
+	if (sizeof(arg.in.tp_attr) != sizeof(struct ubcore_tp_attr_value)) {
+		uburma_log_err("Invalid parameter.\n");
+		return -EINVAL;
+	}
+	fill_udata(&udata, file->ucontext, &arg.udata);
+	(void)memcpy(&tp_attr, arg.in.tp_attr, sizeof(arg.in.tp_attr));
+
+	ret = ubcore_set_tp_attr(ubc_dev, arg.in.tp_handle, arg.in.tp_attr_cnt,
+				 arg.in.tp_attr_bitmap, &tp_attr, &udata);
+	if (ret != 0)
+		uburma_log_err(
+			"Failed to set tp attribution values, ret: %d.\n", ret);
+
+	return ret;
+}
+
+static int uburma_cmd_get_tp_attr(struct ubcore_device *ubc_dev,
+				  struct uburma_file *file,
+				  struct uburma_cmd_hdr *hdr)
+{
+	struct ubcore_tp_attr_value tp_attr = { 0 };
+	struct uburma_cmd_get_tp_attr arg = { 0 };
+	struct ubcore_udata udata = { 0 };
+	int ret;
+
+	ret = uburma_tlv_parse(hdr, &arg);
+	if (ret != 0)
+		return ret;
+
+	if (sizeof(arg.out.tp_attr) != sizeof(struct ubcore_tp_attr_value)) {
+		uburma_log_err("Invalid parameter.\n");
+		return -EINVAL;
+	}
+	fill_udata(&udata, file->ucontext, &arg.udata);
+
+	ret = ubcore_get_tp_attr(ubc_dev, arg.in.tp_handle,
+				 &arg.out.tp_attr_cnt, &arg.out.tp_attr_bitmap,
+				 &tp_attr, &udata);
+	if (ret != 0) {
+		uburma_log_err(
+			"Failed to get tp attribution values, ret: %d.\n", ret);
+		return ret;
+	}
+	(void)memcpy(arg.out.tp_attr, &tp_attr,
+		     sizeof(struct ubcore_tp_attr_value));
+
+	return uburma_tlv_append(hdr, &arg);
+}
+
 static int uburma_cmd_exchange_tp_info(struct ubcore_device *ubc_dev,
 				       struct uburma_file *file,
 				       struct uburma_cmd_hdr *hdr)
@@ -3139,6 +3201,8 @@ static uburma_cmd_handler g_uburma_cmd_handlers[] = {
 	[UBURMA_CMD_DELETE_JFR_BATCH] = uburma_cmd_delete_jfr_batch,
 	[UBURMA_CMD_DELETE_JFC_BATCH] = uburma_cmd_delete_jfc_batch,
 	[UBURMA_CMD_DELETE_JETTY_BATCH] = uburma_cmd_delete_jetty_batch,
+	[UBURMA_CMD_SET_TP_ATTR] = uburma_cmd_set_tp_attr,
+	[UBURMA_CMD_GET_TP_ATTR] = uburma_cmd_get_tp_attr,
 	[UBURMA_CMD_EXCHANGE_TP_INFO] = uburma_cmd_exchange_tp_info,
 };
 
