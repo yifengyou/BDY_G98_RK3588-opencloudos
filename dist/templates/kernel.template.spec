@@ -913,8 +913,14 @@ InstKernelBasic() {
 
 	%ifarch loongarch64
 	INSTALL_DTB_ARCH_PATH=
-	strip -s $_KernBuild/vmlinux -o $_KernBuild/vmlinux.elf
-	install -m 644 $_KernBuild/vmlinux.elf vmlinuz
+	strip -s $_KernBuild/vmlinux -o vmlinuz.elf
+	cp vmlinuz.elf vmlinuz
+	cp $_KernBuild/arch/loongarch/boot/vmlinuz.efi vmlinuz.efi
+	%if 0%{?_sb_signer:1}
+	%{_sb_signer vmlinuz.efi vmlinuz.efi.signed}
+	mv vmlinuz.efi.signed vmlinuz.efi
+	%endif
+	install -m 644 vmlinuz.efi %{buildroot}/boot/vmlinuz-$KernUnameR-efi
 	%endif
 
 	# Install Arch DTB if exists
@@ -1484,6 +1490,11 @@ if [ ! -e /boot/vmlinuz-%{kernel_unamer} ]; then
 fi
 
 %preun core
+%ifarch loongarch64
+if command -v grubby > /dev/null; then
+	grubby --remove-kernel=/boot/vmlinuz-%{kernel_unamer}-efi >/dev/null 2>&1 || :
+fi
+%endif
 # Boot entry and depmod files
 if command -v kernel-install > /dev/null; then
 	kernel-install remove %{kernel_unamer} /lib/modules/%{kernel_unamer}/vmlinuz || exit $?
@@ -1639,6 +1650,9 @@ fi
 %defattr(-,root,root)
 # Mark files as ghost in case rewritten after install (eg. by kernel-install script)
 %ghost /boot/vmlinuz-%{kernel_unamer}
+%ifarch loongarch64
+/boot/vmlinuz-%{kernel_unamer}-efi
+%endif
 %ghost /boot/.vmlinuz-%{kernel_unamer}.hmac
 /boot/System.map-%{kernel_unamer}
 /boot/config-%{kernel_unamer}
