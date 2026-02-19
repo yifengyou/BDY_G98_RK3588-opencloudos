@@ -51,6 +51,8 @@ static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
 
 DEFINE_STATIC_KEY_FALSE(kvm_rme_is_available);
 
+#include "hisilicon/hisi_virt.h"
+
 DECLARE_KVM_HYP_PER_CPU(unsigned long, kvm_hyp_vector);
 
 DEFINE_PER_CPU(unsigned long, kvm_arm_hyp_stack_page);
@@ -59,6 +61,13 @@ DECLARE_KVM_NVHE_PER_CPU(struct kvm_nvhe_init_params, kvm_init_params);
 DECLARE_KVM_NVHE_PER_CPU(struct kvm_cpu_context, kvm_hyp_ctxt);
 
 static bool vgic_present, kvm_arm_initialised;
+
+/* Capability of non-cacheable snooping */
+bool kvm_ncsnp_support;
+
+/* Capability of DVMBM */
+bool kvm_dvmbm_support;
+
 
 static DEFINE_PER_CPU(unsigned char, kvm_hyp_initialized);
 
@@ -239,6 +248,10 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
 	int ret;
 
+	ret = kvm_sched_affinity_vm_init(kvm);
+	if (ret)
+		return ret;
+
 	mutex_init(&kvm->arch.config_lock);
 
 #ifdef CONFIG_LOCKDEP
@@ -321,6 +334,8 @@ vm_fault_t kvm_arch_vcpu_fault(struct kvm_vcpu *vcpu, struct vm_fault *vmf)
  */
 void kvm_arch_destroy_vm(struct kvm *kvm)
 {
+	kvm_sched_affinity_vm_destroy(kvm);
+
 	bitmap_free(kvm->arch.pmu_filter);
 	free_cpumask_var(kvm->arch.supported_cpus);
 
@@ -535,6 +550,10 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	if (err)
 		return err;
 
+	err = kvm_sched_affinity_vcpu_init(vcpu);
+	if (err)
+		return err;
+
 	err = kvm_share_hyp(vcpu, vcpu + 1);
 	if (err)
 		kvm_vgic_vcpu_destroy(vcpu);
@@ -553,6 +572,8 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_pmu_vcpu_destroy(vcpu);
 	kvm_vgic_vcpu_destroy(vcpu);
 	kvm_arm_vcpu_destroy(vcpu);
+
+	kvm_sched_affinity_vcpu_destroy(vcpu);
 }
 
 void kvm_arch_vcpu_blocking(struct kvm_vcpu *vcpu)
@@ -614,6 +635,8 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 	if (!cpumask_test_cpu(cpu, vcpu->kvm->arch.supported_cpus))
 		vcpu_set_on_unsupported_cpu(vcpu);
+
+	kvm_tlbi_dvmbm_vcpu_load(vcpu);
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
@@ -635,6 +658,8 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	kvm_arm_vmid_clear_active();
 
 	vcpu_clear_on_unsupported_cpu(vcpu);
+
+	kvm_tlbi_dvmbm_vcpu_put(vcpu);
 }
 
 static void __kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu)
@@ -1019,6 +1044,9 @@ static int check_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		if (kvm_dirty_ring_check_request(vcpu))
 			return 0;
+
+		if (kvm_check_request(KVM_REQ_RELOAD_TLBI_DVMBM, vcpu))
+			kvm_hisi_reload_lsudvmbm(vcpu->kvm);
 	}
 
 	return 1;
@@ -2755,6 +2783,15 @@ static __init int kvm_arm_init(void)
 		kvm_info("Error initializing system register tables");
 		return err;
 	}
+
+	probe_hisi_cpu_type();
+	kvm_ncsnp_support = hisi_ncsnp_supported();
+	kvm_dvmbm_support = hisi_dvmbm_supported();
+	kvm_info("KVM ncsnp %s\n", kvm_ncsnp_support ? "enabled" : "disabled");
+	kvm_info("KVM dvmbm %s\n", kvm_dvmbm_support ? "enabled" : "disabled");
+
+	if (kvm_dvmbm_support)
+		kvm_get_pg_cfg();
 
 	in_hyp_mode = is_kernel_in_hyp_mode();
 
