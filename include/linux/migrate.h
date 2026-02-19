@@ -63,8 +63,6 @@ extern const char *migrate_reason_names[MR_TYPES];
 #ifdef CONFIG_MIGRATION
 
 void putback_movable_pages(struct list_head *l);
-int migrate_folio_extra(struct address_space *mapping, struct folio *dst,
-		struct folio *src, enum migrate_mode mode, int extra_count);
 int migrate_folio(struct address_space *mapping, struct folio *dst,
 		struct folio *src, enum migrate_mode mode);
 int migrate_pages(struct list_head *l, new_folio_t new, free_folio_t free,
@@ -74,7 +72,7 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private);
 bool isolate_movable_page(struct page *page, isolate_mode_t mode);
 
 int migrate_huge_page_move_mapping(struct address_space *mapping,
-		struct folio *dst, struct folio *src);
+		struct folio *dst, struct folio *src, enum migrate_mode mode);
 void migration_entry_wait_on_locked(swp_entry_t entry, spinlock_t *ptl)
 		__releases(ptl);
 void folio_migrate_flags(struct folio *newfolio, struct folio *folio);
@@ -96,7 +94,7 @@ static inline bool isolate_movable_page(struct page *page, isolate_mode_t mode)
 	{ return false; }
 
 static inline int migrate_huge_page_move_mapping(struct address_space *mapping,
-				  struct folio *dst, struct folio *src)
+		struct folio *dst, struct folio *src, enum migrate_mode mode)
 {
 	return -ENOSYS;
 }
