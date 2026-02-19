@@ -67,6 +67,7 @@ void __init csv_early_memory_enc_dec(u64 vaddr, u64 size, bool enc);
 
 void csv_memory_enc_dec(u64 vaddr, u64 pages, bool enc);
 int csv3_issue_request_report(phys_addr_t paddr, size_t size);
+int csv3_issue_request_rtmr(void *req_buffer, size_t buffer_size);
 
 #else	/* !CONFIG_HYGON_CSV */
 
@@ -81,6 +82,7 @@ static inline void __init csv_early_memory_enc_dec(u64 vaddr, u64 size,
 
 static inline void csv_memory_enc_dec(u64 vaddr, u64 pages, bool enc) { }
 static inline int csv3_issue_request_report(phys_addr_t paddr, size_t size) { return -EIO; }
+static inline int csv3_issue_request_rtmr(void *req_buffer, size_t buffer_size) { return -ENODEV; }
 
 #endif	/* CONFIG_HYGON_CSV */
 

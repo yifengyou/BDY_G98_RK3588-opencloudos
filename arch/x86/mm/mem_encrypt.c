@@ -47,6 +47,11 @@ static void print_mem_encrypt_feature_info(void)
 {
 	pr_info("Memory Encryption Features active: ");
 
+	if (is_x86_vendor_hygon()) {
+		print_hygon_cc_feature_info();
+		return;
+	}
+
 	switch (cc_vendor) {
 	case CC_VENDOR_INTEL:
 		pr_cont("Intel TDX\n");

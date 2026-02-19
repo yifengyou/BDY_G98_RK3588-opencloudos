@@ -55,17 +55,35 @@ struct csv_user_data_download_firmware {
 	__u32 length;				/* In */
 } __packed;
 
+/* The CSV RTMR version in the kernel */
+#define CSV_RTMR_VERSION_MAX	1U
+#define CSV_RTMR_VERSION_MIN	1U
+
+/* The size of CSV RTMR register. */
+#define CSV_RTMR_REG_SIZE	32 /* SM3 */
+
+/* The size of the CSV RTMR extend data. */
+#define CSV_RTMR_EXTEND_LEN	CSV_RTMR_REG_SIZE
+
 /**
- * struct csv_guest_user_data_attestation - ATTESTATION command parameters
+ * The number of the CSV RTMR registers.
  *
- * @user_data: user specified data for the attestation report
- * @mnonce: user's random nonce
- * @hash: sm3 hash of the @user_data and @mnonce
+ * For version 1, the number of RTMR registers for a guest is 5. The mapping
+ * from TPM2 PCR index to RTMR index is shown as follows:
+ *
+ *   +---------------+--------------------------------------+---------+
+ *   | TPM PCR Index | Event Log Measurement Register Index |  RTMR   |
+ *   |---------------|--------------------------------------|-------- |
+ *   |    0          |    0                                 | RTMR[0] |
+ *   |    1,7        |    1                                 | RTMR[1] |
+ *   |    2~6        |    2                                 | RTMR[2] |
+ *   |    8~15       |    3                                 | RTMR[3] |
+ *   |    16,23      |    4                                 | RTMR[4] |
+ *   +---------------+--------------------------------------+---------+
  */
-struct csv_guest_user_data_attestation {
-	__u8 user_data[64];			/* In */
-	__u8 monce[16];				/* In */
-	__u8 hash[32];				/* In */
-} __packed;
+#define CSV_RTMR_REG_NUM	5
+
+/* The maximum index of the CSV RTMR registers. */
+#define CSV_RTMR_REG_INDEX_MAX	(CSV_RTMR_REG_NUM - 1)
 
 #endif	/* __PSP_HYGON_USER_H__ */
