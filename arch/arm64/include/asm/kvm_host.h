@@ -242,7 +242,7 @@ struct kvm_arch {
 
 	/* Mandated version of PSCI */
 	u32 psci_version;
-
+	KABI_FILL_HOLE(refcount_t pinned);
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 
@@ -1096,6 +1096,8 @@ int __init kvm_arm_vmid_alloc_init(void);
 void __init kvm_arm_vmid_alloc_free(void);
 void kvm_arm_vmid_update(struct kvm_vmid *kvm_vmid);
 void kvm_arm_vmid_clear_active(void);
+unsigned long kvm_arm_pinned_vmid_get(struct kvm_vmid *kvm_vmid);
+void kvm_arm_pinned_vmid_put(struct kvm_vmid *kvm_vmid);
 
 static inline void kvm_arm_pvtime_vcpu_init(struct kvm_vcpu_arch *vcpu_arch)
 {

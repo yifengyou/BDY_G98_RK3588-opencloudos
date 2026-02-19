@@ -10,6 +10,7 @@
 #include "iommu-priv.h"
 
 static DEFINE_MUTEX(iommu_sva_lock);
+static DEFINE_MUTEX(iommu_sva_grant_lock);
 static struct iommu_domain *iommu_sva_domain_alloc(struct device *dev,
 						   struct mm_struct *mm);
 
@@ -314,6 +315,220 @@ static struct iommu_domain *iommu_sva_domain_alloc(struct device *dev,
 	domain->mm = mm;
 	domain->owner = ops;
 	domain->iopf_handler = iommu_sva_iopf_handler;
+#ifdef CONFIG_IOMMU_KSVA
+	domain->isolated_pasid = IOMMU_NO_PASID;
+	if (iommu_is_ksva_domain(domain))
+		domain->iopf_handler = NULL;
+#endif
 
 	return domain;
 }
+
+#ifdef CONFIG_IOMMU_KSVA
+/**
+ * iommu_sva_bind_device_isolated() - Create a isolated sva bond.
+ * @dev: the device to bind
+ * @mm: the memory management structure to bind
+ * @data: driver-specific data for the binding domain
+ *
+ * This function is an extension of iommu_sva_bind_device.
+ * Unlike the latter, which may reuse the binding, this function creates a
+ * isolated binding between the device and the process address space. It
+ * allocates a non shareable PASID for the binding. IOMMU Drivers can use the
+ * provided `data` to configure the binding context.
+ *
+ * Notice:
+ * 1. The PASID is not stored in the `mm` struct. Multiple PASIDs may be bond to
+ *    the same process address space, making this function incompatible with `enqcmd`.
+ * 2. The PASID is released during the unbinding process. The device must stop
+ *    using the PASID before calling `iommu_sva_unbind_device()`.
+ *
+ * On error, returns an ERR_PTR value.
+ */
+struct iommu_sva *iommu_sva_bind_device_isolated(struct device *dev,
+					    struct mm_struct *mm,
+					    void *data)
+{
+	struct iommu_group *group = dev->iommu_group;
+	struct iommu_domain *domain;
+	struct iommu_sva *handle;
+	u32 pasid;
+	int ret;
+
+	if (!group)
+		return ERR_PTR(-ENODEV);
+
+	mutex_lock(&iommu_sva_lock);
+	pasid = iommu_alloc_global_pasid(dev);
+	if (pasid == IOMMU_PASID_INVALID) {
+		ret = -ENOSPC;
+		goto out_unlock;
+	}
+
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle) {
+		ret = -ENOMEM;
+		goto out_release_pasid;
+	}
+
+	/* Allocate a new domain and set it on device pasid. */
+	domain = iommu_sva_domain_alloc(dev, mm);
+	if (IS_ERR(domain)) {
+		ret = PTR_ERR(domain);
+		goto out_free_handle;
+	}
+	domain->sva_data = data;
+	domain->isolated_pasid = pasid;
+	ret = iommu_attach_device_pasid(domain, dev, pasid, &handle->handle);
+	if (ret)
+		goto out_free_domain;
+
+	mutex_unlock(&iommu_sva_lock);
+	handle->dev = dev;
+	return handle;
+
+out_free_domain:
+	iommu_domain_free(domain);
+out_free_handle:
+	kfree(handle);
+out_release_pasid:
+	iommu_free_global_pasid(pasid);
+out_unlock:
+	mutex_unlock(&iommu_sva_lock);
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(iommu_sva_bind_device_isolated);
+
+/**
+ * iommu_sva_unbind_device_isolated() - Remove a bond created with isolated bond
+ * @handle: the handle returned by iommu_sva_unbind_device_isolated()
+ *
+ * Release the bond and related private pasid.
+ */
+void iommu_sva_unbind_device_isolated(struct iommu_sva *handle)
+{
+	struct iommu_domain *domain = handle->handle.domain;
+	struct device *dev = handle->dev;
+
+	mutex_lock(&iommu_sva_lock);
+	iommu_detach_device_pasid(domain, dev, domain->isolated_pasid);
+	iommu_free_global_pasid(domain->isolated_pasid);
+	iommu_domain_free(domain);
+	mutex_unlock(&iommu_sva_lock);
+	kfree(handle);
+}
+EXPORT_SYMBOL_GPL(iommu_sva_unbind_device_isolated);
+
+/**
+ * iommu_ksva_bind_device() - Create a bond for the kernel address space and a
+ *			      device.
+ * @dev: the device to bind
+ * @data: driver-specific data for this binding
+ *
+ * This function lets devices safely access the kernel address space by an
+ * isolated pasid provided by iommu_sva_bind_device_ioslated. The access is
+ * protected by permisson grant operations.
+ *
+ * On error, returns an ERR_PTR value.
+ */
+struct iommu_sva *iommu_ksva_bind_device(struct device *dev, void *data)
+{
+	const struct iommu_perm_ops *perm_ops;
+	struct iommu_sva *handle;
+
+	handle = iommu_sva_bind_device_isolated(dev, &init_mm, data);
+	if (IS_ERR(handle))
+		return handle;
+
+	perm_ops = handle->handle.domain->perm_ops;
+	if (!perm_ops || !perm_ops->grant || !perm_ops->ungrant) {
+		iommu_ksva_unbind_device(handle);
+		return ERR_PTR(-EOPNOTSUPP);
+	}
+
+	return handle;
+}
+EXPORT_SYMBOL_GPL(iommu_ksva_bind_device);
+
+/**
+ * iommu_ksva_unbind_device() - Remove a ksva bond created with isolated bond
+ * @handle: the handle returned by iommu_ksva_bind_device()
+ *
+ * Release the bond and related private pasid.
+ */
+void iommu_ksva_unbind_device(struct iommu_sva *handle)
+{
+	struct iommu_domain *domain = handle->handle.domain;
+
+	if (WARN_ON(domain->mm != &init_mm))
+		return;
+
+	iommu_sva_unbind_device_isolated(handle);
+}
+EXPORT_SYMBOL_GPL(iommu_ksva_unbind_device);
+
+u32 iommu_sva_get_isolated_pasid(struct iommu_sva *handle)
+{
+	struct iommu_domain *domain = handle->handle.domain;
+
+	return domain->isolated_pasid;
+}
+EXPORT_SYMBOL_GPL(iommu_sva_get_isolated_pasid);
+
+/**
+ * iommu_sva_grant() - grant sva access permission with specific cookie
+ * @sva: iommu sva handler
+ * @va: grant va/kva
+ * @size: grant size
+ * @perm: the access permission. drivers define permission type/value.
+ * @cookie: grant with specific cookie.
+ *
+ */
+int iommu_sva_grant(struct iommu_sva *sva, void *va, size_t size, int perm,
+		    void *cookie)
+{
+	struct iommu_domain *domain = sva->handle.domain;
+	struct iommu_plb_gather plb_gather;
+	int ret;
+
+	if (!domain->perm_ops || !domain->perm_ops->grant)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&iommu_sva_grant_lock);
+	ret = domain->perm_ops->grant(domain, va, size, perm, cookie,
+					&plb_gather);
+	if (!ret)
+		iommu_plb_sync(domain, &plb_gather);
+
+	mutex_unlock(&iommu_sva_grant_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_sva_grant);
+
+int iommu_sva_ungrant(struct iommu_sva *sva, void *va, size_t size,
+		      void *cookie)
+{
+	struct iommu_domain *domain = sva->handle.domain;
+	struct iommu_plb_gather plb_gather;
+	int ret;
+
+	if (!domain->perm_ops || !domain->perm_ops->ungrant)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&iommu_sva_grant_lock);
+	ret = domain->perm_ops->ungrant(domain, va, size, cookie,
+					&plb_gather);
+	if (!ret)
+		iommu_plb_sync(domain, &plb_gather);
+
+	mutex_unlock(&iommu_sva_grant_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_sva_ungrant);
+
+bool iommu_is_ksva_domain(struct iommu_domain *domain)
+{
+	return domain->mm == &init_mm;
+}
+EXPORT_SYMBOL_GPL(iommu_is_ksva_domain);
+#endif

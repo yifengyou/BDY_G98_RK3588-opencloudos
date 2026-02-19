@@ -701,10 +701,12 @@ struct iommu_hwpt_get_dirty_bitmap {
  *                                        Data Type
  * @IOMMU_HWPT_INVALIDATE_DATA_VTD_S1: Invalidation data for VTD_S1
  * @IOMMU_VIOMMU_INVALIDATE_DATA_ARM_SMMUV3: Invalidation data for ARM SMMUv3
+ * @IOMMU_VIOMMU_INVALIDATE_DATA_UMMU: Invalidation data for UMMU
  */
 enum iommu_hwpt_invalidate_data_type {
 	IOMMU_HWPT_INVALIDATE_DATA_VTD_S1 = 0,
 	IOMMU_VIOMMU_INVALIDATE_DATA_ARM_SMMUV3 = 1,
+	IOMMU_VIOMMU_INVALIDATE_DATA_UMMU = 2,
 };
 
 /**
@@ -763,6 +765,35 @@ struct iommu_hwpt_vtd_s1_invalidate {
  */
 struct iommu_viommu_arm_smmuv3_invalidate {
 	__aligned_le64 cmd[2];
+};
+
+/**
+ * struct iommufd_viommu_ummu_invalidate - Hisi UMMU cahce invalidation
+ *                                     (IOMMU_VIOMMU_INVALIDATE_DATA_UMMU)
+ * @cmd: 256-bit cache invalidation command that runs in UMMU MCMDQ.
+ *       Must be little-endian.
+ *
+ * Supported command list:
+ *     CMD_PLBI_OS_EID
+ *     CMD_PLBI_OS_EIDTID
+ *     CMD_PLBI_OS_VA
+ *
+ *     CMD_TLBI_OS_ALL
+ *     CMD_TLBI_OS_TID
+ *     CMD_TLBI_OS_VA
+ *     CMD_TLBI_OS_VAA
+ *     CMD_TLBI_S1S2_VMALL
+ *     CMD_TLBI_S2_IPA
+ *     CMD_TLBI_HYP_ALL
+ *     CMD_TLBI_HYP_VAA
+ *     CMD_TLBI_HYP_TID
+ *     CMD_TLBI_HYP_VA
+ *     CMD_TLBI_NS_OS_ALL
+ *
+ * -EIO will be returned if the command is not supported.
+ */
+struct iommufd_viommu_ummu_invalidate {
+	__aligned_u64 cmd[4];
 };
 
 /**
@@ -902,10 +933,12 @@ struct iommu_fault_alloc {
  * enum iommu_viommu_type - Virtual IOMMU Type
  * @IOMMU_VIOMMU_TYPE_DEFAULT: Reserved for future use
  * @IOMMU_VIOMMU_TYPE_ARM_SMMUV3: ARM SMMUv3 driver specific type
+ * @IOMMU_VIOMMU_TYPE_HISI_UMMU: HISI UMMU driver specific type
  */
 enum iommu_viommu_type {
 	IOMMU_VIOMMU_TYPE_DEFAULT = 0,
 	IOMMU_VIOMMU_TYPE_ARM_SMMUV3 = 1,
+	IOMMU_VIOMMU_TYPE_UMMU = 2,
 };
 
 /**

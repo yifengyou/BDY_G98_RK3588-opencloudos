@@ -28,4 +28,51 @@
  */
 #define UBUS_IOCTL_GET_API_VERSION _IO(UBUS_TYPE, 0)
 
+#define GUID_SIZE 16
+
+struct ubus_cmd_bi_create {
+#define UBUS_INSTANCE_DYNAMIC_SERVER 2
+#define UBUS_INSTANCE_DYNAMIC_CLUSTER 3
+	__u8 type;
+	__u16 upi;
+	__u32 eid;
+	__u8 guid[GUID_SIZE];
+};
+
+struct ubus_cmd_bi_destroy {
+	__u8 guid[GUID_SIZE];
+};
+
+struct ubus_cmd_bi_bind {
+	__u8 instance_guid[GUID_SIZE];
+	__u8 dev_guid[GUID_SIZE];
+};
+
+struct ubus_cmd_bi_unbind {
+	__u8 instance_guid[GUID_SIZE];
+	__u8 dev_guid[GUID_SIZE];
+};
+
+#define UBUS_IOCTL_HEADER_SIZE 8
+
+enum ubus_bi_cmd {
+	UBUS_CMD_BI_CREATE = 0,
+	UBUS_CMD_BI_DESTROY,
+	UBUS_CMD_BI_BIND,
+	UBUS_CMD_BI_UNBIND,
+	UBUS_CMD_BI_NUM
+};
+
+struct ubus_ioctl_bus_instance {
+	__u32 argsz; /* size of *union*->structure */
+	__u32 sub_cmd;
+	union {
+		struct ubus_cmd_bi_create create;
+		struct ubus_cmd_bi_destroy destroy;
+		struct ubus_cmd_bi_bind bind;
+		struct ubus_cmd_bi_unbind unbind;
+	};
+};
+#define UBUS_IOCTL_BUS_INSTANCE _IOWR(UBUS_TYPE, 1, struct ubus_ioctl_bus_instance)
+
 #endif /* _UAPI_UB_UBUS_UBUS_H_ */
