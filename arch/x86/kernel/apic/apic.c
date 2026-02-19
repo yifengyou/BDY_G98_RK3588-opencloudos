@@ -19,6 +19,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mc146818rtc.h>
 #include <linux/acpi_pmtmr.h>
+#include <linux/bitmap.h>
 #include <linux/clockchips.h>
 #include <linux/interrupt.h>
 #include <linux/memblock.h>
@@ -77,10 +78,8 @@ EXPORT_SYMBOL_GPL(boot_cpu_physical_apicid);
 
 u8 boot_cpu_apic_version __ro_after_init;
 
-/*
- * Bitmask of physically existing CPUs:
- */
-physid_mask_t phys_cpu_present_map;
+/* Bitmap of physically present CPUs. */
+DECLARE_BITMAP(phys_cpu_present_map, MAX_LOCAL_APIC);
 
 /*
  * Processor to be disabled specified by kernel parameter
@@ -112,7 +111,7 @@ static inline bool apic_accessible(void)
  * Map cpu index to physical APIC ID
  */
 DEFINE_EARLY_PER_CPU_READ_MOSTLY(u32, x86_cpu_to_apicid, BAD_APICID);
-DEFINE_EARLY_PER_CPU_READ_MOSTLY(u32, x86_cpu_to_acpiid, U32_MAX);
+DEFINE_EARLY_PER_CPU_READ_MOSTLY(u32, x86_cpu_to_acpiid, CPU_ACPIID_INVALID);
 EXPORT_EARLY_PER_CPU_SYMBOL(x86_cpu_to_apicid);
 EXPORT_EARLY_PER_CPU_SYMBOL(x86_cpu_to_acpiid);
 
@@ -260,16 +259,6 @@ u64 native_apic_icr_read(void)
 
 	return icr1 | ((u64)icr2 << 32);
 }
-
-#ifdef CONFIG_X86_32
-/**
- * get_physical_broadcast - Get number of physical broadcast IDs
- */
-int get_physical_broadcast(void)
-{
-	return modern_apic() ? 0xff : 0xf;
-}
-#endif
 
 /**
  * lapic_get_maxlvt - get the maximum number of local vector table entries
@@ -1561,9 +1550,6 @@ static void setup_local_APIC(void)
 		apic_write(APIC_ESR, 0);
 	}
 #endif
-	/* Validate that the APIC is registered if required */
-	BUG_ON(apic->apic_id_registered && !apic->apic_id_registered());
-
 	/*
 	 * Intel recommends to set DFR, LDR and TPR before enabling
 	 * an APIC.  See e.g. "AP-388 82489DX User's Manual" (Intel
@@ -2416,7 +2402,7 @@ static void cpu_update_apic(int cpu, u32 apicid)
 	early_per_cpu(x86_cpu_to_apicid, cpu) = apicid;
 #endif
 	set_cpu_possible(cpu, true);
-	physid_set(apicid, phys_cpu_present_map);
+	set_bit(apicid, phys_cpu_present_map);
 	set_cpu_present(cpu, true);
 	num_processors++;
 
@@ -2515,10 +2501,7 @@ EXPORT_SYMBOL_GPL(x86_msi_msg_get_destid);
 
 static void __init apic_bsp_up_setup(void)
 {
-#ifdef CONFIG_X86_64
-	apic_write(APIC_ID, apic->set_apic_id(boot_cpu_physical_apicid));
-#endif
-	physid_set_mask_of_physid(boot_cpu_physical_apicid, &phys_cpu_present_map);
+	reset_phys_cpu_present_map(boot_cpu_physical_apicid);
 }
 
 /**
