@@ -51,6 +51,8 @@ static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
 
 DEFINE_STATIC_KEY_FALSE(kvm_rme_is_available);
 
+#include "hisilicon/hisi_virt.h"
+
 DECLARE_KVM_HYP_PER_CPU(unsigned long, kvm_hyp_vector);
 
 DEFINE_PER_CPU(unsigned long, kvm_arm_hyp_stack_page);
@@ -59,6 +61,13 @@ DECLARE_KVM_NVHE_PER_CPU(struct kvm_nvhe_init_params, kvm_init_params);
 DECLARE_KVM_NVHE_PER_CPU(struct kvm_cpu_context, kvm_hyp_ctxt);
 
 static bool vgic_present, kvm_arm_initialised;
+
+/* Capability of non-cacheable snooping */
+bool kvm_ncsnp_support;
+
+/* Capability of DVMBM */
+bool kvm_dvmbm_support;
+
 
 static DEFINE_PER_CPU(unsigned char, kvm_hyp_initialized);
 
@@ -239,6 +248,10 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
 	int ret;
 
+	ret = kvm_sched_affinity_vm_init(kvm);
+	if (ret)
+		return ret;
+
 	mutex_init(&kvm->arch.config_lock);
 
 #ifdef CONFIG_LOCKDEP
@@ -321,6 +334,8 @@ vm_fault_t kvm_arch_vcpu_fault(struct kvm_vcpu *vcpu, struct vm_fault *vmf)
  */
 void kvm_arch_destroy_vm(struct kvm *kvm)
 {
+	kvm_sched_affinity_vm_destroy(kvm);
+
 	bitmap_free(kvm->arch.pmu_filter);
 	free_cpumask_var(kvm->arch.supported_cpus);
 
@@ -329,6 +344,7 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	if (is_protected_kvm_enabled())
 		pkvm_destroy_hyp_vm(kvm);
 
+	kfree(kvm->arch.mpidr_data);
 	kvm_destroy_vcpus(kvm);
 
 	kvm_unshare_hyp(kvm, kvm + 1);
@@ -458,6 +474,11 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = system_supports_hdbss();
 		break;
 #endif
+#ifdef CONFIG_VIRT_PLAT_DEV
+	case KVM_CAP_ARM_VIRT_MSI_BYPASS:
+		r = sdev_enable;
+		break;
+#endif
 	default:
 		r = 0;
 	}
@@ -529,6 +550,10 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	if (err)
 		return err;
 
+	err = kvm_sched_affinity_vcpu_init(vcpu);
+	if (err)
+		return err;
+
 	err = kvm_share_hyp(vcpu, vcpu + 1);
 	if (err)
 		kvm_vgic_vcpu_destroy(vcpu);
@@ -547,6 +572,8 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_pmu_vcpu_destroy(vcpu);
 	kvm_vgic_vcpu_destroy(vcpu);
 	kvm_arm_vcpu_destroy(vcpu);
+
+	kvm_sched_affinity_vcpu_destroy(vcpu);
 }
 
 void kvm_arch_vcpu_blocking(struct kvm_vcpu *vcpu)
@@ -576,9 +603,9 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	 * We might get preempted before the vCPU actually runs, but
 	 * over-invalidation doesn't affect correctness.
 	 */
-	if (*last_ran != vcpu->vcpu_id) {
+	if (*last_ran != vcpu->vcpu_idx) {
 		kvm_call_hyp(__kvm_flush_cpu_context, mmu);
-		*last_ran = vcpu->vcpu_id;
+		*last_ran = vcpu->vcpu_idx;
 	}
 
 	vcpu->cpu = cpu;
@@ -608,6 +635,8 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 	if (!cpumask_test_cpu(cpu, vcpu->kvm->arch.supported_cpus))
 		vcpu_set_on_unsupported_cpu(vcpu);
+
+	kvm_tlbi_dvmbm_vcpu_load(vcpu);
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
@@ -629,6 +658,8 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	kvm_arm_vmid_clear_active();
 
 	vcpu_clear_on_unsupported_cpu(vcpu);
+
+	kvm_tlbi_dvmbm_vcpu_put(vcpu);
 }
 
 static void __kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu)
@@ -727,6 +758,57 @@ static int kvm_vcpu_initialized(struct kvm_vcpu *vcpu)
 	return vcpu_get_flag(vcpu, VCPU_INITIALIZED);
 }
 
+static void kvm_init_mpidr_data(struct kvm *kvm)
+{
+	struct kvm_mpidr_data *data = NULL;
+	unsigned long c, mask, nr_entries;
+	u64 aff_set = 0, aff_clr = ~0UL;
+	struct kvm_vcpu *vcpu;
+
+	mutex_lock(&kvm->arch.config_lock);
+
+	if (kvm->arch.mpidr_data || atomic_read(&kvm->online_vcpus) == 1)
+		goto out;
+
+	kvm_for_each_vcpu(c, vcpu, kvm) {
+		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
+		aff_set |= aff;
+		aff_clr &= aff;
+	}
+
+	/*
+	 * A significant bit can be either 0 or 1, and will only appear in
+	 * aff_set. Use aff_clr to weed out the useless stuff.
+	 */
+	mask = aff_set ^ aff_clr;
+	nr_entries = BIT_ULL(hweight_long(mask));
+
+	/*
+	 * Don't let userspace fool us. If we need more than a single page
+	 * to describe the compressed MPIDR array, just fall back to the
+	 * iterative method. Single vcpu VMs do not need this either.
+	 */
+	if (struct_size(data, cmpidr_to_idx, nr_entries) <= PAGE_SIZE)
+		data = kzalloc(struct_size(data, cmpidr_to_idx, nr_entries),
+			       GFP_KERNEL_ACCOUNT);
+
+	if (!data)
+		goto out;
+
+	data->mpidr_mask = mask;
+
+	kvm_for_each_vcpu(c, vcpu, kvm) {
+		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
+		u16 index = kvm_mpidr_index(data, aff);
+
+		data->cmpidr_to_idx[index] = c;
+	}
+
+	kvm->arch.mpidr_data = data;
+out:
+	mutex_unlock(&kvm->arch.config_lock);
+}
+
 /*
  * Handle both the initialisation that is being done when the vcpu is
  * run for the first time, as well as the updates that must be
@@ -749,6 +831,8 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 
 	if (likely(vcpu_has_run_once(vcpu)))
 		return 0;
+
+	kvm_init_mpidr_data(kvm);
 
 	kvm_arm_vcpu_init_debug(vcpu);
 
@@ -960,6 +1044,9 @@ static int check_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		if (kvm_dirty_ring_check_request(vcpu))
 			return 0;
+
+		if (kvm_check_request(KVM_REQ_RELOAD_TLBI_DVMBM, vcpu))
+			kvm_hisi_reload_lsudvmbm(vcpu->kvm);
 	}
 
 	return 1;
@@ -1306,27 +1393,23 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 			  bool line_status)
 {
 	u32 irq = irq_level->irq;
-	unsigned int irq_type, vcpu_idx, irq_num;
-	int nrcpus = atomic_read(&kvm->online_vcpus);
+	unsigned int irq_type, vcpu_id, irq_num;
 	struct kvm_vcpu *vcpu = NULL;
 	bool level = irq_level->level;
 
 	irq_type = (irq >> KVM_ARM_IRQ_TYPE_SHIFT) & KVM_ARM_IRQ_TYPE_MASK;
-	vcpu_idx = (irq >> KVM_ARM_IRQ_VCPU_SHIFT) & KVM_ARM_IRQ_VCPU_MASK;
-	vcpu_idx += ((irq >> KVM_ARM_IRQ_VCPU2_SHIFT) & KVM_ARM_IRQ_VCPU2_MASK) * (KVM_ARM_IRQ_VCPU_MASK + 1);
+	vcpu_id = (irq >> KVM_ARM_IRQ_VCPU_SHIFT) & KVM_ARM_IRQ_VCPU_MASK;
+	vcpu_id += ((irq >> KVM_ARM_IRQ_VCPU2_SHIFT) & KVM_ARM_IRQ_VCPU2_MASK) * (KVM_ARM_IRQ_VCPU_MASK + 1);
 	irq_num = (irq >> KVM_ARM_IRQ_NUM_SHIFT) & KVM_ARM_IRQ_NUM_MASK;
 
-	trace_kvm_irq_line(irq_type, vcpu_idx, irq_num, irq_level->level);
+	trace_kvm_irq_line(irq_type, vcpu_id, irq_num, irq_level->level);
 
 	switch (irq_type) {
 	case KVM_ARM_IRQ_TYPE_CPU:
 		if (irqchip_in_kernel(kvm))
 			return -ENXIO;
 
-		if (vcpu_idx >= nrcpus)
-			return -EINVAL;
-
-		vcpu = kvm_get_vcpu(kvm, vcpu_idx);
+		vcpu = kvm_get_vcpu_by_id(kvm, vcpu_id);
 		if (!vcpu)
 			return -EINVAL;
 
@@ -1338,17 +1421,14 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 		if (!irqchip_in_kernel(kvm))
 			return -ENXIO;
 
-		if (vcpu_idx >= nrcpus)
-			return -EINVAL;
-
-		vcpu = kvm_get_vcpu(kvm, vcpu_idx);
+		vcpu = kvm_get_vcpu_by_id(kvm, vcpu_id);
 		if (!vcpu)
 			return -EINVAL;
 
 		if (irq_num < VGIC_NR_SGIS || irq_num >= VGIC_NR_PRIVATE_IRQS)
 			return -EINVAL;
 
-		return kvm_vgic_inject_irq(kvm, vcpu->vcpu_id, irq_num, level, NULL);
+		return kvm_vgic_inject_irq(kvm, vcpu, irq_num, level, NULL);
 	case KVM_ARM_IRQ_TYPE_SPI:
 		if (!irqchip_in_kernel(kvm))
 			return -ENXIO;
@@ -1356,7 +1436,7 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 		if (irq_num < VGIC_NR_PRIVATE_IRQS)
 			return -EINVAL;
 
-		return kvm_vgic_inject_irq(kvm, 0, irq_num, level, NULL);
+		return kvm_vgic_inject_irq(kvm, NULL, irq_num, level, NULL);
 	}
 
 	return -EINVAL;
@@ -1869,6 +1949,36 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 
 		return kvm_vm_set_attr(kvm, &attr);
 	}
+#ifdef CONFIG_VIRT_PLAT_DEV
+	case KVM_CREATE_SHADOW_DEV: {
+		struct kvm_master_dev_info *mdi;
+		u32 nvectors;
+		int ret;
+
+		if (get_user(nvectors, (const u32 __user *)argp))
+			return -EFAULT;
+		if (!nvectors)
+			return -EINVAL;
+
+		mdi = memdup_user(argp, sizeof(*mdi) + nvectors * sizeof(mdi->msi[0]));
+		if (IS_ERR(mdi))
+			return PTR_ERR(mdi);
+
+		ret = kvm_shadow_dev_create(kvm, mdi);
+		kfree(mdi);
+
+		return ret;
+	}
+	case KVM_DEL_SHADOW_DEV: {
+		u32 devid;
+
+		if (get_user(devid, (const u32 __user *)argp))
+			return -EFAULT;
+
+		kvm_shadow_dev_delete(kvm, devid);
+		return 0;
+	}
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -2581,6 +2691,18 @@ struct kvm_vcpu *kvm_mpidr_to_vcpu(struct kvm *kvm, unsigned long mpidr)
 	unsigned long i;
 
 	mpidr &= MPIDR_HWID_BITMASK;
+
+	if (kvm->arch.mpidr_data) {
+		u16 idx = kvm_mpidr_index(kvm->arch.mpidr_data, mpidr);
+
+		vcpu = kvm_get_vcpu(kvm,
+				    kvm->arch.mpidr_data->cmpidr_to_idx[idx]);
+		if (mpidr != kvm_vcpu_get_mpidr_aff(vcpu))
+			vcpu = NULL;
+
+		return vcpu;
+	}
+
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		if (mpidr == kvm_vcpu_get_mpidr_aff(vcpu))
 			return vcpu;
@@ -2633,6 +2755,13 @@ void kvm_arch_irq_bypass_start(struct irq_bypass_consumer *cons)
 	kvm_arm_resume_guest(irqfd->kvm);
 }
 
+#ifdef CONFIG_VIRT_PLAT_DEV
+void kvm_arch_pre_destroy_vm(struct kvm *kvm)
+{
+	kvm_shadow_dev_delete_all(kvm);
+}
+#endif
+
 /* Initialize Hyp-mode and memory mappings on all CPUs */
 static __init int kvm_arm_init(void)
 {
@@ -2654,6 +2783,15 @@ static __init int kvm_arm_init(void)
 		kvm_info("Error initializing system register tables");
 		return err;
 	}
+
+	probe_hisi_cpu_type();
+	kvm_ncsnp_support = hisi_ncsnp_supported();
+	kvm_dvmbm_support = hisi_dvmbm_supported();
+	kvm_info("KVM ncsnp %s\n", kvm_ncsnp_support ? "enabled" : "disabled");
+	kvm_info("KVM dvmbm %s\n", kvm_dvmbm_support ? "enabled" : "disabled");
+
+	if (kvm_dvmbm_support)
+		kvm_get_pg_cfg();
 
 	in_hyp_mode = is_kernel_in_hyp_mode();
 
@@ -2712,6 +2850,10 @@ static __init int kvm_arm_init(void)
 		goto out_subs;
 
 	kvm_arm_initialised = true;
+
+#ifdef CONFIG_VIRT_PLAT_DEV
+	kvm_shadow_dev_init();
+#endif
 
 	return 0;
 
