@@ -1,0 +1,289 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * Copyright (c) 2024, DapuStor Corporation.
+ */
+
+#ifndef __DN200_CFG_H__
+#define __DN200_CFG_H__
+
+#include <linux/platform_device.h>
+#include <linux/phy.h>
+
+#define MTL_MAX_RX_QUEUES	8
+#define MTL_MAX_TX_QUEUES	8
+#define DN200_CH_MAX		8
+
+#define DN200_RX_COE_NONE	0
+#define DN200_RX_COE_TYPE1	1
+#define DN200_RX_COE_TYPE2	2
+
+/* Define the macros for CSR clock range parameters to be passed by
+ * platform code.
+ * This could also be configured at run time using CPU freq framework.
+ */
+
+/* MDC Clock Selection define*/
+#define	DN200_CSR_60_100M	0x0	/* MDC = clk_scr_i/42 */
+#define	DN200_CSR_100_150M	0x1	/* MDC = clk_scr_i/62 */
+#define	DN200_CSR_20_35M	0x2	/* MDC = clk_scr_i/16 */
+#define	DN200_CSR_35_60M	0x3	/* MDC = clk_scr_i/26 */
+#define	DN200_CSR_150_250M	0x4	/* MDC = clk_scr_i/102 */
+#define	DN200_CSR_250_300M	0x5	/* MDC = clk_scr_i/122 */
+
+/* MTL algorithms identifiers */
+#define MTL_TX_ALGORITHM_WRR	0x0
+#define MTL_TX_ALGORITHM_WFQ	0x1
+#define MTL_TX_ALGORITHM_DWRR	0x2
+#define MTL_TX_ALGORITHM_SP	0x3
+#define MTL_RX_ALGORITHM_SP	0x4
+#define MTL_RX_ALGORITHM_WSP	0x5
+
+/* RX/TX Queue Mode */
+#define MTL_QUEUE_AVB		0x0
+#define MTL_QUEUE_DCB		0x1
+
+/* The MDC clock could be set higher than the IEEE 802.3
+ * specified frequency limit 0f 2.5 MHz, by programming a clock divider
+ * of value different than the above defined values. The resultant MDIO
+ * clock frequency of 12.5 MHz is applicable for the interfacing chips
+ * supporting higher MDC clocks.
+ * The MDC clock selection macros need to be defined for MDC clock rate
+ * of 12.5 MHz, corresponding to the following selection.
+ */
+#define DN200_CSR_I_4		0x8	/* clk_csr_i/4 */
+#define DN200_CSR_I_6		0x9	/* clk_csr_i/6 */
+#define DN200_CSR_I_8		0xA	/* clk_csr_i/8 */
+#define DN200_CSR_I_10		0xB	/* clk_csr_i/10 */
+#define DN200_CSR_I_12		0xC	/* clk_csr_i/12 */
+#define DN200_CSR_I_14		0xD	/* clk_csr_i/14 */
+#define DN200_CSR_I_16		0xE	/* clk_csr_i/16 */
+#define DN200_CSR_I_18		0xF	/* clk_csr_i/18 */
+
+/* AXI DMA Burst length supported */
+#define DMA_AXI_BLEN_4 BIT(1)
+#define DMA_AXI_BLEN_8 BIT(2)
+#define DMA_AXI_BLEN_16 BIT(3)
+#define DMA_AXI_BLEN_32 BIT(4)
+#define DMA_AXI_BLEN_64 BIT(5)
+#define DMA_AXI_BLEN_128 BIT(6)
+#define DMA_AXI_BLEN_256 BIT(7)
+#define DMA_AXI_BLEN_ALL                                                       \
+	(DMA_AXI_BLEN_4 | DMA_AXI_BLEN_8 | DMA_AXI_BLEN_16 | DMA_AXI_BLEN_32 | \
+	 DMA_AXI_BLEN_64 | DMA_AXI_BLEN_128 | DMA_AXI_BLEN_256)
+
+/* Platform data for platform device structure's platform_data field */
+
+struct dn200_mdio_bus_data {
+	unsigned int phy_mask;
+	unsigned int has_xpcs;
+	unsigned int xpcs_an_inband;
+	int *irqs;
+	int probed_phy_irq;
+	bool needs_reset;
+};
+
+struct dn200_dma_cfg {
+	int pbl;
+	int txpbl;
+	int rxpbl;
+	bool pblx8;
+	int fixed_burst;
+	int mixed_burst;
+	bool aal;
+	bool onekbbe;
+	bool eame;
+	bool multi_msi_en;
+	bool dche;
+};
+
+#define AXI_BLEN	7
+struct dn200_axi {
+	bool axi_lpi_en;
+	bool axi_xit_frm;
+	u32 axi_wr_osr_lmt;
+	u32 axi_rd_osr_lmt;
+	bool axi_kbbe;
+	u32 axi_blen[AXI_BLEN];
+	bool axi_fb;
+	bool axi_mb;
+	bool axi_rb;
+};
+
+#define EST_GCL		1024
+struct dn200_est {
+	/*Avoid confinct between read with config*/
+	struct mutex lock;
+	int enable;
+	u32 btr_reserve[2];
+	u32 btr_offset[2];
+	u32 btr[2];
+	u32 ctr[2];
+	u32 ter;
+	u32 gcl_unaligned[EST_GCL];
+	u32 gcl[EST_GCL];
+	u32 gcl_size;
+};
+
+struct dn200_rxq_cfg {
+	u8 mode_to_use;
+	u32 chan;
+	u8 pkt_route;
+	bool use_prio;
+	u32 prio;
+	u32 weight;
+};
+
+struct dn200_txq_cfg {
+	u32 weight;
+	u8 mode_to_use;
+	/* Credit Base Shaper parameters */
+	u32 send_slope;
+	u32 idle_slope;
+	u32 high_credit;
+	u32 low_credit;
+	bool use_prio;
+	u32 prio;
+	int tbs_en;
+};
+
+/* FPE link state */
+enum dn200_fpe_state {
+	FPE_STATE_OFF = 0,
+	FPE_STATE_CAPABLE = 1,
+	FPE_STATE_ENTERING_ON = 2,
+	FPE_STATE_ON = 3,
+};
+
+/* FPE link-partner hand-shaking mPacket type */
+enum dn200_mpacket_type {
+	MPACKET_VERIFY = 0,
+	MPACKET_RESPONSE = 1,
+};
+
+enum dn200_fpe_task_state_t {
+	__FPE_REMOVING,
+	__FPE_TASK_SCHED,
+};
+
+struct dn200_fpe_cfg {
+	bool enable;		/* FPE enable */
+	bool hs_enable;		/* FPE handshake enable */
+	enum dn200_fpe_state lp_fpe_state;	/* Link Partner FPE state */
+	enum dn200_fpe_state lo_fpe_state;	/* Local station FPE state */
+};
+
+struct dn200_safety_feature_cfg {
+	u32 tsoee;
+	u32 mrxpee;
+	u32 mestee;
+	u32 mrxee;
+	u32 mtxee;
+	u32 epsi;
+	u32 edpp;
+	u32 prtyen;
+	u32 tmouten;
+};
+
+struct plat_dn200enet_data {
+	int bus_id;
+	int phy_addr;
+	int interface;
+	phy_interface_t phy_interface;
+	struct dn200_mdio_bus_data *mdio_bus_data;
+	struct device_node *phy_node;
+	struct device_node *phylink_node;
+	struct device_node *mdio_node;
+	struct dn200_dma_cfg *dma_cfg;
+	struct dn200_est *est;
+	struct dn200_fpe_cfg *fpe_cfg;
+	struct dn200_safety_feature_cfg *safety_feat_cfg;
+	int clk_csr;
+	int has_gmac;
+	int enh_desc;
+	int tx_coe;
+	int rx_coe;
+	int bugged_jumbo;
+	int force_sf_dma_mode;
+	int riwt_off;
+	int max_speed;
+	int maxmtu;
+	int multicast_filter_bins;
+	int unicast_filter_entries;
+	int tx_fifo_size;
+	int rx_fifo_size;
+	u32 addr64;
+	u32 rx_queues_to_use;
+	u32 tx_queues_to_use;
+	u8 rx_sched_algorithm;
+	u8 tx_sched_algorithm;
+	struct dn200_rxq_cfg rx_queues_cfg[MTL_MAX_RX_QUEUES];
+	struct dn200_txq_cfg tx_queues_cfg[MTL_MAX_TX_QUEUES];
+	int (*init)(struct platform_device *pdev, void *priv);
+	void (*exit)(struct platform_device *pdev, void *priv);
+	struct mac_device_info *(*setup)(void *priv);
+	void (*dump_debug_regs)(void *priv);
+	void *bsp_priv;
+	struct clk *dn200_clk;
+	struct clk *pclk;
+	struct clk *clk_ptp_ref;
+	unsigned int clk_ptp_rate;
+	unsigned int clk_ref_rate;
+	unsigned int mult_fact_100ns;
+	s32 ptp_max_adj;
+	struct dn200_axi *axi;
+	int has_gmac4;
+	bool tso_en;
+	int rss_en;
+	int mac_port_sel_speed;
+	bool en_tx_lpi_clockgating;
+	bool rx_clk_runs_in_lpi;
+	int has_xgmac;
+	bool vlan_fail_q_en;
+	u8 vlan_fail_q;
+	unsigned int eee_usecs_rate;
+	struct pci_dev *pdev;
+	bool has_crossts;
+	int int_snapshot_num;
+	int ext_snapshot_num;
+	bool ext_snapshot_en;
+	bool multi_msi_en;
+	int msi_mac_vec;
+	int msi_lpi_vec;
+	int msi_sfty_ce_vec;
+	int msi_sfty_ue_vec;
+	int msi_rx_base_vec;
+	int msi_tx_base_vec;
+	bool sph_disable;
+};
+
+enum rxp_async_type {
+	DN200_VF_CLEAR_RXP = BIT(0),
+	DN200_VF_SET_UMAC = BIT(1),
+	DN200_VF_SET_FLT = BIT(2),
+	DN200_VF_APP_BC = BIT(3),
+};
+
+#define DN200_MAX_MC_ADDR_NUM	33
+struct dn200_vf_rxp_async_info {
+	u32 crc32;
+	u32 seq;
+	u16 uc_cnt;
+	u16 mc_cnt;
+	u8 rxq_start;
+	u8 vf_offset;
+	bool is_vf;
+	u8 type;
+	u64 flags;
+	u8 uc_mac_addr[ETH_ALEN];
+	u8 mc_mac_addr[DN200_MAX_MC_ADDR_NUM][ETH_ALEN];
+} __aligned(8);
+
+struct dn200_vf_rxp_async_wb {
+	u32 crc32;
+	u32 seq;
+	bool is_promisc;
+	bool is_allmuslt;
+	u8 uc_num;
+	u8 mc_num;
+} __aligned(8);
+#endif
