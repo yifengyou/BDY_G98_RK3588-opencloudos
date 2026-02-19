@@ -14,6 +14,7 @@
 #include <linux/kmsan.h>
 #include <linux/spinlock.h>
 #include <xen/xen.h>
+#include <linux/cc_platform.h>
 
 #ifdef DEBUG
 /* For development, we want to crash whenever the ring is screwed. */
@@ -251,6 +252,13 @@ static bool virtqueue_use_indirect(const struct vring_virtqueue *vq,
 	return (vq->indirect && total_sg > 1 && vq->vq.num_free);
 }
 
+static inline bool should_force_dma(const struct virtio_device *dev)
+{
+	return (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT) &&
+		(!virtio_has_feature(dev, VIRTIO_F_VERSION_1) ||
+		!virtio_has_feature(dev, VIRTIO_F_ACCESS_PLATFORM)));
+}
+
 /*
  * Modern virtio devices have feature bits to specify whether they need a
  * quirk and bypass the IOMMU. If not there, just use the DMA API.
@@ -292,6 +300,9 @@ static bool vring_use_dma_api(const struct virtio_device *vdev)
 	 * all of the sensible Xen configurations to work correctly.
 	 */
 	if (xen_domain())
+		return true;
+
+	if (should_force_dma(vdev))
 		return true;
 
 	return false;
