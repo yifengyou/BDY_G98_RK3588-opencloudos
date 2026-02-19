@@ -219,46 +219,33 @@ int ne6x_dev_get_mac_addr(struct ne6x_adapter *adpt, u8 *mac);
 int ne6x_dev_get_mac_stats(struct ne6x_adapter *adpt);
 int ne6x_dev_get_link_status(struct ne6x_adapter *adpt, struct ne6x_link_info *status);
 int ne6x_dev_set_speed(struct ne6x_adapter *adpt, u32 speed);
-int ne6x_dev_set_sfp_speed(struct ne6x_adapter *adpt, u32 speed);
 int ne6x_dev_get_sfp_speed(struct ne6x_adapter *adpt, u32 *speed);
 
 int ne6x_dev_reset_firmware(struct ne6x_adapter *adpt);
-
-int ne6x_dev_self_test_link(struct ne6x_adapter *adpt, int *verify);
 
 u32 ne6x_dev_get_features(struct ne6x_adapter *adpt);
 int ne6x_dev_set_features(struct ne6x_adapter *adpt, u32 value);
 
 int ne6x_dev_set_mtu(struct ne6x_adapter *adpt, u32 mtu);
-int ne6x_dev_get_mtu(struct ne6x_adapter *adpt, u32 *mtu);
 
 void ne6x_dev_clear_vport(struct ne6x_pf *pf);
 void ne6x_dev_set_port2pi(struct ne6x_adapter *adpt);
 void ne6x_dev_set_pi2port(struct ne6x_adapter *adpt);
 int ne6x_dev_set_vport(struct ne6x_adapter *adpt);
 
-int ne6x_dev_set_vlan_port(struct ne6x_adapter *adpt, u16 vlan_id, pbmp_t pbmp);
-int ne6x_dev_get_vlan_port(struct ne6x_adapter *adpt, u16 vlan_id, pbmp_t pbmp);
 int ne6x_dev_vlan_add(struct ne6x_adapter *adpt, struct ne6x_vlan *vlan);
 int ne6x_dev_vlan_del(struct ne6x_adapter *adpt, struct ne6x_vlan *vlan);
 int ne6x_dev_add_vf_qinq(struct ne6x_vf *vf, __be16 proto, u16 vid);
 int ne6x_dev_del_vf_qinq(struct ne6x_vf *vf, __be16 proto, u16 vid);
-int ne6x_dev_clear_vlan_map(struct ne6x_pf *pf);
 
 int ne6x_dev_set_rss(struct ne6x_adapter *adpt, struct ne6x_rss_info *info);
 
 int ne6x_dev_get_flowctrl(struct ne6x_adapter *adpt, struct ne6x_flowctrl *fctrl);
 int ne6x_dev_set_flowctrl(struct ne6x_adapter *adpt, struct ne6x_flowctrl *fctrl);
-int ne6x_dev_get_port_fec(struct ne6x_adapter *adpt, int *status);
 
-int ne6x_dev_write_eeprom(struct ne6x_adapter *adpt, int offset, u8 *pbuf, int size);
 int ne6x_dev_read_eeprom(struct ne6x_adapter *adpt, int offset, u8 *pbuf, int size);
 
 int ne6x_dev_set_vf_number(struct ne6x_pf *pf, int num_vfs);
-
-int ne6x_dev_clear_stats(struct ne6x_adapter *adpt);
-
-int ne6x_dev_get_port_fec(struct ne6x_adapter *adpt, int *status);
 
 int ne6x_dev_set_uc_promiscuous_enable(struct ne6x_adapter *adpt, int enable);
 int ne6x_dev_set_mc_promiscuous_enable(struct ne6x_adapter *adpt, int enable);
@@ -272,8 +259,6 @@ int ne6x_dev_del_unicast(struct ne6x_adapter *adpt, u8 *mac);
 
 int ne6x_dev_add_multicast(struct ne6x_adapter *adpt, u8 *mac);
 int ne6x_dev_del_multicast(struct ne6x_adapter *adpt, u8 *mac);
-int ne6x_dev_enable_rxhash(struct ne6x_adapter *adpt, int enable);
-int ne6x_dev_read_qsfp(struct ne6x_adapter *adpt, u8 regaddr, u8 *data, int len);
 
 int ne6x_dev_upgrade_firmware(struct ne6x_adapter *adpt, u8 region, u8 *data, int size, int flags);
 
@@ -286,17 +271,14 @@ int ne6x_dev_set_nic_start(struct ne6x_pf *pf, u32 flag);
 int ne6x_dev_get_temperature_info(struct ne6x_pf *pf, struct ne6x_soc_temperature *temp);
 int ne6x_dev_get_power_consum(struct ne6x_pf *pf, struct ne6x_soc_power *power);
 int ne6x_dev_get_fru(struct ne6x_pf *pf, u32 *buffer, u32 size);
-int ne6x_dev_start_ddr_test(struct ne6x_pf *pf);
 int ne6x_dev_i2c3_signal_test(struct ne6x_pf *pf, u32 *id);
 
 int ne6x_dev_set_if_state(struct ne6x_adapter *adpt, u32 state);
-int ne6x_dev_get_if_state(struct ne6x_adapter *adpt, u32 *state);
 
 int ne6x_dev_get_sfp_status(struct ne6x_adapter *adpt, u8 *status);
 
 int ne6x_dev_set_led(struct ne6x_adapter *adpt, bool state);
 int ne6x_dev_get_vf_stat(struct ne6x_adapter *adpt, struct vf_stat *stat);
-int ne6x_dev_reset_vf_stat(struct ne6x_adapter *adpt);
 int ne6x_dev_check_speed(struct ne6x_adapter *adpt, u32 speed);
 
 int ne6x_reg_table_update(struct ne6x_pf *pf, enum ne6x_reg_table table, u32 index,
@@ -331,7 +313,6 @@ bool ne6x_dev_get_trust_vlan(struct ne6x_pf *pf);
 int ne6x_dev_set_spoofchk(struct ne6x_adapter *adpt, bool setting);
 int ne6x_dev_check_speed_change(struct ne6x_adapter *adpt);
 int ne6x_dev_check_media(struct ne6x_adapter *adpt, u32 media);
-int ne6x_dev_set_fw_chip_id(struct ne6x_adapter *adpt, u16 chip_id);
 int ne6x_dev_set_perm_mac(struct ne6x_pf *pf, u32 lport, u8 *mac);
 
 #endif
