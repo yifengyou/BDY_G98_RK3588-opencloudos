@@ -602,8 +602,13 @@ struct sched_statistics {
 	u64				core_forceidle_sum;
 #endif
 
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+	u64				nr_wakeups_preferred_cpus;
+	u64				nr_wakeups_force_preferred_cpus;
+#else
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
+#endif
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
@@ -1536,6 +1541,11 @@ struct task_struct {
 
 	/* Timestamp for last schedule: */
 	unsigned long long		ftrace_timestamp;
+
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+	cpumask_t			*prefer_cpus;
+	const cpumask_t			*select_cpus;
+#endif
 
 	/*
 	 * Number of functions that haven't been traced
@@ -2587,6 +2597,25 @@ static inline void rseq_execve(struct task_struct *t)
 {
 }
 
+#endif
+
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+int set_prefer_cpus_ptr(struct task_struct *p,
+			const struct cpumask *new_mask);
+int sched_prefer_cpus_fork(struct task_struct *p, struct cpumask *mask);
+void sched_prefer_cpus_free(struct task_struct *p);
+
+extern struct static_key_false __dynamic_affinity_switch;
+static inline bool dynamic_affinity_enabled(void)
+{
+	return static_branch_unlikely(&__dynamic_affinity_switch);
+}
+
+#ifdef CONFIG_SCHED_PARAL
+bool sched_paral_used(void);
+#else
+static inline bool sched_paral_used(void) { return false; }
+#endif
 #endif
 
 #ifdef CONFIG_DEBUG_RSEQ
