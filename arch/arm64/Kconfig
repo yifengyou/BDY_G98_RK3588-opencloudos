@@ -2230,6 +2230,12 @@ menu "ARMv8.6 architectural features"
 config ARM64_LS64
 	bool
 
+config ARM64_TWED
+	bool "Enable support for delayed trapping of WFE"
+	default y
+	help
+	  Delayed Trapping of WFE (part of the ARMv8.6 Extensions)
+
 endmenu # "ARMv8.6 architectural features"
 
 menu "ARMv8.7 architectural features"
