@@ -304,6 +304,44 @@ TRACE_EVENT(mm_page_alloc_extfrag,
 		__entry->change_ownership)
 );
 
+TRACE_EVENT(mm_alloc_contig_migrate_range_info,
+
+	TP_PROTO(unsigned long start,
+		 unsigned long end,
+		 unsigned long nr_migrated,
+		 unsigned long nr_reclaimed,
+		 unsigned long nr_mapped,
+		 int migratetype),
+
+	TP_ARGS(start, end, nr_migrated, nr_reclaimed, nr_mapped, migratetype),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, start)
+		__field(unsigned long, end)
+		__field(unsigned long, nr_migrated)
+		__field(unsigned long, nr_reclaimed)
+		__field(unsigned long, nr_mapped)
+		__field(int, migratetype)
+	),
+
+	TP_fast_assign(
+		__entry->start = start;
+		__entry->end = end;
+		__entry->nr_migrated = nr_migrated;
+		__entry->nr_reclaimed = nr_reclaimed;
+		__entry->nr_mapped = nr_mapped;
+		__entry->migratetype = migratetype;
+	),
+
+	TP_printk("start=0x%lx end=0x%lx migratetype=%d nr_migrated=%lu nr_reclaimed=%lu nr_mapped=%lu",
+		  __entry->start,
+		  __entry->end,
+		  __entry->migratetype,
+		  __entry->nr_migrated,
+		  __entry->nr_reclaimed,
+		  __entry->nr_mapped)
+);
+
 /*
  * Required for uniquely and securely identifying mm in rss_stat tracepoint.
  */
@@ -395,6 +433,123 @@ TRACE_EVENT(mm_fast_copy_page_switched,
 		__entry->to)
 );
 
+#ifdef CONFIG_PFN_RANGE_ALLOC
+TRACE_EVENT(pfn_range_alloc,
+
+	TP_PROTO(struct folio *folio, unsigned int nr_pages,
+			int nid),
+
+	TP_ARGS(folio, nr_pages, nid),
+
+	TP_STRUCT__entry(
+		__field(struct folio*, folio)
+		__field(unsigned int, nr_pages)
+		__field(int, nid)
+	),
+
+	TP_fast_assign(
+		__entry->folio = folio;
+		__entry->nr_pages = nr_pages;
+		__entry->nid = nid;
+	),
+
+	TP_printk("folio=%p pfn=0x%lx err=%ld nr_pages=%u nid=%d",
+		!IS_ERR(__entry->folio) ? __entry->folio : NULL,
+		!IS_ERR(__entry->folio) ? folio_pfn(__entry->folio) : 0,
+		!IS_ERR(__entry->folio) ? 0 : PTR_ERR(__entry->folio),
+		__entry->nr_pages,
+		__entry->nid)
+);
+
+TRACE_EVENT(pfn_range_free,
+
+	TP_PROTO(struct folio *folio, int ret),
+
+	TP_ARGS(folio, ret),
+
+	TP_STRUCT__entry(
+		__field(struct folio*, folio)
+		__field(int, ret)
+	),
+
+	TP_fast_assign(
+		__entry->folio = folio;
+		__entry->ret = ret;
+	),
+
+	TP_printk("folio=%p pfn=0x%lx ret=%d",
+		__entry->folio, folio_pfn(__entry->folio), __entry->ret)
+);
+
+TRACE_EVENT(hugetlb_pool_alloc,
+
+	TP_PROTO(struct folio *folio, int nid),
+
+	TP_ARGS(folio, nid),
+
+	TP_STRUCT__entry(
+		__field(struct folio*, folio)
+		__field(int, nid)
+	),
+
+	TP_fast_assign(
+		__entry->folio = folio;
+		__entry->nid = nid;
+	),
+
+	TP_printk("folio=%p pfn=0x%lx err=%ld nid=%d",
+		!IS_ERR(__entry->folio) ? __entry->folio : NULL,
+		!IS_ERR(__entry->folio) ? folio_pfn(__entry->folio) : 0,
+		!IS_ERR(__entry->folio) ? 0 : PTR_ERR(__entry->folio),
+		__entry->nid)
+);
+
+TRACE_EVENT(hugetlb_pool_free,
+
+	TP_PROTO(struct folio *folio, int ret),
+
+	TP_ARGS(folio, ret),
+
+	TP_STRUCT__entry(
+		__field(struct folio*, folio)
+		__field(int, ret)
+	),
+
+	TP_fast_assign(
+		__entry->folio = folio;
+		__entry->ret = ret;
+	),
+
+	TP_printk("folio=%p pfn=0x%lx ret=%d",
+		__entry->folio, folio_pfn(__entry->folio), __entry->ret)
+);
+
+TRACE_EVENT(hugetlb_pool_alloc_size,
+
+	TP_PROTO(struct folio *folio, int nid, unsigned long size),
+
+	TP_ARGS(folio, nid, size),
+
+	TP_STRUCT__entry(
+		__field(struct folio*, folio)
+		__field(int, nid)
+		__field(unsigned long, size)
+	),
+
+	TP_fast_assign(
+		__entry->folio = folio;
+		__entry->nid = nid;
+		__entry->size = size;
+	),
+
+	TP_printk("folio=%p pfn=0x%lx err=%ld nid=%d size=0x%lx",
+		!IS_ERR(__entry->folio) ? __entry->folio : NULL,
+		!IS_ERR(__entry->folio) ? folio_pfn(__entry->folio) : 0,
+		!IS_ERR(__entry->folio) ? 0 : PTR_ERR(__entry->folio),
+		__entry->nid, __entry->size)
+);
+
+#endif
 #endif /* _TRACE_KMEM_H */
 
 /* This part must be outside protection */

@@ -20,6 +20,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/numa_remote.h>
 
 static struct bus_type node_subsys = {
 	.name = "node",
@@ -487,6 +488,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 #endif
 			    );
 	len += hugetlb_report_node_meminfo(buf, len, nid);
+	len += numa_remote_report_node_meminfo(buf, len, nid);
 	return len;
 }
 
@@ -637,6 +639,7 @@ static int register_node(struct node *node, int num)
 	} else {
 		hugetlb_register_node(node);
 		compaction_register_node(node);
+		numa_remote_register_node(node);
 	}
 
 	return error;
@@ -653,6 +656,7 @@ void unregister_node(struct node *node)
 {
 	hugetlb_unregister_node(node);
 	compaction_unregister_node(node);
+	numa_remote_unregister_node(node);
 	node_remove_accesses(node);
 	node_remove_caches(node);
 	device_unregister(&node->dev);

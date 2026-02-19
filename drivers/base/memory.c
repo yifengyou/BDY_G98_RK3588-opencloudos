@@ -25,6 +25,7 @@
 
 #include <linux/atomic.h>
 #include <linux/uaccess.h>
+#include <linux/numa_remote.h>
 
 #define MEMORY_CLASS_NAME	"memory"
 
@@ -33,6 +34,9 @@ static const char *const online_type_to_str[] = {
 	[MMOP_ONLINE] = "online",
 	[MMOP_ONLINE_KERNEL] = "online_kernel",
 	[MMOP_ONLINE_MOVABLE] = "online_movable",
+#ifdef CONFIG_ZONE_EXTMEM
+	[MMOP_ONLINE_EXTMEM] = "online_extmem",
+#endif
 };
 
 int mhp_online_type_from_str(const char *str)
@@ -371,6 +375,9 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 	switch (online_type) {
 	case MMOP_ONLINE_KERNEL:
 	case MMOP_ONLINE_MOVABLE:
+#ifdef CONFIG_ZONE_EXTMEM
+	case MMOP_ONLINE_EXTMEM:
+#endif
 	case MMOP_ONLINE:
 		/* mem->online_type is protected by device_hotplug_lock */
 		mem->online_type = online_type;
@@ -460,11 +467,26 @@ static ssize_t valid_zones_show(struct device *dev,
 				  MMOP_ONLINE_KERNEL, default_zone);
 	len += print_allowed_zone(buf, len, nid, group, start_pfn, nr_pages,
 				  MMOP_ONLINE_MOVABLE, default_zone);
+#ifdef CONFIG_ZONE_EXTMEM
+	len += print_allowed_zone(buf, len, nid, group, start_pfn, nr_pages,
+				  MMOP_ONLINE_EXTMEM, default_zone);
+#endif
 out:
 	len += sysfs_emit_at(buf, len, "\n");
 	return len;
 }
 static DEVICE_ATTR_RO(valid_zones);
+#endif
+
+#ifdef CONFIG_NUMA_REMOTE
+static ssize_t preonline_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct memory_block *mem = to_memory_block(dev);
+
+	return sysfs_emit_at(buf, 0, "%d\n", mem->pre_online);
+}
+static DEVICE_ATTR_RO(preonline);
 #endif
 
 static DEVICE_ATTR_RO(phys_index);
@@ -642,6 +664,9 @@ static struct attribute *memory_memblk_attrs[] = {
 	&dev_attr_removable.attr,
 #ifdef CONFIG_MEMORY_HOTREMOVE
 	&dev_attr_valid_zones.attr,
+#endif
+#ifdef CONFIG_NUMA_REMOTE
+	&dev_attr_preonline.attr,
 #endif
 	NULL
 };
@@ -905,6 +930,76 @@ void remove_memory_block_devices(unsigned long start, unsigned long size)
 		remove_memory_block(mem);
 	}
 }
+
+#ifdef CONFIG_NUMA_REMOTE
+
+enum check_state_type {
+	CHECK_NID,
+	CHECK_PREONLINE,
+	CHECK_ONLINE,
+};
+
+static inline bool check_memory_block_state(unsigned long start, unsigned long size,
+						enum check_state_type type, int check_val)
+{
+	unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
+	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size - 1));
+	unsigned long block_id;
+	struct memory_block *mem;
+	bool check_res = true;
+
+	for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
+		mem = find_memory_block_by_id(block_id);
+		if (!mem)
+			return false;
+
+		if (type == CHECK_NID)
+			check_res = (mem->nid == check_val);
+		else if (type == CHECK_PREONLINE)
+			check_res = (mem->pre_online == check_val);
+		else if (type == CHECK_ONLINE)
+			check_res = (mem->state == check_val);
+		put_device(&mem->dev);
+		if (!check_res)
+			return false;
+	}
+	return true;
+}
+
+bool check_memory_block_nid(unsigned long start, unsigned long size, int nid)
+{
+	return check_memory_block_state(start, size, CHECK_NID, nid);
+}
+
+bool check_memory_block_pre_online(unsigned long start, unsigned long size,
+				   bool pre_online)
+{
+	return check_memory_block_state(start, size, CHECK_PREONLINE, pre_online);
+}
+
+bool check_memory_block_online(unsigned long start, unsigned long size)
+{
+	return check_memory_block_state(start, size, CHECK_ONLINE, MEM_ONLINE);
+}
+
+void set_memory_block_pre_online(unsigned long start, unsigned long size,
+				   bool pre_online)
+{
+	unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
+	unsigned long end_block_id = pfn_to_block_id(PFN_DOWN(start + size - 1));
+	unsigned long block_id;
+	struct memory_block *mem;
+
+	for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
+		mem = find_memory_block_by_id(block_id);
+		if (!mem)
+			continue;
+
+		mem->pre_online = pre_online;
+		put_device(&mem->dev);
+	}
+}
+#endif
 
 static struct attribute *memory_root_attrs[] = {
 #ifdef CONFIG_ARCH_MEMORY_PROBE

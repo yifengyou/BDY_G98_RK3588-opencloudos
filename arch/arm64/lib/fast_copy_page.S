@@ -28,12 +28,6 @@ SYM_FUNC_START(fast_copy_page)
 	bl      kernel_neon_begin
 	add     x0, x19, #(PAGE_SIZE >> 12), lsl #12
 
-	alternative_if ARM64_HAS_NO_HW_PREFETCH
-    // Prefetch three cache lines ahead.
-    prfm    pldl1strm, [x20, #128]
-    prfm    pldl1strm, [x20, #256]
-    prfm    pldl1strm, [x20, #384]
-    alternative_else_nop_endif
 1:
 	ldr     q7, [x20]
 	add     x19, x19, #0x80
@@ -43,9 +37,6 @@ SYM_FUNC_START(fast_copy_page)
 3:
 	ldr     q5, [x20, #32]
 	add     x20, x20, #0x80
-	alternative_if ARM64_HAS_NO_HW_PREFETCH
-    prfm    pldl1strm, [x20, #384]
-    alternative_else_nop_endif
 4:
 	ldur    q4, [x20, #-80]
 5:

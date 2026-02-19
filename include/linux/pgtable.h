@@ -631,6 +631,12 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 }
 #endif
 
+#ifndef CONFIG_ARCH_SUPPORTS_HUGE_PFNMAP
+#ifndef pte_clrhuge
+#define pte_clrhuge(pte) (pte)
+#endif
+#endif
+
 #ifndef get_and_clear_full_ptes
 /**
  * get_and_clear_full_ptes - Clear present PTEs that map consecutive pages of
@@ -914,7 +920,7 @@ extern pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
 #endif
 
 #ifndef arch_needs_pgtable_deposit
-#define arch_needs_pgtable_deposit() (false)
+#define arch_needs_pgtable_deposit(vma) (false)
 #endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -1931,6 +1937,18 @@ typedef unsigned int pgtbl_mod_mask;
 
 #ifndef MAX_PTRS_PER_P4D
 #define MAX_PTRS_PER_P4D PTRS_PER_P4D
+#endif
+
+#ifndef pte_pgprot
+#define pte_pgprot(x) ((pgprot_t) {0})
+#endif
+
+#ifndef pmd_pgprot
+#define pmd_pgprot(x) ((pgprot_t) {0})
+#endif
+
+#ifndef pud_pgprot
+#define pud_pgprot(x) ((pgprot_t) {0})
 #endif
 
 /* description of effects of mapping type and prot in current implementation.
