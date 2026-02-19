@@ -20,8 +20,9 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
-#include <asm/amd_nb.h>
+#include <asm/amd_node.h>
 #include <asm/processor.h>
+#include <asm/amd_nb.h>
 
 MODULE_DESCRIPTION("AMD Family 10h+ CPU core temperature monitor");
 MODULE_AUTHOR("Clemens Ladisch <clemens@ladisch.de>");
@@ -446,15 +447,20 @@ static void k10temp_get_ccd_support_2nd(struct pci_dev *pdev,
 					struct k10temp_data *data, int limit)
 {
 	struct hygon_private *h_priv;
-	u32 regval;
+	u32 regval,tmp;
 	int i;
 
 	h_priv = (struct hygon_private *)data->priv;
 	for (i = h_priv->index_2nd; i < limit; i++) {
-		amd_smn_read(amd_pci_dev_to_node_id(pdev),
+		// malathi change to avoid warning
+		if (!amd_smn_read(amd_pci_dev_to_node_id(pdev),
 			     ZEN_CCD_TEMP(h_priv->offset_2nd,
 			     i - h_priv->index_2nd),
-			     &regval);
+			     &tmp))
+			regval = tmp;
+		else
+			continue;
+
 		if (regval & ZEN_CCD_TEMP_VALID)
 			data->show_temp |= BIT(TCCD_BIT(i));
 	}
