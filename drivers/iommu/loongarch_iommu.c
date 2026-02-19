@@ -1180,14 +1180,6 @@ static phys_addr_t la_iommu_iova_to_phys(struct iommu_domain *domain,
 	return phys;
 }
 
-static void la_domain_set_plaform_dma_ops(struct device *dev)
-{
-	/*
-	 * loongarch doesn't setup default domains because we can't hook into the
-	 * normal probe path
-	 */
-}
-
 static int la_iommu_def_domain_type(struct device *dev)
 {
 	return IOMMU_DOMAIN_IDENTITY;
@@ -1202,7 +1194,6 @@ const struct iommu_ops la_iommu_ops = {
 	.pgsize_bitmap	= LA_IOMMU_PGSIZE,
 	.def_domain_type = la_iommu_def_domain_type,
 	.owner = THIS_MODULE,
-	.set_platform_dma_ops = la_domain_set_plaform_dma_ops,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= la_iommu_attach_dev,
 		.map = la_iommu_map,
