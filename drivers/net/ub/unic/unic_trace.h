@@ -69,15 +69,15 @@ DEFINE_EVENT(unic_cqe_template, unic_rx_cqe,
 	     TP_ARGS(netdev, cq, pi, ci, cqe_mask));
 
 TRACE_EVENT(unic_tx_sqe,
-	    TP_PROTO(struct unic_sq *sq, u16 sqebb_num, u16 sqebb_mask,
-		     bool doorbell),
-	    TP_ARGS(sq, sqebb_num, sqebb_mask, doorbell),
+	    TP_PROTO(struct unic_sq *sq, u16 sqebb_num, u16 sqebb_mask),
+	    TP_ARGS(sq, sqebb_num, sqebb_mask),
 
 	    TP_STRUCT__entry(__field(u32, jfcn)
 			__field(u16, pi)
 			__field(u16, ci)
+			__field(u16, buff_pi)
+			__field(u16, buff_ci)
 			__field(u16, sqebb_num)
-			__field(bool, doorbell)
 			__field(u16, real_pi)
 			__array(u32, sqebb, trace_sqebb_num(trace_tx_max_sqebb_num))
 			__string(devname, sq->netdev->name)
@@ -86,8 +86,9 @@ TRACE_EVENT(unic_tx_sqe,
 	    TP_fast_assign(__entry->jfcn = sq->cq->jfcn;
 			__entry->pi = sq->pi;
 			__entry->ci = sq->ci;
+			__entry->buff_pi = sq->tx_buff->pi;
+			__entry->buff_ci = sq->tx_buff->ci;
 			__entry->sqebb_num = sqebb_num;
-			__entry->doorbell = doorbell;
 			__entry->real_pi = sq->pi & sqebb_mask;
 			if (__entry->real_pi + sqebb_num - 1 > sqebb_mask) {
 				memcpy(__entry->sqebb, &sq->sqebb[__entry->real_pi],
@@ -105,9 +106,9 @@ TRACE_EVENT(unic_tx_sqe,
 			__assign_str(devname, sq->netdev->name);
 	    ),
 
-	    TP_printk("%s-%u-%u/%u-%d sqe: %s",
+	    TP_printk("%s-%u-%u/%u-%u/%u sqe: %s",
 		      __get_str(devname), __entry->jfcn, __entry->pi,
-		      __entry->ci, __entry->doorbell,
+		      __entry->ci, __entry->buff_pi, __entry->buff_ci,
 		      __print_array(__entry->sqebb,
 				    trace_sqebb_num(__entry->sqebb_num),
 				    sizeof(u32))
@@ -145,6 +146,29 @@ TRACE_EVENT(unic_ip_req_skb,
 				    sizeof(u32))
 	    )
 );
+
+TRACE_EVENT(unic_rq_ci_mismatch,
+	    TP_PROTO(struct unic_rq *rq, const u32 start_rqe_idx),
+	    TP_ARGS(rq, start_rqe_idx),
+
+	    TP_STRUCT__entry(__field(u16, queue_index)
+			__field(u16, ci)
+			__field(u32, start_rqe_idx)
+			__string(devname, rq->netdev->name)
+	    ),
+
+	    TP_fast_assign(__entry->queue_index = rq->queue_index;
+			__entry->ci = rq->ci;
+			__entry->start_rqe_idx = start_rqe_idx;
+			__assign_str(devname, rq->netdev->name);
+	    ),
+
+	    TP_printk("%s rq_ci: queue_index=%u sw_rq_ci=%u hw_rq_ci=%u",
+		      __get_str(devname), __entry->queue_index, __entry->ci,
+		      __entry->start_rqe_idx
+	    )
+);
+
 #endif /* _UNIC_TRACE_H_ */
 
 /* This must be outside ifdef _UNIC_TRACE_H */

@@ -72,6 +72,7 @@ enum ubcore_opcode {
 	UBCORE_OPC_SEND_INVALIDATE =
 		0x42, // remote JFR/jetty ID and seg token id
 	UBCORE_OPC_NOP = 0x51,
+	UBCORE_OPC_WRITE_ATOMIC = 0x60,
 	UBCORE_OPC_LAST
 };
 

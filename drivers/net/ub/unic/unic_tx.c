@@ -47,6 +47,7 @@
 #define UNIC_SKB_FRAGS_START_INDEX	1
 #define UNIC_SQEBB_POINT_REVERSE	(USHRT_MAX + 1)
 #define UNIC_RCV_SEND_MAX_DIFF_VAL	512U
+#define UNIC_TX_PAGES_NUM		(1024 * 1024 * 2 / PAGE_SIZE)
 
 #define unic_sqebb_cnt(sge_num) DIV_ROUND_UP((sge_num), 4)
 
@@ -62,53 +63,27 @@ static inline u16 unic_get_sqe_mask(struct unic_sq *sq)
 	return unic_get_sqe_depth(sq) - 1;
 }
 
-static u16 unic_get_spare_sqebb(struct unic_sq *sq)
+static u16 unic_get_spare_sqebb_num(struct unic_sq *sq)
 {
 	u16 sqe_depth = unic_get_sqe_depth(sq);
 	u32 pi = sq->pi;
+	u32 ci = sq->ci;
 
-	if (unlikely(sq->pi < sq->ci))
+	if (unlikely(pi < ci))
 		pi += UNIC_SQEBB_POINT_REVERSE;
 
-	return sqe_depth - (pi - sq->ci);
+	return sqe_depth - (pi - ci);
 }
 
-static void unic_unmap_skb_buffer(struct unic_sq *sq, u32 info_index,
-				  u8 skb_map_num, u16 sqebb_mask)
+static inline u16 unic_get_spare_page_num(struct unic_tx_buff *tx_buff)
 {
-	struct unic_dev *unic_dev = netdev_priv(sq->netdev);
-	struct unic_sqe_ctrl_section *ctrl;
-	struct unic_sqe_sge_section *sge;
-	struct device *dev;
-	u8 i;
+	u32 pi = tx_buff->pi;
+	u32 ci = tx_buff->ci;
 
-	ctrl = (struct unic_sqe_ctrl_section *)&sq->sqebb[info_index & sqebb_mask];
-	sge = (struct unic_sqe_sge_section *)(ctrl + 1);
-	dev = &unic_dev->comdev.adev->dev;
-	dma_unmap_single(dev->parent, sge->address, sge->length, DMA_TO_DEVICE);
+	if (unlikely(pi < ci))
+		pi += UNIC_SQEBB_POINT_REVERSE;
 
-	for (i = UNIC_SKB_FRAGS_START_INDEX; i < skb_map_num; i++) {
-		if (!((i + UNIC_SQE_CTRL_SECTION_NUM) % UNIC_SQEBB_MAX_SGE_NUM)) {
-			info_index++;
-			sge = (struct unic_sqe_sge_section *)
-			      &sq->sqebb[info_index & sqebb_mask];
-		} else {
-			sge++;
-		}
-
-		dma_unmap_page(dev->parent, sge->address, sge->length, DMA_TO_DEVICE);
-	}
-}
-
-static void unic_consume_skb(struct sk_buff *skb, u32 info_index,
-			     struct unic_sq *sq, int budget, u16 sqebb_mask)
-{
-	struct unic_sqe_ctrl_section *ctrl;
-
-	ctrl = (struct unic_sqe_ctrl_section *)&sq->sqebb[info_index & sqebb_mask];
-	unic_unmap_skb_buffer(sq, info_index, ctrl->sge_num, sqebb_mask);
-
-	napi_consume_skb(skb, budget);
+	return tx_buff->num - (pi - ci);
 }
 
 static bool unic_check_hw_ci_valid(u16 hw_ci, u16 sq_ci, struct unic_sq *sq)
@@ -147,6 +122,7 @@ static void unic_reclaim_single_sqe_space(struct unic_sq *sq, u16 sqebb_mask,
 	}
 
 	*sq_ci += sqebb_cnt;
+	sq->tx_buff->ci += sge_num;
 }
 
 static void unic_flush_unused_sqe(struct unic_sq *sq, u16 sqebb_mask,
@@ -156,7 +132,7 @@ static void unic_flush_unused_sqe(struct unic_sq *sq, u16 sqebb_mask,
 
 	while (*sq_ci != sq->pi) {
 		skb = sq->skbs[*sq_ci & sqebb_mask];
-		unic_consume_skb(skb, *sq_ci, sq, 0, sqebb_mask);
+		napi_consume_skb(skb, 0);
 		unic_reclaim_single_sqe_space(sq, sqebb_mask, sq_ci);
 	}
 }
@@ -217,11 +193,11 @@ static bool unic_reclaim_sq_space(struct unic_sq *sq, int budget, u64 *bytes,
 		skb = sq->skbs[sq_ci & sqebb_mask];
 
 		if (!clear && likely(!unic_check_hw_ci_late(sq, sq_ci))) {
-			*bytes += skb->len;
+			*bytes += skb_headlen(skb);
 			(*packets)++;
 		}
 
-		unic_consume_skb(skb, sq_ci, sq, budget, sqebb_mask);
+		napi_consume_skb(skb, budget);
 		unic_reclaim_single_sqe_space(sq, sqebb_mask, &sq_ci);
 
 		reclaimed = true;
@@ -236,9 +212,8 @@ static bool unic_reclaim_sq_space(struct unic_sq *sq, int budget, u64 *bytes,
 
 void unic_poll_tx(struct unic_sq *sq, int budget)
 {
-#define UNIC_MIN_SPARE_SQEBB DIV_ROUND_UP(UNIC_SQE_CTRL_SECTION_NUM + \
-					  UNIC_SQE_MAX_SGE_NUM, \
-					  UNIC_SQEBB_MAX_SGE_NUM)
+#define UNIC_MIN_SPARE_SQEBB	1
+#define UNIC_MIN_SPARE_PAGE	2
 
 	struct net_device *netdev = sq->netdev;
 	struct netdev_queue *dev_queue;
@@ -258,7 +233,8 @@ void unic_poll_tx(struct unic_sq *sq, int budget)
 	netdev_tx_completed_queue(dev_queue, packets, bytes);
 
 	if (unlikely(netif_carrier_ok(netdev) &&
-		     unic_get_spare_sqebb(sq) >= UNIC_MIN_SPARE_SQEBB)) {
+		     unic_get_spare_sqebb_num(sq) >= UNIC_MIN_SPARE_SQEBB &&
+		     unic_get_spare_page_num(sq->tx_buff) >= UNIC_MIN_SPARE_PAGE)) {
 		unic_dev = netdev_priv(netdev);
 		if (netif_tx_queue_stopped(dev_queue) &&
 		    !test_bit(UNIC_STATE_DOWN, &unic_dev->state)) {
@@ -631,10 +607,80 @@ static void unic_destroy_multi_jfs(struct unic_dev *unic_dev, u32 num,
 	unic_destroy_multi_jfs_context(adev, num, start_idx);
 }
 
-static int unic_sq_alloc_resource(struct auxiliary_device *adev,
-				  struct unic_sq *sq, u32 sqebb_depth)
+static void unic_sq_free_tx_buff_resources(struct auxiliary_device *adev,
+					   struct unic_tx_buff *tx_buff)
 {
+	struct unic_tx_page_info *page_info;
+	u16 i;
+
+	for (i = 0; i < tx_buff->num; i++) {
+		page_info = &tx_buff->page_info[i];
+		dma_unmap_page(adev->dev.parent, page_info->sge_dma_addr,
+			       PAGE_SIZE, DMA_FROM_DEVICE);
+		__free_page(page_info->p);
+	}
+
+	devm_kfree(&adev->dev, tx_buff->page_info);
+}
+
+static int unic_sq_alloc_tx_buff_resources(struct auxiliary_device *adev,
+					   struct unic_tx_buff *tx_buff,
+					   u16 page_num)
+{
+	struct unic_tx_page_info *page_info;
+	int ret;
+	u16 i;
+
+	tx_buff->page_info = devm_kcalloc(&adev->dev, page_num,
+					  sizeof(struct unic_tx_page_info),
+					  GFP_KERNEL);
+	if (!tx_buff->page_info) {
+		dev_err(adev->dev.parent, "failed to alloc unic tx page info.\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < page_num; i++) {
+		page_info = &tx_buff->page_info[i];
+		page_info->p = alloc_page(GFP_KERNEL);
+		if (!page_info->p) {
+			dev_err(adev->dev.parent,
+				"failed to alloc %uth tx page.\n", i);
+			ret = -ENOMEM;
+			goto err_alloc_pages;
+		}
+
+		page_info->sge_dma_addr = dma_map_page(adev->dev.parent,
+						       page_info->p, 0,
+						       PAGE_SIZE,
+						       DMA_FROM_DEVICE);
+		if (unlikely(dma_mapping_error(adev->dev.parent,
+					       page_info->sge_dma_addr))) {
+			dev_err(adev->dev.parent,
+				"failed to dma map %uth tx page.\n", i);
+			__free_page(page_info->p);
+			ret = -ENOMEM;
+			goto err_alloc_pages;
+		}
+
+		page_info->sge_va_addr = page_address(page_info->p);
+		tx_buff->num++;
+	}
+
+	return 0;
+
+err_alloc_pages:
+	unic_sq_free_tx_buff_resources(adev, tx_buff);
+
+	return ret;
+}
+
+static int unic_sq_alloc_resource(struct unic_dev *unic_dev, struct unic_sq *sq)
+{
+	u16 page_num = UNIC_TX_PAGES_NUM / unic_dev->channels.num;
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	u16 sqebb_depth = unic_dev->channels.sqebb_depth;
 	u32 size = sqebb_depth * sizeof(struct unic_sqebb);
+	int ret;
 
 	sq->skbs = devm_kcalloc(&adev->dev, sqebb_depth,
 				sizeof(struct sk_buff *), GFP_KERNEL);
@@ -647,24 +693,45 @@ static int unic_sq_alloc_resource(struct auxiliary_device *adev,
 				       &sq->sqebb_dma_addr, GFP_KERNEL);
 	if (!sq->sqebb) {
 		dev_err(adev->dev.parent, "failed to dma alloc unic sqebb.\n");
+		ret = -ENOMEM;
 		goto err_alloc_unic_sqebb;
+	}
+
+	sq->tx_buff = devm_kzalloc(&adev->dev, sizeof(struct unic_tx_buff),
+				   GFP_KERNEL);
+	if (!sq->tx_buff) {
+		ret = -ENOMEM;
+		goto err_alloc_tx_buff;
+	}
+
+	ret = unic_sq_alloc_tx_buff_resources(adev, sq->tx_buff, page_num);
+	if (ret) {
+		dev_err(adev->dev.parent, "failed to alloc sqebb resources.\n");
+		goto err_alloc_tx_buff_resources;
 	}
 
 	return 0;
 
+err_alloc_tx_buff_resources:
+	devm_kfree(&adev->dev, sq->tx_buff);
+err_alloc_tx_buff:
+	dma_free_coherent(adev->dev.parent, size, sq->sqebb, sq->sqebb_dma_addr);
 err_alloc_unic_sqebb:
 	devm_kfree(&adev->dev, sq->skbs);
 
-	return -ENOMEM;
+	return ret;
 }
 
-static void unic_sq_free_resource(struct auxiliary_device *adev,
-				  struct unic_sq *sq, u32 sqebb_depth)
+static void unic_sq_free_resource(struct unic_dev *unic_dev, struct unic_sq *sq)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	u16 sqebb_depth = unic_dev->channels.sqebb_depth;
 	u32 size = sqebb_depth * sizeof(struct unic_sqebb);
 	u16 sqebb_mask = unic_get_sqe_mask(sq);
 
 	unic_flush_unused_sqe(sq, sqebb_mask, &sq->ci);
+	unic_sq_free_tx_buff_resources(adev, sq->tx_buff);
+	devm_kfree(&adev->dev, sq->tx_buff);
 	dma_free_coherent(adev->dev.parent, size, sq->sqebb, sq->sqebb_dma_addr);
 	devm_kfree(&adev->dev, sq->skbs);
 }
@@ -677,7 +744,6 @@ int unic_create_sq(struct unic_dev *unic_dev, u32 idx)
 	struct unic_channel *channel = &unic_dev->channels.c[idx];
 	struct unic_sq *sq;
 	u32 jfs_start_idx;
-	u16 sqebb_depth;
 	u32 offset;
 	int ret;
 
@@ -697,8 +763,7 @@ int unic_create_sq(struct unic_dev *unic_dev, u32 idx)
 		return -ENOMEM;
 	}
 
-	sqebb_depth = unic_dev->channels.sqebb_depth;
-	ret = unic_sq_alloc_resource(adev, sq, sqebb_depth);
+	ret = unic_sq_alloc_resource(unic_dev, sq);
 	if (ret)
 		goto err_alloc_res;
 
@@ -724,7 +789,7 @@ int unic_create_sq(struct unic_dev *unic_dev, u32 idx)
 	return 0;
 
 err_mbx_create_jfs_context:
-	unic_sq_free_resource(adev, sq, sqebb_depth);
+	unic_sq_free_resource(unic_dev, sq);
 err_alloc_res:
 	devm_kfree(&adev->dev, sq);
 	return ret;
@@ -738,8 +803,7 @@ static void unic_free_multi_sq_resource(struct unic_dev *unic_dev, u32 num)
 
 	for (i = 0; i < num; i++) {
 		channel = &unic_dev->channels.c[i];
-		unic_sq_free_resource(adev, channel->sq,
-				      unic_dev->channels.sqebb_depth);
+		unic_sq_free_resource(unic_dev, channel->sq);
 		devm_kfree(&adev->dev, channel->sq);
 		channel->sq = NULL;
 	}
@@ -769,8 +833,7 @@ static int unic_apply_ub_pkt(struct unic_dev *unic_dev, struct unic_sq *sq,
 	struct ublhdr *ubl = (struct ublhdr *)skb->data;
 
 	if (unic_dev_ubl_supported(unic_dev)) {
-		if (unlikely(ubl->cfg == UB_NOIP_CFG_TYPE &&
-			     unic_is_port_down(unic_dev))) {
+		if (unlikely(ubl->cfg == UB_NOIP_CFG_TYPE)) {
 			unic_sq_stats_inc(sq, cfg5_drop_cnt);
 			return -EIO;
 		}
@@ -786,47 +849,31 @@ static int unic_apply_ub_pkt(struct unic_dev *unic_dev, struct unic_sq *sq,
 }
 #endif
 
-static u32 unic_tx_need_sge_num(struct sk_buff *skb)
-{
-	u32 sge_num = 1, i, size;
-	skb_frag_t *frag;
-
-	if (likely(skb->len <= UNIC_SGE_MAX_PAYLOAD && !skb_has_frag_list(skb)))
-		return skb_shinfo(skb)->nr_frags + 1U;
-
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-		frag = &skb_shinfo(skb)->frags[i];
-		size = skb_frag_size(frag);
-		if (!size)
-			continue;
-
-		sge_num++;
-	}
-
-	return sge_num;
-}
-
 static int unic_maybe_stop_tx(struct net_device *netdev, struct unic_sq *sq,
 			      u32 sge_num)
 {
-	u32 sqebb_num = unic_sqebb_cnt(sge_num + UNIC_SQE_CTRL_SECTION_NUM);
-	struct unic_dev *unic_dev = netdev_priv(netdev);
-	u16 spare_num = unic_get_spare_sqebb(sq);
+	u16 spare_page, spare_sqebb, need_sqebb;
+	struct unic_dev *unic_dev;
 
 	if (unlikely(sge_num > UNIC_SQE_MAX_SGE_NUM)) {
 		unic_sq_stats_inc(sq, over_max_sge_num);
 		return -ENOMEM;
 	}
 
-	if (likely(spare_num >= sqebb_num))
+	spare_sqebb = unic_get_spare_sqebb_num(sq);
+	spare_page = unic_get_spare_page_num(sq->tx_buff);
+	need_sqebb = unic_sqebb_cnt(sge_num + UNIC_SQE_CTRL_SECTION_NUM);
+	if (likely(spare_sqebb >= need_sqebb && spare_page >= sge_num))
 		return 0;
 
 	netif_stop_subqueue(netdev, sq->queue_index);
 	smp_mb(); /* Memory barrier before checking sqebb space */
 
+	unic_dev = netdev_priv(netdev);
 	if (unlikely(netif_carrier_ok(netdev) &&
 		     !test_bit(UNIC_STATE_DOWN, &unic_dev->state) &&
-		     unic_get_spare_sqebb(sq) > sqebb_num)) {
+		     unic_get_spare_sqebb_num(sq) >= need_sqebb &&
+		     unic_get_spare_page_num(sq->tx_buff) >= sge_num)) {
 		netif_start_subqueue(netdev, sq->queue_index);
 		return 0;
 	}
@@ -1044,24 +1091,23 @@ vlan_err:
 	return ret;
 }
 
-static inline void unic_fill_sge_section(struct unic_sqe_sge_section *sge, u64 addr,
-					 u32 length, u32 tid)
+static inline void unic_fill_sge_section(struct unic_sqe_sge_section *sge,
+					 u64 addr, u32 length)
 {
 	sge->length = length;
-	sge->token_id = tid;
 	sge->address = addr;
 }
 
 static inline struct unic_sqe_sge_section *
 unic_get_next_sge(u8 *sec_num, struct unic_sqe_sge_section *sge,
-		  struct unic_sq *sq, u16 sqebb_mask)
+		  struct unic_sq *sq, u16 sqebb_mask, u16 *sq_pi)
 {
 	(*sec_num)++;
 	if (*sec_num >= UNIC_SQEBB_MAX_SGE_NUM) {
-		sq->pi++;
+		(*sq_pi)++;
 		*sec_num = 0;
 		sge = (struct unic_sqe_sge_section *)
-		      &sq->sqebb[sq->pi & sqebb_mask];
+		      &sq->sqebb[*sq_pi & sqebb_mask];
 	} else {
 		sge++;
 	}
@@ -1069,104 +1115,36 @@ unic_get_next_sge(u8 *sec_num, struct unic_sqe_sge_section *sge,
 	return sge;
 }
 
-static int unic_map_skb_frags(struct unic_sq *sq, struct sk_buff *skb,
-			      u8 *skb_map_num, u8 *sec_num,
-			      struct unic_sqe_sge_section *sge)
+static void unic_handle_sge_section(struct unic_sq *sq, struct sk_buff *skb,
+				    struct unic_sqe_sge_section *sge,
+				    u16 sqebb_mask, u8 sge_num)
 {
-	struct net_device *netdev = sq->netdev;
-	u16 sqebb_mask = unic_get_sqe_mask(sq);
-	struct unic_dev *unic_dev;
-	struct device *dev;
-	skb_frag_t *frag;
-	dma_addr_t dma;
-	u32 size, i;
-
-	unic_dev = netdev_priv(netdev);
-	dev = &unic_dev->comdev.adev->dev;
-
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-		frag = &skb_shinfo(skb)->frags[i];
-		size = skb_frag_size(frag);
-		if (!size)
-			continue;
-
-		dma = skb_frag_dma_map(dev->parent, frag, 0, size, DMA_TO_DEVICE);
-		if (unlikely(dma_mapping_error(dev, dma))) {
-			unic_sq_stats_inc(sq, map_err);
-			return -ENOMEM;
-		}
-
-		sge = unic_get_next_sge(sec_num, sge, sq, sqebb_mask);
-		unic_fill_sge_section(sge, (u64)dma, size, unic_dev->tid);
-
-		(*skb_map_num)++;
-	}
-
-	return 0;
-}
-
-static void unic_clear_sge_section(struct unic_sq *sq, u16 idx, u8 skb_map_num,
-				   u16 sqebb_mask)
-{
-	struct unic_sqe_ctrl_section *ctrl;
-	u16 index = idx & sqebb_mask;
-	u8 sqebb_cnt;
-
-	ctrl = (struct unic_sqe_ctrl_section *)&sq->sqebb[index];
-	sqebb_cnt = unic_sqebb_cnt(skb_map_num + UNIC_SQE_CTRL_SECTION_NUM);
-	if (unlikely(index + sqebb_cnt - 1 > sqebb_mask)) {
-		memset(ctrl, 0, (sqebb_mask - index + 1) * sizeof(struct unic_sqebb));
-		memset(&sq->sqebb[0], 0,
-		       (index + sqebb_cnt - 1 - sqebb_mask) * sizeof(struct unic_sqebb));
-	} else {
-		memset(ctrl, 0, sqebb_cnt * sizeof(struct unic_sqebb));
-	}
-}
-
-static int unic_handle_sge_section(struct unic_sq *sq, struct sk_buff *skb,
-				   struct unic_sqe_sge_section *sge,
-				   u16 sqebb_mask)
-{
+	struct unic_tx_buff *tx_buff = sq->tx_buff;
 	u8 sec_num = UNIC_SQE_CTRL_SECTION_NUM;
-	struct net_device *netdev = sq->netdev;
-	struct unic_dev *unic_dev;
-	struct device *dev;
-	u8 skb_map_num = 0;
-	u16 pi = sq->pi;
-	dma_addr_t dma;
-	u32 size;
+	struct unic_tx_page_info *page_info;
+	u32 size = skb_headlen(skb);
+	u16 sq_pi = sq->pi;
+	u32 i, len;
 
-	size = skb_headlen(skb);
-	unic_dev = netdev_priv(netdev);
-	dev = &unic_dev->comdev.adev->dev;
+	for (i = 0; i < sge_num; i++) {
+		page_info = &tx_buff->page_info[tx_buff->pi % tx_buff->num];
+		len = i < sge_num - 1 ? PAGE_SIZE : size;
+		memcpy(page_info->sge_va_addr, skb->data + i * PAGE_SIZE, len);
+		unic_fill_sge_section(sge, (u64)page_info->sge_dma_addr, len);
 
-	dma = dma_map_single(dev->parent, skb->data, size, DMA_TO_DEVICE);
-	if (unlikely(dma_mapping_error(dev, dma))) {
-		unic_sq_stats_inc(sq, map_err);
-		return -ENOMEM;
+		sge = unic_get_next_sge(&sec_num, sge, sq, sqebb_mask, &sq_pi);
+		size -= PAGE_SIZE;
+		tx_buff->pi++;
 	}
-
-	unic_fill_sge_section(sge, (u64)dma, size, unic_dev->tid);
-	skb_map_num++;
-
-	if (unlikely(unic_map_skb_frags(sq, skb, &skb_map_num, &sec_num, sge)))
-		goto dma_map_err;
-
-	sq->pi = pi;
-	return 0;
-
-dma_map_err:
-	unic_unmap_skb_buffer(sq, pi, skb_map_num, sqebb_mask);
-	unic_clear_sge_section(sq, pi, skb_map_num, sqebb_mask);
-	sq->pi = pi;
-	return -ENOMEM;
 }
 
-static int unic_handle_sqe(struct sk_buff *skb, struct unic_sq *sq, u8 sge_num)
+static int unic_handle_sqe(struct sk_buff *skb, struct unic_sq *sq)
 {
+	u8 sge_num = DIV_ROUND_UP(skb_headlen(skb), PAGE_SIZE);
 	u16 sqebb_mask = unic_get_sqe_mask(sq);
 	struct unic_sqe_ctrl_section *ctrl;
 	struct unic_sqe_sge_section *sge;
+	u16 sqebb_num;
 	int ret;
 
 	ctrl = (struct unic_sqe_ctrl_section *)&sq->sqebb[sq->pi & sqebb_mask];
@@ -1175,24 +1153,19 @@ static int unic_handle_sqe(struct sk_buff *skb, struct unic_sq *sq, u8 sge_num)
 		return ret;
 
 	sge = (struct unic_sqe_sge_section *)(ctrl + 1);
-	ret = unic_handle_sge_section(sq, skb, sge, sqebb_mask);
-	if (unlikely(ret))
-		return ret;
+	unic_handle_sge_section(sq, skb, sge, sqebb_mask, sge_num);
 
 	sq->skbs[sq->pi & sqebb_mask] = skb;
+	sqebb_num = unic_sqebb_cnt(sge_num + UNIC_SQE_CTRL_SECTION_NUM);
 
-	return ret;
+	trace_unic_tx_sqe(sq, sqebb_num, sqebb_mask);
+	sq->pi += sqebb_num;
+	return 0;
 }
 
-static void unic_tx_doorbell(struct unic_sq *sq, u16 sge_num, bool doorbell)
+static void unic_tx_doorbell(struct unic_sq *sq, bool doorbell)
 {
-	u16 sqebb_num = unic_sqebb_cnt(sge_num + UNIC_SQE_CTRL_SECTION_NUM);
-	u16 sqebb_mask = unic_get_sqe_mask(sq);
 	struct unic_jfs_db jfs_db = {0};
-
-	trace_unic_tx_sqe(sq, sqebb_num, sqebb_mask, doorbell);
-
-	sq->pi += sqebb_num;
 
 	if (!doorbell) {
 		unic_sq_stats_inc(sq, more);
@@ -1211,7 +1184,7 @@ static void unic_tx_compensate_doorbell(struct unic_sq *sq)
 	if (sq->last_pi == sq->pi)
 		return;
 
-	trace_unic_tx_sqe(sq, 0, unic_get_sqe_mask(sq), true);
+	trace_unic_tx_sqe(sq, 0, unic_get_sqe_mask(sq));
 	jfs_db.pi = cpu_to_le16(sq->pi);
 	writel(*(u32 *)&jfs_db, sq->db_addr);
 	sq->last_pi = sq->pi;
@@ -1237,7 +1210,7 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* Prefetch the data used later */
 	prefetch(skb->data);
 
-	sge_num = unic_tx_need_sge_num(skb);
+	sge_num = DIV_ROUND_UP(skb_headlen(skb), PAGE_SIZE);
 	ret = unic_maybe_stop_tx(netdev, sq, sge_num);
 	if (unlikely(ret < 0)) {
 		if (ret == -EBUSY) {
@@ -1250,19 +1223,19 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	}
 
 #ifdef CONFIG_UB_UNIC_UBL
-	if (unlikely(unic_apply_ub_pkt(unic_dev, sq, skb)))
+	if (unic_apply_ub_pkt(unic_dev, sq, skb))
 		goto xmit_drop_pkt;
 #endif
 
-	ret = unic_handle_sqe(skb, sq, sge_num);
+	ret = unic_handle_sqe(skb, sq);
 	if (unlikely(ret))
 		goto xmit_drop_pkt;
 
 	dev_queue = netdev_get_tx_queue(netdev, sq->queue_index);
-	doorbell = __netdev_tx_sent_queue(dev_queue, skb->len,
+	doorbell = __netdev_tx_sent_queue(dev_queue, skb_headlen(skb),
 					  netdev_xmit_more());
 
-	unic_tx_doorbell(sq, sge_num, doorbell);
+	unic_tx_doorbell(sq, doorbell);
 
 	return NETDEV_TX_OK;
 
@@ -1315,7 +1288,6 @@ void unic_dump_sq_stats(struct net_device *netdev, u32 queue_idx)
 		  "pad_err:          %llu\n"
 		  "bytes:            %llu\n"
 		  "packets:          %llu\n"
-		  "map_err:          %llu\n"
 		  "busy:             %llu\n"
 		  "more:             %llu\n"
 		  "restart_queue:    %llu\n"
@@ -1327,10 +1299,10 @@ void unic_dump_sq_stats(struct net_device *netdev, u32 queue_idx)
 		  "cfg5_drop_cnt:    %llu\n",
 		  queue_idx, queue->state, sq->pi, sq->ci,
 		  sq_stats->pad_err, sq_stats->bytes, sq_stats->packets,
-		  sq_stats->map_err, sq_stats->busy, sq_stats->more,
-		  sq_stats->restart_queue, sq_stats->over_max_sge_num,
-		  sq_stats->csum_err, sq_stats->ci_mismatch, sq_stats->fd_cnt,
-		  sq_stats->drop_cnt, sq_stats->cfg5_drop_cnt);
+		  sq_stats->busy, sq_stats->more, sq_stats->restart_queue,
+		  sq_stats->over_max_sge_num, sq_stats->csum_err,
+		  sq_stats->ci_mismatch, sq_stats->fd_cnt, sq_stats->drop_cnt,
+		  sq_stats->cfg5_drop_cnt);
 }
 
 void unic_mask_key_words(void *sqebb)

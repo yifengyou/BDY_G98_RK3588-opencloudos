@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <ub/urma/ubcore_types.h>
+#include <ub/urma/ubcore_uapi.h>
 #include "ubcore_cmd.h"
 #include "ubcore_log.h"
 #include "ubcore_priv.h"
@@ -27,13 +28,22 @@
 #define UBCORE_MAX_DSCP_VL_NUM 64
 #define UBCORE_CMD_MAX_MUE_NUM 128
 
-enum ubcore_uvs_global_cmd { UBCORE_CMD_SET_TOPO = 1, UBCORE_CMD_GLOBAL_LAST };
+enum ubcore_uvs_global_cmd {
+	UBCORE_CMD_SET_TOPO = 1,
+	UBCORE_CMD_GET_ROUTE_LIST = 2,
+	UBCORE_CMD_GLOBAL_LAST
+};
 
 struct ubcore_cmd_set_topo {
 	struct {
 		void *topo_info;
 		uint32_t topo_num;
 	} in;
+};
+
+struct ubcore_cmd_get_route_list {
+	struct ubcore_route in;
+	struct ubcore_route_list out;
 };
 
 int ubcore_uvs_mue_cmd_parse(struct ubcore_mue_file *file,

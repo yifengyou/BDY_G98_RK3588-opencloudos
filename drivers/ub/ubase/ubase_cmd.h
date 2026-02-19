@@ -13,8 +13,8 @@
 
 #define UBASE_CMDQ_DESC_NUM_S		3
 #define UBASE_CMDQ_DESC_NUM		1024
-#define UBASE_CMDQ_TX_TIMEOUT		3000000
-#define UBASE_CMDQ_MBX_TX_TIMEOUT	30000
+#define UBASE_CMDQ_TX_TIMEOUT		300000
+#define UBASE_CMDQ_MBX_TX_TIMEOUT	50
 #define UBASE_CMDQ_CLEAR_WAIT_TIME	200
 #define UBASE_CMDQ_WAIT_TIME		10
 
@@ -43,10 +43,26 @@ enum ubase_cmd_state {
 };
 
 struct ubase_query_version_cmd {
-	__le32 firmware;
-	__le32 hardware;
-	__le32 rsv;
-	__le32 caps[UBASE_CAP_LEN];
+	__le32	fw_version;
+	u8	rsv[20];
+};
+
+enum ubase_drv_cap_bit {
+	UBASE_CAP_SUP_ACTIVATE_B = 0,
+};
+
+struct ubase_notify_drv_cap_cmd {
+	u8	cap_bits[24]; /* see ubase_drv_cap_bit */
+};
+
+#define UBASE_UBCL_CFG_DATA_ALIGN	4
+#define UBASE_UBCL_CFG_DATA_NUM		60
+struct ubase_ubcl_config_cmd {
+	__le16	is_query_size;
+	__le16	offset;
+	__le16	size;
+	__le16	rsv;
+	__le32	data[UBASE_UBCL_CFG_DATA_NUM];
 };
 
 enum ubase_ue2ue_sub_cmd {
@@ -67,7 +83,8 @@ struct ubase_ue2ue_ctrlq_head {
 	u16 out_size;
 	u8 need_resp : 1;
 	u8 is_resp : 1;
-	u8 rsv : 6;
+	u8 is_async : 1;
+	u8 rsv : 5;
 };
 
 struct ubase_start_perf_stats_cmd {
@@ -96,10 +113,10 @@ struct ubase_cfg_ets_vl_sch_cmd {
 };
 
 struct ubase_cfg_tm_vl_sch_cmd {
-	__le16 bus_ue_id;
+	u8 rsvd0[2];
 	__le16 vl_bitmap;
 	__le16 vl_tsa;
-	u8 rsvd[2];
+	u8 rsvd1[2];
 	u8 vl_bw[UBASE_MAX_VL_NUM];
 };
 
@@ -293,9 +310,6 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 int __ubase_cmd_send_in(struct ubase_dev *udev, struct ubase_cmd_buf *in);
 int __ubase_cmd_send_inout(struct ubase_dev *udev, struct ubase_cmd_buf *in,
 			   struct ubase_cmd_buf *out);
-
-int ubase_cmd_mbx_event_cb(struct notifier_block *nb, unsigned long action,
-			   void *data);
 
 int __ubase_register_crq_event(struct ubase_dev *udev,
 			       struct ubase_crq_event_nb *nb);

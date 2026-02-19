@@ -200,6 +200,10 @@ static void __print_mce(struct mce_hw_err *err)
 	if (mce_flags.smca) {
 		if (m->synd)
 			pr_cont("SYND %llx ", m->synd);
+		if (err->vendor.amd.synd1)
+			pr_cont("SYND1 %llx ", err->vendor.amd.synd1);
+		if (err->vendor.amd.synd2)
+			pr_cont("SYND2 %llx ", err->vendor.amd.synd2);
 		if (m->ipid)
 			pr_cont("IPID %llx ", m->ipid);
 	}
@@ -368,7 +372,7 @@ void ex_handler_msr_mce(struct pt_regs *regs, bool wrmsr)
 }
 
 /* MSR access wrappers used for error injection */
-noinstr u64 mce_rdmsrl(u32 msr)
+noinstr u64 mce_rdmsrq(u32 msr)
 {
 	DECLARE_ARGS(val, low, high);
 
@@ -424,7 +428,7 @@ noinstr void mce_wrmsrq(u32 msr, u64 v)
 	low  = (u32)v;
 	high = (u32)(v >> 32);
 
-	/* See comment in mce_rdmsrl() */
+	/* See comment in mce_rdmsrq() */
 	asm volatile("1: wrmsr\n"
 		     "2:\n"
 		     _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_WRMSR_IN_MCE)
@@ -448,7 +452,7 @@ static noinstr void mce_gather_info(struct mce_hw_err *err, struct pt_regs *regs
 	instrumentation_end();
 
 	m = &err->m;
-	m->mcgstatus = mce_rdmsrl(MSR_IA32_MCG_STATUS);
+	m->mcgstatus = mce_rdmsrq(MSR_IA32_MCG_STATUS);
 	if (regs) {
 		/*
 		 * Get the address of the instruction at the time of
@@ -468,14 +472,14 @@ static noinstr void mce_gather_info(struct mce_hw_err *err, struct pt_regs *regs
 		}
 		/* Use accurate RIP reporting if available. */
 		if (mca_cfg.rip_msr)
-			m->ip = mce_rdmsrl(mca_cfg.rip_msr);
+			m->ip = mce_rdmsrq(mca_cfg.rip_msr);
 	}
 }
 
-int mce_available(struct cpuinfo_x86 *c)
+bool mce_available(struct cpuinfo_x86 *c)
 {
 	if (mca_cfg.disabled)
-		return 0;
+		return false;
 	return cpu_has(c, X86_FEATURE_MCE) && cpu_has(c, X86_FEATURE_MCA);
 }
 
@@ -500,6 +504,9 @@ int mce_usable_address(struct mce *m)
 {
 	if (!(m->status & MCI_STATUS_ADDRV))
 		return 0;
+
+	if (m->cpuvendor == X86_VENDOR_AMD)
+		return amd_mce_usable_address(m);
 
 	/* Checks after this one are Intel/Zhaoxin-specific: */
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_INTEL &&
@@ -654,10 +661,13 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 	struct mce *m = &err->m;
 
 	if (m->status & MCI_STATUS_MISCV)
-		m->misc = mce_rdmsrl(mca_msr_reg(i, MCA_MISC));
+		m->misc = mce_rdmsrq(mca_msr_reg(i, MCA_MISC));
 
 	if (m->status & MCI_STATUS_ADDRV) {
-		m->addr = mce_rdmsrl(mca_msr_reg(i, MCA_ADDR));
+		if (m->kflags & MCE_CHECK_DFR_REGS)
+			m->addr = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DEADDR(i));
+		else
+			m->addr = mce_rdmsrq(mca_msr_reg(i, MCA_ADDR));
 
 		/*
 		 * Mask the reported address by the reported granularity.
@@ -672,14 +682,40 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 	}
 
 	if (mce_flags.smca) {
-		m->ipid = mce_rdmsrl(MSR_AMD64_SMCA_MCx_IPID(i));
+		m->ipid = mce_rdmsrq(MSR_AMD64_SMCA_MCx_IPID(i));
 
-		if (m->status & MCI_STATUS_SYNDV)
-			m->synd = mce_rdmsrl(MSR_AMD64_SMCA_MCx_SYND(i));
+		if (m->status & MCI_STATUS_SYNDV) {
+			m->synd = mce_rdmsrq(MSR_AMD64_SMCA_MCx_SYND(i));
+			err->vendor.amd.synd1 = mce_rdmsrq(MSR_AMD64_SMCA_MCx_SYND1(i));
+			err->vendor.amd.synd2 = mce_rdmsrq(MSR_AMD64_SMCA_MCx_SYND2(i));
+		}
 	}
 }
 
 DEFINE_PER_CPU(unsigned, mce_poll_count);
+
+/*
+ * We have three scenarios for checking for Deferred errors:
+ *
+ * 1) Non-SMCA systems check MCA_STATUS and log error if found.
+ * 2) SMCA systems check MCA_STATUS. If error is found then log it and also
+ *    clear MCA_DESTAT.
+ * 3) SMCA systems check MCA_DESTAT, if error was not found in MCA_STATUS, and
+ *    log it.
+ */
+static bool smca_should_log_poll_error(struct mce *m)
+{
+	if (m->status & MCI_STATUS_VAL)
+		return true;
+
+	m->status = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DESTAT(m->bank));
+	if ((m->status & MCI_STATUS_VAL) && (m->status & MCI_STATUS_DEFERRED)) {
+		m->kflags |= MCE_CHECK_DFR_REGS;
+		return true;
+	}
+
+	return false;
+}
 
 /*
  * Newer Intel systems that support software error
@@ -706,6 +742,9 @@ static bool ser_should_log_poll_error(struct mce *m)
 static bool should_log_poll_error(enum mcp_flags flags, struct mce_hw_err *err)
 {
 	struct mce *m = &err->m;
+
+	if (mce_flags.smca)
+		return smca_should_log_poll_error(m);
 
 	/* If this entry is not valid, ignore it. */
 	if (!(m->status & MCI_STATUS_VAL))
@@ -774,7 +813,7 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		m->bank = i;
 
 		barrier();
-		m->status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
+		m->status = mce_rdmsrq(mca_msr_reg(i, MCA_STATUS));
 
 		/*
 		 * Update storm tracking here, before checking for the
@@ -864,8 +903,8 @@ quirk_sandybridge_ifu(int bank, struct mce *m, struct pt_regs *regs)
  */
 static noinstr bool quirk_skylake_repmov(void)
 {
-	u64 mcgstatus   = mce_rdmsrl(MSR_IA32_MCG_STATUS);
-	u64 misc_enable = mce_rdmsrl(MSR_IA32_MISC_ENABLE);
+	u64 mcgstatus   = mce_rdmsrq(MSR_IA32_MCG_STATUS);
+	u64 misc_enable = mce_rdmsrq(MSR_IA32_MISC_ENABLE);
 	u64 mc1_status;
 
 	/*
@@ -876,7 +915,7 @@ static noinstr bool quirk_skylake_repmov(void)
 	    !(misc_enable & MSR_IA32_MISC_ENABLE_FAST_STRING))
 		return false;
 
-	mc1_status = mce_rdmsrl(MSR_IA32_MCx_STATUS(1));
+	mc1_status = mce_rdmsrq(MSR_IA32_MCx_STATUS(1));
 
 	/* Check for a software-recoverable data fetch error. */
 	if ((mc1_status &
@@ -932,7 +971,7 @@ static __always_inline int mce_no_way_out(struct mce_hw_err *err, char **msg, un
 	int i;
 
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
-		m->status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
+		m->status = mce_rdmsrq(mca_msr_reg(i, MCA_STATUS));
 		if (!(m->status & MCI_STATUS_VAL))
 			continue;
 
@@ -1313,7 +1352,7 @@ __mc_scan_banks(struct mce_hw_err *err, struct pt_regs *regs,
 		m->addr = 0;
 		m->bank = i;
 
-		m->status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
+		m->status = mce_rdmsrq(mca_msr_reg(i, MCA_STATUS));
 		if (!(m->status & MCI_STATUS_VAL))
 			continue;
 
@@ -1784,7 +1823,7 @@ static void mce_timer_delete_all(void)
  * Can be called from interrupt context, but not from machine check/NMI
  * context.
  */
-int mce_notify_irq(void)
+bool mce_notify_irq(void)
 {
 	/* Not more than two messages every minute */
 	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 2);
@@ -1795,9 +1834,9 @@ int mce_notify_irq(void)
 		if (__ratelimit(&ratelimit))
 			pr_info(HW_ERR "Machine check events logged\n");
 
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_GPL(mce_notify_irq);
 
@@ -1949,25 +1988,25 @@ static void zhaoxin_apply_global_quirks(struct cpuinfo_x86 *c)
 	}
 }
 
-static int __mcheck_cpu_ancient_init(struct cpuinfo_x86 *c)
+static bool __mcheck_cpu_ancient_init(struct cpuinfo_x86 *c)
 {
 	if (c->x86 != 5)
-		return 0;
+		return false;
 
 	switch (c->x86_vendor) {
 	case X86_VENDOR_INTEL:
 		intel_p5_mcheck_init(c);
 		mce_flags.p5 = 1;
-		return 1;
+		return true;
 	case X86_VENDOR_CENTAUR:
 		winchip_mcheck_init(c);
 		mce_flags.winchip = 1;
-		return 1;
+		return true;
 	default:
-		return 0;
+		return false;
 	}
 
-	return 0;
+	return false;
 }
 
 static void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c)

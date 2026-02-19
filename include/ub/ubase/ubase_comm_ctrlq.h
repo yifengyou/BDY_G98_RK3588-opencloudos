@@ -28,16 +28,17 @@ enum ubase_ctrlq_ser_ver {
 };
 
 enum ubase_ctrlq_ser_type {
-	UBASE_CTRLQ_SER_TYPE_TP_ACL = 0x01,
-	UBASE_CTRLQ_SER_TYPE_DEV_REGISTER = 0x02,
-	UBASE_CTRLQ_SER_TYPE_IP_ACL = 0x03,
-	UBASE_CTRLQ_SER_TYPE_QOS = 0x04,
+	UBASE_CTRLQ_SER_TYPE_TP_ACL		= 0x01,
+	UBASE_CTRLQ_SER_TYPE_DEV_REGISTER	= 0x02,
+	UBASE_CTRLQ_SER_TYPE_IP_ACL		= 0x03,
+	UBASE_CTRLQ_SER_TYPE_QOS		= 0x04,
 };
 
-enum ubase_ctrlq_opc_type {
+enum ubase_ctrlq_opc_type_tp {
 	UBASE_CTRLQ_OPC_CREATE_TP	= 0x11,
 	UBASE_CTRLQ_OPC_DESTROY_TP	= 0x12,
 	UBASE_CTRLQ_OPC_TP_FLUSH_DONE	= 0x14,
+	UBASE_CTRLQ_OPC_CHECK_TP_ACTIVE	= 0x15,
 };
 
 enum ubase_ctrlq_opc_type_qos {
@@ -45,23 +46,41 @@ enum ubase_ctrlq_opc_type_qos {
 	UBASE_CTRLQ_OPC_QUERY_SL	= 0x02,
 };
 
-enum ubase_ctrlq_opc_ip {
-	UBASE_CTRLQ_OPC_NOTIFY_IP = 0x01,
-	UBASE_CTRLQ_OPC_QUERY_IP = 0x02,
+enum ubase_ctrlq_opc_type_ip {
+	UBASE_CTRLQ_OPC_NOTIFY_IP	= 0x01,
+	UBASE_CTRLQ_OPC_QUERY_IP	= 0x02,
 };
 
 enum ubase_ctrlq_opc_type_dev_register {
-	UBASE_CTRLQ_OPC_CTRLQ_CTRL	= 0x14,
-	UBASE_CTRLQ_OPC_UE_RESET_CTRL	= 0x15,
+	UBASE_CTRLQ_OPC_UPDATE_SEID		= 0x02,
+	UBASE_CTRLQ_OPC_NOTIFY_RES_RATIO	= 0x13,
+	UBASE_CTRLQ_OPC_CTRLQ_CTRL		= 0x14,
+	UBASE_CTRLQ_OPC_UE_RESET_CTRL		= 0x15,
 };
 
+/**
+ * struct ubase_ctrlq_msg - ubase ctrlq msg structure
+ * @service_ver: ctrlq service version
+ * @service_type: ctrlq service type
+ * @opcode: ctrlq opcode
+ * @need_resp: whether the message need a response
+ * @is_resp: whether the message is a response
+ * @resv: reserved bits
+ * @resp_ret: the return value of response message
+ * @resp_seq: response message sequence
+ * @in_size: input data buffer size
+ * @out_size: output data buffer size
+ * @in: input data buffer
+ * @out: output data buffer
+ */
 struct ubase_ctrlq_msg {
 	enum ubase_ctrlq_ser_ver	service_ver;
 	enum ubase_ctrlq_ser_type	service_type;
 	u8	opcode;
 	u8	need_resp : 1;
 	u8	is_resp : 1;
-	u8	resv : 6;
+	u8	is_async : 1;
+	u8	resv : 5;
 	u8	resp_ret; /* must set when the is_resp field is true. */
 	u16	resp_seq; /* must set when the is_resp field is true. */
 	u16	in_size;
@@ -70,6 +89,13 @@ struct ubase_ctrlq_msg {
 	void	*out;
 };
 
+/**
+ * struct ubase_ctrlq_event_nb - ubase ctrlq event notification block structure
+ * @service_type: ctrlq service type
+ * @opcode: ctrlq crq opcode
+ * @back: arbitrary registered pointer
+ * @crq_handler: ctrlq crq handle function
+ */
 struct ubase_ctrlq_event_nb {
 	u8	service_type;
 	u8	opcode;
@@ -80,7 +106,6 @@ struct ubase_ctrlq_event_nb {
 
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,
 			 struct ubase_ctrlq_msg *msg);
-
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
 				   struct ubase_ctrlq_event_nb *nb);
 void ubase_ctrlq_unregister_crq_event(struct auxiliary_device *aux_dev,

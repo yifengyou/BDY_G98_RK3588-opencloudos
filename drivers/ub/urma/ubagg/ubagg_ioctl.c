@@ -182,13 +182,12 @@ static bool ubagg_dev_exists(char *dev_name)
 static struct ubagg_device *ubagg_find_dev_by_name(char *dev_name)
 {
 	struct ubagg_device *dev;
-	unsigned long flags;
 
 	spin_lock(&g_ubagg_dev_list_lock);
 	list_for_each_entry(dev, &g_ubagg_dev_list, list_node) {
 		if (strncmp(dev_name, dev->master_dev_name,
 			    UBAGG_MAX_DEV_NAME_LEN) == 0) {
-			spin_unlock_irqrestore(&g_ubagg_dev_list_lock, flags);
+			spin_unlock(&g_ubagg_dev_list_lock);
 			return dev;
 		}
 	}

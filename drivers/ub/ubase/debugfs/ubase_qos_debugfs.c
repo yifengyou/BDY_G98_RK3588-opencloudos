@@ -156,7 +156,7 @@ int ubase_dbg_dump_ets_port_info(struct seq_file *s, void *data)
 	return 0;
 }
 
-int ubase_dbg_dump_rack_vl_bitmap(struct seq_file *s, void *data)
+int ubase_dbg_dump_vl_bitmap(struct seq_file *s, void *data)
 {
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
 	struct ubase_ctrlq_query_vl_resp resp = {0};
@@ -184,7 +184,7 @@ int ubase_dbg_dump_rack_vl_bitmap(struct seq_file *s, void *data)
 
 	vl_bitmap = le16_to_cpu(resp.vl_bitmap);
 
-	seq_printf(s, "rack vl bitmap : 0x%x", vl_bitmap);
+	seq_printf(s, "vl bitmap : 0x%x", vl_bitmap);
 
 	return 0;
 }
@@ -192,9 +192,6 @@ int ubase_dbg_dump_rack_vl_bitmap(struct seq_file *s, void *data)
 static void ubase_dbg_dump_adev_vl_info(struct seq_file *s,
 					struct ubase_adev_qos *qos)
 {
-	seq_puts(s, "vl:");
-	ubase_dbg_dump_arr_info(s, qos->vl, qos->vl_num);
-
 	seq_puts(s, "tp_req_vl:");
 	ubase_dbg_dump_arr_info(s, qos->tp_req_vl, qos->tp_vl_num);
 
@@ -208,9 +205,6 @@ static void ubase_dbg_dump_adev_vl_info(struct seq_file *s,
 static void ubase_dbg_dump_adev_sl_info(struct seq_file *s,
 					struct ubase_adev_qos *qos)
 {
-	seq_puts(s, "sl:");
-	ubase_dbg_dump_arr_info(s, qos->sl, qos->sl_num);
-
 	seq_puts(s, "tp_sl:");
 	ubase_dbg_dump_arr_info(s, qos->tp_sl, qos->tp_sl_num);
 
@@ -229,12 +223,10 @@ int ubase_dbg_dump_adev_qos_info(struct seq_file *s, void *data)
 		const char *format;
 		u8 qos_info;
 	} adev_qos_info[] = {
-		{"vl_num: %u\n", qos->vl_num},
 		{"tp_vl_num: %u\n", qos->tp_vl_num},
 		{"ctp_vl_num: %u\n", qos->ctp_vl_num},
 		{"tp_resp_vl_offset: %u\n", qos->tp_resp_vl_offset},
 		{"ctp_resp_vl_offset: %u\n", qos->ctp_resp_vl_offset},
-		{"sl_num: %u\n", qos->sl_num},
 		{"tp_sl_num: %u\n", qos->tp_sl_num},
 		{"ctp_sl_num: %u\n", qos->ctp_sl_num},
 		{"nic_sl_num: %u\n", qos->nic_sl_num},
@@ -250,6 +242,108 @@ int ubase_dbg_dump_adev_qos_info(struct seq_file *s, void *data)
 	ubase_dbg_dump_adev_sl_info(s, qos);
 
 	return 0;
+}
+
+static void ubase_dbg_fill_fst_fvt(struct seq_file *s,
+				   struct ubase_query_fst_fvt_rqmt_cmd *resp)
+{
+	seq_puts(s, "\tFST:\n");
+	seq_printf(s, "\t\tsl_queue_vl_num: %u\n",
+		   le16_to_cpu(resp->sl_queue_vl_num));
+	seq_printf(s, "\t\tsl_queue_start_qid: %u\n",
+		   le16_to_cpu(resp->sl_queue_start_qid));
+	seq_puts(s, "\tFVT:\n");
+	seq_printf(s, "\t\tfvt_vl_size: %u\n", le16_to_cpu(resp->fvt_vl_size));
+	seq_printf(s, "\t\tfvt_rqmt_offset: %u\n",
+		   le16_to_cpu(resp->fvt_rqmt_offset));
+}
+
+static void ubase_dbg_fill_fst_revert(struct seq_file *s,
+				      struct ubase_query_fst_fvt_rqmt_cmd *resp)
+{
+	u16 vl_num = min(UBASE_MAX_VL_NUM, le16_to_cpu(resp->sl_queue_vl_num));
+	u16 j;
+
+	seq_puts(s, "\tFST_REVERT:\n");
+	seq_puts(s, "\t\tFST_IDX  UE_IDX   QUE_IDX   VL_NUM\n");
+
+	for (j = 0; j < vl_num; j++) {
+		seq_puts(s, "\t\t");
+		seq_printf(s, "%-9u", le16_to_cpu(resp->fstr_info[j].fst_idx));
+		seq_printf(s, "%-10u", resp->fstr_info[j].queue_ue_num);
+		seq_printf(s, "%-10u", resp->fstr_info[j].queue_que_num);
+		seq_printf(s, "%-9u", le16_to_cpu(resp->fstr_info[j].queue_vl_num));
+		seq_puts(s, "\n");
+	}
+}
+
+static void ubase_dbg_fill_rqmt(struct seq_file *s,
+				struct ubase_query_fst_fvt_rqmt_cmd *resp)
+{
+	u16 vl_size = min(UBASE_MAX_VL_NUM, le16_to_cpu(resp->fvt_vl_size));
+	u16 j;
+
+	seq_puts(s, "\tRQMT:\n");
+	seq_puts(s, "\t\tFST_IDX  QUE_IDX   QUE_SHIFT\n");
+
+	for (j = 0; j < vl_size; j++) {
+		seq_puts(s, "\t\t");
+		seq_printf(s, "%-9u", le16_to_cpu(resp->rqmt_info[j].fst_idx));
+		seq_printf(s, "%-10u",
+			   le16_to_cpu(resp->rqmt_info[j].start_queue_idx));
+		seq_printf(s, "%-12u",
+			   le16_to_cpu(resp->rqmt_info[j].queue_quantity_shift));
+		seq_puts(s, "\n");
+	}
+
+	seq_puts(s, "\n");
+}
+
+static void ubase_dbg_fill_tbl_content(struct seq_file *s,
+				       struct ubase_query_fst_fvt_rqmt_cmd *resp)
+{
+	ubase_dbg_fill_fst_fvt(s, resp);
+
+	ubase_dbg_fill_fst_revert(s, resp);
+
+	ubase_dbg_fill_rqmt(s, resp);
+}
+
+int ubase_dbg_dump_fsv_fvt_rqmt(struct seq_file *s, void *data)
+{
+	struct ubase_dev *udev = dev_get_drvdata(s->private);
+	struct ubase_query_fst_fvt_rqmt_cmd resp = {0};
+	struct ubase_ue_node *ue_node;
+	u16 ue_id;
+	int ret;
+
+	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits) ||
+	     test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		return -EBUSY;
+
+	seq_puts(s, "current ue:\n");
+	ret = ubase_query_fst_fvt_rqmt(udev, &resp, 0);
+	if (ret)
+		return ret;
+
+	ubase_dbg_fill_tbl_content(s, &resp);
+
+	mutex_lock(&udev->ue_list_lock);
+	list_for_each_entry(ue_node, &udev->ue_list, list) {
+		ue_id = ue_node->bus_ue_id;
+		memset(&resp, 0, sizeof(resp));
+
+		seq_printf(s, "ue%u:\n", ue_id);
+
+		ret = ubase_query_fst_fvt_rqmt(udev, &resp, ue_id);
+		if (ret)
+			goto out;
+		ubase_dbg_fill_tbl_content(s, &resp);
+	}
+
+out:
+	mutex_unlock(&udev->ue_list_lock);
+	return ret;
 }
 
 static void ubase_dbg_fill_tm_queue_seq(struct seq_file *s,

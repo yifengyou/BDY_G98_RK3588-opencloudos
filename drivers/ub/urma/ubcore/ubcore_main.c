@@ -10,7 +10,6 @@
  */
 
 #include <linux/module.h>
-
 #include "ubcore_main.h"
 #include "ubcore_log.h"
 #include "ubcore_workqueue.h"
@@ -20,6 +19,11 @@
 #include "ubcore_connect_bonding.h"
 #include "ubcore_genl.h"
 #include "ubcm/ub_cm.h"
+
+#define UBCORE_LOG_FILE_PERMISSION (0644)
+
+module_param(g_ubcore_log_level, uint, UBCORE_LOG_FILE_PERMISSION);
+MODULE_PARM_DESC(g_ubcore_log_level, " 3: ERR, 4: WARNING, 6: INFO, 7: DEBUG");
 
 static int __init ubcore_init(void)
 {

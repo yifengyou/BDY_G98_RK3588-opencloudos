@@ -23,9 +23,11 @@
 #include "unic_event.h"
 #include "unic_guid.h"
 #include "unic_hw.h"
+#include "unic_ip.h"
 #include "unic_qos_hw.h"
+#include "unic_mac.h"
 #include "unic_netdev.h"
-#include "unic_rack_ip.h"
+#include "unic_vlan.h"
 #include "unic_dev.h"
 
 #define UNIC_WATCHDOG_TIMEOUT (5 * HZ)
@@ -44,6 +46,7 @@ MODULE_PARM_DESC(debug, "enable unic debug log, 0:disable, others:enable, defaul
 
 #define DEFAULT_MSG_LEVEL (NETIF_MSG_PROBE | NETIF_MSG_LINK | \
 			   NETIF_MSG_IFDOWN | NETIF_MSG_IFUP)
+#define DEFAULT_RSS_SIZE 1
 
 static struct workqueue_struct *unic_wq;
 
@@ -232,6 +235,43 @@ static int unic_init_vl_maxrate(struct unic_dev *unic_dev)
 					 unic_dev->channels.vl.vl_bitmap);
 }
 
+static int unic_init_pause(struct unic_dev *unic_dev)
+{
+	struct unic_pfc_info *pfc_info = &unic_dev->channels.vl.pfc_info;
+	int ret;
+
+	if (!unic_dev_pause_supported(unic_dev))
+		return 0;
+
+	ret = unic_mac_pause_en_cfg(unic_dev, UNIC_RX_TX_PAUSE_ON,
+				    UNIC_RX_TX_PAUSE_ON);
+	if (ret)
+		return ret;
+
+	pfc_info->fc_mode = UNIC_TX_PAUSE_EN | UNIC_RX_PAUSE_EN;
+
+	return ret;
+}
+
+static int unic_init_pfc(struct unic_dev *unic_dev)
+{
+	if (!unic_dev_pfc_supported(unic_dev))
+		return 0;
+
+	return unic_pfc_pause_cfg(unic_dev, 0);
+}
+
+static int unic_init_fc_mode(struct unic_dev *unic_dev)
+{
+	int ret;
+
+	ret = unic_init_pause(unic_dev);
+	if (ret)
+		return ret;
+
+	return unic_init_pfc(unic_dev);
+}
+
 static int unic_init_vl_info(struct unic_dev *unic_dev)
 {
 	int ret;
@@ -248,10 +288,12 @@ static int unic_init_vl_info(struct unic_dev *unic_dev)
 		return ret;
 
 	ret = unic_init_vl_maxrate(unic_dev);
-	if (ret)
+	if (ret && ret != -EPERM)
 		return ret;
 
-	return unic_init_vl_sch(unic_dev);
+	ret = unic_init_vl_sch(unic_dev);
+
+	return ret == -EPERM ? 0 : ret;
 }
 
 static int unic_init_channels_attr(struct unic_dev *unic_dev)
@@ -267,7 +309,7 @@ static int unic_init_channels_attr(struct unic_dev *unic_dev)
 
 	channels->vl.vl_num = 1;
 	channels->rss_vl_num = 1;
-	channels->rss_size = unic_channels_max_num(unic_dev->comdev.adev);
+	channels->rss_size = DEFAULT_RSS_SIZE;
 	channels->num = channels->rss_size * channels->rss_vl_num;
 	channels->sqebb_depth = unic_caps->jfs.depth;
 	channels->rqe_depth = unic_caps->jfr.depth;
@@ -291,6 +333,30 @@ static void unic_uninit_channels_attr(struct unic_dev *unic_dev)
 	struct unic_channels *channels = &unic_dev->channels;
 
 	mutex_destroy(&channels->mutex);
+}
+
+u16 unic_cqe_period_round_down(u16 cqe_period)
+{
+	u16 period[] = {
+		UNIC_CQE_PERIOD_0,
+		UNIC_CQE_PERIOD_4,
+		UNIC_CQE_PERIOD_16,
+		UNIC_CQE_PERIOD_64,
+		UNIC_CQE_PERIOD_256,
+		UNIC_CQE_PERIOD_1024,
+		UNIC_CQE_PERIOD_4096,
+		UNIC_CQE_PERIOD_16384,
+		UNIC_CQE_PERIOD_ERR
+	};
+	u16 i;
+
+	for (i = 0; i < ARRAY_SIZE(period) - 1; i++) {
+		if (cqe_period >= period[i] &&
+		    cqe_period < period[i + 1])
+			return period[i];
+	}
+
+	return UNIC_CQE_PERIOD_ERR;
 }
 
 int unic_init_tx(struct unic_dev *unic_dev, u32 num)
@@ -517,6 +583,14 @@ static void unic_set_netdev_attr(struct net_device *netdev)
 	if (unic_dev_ubl_supported(unic_dev)) {
 		netdev->features |= NETIF_F_VLAN_CHALLENGED;
 		netdev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
+	} else {
+		netdev->flags |= IFF_BROADCAST | IFF_MULTICAST;
+		netdev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
+	}
+
+	if (!unic_dev_cfg_vlan_filter_supported(unic_dev)) {
+		netdev->features |= NETIF_F_VLAN_CHALLENGED;
+		netdev->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 	}
 
 	if (unic_dev_tx_csum_offload_supported(unic_dev))
@@ -535,21 +609,17 @@ static int unic_dev_init_mtu(struct unic_dev *unic_dev)
 {
 	struct net_device *netdev = unic_dev->comdev.netdev;
 	struct unic_caps *caps = &unic_dev->caps;
-	int ret;
 
 	netdev->mtu = UB_DATA_LEN;
 	netdev->max_mtu = caps->max_trans_unit;
 	netdev->min_mtu = caps->min_trans_unit;
 
-	ret = unic_config_mtu(unic_dev, netdev->mtu);
-	if (ret == -EPERM)
-		return 0;
-
-	return ret;
+	return unic_config_mtu(unic_dev, netdev->mtu);
 }
 
 static int unic_init_mac(struct unic_dev *unic_dev)
 {
+	struct unic_link_stats *record = &unic_dev->stats.link_record;
 	struct unic_mac *mac = &unic_dev->hw.mac;
 	int ret;
 
@@ -558,11 +628,11 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 
 	ret = unic_set_mac_speed_duplex(unic_dev, mac->speed, mac->duplex,
 					mac->lanes);
-	if (ret && ret != -EPERM)
+	if (ret)
 		return ret;
 
 	ret = unic_set_mac_autoneg(unic_dev, mac->autoneg);
-	if (ret && ret != -EPERM)
+	if (ret)
 		return ret;
 
 	ret = unic_dev_fec_supported(unic_dev) && mac->user_fec_mode ?
@@ -577,7 +647,25 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 		return ret;
 	}
 
+	ret = unic_init_fc_mode(unic_dev);
+	if (ret)
+		return ret;
+
+	mutex_init(&record->lock);
 	return 0;
+}
+
+static void unic_uninit_mac(struct unic_dev *unic_dev)
+{
+	struct unic_link_stats *record = &unic_dev->stats.link_record;
+
+	mutex_destroy(&record->lock);
+}
+
+static void unic_uninit_dev_addr(struct unic_dev *unic_dev)
+{
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_uninit_mac_addr(unic_dev);
 }
 
 int unic_set_mtu(struct unic_dev *unic_dev, int new_mtu)
@@ -588,9 +676,7 @@ int unic_set_mtu(struct unic_dev *unic_dev, int new_mtu)
 	new_mtu = max(new_mtu, UB_DATA_LEN);
 
 	ret = unic_check_validate_dump_mtu(unic_dev, new_mtu, &max_frame_size);
-	if (ret == -EPERM) {
-		return 0;
-	} else if (ret < 0) {
+	if (ret) {
 		unic_err(unic_dev, "invalid MTU(%d), please check, ret = %d.\n",
 			 new_mtu, ret);
 		return -EINVAL;
@@ -626,8 +712,13 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 
 	unic_link_status_update(unic_dev);
 	unic_update_port_info(unic_dev);
-	unic_sync_rack_ip_table(unic_dev);
+	unic_sync_ip_table(unic_dev);
+
+	if (unic_dev_eth_mac_supported(unic_dev))
+		unic_sync_mac_table(unic_dev);
+
 	unic_sync_promisc_mode(unic_dev);
+	unic_sync_vlan_filter(unic_dev);
 
 	if (!(unic_dev->serv_processed_cnt % UNIC_UPDATE_STATS_TIMER_INTERVAL))
 		unic_update_stats_for_all(unic_dev);
@@ -652,6 +743,12 @@ static void unic_init_vport_info(struct unic_dev *unic_dev)
 	spin_lock_init(&unic_dev->vport.addr_tbl.tmp_ip_lock);
 	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.ip_list);
 	spin_lock_init(&unic_dev->vport.addr_tbl.ip_list_lock);
+
+	if (unic_dev_eth_mac_supported(unic_dev)) {
+		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.uc_mac_list);
+		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.mc_mac_list);
+		spin_lock_init(&unic_dev->vport.addr_tbl.mac_list_lock);
+	}
 }
 
 static int unic_alloc_vport_buf(struct unic_dev *unic_dev)
@@ -736,12 +833,22 @@ static int unic_init_vport(struct unic_dev *unic_dev)
 
 	unic_init_vport_info(unic_dev);
 
+	ret = unic_init_vlan_config(unic_dev);
+	if (ret)
+		unic_uninit_vport_buf(unic_dev);
+
 	return ret;
 }
 
 static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
-	unic_uninit_rack_ip_table(unic_dev);
+	unic_uninit_ip_table(unic_dev);
+
+	if (unic_dev_eth_mac_supported(unic_dev)) {
+		unic_uninit_mac_table(unic_dev);
+		unic_uninit_vlan_config(unic_dev);
+	}
+
 	unic_uninit_vport_buf(unic_dev);
 }
 
@@ -762,7 +869,7 @@ static int unic_init_dev_addr(struct unic_dev *unic_dev)
 	if (unic_dev_ubl_supported(unic_dev))
 		return unic_init_guid(unic_dev);
 
-	return 0;
+	return unic_init_mac_addr(unic_dev);
 }
 
 static int unic_init_netdev_priv(struct net_device *netdev,
@@ -798,11 +905,11 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 	ret = unic_init_dev_addr(priv);
 	if (ret)
-		goto err_uninit_vport;
+		goto unic_unint_mac;
 
 	ret = unic_init_channels_attr(priv);
 	if (ret)
-		goto err_uninit_vport;
+		goto err_uninit_dev_addr;
 
 	ret = unic_init_channels(priv, priv->channels.num);
 	if (ret) {
@@ -816,6 +923,10 @@ static int unic_init_netdev_priv(struct net_device *netdev,
 
 err_uninit_channels_attr:
 	unic_uninit_channels_attr(priv);
+err_uninit_dev_addr:
+	unic_uninit_dev_addr(priv);
+unic_unint_mac:
+	unic_uninit_mac(priv);
 err_uninit_vport:
 	unic_uninit_vport(priv);
 destroy_lock:
@@ -830,6 +941,8 @@ static void unic_uninit_netdev_priv(struct net_device *netdev)
 
 	unic_uninit_channels(priv);
 	unic_uninit_channels_attr(priv);
+	unic_uninit_dev_addr(priv);
+	unic_uninit_mac(priv);
 	unic_uninit_vport(priv);
 	mutex_destroy(&priv->act_info.mutex);
 }
@@ -869,16 +982,22 @@ void unic_remove_period_task(struct unic_dev *unic_dev)
 		cancel_delayed_work_sync(&unic_dev->service_task);
 }
 
+bool unic_rss_vl_num_changed(struct unic_dev *unic_dev, u8 vl_num)
+{
+	struct unic_channels *channels = &unic_dev->channels;
+
+	return channels->rss_vl_num != unic_get_rss_vl_num(unic_dev, vl_num);
+}
+
 int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 			 u32 org_rss_size)
 {
 	struct unic_channels *channels = &unic_dev->channels;
 	int ret;
 
-	dev_info(unic_dev->comdev.adev->dev.parent,
-		 "change rss_size from %u to %u.\n", org_rss_size, new_rss_size);
-
 	mutex_lock(&channels->mutex);
+
+	set_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 	__unic_uninit_channels(unic_dev);
 
 	channels->rss_size = new_rss_size;
@@ -890,10 +1009,22 @@ int unic_change_rss_size(struct unic_dev *unic_dev, u32 new_rss_size,
 	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,
 			"failed to change rss_size, ret = %d.\n", ret);
+	else
+		clear_bit(UNIC_STATE_CHANNEL_INVALID, &unic_dev->state);
 
 	mutex_unlock(&channels->mutex);
 
 	return ret;
+}
+
+int unic_update_channels(struct unic_dev *unic_dev, u8 vl_num)
+{
+	struct unic_channels *channels = &unic_dev->channels;
+	u32 old_rss_size = channels->rss_size;
+
+	channels->rss_vl_num = unic_get_rss_vl_num(unic_dev, vl_num);
+
+	return unic_change_rss_size(unic_dev, DEFAULT_RSS_SIZE, old_rss_size);
 }
 
 static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)
@@ -916,6 +1047,11 @@ static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)
 		dev_warn(adev->dev.parent,
 			 "failed to alloc netdev because of ubl macro is not enabled.\n");
 #endif
+	} else {
+		snprintf(name, IFNAMSIZ, "ethc%ud%ue%u", caps->chip_id,
+			 caps->die_id, caps->ue_id);
+		netdev = alloc_netdev_mq(sizeof(struct unic_dev), name,
+					 NET_NAME_USER, ether_setup, channel_num);
 	}
 
 	return netdev;
@@ -957,7 +1093,7 @@ int unic_dev_init(struct auxiliary_device *adev)
 		goto err_unregister_event;
 	}
 
-	unic_query_rack_ip(adev);
+	unic_query_ip_addr(adev);
 	unic_start_dev_period_task(netdev);
 
 	return 0;
