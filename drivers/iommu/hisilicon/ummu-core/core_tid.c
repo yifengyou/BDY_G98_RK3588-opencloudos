@@ -15,6 +15,7 @@ struct ummu_tid_data {
 	struct device *device;
 	enum ummu_mapt_mode mode;
 	enum tid_alloc_mode alloc_mode;
+	u32 domain_type;
 };
 
 static int default_tid_alloc(struct ummu_tid_manager *manager,
@@ -116,6 +117,7 @@ static int ummu_global_pasid_alloc(struct ummu_tid_manager *manager,
 	tid_data->device = param->device;
 	tid_data->mode = param->mode;
 	tid_data->alloc_mode = param->alloc_mode;
+	tid_data->domain_type = param->domain_type;
 
 	switch (param->alloc_mode) {
 	case TID_ALLOC_TRANSPARENT:
@@ -268,6 +270,31 @@ void ummu_core_put_device(struct device *dev)
 	put_device(dev);
 }
 EXPORT_SYMBOL_GPL(ummu_core_put_device);
+
+int ummu_core_get_tid_type(struct ummu_core_device *ummu_core, u32 tid,
+			   u32 *tid_type)
+{
+	struct ummu_tid_data *tid_data;
+	int ret;
+
+	if (!ummu_core || !ummu_core->tid_manager || tid >= UMMU_INVALID_TID ||
+	    !tid_type)
+		return -EINVAL;
+
+	xa_lock(&ummu_core->tid_manager->token_ids);
+	tid_data = xa_load(&ummu_core->tid_manager->token_ids, tid);
+	if (tid_data) {
+		*tid_type = tid_data->domain_type;
+		ret = 0;
+	} else {
+		pr_err("cannot get tid_data.\n");
+		ret = -ENOENT;
+	}
+	xa_unlock(&ummu_core->tid_manager->token_ids);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ummu_core_get_tid_type);
 
 const struct tid_ops *ummu_core_tid_ops[] = {
 	[PASID_OPS] = &ummu_global_pasid_ops,
