@@ -1412,7 +1412,7 @@ static int hygon_umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc,
 	}
 
 	if (boot_cpu_data.x86_model == 0x4) {
-		if (df_indirect_read_broadcast(nid, 2, 0x48, &ctx.tmp))
+		if (df_indirect_read_instance(nid, 2, 0x48, umc, &ctx.tmp))
 			goto out_err;
 		chan_addr_sel = (ctx.tmp >> 24) & 0x1;
 		chan_hash_enable = (ctx.tmp >> 23) & 0x1;
