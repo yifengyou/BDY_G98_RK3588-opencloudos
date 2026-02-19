@@ -33,44 +33,11 @@ MODULE_PARM_DESC(entity_flex_en, "Entity Flexible enable: default: 0");
 
 DECLARE_RWSEM(ub_bus_sem);
 
+#define UBC_GUID_VENDOR_SHIFT 48
+#define UBC_GUID_VENDOR_MASK GENMASK(15, 0)
+
 static DEFINE_MUTEX(manage_subsystem_ops_mutex);
 static const struct ub_manage_subsystem_ops *manage_subsystem_ops;
-
-int register_ub_manage_subsystem_ops(const struct ub_manage_subsystem_ops *ops)
-{
-	if (!ops)
-		return -EINVAL;
-
-	mutex_lock(&manage_subsystem_ops_mutex);
-	if (!manage_subsystem_ops) {
-		manage_subsystem_ops = ops;
-		mutex_unlock(&manage_subsystem_ops_mutex);
-		pr_info("ub manage subsystem ops register successfully\n");
-		return 0;
-	}
-
-	pr_warn("ub manage subsystem ops has been registered\n");
-	mutex_unlock(&manage_subsystem_ops_mutex);
-
-	return -EINVAL;
-}
-EXPORT_SYMBOL_GPL(register_ub_manage_subsystem_ops);
-
-void unregister_ub_manage_subsystem_ops(const struct ub_manage_subsystem_ops *ops)
-{
-	if (!ops)
-		return;
-
-	mutex_lock(&manage_subsystem_ops_mutex);
-	if (manage_subsystem_ops == ops) {
-		manage_subsystem_ops = NULL;
-		pr_info("ub manage subsystem ops unregister successfully\n");
-	} else {
-		pr_warn("ub manage subsystem ops is not registered by this vendor\n");
-	}
-	mutex_unlock(&manage_subsystem_ops_mutex);
-}
-EXPORT_SYMBOL_GPL(unregister_ub_manage_subsystem_ops);
 
 const struct ub_manage_subsystem_ops *get_ub_manage_subsystem_ops(void)
 {
@@ -653,7 +620,7 @@ static void ubus_driver_resource_drain(void)
 	ub_static_cluster_instance_drain();
 }
 
-int ub_host_probe(void)
+static int ub_host_probe(void)
 {
 	int ret;
 
@@ -724,9 +691,8 @@ ub_cfg_ops_init_fail:
 	ub_bus_type_uninit();
 	return ret;
 }
-EXPORT_SYMBOL_GPL(ub_host_probe);
 
-void ub_host_remove(void)
+static void ub_host_remove(void)
 {
 	message_rx_uninit();
 	if (manage_subsystem_ops && manage_subsystem_ops->ras_handler_remove)
@@ -741,7 +707,61 @@ void ub_host_remove(void)
 	unregister_ub_cfg_ops();
 	ub_bus_type_uninit();
 }
-EXPORT_SYMBOL_GPL(ub_host_remove);
+
+int register_ub_manage_subsystem_ops(const struct ub_manage_subsystem_ops *ops)
+{
+	struct ub_bus_controller *ubc;
+	int ret;
+
+	if (!ops) {
+		pr_err("ub manage subsystem ops is NULL\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&manage_subsystem_ops_mutex);
+	if (!manage_subsystem_ops) {
+		list_for_each_entry(ubc, &ubc_list, node) {
+			if (((ubc->attr.ubc_guid_high >> UBC_GUID_VENDOR_SHIFT) &
+			    UBC_GUID_VENDOR_MASK) == ops->vendor) {
+				manage_subsystem_ops = ops;
+				ret = ub_host_probe();
+				if (ret)
+					manage_subsystem_ops = NULL;
+				else
+					pr_info("ub manage subsystem ops register successfully\n");
+
+				mutex_unlock(&manage_subsystem_ops_mutex);
+				return ret;
+			}
+		}
+		pr_warn("ub manage subsystem ops is not match with any of ub controller\n");
+	} else {
+		pr_warn("ub manage subsystem ops has been registered\n");
+	}
+	mutex_unlock(&manage_subsystem_ops_mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(register_ub_manage_subsystem_ops);
+
+void unregister_ub_manage_subsystem_ops(const struct ub_manage_subsystem_ops *ops)
+{
+	if (!ops) {
+		pr_err("ub manage subsystem ops is NULL\n");
+		return;
+	}
+
+	mutex_lock(&manage_subsystem_ops_mutex);
+	if (manage_subsystem_ops == ops) {
+		ub_host_remove();
+		manage_subsystem_ops = NULL;
+		pr_info("ub manage subsystem ops unregister successfully\n");
+	} else {
+		pr_warn("ub manage subsystem ops is not registered by this vendor\n");
+	}
+	mutex_unlock(&manage_subsystem_ops_mutex);
+}
+EXPORT_SYMBOL_GPL(unregister_ub_manage_subsystem_ops);
 
 static int __init ubus_driver_init(void)
 {

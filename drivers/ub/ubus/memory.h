@@ -29,8 +29,8 @@ struct ub_mem_ras_ctx {
 };
 
 struct ub_mem_device_ops {
-	void (*mem_drain_start)(struct ub_mem_device *mem_device);
-	int (*mem_drain_state)(struct ub_mem_device *mem_device);
+	void (*mem_drain_start)(struct ub_bus_controller *ubc);
+	int (*mem_drain_state)(struct ub_bus_controller *ubc);
 	bool (*mem_validate_pa)(struct ub_bus_controller *ubc, u64 pa_start,
 				u64 pa_end, bool cacheable);
 

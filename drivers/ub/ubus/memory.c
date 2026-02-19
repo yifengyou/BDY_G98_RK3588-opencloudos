@@ -114,7 +114,7 @@ void ub_mem_drain_start(u32 scna)
 	}
 
 	if (mem_device->ops && mem_device->ops->mem_drain_start)
-		mem_device->ops->mem_drain_start(mem_device);
+		mem_device->ops->mem_drain_start(ubc);
 	else
 		dev_warn(mem_device->dev, "ub mem_device ops mem_drain_start is null.\n");
 }
@@ -138,7 +138,7 @@ int ub_mem_drain_state(u32 scna)
 	}
 
 	if (mem_device->ops && mem_device->ops->mem_drain_state)
-		return mem_device->ops->mem_drain_state(mem_device);
+		return mem_device->ops->mem_drain_state(ubc);
 
 	dev_warn(mem_device->dev, "ub memory decoder ops mem_drain_state is null.\n");
 	return 0;

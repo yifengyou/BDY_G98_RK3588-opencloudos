@@ -12,12 +12,22 @@
 #include <ub/urma/udma/udma_ctl.h>
 
 extern bool dfx_switch;
+extern bool cqe_mode;
+extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
 
 #define UBCORE_MAX_DEV_NAME 64
 
+#define WQE_BB_SIZE_SHIFT 6
+
+#define UDMA_CTX_NUM 2
+
+#define UDMA_BITS_PER_INT 32
+
 #define MAX_JETTY_IN_JETTY_GRP 32
+
+#define UDMA_USER_DATA_H_OFFSET 32U
 
 #define MAX_WQEBB_IN_SQE 4
 
@@ -25,6 +35,8 @@ extern bool dump_aux_info;
 
 #define UDMA_HW_PAGE_SHIFT 12
 #define UDMA_HW_PAGE_SIZE (1 << UDMA_HW_PAGE_SHIFT)
+#define UDMA_HUGEPAGE_SHIFT 21
+#define UDMA_HUGEPAGE_SIZE (1 << UDMA_HUGEPAGE_SHIFT)
 
 #define UDMA_DEV_UE_NUM 47
 
@@ -32,6 +44,8 @@ extern bool dump_aux_info;
 
 #define UDMA_MAX_SL_NUM 16
 #define UDMA_DEFAULT_SL_NUM 0
+
+#define UDMA_RCV_SEND_MAX_DIFF 512U
 
 #define UDMA_CQE_SIZE 64
 
@@ -76,6 +90,11 @@ struct udma_mailbox_cmd {
 	struct rw_semaphore udma_mb_rwsem;
 };
 
+struct udma_ex_jfc_addr {
+	uint64_t cq_addr;
+	uint32_t cq_len;
+};
+
 struct udma_dev {
 	struct ubase_adev_com comdev;
 	struct ubcore_device ub_dev;
@@ -98,6 +117,7 @@ struct udma_dev {
 	struct xarray crq_nb_table;
 	struct xarray npu_nb_table;
 	struct mutex npu_nb_mutex;
+	struct xarray ctrlq_tpid_table;
 	struct xarray tpn_ue_idx_table;
 	struct ubase_event_nb *ae_event_addr[UBASE_EVENT_TYPE_MAX];
 	resource_size_t db_base;
@@ -115,6 +135,7 @@ struct udma_dev {
 	uint32_t status;
 	struct udma_dev_debugfs *dbgfs;
 	uint32_t ue_num;
+	struct udma_ex_jfc_addr cq_addr_array[UDMA_JFC_TYPE_NUM];
 	uint32_t ue_id;
 	struct page *db_page;
 	u8 udma_tp_sl_num;
@@ -128,6 +149,9 @@ struct udma_dev {
 	u8 udma_sl[UDMA_MAX_SL_NUM];
 	int disable_ue_rx_count;
 	struct mutex disable_ue_rx_mutex;
+	struct mutex hugepage_lock;
+	struct list_head hugepage_list;
+	uint32_t total_hugepage_num;
 };
 
 #define UDMA_ERR_MSG_LEN	128

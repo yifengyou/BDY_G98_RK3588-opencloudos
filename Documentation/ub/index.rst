@@ -11,3 +11,5 @@ UnifiedBus Subsystem
    :maxdepth: 2
 
    ubase/index
+   ubfi/index
+   ubus/index

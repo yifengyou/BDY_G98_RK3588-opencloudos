@@ -16,6 +16,8 @@ struct udma_context {
 	struct mutex pgdir_mutex;
 	struct iommu_sva *sva;
 	uint32_t tid;
+	struct mutex hugepage_lock;
+	struct list_head hugepage_list;
 };
 
 static inline struct udma_context *to_udma_context(struct ubcore_ucontext *uctx)
@@ -38,5 +40,9 @@ struct ubcore_ucontext *udma_alloc_ucontext(struct ubcore_device *ub_dev,
 					    struct ubcore_udrv_priv *udrv_data);
 int udma_free_ucontext(struct ubcore_ucontext *ucontext);
 int udma_mmap(struct ubcore_ucontext *uctx, struct vm_area_struct *vma);
+
+int udma_alloc_u_hugepage(struct udma_context *ctx, struct vm_area_struct *vma);
+int udma_occupy_u_hugepage(struct udma_context *ctx, void *va);
+void udma_return_u_hugepage(struct udma_context *ctx, void *va);
 
 #endif /* __UDMA_CTX_H__ */
