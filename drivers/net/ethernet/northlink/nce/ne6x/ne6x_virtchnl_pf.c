@@ -631,7 +631,7 @@ static int ne6x_adpt_resetup(struct ne6x_pf *pf, bool recovery)
 		pf->irq_pile->num_entries = actual_vector;
 	} else {
 		if (!pf->irq_pile) {
-			size = sizeof(struct ne6x_lump_tracking) + (sizeof(u16) * actual_vector);
+			size = struct_size(pf->irq_pile, list, actual_vector);
 			pf->irq_pile = kzalloc(size, GFP_KERNEL);
 			if (!pf->irq_pile) {
 				dev_err(dev, "error intx allocating irq_pile memory\n");

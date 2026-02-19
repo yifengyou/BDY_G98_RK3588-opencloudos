@@ -55,10 +55,10 @@ static void ext_toeplitz_key(const unsigned char *key, unsigned char *ext_key)
 	}
 }
 
-static int  ne6x_dev_get_fw_info(struct ne6x_pf *pf, struct ne6x_fw_info *fw_info)
+static int ne6x_dev_get_fw_info(struct ne6x_pf *pf, struct ne6x_fw_info *fw_info)
 {
 	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_GET_FW_INFO, NULL, 0,
-							(u32 *)fw_info, sizeof(*fw_info));
+				(u32 *)fw_info, sizeof(*fw_info));
 }
 
 static int ne6x_dev_get_dev_info(struct ne6x_pf *pf)
@@ -67,7 +67,7 @@ static int ne6x_dev_get_dev_info(struct ne6x_pf *pf)
 
 	ret = ne6x_dev_get_fw_info(pf, &pf->fw_info);
 	if (ret)
-		dev_err(ne6x_pf_to_dev(pf), "get fw_info  fail\n");
+		dev_err(ne6x_pf_to_dev(pf), "get fw_info fail\n");
 	return ret;
 }
 
@@ -178,40 +178,30 @@ int ne6x_dev_get_port_num(struct ne6x_pf *pf)
 int ne6x_dev_get_temperature_info(struct ne6x_pf *pf, struct ne6x_soc_temperature *temp)
 {
 	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_GET_TEMPERATURE, NULL, 0,
-							(u32 *)temp, sizeof(*temp));
+				(u32 *)temp, sizeof(*temp));
 }
 
 int  ne6x_dev_get_power_consum(struct ne6x_pf *pf, struct ne6x_soc_power *power)
 {
 	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_GET_POWER_CONSUM, NULL, 0,
-							(u32 *)power, sizeof(*power));
+				(u32 *)power, sizeof(*power));
 }
 
 int  ne6x_dev_i2c3_signal_test(struct ne6x_pf *pf, u32 *id)
 {
 	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_I2C3_TEST, NULL, 0,
-							(u32 *)id, sizeof(u32));
+				(u32 *)id, sizeof(u32));
 }
 
 int ne6x_dev_get_fru(struct ne6x_pf *pf, u32 *buffer, u32 size)
 {
 	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_GET_FRU, &size,
-							sizeof(u32), buffer, size);
-}
-
-int ne6x_dev_start_ddr_test(struct ne6x_pf *pf)
-{
-	return ne6x_reg_sub_cmd(pf, NE6X_SUB_CMD_START_DDR_TEST, NULL, 0, NULL, 0);
+				sizeof(u32), buffer, size);
 }
 
 int ne6x_dev_read_eeprom(struct ne6x_adapter *adpt, int offset, u8 *pbuf, int size)
 {
 	return ne6x_reg_e2prom_read(adpt->back, offset, pbuf, size);
-}
-
-int ne6x_dev_write_eeprom(struct ne6x_adapter *adpt, int offset, u8 *pbuf, int size)
-{
-	return ne6x_reg_e2prom_write(adpt->back, offset, pbuf, size);
 }
 
 int ne6x_dev_set_vf_number(struct ne6x_pf *pf, int num_vfs)
@@ -237,12 +227,6 @@ int ne6x_dev_get_sfp_status(struct ne6x_adapter *adpt, u8 *status)
 	*status = sfp_state & 0xff;
 
 	return 0;
-}
-
-int ne6x_dev_self_test_link(struct ne6x_adapter *adpt, int *verify)
-{
-	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_LINK_STATUS, NE6X_TALK_GET,
-				  ADPT_LPORT(adpt), (void *)verify, sizeof(int));
 }
 
 int ne6x_dev_reset_firmware(struct ne6x_adapter *adpt)
@@ -280,18 +264,6 @@ int ne6x_dev_set_mtu(struct ne6x_adapter *adpt, u32 mtu)
 
 	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_MAX_FRAME, NE6X_TALK_SET,
 				  ADPT_LPORT(adpt), (void *)&max_length, sizeof(max_length));
-}
-
-int ne6x_dev_get_mtu(struct ne6x_adapter *adpt, u32 *mtu)
-{
-	u32 max_length;
-	int ret;
-
-	ret = ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_MAX_FRAME, NE6X_TALK_GET,
-				 ADPT_LPORT(adpt), (void *)&max_length, sizeof(max_length));
-	*mtu = max_length  - 18;
-
-	return ret;
 }
 
 static int fastlog2(int x)
@@ -359,12 +331,6 @@ int ne6x_dev_get_sfp_eeprom(struct ne6x_adapter *adpt, u8 *data, int offset, int
 	return ne6x_reg_get_sfp_eeprom(adpt->back, ADPT_LPORT(adpt), data, offset, size);
 }
 
-int ne6x_dev_clear_stats(struct ne6x_adapter *adpt)
-{
-	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_STATS, NE6X_TALK_SET,
-				  ADPT_LPORT(adpt), NULL, 0);
-}
-
 /* panel port mapped to logical port */
 void ne6x_dev_set_port2pi(struct ne6x_adapter *adpt)
 {
@@ -413,40 +379,6 @@ int ne6x_dev_set_vport(struct ne6x_adapter *adpt)
 	}
 
 	return 0;
-}
-
-int ne6x_dev_get_vlan_port(struct ne6x_adapter *adpt, u16 vlan_id, pbmp_t pbmp)
-{
-	pbmp_t new_pbmp;
-	int ret;
-
-	PBMP_CLEAR(new_pbmp);
-	ret = ne6x_reg_table_read(adpt->back, NE6X_REG_VLAN_TABLE,
-				  ADPT_LPORT(adpt) * 4096 + (vlan_id & 0xFFF),
-				  (void *)new_pbmp,
-				  sizeof(pbmp_t));
-
-	PBMP_DWORD_GET(pbmp, 0) = PBMP_DWORD_GET(new_pbmp, 3);
-	PBMP_DWORD_GET(pbmp, 1) = PBMP_DWORD_GET(new_pbmp, 2);
-	PBMP_DWORD_GET(pbmp, 2) = PBMP_DWORD_GET(new_pbmp, 1);
-	PBMP_DWORD_GET(pbmp, 3) = PBMP_DWORD_GET(new_pbmp, 0);
-
-	return ret;
-}
-
-int ne6x_dev_set_vlan_port(struct ne6x_adapter *adpt, u16 vlan_id, pbmp_t pbmp)
-{
-	pbmp_t new_pbmp;
-
-	PBMP_CLEAR(new_pbmp);
-	PBMP_DWORD_GET(new_pbmp, 0) = PBMP_DWORD_GET(pbmp, 3);
-	PBMP_DWORD_GET(new_pbmp, 1) = PBMP_DWORD_GET(pbmp, 2);
-	PBMP_DWORD_GET(new_pbmp, 2) = PBMP_DWORD_GET(pbmp, 1);
-	PBMP_DWORD_GET(new_pbmp, 3) = PBMP_DWORD_GET(pbmp, 0);
-
-	return ne6x_reg_table_write(adpt->back, NE6X_REG_VLAN_TABLE,
-				   ADPT_LPORT(adpt) * 4096 + (vlan_id & 0xFFF),
-				   (void *)new_pbmp, sizeof(pbmp_t));
 }
 
 int ne6x_dev_vlan_add(struct ne6x_adapter *adpt, struct ne6x_vlan *vlan)
@@ -516,19 +448,6 @@ int ne6x_dev_vlan_del(struct ne6x_adapter *adpt, struct ne6x_vlan *vlan)
 
 	ne6x_reg_table_write(adpt->back, NE6X_REG_VLAN_TABLE, index + (vlan->vid & 0xFFF),
 			     (void *)&new_pbmp, sizeof(pbmp));
-
-	return 0;
-}
-
-/* clear vlan table */
-int ne6x_dev_clear_vlan_map(struct ne6x_pf *pf)
-{
-	pbmp_t pbmp;
-	int index;
-
-	PBMP_CLEAR(pbmp);
-	for (index = 0; index < 8192; index++)
-		ne6x_reg_table_write(pf, NE6X_REG_VLAN_TABLE, index, (void *)pbmp, sizeof(pbmp));
 
 	return 0;
 }
@@ -867,21 +786,6 @@ int ne6x_dev_set_features(struct ne6x_adapter *adpt, u32 val)
 	return 0;
 }
 
-int ne6x_dev_enable_rxhash(struct ne6x_adapter *adpt, int enable)
-{
-	u32 val = 0;
-
-	ne6x_reg_get_user_data(adpt->back, NP_USER_DATA_PORT_OLFLAGS_0 + ADPT_VPORT(adpt), &val);
-	if (enable)
-		val |= NE6X_F_RSS;
-	else
-		val &= ~NE6X_F_RSS;
-
-	ne6x_reg_set_user_data(adpt->back, NP_USER_DATA_PORT_OLFLAGS_0 + ADPT_VPORT(adpt), val);
-
-	return 0;
-}
-
 int ne6x_dev_check_fec_capability(struct ne6x_adapter *adpt, enum ne6x_fec_state fec)
 {
 	if (adpt->back->dev_type == NE6000_PCIE_2X100G && fec == NE6X_FEC_BASER)
@@ -907,12 +811,6 @@ int ne6x_dev_get_fec(struct ne6x_adapter *adpt, enum ne6x_fec_state *fec)
 				  ADPT_LPORT(adpt), (void *)fec, sizeof(int));
 }
 
-int ne6x_dev_set_sfp_speed(struct ne6x_adapter *adpt, u32 speed)
-{
-	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_SFP_SPEED, NE6X_TALK_SET,
-				  ADPT_LPORT(adpt), (void *)&speed, sizeof(u32));
-}
-
 int ne6x_dev_get_sfp_speed(struct ne6x_adapter *adpt, u32 *speed)
 {
 	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_SFP_SPEED, NE6X_TALK_GET,
@@ -923,12 +821,6 @@ int ne6x_dev_set_if_state(struct ne6x_adapter *adpt, u32 state)
 {
 	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_STATE, NE6X_TALK_SET,
 				  ADPT_LPORT(adpt), (void *)&state, sizeof(u32));
-}
-
-int ne6x_dev_get_if_state(struct ne6x_adapter *adpt, u32 *state)
-{
-	return ne6x_reg_talk_port(adpt->back, NE6X_MSG_PORT_STATE, NE6X_TALK_GET,
-				  ADPT_LPORT(adpt), (void *)state, sizeof(u32));
 }
 
 int ne6x_dev_set_nic_stop(struct ne6x_pf *pf, u32 flag)
@@ -979,14 +871,6 @@ int ne6x_dev_get_vf_stat(struct ne6x_adapter *adpt, struct vf_stat *stat)
 	ne6x_dev_transform_vf_stat_format(stat_arr, stat);
 
 	return ret;
-}
-
-int ne6x_dev_reset_vf_stat(struct ne6x_adapter *adpt)
-{
-	u32 stat_arr[64] = {0};
-
-	return ne6x_reg_table_write(adpt->back, NE6X_REG_VF_STAT_TABLE, ADPT_VPORT(adpt),
-				   (u32 *)&stat_arr[0], sizeof(stat_arr));
 }
 
 int ne6x_dev_check_speed(struct ne6x_adapter *adpt, u32 speed)
