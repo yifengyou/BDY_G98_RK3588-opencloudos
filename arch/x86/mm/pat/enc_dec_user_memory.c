@@ -296,8 +296,6 @@ repeat:
 		 */
 		if (pte_val(old_pte) != pte_val(new_pte)) {
 			cpa_page_cache_insert(cpa, pte_page(old_pte));
-			cpa_page_cache_flush(cpa);
-			//pte_lockptr()
 			set_pte_atomic(kpte, new_pte);
 		}
 		cpa->numpages = 1;
