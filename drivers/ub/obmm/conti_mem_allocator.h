@@ -1,0 +1,120 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2023-2025. All rights reserved.
+ * Description：OBMM Framework's implementations.
+ */
+
+#ifndef CONTI_MEM_ALLOC
+#define CONTI_MEM_ALLOC
+
+#include <linux/types.h>
+#include <linux/wait.h>
+#include <linux/kthread.h>
+#include <linux/atmioc.h>
+
+struct memseg_node {
+	phys_addr_t addr;
+	size_t size;
+	struct list_head list;
+};
+
+struct conti_mem_allocator;
+
+/**
+ * struct conti_mempool_ops - Memory pool operation callbacks for the allocator
+ *
+ * This structure defines a set of callback functions that customize the
+ * behavior of the memory allocator for different memory management strategies.
+ * Each function pointer implements specific operations required for memory
+ * allocation, deallocation, and pool management.
+ *
+ * @clear_memseg: Clear the memory segment's data (e.g., zeroing or secure erase)
+ *   @allocator: Pointer to the memory allocator instance
+ *   @memseg: Memory segment to be cleared
+ *   Return: 0 for success, or an error on failure
+ *
+ * @pool_free_memseg: Return a memory segment to the pool for reuse
+ *   @allocator: Pointer to the memory allocator instance
+ *   @memseg: Memory segment to be freed back to the pool
+ *
+ * @pool_alloc_memseg: Allocate a new memory segment from the underlying memory source
+ *   @allocator: Pointer to the memory allocator instance
+ *   Return: A newly allocated memory segment, or NULL on failure
+ *
+ * @need_contract: Check if the memory pool should be shrunk
+ *   @allocator: Pointer to the memory allocator instance
+ *   Return: true if contraction is needed, false otherwise
+ *
+ * @contract_size: Calculate the size to contract the memory pool
+ *   @allocator: Pointer to the memory allocator instance
+ *   Return: The size (in bytes) to reduce the pool, or 0 if no contraction
+ *
+ * @need_expand: Check if the memory pool should be expanded
+ *   @allocator: Pointer to the memory allocator instance
+ *   Return: true if expansion is needed, false otherwise
+ *
+ * @expand_size: Calculate the size to expand the memory pool
+ *   @allocator: Pointer to the memory allocator instance
+ *   Return: The size (in bytes) to increase the pool, or 0 if no expansion
+ */
+struct conti_mempool_ops {
+	int (*clear_memseg)(struct conti_mem_allocator *allocator, struct memseg_node *node);
+	void (*pool_free_memseg)(struct conti_mem_allocator *allocator, struct memseg_node *node);
+	struct memseg_node *(*pool_alloc_memseg)(struct conti_mem_allocator *allocator);
+	bool (*need_contract)(struct conti_mem_allocator *allocator);
+	size_t (*contract_size)(struct conti_mem_allocator *allocator);
+	bool (*need_expand)(struct conti_mem_allocator *allocator);
+	size_t (*expand_size)(struct conti_mem_allocator *allocator);
+};
+
+struct conti_mem_allocator {
+	bool initialized;
+
+	int nid;
+	size_t granu;
+
+	atomic64_t pooled_mem_size;
+	atomic64_t used_mem_size;
+
+	spinlock_t lock;
+	struct list_head memseg_ready;
+	struct list_head memseg_uncleared;
+	struct memseg_node *memseg_clearing;
+	struct list_head memseg_poisoned;
+
+	struct task_struct *clear_work;
+	struct wait_queue_head clear_wq;
+
+	struct task_struct *pool_work;
+	struct wait_queue_head pool_wq;
+
+	const struct conti_mempool_ops *ops;
+	const char *name;
+};
+
+static inline size_t conti_get_total(struct conti_mem_allocator *a)
+{
+	return atomic64_read(&a->pooled_mem_size);
+}
+
+static inline size_t conti_get_avail(struct conti_mem_allocator *a)
+{
+	return atomic64_read(&a->pooled_mem_size) - atomic64_read(&a->used_mem_size);
+}
+
+int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, size_t granu,
+			     const struct conti_mempool_ops *ops, const char *fmt, ...);
+void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator);
+
+void conti_free_memory(struct conti_mem_allocator *allocator, struct list_head *head);
+
+size_t conti_alloc_memory(struct conti_mem_allocator *allocator, size_t size,
+			  struct list_head *head, bool zero, bool allow_slow);
+
+size_t conti_mem_allocator_expand(struct conti_mem_allocator *allocator, size_t size);
+
+size_t conti_mem_allocator_contract(struct conti_mem_allocator *allocator, size_t size);
+
+bool conti_mem_allocator_isolate_memseg(struct conti_mem_allocator *allocator, unsigned long addr);
+
+#endif

@@ -17,6 +17,7 @@
 #include "eid.h"
 #include "cna.h"
 #include "resource.h"
+#include "memory.h"
 #include "ubus_controller.h"
 #include "ubus_driver.h"
 #include "ubus_inner.h"
@@ -438,6 +439,7 @@ void ub_start_ent(struct ub_entity *uent)
 	WARN_ON(ret);
 
 	ub_create_sysfs_dev_files(uent);
+	ub_mem_decoder_init(uent);
 
 	if (!((is_p_device(uent) || is_p_idevice(uent)) && is_dynamic(uent->bi))) {
 		uent->match_driver = true;
@@ -531,6 +533,7 @@ void ub_remove_ent(struct ub_entity *uent)
 	list_del(&uent->node);
 	up_write(&ub_bus_sem);
 
+	ub_mem_decoder_uninit(uent);
 	ub_uninit_capabilities(uent);
 	ub_unconfigure_ent(uent);
 	ub_entity_unset_mmio(uent);

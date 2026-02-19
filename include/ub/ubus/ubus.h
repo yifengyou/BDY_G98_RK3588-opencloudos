@@ -422,6 +422,9 @@ struct ub_bus_controller {
 	struct ub_bus_instance *bi;
 	struct ub_bus_instance *cluster_bi;
 
+	/* ub memory decoder */
+	struct ub_mem_device *mem_device;
+
 	void *data;
 	struct dentry *debug_root;
 

@@ -8,6 +8,7 @@
 #include "../ubus.h"
 #include "../decoder.h"
 #include "../ubus_driver.h"
+#include "../memory.h"
 #include "service.h"
 
 static const struct ub_device_id component_device_ids[] = {
@@ -128,15 +129,18 @@ static void ub_setup_bus_controller(struct ub_entity *uent)
 		return;
 	}
 
-	if ((u32)usi_count < vec_num_max)
+	if ((u32)usi_count < vec_num_max) {
 		ub_err(uent, "alloc irq vectors failed, usi count=%d, vec_num_max=%u\n",
 		       usi_count, vec_num_max);
-	else
+	} else {
 		ub_init_decoder_usi(uent);
+		ub_mem_init_usi(uent);
+	}
 }
 
 static void ub_unset_bus_controller(struct ub_entity *uent)
 {
+	ub_mem_uninit_usi(uent);
 	ub_uninit_decoder_usi(uent);
 	ub_disable_intr(uent);
 	ub_disable_err_msq_ctrl(uent);
