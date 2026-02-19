@@ -32,6 +32,7 @@
 #include <trace/events/iommu.h>
 #include <linux/sched/mm.h>
 #include <linux/msi.h>
+#include <ub/ubus/ubus.h>
 
 #include "dma-iommu.h"
 #include "iommu-priv.h"
@@ -167,6 +168,9 @@ static const struct bus_type * const iommu_buses[] = {
 #endif
 #ifdef CONFIG_CDX_BUS
 	&cdx_bus_type,
+#endif
+#ifdef CONFIG_UB_UBUS
+	&ub_bus_type,
 #endif
 };
 
@@ -372,6 +376,12 @@ static bool dev_has_iommu(struct device *dev)
 	return dev->iommu && dev->iommu->iommu_dev;
 }
 
+static u32 dev_iommu_get_min_pasids(struct device *dev)
+{
+	return max_t(u32, dev->iommu->iommu_dev->min_pasids,
+					IOMMU_FIRST_GLOBAL_PASID);
+}
+
 static u32 dev_iommu_get_max_pasids(struct device *dev)
 {
 	u32 max_pasids = 0, bits = 0;
@@ -386,6 +396,9 @@ static u32 dev_iommu_get_max_pasids(struct device *dev)
 		if (!ret)
 			max_pasids = 1UL << bits;
 	}
+
+	if (dev_is_ub(dev))
+		return dev->iommu->iommu_dev->max_pasids;
 
 	return min_t(u32, max_pasids, dev->iommu->iommu_dev->max_pasids);
 }
@@ -437,6 +450,7 @@ static int iommu_init_device(struct device *dev, const struct iommu_ops *ops)
 	}
 	dev->iommu_group = group;
 
+	dev->iommu->min_pasids = dev_iommu_get_min_pasids(dev);
 	dev->iommu->max_pasids = dev_iommu_get_max_pasids(dev);
 	if (ops->is_attach_deferred)
 		dev->iommu->attach_deferred = ops->is_attach_deferred(dev);
@@ -3671,7 +3685,7 @@ ioasid_t iommu_alloc_global_pasid(struct device *dev)
 	 * max_pasids is set up by vendor driver based on number of PASID bits
 	 * supported but the IDA allocation is inclusive.
 	 */
-	ret = ida_alloc_range(&iommu_global_pasid_ida, IOMMU_FIRST_GLOBAL_PASID,
+	ret = ida_alloc_range(&iommu_global_pasid_ida, dev->iommu->min_pasids,
 			      dev->iommu->max_pasids - 1, GFP_KERNEL);
 	return ret < 0 ? IOMMU_PASID_INVALID : ret;
 }

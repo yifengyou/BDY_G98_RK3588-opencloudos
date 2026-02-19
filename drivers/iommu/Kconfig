@@ -166,6 +166,14 @@ config IOMMU_SVA
 config IOMMU_IOPF
 	bool
 
+# Shared Kernel Virtual Addressing
+config IOMMU_KSVA
+	bool
+	default n
+	help
+	  Enable sharing kernel virtual address to devices.
+	  Say N unless you know you need this.
+
 config FSL_PAMU
 	bool "Freescale IOMMU support"
 	depends on PCI
@@ -196,6 +204,7 @@ source "drivers/iommu/amd/Kconfig"
 source "drivers/iommu/intel/Kconfig"
 source "drivers/iommu/iommufd/Kconfig"
 source "drivers/iommu/sw64/Kconfig"
+source "drivers/iommu/hisilicon/Kconfig"
 
 config IRQ_REMAP
 	bool "Support for Interrupt Remapping"

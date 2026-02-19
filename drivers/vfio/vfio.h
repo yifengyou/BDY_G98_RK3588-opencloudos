@@ -85,6 +85,8 @@ struct vfio_group {
 	struct list_head		vfio_next;
 #if IS_ENABLED(CONFIG_VFIO_CONTAINER)
 	struct list_head		container_next;
+#else
+	KABI_DEPRECATE(struct list_head, container_next)
 #endif
 	enum vfio_group_type		type;
 	struct mutex			group_lock;
