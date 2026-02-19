@@ -7572,6 +7572,40 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 		}
 	}
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	if (sched_feat(SOFT_DOMAIN)) {
+		struct task_group *tg = task_group(p);
+
+		if (tg->sf_ctx && tg->sf_ctx->policy != 0) {
+			struct cpumask *tmpmask = to_cpumask(tg->sf_ctx->span);
+
+			for_each_cpu_wrap(cpu, tmpmask, target + 1) {
+				if (!cpumask_test_cpu(cpu, tmpmask))
+					continue;
+
+				if (has_idle_core) {
+					i = select_idle_core(p, cpu, cpus, &idle_cpu);
+					if ((unsigned int)i < nr_cpumask_bits)
+						return i;
+
+				} else {
+					if (--nr <= 0)
+						return -1;
+					idle_cpu = __select_idle_cpu(cpu, p);
+					if ((unsigned int)idle_cpu < nr_cpumask_bits)
+						return idle_cpu;
+				}
+			}
+
+			if (idle_cpu != -1)
+				return idle_cpu;
+
+			cpumask_andnot(cpus, cpus, tmpmask);
+		}
+
+	}
+#endif
+
 	if (static_branch_unlikely(&sched_cluster_active)) {
 		struct sched_group *sg = sd->groups;
 
@@ -8505,6 +8539,33 @@ static void set_task_select_cpus(struct task_struct *p, int *idlest_cpu,
 }
 #endif
 
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+static int wake_soft_domain(struct task_struct *p, int target)
+{
+	struct cpumask *mask = this_cpu_cpumask_var_ptr(select_rq_mask);
+	struct soft_domain_ctx *ctx = NULL;
+
+	ctx = task_group(p)->sf_ctx;
+	if (!ctx || ctx->policy == 0)
+		goto out;
+
+#ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
+	cpumask_and(mask, to_cpumask(ctx->span), p->select_cpus);
+#else
+	cpumask_and(mask, to_cpumask(ctx->span), p->cpus_ptr);
+#endif
+	cpumask_and(mask, mask, cpu_active_mask);
+	if (cpumask_empty(mask) || cpumask_test_cpu(target, mask))
+		goto out;
+	else
+		target = cpumask_any_distribute(mask);
+
+out:
+
+	return target;
+}
+#endif
+
 /*
  * select_task_rq_fair: Select target runqueue for the waking task in domains
  * that have the relevant SD flag set. In practice, this is SD_BALANCE_WAKE,
@@ -8560,6 +8621,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	}
 
 	rcu_read_lock();
+
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	if (sched_feat(SOFT_DOMAIN))
+		new_cpu = prev_cpu = wake_soft_domain(p, prev_cpu);
+#endif
+
 	for_each_domain(cpu, tmp) {
 		/*
 		 * If both 'cpu' and 'prev_cpu' are part of this domain,
@@ -9256,6 +9323,15 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	 */
 	if (throttled_lb_pair(task_group(p), env->src_cpu, env->dst_cpu))
 		return 0;
+
+#ifdef CONFIG_SCHED_SOFT_DOMAIN
+	/* Do not migrate soft domain tasks between numa. */
+	if (sched_feat(SOFT_DOMAIN)) {
+		if (task_group(p)->sf_ctx && task_group(p)->sf_ctx->policy &&
+		(env->sd->flags & SD_NUMA) != 0)
+			return 0;
+	}
+#endif
 
 	/* Disregard pcpu kthreads; they are where they need to be. */
 	if (kthread_is_per_cpu(p))
@@ -13218,7 +13294,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 {
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
-	int i;
+	int i, ret;
 
 	tg->cfs_rq = kcalloc(nr_cpu_ids, sizeof(cfs_rq), GFP_KERNEL);
 	if (!tg->cfs_rq)
@@ -13230,6 +13306,10 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	tg->shares = NICE_0_LOAD;
 
 	init_cfs_bandwidth(tg_cfs_bandwidth(tg), tg_cfs_bandwidth(parent));
+
+	ret = init_soft_domain(tg, parent);
+	if (ret)
+		goto err;
 
 	for_each_possible_cpu(i) {
 		cfs_rq = kzalloc_node(sizeof(struct cfs_rq),
@@ -13252,6 +13332,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 err_free_rq:
 	kfree(cfs_rq);
 err:
+	destroy_soft_domain(tg);
 	return 0;
 }
 
@@ -13280,6 +13361,7 @@ void unregister_fair_sched_group(struct task_group *tg)
 	int cpu;
 
 	destroy_cfs_bandwidth(tg_cfs_bandwidth(tg));
+	destroy_soft_domain(tg);
 
 	for_each_possible_cpu(cpu) {
 		if (tg->se[cpu])
