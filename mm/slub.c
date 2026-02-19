@@ -185,6 +185,7 @@ unsigned int __weak iee_calculate_order(struct kmem_cache *s, unsigned int order
 {
 	return order;
 }
+void __weak iee_set_min_partial(struct kmem_cache *s) {  }
 #endif
 
 /*
@@ -5278,6 +5279,9 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 	s->min_partial = min_t(unsigned long, MAX_PARTIAL, ilog2(s->size) / 2);
 	s->min_partial = max_t(unsigned long, MIN_PARTIAL, s->min_partial);
 
+#ifdef CONFIG_IEE
+	iee_set_min_partial(s);
+#endif
 	set_cpu_partial(s);
 
 #ifdef CONFIG_NUMA

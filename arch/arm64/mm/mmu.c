@@ -40,6 +40,14 @@
 #include <asm/tlbflush.h>
 #include <asm/pgalloc.h>
 #include <asm/kfence.h>
+#ifdef CONFIG_IEE
+#include <asm/haoc/iee.h>
+#include <asm/haoc/iee-mmu.h>
+#include <asm/haoc/iee-init.h>
+#ifdef CONFIG_IEE_SIP
+#include <asm/haoc/iee-si.h>
+#endif
+#endif
 
 #define NO_BLOCK_MAPPINGS	BIT(0)
 #define NO_CONT_MAPPINGS	BIT(1)
@@ -401,8 +409,17 @@ static void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				 int flags)
 {
 	mutex_lock(&fixmap_lock);
+	#ifdef CONFIG_IEE
+	if (haoc_enabled)
+		__iee_create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
+				pgtable_alloc, flags);
+	else
+		__create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
+				pgtable_alloc, flags);
+	#else
 	__create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
 				    pgtable_alloc, flags);
+	#endif
 	mutex_unlock(&fixmap_lock);
 }
 
@@ -723,6 +740,12 @@ static void __init map_kernel(pgd_t *pgdp)
 {
 	static struct vm_struct vmlinux_text, vmlinux_rodata, vmlinux_inittext,
 				vmlinux_initdata, vmlinux_data;
+#ifdef CONFIG_IEE
+	static struct vm_struct vmlinux_iee_init_data;
+#endif
+#ifdef CONFIG_IEE_SIP
+	static struct vm_struct vmlinux_iee_text, vmlinux_text_end;
+#endif
 
 	/*
 	 * External debuggers may need to write directly to the text
@@ -739,22 +762,46 @@ static void __init map_kernel(pgd_t *pgdp)
 	if (arm64_early_this_cpu_has_bti())
 		text_prot = __pgprot_modify(text_prot, PTE_GP, PTE_GP);
 
-	/*
-	 * Only rodata will be remapped with different permissions later on,
-	 * all other segments are allowed to use contiguous mappings.
-	 */
-	map_kernel_segment(pgdp, _stext, _etext, text_prot, &vmlinux_text, 0,
-			   VM_NO_GUARD);
-	map_kernel_segment(pgdp, __start_rodata, __inittext_begin, PAGE_KERNEL,
-			   &vmlinux_rodata, NO_CONT_MAPPINGS, VM_NO_GUARD);
-	map_kernel_segment(pgdp, __inittext_begin, __inittext_end, text_prot,
-			   &vmlinux_inittext, 0, VM_NO_GUARD);
-	map_kernel_segment(pgdp, __initdata_begin, __initdata_end, PAGE_KERNEL,
-			   &vmlinux_initdata, 0, VM_NO_GUARD);
-	map_kernel_segment(pgdp, _data, _end, PAGE_KERNEL, &vmlinux_data, 0, 0);
-
-	fixmap_copy(pgdp);
-	kasan_copy_shadow(pgdp);
+#ifdef CONFIG_IEE_SIP
+		if (haoc_enabled) {
+			/* Ensure iee si code are not mapped with block descriptor. */
+			map_kernel_segment(pgdp, _stext, __iee_si_text_start, text_prot,
+					&vmlinux_text, 0, VM_NO_GUARD);
+			map_kernel_segment(pgdp, __iee_si_text_start, __iee_si_text_end,
+					SET_NG(text_prot), &vmlinux_iee_text, NO_CONT_MAPPINGS |
+					NO_BLOCK_MAPPINGS, VM_NO_GUARD);
+			map_kernel_segment(pgdp, __iee_si_text_end, _etext, text_prot,
+					&vmlinux_text_end, 0, VM_NO_GUARD);
+		} else	
+			map_kernel_segment(pgdp, _stext, _etext, text_prot, &vmlinux_text, 0,
+				VM_NO_GUARD);
+#else
+		/*
+		 * Only rodata will be remapped with different permissions later on,
+		 * all other segments are allowed to use contiguous mappings.
+		 */
+		map_kernel_segment(pgdp, _stext, _etext, text_prot, &vmlinux_text, 0,
+				   VM_NO_GUARD);
+#endif
+		map_kernel_segment(pgdp, __start_rodata, __inittext_begin, PAGE_KERNEL,
+				   &vmlinux_rodata, NO_CONT_MAPPINGS, VM_NO_GUARD);
+		map_kernel_segment(pgdp, __inittext_begin, __inittext_end, text_prot,
+				   &vmlinux_inittext, 0, VM_NO_GUARD);
+		map_kernel_segment(pgdp, __initdata_begin, __initdata_end, PAGE_KERNEL,
+				   &vmlinux_initdata, 0, VM_NO_GUARD);
+#ifdef CONFIG_IEE
+		if (haoc_enabled) {
+			map_kernel_segment(pgdp, _data, iee_init_data_end, PAGE_KERNEL,
+					 &vmlinux_iee_init_data, NO_CONT_MAPPINGS | NO_BLOCK_MAPPINGS, VM_NO_GUARD);
+			map_kernel_segment(pgdp, iee_init_data_end, _end, PAGE_KERNEL, &vmlinux_data, 0, 0);
+			} else
+			map_kernel_segment(pgdp, _data, _end, PAGE_KERNEL, &vmlinux_data, 0, 0);
+#else	
+		map_kernel_segment(pgdp, _data, _end, PAGE_KERNEL, &vmlinux_data, 0, 0);
+#endif
+		
+		fixmap_copy(pgdp);
+		kasan_copy_shadow(pgdp);
 }
 
 static void __init create_idmap(void)
@@ -794,13 +841,25 @@ void __init paging_init(void)
 
 	idmap_t0sz = 63UL - __fls(__pa_symbol(_end) | GENMASK(VA_BITS_MIN - 1, 0));
 
+	#ifdef CONFIG_IEE
+	early_iee_data_cache_init();
+	#endif
+
 	map_kernel(pgdp);
 	map_mem(pgdp);
+
+	#ifdef CONFIG_IEE
+	iee_init_mappings(pgdp);
+	#endif
 
 	pgd_clear_fixmap();
 
 	cpu_replace_ttbr1(lm_alias(swapper_pg_dir), init_idmap_pg_dir);
 	init_mm.pgd = swapper_pg_dir;
+
+	#ifdef CONFIG_IEE
+	init_early_iee_data();
+	#endif
 
 	memblock_phys_free(__pa_symbol(init_pg_dir),
 			   __pa_symbol(init_pg_end) - __pa_symbol(init_pg_dir));
@@ -808,6 +867,10 @@ void __init paging_init(void)
 	memblock_allow_resize();
 
 	create_idmap();
+
+	#ifdef CONFIG_IEE
+	iee_init_post();
+	#endif
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG

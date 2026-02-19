@@ -54,6 +54,9 @@
 #include <asm/efi.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/mmu_context.h>
+#ifdef CONFIG_IEE_SIP
+#include <asm/haoc/iee-si.h>
+#endif
 
 static int num_standard_resources;
 static struct resource *standard_resources;

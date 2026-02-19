@@ -123,6 +123,49 @@ jiffies = jiffies_64;
 #define TRAMP_TEXT
 #endif
 
+#ifdef CONFIG_IEE_SIP
+#define IEE_SI_TEXT	\
+	. = ALIGN(PAGE_SIZE);	\
+	. += PMD_SIZE;		\
+	__iee_si_text_start = .;	\
+	*(.iee.si_text)	\
+	. = ALIGN(PAGE_SIZE);	\
+	__iee_si_text_end = .;	\
+	. += PMD_SIZE;
+#else
+#define IEE_SI_TEXT
+#endif
+
+#ifdef CONFIG_IEE
+#define IEE_TEXT \
+	. = ALIGN(PAGE_SIZE);				\
+	__iee_code_start = .;       \
+	*(.iee.text)				        \
+	. = ALIGN(PAGE_SIZE);				\
+	__iee_code_end = .;			\
+	IEE_SI_TEXT
+#else
+#define IEE_TEXT
+#endif
+
+#ifdef CONFIG_CREDP
+#define CRED_DATA				\
+	. = ALIGN(PAGE_SIZE);		\
+	*(.iee.cred)				\
+	. = ALIGN(PAGE_SIZE);
+#endif
+
+#ifdef CONFIG_IEE
+#define IEE_INIT_DATA \
+	.iee.data : {		\
+	. = ALIGN(PAGE_SIZE);		\
+	iee_init_data_begin = .;	\
+	CRED_DATA	\
+	. = ALIGN(PAGE_SIZE);	\
+	iee_init_data_end = .;	\
+	}
+#endif
+
 #ifdef CONFIG_UNWIND_TABLES
 #define UNWIND_DATA_SECTIONS				\
 	.eh_frame : {					\
@@ -181,6 +224,7 @@ SECTIONS
 			LOCK_TEXT
 			KPROBES_TEXT
 			HYPERVISOR_TEXT
+			IEE_TEXT
 			*(.gnu.warning)
 	}
 
@@ -291,6 +335,9 @@ SECTIONS
 
 	_data = .;
 	_sdata = .;
+	#ifdef CONFIG_IEE
+	IEE_INIT_DATA
+	#endif	
 	RW_DATA(L1_CACHE_BYTES, PAGE_SIZE, THREAD_ALIGN)
 
 	/*
