@@ -608,13 +608,14 @@ static int ubctl_msgq_entry_move_data(struct ubctl_query_cmd_param *query_cmd_pa
 {
 	u32 msgq_entry_data_size = block_size + offset * sizeof(u32);
 	u32 *data_offset = query_cmd_param->out->data + offset;
+	u32 block_num = block_size / sizeof(u32);
 	u32 i;
 
 	if (msgq_entry_data_size > query_cmd_param->out_len)
 		return -EINVAL;
 
-	for (i = 0; i < block_size / sizeof(u32); i++)
-		data_offset[i] = readl(entry_addr + i);
+	for (i = 0; i < block_num; i++)
+		data_offset[i] = readl((void __iomem *)((u32 *)entry_addr + i));
 
 	return 0;
 }

@@ -796,6 +796,14 @@ static bool udma_wait_timeout(uint32_t *sum_times, uint32_t times, uint32_t ta_t
 	return false;
 }
 
+static void udma_mask_jetty_ctx(struct udma_jetty_ctx *ctx)
+{
+	ctx->sqe_base_addr_l = 0;
+	ctx->sqe_base_addr_h = 0;
+	ctx->user_data_l = 0;
+	ctx->user_data_h = 0;
+}
+
 static bool udma_query_jetty_fd(struct udma_dev *dev, struct udma_jetty_queue *sq)
 {
 	struct udma_jetty_ctx ctx = {};
@@ -821,6 +829,7 @@ static bool udma_query_jetty_fd(struct udma_dev *dev, struct udma_jetty_queue *s
 	if (ctx.flush_ssn_vld && rcv_send_diff < UDMA_RCV_SEND_MAX_DIFF)
 		return true;
 
+	udma_mask_jetty_ctx(&ctx);
 	udma_dfx_ctx_print(dev, "Flush Failed Jetty", sq->id, sizeof(ctx) / sizeof(uint32_t),
 			   (uint32_t *)&ctx);
 
@@ -1098,6 +1107,8 @@ static bool udma_batch_query_jetty_fd(struct udma_dev *dev,
 
 		*bad_jetty_index = 0;
 		all_query_done = false;
+
+		udma_mask_jetty_ctx(&ctx);
 		udma_dfx_ctx_print(dev, "Flush Failed Jetty", sq->id,
 				   sizeof(ctx) / sizeof(uint32_t), (uint32_t *)&ctx);
 		break;

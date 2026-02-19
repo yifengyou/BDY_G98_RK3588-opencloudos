@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright(c) 2025 HiSilicon Technologies CO., Ltd. All rights reserved.
 
-menuconfig UB_UDMA
+config UB_UDMA
 	default n
 	tristate "UB UDMA Driver"
 	depends on UB_UBASE && UB_URMA && UB_UMMU_CORE

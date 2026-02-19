@@ -31,8 +31,8 @@ static void ummu_build_nested_domain_tct(struct ummu_domain *u_domain,
 	tcr_sel = (ummu->cap.features & UMMU_FEAT_E2H) ? TECT_ENT0_TCR_EL2 :
 						  TECT_ENT0_TCR_NSEL1;
 	target->data[0] |= cpu_to_le64(
-			   FIELD_PREP(TECT_ENT0_TCRC_SEL, tcr_sel) |
-			   (ummu->cap.support_mapt ? TECT_ENT0_MAPT_EN : 0));
+		FIELD_PREP(TECT_ENT0_TCRC_SEL, tcr_sel) |
+		((ummu->cap.features & UMMU_FEAT_MAPT) ? TECT_ENT0_MAPT_EN : 0));
 }
 
 static void ummu_build_nested_domain_tecte(
@@ -184,7 +184,6 @@ static int ummu_fix_user_cmd(struct ummu_device *ummu,
 	case CMD_CFGI_TECT_RANGE:
 	case CMD_CFGI_TCT:
 	case CMD_CFGI_TCT_ALL:
-	case CMD_CFGI_TECTS_PIDM:
 		cmd[2] &= ~CMD_CFGI_2_TECTE_TAG;
 		cmd[2] |= FIELD_PREP(CMD_CFGI_2_TECTE_TAG, tecte_tag);
 		break;
@@ -210,7 +209,7 @@ int ummu_viommu_cache_invalidate_user(struct iommu_domain *domain,
 	nested_domain = to_nested_domain(domain);
 	tecte_tag = nested_domain->s2_parent->cfgs.tecte_tag;
 
-	ummu = core_to_ummu_device(nested_domain->s2_parent->base_domain.core_dev);
+	ummu = core_to_ummu_device(nested_domain->base_domain.core_dev);
 
 	cmds = kcalloc(array->entry_num, sizeof(*cmds), GFP_KERNEL);
 	if (!cmds)

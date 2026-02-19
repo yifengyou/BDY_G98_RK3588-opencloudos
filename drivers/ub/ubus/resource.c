@@ -12,7 +12,6 @@
 #include "ubus.h"
 #include "msg.h"
 #include "decoder.h"
-#include "omm.h"
 #include "resource.h"
 
 struct query_token_msg_pld_req {
@@ -97,7 +96,7 @@ static int _ub_assign_resource(struct ub_entity *uent, int idx,
 	return -ENOMEM;
 }
 
-int ub_assign_resource(struct ub_entity *uent, int idx)
+static int ub_assign_resource(struct ub_entity *uent, int idx)
 {
 	struct resource *res = &uent->zone[idx].res;
 	resource_size_t size;
@@ -123,7 +122,7 @@ int ub_assign_resource(struct ub_entity *uent, int idx)
 	return 0;
 }
 
-void ub_release_resource(struct ub_entity *uent, int idx)
+static void ub_release_resource(struct ub_entity *uent, int idx)
 {
 	int ret;
 
@@ -292,7 +291,7 @@ int ub_insert_resource(struct ub_entity *dev, int idx)
 	return 0;
 }
 
-int ub_entity_alloc_mmio_idx(struct ub_entity *dev, int idx)
+static int ub_entity_alloc_mmio_idx(struct ub_entity *dev, int idx)
 {
 	if (is_ibus_controller(dev) || is_idev(dev))
 		return ub_insert_resource(dev, idx);

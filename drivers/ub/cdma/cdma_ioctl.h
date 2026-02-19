@@ -9,4 +9,4 @@ struct cdma_ioctl_hdr;
 
 int cdma_cmd_parse(struct cdma_file *cfile, struct cdma_ioctl_hdr *hdr);
 
-#endif /* _CDMA_IOCTL_H_ */
+#endif /* __CDMA_IOCTL_H__ */

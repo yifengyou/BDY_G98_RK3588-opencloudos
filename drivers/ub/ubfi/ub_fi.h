@@ -6,12 +6,11 @@
 #ifndef __UB_FI_H__
 #define __UB_FI_H__
 
-enum bios_report_mode {
+enum firmware_report_mode {
 	ACPI = 0,
 	DTS = 1,
-	UBIOS = 3,
-	UNKNOWN = 4,
+	UNKNOWN = 2
 };
 
-extern enum bios_report_mode bios_mode;
+extern enum firmware_report_mode firmware_mode;
 #endif /* __UB_FI_H__ */

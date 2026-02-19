@@ -61,6 +61,12 @@ int ub_get_bus_controller(struct ub_entity *ubc_dev[], unsigned int max_num,
 {
 	struct ub_bus_controller *ubc;
 	unsigned int ubc_num = 0;
+	int ret;
+
+	if (!manage_subsystem_ops) {
+		pr_err("manage subsystem ops is null\n");
+		return -EINVAL;
+	}
 
 	if (!real_num || !ubc_dev) {
 		pr_err("%s: input parameters invalid\n", __func__);
@@ -70,16 +76,25 @@ int ub_get_bus_controller(struct ub_entity *ubc_dev[], unsigned int max_num,
 	list_for_each_entry(ubc, &ubc_list, node) {
 		if (ubc_num >= max_num) {
 			pr_err("ubc list num over max num %u\n", max_num);
-			ub_put_bus_controller(ubc_dev, max_num);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto ubc_put;
 		}
 
-		ubc_dev[ubc_num] = ub_entity_get(ubc->uent);
+		if (!ub_entity_get(ubc->uent)) {
+			pr_err("The ub_entity of ubc is null\n");
+			ret = -EINVAL;
+			goto ubc_put;
+		}
+		ubc_dev[ubc_num] = ubc->uent;
 		ubc_num++;
 	}
 	*real_num = ubc_num;
 
 	return 0;
+
+ubc_put:
+	ub_put_bus_controller(ubc_dev, max_num);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(ub_get_bus_controller);
 
@@ -134,7 +149,7 @@ ub_match_one_device(const struct ub_device_id *id, const struct ub_entity *dev)
 	return NULL;
 }
 
-const struct ub_device_id *ub_match_id(const struct ub_device_id *ids,
+static const struct ub_device_id *ub_match_id(const struct ub_device_id *ids,
 				       struct ub_entity *dev)
 {
 	if (ids && dev) {
@@ -567,7 +582,7 @@ static int ub_bus_num_ue(struct device *dev)
 	return ub_num_ue(to_ub_entity(dev));
 }
 
-void ub_bus_type_init(void)
+static void ub_bus_type_init(void)
 {
 	ub_bus_type.match = ub_bus_match;
 	ub_bus_type.uevent = ub_uevent;
@@ -580,7 +595,7 @@ void ub_bus_type_init(void)
 	ub_bus_type.num_vf = ub_bus_num_ue;
 }
 
-void ub_bus_type_uninit(void)
+static void ub_bus_type_uninit(void)
 {
 	ub_bus_type.match = NULL;
 	ub_bus_type.uevent = NULL;

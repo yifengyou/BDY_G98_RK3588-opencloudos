@@ -70,14 +70,28 @@ static void udma_init_seg_cfg(struct udma_segment *seg, struct ubcore_seg_cfg *c
 
 static int udma_u_get_seg_perm(struct ubcore_seg_cfg *cfg)
 {
-	if (cfg->flag.bs.access & UBCORE_ACCESS_LOCAL_ONLY ||
-	    cfg->flag.bs.access & UBCORE_ACCESS_ATOMIC)
+	bool local_only_flag = cfg->flag.bs.access & UBCORE_ACCESS_LOCAL_ONLY;
+	bool atomic_flag = cfg->flag.bs.access & UBCORE_ACCESS_ATOMIC;
+	bool write_flag = cfg->flag.bs.access & UBCORE_ACCESS_WRITE;
+	bool read_flag = cfg->flag.bs.access & UBCORE_ACCESS_READ;
+
+	/* After setting ACCESS_LOCAL, other operations cannot be configured. */
+	if (local_only_flag && !atomic_flag && !write_flag && !read_flag)
 		return UMMU_DEV_ATOMIC | UMMU_DEV_WRITE | UMMU_DEV_READ;
 
-	if (cfg->flag.bs.access & UBCORE_ACCESS_WRITE)
+	/* Atomic require additional configuration of write and read. */
+	if (!local_only_flag && atomic_flag && write_flag && read_flag)
+		return UMMU_DEV_ATOMIC | UMMU_DEV_WRITE | UMMU_DEV_READ;
+
+	/* Write require additional configuration of read. */
+	if (!local_only_flag && !atomic_flag && write_flag && read_flag)
 		return UMMU_DEV_WRITE | UMMU_DEV_READ;
 
-	return UMMU_DEV_READ;
+	if (!local_only_flag && !atomic_flag && !write_flag && read_flag)
+		return UMMU_DEV_READ;
+
+	/* All other configurations are illegal. */
+	return 0;
 }
 
 static int udma_sva_grant(struct ubcore_seg_cfg *cfg, struct iommu_sva *ksva)
@@ -245,8 +259,8 @@ struct ubcore_target_seg *udma_register_seg(struct ubcore_device *ub_dev,
 	ret = udma_sva_grant(cfg, ksva);
 	if (ret) {
 		dev_err(udma_dev->dev,
-			"ksva grant failed with token policy %d, ret = %d.\n",
-			cfg->flag.bs.token_policy, ret);
+			"ksva grant failed token policy %d, access %d, ret = %d.\n",
+			cfg->flag.bs.token_policy, cfg->flag.bs.access, ret);
 		goto err_load_ksva;
 	}
 	mutex_unlock(&udma_dev->ksva_mutex);

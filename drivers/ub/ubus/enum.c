@@ -1430,6 +1430,10 @@ int ub_enum_entities_active(struct list_head *dev_list)
 
 		list_del(&uent->node);
 		ub_entity_add(uent, uent->ubc);
+
+		if (is_ibus_controller(uent) && uent->ubc->cluster)
+			continue;
+
 		ub_start_ent(uent);
 	}
 

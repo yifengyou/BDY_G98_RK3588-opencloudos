@@ -12,6 +12,7 @@
 int ub_update_msi_domain(struct device *dev,
 			 enum irq_domain_bus_token bus_token)
 {
+#ifdef CONFIG_GENERIC_MSI_IRQ
 	struct fwnode_handle *fwnode;
 	struct irq_domain *domain;
 
@@ -35,7 +36,7 @@ int ub_update_msi_domain(struct device *dev,
 
 	/* Update msi domain with new bus_token */
 	dev_set_msi_domain(dev, domain);
-
+#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ub_update_msi_domain);
@@ -61,8 +62,10 @@ int ubrt_register_gsi(u32 hwirq, int trigger, int polarity, const char *name,
 	res->start = irq;
 	res->end = irq;
 	res->flags = IORESOURCE_IRQ;
-#endif
 	return 0;
+#else
+	return -EINVAL;
+#endif
 }
 EXPORT_SYMBOL_GPL(ubrt_register_gsi);
 
@@ -74,32 +77,3 @@ void ubrt_unregister_gsi(u32 hwirq)
 }
 EXPORT_SYMBOL_GPL(ubrt_unregister_gsi);
 
-#if IS_ENABLED(CONFIG_UB_UBRT_PLAT_DEV)
-int ubrt_pmsi_get_interrupt_id(struct device *dev, u32 *interrupt_id)
-{
-	struct ubrt_fwnode *fw;
-	struct ummu_node *node;
-
-	if (!dev->fwnode)
-		return -EINVAL;
-
-	fw = ubrt_fwnode_get(dev->fwnode);
-	if (!fw)
-		return -ENODEV;
-
-	switch (fw->type) {
-	case UBRT_UMMU:
-		node = (struct ummu_node *)fw->ubrt_node;
-		*interrupt_id = node->intr_id;
-		break;
-	case UBRT_UMMU_PMU:
-		node = (struct ummu_node *)fw->ubrt_node;
-		*interrupt_id = node->pmu_intr_id;
-		break;
-	default:
-		return -ENODEV;
-	}
-	dev_info(dev, "ubct pmsi successfully obtained interrupt id[0x%x].\n", *interrupt_id);
-	return 0;
-}
-#endif

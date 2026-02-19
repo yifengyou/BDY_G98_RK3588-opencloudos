@@ -365,15 +365,15 @@ int udma_init_tables(struct udma_dev *udma_dev)
 	}
 
 	udma_init_udma_table(&udma_dev->jfr_table, udma_dev->caps.jfr.max_cnt +
-			     udma_dev->caps.jfr.start_idx - 1, udma_dev->caps.jfr.start_idx);
+			     udma_dev->caps.jfr.start_idx - 1, udma_dev->caps.jfr.start_idx, false);
 	udma_init_udma_table(&udma_dev->jfc_table, udma_dev->caps.jfc.max_cnt +
-			     udma_dev->caps.jfc.start_idx - 1, udma_dev->caps.jfc.start_idx);
+			     udma_dev->caps.jfc.start_idx - 1, udma_dev->caps.jfc.start_idx, true);
 	udma_init_udma_table(&udma_dev->jetty_grp_table, udma_dev->caps.jetty_grp.max_cnt +
 			     udma_dev->caps.jetty_grp.start_idx - 1,
-			     udma_dev->caps.jetty_grp.start_idx);
-	udma_init_udma_table_mutex(&udma_dev->ksva_table, &udma_dev->ksva_mutex);
-	udma_init_udma_table_mutex(&udma_dev->npu_nb_table, &udma_dev->npu_nb_mutex);
-	xa_init(&udma_dev->tpn_ue_idx_table);
+			     udma_dev->caps.jetty_grp.start_idx, true);
+	udma_init_udma_table_mutex(&udma_dev->ksva_table, &udma_dev->ksva_mutex, false);
+	udma_init_udma_table_mutex(&udma_dev->npu_nb_table, &udma_dev->npu_nb_mutex, true);
+	xa_init_flags(&udma_dev->tpn_ue_idx_table, XA_FLAGS_LOCK_IRQ);
 	xa_init(&udma_dev->crq_nb_table);
 	ida_init(&udma_dev->rsvd_jetty_ida_table.ida);
 	mutex_init(&udma_dev->disable_ue_rx_mutex);
@@ -891,11 +891,10 @@ err_ce_register:
 	return ret;
 }
 
-static void udma_unregister_event(struct auxiliary_device *adev)
+static void udma_unregister_none_crq_event(struct auxiliary_device *adev)
 {
 	ubase_port_unregister(adev);
 	udma_unregister_ctrlq_event(adev);
-	udma_unregister_crq_event(adev);
 	udma_unregister_ce_event(adev);
 	udma_unregister_ae_event(adev);
 }
@@ -1021,7 +1020,8 @@ err_init_eid:
 err_set_ubcore_dev:
 	udma_unregister_activate_workqueue(udma_dev);
 err_register_act_init:
-	udma_unregister_event(adev);
+	udma_unregister_none_crq_event(adev);
+	udma_unregister_crq_event(adev);
 err_event_register:
 	udma_destroy_dev(udma_dev);
 err_create:
@@ -1067,12 +1067,6 @@ void udma_reset_down(struct auxiliary_device *adev)
 	}
 
 	ubcore_stop_requests(&udma_dev->ub_dev);
-	if (udma_close_ue_rx(udma_dev, false, false, true, 0)) {
-		mutex_unlock(&udma_reset_mutex);
-		dev_err(&adev->dev, "udma close ue rx failed in reset down process.\n");
-		return;
-	}
-
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_dev->status = UDMA_SUSPEND;
 	mutex_unlock(&udma_reset_mutex);
@@ -1096,11 +1090,18 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 		return;
 	}
 
+	if (udma_close_ue_rx(udma_dev, false, false, true, 0)) {
+		mutex_unlock(&udma_reset_mutex);
+		dev_err(&adev->dev, "udma close ue rx failed in reset process.\n");
+		return;
+	}
+
+	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
-	udma_unregister_event(adev);
+	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
 }
@@ -1124,8 +1125,8 @@ void udma_remove(struct auxiliary_device *adev)
 {
 	struct udma_dev *udma_dev;
 
-	mutex_lock(&udma_reset_mutex);
 	ubase_reset_unregister(adev);
+	mutex_lock(&udma_reset_mutex);
 	udma_dev = get_udma_dev(adev);
 	if (!udma_dev) {
 		mutex_unlock(&udma_reset_mutex);
@@ -1134,23 +1135,22 @@ void udma_remove(struct auxiliary_device *adev)
 	}
 
 	ubcore_stop_requests(&udma_dev->ub_dev);
-	if (udma_close_ue_rx(udma_dev, false, false, false, 0)) {
-		mutex_unlock(&udma_reset_mutex);
+	if (udma_close_ue_rx(udma_dev, false, false, false, 0))
 		dev_err(&adev->dev, "udma close ue rx failed in remove process.\n");
-		return;
-	}
 
 	udma_dev->status = UDMA_SUSPEND;
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
-
+	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
 	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
-	(void)ubase_activate_dev(adev);
-	udma_unregister_event(adev);
+	if (is_rmmod)
+		(void)ubase_activate_dev(adev);
+	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
+	dev_info(&adev->dev, "udma device remove success.\n");
 }
 
 static struct auxiliary_driver udma_drv = {

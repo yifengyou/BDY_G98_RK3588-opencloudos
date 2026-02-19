@@ -313,7 +313,7 @@ static int ummu_sva_collect_domain_cfg(struct ummu_domain *domain, ioasid_t id)
 			domain->cfgs.sva_mode = UMMU_MODE_SVA;
 	}
 
-	if (ummu->cap.support_mapt &&
+	if ((ummu->cap.features & UMMU_FEAT_MAPT) &&
 	    domain->cfgs.sva_mode != UMMU_MODE_SVA_DISABLE_PTB) {
 		domain->cfgs.s1_cfg.io_pt_cfg.mode = mode;
 		if (!ksva) {

@@ -251,7 +251,8 @@ static int ummu_mcmdq_init(struct ummu_device *ummu)
 	int cpu, ret;
 
 	ummu->nr_mcmdq = 1UL << ummu->cap.mcmdq_log2num;
-	ummu->nr_mcmdq -= 1;
+	if (ummu->cap.options & UMMU_OPT_MCMDQ_DECREASE)
+		ummu->nr_mcmdq -= 1;
 	shift = order_base_2(num_possible_cpus() / ummu->nr_mcmdq);
 
 	ummu->mcmdq = devm_alloc_percpu(ummu->dev, struct ummu_mcmdq *);

@@ -1008,6 +1008,7 @@ static int copy_out_cqe_data_from_user(struct udma_dev *udma_dev,
 					sizeof(uint32_t), GFP_KERNEL);
 			if (!aux_info_out->aux_info_value) {
 				kfree(aux_info_out->aux_info_type);
+				aux_info_out->aux_info_type = NULL;
 				return -ENOMEM;
 			}
 		}
@@ -1206,6 +1207,7 @@ static int copy_out_ae_data_from_user(struct udma_dev *udma_dev,
 					sizeof(uint32_t), GFP_KERNEL);
 			if (!aux_info_out->aux_info_value) {
 				kfree(aux_info_out->aux_info_type);
+				aux_info_out->aux_info_type = NULL;
 				return -ENOMEM;
 			}
 		}

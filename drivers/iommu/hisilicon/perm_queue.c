@@ -12,10 +12,7 @@
 #include "regs.h"
 #include "perm_queue.h"
 
-#define PCMDQ_ENT_BYTES 16U
-#define PCPLQ_ENT_BYTES 4U
 #define PERMQ_CTXTBL_BYTES 64U
-
 #define PERMQ_CTXTBL_STATUS GENMASK(1, 0)
 #define PERMQ_CTXTBL_RESET 0x0
 #define PERMQ_CTXTBL_READY 0x1
@@ -44,8 +41,10 @@
 
 void ummu_device_uninit_permqs(struct ummu_device *ummu)
 {
-	if (ummu->cap.support_mapt)
-		xa_destroy(&ummu->permq_ctx_cfg.permq_xa);
+	if (!(ummu->cap.features & UMMU_FEAT_MAPT))
+		return;
+
+	xa_destroy(&ummu->permq_ctx_cfg.permq_xa);
 	mutex_destroy(&ummu->permq_ctx_cfg.permq_rel_mutex);
 }
 
@@ -335,6 +334,7 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 
 	domain->qid = qid;
 	ummu_init_permq_ctxtbl_ent(domain, permq);
+	dma_wmb();
 	ummu_init_permq_ctrltbl_ent(ummu->ucmdq_ctrl_page, qid);
 	return 0;
 

@@ -43,10 +43,8 @@ int hi_mem_decoder_create(struct ub_bus_controller *ubc);
 void hi_mem_decoder_remove(struct ub_bus_controller *ubc);
 void hi_register_ubmem_irq(struct ub_bus_controller *ubc);
 void hi_unregister_ubmem_irq(struct ub_bus_controller *ubc);
-void hi_register_decoder_base_addr(struct ub_bus_controller *ubc, u64 *cmd_queue,
-				   u64 *event_queue);
 int hi_send_entity_enable_msg(struct ub_entity *uent, u8 enable);
-
+int hi_send_port_reset_msg(struct ub_entity *uent, u16 port_idx);
 int ub_bus_controller_probe(struct ub_bus_controller *ubc);
 void ub_bus_controller_remove(struct ub_bus_controller *ubc);
 
