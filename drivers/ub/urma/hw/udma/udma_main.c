@@ -19,6 +19,9 @@
 #include "udma_dev.h"
 #include "udma_eq.h"
 #include "udma_segment.h"
+#include "udma_jfs.h"
+#include "udma_jfc.h"
+#include "udma_jfr.h"
 #include "udma_cmd.h"
 #include "udma_ctx.h"
 #include "udma_rct.h"
@@ -29,8 +32,10 @@
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 
+bool cqe_mode = true;
 bool is_rmmod;
 static DEFINE_MUTEX(udma_reset_mutex);
+uint32_t jfr_sleep_time = 1000;
 uint32_t jfc_arm_mode;
 bool dump_aux_info;
 
@@ -157,6 +162,35 @@ static int udma_query_device_attr(struct ubcore_device *dev,
 	return 0;
 }
 
+static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *key,
+			    struct ubcore_stats_val *val)
+{
+	struct ubcore_stats_com_val *com_val = (struct ubcore_stats_com_val *)val->addr;
+	struct udma_dev *udma_dev = to_udma_dev(dev);
+	struct ubase_ub_dl_stats dl_stats = {};
+	int ret;
+
+	ret = ubase_get_ub_port_stats(udma_dev->comdev.adev,
+				      udma_dev->port_logic_id, &dl_stats);
+	if (ret) {
+		dev_err(udma_dev->dev, "failed to query port stats, ret = %d.\n", ret);
+		return ret;
+	}
+
+	com_val->tx_pkt = dl_stats.dl_tx_busi_pkt_num;
+	com_val->rx_pkt = dl_stats.dl_rx_busi_pkt_num;
+	com_val->rx_pkt_err = 0;
+	com_val->tx_pkt_err = 0;
+	com_val->tx_bytes = 0;
+	com_val->rx_bytes = 0;
+
+	return ret;
+}
+
+static void udma_disassociate_ucontext(struct ubcore_ucontext *uctx)
+{
+}
+
 static struct ubcore_ops g_dev_ops = {
 	.owner = THIS_MODULE,
 	.abi_version = 0,
@@ -173,6 +207,49 @@ static struct ubcore_ops g_dev_ops = {
 	.unregister_seg = udma_unregister_seg,
 	.import_seg = udma_import_seg,
 	.unimport_seg = udma_unimport_seg,
+	.create_jfc = udma_create_jfc,
+	.modify_jfc = udma_modify_jfc,
+	.destroy_jfc = udma_destroy_jfc,
+	.rearm_jfc = udma_rearm_jfc,
+	.create_jfs = udma_create_jfs,
+	.modify_jfs = udma_modify_jfs,
+	.query_jfs = udma_query_jfs,
+	.flush_jfs = udma_flush_jfs,
+	.destroy_jfs = udma_destroy_jfs,
+	.destroy_jfs_batch = udma_destroy_jfs_batch,
+	.create_jfr = udma_create_jfr,
+	.modify_jfr = udma_modify_jfr,
+	.query_jfr = udma_query_jfr,
+	.destroy_jfr = udma_destroy_jfr,
+	.destroy_jfr_batch = udma_destroy_jfr_batch,
+	.import_jfr_ex = udma_import_jfr_ex,
+	.unimport_jfr = udma_unimport_jfr,
+	.create_jetty = udma_create_jetty,
+	.modify_jetty = udma_modify_jetty,
+	.query_jetty = udma_query_jetty,
+	.flush_jetty = udma_flush_jetty,
+	.destroy_jetty = udma_destroy_jetty,
+	.destroy_jetty_batch = udma_destroy_jetty_batch,
+	.import_jetty_ex = udma_import_jetty_ex,
+	.unimport_jetty = udma_unimport_jetty,
+	.bind_jetty_ex = udma_bind_jetty_ex,
+	.unbind_jetty = udma_unbind_jetty,
+	.create_jetty_grp = udma_create_jetty_grp,
+	.delete_jetty_grp = udma_delete_jetty_grp,
+	.get_tp_list = udma_get_tp_list,
+	.set_tp_attr = udma_set_tp_attr,
+	.get_tp_attr = udma_get_tp_attr,
+	.active_tp = udma_active_tp,
+	.deactive_tp = udma_deactive_tp,
+	.user_ctl = udma_user_ctl,
+	.post_jfs_wr = udma_post_jfs_wr,
+	.post_jfr_wr = udma_post_jfr_wr,
+	.post_jetty_send_wr = udma_post_jetty_send_wr,
+	.post_jetty_recv_wr = udma_post_jetty_recv_wr,
+	.poll_jfc = udma_poll_jfc,
+	.query_stats = udma_query_stats,
+	.query_ue_idx = udma_query_ue_idx,
+	.disassociate_ucontext = udma_disassociate_ucontext,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)
@@ -205,6 +282,7 @@ static void udma_destroy_tp_ue_idx_table(struct udma_dev *udma_dev)
 
 void udma_destroy_tables(struct udma_dev *udma_dev)
 {
+	udma_ctrlq_destroy_tpid_list(udma_dev, &udma_dev->ctrlq_tpid_table, false);
 	udma_destroy_eid_table(udma_dev);
 	mutex_destroy(&udma_dev->disable_ue_rx_mutex);
 	if (!ida_is_empty(&udma_dev->rsvd_jetty_ida_table.ida))
@@ -217,6 +295,7 @@ void udma_destroy_tables(struct udma_dev *udma_dev)
 	xa_destroy(&udma_dev->crq_nb_table);
 
 	udma_destroy_tp_ue_idx_table(udma_dev);
+	udma_destroy_npu_cb_table(udma_dev);
 
 	if (!xa_empty(&udma_dev->ksva_table))
 		dev_err(udma_dev->dev, "ksva table is not empty.\n");
@@ -266,6 +345,7 @@ static void udma_init_managed_by_ctrl_cpu_table(struct udma_dev *udma_dev)
 {
 	mutex_init(&udma_dev->eid_mutex);
 	xa_init(&udma_dev->eid_table);
+	xa_init(&udma_dev->ctrlq_tpid_table);
 }
 
 int udma_init_tables(struct udma_dev *udma_dev)
@@ -407,7 +487,6 @@ static void udma_get_jetty_id_range(struct udma_dev *udma_dev,
 
 static int query_caps_from_firmware(struct udma_dev *udma_dev)
 {
-#define RC_QUEUE_ENTRY_SIZE 128
 	struct udma_cmd_ue_resource cmd = {};
 	int ret;
 
@@ -433,10 +512,6 @@ static int query_caps_from_firmware(struct udma_dev *udma_dev)
 	udma_dev->caps.atomic_feat = cmd.atomic_feat;
 
 	udma_get_jetty_id_range(udma_dev, &cmd);
-
-	udma_dev->caps.rc_queue_num = cmd.rc_queue_num;
-	udma_dev->caps.rc_queue_depth = cmd.rc_depth;
-	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
 
 	udma_dev->caps.feature = cmd.cap_info;
 	udma_dev->caps.ue_cnt = cmd.ue_cnt >= UDMA_DEV_UE_NUM ?
@@ -501,9 +576,24 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	return 0;
 }
 
+static void cal_max_2m_num(struct udma_dev *dev)
+{
+	uint32_t jfs_pg = ALIGN(dev->caps.jfs.depth * MAX_WQEBB_IN_SQE *
+				UDMA_JFS_WQEBB_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+	uint32_t jfr_pg = ALIGN(dev->caps.jfr.depth * dev->caps.jfr_sge *
+				UDMA_SGE_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+	uint32_t jfc_pg = ALIGN(dev->caps.jfc.depth * dev->caps.cqe_size,
+				UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
+
+	dev->total_hugepage_num =
+		(dev->caps.jetty.start_idx + dev->caps.jetty.max_cnt) * jfs_pg +
+		dev->caps.jfr.max_cnt * jfr_pg + dev->caps.jfc.max_cnt * jfc_pg;
+}
+
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
+#define RC_QUEUE_ENTRY_SIZE 64
 	struct ubase_adev_caps *a_caps;
 	uint32_t jetty_grp_cnt;
 	int ret;
@@ -529,6 +619,14 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.jetty.start_idx = a_caps->jfs.start_idx;
 	udma_dev->caps.jetty.next_idx = udma_dev->caps.jetty.start_idx;
 	udma_dev->caps.cqe_size = UDMA_CQE_SIZE;
+	udma_dev->caps.rc_queue_num = a_caps->rc_max_cnt;
+	udma_dev->caps.rc_queue_depth = a_caps->rc_que_depth;
+	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
+	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
+	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
+
+	cal_max_2m_num(udma_dev);
+
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)
 		return ret;
@@ -577,11 +675,14 @@ static int udma_init_dev_param(struct udma_dev *udma_dev)
 	for (i = 0; i < UDMA_DB_TYPE_NUM; i++)
 		INIT_LIST_HEAD(&udma_dev->db_list[i]);
 
+	udma_init_hugepage(udma_dev);
+
 	return 0;
 }
 
 static void udma_uninit_dev_param(struct udma_dev *udma_dev)
 {
+	udma_destroy_hugepage(udma_dev);
 	mutex_destroy(&udma_dev->db_mutex);
 	dev_set_drvdata(&udma_dev->comdev.adev->dev, NULL);
 	udma_destroy_tables(udma_dev);
@@ -1083,6 +1184,12 @@ static void __exit udma_exit(void)
 module_init(udma_init);
 module_exit(udma_exit);
 MODULE_LICENSE("GPL");
+
+module_param(cqe_mode, bool, 0444);
+MODULE_PARM_DESC(cqe_mode, "Set cqe reporting mode, default: 1 (0:BY_COUNT, 1:BY_CI_PI_GAP)");
+
+module_param(jfr_sleep_time, uint, 0444);
+MODULE_PARM_DESC(jfr_sleep_time, "Set the destroy jfr sleep time, default: 1000 us.\n");
 
 module_param(jfc_arm_mode, uint, 0444);
 MODULE_PARM_DESC(jfc_arm_mode,

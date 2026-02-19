@@ -63,6 +63,8 @@ struct udma_caps {
 	uint16_t rc_queue_num;
 	uint16_t rc_queue_depth;
 	uint8_t rc_entry_size;
+	uint64_t rc_dma_len;
+	dma_addr_t rc_dma_addr;
 	uint8_t ack_queue_num;
 	uint8_t port_num;
 	uint8_t cqe_size;
@@ -109,6 +111,24 @@ struct udma_sw_db_page {
 	refcount_t refcount;
 };
 
+struct udma_hugepage_priv {
+	struct list_head list;
+	struct page **pages;
+	uint32_t page_num;
+	struct ubcore_umem *umem;
+	void *va_base;
+	uint32_t va_len;
+	uint32_t left_va_offset;
+	uint32_t left_va_len;
+	refcount_t refcnt;
+};
+
+struct udma_hugepage {
+	void *va_start;
+	uint32_t va_len;
+	struct udma_hugepage_priv *priv;
+};
+
 struct udma_buf {
 	dma_addr_t		addr;
 	union {
@@ -123,6 +143,8 @@ struct udma_buf {
 	uint32_t		cnt_per_page_shift;
 	struct xarray		id_table_xa;
 	struct mutex		id_table_mutex;
+	bool			is_hugepage;
+	struct udma_hugepage	*hugepage;
 };
 
 struct udma_k_sw_db_page {

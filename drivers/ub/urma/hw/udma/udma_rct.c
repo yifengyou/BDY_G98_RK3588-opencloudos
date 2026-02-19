@@ -51,13 +51,50 @@ static int udma_destroy_rc_queue_ctx(struct udma_dev *dev, struct udma_rc_queue 
 	return ret;
 }
 
+static int udma_alloc_rct_buffer(struct udma_dev *dev, struct ubcore_device_cfg *cfg,
+				 struct udma_rc_queue *rcq)
+{
+	uint32_t rct_buffer_size = dev->caps.rc_entry_size * cfg->rc_cfg.depth;
+	uint32_t buf_num_per_hugepage;
+
+	rcq->buf.entry_size = dev->caps.rc_entry_size;
+	rcq->buf.entry_cnt = cfg->rc_cfg.depth;
+	if (ubase_adev_prealloc_supported(dev->comdev.adev)) {
+		rct_buffer_size = ALIGN(rct_buffer_size, PAGE_SIZE);
+		if (rct_buffer_size > UDMA_HUGEPAGE_SIZE) {
+			rcq->buf.addr = dev->caps.rc_dma_addr + rcq->id * rct_buffer_size;
+		} else {
+			buf_num_per_hugepage = UDMA_HUGEPAGE_SIZE / rct_buffer_size;
+			rcq->buf.addr = dev->caps.rc_dma_addr +
+					rcq->id / buf_num_per_hugepage * UDMA_HUGEPAGE_SIZE +
+					rcq->id % buf_num_per_hugepage * rct_buffer_size;
+		}
+	} else {
+		rcq->buf.kva_or_slot = udma_alloc_iova(dev, rct_buffer_size, &rcq->buf.addr);
+		if (!rcq->buf.kva_or_slot) {
+			dev_err(dev->dev, "failed to alloc rct buffer.\n");
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
+}
+
+static void udma_free_rct_buffer(struct udma_dev *dev, struct udma_rc_queue *rcq)
+{
+	uint32_t rct_buffer_size = rcq->buf.entry_size * rcq->buf.entry_cnt;
+
+	if (!ubase_adev_prealloc_supported(dev->comdev.adev)) {
+		udma_free_iova(dev, rct_buffer_size, rcq->buf.kva_or_slot, rcq->buf.addr);
+		rcq->buf.kva_or_slot = NULL;
+		rcq->buf.addr = 0;
+	}
+}
+
 static int udma_alloc_rc_queue(struct udma_dev *dev,
 			       struct ubcore_device_cfg *cfg, int rc_queue_id)
 {
-	uint32_t rcq_entry_size = dev->caps.rc_entry_size;
-	uint32_t rcq_entry_num = cfg->rc_cfg.depth;
 	struct udma_rc_queue *rcq;
-	uint32_t size;
 	int ret;
 
 	rcq = kzalloc(sizeof(struct udma_rc_queue), GFP_KERNEL);
@@ -65,15 +102,9 @@ static int udma_alloc_rc_queue(struct udma_dev *dev,
 		return -ENOMEM;
 	rcq->id = rc_queue_id;
 
-	size = rcq_entry_size * rcq_entry_num;
-	rcq->buf.kva_or_slot = udma_alloc_iova(dev, size, &rcq->buf.addr);
-	if (!rcq->buf.kva_or_slot) {
-		ret = -ENOMEM;
-		dev_err(dev->dev, "failed to alloc rc queue buffer.\n");
-		goto err_alloc_rcq;
-	}
-	rcq->buf.entry_size = rcq_entry_size;
-	rcq->buf.entry_cnt = rcq_entry_num;
+	ret = udma_alloc_rct_buffer(dev, cfg, rcq);
+	if (ret)
+		goto err_alloc_rct_buffer;
 
 	ret = udma_create_rc_queue_ctx(dev, rcq);
 	if (ret) {
@@ -101,10 +132,8 @@ err_store_rcq_id:
 		dev_err(dev->dev,
 			"udma destroy rc queue ctx failed when alloc rc queue.\n");
 err_create_rcq_ctx:
-	udma_free_iova(dev, size, rcq->buf.kva_or_slot, rcq->buf.addr);
-	rcq->buf.kva_or_slot = NULL;
-	rcq->buf.addr = 0;
-err_alloc_rcq:
+	udma_free_rct_buffer(dev, rcq);
+err_alloc_rct_buffer:
 	kfree(rcq);
 
 	return ret;
@@ -131,10 +160,7 @@ void udma_free_rc_queue(struct udma_dev *dev, int rc_queue_id)
 	if (dfx_switch)
 		udma_dfx_delete_id(dev, &dev->dfx_info->rc, rc_queue_id);
 
-	udma_free_iova(dev, rcq->buf.entry_size * rcq->buf.entry_cnt,
-		       rcq->buf.kva_or_slot, rcq->buf.addr);
-	rcq->buf.kva_or_slot = NULL;
-	rcq->buf.addr = 0;
+	udma_free_rct_buffer(dev, rcq);
 	kfree(rcq);
 }
 

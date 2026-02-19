@@ -18,6 +18,9 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
+#ifdef CONFIG_UB_UBUS
+#include <ub/ubus/ubus.h>
+#endif
 
 struct map_benchmark_data {
 	struct map_benchmark bparam;
@@ -351,6 +354,19 @@ static struct pci_driver map_benchmark_pci_driver = {
 	.probe	= map_benchmark_pci_probe,
 };
 
+#ifdef CONFIG_UB_UBUS
+static int map_benchmark_ub_probe(struct ub_entity *uent,
+				  const struct ub_device_id *id)
+{
+	return __map_benchmark_probe(&uent->dev);
+}
+
+static struct ub_driver map_benchmark_ub_driver = {
+	.name = "dma_map_benchmark",
+	.probe = map_benchmark_ub_probe,
+};
+#endif
+
 static int __init map_benchmark_init(void)
 {
 	int ret;
@@ -360,16 +376,30 @@ static int __init map_benchmark_init(void)
 		return ret;
 
 	ret = platform_driver_register(&map_benchmark_platform_driver);
-	if (ret) {
-		pci_unregister_driver(&map_benchmark_pci_driver);
-		return ret;
-	}
+	if (ret)
+		goto err_reg_platform;
+
+#ifdef CONFIG_UB_UBUS
+	ret = ub_register_driver(&map_benchmark_ub_driver);
+	if (ret)
+		goto err_reg_ub;
+#endif
 
 	return 0;
+#ifdef CONFIG_UB_UBUS
+err_reg_ub:
+	platform_driver_unregister(&map_benchmark_platform_driver);
+#endif
+err_reg_platform:
+	pci_unregister_driver(&map_benchmark_pci_driver);
+	return ret;
 }
 
 static void __exit map_benchmark_cleanup(void)
 {
+#ifdef CONFIG_UB_UBUS
+	ub_unregister_driver(&map_benchmark_ub_driver);
+#endif
 	platform_driver_unregister(&map_benchmark_platform_driver);
 	pci_unregister_driver(&map_benchmark_pci_driver);
 }

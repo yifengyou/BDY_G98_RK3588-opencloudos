@@ -47,6 +47,12 @@ static inline uint32_t to_udma_rx_threshold(uint32_t limit_wl)
 	}
 }
 
+int udma_query_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_cfg *cfg,
+		   struct ubcore_jfr_attr *attr);
+int udma_query_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_cfg *cfg,
+		   struct ubcore_jfs_attr *attr);
+int udma_query_jetty(struct ubcore_jetty *jetty, struct ubcore_jetty_cfg *cfg,
+		     struct ubcore_jetty_attr *attr);
 int udma_query_res(struct ubcore_device *dev, struct ubcore_res_key *key,
 		   struct ubcore_res_val *val);
 int udma_dfx_init(struct udma_dev *udma_dev);
