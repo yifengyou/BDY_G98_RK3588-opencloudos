@@ -50,6 +50,8 @@
 #define ITS_FLAGS_WORKAROUND_CAVIUM_22375	(1ULL << 1)
 #define ITS_FLAGS_WORKAROUND_CAVIUM_23144	(1ULL << 2)
 #define ITS_FLAGS_FORCE_NON_SHAREABLE		(1ULL << 3)
+#define ITS_FLAGS_WORKAROUND_HISILICON_162100801	(1ULL << 4)
+#define ITS_FLAGS_WORKAROUND_HISILICON_162100803	(1ULL << 5)
 
 #define RD_LOCAL_LPI_ENABLED                    BIT(0)
 #define RD_LOCAL_PENDTABLE_PREALLOCATED         BIT(1)
@@ -125,6 +127,8 @@ struct its_node {
 	u32			pre_its_base; /* for Socionext Synquacer */
 	int			vlpi_redist_offset;
 };
+
+static DEFINE_PER_CPU(struct its_node *, local_4_1_its);
 
 #define is_v4(its)		(!!((its)->typer & GITS_TYPER_VLPIS))
 #define is_v4_1(its)		(!!((its)->typer & GITS_TYPER_VMAPP))
@@ -712,11 +716,71 @@ static struct its_collection *its_build_mapd_cmd(struct its_node *its,
 
 	its_encode_cmd(cmd, GITS_CMD_MAPD);
 	its_encode_devid(cmd, desc->its_mapd_cmd.dev->device_id);
-	its_encode_size(cmd, size - 1);
+
+	if (its->flags & ITS_FLAGS_WORKAROUND_HISILICON_162100803)
+		its_encode_size(cmd, 0xf);
+	else
+		its_encode_size(cmd, size - 1);
+
 	its_encode_itt(cmd, itt_addr);
 	its_encode_valid(cmd, desc->its_mapd_cmd.valid);
 
 	its_fixup_cmd(cmd);
+
+	return NULL;
+}
+
+static struct its_baser *its_get_baser(struct its_node *its, u32 type)
+{
+	int i;
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (GITS_BASER_TYPE(its->tables[i].val) == type)
+			return &its->tables[i];
+	}
+
+	return NULL;
+}
+
+static struct its_collection
+*its_build_mapd_cmd_hisi_quirk(struct its_node *its, struct its_cmd_block *cmd,
+			       struct its_cmd_desc *desc)
+{
+	struct its_baser *baser = its_get_baser(its, GITS_BASER_TYPE_DEVICE);
+	u32 devid = desc->its_mapd_cmd.dev->device_id;
+	void *base = baser->base;
+	u32 *dt_entry;
+	void __iomem *its_func_en = its->sgir_base + 0x80;
+	u32 tmp, tmp1, mask = 1 << 19;
+	int i = 100;
+
+	/*
+	 * The device table is flat. Modify v to 0 in the dt entry of devid,
+	 * dt entry format as below: word0: [0-31] ITT address; word1: [0-7]
+	 * ITT address, [8-12]: ITT size, [13]: V
+	 */
+	dt_entry = (u32 *)(base + devid * 8 + 4);
+	*dt_entry &= ~(1 << 13);
+
+	dsb(ishst);
+
+	/*
+	 * Invalidate cache by a private register GITS_FUNC_EN, whose offset
+	 * is 0x20080 of ITS base address. GICv4.1 already maps sgir_base
+	 * (offset is 0x20000), so address of GITS_FUNC_EN can be got by
+	 * sgir_base + 0x80. Bit 16 is used to clear DT cache, the flip of
+	 * bit 19 indicates that DT cache has been cleared.
+	 */
+	while (--i) {
+		tmp = readl_relaxed(its_func_en) & mask;
+		writel_relaxed(tmp | (1 << 16), its_func_en);
+		tmp1 = readl_relaxed(its_func_en) & mask;
+		if (tmp != tmp1)
+			break;
+	}
+
+	if (i == 0)
+		WARN_ON(1);
 
 	return NULL;
 }
@@ -1302,11 +1366,18 @@ static void its_send_inv(struct its_device *dev, u32 event_id)
 static void its_send_mapd(struct its_device *dev, int valid)
 {
 	struct its_cmd_desc desc;
+	its_cmd_builder_t fn;
+
+	if (dev->its->flags & ITS_FLAGS_WORKAROUND_HISILICON_162100803 &&
+	    valid == 0)
+		fn = its_build_mapd_cmd_hisi_quirk;
+	else
+		fn = its_build_mapd_cmd;
 
 	desc.its_mapd_cmd.dev = dev;
 	desc.its_mapd_cmd.valid = !!valid;
 
-	its_send_single_command(dev->its, its_build_mapd_cmd, &desc);
+	its_send_single_command(dev->its, fn, &desc);
 }
 
 static void its_send_mapc(struct its_node *its, struct its_collection *col,
@@ -1401,6 +1472,14 @@ static void its_send_vmapp(struct its_node *its,
 	its_send_single_vcommand(its, its_build_vmapp_cmd, &desc);
 }
 
+static void its_send_vinvall(struct its_node *its, struct its_vpe *vpe)
+{
+	struct its_cmd_desc desc;
+
+	desc.its_vinvall_cmd.vpe = vpe;
+	its_send_single_vcommand(its, its_build_vinvall_cmd, &desc);
+}
+
 static void its_send_vmovp(struct its_vpe *vpe)
 {
 	struct its_cmd_desc desc = {};
@@ -1440,17 +1519,12 @@ static void its_send_vmovp(struct its_vpe *vpe)
 
 		desc.its_vmovp_cmd.col = &its->collections[col_id];
 		its_send_single_vcommand(its, its_build_vmovp_cmd, &desc);
+		if (is_v4_1(its) && (its->flags &
+			    ITS_FLAGS_WORKAROUND_HISILICON_162100801))
+			its_send_vinvall(its, vpe);
 	}
 
 	raw_spin_unlock_irqrestore(&vmovp_lock, flags);
-}
-
-static void its_send_vinvall(struct its_node *its, struct its_vpe *vpe)
-{
-	struct its_cmd_desc desc;
-
-	desc.its_vinvall_cmd.vpe = vpe;
-	its_send_single_vcommand(its, its_build_vinvall_cmd, &desc);
 }
 
 static void its_send_vinv(struct its_device *dev, u32 event_id)
@@ -2805,6 +2879,7 @@ static u64 inherit_vpe_l1_table_from_its(void)
 		}
 		val |= FIELD_PREP(GICR_VPROPBASER_4_1_SIZE, GITS_BASER_NR_PAGES(baser) - 1);
 
+		*this_cpu_ptr(&local_4_1_its) = its;
 		return val;
 	}
 
@@ -2842,6 +2917,7 @@ static u64 inherit_vpe_l1_table_from_rd(cpumask_t **mask)
 		gic_data_rdist()->vpe_l1_base = gic_data_rdist_cpu(cpu)->vpe_l1_base;
 		*mask = gic_data_rdist_cpu(cpu)->vpe_table_mask;
 
+		*this_cpu_ptr(&local_4_1_its) = *per_cpu_ptr(&local_4_1_its, cpu);
 		return val;
 	}
 
@@ -3374,18 +3450,6 @@ static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
 	raw_spin_unlock_irqrestore(&its->lock, flags);
 
 	return its_dev;
-}
-
-static struct its_baser *its_get_baser(struct its_node *its, u32 type)
-{
-	int i;
-
-	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
-		if (GITS_BASER_TYPE(its->tables[i].val) == type)
-			return &its->tables[i];
-	}
-
-	return NULL;
 }
 
 static bool its_alloc_table_entry(struct its_node *its,
@@ -4159,7 +4223,7 @@ static struct irq_chip its_vpe_irq_chip = {
 
 static struct its_node *find_4_1_its(void)
 {
-	static struct its_node *its = NULL;
+	struct its_node *its = *this_cpu_ptr(&local_4_1_its);
 
 	if (!its) {
 		list_for_each_entry(its, &its_nodes, entry) {
@@ -4863,6 +4927,24 @@ static bool its_set_non_coherent(void *data)
 	return true;
 }
 
+static bool __maybe_unused its_enable_quirk_hip09_162100801(void *data)
+{
+	struct its_node *its = data;
+
+	its->flags |= ITS_FLAGS_WORKAROUND_HISILICON_162100801;
+	return true;
+}
+
+static bool __maybe_unused its_enable_quirk_162100803(void *data)
+{
+	struct its_node *its = data;
+
+	if (is_v4_1(its))
+		its->flags |= ITS_FLAGS_WORKAROUND_HISILICON_162100803;
+
+	return true;
+}
+
 static const struct gic_quirk its_quirks[] = {
 #ifdef CONFIG_CAVIUM_ERRATUM_22375
 	{
@@ -4907,6 +4989,40 @@ static const struct gic_quirk its_quirks[] = {
 		.iidr	= 0x00000004,
 		.mask	= 0xffffffff,
 		.init	= its_enable_quirk_hip07_161600802,
+	},
+#endif
+#ifdef CONFIG_HISILICON_ERRATUM_162100801
+	{
+		.desc = "ITS: Hip09 erratum 162100801",
+		.iidr = 0x00051736,
+		.mask = 0xffffffff,
+		.init = its_enable_quirk_hip09_162100801,
+	},
+#endif
+#ifdef CONFIG_HISILICON_ERRATUM_162100803
+	{
+		.desc = "ITS: Hip09 erratum 162100803",
+		.iidr = 0x00051736,
+		.mask = 0xffffffff,
+		.init = its_enable_quirk_162100803,
+	},
+	{
+		.desc = "ITS: Hip10 erratum 162200807",
+		.iidr = 0x01051736,
+		.mask = 0xffffffff,
+		.init = its_enable_quirk_162100803,
+	},
+	{
+		.desc = "ITS: Hip10c erratum 162400807",
+		.iidr = 0x00061736,
+		.mask = 0xffffffff,
+		.init = its_enable_quirk_162100803,
+	},
+	{
+		.desc = "ITS: Hip12 erratum 165010802",
+		.iidr = 0x00070736,
+		.mask = 0xffffffff,
+		.init = its_enable_quirk_162100803,
 	},
 #endif
 #ifdef CONFIG_ROCKCHIP_ERRATUM_3588001
