@@ -10,6 +10,7 @@
 #include "cpu.h"
 
 struct x86_topology_system x86_topo_system __ro_after_init;
+EXPORT_SYMBOL_GPL(x86_topo_system);
 
 unsigned int __amd_nodes_per_pkg __ro_after_init;
 EXPORT_SYMBOL_GPL(__amd_nodes_per_pkg);
@@ -77,7 +78,7 @@ static bool fake_topology(struct topo_scan *tscan)
 	topology_set_dom(tscan, TOPO_SMT_DOMAIN, 0, 1);
 	topology_set_dom(tscan, TOPO_CORE_DOMAIN, 0, 1);
 
-	return tscan->c->cpuid_level < 1 || xen_pv_domain();
+	return tscan->c->cpuid_level < 1;
 }
 
 static void parse_topology(struct topo_scan *tscan, bool early)
@@ -139,13 +140,18 @@ static void parse_topology(struct topo_scan *tscan, bool early)
 	}
 }
 
-static void topo_set_ids(struct topo_scan *tscan)
+static void topo_set_ids(struct topo_scan *tscan, bool early)
 {
 	struct cpuinfo_x86 *c = tscan->c;
 	u32 apicid = c->topo.apicid;
 
 	c->topo.pkg_id = topo_shift_apicid(apicid, TOPO_PKG_DOMAIN);
 	c->topo.die_id = topo_shift_apicid(apicid, TOPO_DIE_DOMAIN);
+
+	if (!early) {
+		c->topo.logical_pkg_id = topology_get_logical_id(apicid, TOPO_PKG_DOMAIN);
+		c->topo.logical_die_id = topology_get_logical_id(apicid, TOPO_DIE_DOMAIN);
+	}
 
 	/* Package relative core ID */
 	c->topo.core_id = (apicid & topo_domain_mask(TOPO_PKG_DOMAIN)) >>
@@ -157,25 +163,24 @@ static void topo_set_ids(struct topo_scan *tscan)
 		cpu_topology_fixup_amd(tscan);
 }
 
-static void topo_set_max_cores(struct topo_scan *tscan)
-{
-	/*
-	 * Bug compatible for now. This is broken on hybrid systems:
-	 * 8 cores SMT + 8 cores w/o SMT
-	 * tscan.dom_ncpus[TOPO_DIEGRP_DOMAIN] = 24; 24 / 2 = 12 !!
-	 *
-	 * Cannot be fixed without further topology enumeration changes.
-	 */
-	tscan->c->x86_max_cores = tscan->dom_ncpus[TOPO_DIEGRP_DOMAIN] >>
-		x86_topo_system.dom_shifts[TOPO_SMT_DOMAIN];
-}
-
 void cpu_parse_topology(struct cpuinfo_x86 *c)
 {
 	unsigned int dom, cpu = smp_processor_id();
 	struct topo_scan tscan = { .c = c, };
 
 	parse_topology(&tscan, false);
+
+	if (IS_ENABLED(CONFIG_X86_LOCAL_APIC)) {
+		if (c->topo.initial_apicid != c->topo.apicid) {
+			pr_err(FW_BUG "CPU%4u: APIC ID mismatch. CPUID: 0x%04x APIC: 0x%04x\n",
+			       cpu, c->topo.initial_apicid, c->topo.apicid);
+		}
+
+		if (c->topo.apicid != cpuid_to_apicid[cpu]) {
+			pr_err(FW_BUG "CPU%4u: APIC ID mismatch. Firmware: 0x%04x APIC: 0x%04x\n",
+			       cpu, cpuid_to_apicid[cpu], c->topo.apicid);
+		}
+	}
 
 	for (dom = TOPO_SMT_DOMAIN; dom < TOPO_MAX_DOMAIN; dom++) {
 		if (tscan.dom_shifts[dom] == x86_topo_system.dom_shifts[dom])
@@ -184,18 +189,7 @@ void cpu_parse_topology(struct cpuinfo_x86 *c)
 		       tscan.dom_shifts[dom], x86_topo_system.dom_shifts[dom]);
 	}
 
-	/* Bug compatible with the existing parsers */
-	if (tscan.dom_ncpus[TOPO_SMT_DOMAIN] > smp_num_siblings) {
-		if (system_state == SYSTEM_BOOTING) {
-			pr_warn_once("CPU%d: SMT detected and enabled late\n", cpu);
-			smp_num_siblings = tscan.dom_ncpus[TOPO_SMT_DOMAIN];
-		} else {
-			pr_warn_once("CPU%d: SMT detected after init. Too late!\n", cpu);
-		}
-	}
-
-	topo_set_ids(&tscan);
-	topo_set_max_cores(&tscan);
+	topo_set_ids(&tscan, false);
 }
 
 void __init cpu_init_topology(struct cpuinfo_x86 *c)
@@ -216,23 +210,8 @@ void __init cpu_init_topology(struct cpuinfo_x86 *c)
 		x86_topo_system.dom_size[dom] = 1U << sft;
 	}
 
-	topo_set_ids(&tscan);
-	topo_set_max_cores(&tscan);
+	topo_set_ids(&tscan, true);
 
-	/*
-	 * Bug compatible with the existing code. If the boot CPU does not
-	 * have SMT this ends up with one sibling. This needs way deeper
-	 * changes further down the road to get it right during early boot.
-	 */
-	smp_num_siblings = tscan.dom_ncpus[TOPO_SMT_DOMAIN];
-
-	/*
-	 * Neither it's clear whether there are as many dies as the APIC
-	 * space indicating die level is. But assume that the actual number
-	 * of CPUs gives a proper indication for now to stay bug compatible.
-	 */
-	__max_die_per_package = tscan.dom_ncpus[TOPO_DIE_DOMAIN] /
-		tscan.dom_ncpus[TOPO_DIE_DOMAIN - 1];
 	/*
 	 * AMD systems have Nodes per package which cannot be mapped to
 	 * APIC ID.
