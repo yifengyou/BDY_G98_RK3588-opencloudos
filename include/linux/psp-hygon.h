@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/kvm_types.h>
+#include <uapi/linux/psp-hygon.h>
 
 /*****************************************************************************/
 /***************************** CSV interface *********************************/
@@ -317,6 +318,9 @@ struct csv3_data_dbg_read_mem {
  * struct csv3_data_attestation_report - ATTESTATION secure call command parameters
  *
  * @handle: handle of the VM to process
+ * @flags: the bit flags used to indicate how to extend the attestation report.
+ *	   It's copied from user space's parameter before issuing the ATTESTATION
+ *	   secure call command.
  * @resp_gpa: guest physical address to save the generated report
  * @resp_length: length of the generated report
  * @req_gpa: guest physical address of the input for the report
@@ -325,7 +329,7 @@ struct csv3_data_dbg_read_mem {
  */
 struct csv3_data_attestation_report {
 	u32 handle;				/* Out */
-	u32 reserved1;
+	u32 flags;				/* In */
 	u64 resp_gpa;				/* In */
 	u8 reserved2[16];
 	u32 resp_len;				/* In/Out */
@@ -432,6 +436,237 @@ struct csv3_data_receive_encrypt_context {
 	u32 vmcb_block_len;		/* In */
 } __packed;
 
+/*
+ ****************************** CSV3 secure call *******************************
+ *
+ * CSV3 guest is based on hygon secure isolated virualization feature. An secure
+ * processor which resides in hygon SOC manages guest's private memory. The
+ * secure processor allocates or frees private memory for CSV3 guest and manages
+ * CSV3 guest's nested page table.
+ *
+ * As the secure processor is considered as a PCI device in host, CSV3 guest can
+ * not communicate with it directly. Howerver, CSV3 guest must request the secure
+ * processor to change its physical memory between private memory and shared
+ * memory. CSV3 secure call command is a method used to communicate with secure
+ * processor that host cannot tamper with the data in CSV3 guest. Host can only
+ * perform an external command to notify the secure processor to handle the
+ * pending guest's command.
+ *
+ * CSV3 secure call pages:
+ * Secure call pages are two dedicated pages that reserved by BIOS. We define
+ * secure call pages as page A and page B. During guest launch stage, the secure
+ * processor will parse the address of secure call pages. The secure processor
+ * maps the two pages with same private memory page in NPT. The secure processor
+ * always set one page as present and another page as non-present in NPT.
+
+ * CSV3 secure call main work flow:
+ * If we write the guest's commands in one page then read them from another page,
+ * nested page fault happens and the guest exits to host. Then host will perform
+ * an external command with the gpa(page A or page B) to the secure processor.
+ * The secure processor checks that the gpa in NPF belongs to secure call pages,
+ * read the guest's command to handle, then switch the present bit between the
+ * two pages.
+ *
+ *			guest page A    guest page B
+ *			      |              |
+ *			  ____|______________|____
+ *			  |                      |
+ *			  |  nested page table   |
+ *			  |______________________|
+ *			      \              /
+ *			       \            /
+ *			        \          /
+ *			         \        /
+ *			          \      /
+ *			       secure memory page
+ *
+ * CSV3_SECURE_CMD_ENC:
+ *	CSV3 guest declares a specifid memory range as secure. By default, all of
+ *	CSV3 guest's memory mapped as secure.
+ *	The secure processor allocate a block of secure memory and map the memory
+ *	in CSV3 guest's NPT with the specified guest physical memory range in CSV3
+ *	secure call.
+ *
+ * CSV3_SECURE_CMD_DEC:
+ *	CSV3 guest declares a specified memory range as shared.
+ *	The secure processor save the guest physical memory range in its own ram
+ *	and free the range in CSV3 guest's NPT. When CSV3 guest access the memory,
+ *	a new nested page fault happens.
+ *
+ * CSV3_SECURE_CMD_RESET:
+ *	CSV3 guest switches all of the shared memory to secure.
+ *	The secure processor resets all the shared memory in CSV3 guest's NPT and
+ *	clears the saved shared memory range. Then the secure process allocates
+ *	secure memory to map in CSV3 guest's NPT.
+ *
+ * CSV3_SECURE_CMD_UPDATE_SECURE_CALL_TABLE:
+ *	CSV3 guest wants to change the secure call pages.
+ *	The secure processor re-init the secure call context.
+ *
+ * CSV3_SECURE_CMD_REQ_REPORT:
+ *      CSV3 guest wants to request attestation report.
+ *      The secure processor will update the request message buffer and respond
+ *      buffer to indicate the result of this request.
+ */
+enum csv3_secure_command_type {
+	/* The secure call request should below CSV3_SECURE_CMD_ACK */
+	CSV3_SECURE_CMD_ENC			= 0x1,
+	CSV3_SECURE_CMD_DEC,
+	CSV3_SECURE_CMD_RESET,
+	CSV3_SECURE_CMD_UPDATE_SECURE_CALL_TABLE,
+	CSV3_SECURE_CMD_REQ_REPORT		= 0x7,
+	CSV3_SECURE_CMD_RTMR,
+
+	/* SECURE_CMD_ACK indicates secure call request can be handled */
+	CSV3_SECURE_CMD_ACK			= 0x6b,
+
+	/*
+	 * The following values are the error code of the secure call
+	 * when firmware can't handling the specific secure call command
+	 * as expected.
+	 */
+	CSV3_SECURE_CMD_ERROR_INTERNAL		= 0x6c,
+	CSV3_SECURE_CMD_ERROR_INVALID_COMMAND	= 0x6d,
+	CSV3_SECURE_CMD_ERROR_INVALID_PARAM	= 0x6e,
+	CSV3_SECURE_CMD_ERROR_INVALID_ADDRESS	= 0x6f,
+	CSV3_SECURE_CMD_ERROR_INVALID_LENGTH	= 0x70,
+};
+
+/*
+ * CSV3_SECURE_CMD_RTMR's subcommand.
+ *
+ * CSV3_SECURE_CMD_RTMR_STATUS:
+ *     Get the RTMR status info of the CSV3 guest.
+ * CSV3_SECURE_CMD_RTMR_START:
+ *     Negotiate/Start the RTMR.
+ * CSV3_SECURE_CMD_RTMR_READ:
+ *     Read RTMR registers.
+ * CSV3_SECURE_CMD_RTMR_EXTEND:
+ *     Extend a specific RTMR register.
+ */
+enum csv3_secure_command_rtmr_subtype {
+	CSV3_SECURE_CMD_RTMR_STATUS	= 0x1,
+	CSV3_SECURE_CMD_RTMR_START	= 0x2,
+	CSV3_SECURE_CMD_RTMR_READ	= 0x3,
+	CSV3_SECURE_CMD_RTMR_EXTEND	= 0x4,
+};
+
+/**
+ * struct csv_rtmr_subcmd_hdr - Common header structure for RTMR subcommands
+ *
+ * @subcmd_id: identifier of the subcommand
+ * @subcmd_size: the size of the subcommand buffer
+ * @fw_error_code: the return code of subcommand
+ */
+struct csv_rtmr_subcmd_hdr {
+	uint16_t subcmd_id;	/* In */
+	uint16_t subcmd_size;	/* In,Out */
+	uint32_t fw_error_code;	/* Out */
+} __packed;
+
+/**
+ * struct csv_rtmr_subcmd_status - RTMR_STATUS subcommand parameters
+ *
+ * @hdr: common structure used for RTMR subcommands
+ * @version: the RTMR version used in the guest. When in state
+ *	     RTMR_STATE_INIT, it will be fixed.
+ * @state: the state of the guest's RTMR.
+ * @reserved: reserved
+ */
+struct csv_rtmr_subcmd_status {
+	struct csv_rtmr_subcmd_hdr hdr;	/* In,Out */
+	uint16_t version;		/* Out */
+	uint8_t state;			/* Out */
+	uint8_t reserved[21];		/* reserved */
+} __packed;
+
+/**
+ * struct csv_rtmr_subcmd_start - RTMR_START subcommand parameters
+ *
+ * @hdr: common structure used for RTMR subcommands
+ * @version: the RTMR version requested by the guest
+ * @reserved: reserved
+ */
+struct csv_rtmr_subcmd_start {
+	struct csv_rtmr_subcmd_hdr hdr;	/* In,Out */
+	uint16_t version;		/* In,Out */
+	uint8_t reserved[22];		/* reserved */
+} __packed;
+
+/**
+ * struct csv_rtmr_subcmd_read - RTMR_READ subcommand parameters
+ *
+ * @hdr: common structure used for RTMR subcommands
+ * @rtmr_reg_bitmap: the bitmap specified the RTMR registers to read
+ * @reserved: reserved
+ * @data: the buffer to store data of the specified RTMR registers
+ */
+struct csv_rtmr_subcmd_read {
+	struct csv_rtmr_subcmd_hdr hdr;		/* In,Out */
+	uint32_t rtmr_reg_bitmap;		/* In,Out */
+	uint8_t  reserved[20];			/* reserved */
+	uint8_t data[CSV_RTMR_REG_SIZE];	/* Out */
+} __packed;
+
+/**
+ * struct csv_rtmr_subcmd_extend - RTMR_EXTEND subcommand parameters
+ *
+ * @hdr: common structure used for RTMR subcommands
+ * @index: the index for extending the RTMR register
+ * @reserved1: reserved
+ * @data_length: the length of the data to be extended
+ * @reserved2: reserved
+ * @data: the data to be extended to the RTMR register
+ */
+struct csv_rtmr_subcmd_extend {
+	struct csv_rtmr_subcmd_hdr hdr;		/* In,Out */
+	uint8_t index;				/* In,Out */
+	uint8_t reserved1;			/* reserved */
+	uint16_t data_length;			/* In,Out */
+	uint8_t reserved2[20];			/* reserved */
+	uint8_t data[CSV_RTMR_EXTEND_LEN];	/* In */
+} __packed;
+
+/* csv3 secure call guid, do not change the value. */
+#define CSV3_SECURE_CALL_GUID_LOW	0xceba2fa59a5d926ful
+#define CSV3_SECURE_CALL_GUID_HIGH	0xa556555d276b21abul
+
+/*
+ * Secure call page fields.
+ * Secure call page size is 4KB always. We define CSV3 secure call page structure
+ * as below.
+ * guid:	Must be in the first 128 bytes of the page. Its value should be
+ *		(0xceba2fa59a5d926ful, 0xa556555d276b21abul) always.
+ * cmd_type:	Command to be issued to the secure processor.
+ * nums:	number of entries in the command.
+ * base_address:Start address of the memory range.
+ * size:	Size of the memory range.
+ */
+#define SECURE_CALL_ENTRY_MAX	(254)
+
+/* size of secure call cmd is 4KB. */
+struct csv3_secure_call_cmd {
+	union {
+		u8	guid[16];
+		u64	guid_64[2];
+	};
+	u32	cmd_type;
+	u32	nums;
+	u64	unused;
+	union {
+		struct {
+			u64	base_address;
+			u64	size;
+		} entry[SECURE_CALL_ENTRY_MAX];
+		union {
+			struct csv_rtmr_subcmd_hdr hdr;
+			struct csv_rtmr_subcmd_status status_cmd;
+			struct csv_rtmr_subcmd_read read_cmd;
+			struct csv_rtmr_subcmd_extend extend_cmd;
+		} csv_rtmr_subcmd;
+	};
+} __packed;
+
 struct kvm_vpsp {
 	struct kvm *kvm;
 	int (*write_guest)(struct kvm *kvm, gpa_t gpa, const void *data, unsigned long len);
@@ -444,6 +679,19 @@ struct kvm_vpsp {
 #ifdef CONFIG_CRYPTO_DEV_SP_PSP
 
 int psp_do_cmd(int cmd, void *data, int *psp_ret);
+
+typedef int (*p2c_notifier_t)(uint32_t id, uint64_t data);
+
+#ifdef CONFIG_HYGON_PSP2CPU_CMD
+int psp_register_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier);
+int psp_unregister_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier);
+#else	/* !CONFIG_HYGON_PSP2CPU_CMD */
+static inline int __maybe_unused
+psp_register_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier) { return -ENODEV; }
+
+static inline int __maybe_unused
+psp_unregister_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier) { return -ENODEV; }
+#endif	/* CONFIG_HYGON_PSP2CPU_CMD */
 
 int csv_ring_buffer_queue_init(void);
 int csv_ring_buffer_queue_free(void);
@@ -497,19 +745,5 @@ kvm_pv_psp_forward_op(struct kvm_vpsp *vpsp, uint32_t cmd,
 static inline int csv_get_extension_info(void *buf, size_t *size) { return -ENODEV; }
 
 #endif	/* CONFIG_CRYPTO_DEV_SP_PSP */
-
-typedef int (*p2c_notifier_t)(uint32_t id, uint64_t data);
-
-#ifdef CONFIG_HYGON_PSP2CPU_CMD
-
-int psp_register_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier);
-int psp_unregister_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier);
-
-#else	/* !CONFIG_HYGON_PSP2CPU_CMD */
-
-int psp_register_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier) { return -ENODEV; }
-int psp_unregister_cmd_notifier(uint32_t cmd_id, p2c_notifier_t notifier) { return -ENODEV; }
-
-#endif	/* CONFIG_HYGON_PSP2CPU_CMD */
 
 #endif	/* __PSP_HYGON_H__ */

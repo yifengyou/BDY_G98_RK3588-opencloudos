@@ -358,3 +358,59 @@ int csv3_issue_request_report(phys_addr_t paddr, size_t size)
 	return sc_return_code == CSV3_SECURE_CMD_ACK ? 0 : -EIO;
 }
 EXPORT_SYMBOL_GPL(csv3_issue_request_report);
+
+int csv3_issue_request_rtmr(void *req_buffer, size_t buffer_size)
+{
+	struct secure_call_pages *sc_page_info;
+	struct csv3_secure_call_cmd *sc_wr, *sc_rd;
+	unsigned long flags;
+	int sc_page_idx;
+	enum csv3_secure_command_type sc_return_code;
+
+	/*
+	 * secure call pages needs to access with IRQs disabled because it is
+	 * using a per-CPU data.
+	 */
+	local_irq_save(flags);
+
+	sc_page_info = this_cpu_read(secure_call_data);
+	sc_page_idx = this_cpu_read(secure_call_page_idx);
+
+	sc_wr = sc_page_idx ? &sc_page_info->page_a : &sc_page_info->page_b;
+	sc_rd = sc_page_idx ? &sc_page_info->page_b : &sc_page_info->page_a;
+
+	sc_wr->cmd_type = CSV3_SECURE_CMD_RTMR;
+	sc_wr->nums = 1;
+	sc_wr->unused = 0;
+	/* The RTMR subcommand buffer lives in the secure call page. */
+	unsafe_memcpy((void *)&sc_wr->csv_rtmr_subcmd, req_buffer, buffer_size,
+		/* "buffer_size" was calculated by the caller */);
+
+	/*
+	 * Write command in sc_wr must be done before retrieve status code
+	 * from sc_rd, and it's ensured by the smp_mb below.
+	 */
+	smp_mb();
+
+	sc_return_code = sc_rd->cmd_type;
+
+	/* If the firmware support RTMR, copy the response data. */
+	if (sc_return_code == CSV3_SECURE_CMD_ACK)
+		unsafe_memcpy(req_buffer, &sc_rd->csv_rtmr_subcmd, buffer_size,
+			/* "buffer_size" was calculated by the caller */);
+
+	this_cpu_write(secure_call_page_idx, sc_page_idx ^ 1);
+
+	/* Leave per-CPU data access */
+	local_irq_restore(flags);
+
+	/* Print return code of the secure call */
+	print_secure_call_error(sc_return_code);
+
+	/*
+	 * If the secure call returns an error, the RTMR is considered
+	 * unsupported.
+	 */
+	return sc_return_code == CSV3_SECURE_CMD_ACK ? 0 : -ENODEV;
+}
+EXPORT_SYMBOL_GPL(csv3_issue_request_rtmr);
