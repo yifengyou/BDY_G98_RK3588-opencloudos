@@ -75,6 +75,7 @@ config EFI_GENERIC_STUB
 config EFI_ZBOOT
 	bool "Enable the generic EFI decompressor"
 	depends on EFI_GENERIC_STUB && !ARM
+	depends on !CC_IS_GCC || GCC_VERSION >= 120100
 	select HAVE_KERNEL_GZIP
 	select HAVE_KERNEL_LZ4
 	select HAVE_KERNEL_LZMA
