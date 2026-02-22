@@ -1,3 +1,193 @@
+* Sun Feb 22 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47
+- !650 AMD Venice ATL/PRM support for OpenCloudOS 6.6 kernel
+- !649 net/oenetcls: fix an issue with incorrect copy length
+- !646 drivers: remove some unused symbol of Chengdu NorthLink Technology N5/N6 Series Network Card drivers
+- !641 [Backport][6.6] Backport bugfix for Kunpeng new SOC
+- !640 [Backport][6.6] Backport ubus and udma module for Kunpeng new SOC
+- !639 [Backport][6.6] Backport cdma fwctl ub_fwctl and udma module for Kunpeng new SOC
+- !645 [Backport][6.6]Backport unic and ubase module for Kunpeng new SOC
+- !644 x86/amd_nb, hwmon: (k10temp): Simplify amd_pci_dev_to_node_id()
+- !636 MCA rework and new features phase_2 patches
+- !636 drivers: Update vendor name of Chengdu NorthLink Technology N5/N6
+- !635 [Backport] [6.6] MCA rework and new features Phase-1 patches
+- !631 add uvb, obmm and sysSentry
+- !626 add oenetcls support
+- !634 iommufd: support config iommufd default
+- !632 mm/slab: make __free(kfree) accept error pointers
+- !630 [Hygon][6.6][Feature]OpenCloudOS:x86/hw-vuln:Support hardware-based mitigation for Retbleed and SRSO via Hygon IBRS.
+- !624 add ubl ubase unic
+- !629 urma: added functions for getting and setting TP attribute fields.
+- !628 add ras, NUMA.remote and mempool
+- !627 Add soft domain support and bugfix
+- !623 Implement IOMMU ops and advanced capabilities, add vfio-ub and hisi-ubus
+- !622 Add ummu-core, ummu, ummu pmu and support new features for ubus
+- !619 Backport PMT spec 3.0 support
+- !621 ub:ubus: Supports decoder event processing
+- !614 Drivers: Add DapuStor Corporation DN200 Series Network Card Driver
+- !607 [Backport] [6.6] Venice essential patches for AMD_NB and HSMP
+- !590 [Backport][6.6] Backport iommu patches
+- !616 [Hygon][6.6][Bugfix] Get correct CPU LLC ID in guest for Hygon processors
+- !609 Backport v2 "arm64: Support for 2023 DPISA extensions"
+- !615 Revert "sched/eevdf: Skip eligibility check for current entity during
+- !608 support_feature_TLBI_DVMBM v2
+- !606 KVM: Add missing macro guards for virt_dev irqbypass
+- !603 [linux-6.6/devel][backport] CRC optimization for arm64 from upstream
+- !602 [linux-6.6/devel][backport] KVM: arm64: Accelerate lookup of vcpus by MPIDR values (and other fixes)
+- !585 KVM/arm64: support virt_dev irqbypass
+- !601 HAOC: Support ARM64 Page Table Protection.(PTP).
+- !584 v3 Support the FEAT_HDBSS introduced in Armv9.5
+- !600 Backport cstate PMU for CWF
+- !587 HISILICON_ERRATUM_162100803、HISILICON_ERRATUM_162100801 and vtimer patch
+- !598 [linux-6.6/devel][backport] arm64: Add IPI for backtraces / kgdb; try to use NMI for some IPIs
+- !597 Backport "arm64: rust: Enable Rust support for AArch64"
+- !595 [Intel-SIG] new CPU topology series - 4/4: x86/apic: Rework APIC registration
+- !594 [Intel-SIG] new CPU topology series - 3/4: x86/topology: More cleanups and preparatory work
+- !593 [Intel-SIG] new CPU topology series - 2/4: x86/cpu: Rework the topology evaluation - part2
+- !592 [Intel-SIG] new CPU topology series - 1/4: x86/cpu: Rework the topology evaluation - part1
+- !596 sw64: remove out-of-bounds array access in dav_match_set()
+- !583 KVM: arm64: Make use of TWED feature
+- !578 sched/fair: Support NUMA parallel scheduling for multiple processes
+- !591 [Hygon][6.6][Feature]Support Global NPT reservation, Support use 1G hugetlb for CSV3 guest private memory
+- !599 [Intel-SIG] DMR new CPU model support
+- !572 Add HAOC feature for OpenCloudOS linux-6.6: IEE,IEE_SIP,IEE_PTRP, CREDP（ARM64)
+- !589 [Hygon][6.6][Feature] support vtkm live migration
+- !573 [linux-6.6/devel][bugfix]: Reapply "entry: Inline syscall_exit_to_user_mode()" with fixes
+- !577 [linux-6.6/devel][Feature]: Loongarch: crypto: loongson: add cbc(sm4) support
+- !576 [linux-6.6/devel][bugfix]:LoongArch: For all possible CPUs setup logical-physical CPU mapping
+- !575 [linux-6.6/devel][bugfix]: LoongArch: net: stmmac: dwmac-loongson: Set correct {tx,rx}_fifo_size
+- !574 [linux-6.6/devel][bugfix]: LoongArch: Mask all interrupts during kexec/kdump
+- !582 [Hygon][6.6][Feature]PCI: Batch BAR sizing operations
+- !581 [Hygon][6..6][Feature]Batch flusing user memory encrytion status change
+- !580 Backport uncore freq driver fixes and support for agent_types and die_id sysfs attributes
+- !568 [Backport][6.6]arm64/mpam: Introduce MPAM feature
+- !570 [linux-6.6/devel][Feature]：update patches for sw64 architecture
+- !569 [linux-6.6/devel][Feat] Hygon: fix GPL-only symbols in NT copy_user path
+- !567 Revert "locking/qspinlock: Disable CNA by default"
+- !566 ipmi: Errata workaround to prevent SMS message processing timeout
+- !565 [Backport][6.6] Backport FEAT_HAFT and FEAT_LS64 module for Kunpeng new SOC
+- !564 [Backport][6.6] Backport minios module for Kunpeng new SOC
+- !563 [Backport][6.6] Backport perf BRBE module for Kunpeng new SOC
+- !558 [Hygon][6.6][Feature]CSV3 Hostdata support, CSV3 shared memory management, CSV3 sysfs interface, misc bugfixes
+- !562 [Backport][6.6] Backport perf uncore module for Kunpeng new SOC
+- !559 [Hygon][6.6][Feature]Force use dma api for Hygon CVM's virtio devices
+- !561 [Hygon][6.6][Bugfix]Restore display of Hygon memory encryption features
+- !560 [Hygon][6.6][Feature]Support CSV3 RTMR, support hygon psp S4 sleep/resume
+- !557 [Backport][6.6] Backport perf CORE module for Kunpeng new SOC
+- !556 [Backport][6.6] Backport perf DDRC module for Kunpeng new SOC
+- !546 [Backport][6.6] Backport FEAT_NMI module for Kunpeng new SOC
+- !548 [Backport][6.6] Backport FEAT_PMUv3_TH module for Kunpeng new SOC
+- !547 [Backport][6.6] Enable HOTPLUG_SMT for Kunpeng new SOC
+- !545 [Backport][6.6] Backport sdei_watchdog module for Kunpeng new SOC
+- !549 [Backport][6.6] Backport perf_iostat module for Kunpeng new SOC
+- !552 [Hygon][6.6][Bugfix] Bug fix for EDAC to use unicast instead of broadcast on hygon family 18h model 4h
+- !554 [Hygon][6.6][EDAC] The width of hash value is 2 bits for Hygon family 18h model 6h processors
+- !551 [Hygon][6.6][Bugfix] Bug fix for EDAC address translation on hygon family 18h model 4h
+- !544 [Backport][6.6]Backport power_meter module for Kunpeng new SOC
+- !542 Fixed the wrong debugfs node name in hisi_spi debugfs initialization
+- !541 [Backport][6.6] Backport soc_cache module for Kunpeng new SOC
+- !543 [Backport][6.6] Backport ext-gpu module for Kunpeng new SOC
+- !553 [Hygon][6.6][TSC Adjust] Backport x86 TSC adjust patch
+- !555 [linux-6.6/devel][bugfix]:LoongArch: efi: avoid double calling set_virtual_map()
+- !540 [Backport][6.6] Backport PCIe module for Kunpeng new SOC
+- !539 [Backport][6.6]Backport cpufreq module for Kunpeng new SOC
+- !538 Backport PLR (Power Limit Reasons) TPMI driver
+- Merge branch 'zram_class_lock' into 'release' (merge request !953)
+- mm/zsmalloc: change back to per-size_class lock
+- mm/zsmalloc: remove unused zspage->isolated
+- mm/zsmalloc: remove migrate_write_lock_nested()
+- mm/zsmalloc: fix migrate_write_lock() when !CONFIG_COMPACTION
+- Merge branch 'page-flag-uncached_backport' into 'release' (merge request !949)
+- mm/filemap: unify dropbehind flag testing and clearing
+- mm/filemap: unify read/write dropbehind naming
+- mm/filemap: use filemap_end_dropbehind() for read invalidation
+- mm/filemap: gate dropbehind invalidate on folio !dirty && !writeback
+- mm/pagemap: add write_begin_get_folio() helper function
+- fs: Remove three arguments from block_write_end()
+- mm: free up PG_slab
+- mm/lru_gen: print per memcg MGLRU gen stats on OOM
+- Merge branch 'bruzzhang/zram-backingdev' into 'release' (merge request !877)
+- mm/filemap: improve page cache statistic accounting
+- block: add bio_cb_chain for flexible bio completion chaining
+- mm: introduce a cgroup level rejection threshold
+- dist,spec: update mlnx-ofed sha256sum
+- fuse: add ioctl to cleanup all backing files
+- fuse: Relax backing file validation to compare backing inodes
+- mm: try to reclaim without waiting on MGLRU migrating
+- mm: move file lru first to avoid early OOM
+- mm: fix uninit varaible in isolate_folios()
+- rue/net: support cgroup hierarchy for per-cgroup rate limit
+- mm, vmscan: skip force anon aging
+- mm, vmscan: wake up waiters only on aging success
+- mm, vmscan: don't age the lruvec too aggressively
+- emm: fix warn on memory reclaim
+- config: set CONFIG_USB_SERIAL_SIMPLE to m
+- config: disable CONFIG_SYSFB_SIMPLEFB in aarch64
+- x86/dumpstack/64: Skip VC/VC2 exception stacks on non-SEV systems
+- mm/shmem, swap: fix race of truncate and swap entry split
+- mm: make max reclaim retries configurable via sysctl
+- config: turn off MGLRU by default
+- cgroupfs:show steal in container
+- scheduler: modify run_delay stat
+- sw64: Fix out-of-bounds array access in dav_match_set()
+- arm64: Expose the end of the linear map in PHYSMEM_END
+- sched: remove wait bookmarks
+- filemap: remove use of wait bookmarks
+- Revert "tracing: workaround UAF caused by memory ordering issue"
+- Add AMD GPIO/I2c driver module
+- acpi/hest: disable AMD ghes timer
+- mm/rmap: add fast-path for small folios when adding/removing/duplicating
+- mm: swap: remove duplicate nr_swap_pages decrement in get_swap_page_of_type()
+- mm/swapfile: use plist_for_each_entry in __folio_throttle_swaprate
+- mm, swap: fix memcg v1 accounting error
+- mm, swap: minor cleanup from upstream
+- config: open config of SMR storage
+- net: sock: add user_policy pointer to struct sock
+- config:modify kconfig
+- rue/scx: Inheritate cpu.scx from parent cgroup
+- kata.config: adapt to cdn version for k8s scene
+- rue/mm: shrink_pagecache batch sizing based on CPUs and read latest pages_used
+- rue/io_qos: add check when enable io_qos
+- rue/io_qos: remove useless rue_io_enabled
+- rue/io_qos: disable io_qos when rmmod rue
+- readahead: fix return value of page_cache_next_miss() when no hole is found
+- readahead: simplify gotos in page_cache_sync_ra()
+- readahead: fold try_context_readahead() into its single caller
+- readahead: disentangle async and sync readahead
+- readahead: drop dead code in ondemand_readahead()
+- readahead: drop dead code in page_cache_ra_order()
+- readahead: drop index argument of page_cache_async_readahead()
+- readahead: drop pointless index from force_page_cache_ra()
+- readahead: properly shorten readahead when falling back to do_page_cache_ra()
+- readahead: don't shorten readahead window in read_pages()
+- filemap: fix page_cache_next_miss() when no hole found
+- readahead: make sure sync readahead reads needed page
+- dist,spec: omit nic drivers for kdump initramfs
+- Hygon: fix GPL-only symbols in NT copy_user path
+- arch/kata.config: add CONFIG_IP_VS support
+- iommu/amd: fix that no iommu_free_page/iommu_alloc_pages
+- iommu/amd: Fix host kdump support for SNP
+- perf/x86/amd: Check event before enable to avoid GPF
+- proc: block mounting on top of /proc/<pid>/fdinfo/*
+- proc: block mounting on top of /proc/<pid>/fd/*
+- proc: block mounting on top of /proc/<pid>/map_files/*
+- proc: add proc_splice_unmountable()
+- proc: proc_readfdinfo() -> proc_fdinfo_iterate()
+- proc: proc_readfd() -> proc_fd_iterate()
+- tos-sec: remove unnecessary task filed from struct socket
+- init/Kconfig: let KATA_SUPPORT depends on !COMPILE_TEST
+- scripts/kconfig/Makefile: add make kataconfig support
+- mm/Kconfig: do not enable ASYNC_FORK as default in kata config
+- open CONFIG_MODULES
+- mm: vmscan: Add missing fallthrough annotation and necessary initialization
+- cgroup/cpuset: Add memory_migrate control for cgroup v2
+- dist/configs/kata: disable CONFIG_LOCALVERSION_AUTO
+- mm/Kconfig: ASYNC_FORK select MMU_NOTIFIER
+- open ipv6 proc interface
+- dist,config: add CONFIG="kata-release" support
+- sandbox: kernel start support
+- rue: Add module version information
+- rue/scx: Add scx_print_exit_kill for verbose kill-on-exit log control
+
 * Tue Dec 16 2025 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-46
 - rue/net: ensure consistency of access to css pointer
 - crypto: x509: support SM2 certificate verification using trusted keyrings
