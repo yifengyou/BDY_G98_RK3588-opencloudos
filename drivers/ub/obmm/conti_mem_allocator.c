@@ -433,7 +433,7 @@ static int clear_thread_init(struct conti_mem_allocator *allocator)
 	struct task_struct *work;
 
 	work = kthread_create_on_node(conti_clear_thread, allocator, allocator->nid,
-				      "conti_clear_%s", allocator->name);
+				      "clearing-%s", allocator->name);
 	if (IS_ERR(work)) {
 		pr_err("failed to init conti_clear task\n");
 		return -ENODEV;
@@ -503,8 +503,8 @@ static int pool_thread_init(struct conti_mem_allocator *allocator)
 	struct task_struct *work;
 
 	init_waitqueue_head(&allocator->pool_wq);
-	work = kthread_create_on_node(conti_pool_thread, allocator, allocator->nid, "conti_pool_%s",
-				      allocator->name);
+	work = kthread_create_on_node(conti_pool_thread, allocator, allocator->nid,
+				      "pooling-%s", allocator->name);
 	if (IS_ERR(work)) {
 		pr_err("failed to init conti_pool task\n");
 		return -ENODEV;

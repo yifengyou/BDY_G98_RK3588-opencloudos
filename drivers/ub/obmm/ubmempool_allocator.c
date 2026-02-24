@@ -38,7 +38,6 @@ module_param(mempool_refill_timeout, int, 0440);
 MODULE_PARM_DESC(mempool_refill_timeout,
 	"After detecting a memory shortage, attempt to expand the memory pool again after a period of time.");
 
-/* Memory allocator structure - must be defined before container_of usage */
 struct mem_allocator {
 	struct timer_list refill_timer;
 	struct conti_mem_allocator allocator;
@@ -413,7 +412,6 @@ static struct conti_mempool_ops buddy_ops = {
 
 static void mem_allocator_uninit_one(int nid)
 {
-	/* Sysfs cleanup is handled in conti_mem_allocator_deinit */
 	conti_mem_allocator_deinit(&mem_allocators[nid].allocator);
 	timer_shutdown_sync(&mem_allocators[nid].refill_timer);
 }
@@ -528,9 +526,8 @@ static int mem_allocator_init_one(int nid, enum allocator_id aid)
 	mem_allocators[nid].can_expand = true;
 	timer_setup(&mem_allocators[nid].refill_timer, refill_timeout, 0);
 
-	/* Pass parent kobject for sysfs creation */
 	ret = conti_mem_allocator_init(allocator, nid, OBMM_MEMSEG_SIZE, allocator_ops[aid],
-				       mempool_kobj, "%s/%d", allocator_names[aid], nid);
+				       mempool_kobj, "obmm-%d", nid);
 	if (ret)
 		goto err_del_timer;
 
@@ -625,7 +622,6 @@ int ubmempool_allocator_init(void)
 
 	for_each_online_local_node(nid) {
 		if (nid >= OBMM_MAX_LOCAL_NUMA_NODES) {
-			/* be no mem_allocators[nid] is out of range */
 			pr_err("Too many local NUMA nodes. OBMM rebuild required.\n");
 			return -EOPNOTSUPP;
 		}
@@ -649,7 +645,6 @@ int ubmempool_allocator_init(void)
 	if (ret)
 		return ret;
 
-	/* Create global mempool sysfs directory as parent for allocator entries */
 	mempool_kobj = kobject_create_and_add("obmm_mempool", kernel_kobj);
 	if (!mempool_kobj) {
 		pr_err("Failed to create mempool sysfs directory\n");
@@ -690,7 +685,6 @@ void ubmempool_allocator_exit(void)
 		mem_allocator_uninit_one(i);
 	}
 
-	/* Cleanup global mempool sysfs directory */
 	if (mempool_kobj) {
 		kobject_put(mempool_kobj);
 		mempool_kobj = NULL;
