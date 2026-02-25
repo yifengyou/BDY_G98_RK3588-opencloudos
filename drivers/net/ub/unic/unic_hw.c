@@ -418,6 +418,7 @@ int unic_set_promisc_mode(struct unic_dev *unic_dev,
 
 void unic_fill_promisc_en(struct unic_promisc_en *promisc_en, u8 flags)
 {
+	memset(promisc_en, 0, sizeof(*promisc_en));
 	promisc_en->en_uc_ip = !!(flags & UNIC_UPE);
 	promisc_en->en_mc = !!(flags & UNIC_MPE);
 	promisc_en->en_uc_mac = !!(flags & UNIC_UPE);
