@@ -202,7 +202,8 @@ static int calculate_export_region_size(unsigned long *total_size,
 		       OBMM_MAX_LOCAL_NUMA_NODES, cmd_export->length);
 		return -E2BIG;
 	}
-	if (cmd_export->pxm_numa > OBMM_MAX_LOCAL_NUMA_NODES) {
+	if (cmd_export->pxm_numa > OBMM_MAX_LOCAL_NUMA_NODES ||
+	    cmd_export->pxm_numa < 0) {
 		pr_err("Invalid pxm_numa %d\n", cmd_export->pxm_numa);
 		return -EINVAL;
 	}

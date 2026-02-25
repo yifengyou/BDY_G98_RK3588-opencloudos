@@ -112,7 +112,8 @@ static bool hisi_workarounds_check_page_list(struct obmm_export_region *reg, str
 		pr_debug("Page resides in node %u\n", node);
 		reg->node_count = node + 1;
 	}
-	if (reg->affinity > OBMM_MAX_LOCAL_NUMA_NODES) {
+	if (reg->affinity > OBMM_MAX_LOCAL_NUMA_NODES ||
+	    reg->affinity < 0) {
 		pr_err("Invalid pxm_numa %d\n", reg->affinity);
 		return false;
 	}
