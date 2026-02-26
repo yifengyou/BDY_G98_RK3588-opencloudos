@@ -39,10 +39,10 @@ static struct folio *page_idle_get_folio(unsigned long pfn)
 	if (!page || PageTail(page))
 		return NULL;
 
-	folio = page_folio(page);
-	if (!folio_test_lru(folio) || !folio_try_get(folio))
+	if (!PageLRU(page) || !get_page_unless_zero(page))
 		return NULL;
-	if (unlikely(page_folio(page) != folio || !folio_test_lru(folio))) {
+	folio = page_folio(page);
+	if (unlikely(page != folio_page(folio, 0) || !folio_test_lru(folio))) {
 		folio_put(folio);
 		folio = NULL;
 	}
