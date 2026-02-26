@@ -627,6 +627,7 @@ void ubase_cmd_crq_handler(struct ubase_dev *udev)
 				  "drop invalid crq message, opcode = 0x%x, bd_num = %u, flag = 0x%x.",
 				  opcode, bd_num, flag);
 			UBASE_MOVE_CRQ_RING_PTR(crq);
+			ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 			continue;
 		}
 
@@ -639,9 +640,9 @@ void ubase_cmd_crq_handler(struct ubase_dev *udev)
 						msg_data_len);
 
 		ubase_free_bd_data(msg_data, bd_num);
+		ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 	}
 
-	ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 }
 
 void ubase_crq_service_task(struct ubase_delay_work *ubase_work)
