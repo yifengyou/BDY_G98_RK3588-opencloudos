@@ -1323,8 +1323,8 @@ static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 	folio_set_hugetlb_freed(folio);
 }
 
-static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
-								int nid)
+static struct folio *__dequeue_hugetlb_folio_node_exact(struct hstate *h, int nid,
+							filter_hugetlb_t filter)
 {
 	struct folio *folio;
 	bool pin = !!(current->flags & PF_MEMALLOC_PIN);
@@ -1340,6 +1340,9 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 		if (is_migrate_isolate_page(&folio->page))
 			continue;
 
+		if (filter && filter(folio))
+			continue;
+
 		list_move(&folio->lru, &h->hugepage_activelist);
 		folio_ref_unfreeze(folio, 1);
 		folio_clear_hugetlb_freed(folio);
@@ -1351,8 +1354,13 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 	return NULL;
 }
 
-static struct folio *dequeue_hugetlb_folio_nodemask(struct hstate *h, gfp_t gfp_mask,
-							int nid, nodemask_t *nmask)
+struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h, int nid)
+{
+	return __dequeue_hugetlb_folio_node_exact(h, nid, NULL);
+}
+
+static struct folio *__dequeue_hugetlb_folio_nodemask(struct hstate *h, gfp_t gfp_mask,
+					int nid, nodemask_t *nmask, filter_hugetlb_t filter)
 {
 	unsigned int cpuset_mems_cookie;
 	struct zonelist *zonelist;
@@ -1377,7 +1385,7 @@ retry_cpuset:
 			continue;
 		node = zone_to_nid(zone);
 
-		folio = dequeue_hugetlb_folio_node_exact(h, node);
+		folio = __dequeue_hugetlb_folio_node_exact(h, node, filter);
 		if (folio)
 			return folio;
 	}
@@ -1385,6 +1393,12 @@ retry_cpuset:
 		goto retry_cpuset;
 
 	return NULL;
+}
+
+static struct folio *dequeue_hugetlb_folio_nodemask(struct hstate *h, gfp_t gfp_mask,
+							int nid, nodemask_t *nmask)
+{
+	return __dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, nmask, NULL);
 }
 
 static unsigned long available_huge_pages(struct hstate *h)
@@ -2524,6 +2538,31 @@ struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 
 	return alloc_migrate_hugetlb_folio(h, gfp_mask, preferred_nid, nmask);
 }
+
+/*
+ * Similar to alloc_hugetlb_folio_nodemask(), but it will only
+ * allocate hugepages from free lists.
+ */
+struct folio *get_hugetlb_folio_nodemask(unsigned long size, int preferred_nid,
+		nodemask_t *nmask, gfp_t gfp_mask, filter_hugetlb_t filter)
+{
+	unsigned long flags;
+	struct hstate *h;
+	struct folio *folio = NULL;
+
+	h = size_to_hstate(size);
+	if (!h)
+		return NULL;
+
+	spin_lock_irqsave(&hugetlb_lock, flags);
+	if (available_huge_pages(h))
+		folio = __dequeue_hugetlb_folio_nodemask(h, gfp_mask, preferred_nid,
+						nmask, filter);
+	spin_unlock_irqrestore(&hugetlb_lock, flags);
+
+	return folio;
+}
+EXPORT_SYMBOL(get_hugetlb_folio_nodemask);
 
 static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
 {
@@ -7513,6 +7552,12 @@ void folio_putback_active_hugetlb(struct folio *folio)
 	folio_put(folio);
 }
 
+void putback_hugetlb_folio(struct folio *folio)
+{
+	folio_putback_active_hugetlb(folio);
+}
+EXPORT_SYMBOL(putback_hugetlb_folio);
+
 void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio, int reason)
 {
 	struct hstate *h = folio_hstate(old_folio);
@@ -7781,8 +7826,6 @@ struct folio *alloc_hugetlb_folio_size(int nid, unsigned long size)
 	gfp_t gfp_mask;
 	struct hstate *h;
 	nodemask_t nodemask;
-	unsigned long flags;
-	struct folio *folio = NULL;
 
 	h = size_to_hstate(size);
 	if (!h)
@@ -7791,12 +7834,8 @@ struct folio *alloc_hugetlb_folio_size(int nid, unsigned long size)
 	nodes_clear(nodemask);
 	node_set(nid, nodemask);
 	gfp_mask = htlb_alloc_mask(h);
-	spin_lock_irqsave(&hugetlb_lock, flags);
-	if (h->free_huge_pages - h->resv_huge_pages > 0)
-		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, &nodemask);
-	spin_unlock_irqrestore(&hugetlb_lock, flags);
 
-	return folio;
+	return get_hugetlb_folio_nodemask(size, nid, &nodemask, gfp_mask, NULL);
 }
 EXPORT_SYMBOL(alloc_hugetlb_folio_size);
 

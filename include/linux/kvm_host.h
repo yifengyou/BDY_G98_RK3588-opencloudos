@@ -2450,6 +2450,8 @@ static inline void kvm_pinned_vmid_put(struct kvm *kvm)
 }
 #endif
 
+int kvm_mmu_mark_touched_log(struct kvm *kvm);
+
 /*
  * If more than one page is being (un)accounted, @virt must be the address of
  * the first page of a block of pages what were allocated together (i.e

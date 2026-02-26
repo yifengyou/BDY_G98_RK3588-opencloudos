@@ -26,6 +26,7 @@ typedef struct { unsigned long pd; } hugepd_t;
 #define __hugepd(x) ((hugepd_t) { (x) })
 #endif
 
+typedef bool filter_hugetlb_t(struct folio *folio);
 void free_huge_folio(struct folio *folio);
 
 #ifdef CONFIG_HUGETLB_PAGE
@@ -167,6 +168,7 @@ int get_hwpoison_hugetlb_folio(struct folio *folio, bool *hugetlb, bool unpoison
 int get_huge_page_for_hwpoison(unsigned long pfn, int flags,
 				bool *migratable_cleared);
 void folio_putback_active_hugetlb(struct folio *folio);
+void putback_hugetlb_folio(struct folio *folio);
 void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio, int reason);
 void hugetlb_fix_reserve_counts(struct inode *inode);
 extern struct mutex *hugetlb_fault_mutex_table;
@@ -464,6 +466,10 @@ static inline void folio_putback_active_hugetlb(struct folio *folio)
 {
 }
 
+static inline void putback_hugetlb_folio(struct folio *folio)
+{
+}
+
 static inline void move_hugetlb_state(struct folio *old_folio,
 					struct folio *new_folio, int reason)
 {
@@ -757,6 +763,9 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 				unsigned long addr, int avoid_reserve);
 struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 				nodemask_t *nmask, gfp_t gfp_mask);
+struct folio *get_hugetlb_folio_nodemask(unsigned long size, int preferred_nid,
+				nodemask_t *nmask, gfp_t gfp_mask,
+				filter_hugetlb_t filter);
 int hugetlb_add_to_page_cache(struct folio *folio, struct address_space *mapping,
 			pgoff_t idx);
 void restore_reserve_on_error(struct hstate *h, struct vm_area_struct *vma,
@@ -1093,6 +1102,14 @@ static inline struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 static inline struct folio *
 alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 			nodemask_t *nmask, gfp_t gfp_mask)
+{
+	return NULL;
+}
+
+static inline struct folio *
+get_hugetlb_folio_nodemask(unsigned long size, int preferred_nid,
+			nodemask_t *nmask, gfp_t gfp_mask,
+			filter_hugetlb_t filter)
 {
 	return NULL;
 }

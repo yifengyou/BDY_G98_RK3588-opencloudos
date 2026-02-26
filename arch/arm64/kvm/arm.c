@@ -1993,6 +1993,9 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		return 0;
 	}
 #endif
+	case KVM_POD_TOUCHED_LOG: {
+		return kvm_mmu_mark_touched_log(kvm);
+	}
 	default:
 		return -EINVAL;
 	}

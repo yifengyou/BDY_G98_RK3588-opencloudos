@@ -116,7 +116,7 @@ struct sentry_ubcore_resource {
 	union ubcore_eid server_eid[MAX_NODE_NUM];
 	char server_eid_array[MAX_NODE_NUM][EID_MAX_LEN];
 	int server_eid_valid_num;
-	uint32_t eid_index;
+	uint32_t primary_eid_index;
 
 	/* cnt for retry */
 	atomic_t send_cnt[MAX_NODE_NUM];
@@ -655,6 +655,7 @@ free_seg:
 /**
  * sentry_create_jetty - Create a URMA jetty endpoint
  * @device: URMA device to create jetty on
+ * @eid_index: eid index
  * @jfc_s: Send completion queue
  * @jfc_r: Receive completion queue
  * @jfr: Receive work queue
@@ -666,6 +667,7 @@ free_seg:
  * for URMA communication.
  */
 static struct ubcore_jetty *sentry_create_jetty(struct ubcore_device *device,
+						uint32_t eid_index,
 						struct ubcore_jfc *jfc_s,
 						struct ubcore_jfc *jfc_r,
 						struct ubcore_jfr *jfr,
@@ -675,7 +677,7 @@ static struct ubcore_jetty *sentry_create_jetty(struct ubcore_device *device,
 		.id = jetty_id,
 		.flag.bs.share_jfr = 1,
 		.trans_mode = UBCORE_TP_RM,
-		.eid_index = 0,
+		.eid_index = eid_index,
 		.jfs_depth = MAX_JFS_DEPTH,
 		.priority = 0, /* Highest priority */
 		.max_send_sge = 1,
@@ -804,7 +806,7 @@ static int create_ubcore_resource(int die_index)
 	pr_info("ubcore_create_jfc success\n");
 
 	/* Create JFR */
-	default_jfr_cfg.eid_index = sentry_urma_dev[die_index].eid_index;
+	default_jfr_cfg.eid_index = sentry_urma_dev[die_index].primary_eid_index;
 	default_jfr_cfg.jfc = sentry_urma_dev[die_index].receiver_jfc;
 	sentry_urma_dev[die_index].jetty_jfr =
 		ubcore_create_jfr(sentry_urma_dev[die_index].sentry_ubcore_dev,
@@ -955,10 +957,11 @@ int import(void)
 		/* Create local jetty */
 		sentry_urma_dev[die_index].jetty =
 			sentry_create_jetty(sentry_urma_dev[die_index].sentry_ubcore_dev,
-					    sentry_urma_dev[die_index].sender_jfc,
-					    sentry_urma_dev[die_index].receiver_jfc,
-					    sentry_urma_dev[die_index].jetty_jfr,
-					    sentry_urma_ctx.client_jetty_id);
+						sentry_urma_dev[die_index].primary_eid_index,
+						sentry_urma_dev[die_index].sender_jfc,
+						sentry_urma_dev[die_index].receiver_jfc,
+						sentry_urma_dev[die_index].jetty_jfr,
+						sentry_urma_ctx.client_jetty_id);
 		if (IS_ERR_OR_NULL(sentry_urma_dev[die_index].jetty)) {
 			sentry_urma_dev[die_index].jetty = NULL;
 			pr_err("ubcore_create_jetty failed for device %s\n",
@@ -1136,7 +1139,7 @@ int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 	/* Create resources for each EID */
 	for (i = 0; i < eid_num; i++) {
 		sentry_urma_dev[i].sentry_ubcore_dev =
-			match_dev_by_local_eid(&eid[i], &sentry_urma_dev[i].eid_index);
+			match_dev_by_local_eid(&eid[i], &sentry_urma_dev[i].primary_eid_index);
 		if (IS_ERR_OR_NULL(sentry_urma_dev[i].sentry_ubcore_dev))
 			return -EINVAL;
 
@@ -1675,6 +1678,7 @@ static int sentry_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr 
 	}
 
 	cnt = ubcore_poll_jfc(jfc, cr_cnt, cr);
+	pr_info("ubcore_poll_jfc cr.status is %d\n", cr->status);
 	if (cnt <= 0)
 		return cnt;
 

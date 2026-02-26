@@ -1648,6 +1648,7 @@ static int check_memory_region_flags(struct kvm *kvm,
 	    !(mem->flags & KVM_MEM_GUEST_MEMFD))
 		valid_flags |= KVM_MEM_READONLY;
 #endif
+	valid_flags |= KVM_MEM_HUGE_POD;
 
 	if (mem->flags & ~valid_flags)
 		return -EINVAL;
