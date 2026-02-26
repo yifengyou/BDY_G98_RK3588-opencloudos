@@ -178,6 +178,32 @@ void putback_movable_pages(struct list_head *l)
 	}
 }
 
+/* Must be called with an elevated refcount on the non-hugetlb folio */
+bool isolate_folio_to_list(struct folio *folio, struct list_head *list)
+{
+	bool isolated, lru;
+
+	if (folio_test_hugetlb(folio))
+		return isolate_hugetlb(folio, list);
+
+	lru = !__folio_test_movable(folio);
+	if (lru)
+		isolated = folio_isolate_lru(folio);
+	else
+		isolated = isolate_movable_page(&folio->page,
+						ISOLATE_UNEVICTABLE);
+
+	if (!isolated)
+		return false;
+
+	list_add(&folio->lru, list);
+	if (lru)
+		node_stat_add_folio(folio, NR_ISOLATED_ANON +
+				    folio_is_file_lru(folio));
+
+	return true;
+}
+
 /*
  * Restore a potential migration pte to a working pte entry
  */
@@ -2061,6 +2087,60 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 
 	return __folio_alloc(gfp_mask, order, nid, mtc->nmask);
 }
+
+/*
+ * isolate_and_migrate_folios - isolate and migrate folios
+ *
+ * @folios:		The array stores the folios to be migrated.
+ * @nr_folios:		The number of folios to be migrated.
+ * @get_new_folio:	The function used to allocate free folios to be used
+ *			as the target of the folio migration.
+ * @put_new_folio:	The function used to free target folios if migration
+ *			fails, or NULL if no special handling is necessary.
+ * @private:		Private data to be passed on to get_new_folio()
+ * @mode:		The migration mode that specifies the constraints for
+ *			folio migration, if any.
+ * @nr_succeeded:	Set to the number of folios migrated successfully if
+ *			the caller passes a non-NULL pointer.
+ *
+ * This function is mainly used to isolate and migrate folios based on hotness
+ * of folios. Use this function to migrate cold folios identified by the caller
+ * to remote NUMA and hot folios to local NUMA.
+ *
+ * Context: The folio_get must be called on all folios before because folio_put
+ *	    is called after isolation.
+ *
+ * Returns the number of folios that were isolated but not migrated,
+ * or an error code.
+ */
+int isolate_and_migrate_folios(struct folio **folios, unsigned int nr_folios,
+		new_folio_t get_new_folio, free_folio_t put_new_folio,
+		unsigned long private, enum migrate_mode mode,
+		unsigned int *nr_succeeded)
+{
+	int ret = 0;
+	unsigned int i;
+	struct folio *folio;
+	LIST_HEAD(source);
+
+	for (i = 0; i < nr_folios; i++) {
+		folio = folios[i];
+		VM_BUG_ON_FOLIO(!folio_ref_count(folio), folio);
+		isolate_folio_to_list(folio, &source);
+		folio_put(folio);
+	}
+	if (!list_empty(&source)) {
+		ret = migrate_pages(&source, get_new_folio, put_new_folio,
+			private, mode, MR_HOTNESS, nr_succeeded);
+		if (ret)
+			putback_movable_pages(&source);
+		if (nr_succeeded && *nr_succeeded)
+			count_vm_numa_events(NUMA_PAGE_MIGRATE, *nr_succeeded);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(isolate_and_migrate_folios);
 
 #ifdef CONFIG_NUMA
 

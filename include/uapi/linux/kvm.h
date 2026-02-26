@@ -116,6 +116,7 @@ struct kvm_userspace_memory_region2 {
 #define KVM_MEM_LOG_DIRTY_PAGES	(1UL << 0)
 #define KVM_MEM_READONLY	(1UL << 1)
 #define KVM_MEM_GUEST_MEMFD	(1UL << 2)
+#define KVM_MEM_HUGE_POD   (1UL << 9)
 
 /* for KVM_IRQ_LINE */
 struct kvm_irq_level {
@@ -1517,6 +1518,8 @@ struct kvm_master_dev_info {
 #define KVM_SET_IDENTITY_MAP_ADDR _IOW(KVMIO,  0x48, __u64)
 #define KVM_SET_USER_MEMORY_REGION2 _IOW(KVMIO, 0x49, \
 					 struct kvm_userspace_memory_region2)
+
+#define KVM_POD_TOUCHED_LOG       _IO(KVMIO,  0xfe)
 
 /* enable ucontrol for s390 */
 struct kvm_s390_ucas_mapping {
