@@ -128,7 +128,7 @@ struct ubase_cfg_dma_buf_req {
 	__le32 resv[3];
 };
 
-struct ubase_config_sl_vl_cmd {
+struct ubase_query_sl_vl_cmd {
 	u8	sl_num;
 	u8	sl_vl[23];
 };
