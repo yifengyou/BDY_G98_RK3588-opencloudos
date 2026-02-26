@@ -1,4 +1,12 @@
+* Thu Feb 26 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.1
+- mm, swap: fix swap map underflow with KSM
+- mm, shmem: prevent infinite loop on truncate race
+
 * Sun Feb 22 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47
+- !651 [Intel-SIG] DMR APX support - kernel-host part
+- !648 mm: hugetlb: add putback_hugetlb_folio()
+- page_idle: prevent folio_flags warning when opening DEBUG_VM
+- memcg: avoid refill_stock for root memcg
 - !650 AMD Venice ATL/PRM support for OpenCloudOS 6.6 kernel
 - !649 net/oenetcls: fix an issue with incorrect copy length
 - !646 drivers: remove some unused symbol of Chengdu NorthLink Technology N5/N6 Series Network Card drivers
