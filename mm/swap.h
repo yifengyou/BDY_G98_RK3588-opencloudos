@@ -269,7 +269,7 @@ static inline bool folio_matches_swap_entry(struct folio *folio,
  *   swap entries in the page table, similar to locking swap cache folio.
  * - See the comment of get_swap_device() for more complex usage.
  */
-bool swap_cache_check_folio(swp_entry_t entry);
+bool swap_cache_has_folio(swp_entry_t entry);
 struct folio *swap_cache_get_folio(swp_entry_t entry);
 void *swap_cache_get_shadow(swp_entry_t entry);
 void swap_cache_del_folio(struct folio *folio);
@@ -338,7 +338,7 @@ static inline int non_swapcache_batch(swp_entry_t entry, int max_nr)
 	 * be in conflict with the folio in swap cache.
 	 */
 	for (i = 0; i < max_nr; i++) {
-		if (swap_cache_check_folio(entry))
+		if (swap_cache_has_folio(entry))
 			return i;
 		entry.val++;
 	}
@@ -442,7 +442,7 @@ static inline void swap_update_readahead(struct folio *folio,
 {
 }
 
-static inline bool swap_cache_check_folio(swp_entry_t entry)
+static inline bool swap_cache_has_folio(swp_entry_t entry)
 {
 	return false;
 }

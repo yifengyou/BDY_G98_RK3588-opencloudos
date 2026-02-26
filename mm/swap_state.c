@@ -105,13 +105,13 @@ struct folio *swap_cache_get_folio(swp_entry_t entry)
 }
 
 /**
- * swap_cache_check_folio - Check if a swap slot has cache.
+ * swap_cache_has_folio - Check if a swap slot has cache.
  * @entry: swap entry indicating the slot.
  *
  * Context: Caller must ensure @entry is valid and protect the swap
  * device with reference count or locks.
  */
-bool swap_cache_check_folio(swp_entry_t entry)
+bool swap_cache_has_folio(swp_entry_t entry)
 {
 	unsigned long swp_tb;
 
@@ -360,7 +360,7 @@ void __swap_cache_replace_folio(struct swap_cluster_info *ci,
 }
 
 /**
- * swap_cache_clear_shadow - Clears a set of shadows in the swap cache.
+ * __swap_cache_clear_shadow - Clears a set of shadows in the swap cache.
  * @entry: The starting index entry.
  * @nr_ents: How many slots need to be cleared.
  *
@@ -492,8 +492,8 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
  * All swap slots covered by the folio must have a non-zero swap count.
  *
  * Context: Caller must protect the swap device with reference count or locks.
- * Return: Returns the folio being added on success. Returns the existing
- * folio if @entry is cached. Returns NULL if raced with swapin or swapoff.
+ * Return: Returns the folio being added on success. Returns the existing folio
+ * if @entry is already cached. Returns NULL if raced with swapin or swapoff.
  */
 static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 						  struct folio *folio,
