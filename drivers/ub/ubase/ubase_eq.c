@@ -4,7 +4,6 @@
  *
  */
 
-#include <linux/interrupt.h>
 #include <ub/ubase/ubase_comm_eq.h>
 
 #include "ubase_cmd.h"
@@ -495,14 +494,14 @@ static int ubase_fill_eq_attribute(struct ubase_dev *udev, struct ubase_eq *eq,
 	if (eq_type == UBASE_EQ_TYPE_AEQ) {
 		eq->eqe_size = udev->caps.dev_caps.aeqe_size;
 		eq->entries_num = udev->caps.dev_caps.aeqe_depth;
-		eq->eq_period = EQC_EQ_MAX_PERIOD_INDX;
+		eq->eq_period = EQC_EQ_DEFAULT_PERIOD_INDX;
 		eq->eqc_irqn = eqn + udev->caps.dev_caps.num_misc_vectors;
 	} else {
 		eq->eqe_size = udev->caps.dev_caps.ceqe_size;
 		eq->entries_num = udev->caps.dev_caps.ceqe_depth;
 		eq->eqc_irqn = eqn + udev->caps.dev_caps.num_misc_vectors +
 			       udev->caps.dev_caps.num_aeq_vectors;
-		eq->eq_period = EQC_EQ_MAX_PERIOD_INDX;
+		eq->eq_period = EQC_EQ_DEFAULT_PERIOD_INDX;
 	}
 
 	eq->cons_index = 0;

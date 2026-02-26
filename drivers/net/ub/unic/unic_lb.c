@@ -503,9 +503,9 @@ static bool unic_self_test_is_unexecuted(struct net_device *ndev,
 		return true;
 	}
 
-	if (unic_is_initing_or_resetting(unic_dev)) {
+	if (unic_is_initing_or_resetting(unic_dev) || !unic_dev->channels.c) {
 		unic_err(unic_dev,
-			 "failed to self test, due to dev resetting.\n");
+			 "failed to self test, due to dev initing or resetting.\n");
 		return true;
 	}
 

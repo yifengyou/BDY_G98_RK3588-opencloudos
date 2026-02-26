@@ -1248,7 +1248,7 @@ void ubase_update_udma_dscp_vl(struct auxiliary_device *adev, u8 *dscp_vl,
 
 	for (i = 0; i < arr_len; i++)
 		qos->dscp_vl[i] = ubase_is_udma_tp_vl(qos, dscp_vl[i]) ?
-				       dscp_vl[i] : qos->tp_req_vl[0];
+				  dscp_vl[i] : qos->tp_req_vl[0];
 }
 EXPORT_SYMBOL(ubase_update_udma_dscp_vl);
 

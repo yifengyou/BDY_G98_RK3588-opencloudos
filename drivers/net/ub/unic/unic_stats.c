@@ -108,7 +108,7 @@ static struct unic_dfx_regs_group unic_dfx_reg_arr[] = {
 		.opcode = UBASE_OPC_DFX_HIMAC_REG,
 		.property = UBASE_SUP_ETH,
 		.is_supported = unic_dfx_reg_support
-	}
+	},
 };
 
 static const struct unic_stats_desc unic_sq_stats_str[] = {

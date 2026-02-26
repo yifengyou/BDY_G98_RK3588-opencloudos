@@ -9,7 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <net/rtnetlink.h>
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 #include <net/ub/ubl.h>
 #endif
 #include <ub/ubase/ubase_comm_cmd.h>
@@ -1046,14 +1046,14 @@ static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)
 		channel_num = UNIC_DEFAULT_CHANNEL_NUM;
 
 	if (ubase_adev_ubl_supported(adev)) {
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 		snprintf(name, IFNAMSIZ, "ublc%ud%ue%u", caps->chip_id,
 			 caps->die_id, caps->ue_id);
 		netdev = alloc_netdev_mq(sizeof(struct unic_dev), name,
 					 NET_NAME_USER, ubl_setup, channel_num);
 #else
 		dev_warn(adev->dev.parent,
-			 "failed to alloc netdev because of ubl macro is not enabled.\n");
+			 "failed to alloc netdev because of CONFIG_UB_UNIC_UBL is not enabled.\n");
 #endif
 	} else {
 		snprintf(name, IFNAMSIZ, "ethc%ud%ue%u", caps->chip_id,

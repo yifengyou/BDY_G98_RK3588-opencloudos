@@ -442,6 +442,9 @@ static int unic_backup_stats(struct unic_dev *unic_dev,
 	struct unic_rq_stats *rx_stats;
 	u32 i;
 
+	if (!unic_dev->channels.c)
+		return -EEXIST;
+
 	tx_stats = kcalloc(unic_dev->channels.num, sizeof(*tx_stats),
 			   GFP_KERNEL);
 	if (!tx_stats)
