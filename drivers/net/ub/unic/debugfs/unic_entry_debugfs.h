@@ -17,9 +17,12 @@
 
 #define UNIC_BITMAP_LEN		8
 #define UNIC_DBG_MAC_NUM	16
+#define UNIC_DBG_MNG_NUM	8
 #define UNIC_DBG_VLAN_NUM	250
 #define UNIC_QUERY_MAC_LEN	(sizeof(struct unic_dbg_mac_head) + \
 				 sizeof(struct unic_dbg_mac_entry) * UNIC_DBG_MAC_NUM)
+#define UNIC_QUERY_MNG_LEN	(sizeof(struct unic_dbg_mng_head) + \
+				 sizeof(struct unic_dbg_mng_entry) * UNIC_DBG_MNG_NUM)
 #define UNIC_QUERY_VLAN_LEN	(sizeof(struct unic_dbg_vlan_head) + \
 				 sizeof(struct unic_dbg_vlan_entry) * UNIC_DBG_VLAN_NUM)
 
@@ -33,6 +36,32 @@ struct unic_dbg_mac_head {
 	u8 cur_mac_cnt;
 	u8 rsv[3];
 	struct unic_dbg_mac_entry mac_entry[];
+};
+
+struct unic_dbg_mng_entry {
+	u8 mac_mask;
+	u8 ether_type_mask;
+	u8 vlan_mask;
+	u8 resv0;
+
+	u8 mac[ETH_ALEN];
+	u8 resv1[2];
+
+	__le16 ether_type;
+	__le16 vlan;
+
+	u8 port_bitmap;
+	u8 drop;
+	__le16 jfrn;
+
+	u8 resv2[4];
+};
+
+struct unic_dbg_mng_head {
+	__le16 idx;
+	u8 entry_num;
+	u8 resv;
+	struct unic_dbg_mng_entry entries[];
 };
 
 struct unic_dbg_vlan_entry {
@@ -70,6 +99,19 @@ struct unic_dbg_comm_addr_node {
 	};
 };
 
+struct unic_dbg_mng_node {
+	struct list_head	node;
+	u8			mac_mask;
+	u8			ether_type_mask;
+	u8			vlan_mask;
+	u8			mac[ETH_ALEN];
+	u16			ether_type;
+	u16			vlan;
+	u8			port_bitmap;
+	u8			drop;
+	u16			jfrn;
+};
+
 int unic_dbg_dump_ip_tbl_spec(struct seq_file *s, void *data);
 int unic_dbg_dump_mac_tbl_spec(struct seq_file *s, void *data);
 int unic_dbg_dump_mc_mac_tbl_list(struct seq_file *s, void *data);
@@ -78,5 +120,6 @@ int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data);
 int unic_dbg_dump_bond_ip_tbl_list(struct seq_file *s, void *data);
 int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_mac_tbl_list_hw(struct seq_file *s, void *data);
+int unic_dbg_dump_mng_tbl_list_hw(struct seq_file *s, void *data);
 
 #endif /* _UNIC_ENTRY_DEBUGFS_H */
