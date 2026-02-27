@@ -1,3 +1,11 @@
+* Fri Feb 27 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.2
+- execve: fix sysctl_max_arg_strlen undefined error for external modules
+- mm/mremap: fix address wraparound in move_page_tables()
+- mm/mremap: allow moves within the same VMA for stack moves
+- mm/mremap: optimize the start addresses in move_page_tables()
+- gic: Add hip09 support for HISILICON_ERRATUM_165010801
+- kvm: replace __KVM_HAVE_READONLY_MEM with Kconfig symbol
+
 * Thu Feb 26 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.1
 - mm, swap: fix swap map underflow with KSM
 - mm, shmem: prevent infinite loop on truncate race
