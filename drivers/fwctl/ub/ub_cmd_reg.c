@@ -658,6 +658,19 @@ static int ubctl_query_dump_data(struct ubctl_dev *ucdev,
 				   query_dp, ARRAY_SIZE(query_dp));
 }
 
+static int ubctl_query_port_pkt_stats(struct ubctl_dev *ucdev,
+				      struct ubctl_query_cmd_param *query_cmd_param,
+				      struct ubctl_func_dispatch *query_func)
+{
+	struct ubctl_query_dp query_dp[] = {
+		{ UBCTL_QUERY_PORT_PKT_STATS_DFX, UBCTL_PORT_PKT_STATS_LEN,
+		  UBCTL_READ, NULL, 0 },
+	};
+
+	return ubctl_query_data(ucdev, query_cmd_param, query_func,
+				query_dp, ARRAY_SIZE(query_dp));
+}
+
 static struct ubctl_func_dispatch g_ubctl_query_reg[] = {
 	{ UTOOL_CMD_QUERY_NL, ubctl_query_nl_data, ubctl_query_data_deal },
 	{ UTOOL_CMD_QUERY_NL_PKT_STATS, ubctl_query_nl_pkt_stats_data,
@@ -726,6 +739,8 @@ static struct ubctl_func_dispatch g_ubctl_query_reg[] = {
 	{ UTOOL_CMD_QUERY_UBOMMU, ubctl_query_ubommu_data, ubctl_query_data_deal },
 
 	{ UTOOL_CMD_QUERY_PORT_INFO, ubctl_query_port_info_data,
+	  ubctl_query_data_deal },
+	{ UTOOL_CMD_QUERY_PORT_PKT_STATS, ubctl_query_port_pkt_stats,
 	  ubctl_query_data_deal },
 
 	{ UTOOL_CMD_QUERY_ECC_2B, ubctl_query_ecc_2b_data, ubctl_query_data_deal },
