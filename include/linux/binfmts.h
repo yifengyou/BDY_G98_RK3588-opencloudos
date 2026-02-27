@@ -12,8 +12,12 @@
 #error "MAX_ARG_STRLEN has been modified, adaptation is required"
 #else
 #undef MAX_ARG_STRLEN
+#ifdef MODULE
+#define MAX_ARG_STRLEN ORIG_MAX_ARG_STRLEN
+#else
 #define MAX_ARG_STRLEN sysctl_max_arg_strlen
 extern unsigned int sysctl_max_arg_strlen;
+#endif
 #endif
 
 struct filename;
