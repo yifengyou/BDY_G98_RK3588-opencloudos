@@ -58,6 +58,9 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 #include <linux/log2.h>
 #include <linux/sched/clock.h>
 #include <linux/numa_remote.h>
@@ -2805,6 +2808,9 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z,
 {
 #ifdef CONFIG_NUMA
 	enum numa_stat_item local_stat = NUMA_LOCAL;
+#ifdef CONFIG_RQI
+	int nid = zone_to_nid(z);
+#endif
 
 	/* skip numa counters update if numa stats is disabled */
 	if (!static_branch_likely(&vm_numa_stat_key))
@@ -2813,6 +2819,12 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z,
 	if (zone_to_nid(z) != numa_node_id())
 		local_stat = NUMA_OTHER;
 
+#ifdef CONFIG_RQI
+	if (local_stat == NUMA_OTHER)
+		rqi_stat(RQI_NUMA_OTHER, nr_account, &nid);
+	else
+		rqi_stat(RQI_NUMA_LOCAL, nr_account, &nid);
+#endif
 	if (zone_to_nid(z) == zone_to_nid(preferred_zone))
 		__count_numa_events(z, NUMA_HIT, nr_account);
 	else {
@@ -4026,6 +4038,9 @@ __perform_reclaim(gfp_t gfp_mask, unsigned int order,
 #ifdef CONFIG_CGROUP_SLI
 	sli_memlat_stat_start(&start);
 #endif
+#ifdef CONFIG_RQI
+	u64 start_rqi = rqi_start(RQI_MEM_DIRECT_RECLAIM);
+#endif
 	fs_reclaim_acquire(gfp_mask);
 	noreclaim_flag = memalloc_noreclaim_save();
 
@@ -4036,6 +4051,9 @@ __perform_reclaim(gfp_t gfp_mask, unsigned int order,
 	fs_reclaim_release(gfp_mask);
 #ifdef CONFIG_CGROUP_SLI
 	sli_memlat_stat_end(MEM_LAT_GLOBAL_DIRECT_RECLAIM, start);
+#endif
+#ifdef CONFIG_RQI
+	rqi_end(RQI_MEM_DIRECT_RECLAIM, start_rqi);
 #endif
 
 	cond_resched();
@@ -5971,6 +5989,10 @@ void __init setup_per_cpu_pageset(void)
 	for_each_online_pgdat(pgdat)
 		pgdat->per_cpu_nodestats =
 			alloc_percpu(struct per_cpu_nodestat);
+#ifdef CONFIG_RQI
+	for_each_online_pgdat(pgdat)
+		pgdat->rqi_pcpu_numa_stats = alloc_percpu(struct rqi_percpu_numa_stat);
+#endif
 }
 
 __meminit void zone_pcp_init(struct zone *zone)

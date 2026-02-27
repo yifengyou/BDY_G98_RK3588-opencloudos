@@ -93,6 +93,9 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 #include "pgalloc-track.h"
 #include "internal.h"
@@ -5858,9 +5861,15 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 
 		sli_memlat_stat_start(&start);
 #endif
+#ifdef CONFIG_RQI
+		u64 start_rqi = rqi_start(RQI_MEM_SWAP_FAULT);
+#endif
 		retval = do_swap_page(vmf);
 #ifdef CONFIG_CGROUP_SLI
 		sli_memlat_stat_end(MEM_LAT_DIRECT_SWAPIN, start);
+#endif
+#ifdef CONFIG_RQI
+		rqi_end(RQI_MEM_SWAP_FAULT, start_rqi);
 #endif
 		return retval;
 	}

@@ -68,6 +68,9 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_GENERIC_ENTRY
@@ -5976,6 +5979,9 @@ void scheduler_tick(void)
 #ifdef CONFIG_CGROUP_SLI
 	sli_check_longsys(curr);
 #endif
+#ifdef CONFIG_RQI
+	rqi_check_longsys(curr);
+#endif
 	rq_unlock(rq, &rf);
 
 	if (sched_feat(LATENCY_WARN) && resched_latency)
@@ -6073,6 +6079,9 @@ static void sched_tick_remote(struct work_struct *work)
 			calc_load_nohz_remote(rq);
 #ifdef CONFIG_CGROUP_SLI
 			sli_check_longsys(curr);
+#endif
+#ifdef CONFIG_RQI
+			rqi_check_longsys(curr);
 #endif
 		}
 	}

@@ -25,6 +25,9 @@
 #include <linux/zswap.h>
 #include <linux/kabi.h>
 #include <asm/page.h>
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_ARCH_FORCE_MAX_ORDER
@@ -1472,6 +1475,10 @@ typedef struct pglist_data {
 #endif
 #ifdef CONFIG_MEMORY_FAILURE
 	struct memory_failure_stats mf_stats;
+#endif
+#ifdef CONFIG_RQI
+	/* Per-node NUMA stat events */
+	struct rqi_percpu_numa_stat __percpu *rqi_pcpu_numa_stats;
 #endif
 
 	KABI_RESERVE(1);

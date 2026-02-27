@@ -23,6 +23,9 @@
 #include <linux/page-flags.h>
 #include <linux/shrinker.h>
 #include <linux/kabi.h>
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 #define MEM_LATENCY_MAX_SLOTS 64
 
@@ -1851,6 +1854,9 @@ static inline void folio_lruvec_relock_irqsave(struct folio *folio,
 		unlock_page_lruvec_irqrestore(*lruvecp, *flags);
 	}
 
+#ifdef CONFIG_RQI
+	rqi_stat(RQI_MEM_LRUADD_FLUSH, 1, NULL);
+#endif
 	*lruvecp = folio_lruvec_lock_irqsave(folio, flags);
 }
 
