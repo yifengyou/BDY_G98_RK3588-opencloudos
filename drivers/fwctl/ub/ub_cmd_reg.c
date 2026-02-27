@@ -576,6 +576,21 @@ static int ubctl_config_prbs(struct ubctl_dev *ucdev,
 	return ret;
 }
 
+static int ubctl_query_fw_version(struct ubctl_dev *ucdev,
+				  struct ubctl_query_cmd_param *query_cmd_param,
+				  struct ubctl_func_dispatch *query_func)
+{
+#define QUERY_TYPE 1
+	struct ubctl_query_dp query_dp[] = {
+		{ UBCTL_QUERY_FIRMWARE_VERSION_DFX, UBCTL_FIRMWARE_VERSION_LEN,
+		  UBCTL_READ, NULL, 0 },
+	};
+
+	*query_cmd_param->in->data = QUERY_TYPE;
+	return ubctl_query_data(ucdev, query_cmd_param, query_func,
+				query_dp, ARRAY_SIZE(query_dp));
+}
+
 static int ubctl_query_nl_ssu_sw(struct ubctl_dev *ucdev,
 				 struct ubctl_query_cmd_param *query_cmd_param,
 				 struct ubctl_func_dispatch *query_func)
@@ -752,6 +767,9 @@ static struct ubctl_func_dispatch g_ubctl_query_reg[] = {
 	{ UTOOL_CMD_QUERY_PRBS_EN, ubctl_query_prbs, ubctl_query_data_deal },
 	{ UTOOL_CMD_CONF_PRBS_EN, ubctl_config_prbs, ubctl_query_data_deal },
 	{ UTOOL_CMD_QUERY_PRBS_RESULT, ubctl_query_prbs, ubctl_query_data_deal },
+
+	{ UTOOL_CMD_QUERY_FIRMWARE_VERSION, ubctl_query_fw_version,
+	  ubctl_query_data_deal },
 
 	{ UTOOL_CMD_QUERY_DUMP, ubctl_query_dump_data, ubctl_query_data_deal },
 
