@@ -1719,6 +1719,7 @@ static void remove_all_eid(void)
 static int logic_ummu_invalidate_cfg(struct ummu_base_domain *domain)
 {
 	const struct ummu_core_ops *core_ops = get_agent_core_ops();
+	const struct ummu_device_helper *helper = get_agent_helper();
 	struct logic_ummu_domain *logic_domain;
 	struct ummu_base_domain *base_domain;
 	int ret;
@@ -1739,14 +1740,19 @@ static int logic_ummu_invalidate_cfg(struct ummu_base_domain *domain)
 		pr_err("invalidate cfg table failed.\n");
 		return ret;
 	}
+
 	list_for_each_entry(base_domain, &logic_domain->base_domain.list, list) {
 		if (base_domain == logic_domain->agent_domain)
 			continue;
+
 		if (core_ops->cfg_sync)
 			core_ops->cfg_sync(base_domain);
+
+		if (helper && helper->sync_iotlb_all)
+			helper->sync_iotlb_all(&base_domain->domain);
 	}
 
-	return ret;
+	return 0;
 }
 
 int logic_ummu_register_support_attr(tdev_select_logic_ummu func)

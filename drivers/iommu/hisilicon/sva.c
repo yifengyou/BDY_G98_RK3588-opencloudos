@@ -504,8 +504,11 @@ void ummu_sva_tcte_invalidate(struct ummu_domain *u_domain)
 {
 	struct ummu_device *ummu =
 		core_to_ummu_device(u_domain->base_domain.core_dev);
+	struct ummu_tct_desc *tct_desc = &u_domain->cfgs.s1_cfg.tct;
 
 	guard(mutex)(&ummu_sva_mutex);
-	ummu_write_tct_desc(ummu, &u_domain->cfgs, true);
+	tct_desc->tcr0 &= ~TCT_ENT0_FBR;
+	tct_desc->tcr1 |= TCT_ENT1_TTWD;
+	ummu_write_tct_desc(ummu, &u_domain->cfgs, false);
 	ummu_flush_iotlb_all(&u_domain->base_domain.domain);
 }
