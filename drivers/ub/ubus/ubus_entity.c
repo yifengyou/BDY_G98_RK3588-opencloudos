@@ -311,6 +311,7 @@ int ub_setup_ent(struct ub_entity *uent)
 	uent_num = ub_entity_num_alloc();
 	if (uent_num < 0) {
 		ub_err(uent, "alloc dev uent_num failed, ret=%d\n", uent_num);
+		ret = -ENOSPC;
 		goto free_eid;
 	}
 

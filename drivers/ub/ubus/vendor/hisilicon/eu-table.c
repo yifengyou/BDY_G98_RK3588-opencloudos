@@ -131,7 +131,7 @@ static ssize_t hi_eu_table_info_write(struct file *file,
 	struct ub_bus_controller *ubc =
 		(struct ub_bus_controller *)file->f_inode->i_private;
 #define BUF_SIZE 8
-	int len, bit, fields, ret;
+	int len, bit, ret;
 	char buf[BUF_SIZE];
 
 	if (*loff != 0)
@@ -146,8 +146,8 @@ static ssize_t hi_eu_table_info_write(struct file *file,
 
 	buf[len] = '\0';
 	ret = kstrtoint(buf, 10, &bit);
-	if (fields != 1)
-		return -EINVAL;
+	if (ret < 0)
+		return ret;
 
 	if (bit >= (int)ubc->uent->eu_table->entries) {
 		pr_err("eu table query bit(%d) invalid\n", bit);

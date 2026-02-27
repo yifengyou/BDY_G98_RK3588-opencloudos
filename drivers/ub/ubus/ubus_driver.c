@@ -650,8 +650,10 @@ static int ub_host_probe(void)
 	if (ret)
 		goto cdev_fail;
 
-	if (!manage_subsystem_ops || !manage_subsystem_ops->ras_handler_probe)
+	if (!manage_subsystem_ops || !manage_subsystem_ops->ras_handler_probe) {
+		ret = -EFAULT;
 		goto error_register_fail;
+	}
 
 	ret = manage_subsystem_ops->ras_handler_probe();
 	if (ret)
