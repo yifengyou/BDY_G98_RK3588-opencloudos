@@ -481,7 +481,7 @@ static int ubmem_mmu_map_pages(struct iommu_domain *domain, unsigned long iova,
 	info->paddr = paddr;
 	info->size = size;
 	mt = (struct maple_tree *)mdom->cached_pa_list;
-	ret = mtree_insert_range(mt, iova, iova + size - 1, info, GFP_KERNEL);
+	ret = mtree_insert_range(mt, iova, iova + size - 1, info, gfp);
 	if (ret) {
 		pr_err("insert phys addr info failed, ret = %d.\n", ret);
 		kfree(info);
