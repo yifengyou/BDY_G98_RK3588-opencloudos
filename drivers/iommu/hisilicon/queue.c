@@ -169,7 +169,6 @@ static int ummu_common_init_queue(struct ummu_device *ummu,
 		if (get_order(qsz) <= MAX_PAGE_ORDER)
 			q->base = (__le64 *)devm_get_free_pages(ummu->dev, GFP_KERNEL,
 								get_order(qsz));
-
 		q->llq.log2size--;
 	} while (!q->base && qsz > PAGE_SIZE);
 
