@@ -392,6 +392,10 @@ static int ubctl_scc_data_deal(struct ubctl_dev *ucdev, u32 index,
 	}
 
 	phy_addr = UBCTL_GET_PHY_ADDR(scc->phy_addr_high, scc->phy_addr_low);
+	if (!phy_addr) {
+		ubctl_err(ucdev, " scc phy addr is invalid.\n");
+		return -EFAULT;
+	}
 
 	vir_addr = ioremap(phy_addr, scc->data_size);
 	if (!vir_addr) {
