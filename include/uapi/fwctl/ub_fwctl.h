@@ -128,6 +128,10 @@ enum ub_fwctl_cmdrpc_type {
 	 * @UTOOL_CMD_QUERY_DL_BIST_ERR: Query DL layer BIST_ERR related registers
 	 */
 	UTOOL_CMD_QUERY_DL_BIST_ERR = 0x0019,
+	/**
+	 * @UTOOL_CMD_QUERY_DL_RT_BANDWIDTH: Query DL layer real time bandwidth
+	 */
+	UTOOL_CMD_QUERY_DL_RT_BANDWIDTH = 0x001C,
 
 	/**
 	 * @UTOOL_CMD_QUERY_TA: Query all registers at the TA layer

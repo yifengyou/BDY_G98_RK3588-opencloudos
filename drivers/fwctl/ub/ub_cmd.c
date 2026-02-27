@@ -217,6 +217,13 @@ struct ubctl_msgq_phy_addr {
 	u64 cq_entry_phy_addr;
 };
 
+struct ubctl_rt_bandwidth_data {
+	u32 port_id;
+	u32 is_valid;
+	u64 tx_bandwidth;
+	u64 rx_bandwidth;
+};
+
 static int ubctl_trace_data_deal(struct ubctl_dev *ucdev,
 				 struct ubctl_query_cmd_param *query_cmd_param,
 				 struct ubctl_cmd *cmd, u32 out_len, u32 offset)
@@ -1072,6 +1079,57 @@ static int ubctl_ummu_process_data(struct ubctl_dev *ucdev,
 	return -EINVAL;
 }
 
+static int ubctl_query_rt_bandwidth(struct ubctl_dev *ucdev,
+				    struct ubctl_query_cmd_param *query_cmd_param,
+				    struct ubctl_func_dispatch *query_func)
+{
+#define UTOOL_MAX_PORT_NUM 64U
+
+	struct ubase_ub_dl_pkt_stats_result *result_data;
+	struct ubctl_rt_bandwidth_data *usr_out_data;
+	struct fwctl_pkt_in_port *pkt_in;
+	u64 port_bitmap;
+	int ret = 0;
+	u32 i = 0;
+
+	if (query_cmd_param->in->data_size != sizeof(struct fwctl_pkt_in_port)) {
+		ubctl_err(ucdev, "user in data of trace is invalid.\n");
+		return -EINVAL;
+	}
+	if (query_cmd_param->out_len != UTOOL_MAX_PORT_NUM * sizeof(*usr_out_data)) {
+		ubctl_err(ucdev, "user out data of trace is invalid, out len = %lu.\n",
+			  query_cmd_param->out_len);
+		return -EINVAL;
+	}
+
+	pkt_in = (struct fwctl_pkt_in_port *)query_cmd_param->in->data;
+	result_data = kvzalloc((UTOOL_MAX_PORT_NUM * sizeof(*result_data)), GFP_KERNEL);
+	if (!result_data) {
+		ubctl_err(ucdev, "result data create memory failed.\n");
+		return -ENOMEM;
+	}
+
+	port_bitmap = (u64)pkt_in->port_id;
+	ret = ubase_get_ub_dl_pkt_stats(ucdev->adev, port_bitmap, result_data, UTOOL_MAX_PORT_NUM);
+	if (ret) {
+		ubctl_err(ucdev, "ubctl query real time bandwidth failed, ret = %d.\n", ret);
+		goto query_rt_bw_end;
+	}
+
+	usr_out_data = (struct ubctl_rt_bandwidth_data *)query_cmd_param->out->data;
+	for (; i < UTOOL_MAX_PORT_NUM; i++) {
+		usr_out_data[i].port_id = result_data[i].port_id;
+		usr_out_data[i].is_valid = result_data[i].valid;
+		usr_out_data[i].rx_bandwidth = result_data[i].rx_pkt_bytes;
+		usr_out_data[i].tx_bandwidth = result_data[i].tx_pkt_bytes;
+	}
+	query_cmd_param->out->data_size = UTOOL_MAX_PORT_NUM * sizeof(*usr_out_data);
+
+query_rt_bw_end:
+	kvfree(result_data);
+	return ret;
+}
+
 static struct ubctl_func_dispatch g_ubctl_query_func[] = {
 	{ UTOOL_CMD_QUERY_DL_LINK_TRACE, ubctl_query_dl_trace_data,
 	  ubctl_trace_data_deal },
@@ -1090,6 +1148,8 @@ static struct ubctl_func_dispatch g_ubctl_query_func[] = {
 	{ UTOOL_CMD_QUERY_UMMU_ALL, ubctl_ummu_process_data, NULL },
 	{ UTOOL_CMD_QUERY_UMMU_SYNC, ubctl_ummu_process_data, NULL },
 	{ UTOOL_CMD_CONFIG_UMMU_SYNC, ubctl_ummu_process_data, NULL },
+
+	{ UTOOL_CMD_QUERY_DL_RT_BANDWIDTH, ubctl_query_rt_bandwidth, NULL },
 
 	{ UTOOL_CMD_QUERY_MAX, NULL, NULL }
 };

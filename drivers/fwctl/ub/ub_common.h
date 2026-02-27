@@ -9,6 +9,9 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/fwctl.h>
 #include <linux/kfifo.h>
+#include <ub/ubase/ubase_comm_stats.h>
+#include <ub/ubase/ubase_comm_cmd.h>
+#include <ub/ubase/ubase_comm_dev.h>
 
 #include <uapi/fwctl/ub_fwctl.h>
 
