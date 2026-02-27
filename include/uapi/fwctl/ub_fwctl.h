@@ -279,6 +279,11 @@ enum ub_fwctl_cmdrpc_type {
 	UTOOL_CMD_QUERY_PORT_PKT_STATS = 0x00E2,
 
 	/**
+	 * @UTOOL_CMD_QUERY_PORT_LINK_STATS: Query the historical status of port links
+	 */
+	UTOOL_CMD_QUERY_PORT_LINK_STATS = 0x00F1,
+
+	/**
 	 * @UTOOL_CMD_QUERY_DUMP: Dump all register data
 	 */
 	UTOOL_CMD_QUERY_DUMP = 0xFFFE,
