@@ -30,7 +30,7 @@
 #include "unic_vlan.h"
 #include "unic_dev.h"
 
-#define UNIC_WATCHDOG_TIMEOUT (5 * HZ)
+#define UNIC_WATCHDOG_TIMEOUT (30 * HZ)
 
 #ifndef UB_DATA_LEN
 #define UB_DATA_LEN 1500

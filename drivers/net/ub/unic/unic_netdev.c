@@ -609,11 +609,7 @@ static void unic_set_rx_mode(struct net_device *netdev)
 
 static void unic_tx_timeout(struct net_device *netdev, u32 queue_idx)
 {
-	struct unic_dev *unic_dev = netdev_priv(netdev);
-
 	unic_dump_sq_stats(netdev, queue_idx);
-
-	ubase_reset_event(unic_dev->comdev.adev, UBASE_UE_RESET);
 }
 
 static u8 unic_get_skb_dscp(struct sk_buff *skb)
