@@ -12201,6 +12201,46 @@ bpf_set_egress_dev(struct __sk_buff *skb_ctx, unsigned long _dev)
 	skb->dev = dev;
 	return 0;
 }
+
+__bpf_kfunc void bpf_handle_ingress_ptype(struct __sk_buff *skb_ctx)
+{
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct list_head *ptype_list = &ptype_all;
+	struct packet_type *ptype;
+
+	rcu_read_lock();
+again:
+	list_for_each_entry_rcu(ptype, ptype_list, list) {
+		if (likely(!skb_orphan_frags_rx(skb, GFP_ATOMIC))) {
+			refcount_inc(&skb->users);
+			ptype->func(skb, skb->dev, ptype, skb->dev);
+		}
+	}
+
+	if (ptype_list == &ptype_all) {
+		ptype_list = &skb->dev->ptype_all;
+		goto again;
+	}
+
+	rcu_read_unlock();
+}
+
+__bpf_kfunc void bpf_handle_egress_ptype(struct __sk_buff *skb_ctx)
+{
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct net_device *dev, *orig_dev = skb->dev;
+
+	rcu_read_lock();
+	dev = skb_dst_dev_rcu(skb);
+	skb->dev = dev;
+	skb->protocol = htons(ETH_P_IP);
+
+	if (dev_nit_active(skb->dev))
+		dev_queue_xmit_nit(skb, skb->dev);
+
+	skb->dev = orig_dev;
+	rcu_read_unlock();
+}
 #endif
 __diag_pop();
 
@@ -12245,6 +12285,8 @@ BTF_ID_FLAGS(func, bpf_get_skb_ethhdr)
 BTF_ID_FLAGS(func, bpf_set_ingress_dev)
 BTF_ID_FLAGS(func, bpf_set_egress_dev)
 BTF_ID_FLAGS(func, bpf_skb_change_dev)
+BTF_ID_FLAGS(func, bpf_handle_ingress_ptype)
+BTF_ID_FLAGS(func, bpf_handle_egress_ptype)
 BTF_SET8_END(bpf_kfunc_check_set_hisock)
 #endif
 
