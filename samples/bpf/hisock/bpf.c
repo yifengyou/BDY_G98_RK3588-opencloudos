@@ -26,6 +26,8 @@
 #define MAX_CONN_NUMA	4096
 #define MAX_CONN	(MAX_CONN_NUMA * MAX_NUMA * 2)
 
+#define MAX_COMM_NUM	8
+
 struct sock_tuple {
 	u32 saddr;
 	u32 daddr;
@@ -54,6 +56,13 @@ struct {
 	__uint(value_size, sizeof(u8));
 	__uint(max_entries, 128);
 } speed_port SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(char[TASK_COMM_LEN]));
+	__uint(value_size, sizeof(u8));
+	__uint(max_entries, MAX_COMM_NUM);
+} target_comm SEC(".maps");
 
 int bpf_set_ingress_dst(struct __sk_buff *skb, unsigned long sk) __ksym;
 int bpf_get_skb_ethhdr(struct __sk_buff *skb, struct ethhdr *peth, int size) __ksym;
@@ -93,11 +102,32 @@ static inline unsigned long parse_egress_dev(struct __sk_buff *skb)
 	return (unsigned long)dev;
 }
 
+static void handle_listen_cb(struct bpf_sock_ops *skops)
+{
+	char comm[TASK_COMM_LEN] = { 0 };
+	u8 *comm_val;
+
+	bpf_get_current_comm(comm, sizeof(comm));
+
+	comm_val = bpf_map_lookup_elem(&target_comm, comm);
+	if (comm_val && *comm_val == 1) {
+		u16 key = skops->local_port;
+		u8 val = 1;
+
+		bpf_map_update_elem(&speed_port, &key, &val, BPF_ANY);
+	}
+}
+
 SEC("hisock_sockops")
 int hisock_sockops_prog(struct bpf_sock_ops *skops)
 {
 	struct sock_tuple key = { 0 };
 	struct sock_value val = { 0 };
+
+	if (skops->op == BPF_SOCK_OPS_TCP_LISTEN_CB) {
+		handle_listen_cb(skops);
+		return 1;
+	}
 
 	if (!is_speed_flow(skops->local_port))
 		return 1;
