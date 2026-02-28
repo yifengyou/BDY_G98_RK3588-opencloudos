@@ -290,6 +290,10 @@ static struct ubcore_ops g_dev_ops = {
 	.query_ue_idx = udma_query_ue_idx,
 	.disassociate_ucontext = udma_disassociate_ucontext,
 	.set_sl = udma_set_sl,
+	.get_eid_by_ip = udma_get_eid_by_ip,
+	.get_ip_by_eid = udma_get_ip_by_eid,
+	.get_smac = udma_get_smac,
+	.get_dmac = NULL,
 };
 
 static void udma_uninit_group_table(struct udma_dev *dev, struct udma_group_table *table)
