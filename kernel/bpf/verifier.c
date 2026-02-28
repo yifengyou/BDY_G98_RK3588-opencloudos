@@ -11103,6 +11103,9 @@ enum special_kfunc_type {
 	KF_bpf_iter_css_task_new,
 	KF_bpf_local_irq_save,
 	KF_bpf_local_irq_restore,
+#ifdef CONFIG_HISOCK
+	KF_bpf_set_ingress_dst,
+#endif
 };
 
 BTF_SET_START(special_kfunc_set)
@@ -11125,6 +11128,9 @@ BTF_ID(func, bpf_dynptr_slice_rdwr)
 BTF_ID(func, bpf_dynptr_clone)
 #ifdef CONFIG_CGROUPS
 BTF_ID(func, bpf_iter_css_task_new)
+#endif
+#ifdef CONFIG_HISOCK
+BTF_ID(func, bpf_set_ingress_dst)
 #endif
 BTF_SET_END(special_kfunc_set)
 
@@ -11155,6 +11161,9 @@ BTF_ID_UNUSED
 #endif
 BTF_ID(func, bpf_local_irq_save)
 BTF_ID(func, bpf_local_irq_restore)
+#ifdef CONFIG_HISOCK
+BTF_ID(func, bpf_set_ingress_dst)
+#endif
 
 static bool is_kfunc_ret_null(struct bpf_kfunc_call_arg_meta *meta)
 {
@@ -12224,6 +12233,16 @@ static int fetch_kfunc_meta(struct bpf_verifier_env *env,
 	return 0;
 }
 
+static int check_atype_kfunc_compatibility(struct bpf_verifier_env *env, u32 func_id)
+{
+#ifdef CONFIG_HISOCK
+	if (func_id == special_kfunc_list[KF_bpf_set_ingress_dst] &&
+	    env->prog->expected_attach_type != BPF_HISOCK_INGRESS)
+		return -EACCES;
+#endif
+	return 0;
+}
+
 static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 			    int *insn_idx_p)
 {
@@ -12252,6 +12271,11 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	insn_aux = &env->insn_aux_data[insn_idx];
 
 	insn_aux->is_iter_next = is_iter_next_kfunc(&meta);
+
+	if (check_atype_kfunc_compatibility(env, meta.func_id)) {
+		verbose(env, "calling kernel function %s is not allowed\n", func_name);
+		return -EACCES;
+	}
 
 	if (is_kfunc_destructive(&meta) && !capable(CAP_SYS_BOOT)) {
 		verbose(env, "destructive kfunc calls require CAP_SYS_BOOT capability\n");

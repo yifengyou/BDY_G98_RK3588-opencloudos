@@ -12104,6 +12104,29 @@ __bpf_kfunc int bpf_xdp_set_ingress_dst(struct xdp_md *xdp_ctx, void *dst__ign)
 	return 0;
 }
 
+__bpf_kfunc int bpf_set_ingress_dst(struct __sk_buff *skb_ctx, unsigned long _sk)
+{
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct sock *sk = (struct sock *)_sk;
+	struct dst_entry *dst;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	if (!sk || !virt_addr_valid(sk))
+		return -EFAULT;
+
+	if (!sk_fullsock(sk))
+		return -EINVAL;
+
+	dst = rcu_dereference(sk->sk_rx_dst);
+	if (dst)
+		dst = dst_check(dst, 0);
+	if (dst && sk->sk_rx_dst_ifindex == skb->skb_iif)
+		skb_dst_set_noref(skb, dst);
+
+	return 0;
+}
+
 __bpf_kfunc int bpf_xdp_change_dev(struct xdp_md *xdp_ctx, u32 ifindex)
 {
 	struct xdp_buff *xdp = (struct xdp_buff *)xdp_ctx;
@@ -12176,6 +12199,7 @@ BTF_ID_FLAGS(func, bpf_skops_get_ingress_dst, KF_RET_NULL)
 BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
 
 BTF_SET8_START(bpf_kfunc_check_set_hisock)
+BTF_ID_FLAGS(func, bpf_set_ingress_dst)
 BTF_ID_FLAGS(func, bpf_skb_change_dev)
 BTF_SET8_END(bpf_kfunc_check_set_hisock)
 #endif
