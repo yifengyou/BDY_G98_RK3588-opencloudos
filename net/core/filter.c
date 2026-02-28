@@ -12073,45 +12073,6 @@ __bpf_kfunc int bpf_sock_addr_set_sun_path(struct bpf_sock_addr_kern *sa_kern,
 }
 
 #ifdef CONFIG_HISOCK
-__bpf_kfunc struct dst_entry *
-bpf_skops_get_ingress_dst(struct bpf_sock_ops *skops_ctx)
-{
-	struct bpf_sock_ops_kern *skops = (struct bpf_sock_ops_kern *)skops_ctx;
-	struct sock *sk = skops->sk;
-	struct dst_entry *dst;
-
-	WARN_ON_ONCE(!rcu_read_lock_held());
-
-	if (!sk || !sk_fullsock(sk))
-		return NULL;
-
-	dst = rcu_dereference(sk->sk_rx_dst);
-	if (dst)
-		dst = dst_check(dst, 0);
-
-	return dst;
-}
-
-__bpf_kfunc int bpf_xdp_set_ingress_dst(struct xdp_md *xdp_ctx, void *dst__ign)
-{
-	struct xdp_buff *xdp = (struct xdp_buff *)xdp_ctx;
-	struct hisock_xdp_buff *hxdp = (struct hisock_xdp_buff *)xdp;
-	struct dst_entry *_dst = (struct dst_entry *)dst__ign;
-
-	if (!hxdp->skb)
-		return -EOPNOTSUPP;
-
-	if (!_dst || !virt_addr_valid(_dst))
-		return -EFAULT;
-
-	/* same as skb_valid_dst */
-	if (_dst->flags & DST_METADATA)
-		return -EINVAL;
-
-	skb_dst_set_noref(hxdp->skb, _dst);
-	return 0;
-}
-
 __bpf_kfunc int bpf_set_ingress_dst(struct __sk_buff *skb_ctx, unsigned long _sk)
 {
 	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
@@ -12132,40 +12093,6 @@ __bpf_kfunc int bpf_set_ingress_dst(struct __sk_buff *skb_ctx, unsigned long _sk
 	if (dst && sk->sk_rx_dst_ifindex == skb->skb_iif)
 		skb_dst_set_noref(skb, dst);
 
-	return 0;
-}
-
-__bpf_kfunc int bpf_xdp_change_dev(struct xdp_md *xdp_ctx, u32 ifindex)
-{
-	struct xdp_buff *xdp = (struct xdp_buff *)xdp_ctx;
-	struct hisock_xdp_buff *hxdp = (void *)xdp;
-	struct net_device *dev;
-
-	WARN_ON_ONCE(!rcu_read_lock_held());
-
-	if (!hxdp->skb)
-		return -EOPNOTSUPP;
-
-	dev = dev_get_by_index_rcu(&init_net, ifindex);
-	if (!dev)
-		return -ENODEV;
-
-	hxdp->skb->dev = dev;
-	return 0;
-}
-
-__bpf_kfunc int bpf_skb_change_dev(struct __sk_buff *skb_ctx, u32 ifindex)
-{
-	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
-	struct net_device *dev;
-
-	WARN_ON_ONCE(!rcu_read_lock_held());
-
-	dev = dev_get_by_index_rcu(&init_net, ifindex);
-	if (!dev)
-		return -ENODEV;
-
-	skb->dev = dev;
 	return 0;
 }
 
@@ -12272,10 +12199,6 @@ BTF_SET8_END(bpf_kfunc_check_set_skb)
 
 BTF_SET8_START(bpf_kfunc_check_set_xdp)
 BTF_ID_FLAGS(func, bpf_dynptr_from_xdp)
-#ifdef CONFIG_HISOCK
-BTF_ID_FLAGS(func, bpf_xdp_set_ingress_dst)
-BTF_ID_FLAGS(func, bpf_xdp_change_dev)
-#endif
 BTF_SET8_END(bpf_kfunc_check_set_xdp)
 
 BTF_SET8_START(bpf_kfunc_check_set_sock_addr)
@@ -12283,16 +12206,11 @@ BTF_ID_FLAGS(func, bpf_sock_addr_set_sun_path)
 BTF_SET8_END(bpf_kfunc_check_set_sock_addr)
 
 #ifdef CONFIG_HISOCK
-BTF_SET8_START(bpf_kfunc_check_set_sock_ops)
-BTF_ID_FLAGS(func, bpf_skops_get_ingress_dst, KF_RET_NULL)
-BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
-
 BTF_SET8_START(bpf_kfunc_check_set_hisock)
 BTF_ID_FLAGS(func, bpf_set_ingress_dst)
 BTF_ID_FLAGS(func, bpf_get_skb_ethhdr)
 BTF_ID_FLAGS(func, bpf_set_ingress_dev)
 BTF_ID_FLAGS(func, bpf_set_egress_dev)
-BTF_ID_FLAGS(func, bpf_skb_change_dev)
 BTF_ID_FLAGS(func, bpf_handle_ingress_ptype)
 BTF_ID_FLAGS(func, bpf_handle_egress_ptype)
 BTF_SET8_END(bpf_kfunc_check_set_hisock)
@@ -12314,11 +12232,6 @@ static const struct btf_kfunc_id_set bpf_kfunc_set_sock_addr = {
 };
 
 #ifdef CONFIG_HISOCK
-static const struct btf_kfunc_id_set bpf_kfunc_set_sock_ops = {
-	.owner = THIS_MODULE,
-	.set = &bpf_kfunc_check_set_sock_ops,
-};
-
 static const struct btf_kfunc_id_set bpf_kfunc_set_hisock = {
 	.owner = THIS_MODULE,
 	.set = &bpf_kfunc_check_set_hisock,
@@ -12341,7 +12254,6 @@ static int __init bpf_kfunc_init(void)
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_NETFILTER, &bpf_kfunc_set_skb);
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_kfunc_set_xdp);
 #ifdef CONFIG_HISOCK
-	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_SOCK_OPS, &bpf_kfunc_set_sock_ops);
 	ret = ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_HISOCK, &bpf_kfunc_set_hisock);
 #endif
 	return ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_CGROUP_SOCK_ADDR,
