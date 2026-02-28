@@ -1062,6 +1062,7 @@ enum bpf_attach_type {
 	BPF_TRACE_UPROBE_MULTI,
 #ifndef __GENKSYMS__
 	BPF_HISOCK_EGRESS,
+	BPF_HISOCK_INGRESS,
 #endif
 	__MAX_BPF_ATTACH_TYPE
 };
