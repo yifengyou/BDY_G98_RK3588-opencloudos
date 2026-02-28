@@ -12160,6 +12160,34 @@ __bpf_kfunc int bpf_skb_change_dev(struct __sk_buff *skb_ctx, u32 ifindex)
 	skb->dev = dev;
 	return 0;
 }
+
+__bpf_kfunc int
+bpf_set_ingress_dev(struct __sk_buff *skb_ctx, unsigned long _dev)
+{
+	struct net_device *dev = (struct net_device *)_dev;
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+
+	if (!dev || !virt_addr_valid(dev))
+		return -EFAULT;
+
+	skb->dev = dev;
+	skb->skb_iif = dev->ifindex;
+	skb->pkt_type = PACKET_HOST;
+	return 0;
+}
+
+__bpf_kfunc int
+bpf_set_egress_dev(struct __sk_buff *skb_ctx, unsigned long _dev)
+{
+	struct net_device *dev = (struct net_device *)_dev;
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+
+	if (!dev || !virt_addr_valid(dev))
+		return -EFAULT;
+
+	skb->dev = dev;
+	return 0;
+}
 #endif
 __diag_pop();
 
@@ -12200,6 +12228,8 @@ BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
 
 BTF_SET8_START(bpf_kfunc_check_set_hisock)
 BTF_ID_FLAGS(func, bpf_set_ingress_dst)
+BTF_ID_FLAGS(func, bpf_set_ingress_dev)
+BTF_ID_FLAGS(func, bpf_set_egress_dev)
 BTF_ID_FLAGS(func, bpf_skb_change_dev)
 BTF_SET8_END(bpf_kfunc_check_set_hisock)
 #endif
