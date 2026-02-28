@@ -12162,6 +12162,19 @@ __bpf_kfunc int bpf_skb_change_dev(struct __sk_buff *skb_ctx, u32 ifindex)
 }
 
 __bpf_kfunc int
+bpf_get_skb_ethhdr(struct __sk_buff *skb_ctx, struct ethhdr *peth, int size__sz)
+{
+	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct ethhdr *eth = eth_hdr(skb);
+
+	if (size__sz != sizeof(struct ethhdr))
+		return -EINVAL;
+
+	memcpy(peth, eth, size__sz);
+	return 0;
+}
+
+__bpf_kfunc int
 bpf_set_ingress_dev(struct __sk_buff *skb_ctx, unsigned long _dev)
 {
 	struct net_device *dev = (struct net_device *)_dev;
@@ -12228,6 +12241,7 @@ BTF_SET8_END(bpf_kfunc_check_set_sock_ops)
 
 BTF_SET8_START(bpf_kfunc_check_set_hisock)
 BTF_ID_FLAGS(func, bpf_set_ingress_dst)
+BTF_ID_FLAGS(func, bpf_get_skb_ethhdr)
 BTF_ID_FLAGS(func, bpf_set_ingress_dev)
 BTF_ID_FLAGS(func, bpf_set_egress_dev)
 BTF_ID_FLAGS(func, bpf_skb_change_dev)
