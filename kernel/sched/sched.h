@@ -731,15 +731,14 @@ struct balance_callback {
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
 	struct load_weight	load;
-	unsigned int		nr_running;
-	unsigned int		h_nr_running;      /* SCHED_{NORMAL,BATCH,IDLE} */
-	unsigned int		idle_nr_running;   /* SCHED_IDLE */
-	unsigned int		idle_h_nr_running; /* SCHED_IDLE */
+	unsigned int		nr_queued;
+	unsigned int		h_nr_queued;       /* SCHED_{NORMAL,BATCH,IDLE} */
+	unsigned int		h_nr_runnable;     /* SCHED_{NORMAL,BATCH,IDLE} */
+	unsigned int		h_nr_idle; /* SCHED_IDLE */
 
 	s64			avg_vruntime;
 	u64			avg_load;
 
-	u64			exec_clock;
 #ifdef CONFIG_BT_BANDWIDTH
 	u64			exec_time;
 #endif
@@ -757,10 +756,6 @@ struct cfs_rq {
 	 */
 	struct sched_entity	*curr;
 	struct sched_entity	*next;
-
-#ifdef	CONFIG_SCHED_DEBUG
-	unsigned int		nr_spread_over;
-#endif
 
 #ifdef CONFIG_SMP
 	/*
@@ -1088,7 +1083,7 @@ struct dl_rq {
 static inline void se_update_runnable(struct sched_entity *se)
 {
 	if (!entity_is_task(se))
-		se->runnable_weight = se->my_q->h_nr_running;
+		se->runnable_weight = se->my_q->h_nr_runnable;
 }
 
 static inline long se_runnable(struct sched_entity *se)
@@ -1479,7 +1474,6 @@ struct rq {
 	/* latency stats */
 	struct sched_info	rq_sched_info;
 	unsigned long long	rq_cpu_time;
-	/* could above be rq->cfs_rq.exec_clock + rq->rt_rq.rt_runtime ? */
 #ifdef CONFIG_SCHED_CLASS_EXT
 	unsigned long long	rq_non_scx_cpu_time;
 #endif
@@ -2393,34 +2387,6 @@ static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 }
 #endif /* CONFIG_SMP */
 
-#include "stats.h"
-
-#if defined(CONFIG_SCHED_CORE) && defined(CONFIG_SCHEDSTATS)
-
-extern void __sched_core_account_forceidle(struct rq *rq);
-
-static inline void sched_core_account_forceidle(struct rq *rq)
-{
-	if (schedstat_enabled())
-		__sched_core_account_forceidle(rq);
-}
-
-extern void __sched_core_tick(struct rq *rq);
-
-static inline void sched_core_tick(struct rq *rq)
-{
-	if (sched_core_enabled(rq) && schedstat_enabled())
-		__sched_core_tick(rq);
-}
-
-#else
-
-static inline void sched_core_account_forceidle(struct rq *rq) {}
-
-static inline void sched_core_tick(struct rq *rq) {}
-
-#endif /* CONFIG_SCHED_CORE && CONFIG_SCHEDSTATS */
-
 #ifdef CONFIG_CGROUP_SCHED
 
 /*
@@ -2896,7 +2862,7 @@ static inline bool sched_rt_runnable(struct rq *rq)
 
 static inline bool sched_fair_runnable(struct rq *rq)
 {
-	return rq->cfs.nr_running > 0;
+	return rq->cfs.nr_queued > 0;
 }
 
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
@@ -3164,8 +3130,6 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
 
 static inline void __block_task(struct rq *rq, struct task_struct *p)
 {
-	WRITE_ONCE(p->on_rq, 0);
-	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
 	if (p->sched_contributes_to_load) {
 #ifdef CONFIG_BT_SCHED
 		if (unlikely(p->sched_class == &bt_sched_class)) {
@@ -3183,6 +3147,38 @@ static inline void __block_task(struct rq *rq, struct task_struct *p)
 		atomic_inc(&rq->nr_iowait);
 		delayacct_blkio_start();
 	}
+
+	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
+
+	/*
+	 * The moment this write goes through, ttwu() can swoop in and migrate
+	 * this task, rendering our rq->__lock ineffective.
+	 *
+	 * __schedule()				try_to_wake_up()
+	 *   LOCK rq->__lock			  LOCK p->pi_lock
+	 *   pick_next_task()
+	 *     pick_next_task_fair()
+	 *       pick_next_entity()
+	 *         dequeue_entities()
+	 *           __block_task()
+	 *             RELEASE p->on_rq = 0	  if (p->on_rq && ...)
+	 *					    break;
+	 *
+	 *					  ACQUIRE (after ctrl-dep)
+	 *
+	 *					  cpu = select_task_rq();
+	 *					  set_task_cpu(p, cpu);
+	 *					  ttwu_queue()
+	 *					    ttwu_do_activate()
+	 *					      LOCK rq->__lock
+	 *					      activate_task()
+	 *					        STORE p->on_rq = 1
+	 *   UNLOCK rq->__lock
+	 *
+	 * Callers must ensure to not reference @p after this -- we no longer
+	 * own it.
+	 */
+	smp_store_release(&p->on_rq, 0);
 }
 
 extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
@@ -3586,6 +3582,34 @@ extern void nohz_run_idle_balance(int cpu);
 #else
 static inline void nohz_run_idle_balance(int cpu) { }
 #endif
+
+#include "stats.h"
+
+#if defined(CONFIG_SCHED_CORE) && defined(CONFIG_SCHEDSTATS)
+
+extern void __sched_core_account_forceidle(struct rq *rq);
+
+static inline void sched_core_account_forceidle(struct rq *rq)
+{
+	if (schedstat_enabled())
+		__sched_core_account_forceidle(rq);
+}
+
+extern void __sched_core_tick(struct rq *rq);
+
+static inline void sched_core_tick(struct rq *rq)
+{
+	if (sched_core_enabled(rq) && schedstat_enabled())
+		__sched_core_tick(rq);
+}
+
+#else
+
+static inline void sched_core_account_forceidle(struct rq *rq) {}
+
+static inline void sched_core_tick(struct rq *rq) {}
+
+#endif /* CONFIG_SCHED_CORE && CONFIG_SCHEDSTATS */
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 struct irqtime {
@@ -4207,7 +4231,7 @@ static inline void init_sched_mm_cid(struct task_struct *t) { }
 extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
-extern void __setscheduler_prio(struct task_struct *p, int prio);
+extern const struct sched_class *__setscheduler_class(struct task_struct *p, int prio);
 extern bool dequeue_task(struct rq *rq, struct task_struct *p, int flags);
 extern void check_class_changing(struct rq *rq, struct task_struct *p,
 				 const struct sched_class *prev_class);
