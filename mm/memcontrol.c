@@ -6255,6 +6255,8 @@ static const unsigned int memcg1_stats[] = {
 	NR_ANON_MAPPED,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	NR_ANON_THPS,
+	NR_SHMEM_THPS,
+	NR_FILE_THPS,
 #endif
 	NR_SHMEM,
 	NR_FILE_MAPPED,
@@ -6269,7 +6271,9 @@ static const char *const memcg1_stat_names[] = {
 	"cache",
 	"rss",
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	"rss_huge",
+	"rss_anon_huge",
+	"rss_shmem_huge",
+	"rss_file_huge",
 #endif
 	"shmem",
 	"mapped_file",
@@ -7367,7 +7371,7 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 	unsigned long mem_unevictable;
 	unsigned long mem_rss;
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	unsigned long mem_rss_huge;
+	unsigned long mem_rss_anon_huge, mem_rss_shmem_huge, mem_rss_file_huge;
 #endif
 	unsigned long mem_file_map, mem_shmem;
 	unsigned long mem_free = 0;
@@ -7427,7 +7431,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_unevictable = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_UNEVICTABLE), false);
 		mem_rss = memcg_page_state_local(memcg, NR_ANON_MAPPED);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		mem_rss_huge = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_anon_huge  = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_shmem_huge = memcg_page_state(memcg, NR_SHMEM_THPS);
+		mem_rss_file_huge  = memcg_page_state(memcg, NR_FILE_THPS);
 #endif
 		mem_file_map = memcg_page_state_local(memcg, NR_FILE_MAPPED);
 		mem_shmem = memcg_page_state_local(memcg, NR_SHMEM);
@@ -7443,7 +7449,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_unevictable = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_UNEVICTABLE), true);
 		mem_rss = memcg_page_state(memcg, NR_ANON_MAPPED);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		mem_rss_huge = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_anon_huge  = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_shmem_huge = memcg_page_state(memcg, NR_SHMEM_THPS);
+		mem_rss_file_huge  = memcg_page_state(memcg, NR_FILE_THPS);
 #endif
 		mem_file_map = memcg_page_state(memcg, NR_FILE_MAPPED);
 		mem_shmem = memcg_page_state(memcg, NR_SHMEM);
@@ -7508,6 +7516,8 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 		"AnonHugePages:  %8lu kB\n"
+		"ShmemHugePages: %8lu kB\n"
+		"FileHugePages:  %8lu kB\n"
 #endif
 		, K(mem_limit)
 		, K(mem_free)
@@ -7536,7 +7546,7 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		, 0UL // K(global_page_state(NR_FILE_DIRTY)),
 		, 0UL // K(global_page_state(NR_WRITEBACK)),
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		, K(mem_rss + mem_rss_huge + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES) +
+		, K(mem_rss + mem_rss_anon_huge + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES) +
 					    // global_page_state(NR_ANON_TRANSPARENT_HUGEPAGES) * HPAGE_PMD_NR),
 #else
 		, K(mem_rss + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES)),
@@ -7564,7 +7574,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		, 0UL // atomic_long_read(&num_poisoned_pages) << (PAGE_SHIFT - 10)
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		, K(mem_rss_huge)
+		, K(mem_rss_anon_huge)
+		, K(mem_rss_shmem_huge)
+		, K(mem_rss_file_huge)
 #endif
 		);
 
