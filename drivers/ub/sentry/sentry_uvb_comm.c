@@ -50,7 +50,8 @@ int uvb_send(const char *str, uint32_t dst_cna, bool is_sync)
 		return -EINVAL;
     }
 
-    struct cis_message msg;
+	struct cis_message msg = {0};
+
     msg.input = (char *)str;
     msg.input_size = strlen(str) + 1;
     msg.output = NULL;

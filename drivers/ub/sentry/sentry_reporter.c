@@ -114,7 +114,7 @@ static int acpi_power_notifier_callback(struct notifier_block *nb,
 					unsigned long action, void *data)
 {
 	int ret;
-	struct sentry_msg_helper_msg msg;
+	struct sentry_msg_helper_msg msg = {0};
 
 	if (!g_power_off_enable)
 		return NOTIFY_OK;
@@ -147,7 +147,7 @@ static int lowmem_notifier_callback(struct notifier_block *nb,
 				    unsigned long action, void *parm)
 {
 	struct reclaim_notify_data *data = parm;
-	struct sentry_msg_helper_msg msg;
+	struct sentry_msg_helper_msg msg = {0};
 	int ret;
 	int i;
 
@@ -463,7 +463,7 @@ static const struct proc_ops proc_ub_mem_fault_with_kill_file_operations = {
  */
 static int ub_mem_ras_handler(uint64_t phys_addr, enum ras_err_type err_type)
 {
-	struct sentry_msg_helper_msg msg;
+	struct sentry_msg_helper_msg msg = {0};
 	struct page *page;
 	int ret;
 
