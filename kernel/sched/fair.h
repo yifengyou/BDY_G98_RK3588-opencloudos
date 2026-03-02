@@ -25,4 +25,30 @@ static inline u64 min_vruntime(u64 min_vruntime, u64 vruntime)
 
 u64 __sched_period(unsigned long nr_running);
 
+#ifdef CONFIG_BT_SCHED
+
+#define BT_SCHED_BULD_FIXED_1
+
+#define BT_WEIGHT 10
+#define CFS_WEIGHT 1000
+static inline u64 get_balance_load(struct rq *rq)
+{
+	return rq->cfs.h_nr_running * CFS_WEIGHT + rq->bt.h_nr_running * BT_WEIGHT;
+}
+
+static inline u64 get_balance_load_dequeue_bt(struct rq *rq, int nr)
+{
+	unsigned int bt_h_nr_running;
+
+	bt_h_nr_running = rq->bt.h_nr_running >= nr ? rq->bt.h_nr_running - nr : 0;
+	return rq->cfs.h_nr_running * CFS_WEIGHT + bt_h_nr_running * BT_WEIGHT;
+}
+
+static inline u64 get_balance_load_enqueue_bt(struct rq *rq, int nr)
+{
+	return rq->cfs.h_nr_running * CFS_WEIGHT + (rq->bt.h_nr_running + nr) * BT_WEIGHT;
+}
+
+#endif
+
 #endif /* _SCHED_FAIR_H */
