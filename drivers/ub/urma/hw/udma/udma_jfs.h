@@ -44,7 +44,6 @@ struct udma_jfs {
 	refcount_t ae_refcount;
 	struct completion ae_comp;
 	uint32_t mode;
-	bool pi_type;
 	bool ue_rx_closed;
 };
 
@@ -169,5 +168,14 @@ void udma_init_jfsc(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 		    struct udma_jfs *jfs, void *mb_buf);
 int udma_verify_jfs_param(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 			  bool enable_stars);
+int udma_alloc_jfs(struct ubcore_device *dev, struct ubcore_jfs_cfg *cfg,
+		   struct ubcore_jfs **jfs, struct ubcore_udata *udata);
+int udma_free_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
+int udma_set_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf,
+		     uint32_t len, struct ubcore_udata *udata);
+int udma_get_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf,
+		     uint32_t len, struct ubcore_udata *udata);
+int udma_active_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
+int udma_deactive_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFS_H__ */

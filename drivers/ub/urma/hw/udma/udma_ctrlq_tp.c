@@ -827,6 +827,43 @@ int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontex
 	return ret;
 }
 
+int udma_ctrlq_query_host_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg ctrlq_msg = {};
+	struct ubase_bus_eid eid = {};
+	int ret = 0;
+
+	if (out->addr == 0) {
+		dev_err(udev->dev, "query host ubmem info failed, addr is NULL.\n");
+		return -EINVAL;
+	}
+
+	ret = ubase_get_bus_eid(udev->comdev.adev, &eid);
+	if (ret) {
+		dev_err(udev->dev,
+			"get dev bus eid failed in query host ubmem info, ret is %d.\n", ret);
+		return ret;
+	}
+
+	ctrlq_msg.service_type = UDMA_CTRLQ_SER_TYPE_UBMEM;
+	ctrlq_msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	ctrlq_msg.need_resp = 1;
+	ctrlq_msg.in_size = sizeof(eid);
+	ctrlq_msg.in = (void *)&eid;
+	ctrlq_msg.out_size = out->len;
+	ctrlq_msg.out = (void *)(uintptr_t)out->addr;
+	ctrlq_msg.opcode = UDMA_CTRLQ_QUERY_HOST_UBMEM_INFO;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &ctrlq_msg);
+	if (ret)
+		dev_err(udev->dev,
+			"query host ubmem info send ctrlq msg failed, ret is %d.\n", ret);
+
+	return ret;
+}
+
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
 		     const struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata)

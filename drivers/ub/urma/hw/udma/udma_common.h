@@ -51,7 +51,17 @@ struct udma_jetty_queue {
 	bool non_pin;
 	struct udma_jetty_grp *jetty_grp;
 	enum udma_jetty_type jetty_type;
+	struct {
+		struct page *pg;
+		int order;
+		uint32_t len;
+	} reserved_info;
 	struct sg_table *sgt;
+	uint8_t db_status;
+	bool need_ring_db;
+	bool pi_type;
+	bool activated;
+	bool cstm;
 };
 
 enum tp_state {
@@ -376,6 +386,16 @@ udma_remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 		return remap_pfn_range_try_pmd(vma, addr, pfn, size, prot);
 #endif
 	return remap_pfn_range(vma, addr, pfn, size, prot);
+}
+
+static inline struct page *udma_alloc_pages(int flag, uint32_t order)
+{
+	return order == 0 ? alloc_page(flag) : alloc_pages(flag, order);
+}
+
+static inline void udma_free_pages(struct page *pg, uint32_t order)
+{
+	order == 0 ? __free_page(pg) : __free_pages(pg, order);
 }
 
 int udma_query_ue_idx(struct ubcore_device *ub_dev, struct ubcore_devid *devid,

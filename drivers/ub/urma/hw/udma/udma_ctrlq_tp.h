@@ -11,13 +11,14 @@
 #define UDMA_CNA_SIZE		16
 #define UDMA_PID_MASK		0xFFFFFF
 #define UDMA_DEFAULT_PID	1
-#define UDMA_UE_NUM		64
+#define UDMA_UE_NUM			64
 #define UDMA_MAX_UE_IDX		256
 #define UDMA_MAX_TPID_NUM	5
 #define UDMA_IP_SIZE		16
 #define UDMA_CTRLQ_SER_TYPE_UBMEM 5
 #define UDMA_CTRLQ_EID_TYPE_128 1
-#define UDMA_CTRLQ_UBMEM_INFO_NUM (96)
+#define UDMA_CTRLQ_UBMEM_INFO_NUM (205)
+#define UDMA_CTRLQ_HOST_UBMEM_INFO_NUM (8)
 #define UDMA_TPN_CNT_MASK 0x1F
 
 enum udma_ctrlq_cmd_code_type {
@@ -37,6 +38,7 @@ enum udma_ctrlq_cmd_code_type {
 
 enum udma_ctrlq_ubmem_opcode {
 	UDMA_CTRLQ_QUERY_UBMEM_INFO = 0x1,
+	UDMA_CTRLQ_QUERY_HOST_UBMEM_INFO,
 };
 
 enum udma_link_mode {
@@ -196,6 +198,10 @@ struct udma_ctrlq_ubmem_out_query {
 	uint32_t data[UDMA_CTRLQ_UBMEM_INFO_NUM];
 };
 
+struct udma_ctrlq_host_ubmem_out_query {
+	uint32_t data[UDMA_CTRLQ_HOST_UBMEM_INFO_NUM];
+};
+
 struct udma_ctrlq_tp_attr {
 	uint32_t tp_attr_bitmap;
 	struct ubcore_tp_attr_value tp_attr_value;
@@ -289,6 +295,10 @@ int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_ha
 
 int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+
+int udma_ctrlq_query_host_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				     struct ubcore_user_ctl_in *in,
+				     struct ubcore_user_ctl_out *out);
 
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,

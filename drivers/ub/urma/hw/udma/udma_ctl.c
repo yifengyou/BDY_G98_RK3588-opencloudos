@@ -14,6 +14,7 @@
 #include "udma_segment.h"
 #include "udma_jfs.h"
 #include "udma_jfc.h"
+#include "udma_jfr.h"
 #include "udma_db.h"
 #include "udma_ctrlq_tp.h"
 #include <ub/urma/udma/udma_ctl.h>
@@ -239,6 +240,7 @@ static struct ubcore_jfs *udma_create_jfs_ex(struct ubcore_device *ub_dev,
 		goto err_update_ctx;
 	}
 
+	jfs->sq.activated = true;
 	refcount_set(&jfs->ae_refcount, 1);
 	init_completion(&jfs->ae_comp);
 
@@ -891,7 +893,7 @@ static int copy_out_cqe_data_from_user(struct udma_dev *udma_dev,
 {
 	if (out->addr != 0) {
 		memcpy(aux_info_out, (void *)(uintptr_t)out->addr,
-		       sizeof(struct udma_cqe_aux_info_out));
+		       min(out->len, sizeof(struct udma_cqe_aux_info_out)));
 		if (uctx && aux_info_out->aux_info_num > 0 &&
 		    aux_info_out->aux_info_type != NULL &&
 		    aux_info_out->aux_info_value != NULL) {
@@ -936,7 +938,8 @@ static int copy_out_cqe_data_to_user(struct udma_dev *udma_dev,
 	if (out->addr != 0) {
 		if (uctx && aux_info_out->aux_info_num > 0 &&
 		    aux_info_out->aux_info_type != NULL &&
-		    aux_info_out->aux_info_value != NULL) {
+		    aux_info_out->aux_info_value != NULL &&
+		    user_aux_info_out->aux_info_type != NULL) {
 			byte = copy_to_user((void __user *)user_aux_info_out->aux_info_type,
 					    (void *)aux_info_out->aux_info_type,
 					    aux_info_out->aux_info_num *
@@ -998,9 +1001,9 @@ static int udma_verify_aux_info_param(struct udma_dev *udev, struct ubcore_user_
 				      struct ubcore_user_ctl_out *out, uint32_t except_in_len,
 				      uint32_t except_out_len)
 {
-	if (udma_check_base_param(in->addr, in->len, except_in_len)) {
-		dev_err(udev->dev, "parameter invalid in query cqe aux info, in_len = %u.\n",
-			in->len);
+	if (!in->addr || in->len == 0 || in->len < except_in_len) {
+		dev_err(udev->dev, "parameter invalid for in_addr or in_len, in_len=%u, except_in_len=%u.\n",
+				    in->len, except_in_len);
 		return -EINVAL;
 	}
 
@@ -1008,10 +1011,10 @@ static int udma_verify_aux_info_param(struct udma_dev *udev, struct ubcore_user_
 	 * When out_addr is null and len is 0, the driver does not return
 	 * aux_info to the user; it only prints it in kernel mode.
 	 */
-	if ((out->addr != 0 && out->len != except_out_len) ||
+	if ((out->addr != 0 && (out->len == 0 || out->len < except_out_len)) ||
 	    (out->addr == 0 && out->len > 0)) {
-		dev_err(udev->dev, "parameter invalid in query cqe aux info, out_len = %u.\n",
-			out->len);
+		dev_err(udev->dev, "parameter invalid for out_addr or out_len, out_len = %u, except_out_len=%u.\n",
+			out->len, except_out_len);
 		return -EINVAL;
 	}
 
@@ -1034,7 +1037,7 @@ int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *u
 		return ret;
 
 	memcpy(&cqe_info_in, (void *)(uintptr_t)in->addr,
-	       sizeof(struct udma_cqe_info_in));
+	       min(in->len, sizeof(struct udma_cqe_info_in)));
 
 	ret = udma_check_cqe_info(udev, &info, &cqe_info_in);
 	if (ret)
@@ -1190,7 +1193,7 @@ static int copy_out_ae_data_from_user(struct udma_dev *udma_dev,
 {
 	if (out->addr != 0) {
 		memcpy(aux_info_out, (void *)(uintptr_t)out->addr,
-		       sizeof(struct udma_ae_aux_info_out));
+		       min(out->len, sizeof(struct udma_ae_aux_info_out)));
 		if (uctx && aux_info_out->aux_info_num > 0 &&
 		    aux_info_out->aux_info_type != NULL &&
 		    aux_info_out->aux_info_value != NULL) {
@@ -1235,7 +1238,8 @@ static int copy_out_ae_data_to_user(struct udma_dev *udma_dev,
 	if (out->addr != 0) {
 		if (uctx && aux_info_out->aux_info_num > 0 &&
 		    aux_info_out->aux_info_type != NULL &&
-		    aux_info_out->aux_info_value != NULL) {
+		    aux_info_out->aux_info_value != NULL &&
+		    user_aux_info_out->aux_info_type != NULL) {
 			byte = copy_to_user((void __user *)user_aux_info_out->aux_info_type,
 					    (void *)aux_info_out->aux_info_type,
 					    aux_info_out->aux_info_num *
@@ -1285,7 +1289,7 @@ int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uc
 		return ret;
 
 	memcpy(&ae_info_in, (void *)(uintptr_t)in->addr,
-	       sizeof(struct udma_ae_info_in));
+	       min(in->len, sizeof(struct udma_ae_info_in)));
 	ret = to_hw_ae_event_type(udma_dev, ae_info_in.event_type, &info);
 	if (ret)
 		return ret;
@@ -1333,6 +1337,7 @@ static udma_user_ctl_ops g_udma_user_ctl_k_ops[] = {
 	[UDMA_USER_CTL_QUERY_AE_AUX_INFO] = udma_query_ae_aux_info,
 	[UDMA_USER_CTL_QUERY_UBMEM_INFO] = udma_ctrlq_query_ubmem_info,
 	[UDMA_USER_CTL_QUERY_PAIR_DEVNUM] = udma_query_pair_dev_count,
+	[UDMA_USER_CTL_QUERY_HOST_UBMEM_INFO] = udma_ctrlq_query_host_ubmem_info,
 };
 
 static udma_user_ctl_ops g_udma_user_ctl_u_ops[] = {

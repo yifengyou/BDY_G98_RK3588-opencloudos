@@ -39,6 +39,7 @@ uint32_t batch_flush_query_freq = 10;
 uint32_t batch_flush_query_timeout = 64000;
 bool is_rmmod;
 static DEFINE_MUTEX(udma_reset_mutex);
+bool sq_reserved;
 uint32_t jfr_sleep_time = 1000;
 uint32_t jfc_arm_mode;
 bool dump_aux_info;
@@ -250,12 +251,24 @@ static struct ubcore_ops g_dev_ops = {
 	.modify_jfc = udma_modify_jfc,
 	.destroy_jfc = udma_destroy_jfc,
 	.rearm_jfc = udma_rearm_jfc,
+	.alloc_jfc = udma_alloc_jfc,
+	.set_jfc_opt = udma_set_jfc_opt,
+	.active_jfc = udma_active_jfc,
+	.get_jfc_opt = udma_get_jfc_opt,
+	.deactive_jfc = udma_deactive_jfc,
+	.free_jfc = udma_free_jfc,
 	.create_jfs = udma_create_jfs,
 	.modify_jfs = udma_modify_jfs,
 	.query_jfs = udma_query_jfs,
 	.flush_jfs = udma_flush_jfs,
 	.destroy_jfs = udma_destroy_jfs,
 	.destroy_jfs_batch = udma_destroy_jfs_batch,
+	.alloc_jfs = udma_alloc_jfs,
+	.set_jfs_opt = udma_set_jfs_opt,
+	.active_jfs = udma_active_jfs,
+	.get_jfs_opt = udma_get_jfs_opt,
+	.deactive_jfs = udma_deactive_jfs,
+	.free_jfs = udma_free_jfs,
 	.create_jfr = udma_create_jfr,
 	.modify_jfr = udma_modify_jfr,
 	.query_jfr = udma_query_jfr,
@@ -263,6 +276,12 @@ static struct ubcore_ops g_dev_ops = {
 	.destroy_jfr_batch = udma_destroy_jfr_batch,
 	.import_jfr_ex = udma_import_jfr_ex,
 	.unimport_jfr = udma_unimport_jfr,
+	.alloc_jfr = udma_alloc_jfr,
+	.set_jfr_opt = udma_set_jfr_opt,
+	.active_jfr = udma_active_jfr,
+	.get_jfr_opt = udma_get_jfr_opt,
+	.deactive_jfr = udma_deactive_jfr,
+	.free_jfr = udma_free_jfr,
 	.create_jetty = udma_create_jetty,
 	.modify_jetty = udma_modify_jetty,
 	.query_jetty = udma_query_jetty,
@@ -275,6 +294,12 @@ static struct ubcore_ops g_dev_ops = {
 	.unbind_jetty = udma_unbind_jetty,
 	.create_jetty_grp = udma_create_jetty_grp,
 	.delete_jetty_grp = udma_delete_jetty_grp,
+	.alloc_jetty = udma_alloc_jetty,
+	.set_jetty_opt = udma_set_jetty_opt,
+	.active_jetty = udma_active_jetty,
+	.get_jetty_opt = udma_get_jetty_opt,
+	.deactive_jetty = udma_deactive_jetty,
+	.free_jetty = udma_free_jetty,
 	.get_tp_list = udma_get_tp_list,
 	.set_tp_attr = udma_set_tp_attr,
 	.get_tp_attr = udma_get_tp_attr,
@@ -650,6 +675,61 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	return 0;
 }
 
+static int udma_query_wqebb_va(struct udma_dev *dev)
+{
+#define UDMA_FIRST_UE_ID 2
+#define UDMA_RESERVED_SQ_SIZE 2097152
+	uint32_t max_jetty_num, ue_va_offset;
+	struct udma_cmd_wqebb_va info = {};
+	struct ubase_cmd_buf in, out;
+	int ret;
+
+	if (!sq_reserved)
+		return 0;
+
+	udma_fill_buf(&in, UDMA_CMD_WQEBB_VA_INFO, true, 0, NULL);
+	udma_fill_buf(&out, UDMA_CMD_WQEBB_VA_INFO, true,
+		      sizeof(info), (void *)&info);
+	ret = ubase_cmd_send_inout(dev->comdev.adev, &in, &out);
+	if (ret) {
+		dev_err(dev->dev, "failed to query_wqebb_va, ret = %d.\n", ret);
+		return -EINVAL;
+	}
+
+	if (info.die_num == 0 || info.ue_num == 0)
+		return 0;
+
+	if (dev->is_ue) {
+		dev_warn(dev->dev, "ue is not supported reserved sq.\n");
+		return 0;
+	}
+
+	if (dev->die_id >= info.die_num || dev->ue_id < UDMA_FIRST_UE_ID ||
+	   dev->ue_id >= info.ue_num + UDMA_FIRST_UE_ID) {
+		dev_warn(dev->dev,
+			 "this mue not supported reserved sq, die_id=%u, ue_id=%u.\n",
+			 dev->die_id, dev->ue_id);
+		return 0;
+	}
+
+	max_jetty_num = dev->caps.jetty.start_idx + dev->caps.jetty.max_cnt;
+	ue_va_offset = dev->die_id * info.ue_num + dev->ue_id - UDMA_FIRST_UE_ID;
+	dev->sq_reserved_info.va_start = info.va_start;
+	dev->sq_reserved_info.va_size = info.va_size;
+	dev->sq_reserved_info.size_per_jetty = UDMA_RESERVED_SQ_SIZE;
+	dev->sq_reserved_info.size_per_ue =
+		ALIGN_DOWN(info.va_size / info.die_num / info.ue_num, UDMA_RESERVED_SQ_SIZE);
+	dev->sq_reserved_info.va_per_ue =
+		info.va_start + dev->sq_reserved_info.size_per_ue * ue_va_offset;
+	dev->sq_reserved_info.sq_reserved = dev->sq_reserved_info.size_per_jetty *
+					    max_jetty_num <= dev->sq_reserved_info.size_per_ue;
+	if (!dev->sq_reserved_info.sq_reserved)
+		dev_warn(dev->dev,
+			"invalid param, the reserved size is not enough to create all sq.\n");
+
+	return 0;
+}
+
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
@@ -688,6 +768,10 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.ctp_en = !(ubase_adev_ip_over_urma_utp_supported(udma_dev->comdev.adev));
 
 	ret = udma_construct_qos_param(udma_dev);
+	if (ret)
+		return ret;
+
+	ret = udma_query_wqebb_va(udma_dev);
 	if (ret)
 		return ret;
 
@@ -1339,6 +1423,10 @@ MODULE_PARM_DESC(jfr_sleep_time, "Set the destroy jfr sleep time, default: 1000 
 module_param(jfc_arm_mode, uint, 0444);
 MODULE_PARM_DESC(jfc_arm_mode,
 		 "Set the ARM mode of the JFC, default: 0(0:Always ARM, other: NO ARM.");
+
+module_param(sq_reserved, bool, 0444);
+MODULE_PARM_DESC(sq_reserved,
+		 "Set whether reserved sq, default: false(false:not reserved, true:reserved)");
 
 module_param(dump_aux_info, bool, 0644);
 MODULE_PARM_DESC(dump_aux_info,
