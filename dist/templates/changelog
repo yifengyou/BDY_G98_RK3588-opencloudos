@@ -1,3 +1,10 @@
+* Mon Mar  2 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.3
+- Merge branch 'eevdf_complete_part2_2_11' into 'release' (merge request !959)
+- Merge branch 'eevdf_part1_arm_compile_failed' into 'release' (merge request !1014)
+- sched: change the support number of scheduler features to 64
+- rue/cpu/bt: move some balance load funcs to kerne/sched/fair.h
+- Merge branch 'eevdf_complete_2_6' into 'release' (merge request !955)
+
 * Fri Feb 27 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.2
 - execve: fix sysctl_max_arg_strlen undefined error for external modules
 - mm/mremap: fix address wraparound in move_page_tables()
