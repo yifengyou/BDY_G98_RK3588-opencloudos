@@ -137,22 +137,8 @@ static int init_tdev(struct tid_dev *tdev, struct tdev_attr *attr, u32 *ptid,
 	tdev->pdev.dev.dma_mask = &(tdev->pdev.dev.coherent_dma_mask);
 	tdev->pdev.dev.groups = ummu_vdev_groups;
 	tdev->pdev.dma_parms.max_segment_size = U32_MAX;
+	device_set_pm_not_required(&tdev->pdev.dev);
 	set_dev_node(&tdev->pdev.dev, NUMA_NO_NODE);
-
-	ret = platform_device_register(&tdev->pdev);
-	if (ret) {
-		platform_device_put(&tdev->pdev);
-		return ret;
-	}
-
-	ret = sysfs_create_link_nowarn(&tdev->pdev.dev.kobj,
-					&ummu_core->iommu.dev->kobj,
-					dev_name(ummu_core->iommu.dev));
-	if (ret) {
-		platform_device_unregister(&tdev->pdev);
-		pr_err("tdev link to iommmu dev ERR!:%d\n", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -212,21 +198,34 @@ struct device *ummu_alloc_tdev(struct tdev_attr *attr, u32 *ptid)
 		return NULL;
 
 	ret = iommu_fwspec_init(&tdev->pdev.dev, iommu_dev->fwnode, iommu_dev->ops);
+	if (ret)
+		goto dev_free;
+
+	ret = init_tdev(tdev, attr, ptid, to_ummu_core(iommu_dev));
+	if (ret)
+		goto fwspec_free;
+
+	ret = platform_device_register(&tdev->pdev);
 	if (ret) {
-		kfree(tdev);
+		iommu_fwspec_free(&tdev->pdev.dev);
+		platform_device_put(&tdev->pdev);
 		return NULL;
 	}
 
-	ret = init_tdev(tdev, attr, ptid, to_ummu_core(iommu_dev));
-	if (ret) {
-		iommu_fwspec_free(&tdev->pdev.dev);
-		kfree(tdev);
+	if (!device_iommu_mapped(&tdev->pdev.dev)) {
+		platform_device_unregister(&tdev->pdev);
 		return NULL;
 	}
 
 	set_dma_configure(&tdev->pdev.dev, attr->dma_attr);
 
 	return &tdev->pdev.dev;
+
+fwspec_free:
+	iommu_fwspec_free(&tdev->pdev.dev);
+dev_free:
+	kfree(tdev);
+	return NULL;
 }
 
 struct device *ummu_core_alloc_tdev(struct tdev_attr *attr, u32 *ptid)
@@ -294,6 +293,7 @@ EXPORT_SYMBOL_GPL(ummu_core_free_tdev);
 
 int tdev_init(void)
 {
+	device_set_pm_not_required(&tid_bus);
 	return device_register(&tid_bus);
 }
 
