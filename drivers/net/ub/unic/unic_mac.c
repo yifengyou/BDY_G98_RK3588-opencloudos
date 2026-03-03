@@ -198,7 +198,7 @@ static void unic_unsync_mac_list(struct unic_vport *vport,
 			kfree(mac_node);
 		} else {
 			set_bit(UNIC_VPORT_STATE_MAC_TBL_CHANGE, &vport->state);
-			break;
+			continue;
 		}
 	}
 }
