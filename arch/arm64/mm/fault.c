@@ -1748,8 +1748,10 @@ static int do_bad(unsigned long far, unsigned long esr, struct pt_regs *regs)
  * Some processing deferred to task_work before ret_to_user().
  */
 static bool do_apei_claim_sea(unsigned long esr, struct pt_regs *regs,
-			      unsigned long siaddr)
+			      unsigned long siaddr, int sig, int code)
 {
+	int err;
+
 	if (user_mode(regs)) {
 		if (!apei_claim_sea(regs))
 			return true;
@@ -1768,10 +1770,21 @@ static bool do_apei_claim_sea(unsigned long esr, struct pt_regs *regs,
 	if (!fixup_exception_me(regs))
 		return false;
 
-	if (apei_claim_sea(regs))
+	err = apei_claim_sea(regs);
+	if (!err)
 		return true;
 
-	return false;
+	pr_emerg("comm: %s pid: %d apei claim sea failed. addr: %#lx, esr: %#lx\n",
+		current->comm, current->pid, siaddr, esr);
+
+	if (!current->mm)
+		return true;
+
+	set_thread_esr(0, esr);
+	arm64_force_sig_fault(sig, code, siaddr,
+		"Uncorrected memory error on access to user memory\n");
+
+	return true;
 }
 
 static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
@@ -1792,7 +1805,7 @@ static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
 	}
 	add_taint(TAINT_MACHINE_CHECK, LOCKDEP_STILL_OK);
 
-	if (do_apei_claim_sea(esr, regs, siaddr))
+	if (do_apei_claim_sea(esr, regs, siaddr, inf->sig, inf->code))
 		return 0;
 
 	arm64_notify_die(inf->name, regs, inf->sig, inf->code, siaddr, esr);
