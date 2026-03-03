@@ -388,7 +388,7 @@ static int process_urma_data(void *data)
 	}
 
 free_msg:
-	free_char_array(msg_str, MAX_NODE_NUM);
+	free_char_array(msg_str, MAX_NODE_NUM * MAX_DIE_NUM);
 
 	pr_info("Urma receiver thread stopped!\n");
 	return ret;
