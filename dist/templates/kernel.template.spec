@@ -553,6 +553,11 @@ This package provides source code included %{_vendor} patch for cross toolchains
 	%define _module_keygen %{SOURCE21}
 %endif
 
+# The colon (:) is a built‑in no‑operation in the bash shell; arguments passed to it are expanded but then ignored.
+%if ! %{with_modsign}
+	%define _module_signer :
+%endif
+
 ### Prepare common build vars to share by %%prep, %%build and %%install section
 # _KernSrc: Path to kernel source, located in _buildir
 # _KernBuild: Path to the built kernel objects, could be same as $_KernSrc (just like source points to build under /lib/modules/<kver>)
@@ -1260,7 +1265,6 @@ BuildInstMLNXOFED() {
 
 	echo "Begin to build $MLNX_OFED_TGZ_NAME"
 	## Now, we in MLNX_OFED_LINUX-* dir!
-	%if %{with_modsign}
 	%ifarch x86_64
 	# The purpose is to reorgnise the mlnx tgz files for our TencentOS
 	# Build the full packages of mlnx ofed.
@@ -1337,7 +1341,6 @@ BuildInstMLNXOFED() {
 
 	popd ## $tmppath
 	rm -rf $tmppath
-	%endif
 	%endif
 
 	popd ## MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-rhel9.4-x86_64
