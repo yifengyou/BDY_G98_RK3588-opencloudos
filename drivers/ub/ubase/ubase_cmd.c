@@ -733,7 +733,8 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 
 		if (time_after(jiffies, end)) {
 			dev_err_ratelimited(udev->dev,
-					    "failed to wait mbox.\n");
+					    "failed to wait mbox, ret = %d.\n",
+					    ret);
 			return -ETIMEDOUT;
 		}
 

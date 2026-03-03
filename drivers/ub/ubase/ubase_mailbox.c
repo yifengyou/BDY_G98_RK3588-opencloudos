@@ -129,6 +129,7 @@ static int ubase_post_mailbox(struct ubase_dev *udev,
 {
 	union ubase_mbox *mb;
 	unsigned long end;
+	u32 hw_run;
 	int ret;
 
 	end = msecs_to_jiffies(timeout) + jiffies;
@@ -140,12 +141,14 @@ static int ubase_post_mailbox(struct ubase_dev *udev,
 			desc->flag |= cpu_to_le16(UBASE_CMD_FLAG_WR);
 
 		ret = ubase_send_cmd(udev, desc, 1);
-		if (!ret && !(is_read ? mb->query_hw_run : mb->hw_run))
+		hw_run = is_read ? mb->query_hw_run : 0;
+		if (!ret && !hw_run)
 			break;
 
 		if (time_after(jiffies, end)) {
 			dev_err_ratelimited(udev->dev,
-					    "failed to wait mbox.\n");
+					    "failed to wait mbox, ret = %d, hw_run = %u.\n",
+					    ret, hw_run);
 			return -ETIMEDOUT;
 		}
 
