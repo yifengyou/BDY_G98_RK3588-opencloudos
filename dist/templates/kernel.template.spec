@@ -1293,6 +1293,8 @@ BuildInstMLNXOFED() {
 
 	# Prepare first
 	pushd $tmppath
+	mlnx_compile_result=$(ls MLNX_OFED_LINUX-*.tgz) ; mlnx_compile_result="${mlnx_compile_result%.tgz}"
+	mlnxrelease="MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-tencent-x86_64-ext.$KernUnameR"
 	tar -xzvf MLNX_OFED_LINUX-*
 	touch ko.location
 	# compatible with module signer script
@@ -1321,23 +1323,15 @@ BuildInstMLNXOFED() {
 	%{_module_signer} "$KernUnameR" "$_KernBuild" "ko_files" || exit $?
 
 	# Compress it into a new tgz file.
-	if [[ "${DISTRO}" != "tl3" ]]; then
-		## "${DISTRO}" == "tl4" or "${DISTRO}" == "oc9"
-		mlnxfulname=$(basename %{SOURCE3001})
-		mlnxrelease=${mlnxfulname%.*}
-	else
-		## "${DISTRO}" == "tl3"
-		mlnxrelease=MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-tencent-x86_64
-	fi
-	mv $mlnxrelease-ext  $mlnxrelease-ext.$KernUnameR/
+	mv $mlnx_compile_result $mlnxrelease
 	# Turn it back to the original file
-	sed -i 's/! -z $JUMP_ROOT/$UID -ne 0/g' $mlnxrelease-ext.$KernUnameR/mlnx_add_kernel_support.sh
-	cp -r $signed $mlnxrelease-ext.$KernUnameR/ko_files.signed
+	sed -i 's/! -z $JUMP_ROOT/$UID -ne 0/g' $mlnxrelease/mlnx_add_kernel_support.sh
+	cp -r $signed $mlnxrelease/ko_files.signed
 	sed -i "s/KERNELMODULE_REPLACE/$KernUnameR/g" %{SOURCE3002}
-	cp -r ko.location %{SOURCE3002} $mlnxrelease-ext.$KernUnameR/
-	tar -zcvf $mlnxrelease-ext.$KernUnameR.tgz $mlnxrelease-ext.$KernUnameR
+	cp -r ko.location %{SOURCE3002} $mlnxrelease/
+	tar -zcvf $mlnxrelease.tgz $mlnxrelease
 	mkdir %{buildroot}/mlnx/
-	install -m 755 $mlnxrelease-ext.$KernUnameR.tgz %{buildroot}/mlnx/
+	install -m 755 $mlnxrelease.tgz %{buildroot}/mlnx/
 
 	popd ## $tmppath
 	rm -rf $tmppath
@@ -1801,11 +1795,7 @@ fi
 %if %{with_ofed}
 %ifarch x86_64
 %files -n mlnx-ofed-dist
-%if "%{?dist}" != ".tl3"
-/mlnx/MLNX_OFED_LINUX-24.10-3.2.5.0-rhel9.4-x86_64-ext.%{kernel_unamer}.tgz
-%else
 /mlnx/MLNX_OFED_LINUX-24.10-3.2.5.0-tencent-x86_64-ext.%{kernel_unamer}.tgz
-%endif
 %endif
 %endif
 
