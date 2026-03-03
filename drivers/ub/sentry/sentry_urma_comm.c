@@ -1130,11 +1130,6 @@ int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 {
 	int ret, i;
 
-	if (eid_num > MAX_DIE_NUM) {
-		pr_err("Invalid eid num, failed to create urma resource\n");
-		return -EINVAL;
-	}
-
 	/* Prepare for new device matching by cleaning up old resources */
 	release_all_resource();
 
@@ -1236,7 +1231,7 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 	int eid_num = 0;
 	char *eid_part;
 
-	if (!eid_buf || !sepstr || eid_max_num > MAX_DIE_NUM) {
+	if (!eid_buf || !sepstr) {
 		pr_err("Invalid param, failed to process multi eid string\n");
 		return -EINVAL;
 	}
@@ -2085,7 +2080,8 @@ int urma_send(const char *buf, size_t len, const char *dst_eid, int die_index)
 	if (!g_is_created_ubcore_resource)
 		return -ENODEV;
 
-	if (!buf || !dst_eid || len > URMA_SEND_DATA_MAX_LEN || strlen(buf) > len) {
+	/* at broadcast mode, dst_eid is NULL */
+	if (!buf || len > URMA_SEND_DATA_MAX_LEN || strlen(buf) > len) {
 		pr_err("%s: Invalid param, failed to send data\n", __func__);
 		return -EINVAL;
 	}
