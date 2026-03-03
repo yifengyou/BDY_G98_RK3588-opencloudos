@@ -2270,7 +2270,7 @@ static int __init sentry_urma_comm_init(void)
 {
 	int ret = 0;
 
-	sentry_urma_ctx.proc_dir = proc_mkdir_mode(PROC_DEVICE_PATH, 0550, NULL);
+	sentry_urma_ctx.proc_dir = proc_mkdir_mode(PROC_DEVICE_PATH, PROC_DIR_PERMISSION, NULL);
 	if (!sentry_urma_ctx.proc_dir) {
 		pr_err("create /proc/%s dir failed\n", PROC_DEVICE_PATH);
 		return -ENOMEM;
