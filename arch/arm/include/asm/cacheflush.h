@@ -473,4 +473,28 @@ void check_cpu_icache_size(int cpuid);
 static inline void check_cpu_icache_size(int cpuid) { }
 #endif
 
+#ifndef copy_mc_to_user_page
+static inline int copy_mc_to_user_page(struct vm_area_struct *vma,
+				       struct page *page, unsigned long vaddr,
+				       void *dst, const void *src,
+				       unsigned long len)
+{
+	copy_to_user_page(vma, page, vaddr, dst, src, len);
+	return 0;
+}
+#define copy_mc_to_user_page copy_mc_to_user_page
+#endif
+
+#ifndef copy_mc_from_user_page
+static inline int copy_mc_from_user_page(struct vm_area_struct *vma,
+					 struct page *page, unsigned long vaddr,
+					 void *dst, const void *src,
+					 unsigned long len)
+{
+	copy_from_user_page(vma, page, vaddr, dst, src, len);
+	return 0;
+}
+#define copy_mc_from_user_page copy_mc_from_user_page
+#endif
+
 #endif
