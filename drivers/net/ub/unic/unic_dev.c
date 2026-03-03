@@ -627,11 +627,6 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 	if (ret)
 		return ret;
 
-	ret = unic_dev_fec_supported(unic_dev) && mac->user_fec_mode ?
-		unic_set_fec_mode(unic_dev, mac->user_fec_mode) : 0;
-	if (ret)
-		return ret;
-
 	ret = unic_dev_init_mtu(unic_dev);
 	if (ret) {
 		dev_err(unic_dev->comdev.adev->dev.parent,

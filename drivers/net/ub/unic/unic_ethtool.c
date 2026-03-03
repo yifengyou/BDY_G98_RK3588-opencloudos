@@ -318,8 +318,6 @@ static int unic_set_fecparam(struct net_device *ndev,
 	if (ret)
 		return ret;
 
-	mac->user_fec_mode = fec_mode;
-
 	return 0;
 }
 

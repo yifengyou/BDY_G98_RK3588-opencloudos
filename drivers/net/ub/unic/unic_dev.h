@@ -102,7 +102,6 @@ struct unic_mac {
 	u32 lanes; /* lane number */
 	u32 fec_mode; /* active fec mode */
 	u32 fec_ability; /* supported fec mode */
-	u32 user_fec_mode; /* user configured fec mode */
 	u8  mac_addr[ETH_ALEN];
 
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);

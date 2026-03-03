@@ -11,7 +11,7 @@
 
 struct ubase_query_mac_stats_cmd {
 	__le16 port_id;
-	u8 resv[2];
+	u8 resv[6];
 	__le64 stats_val[];
 };
 
