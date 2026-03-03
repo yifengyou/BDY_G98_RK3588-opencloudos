@@ -845,6 +845,7 @@ int ubase_dev_init(struct ubase_dev *udev)
 	return 0;
 
 err_init:
+	ubase_ubus_fault_log(udev, UBASE_FAULT_EVENT_ID_PROBE, NULL);
 	for (i -= 1; i >= 0; i--) {
 		if (!ubase_init_func_support(udev,
 					     ubase_init_func_map[i].support_devs))
@@ -966,6 +967,32 @@ void ubase_resume_aux_devices(struct ubase_dev *udev)
 	}
 	mutex_unlock(&priv->uadev_lock);
 }
+
+/**
+ * ubase_adev_fault_log() - trigger black box to dump register values when faults occur
+ * @adev: auxiliary device
+ * @event_id: fault event id (high 8 bits: driver module id, low 24 bits: event type)
+ * @data: optional string pointer to record additional information (can be NULL)
+ *
+ * This function is used as trigger function for the black box mechanism. If faults
+ * occur during the driver's probe or remove process, this function can be called
+ * to dump current values of key registers to the file system for cause analysis.
+ *
+ * Context: Process context. Takes and releases <mutex>.
+ */
+void ubase_adev_fault_log(struct auxiliary_device *adev,
+			  uint32_t event_id, void *data)
+{
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return;
+
+	udev = __ubase_get_udev_by_adev(adev);
+
+	ubase_ubus_fault_log(udev, event_id, data);
+}
+EXPORT_SYMBOL(ubase_adev_fault_log);
 
 /**
  * ubase_adev_ubl_supported() - determine whether ub link is supported
