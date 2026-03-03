@@ -800,8 +800,8 @@ static int unic_init_vport_buf(struct unic_dev *unic_dev)
 
 	if (unic_dev->caps.vport_buf_num > UNIC_MAX_VPORT_BUF_NUM) {
 		dev_err(adev->dev.parent,
-			"vport_buf_num exceeded the maximum(%d).\n",
-			UNIC_MAX_VPORT_BUF_NUM);
+			"vport_buf_num(%hhu) exceeded the maximum(%d).\n",
+			unic_dev->caps.vport_buf_num, UNIC_MAX_VPORT_BUF_NUM);
 		return -EINVAL;
 	}
 

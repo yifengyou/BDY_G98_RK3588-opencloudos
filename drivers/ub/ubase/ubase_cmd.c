@@ -261,7 +261,7 @@ int ubase_send_cmd(struct ubase_dev *udev,
 {
 	struct ubase_cmdq_ring *csq = &udev->hw.cmdq.csq;
 	bool is_completed = false;
-	int cleaned;
+	int cleaned, free_num;
 	u32 sw_pi;
 	int ret;
 
@@ -272,10 +272,12 @@ int ubase_send_cmd(struct ubase_dev *udev,
 		goto err_unlock;
 	}
 
-	if (num > ubase_remain_cmdq_space(csq)) {
+	free_num = ubase_remain_cmdq_space(csq);
+	if (num > free_num) {
 		csq->ci = ubase_read_dev(&udev->hw, UBASE_CSQ_HEAD_REG);
 		ubase_warn(udev,
-			   "the requested space exceeds the remaining space.\n");
+			   "the requested space(%d) exceeds the remaining space(%d).\n",
+			   num, free_num);
 		ret = -EBUSY;
 		goto err_unlock;
 	}

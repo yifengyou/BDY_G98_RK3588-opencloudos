@@ -22,7 +22,7 @@ static int unic_ets_prio_tc_validate(struct unic_dev *unic_dev,
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct ubase_caps *caps = ubase_get_dev_caps(adev);
 	u32 max_queue = unic_channels_max_num(adev);
-	u8 i, max_vl = 0;
+	u8 i, rss_vl_num, max_vl = 0;
 
 	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
 		if (ets->prio_tc[i] != unic_dev->channels.vl.prio_vl[i])
@@ -37,9 +37,11 @@ static int unic_ets_prio_tc_validate(struct unic_dev *unic_dev,
 		return -EINVAL;
 	}
 
-	if (unic_get_rss_vl_num(unic_dev, max_vl) > max_queue) {
+	rss_vl_num = unic_get_rss_vl_num(unic_dev, max_vl);
+	if (rss_vl_num > max_queue) {
 		unic_err(unic_dev,
-			 "tc num can't exceed queue num(%u).\n", max_queue);
+			 "rss vl num(%hhu) can't exceed queue num(%u).\n",
+			 rss_vl_num, max_queue);
 		return -EINVAL;
 	}
 

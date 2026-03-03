@@ -213,7 +213,8 @@ static int unic_query_mac_list_hw(struct unic_dev *unic_dev, u32 *mac_idx,
 	if (head->cur_mac_cnt > UNIC_DBG_MAC_NUM) {
 		ret = -EINVAL;
 		unic_err(unic_dev,
-			 "invalid cur_mac_cnt(%u).\n", head->cur_mac_cnt);
+			 "invalid cur_mac_cnt = %u out of range [0, %d].\n",
+			 head->cur_mac_cnt, UNIC_DBG_MAC_NUM);
 		goto err_out;
 	}
 
@@ -427,7 +428,9 @@ static int unic_query_vlan_list_hw(struct unic_dev *unic_dev, u32 *idx,
 	vlan_cnt = le16_to_cpu(resp->vlan_cnt);
 	if (vlan_cnt > UNIC_DBG_VLAN_NUM) {
 		ret = -EINVAL;
-		unic_err(unic_dev, "invalid vlan_cnt(%u).\n", vlan_cnt);
+		unic_err(unic_dev,
+			 "invalid vlan_cnt = %u out of range [0, %d].\n",
+			 vlan_cnt, UNIC_DBG_VLAN_NUM);
 		goto err_out;
 	}
 

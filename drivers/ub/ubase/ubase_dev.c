@@ -542,8 +542,9 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 	ret = __ubase_ctrlq_send(udev, &msg, &ue_info);
 	if (ret)
 		ubase_err(udev,
-			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, ret = %d.\n",
-			  head->service_type, head->opcode, ret);
+			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, bus_ue_id = %u, seq = %u, ret = %d.\n",
+			  head->service_type, head->opcode, ue_info.bus_ue_id,
+			  ue_info.seq, ret);
 
 	return ret;
 }

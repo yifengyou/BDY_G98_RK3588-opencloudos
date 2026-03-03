@@ -162,7 +162,7 @@ static int ubase_post_mailbox(struct ubase_dev *udev,
 	return ret;
 }
 
-static int ubase_poll_mbox_done(struct ubase_dev *udev, uint32_t timeout)
+static int ubase_poll_mbox_done(struct ubase_dev *udev, u32 timeout)
 {
 	struct ubase_cmdq_desc desc;
 	u8 status = 0;
@@ -173,9 +173,9 @@ static int ubase_poll_mbox_done(struct ubase_dev *udev, uint32_t timeout)
 	ret = ubase_post_mailbox(udev, &desc, timeout, &status, true);
 	if (!ret) {
 		if (!status) {
-			ubase_info(udev,
-				   "failed to query ubase mailbox, status = %u.\n",
-				   status);
+			ubase_err(udev,
+				  "failed to query ubase mailbox, status = %u.\n",
+				  status);
 			return -EBUSY;
 		}
 	} else

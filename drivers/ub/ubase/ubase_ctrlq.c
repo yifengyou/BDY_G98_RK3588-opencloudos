@@ -955,7 +955,7 @@ static void ubase_ctrlq_read_msg_data(struct ubase_dev *udev, u8 num, u8 *msg)
 			head = (struct ubase_ctrlq_base_block *)msg;
 			bus_ue_id = le16_to_cpu(head->bus_ue_id);
 			ubase_fill_ctrlq_trace_info(&trace_info, crq,
-						     num, bus_ue_id);
+						    num, bus_ue_id);
 		}
 		trace_ubase_ctrlq_crq(udev->dev, &trace_info,
 				      msg + i * UBASE_CTRLQ_BB_LEN,
@@ -1222,8 +1222,10 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 	ret = __ubase_cmd_send_in(udev, &in);
 	if (ret)
 		ubase_warn(udev,
-			   "failed to send ue ctrlq msg, opc = 0x%x, service_type = 0x%x, ret = %d.\n",
-			   head->opcode, head->service_type, ret);
+			   "failed to send ue ctrlq msg, opc = 0x%x, service_type = 0x%x, bus_ue_id = %u, seq = %u, ret = %d.\n",
+			   head->opcode, head->service_type,
+			   le16_to_cpu(ue2ue_head->head.bus_ue_id),
+			   ue2ue_head->seq, ret);
 
 out:
 	kfree(resp);

@@ -1019,7 +1019,7 @@ static int unic_set_l4(struct sk_buff *skb, struct unic_sqe_ctrl_section *ctrl,
 		 */
 		if (skb_is_gso(skb)) {
 			unic_err(unic_dev,
-				 "unknown l4 header tso packets hecksum offload.\n");
+				 "unknown l4 header tso packets checksum offload.\n");
 			return -EDOM;
 		}
 		/* the stack computes the IP header already,
