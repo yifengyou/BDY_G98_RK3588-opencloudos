@@ -1747,17 +1747,29 @@ static int do_bad(unsigned long far, unsigned long esr, struct pt_regs *regs)
  * APEI claimed this as a firmware-first notification.
  * Some processing deferred to task_work before ret_to_user().
  */
-static bool do_apei_claim_sea(struct pt_regs *regs)
+static bool do_apei_claim_sea(unsigned long esr, struct pt_regs *regs,
+			      unsigned long siaddr)
 {
 	if (user_mode(regs)) {
 		if (!apei_claim_sea(regs))
 			return true;
-	} else if (IS_ENABLED(CONFIG_ARCH_HAS_COPY_MC)) {
-		if (sysctl_machine_check_safe &&
-		    fixup_exception_me(regs) &&
-		    !apei_claim_sea(regs))
-			return true;
+
+		return false;
 	}
+
+	if (!IS_ENABLED(CONFIG_ARCH_HAS_COPY_MC) || !sysctl_machine_check_safe)
+		return false;
+
+	pr_warn_ratelimited("%s, addr: %#lx comm: %.20s tgid: %d pid: %d cpu: %d\n",
+		user_mode(regs) ? "userspace" : "kernelspace", siaddr,
+		current->comm, current->tgid, current->pid,
+		raw_smp_processor_id());
+
+	if (!fixup_exception_me(regs))
+		return false;
+
+	if (apei_claim_sea(regs))
+		return true;
 
 	return false;
 }
@@ -1780,7 +1792,7 @@ static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
 	}
 	add_taint(TAINT_MACHINE_CHECK, LOCKDEP_STILL_OK);
 
-	if (do_apei_claim_sea(regs))
+	if (do_apei_claim_sea(esr, regs, siaddr))
 		return 0;
 
 	arm64_notify_die(inf->name, regs, inf->sig, inf->code, siaddr, esr);
