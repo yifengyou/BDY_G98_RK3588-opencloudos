@@ -6,7 +6,7 @@
 #ifndef __UB_BLACK_BOX_H__
 #define __UB_BLACK_BOX_H__
 
-#include "ubus.h"
+#include <ub/ubus/ubus.h>
 
 typedef int (*ub_fault_record)(u32 ctl_no, u32 device_id, u32 entity_idx,
 			       u32 event_id, void *data);

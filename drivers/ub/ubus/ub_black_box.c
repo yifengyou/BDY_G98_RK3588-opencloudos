@@ -5,7 +5,8 @@
 
 #include <linux/mutex.h>
 
-#include "ub_black_box.h"
+#include <ub/ubfi/ubfi.h>
+#include <ub/ubus/ub_black_box.h>
 
 ub_fault_record ub_fault_record_func;
 static DEFINE_MUTEX(fault_record_mutex);
