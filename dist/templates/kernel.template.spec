@@ -1230,11 +1230,11 @@ BuildInstMLNXOFED() {
 
 	pushd drivers/thirdparty/release-drivers/mlnx
 	MLNX_OFED_VERSION=$(./get_mlnx_info.sh mlnx_version) ; 	MLNX_OFED_TGZ_NAME=$(./get_mlnx_info.sh mlnx_tgz_name)
-	tar -xzvf $MLNX_OFED_TGZ_NAME
+	tar -xzf $MLNX_OFED_TGZ_NAME
 	pushd MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-rhel9.4-x86_64
 	pushd src
-	echo "tar -xzvf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz"
-	tar -xzvf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz
+	echo "tar -xzf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz"
+	tar -xzf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz
 	pushd MLNX_OFED_SRC-${MLNX_OFED_VERSION}
 
 	# Fix TS4 compile errors by enabling LTO. So, disable LTO,  and enabling -fPIE.
@@ -1295,7 +1295,7 @@ BuildInstMLNXOFED() {
 	pushd $tmppath
 	mlnx_compile_result=$(ls MLNX_OFED_LINUX-*.tgz) ; mlnx_compile_result="${mlnx_compile_result%.tgz}"
 	mlnxrelease="MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-tencent-x86_64-ext.$KernUnameR"
-	tar -xzvf MLNX_OFED_LINUX-*
+	tar -xzf MLNX_OFED_LINUX-*
 	touch ko.location
 	# compatible with module signer script
 	signed=ko_files/lib/modules/$KernUnameR
@@ -1329,7 +1329,7 @@ BuildInstMLNXOFED() {
 	cp -r $signed $mlnxrelease/ko_files.signed
 	sed -i "s/KERNELMODULE_REPLACE/$KernUnameR/g" %{SOURCE3002}
 	cp -r ko.location %{SOURCE3002} $mlnxrelease/
-	tar -zcvf $mlnxrelease.tgz $mlnxrelease
+	tar -zcf $mlnxrelease.tgz $mlnxrelease
 	mkdir %{buildroot}/mlnx/
 	install -m 755 $mlnxrelease.tgz %{buildroot}/mlnx/
 
