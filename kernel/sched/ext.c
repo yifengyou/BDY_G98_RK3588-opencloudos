@@ -4567,6 +4567,7 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 		sched_deq_and_put_task(p, DEQUEUE_SAVE | DEQUEUE_MOVE, &ctx);
 
 		p->sched_class = __setscheduler_class(p, p->prio);
+		scx_ignore_cpubind(p);
 		check_class_changing(task_rq(p), p, old_class);
 
 		sched_enq_and_set_task(&ctx);
@@ -5394,6 +5395,7 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 
 		p->scx.slice = SCX_SLICE_DFL;
 		p->sched_class = __setscheduler_class(p, p->prio);
+		scx_ignore_cpubind(p);
 		check_class_changing(task_rq(p), p, old_class);
 
 		sched_enq_and_set_task(&ctx);

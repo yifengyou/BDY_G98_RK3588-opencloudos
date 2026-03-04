@@ -7421,7 +7421,6 @@ const struct sched_class *__setscheduler_class(struct task_struct *p, int prio)
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 	if (task_should_scx(p)) {
-		scx_ignore_cpubind(p);
 		return &ext_sched_class;
 	}
 #endif
@@ -7570,6 +7569,7 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 
 	p->sched_class = next_class;
 	p->prio = prio;
+	scx_ignore_cpubind(p);
 	check_class_changing(rq, p, prev_class);
 
 	if (queued)
@@ -8321,6 +8321,7 @@ change:
 		__setscheduler_params(p, attr);
 		p->sched_class = next_class;
 		p->prio = newprio;
+		scx_ignore_cpubind(p);
 	}
 	__setscheduler_uclamp(p, attr);
 	check_class_changing(rq, p, prev_class);
