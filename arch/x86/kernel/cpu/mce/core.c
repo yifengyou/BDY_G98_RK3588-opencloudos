@@ -2217,6 +2217,7 @@ void mca_bsp_init(struct cpuinfo_x86 *c)
 	case X86_VENDOR_INTEL:
 		intel_apply_global_quirks(c);
 		break;
+	case X86_VENDOR_CENTAUR:
 	case X86_VENDOR_ZHAOXIN:
 		zhaoxin_apply_global_quirks(c);
 		break;
