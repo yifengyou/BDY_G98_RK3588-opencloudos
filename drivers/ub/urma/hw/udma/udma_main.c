@@ -207,22 +207,35 @@ static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *
 {
 	struct ubcore_stats_com_val *com_val = (struct ubcore_stats_com_val *)val->addr;
 	struct udma_dev *udma_dev = to_udma_dev(dev);
+	struct ubase_eth_mac_stats mac_stats = {};
 	struct ubase_ub_dl_stats dl_stats = {};
 	int ret;
 
-	ret = ubase_get_ub_port_stats(udma_dev->comdev.adev,
-				      udma_dev->port_logic_id, &dl_stats);
+	if (ubase_adev_ubl_supported(udma_dev->comdev.adev))
+		ret = ubase_get_ub_port_stats(udma_dev->comdev.adev,
+					      udma_dev->port_logic_id, &dl_stats);
+	else
+		ret = ubase_get_eth_port_stats(udma_dev->comdev.adev, &mac_stats);
 	if (ret) {
 		dev_err(udma_dev->dev, "failed to query port stats, ret = %d.\n", ret);
 		return ret;
 	}
 
-	com_val->tx_pkt = dl_stats.dl_tx_busi_pkt_num;
-	com_val->rx_pkt = dl_stats.dl_rx_busi_pkt_num;
-	com_val->rx_pkt_err = 0;
-	com_val->tx_pkt_err = 0;
-	com_val->tx_bytes = 0;
-	com_val->rx_bytes = 0;
+	if (ubase_adev_ubl_supported(udma_dev->comdev.adev)) {
+		com_val->tx_pkt = dl_stats.dl_tx_busi_pkt_num;
+		com_val->rx_pkt = dl_stats.dl_rx_busi_pkt_num;
+		com_val->rx_pkt_err = 0;
+		com_val->tx_pkt_err = 0;
+		com_val->tx_bytes = 0;
+		com_val->rx_bytes = 0;
+	} else {
+		com_val->tx_pkt = mac_stats.tx_total_pkts;
+		com_val->rx_pkt = mac_stats.rx_total_pkts;
+		com_val->tx_pkt_err = mac_stats.tx_bad_pkts;
+		com_val->rx_pkt_err = mac_stats.rx_bad_pkts;
+		com_val->tx_bytes = mac_stats.tx_total_octets;
+		com_val->rx_bytes = mac_stats.rx_total_octets;
+	}
 
 	return ret;
 }
@@ -612,6 +625,8 @@ static void get_dev_caps_from_ubase(struct udma_dev *udma_dev)
 	struct ubase_caps *ubase_caps;
 
 	ubase_caps = ubase_get_dev_caps(udma_dev->comdev.adev);
+	if (ubase_caps == NULL)
+		return;
 
 	udma_dev->caps.comp_vector_cnt = ubase_caps->num_ceq_vectors;
 	udma_dev->caps.ack_queue_num = ubase_caps->ack_queue_num;
@@ -1328,8 +1343,10 @@ void udma_reset_init(struct auxiliary_device *adev)
 int udma_probe(struct auxiliary_device *adev,
 	       const struct auxiliary_device_id *id)
 {
-	if (udma_init_dev(adev))
+	if (udma_init_dev(adev)) {
+		ubase_adev_fault_log(adev, UDMA_FAULT_EVENT_ID_PROBE, NULL);
 		return -EINVAL;
+	}
 
 	ubase_reset_register(adev, udma_reset_handler);
 	return 0;
@@ -1354,8 +1371,11 @@ void udma_remove(struct auxiliary_device *adev)
 	udma_dev->status = UDMA_SUSPEND;
 	ubcore_stop_requests(&udma_dev->ub_dev);
 	while (true) {
-		if (!udma_close_ue_rx(udma_dev, false, false, false, 0))
+		if (!udma_close_ue_rx(udma_dev, false, false, false, 0)) {
+			if (wait_time != MIN_SLEEP_TIME)
+				ubase_adev_fault_log(adev, UDMA_FAULT_EVENT_ID_REMOVE, NULL);
 			break;
+		}
 
 		if (ubase_adev_shutting_down(adev)) {
 			dev_err_ratelimited(&adev->dev, "enter shutdown process.\n");
@@ -1363,6 +1383,8 @@ void udma_remove(struct auxiliary_device *adev)
 		}
 
 		msleep(wait_time);
+		if (wait_time == MIN_SLEEP_TIME)
+			ubase_adev_fault_log(adev, UDMA_FAULT_EVENT_ID_REMOVE, NULL);
 		if (wait_time < MAX_SLEEP_TIME)
 			wait_time *= TIME_SLEEP_RATE;
 		dev_err_ratelimited(&adev->dev, "udma close ue rx failed in remove process.\n");
