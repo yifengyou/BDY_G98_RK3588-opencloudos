@@ -51,16 +51,14 @@ static void unic_activate_event_process(struct unic_dev *unic_dev)
 	struct net_device *netdev = unic_dev->comdev.netdev;
 	int ret;
 
+	if (!test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state))
+		return;
+
 	if (test_bit(UNIC_STATE_DISABLED, &unic_dev->state)) {
 		unic_err(unic_dev,
 			 "failed to process activate event, device is not ready.\n");
-		return;
+		goto out;
 	}
-
-	rtnl_lock();
-
-	if (!test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state))
-		goto unlock;
 
 	/* if network interface has already been stopped,
 	 * no need to open by activate event
@@ -84,8 +82,6 @@ out:
 	act_info->deactivate = false;
 	mutex_unlock(&act_info->mutex);
 	clear_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state);
-unlock:
-	rtnl_unlock();
 }
 
 static void unic_deactivate_event_process(struct unic_dev *unic_dev)
@@ -94,16 +90,8 @@ static void unic_deactivate_event_process(struct unic_dev *unic_dev)
 	struct net_device *netdev = unic_dev->comdev.netdev;
 	int ret;
 
-	if (test_bit(UNIC_STATE_DISABLED, &unic_dev->state)) {
-		unic_err(unic_dev,
-			 "failed to process deactivate event, device is not ready.\n");
-		return;
-	}
-
-	rtnl_lock();
-
 	if (test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state))
-		goto unlock;
+		return;
 
 	/* when deactivate event occurs, set flag to true to prevent
 	 * periodic tasks changing promisc
@@ -111,6 +99,12 @@ static void unic_deactivate_event_process(struct unic_dev *unic_dev)
 	mutex_lock(&act_info->mutex);
 	act_info->deactivate = true;
 	mutex_unlock(&act_info->mutex);
+
+	if (test_bit(UNIC_STATE_DISABLED, &unic_dev->state)) {
+		unic_err(unic_dev,
+			 "failed to process deactivate event, device is not ready.\n");
+		goto out;
+	}
 
 	if (unic_dev_eth_mac_supported(unic_dev))
 		unic_deactivate_mac_table(unic_dev);
@@ -129,8 +123,6 @@ static void unic_deactivate_event_process(struct unic_dev *unic_dev)
 
 out:
 	set_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state);
-unlock:
-	rtnl_unlock();
 }
 
 static void unic_activate_handler(struct auxiliary_device *adev, bool activate)
@@ -140,10 +132,12 @@ static void unic_activate_handler(struct auxiliary_device *adev, bool activate)
 	unic_info(unic_dev, "receive %s event callback.\n",
 		  activate ? "activate" : "deactivate");
 
+	rtnl_lock();
 	if (activate)
 		unic_activate_event_process(unic_dev);
 	else
 		unic_deactivate_event_process(unic_dev);
+	rtnl_unlock();
 }
 
 static void unic_ub_port_reset(struct unic_dev *unic_dev, bool link_up)
