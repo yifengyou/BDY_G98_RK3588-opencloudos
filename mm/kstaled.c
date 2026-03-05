@@ -473,16 +473,16 @@ out:
 	return nr_pages;
 }
 
-static int kstaled_range_populate_pte(unsigned long addr)
+static int kstaled_range_populate_pte(unsigned long addr, int nid)
 {
 	struct page *page;
-	struct page *pages[2];
+	struct page *pages[1];
 	int err;
 
 	if (vmalloc_to_page((void *)addr))
 		return 0;
 
-	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	page = alloc_pages_node(nid, GFP_KERNEL | __GFP_ZERO, 0);
 	if (!page)
 		return -ENOMEM;
 
@@ -504,7 +504,7 @@ static int kstaled_populate_folio_age(pg_data_t *pgdat, unsigned long start,
 
 	/* TODO try pmd-mapping first */
 	for (addr = start; addr < end; addr += PAGE_SIZE) {
-		if (kstaled_range_populate_pte(addr))
+		if (kstaled_range_populate_pte(addr, pgdat->node_id))
 			return -ENOMEM;
 	}
 	return 0;
@@ -604,7 +604,7 @@ static int kstale_init_age_sparse_vmemmap(pg_data_t *pgdat)
 			}
 
 			if (valid) {
-				if (kstaled_range_populate_pte(virt_addr))
+				if (kstaled_range_populate_pte(virt_addr, pgdat->node_id))
 					goto free;
 			}
 			virt_addr += PAGE_SIZE;
