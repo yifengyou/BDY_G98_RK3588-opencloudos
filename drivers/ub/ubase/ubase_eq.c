@@ -123,14 +123,7 @@ void ubase_enable_misc_vector(struct ubase_dev *udev, bool enable)
 
 static void ubase_save_ras_type(struct ubase_dev *udev, u32 reg)
 {
-	if (ubase_dev_ubl_supported(udev)) {
-		set_bit(UBASE_STATE_PORT_RESETTING_B, &udev->state_bits);
-		return;
-	}
-
-	if (reg & BIT(UBASE_SW_HANDSHAKE_0_HIMAC_RESET_B))
-		set_bit(UBASE_STATE_HIMAC_RESETTING_B, &udev->state_bits);
-	else if (reg & BIT(UBASE_SW_HANDSHAKE_0_PORT_RESET_B))
+	if (ubase_dev_ubl_supported(udev))
 		set_bit(UBASE_STATE_PORT_RESETTING_B, &udev->state_bits);
 }
 

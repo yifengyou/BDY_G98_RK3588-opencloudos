@@ -292,10 +292,6 @@ void ubase_resume(struct ubase_dev *udev)
 	udev->reset_stat.reset_retry_cnt = 0;
 	clear_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
 	clear_bit(UBASE_STATE_DISABLED_B, &udev->state_bits);
-
-	if (ubase_dev_err_handle_supported(udev))
-		ubase_errhandle_task_schedule(udev);
-
 	return;
 
 err_resume:
@@ -304,3 +300,80 @@ err_resume:
 	clear_bit(UBASE_STATE_DISABLED_B, &udev->state_bits);
 	ubase_reset_err_handle(udev);
 }
+
+void ubase_errhandle_service_task(struct ubase_delay_work *ubase_work)
+{
+	struct ubase_dev *udev;
+
+	udev = container_of(ubase_work, struct ubase_dev, service_task);
+	if (!test_and_clear_bit(UBASE_SERVICE_STATE_ERR_SCHED,
+				&ubase_work->state))
+		return;
+
+	if (!ubase_dev_err_handle_supported(udev)) {
+		ubase_err(udev, "not support err handle processing.\n");
+		return;
+	}
+
+	if (test_and_clear_bit(UBASE_STATE_PORT_RESETTING_B, &udev->state_bits)) {
+		ubase_info(udev, "ras occurred, ubase need to reset port.\n");
+		ubase_port_reset(udev);
+	}
+}
+
+static int ubase_notify_himac_reset(struct ubase_dev *udev)
+{
+#define HIMAC_RESET_RETRY_DELAY 50
+#define HIMAC_RESET_RETRY_CNT 200
+
+	struct ubase_cmd_buf in;
+	int try_cnt = 0;
+	int ret;
+
+	while (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		msleep(UBASE_RST_WAIT_TIME);
+
+	do {
+		__ubase_fill_inout_buf(&in, UBASE_OPC_HIMAC_RESET, false, 0, NULL);
+		ret = __ubase_cmd_send_in(udev, &in);
+		if (!ret) {
+			udev->reset_stat.himac_reset_cnt++;
+			return 0;
+		} else if (ret == -EOPNOTSUPP || ret == -EPERM) {
+			break;
+		}
+
+		msleep(HIMAC_RESET_RETRY_DELAY);
+		try_cnt++;
+	} while (try_cnt < HIMAC_RESET_RETRY_CNT);
+
+	ubase_err(udev, "failed to send himac reset cmd, ret = %d.\n", ret);
+	return ret;
+}
+
+/**
+ * ubase_himac_reset() - himac reset processing
+ * @adev: auxiliary device
+ *
+ * Himac reset processing function. This function is called when an himac RAS
+ * error is generated and needs to be recovered.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. May sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_himac_reset(struct auxiliary_device *adev)
+{
+	struct ubase_dev *udev;
+
+	if (!adev)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (!ubase_dev_eth_mac_supported(udev) ||
+	    !ubase_dev_err_handle_supported(udev))
+		return -EOPNOTSUPP;
+
+	ubase_info(udev, "ubase start to reset himac.\n");
+	return ubase_notify_himac_reset(udev);
+}
+EXPORT_SYMBOL(ubase_himac_reset);

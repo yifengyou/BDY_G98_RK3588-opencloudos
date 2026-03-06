@@ -12,7 +12,6 @@
 #include "ubase_arq.h"
 #include "ubase_cmd.h"
 #include "ubase_ctrlq.h"
-#include "ubase_err_handle.h"
 #include "ubase_hw.h"
 #include "ubase_mailbox.h"
 #include "ubase_pmem.h"

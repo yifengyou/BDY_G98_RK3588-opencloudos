@@ -414,4 +414,6 @@ int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
 void ubase_adev_fault_log(struct auxiliary_device *adev,
 			  u32 event_id, void *data);
 
+int ubase_himac_reset(struct auxiliary_device *adev);
+
 #endif
