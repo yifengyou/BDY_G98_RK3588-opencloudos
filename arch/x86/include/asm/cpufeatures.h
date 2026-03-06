@@ -13,7 +13,7 @@
 /*
  * Defines x86 CPU feature bits
  */
-#define NCAPINTS			30	   /* N 32-bit words worth of info */
+#define NCAPINTS			31	   /* N 32-bit words worth of info */
 #define NBUGINTS			4	   /* N 32-bit bug flags */
 
 /*
@@ -513,6 +513,9 @@
 #define X86_FEATURE_TSA_L1_NO          (21*32+12) /* "" AMD CPU not vulnerable to TSA-L1 */
 #define X86_FEATURE_CLEAR_CPU_BUF_VM   (21*32+13) /* "" Clear CPU buffers using VERW before VMRUN */
 #define X86_FEATURE_IBPB_EXIT_TO_USER  (21*32+14) /* Use IBPB on exit-to-userspace, see VMSCAPE bug */
+
+/* Zhaoxin/Centaur-defined CPU features, CPUID level 0xC0000006, word 30 */
+#define X86_FEATURE_PAUSEOPT		(30*32+ 0) /* ZHAOXIN PAUSEOPT */
 
 /*
  * BUG word(s)
