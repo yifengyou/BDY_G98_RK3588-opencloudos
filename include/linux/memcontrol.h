@@ -300,6 +300,10 @@ struct mem_cgroup {
 	/* OOM-Killer disable */
 	int		oom_kill_disable;
 
+	/* Early OOM: trigger OOM when available memory (free + reclaimable) falls below threshold */
+	int		early_oom_enabled;
+	int		early_oom_threshold;	/* available memory percentage, 1-100, default 10 */
+
 	/* memory.events and memory.events.local */
 	struct cgroup_file events_file;
 	struct cgroup_file events_local_file;
