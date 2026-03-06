@@ -216,12 +216,12 @@ struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id,
 		}
 		i++;
 		memunmap(*wd_obtain);
-		wd_obtain = NULL;
+		*wd_obtain = NULL;
 	}
 
 free_resources:
 	memunmap(*wd_obtain);
-	wd_obtain = NULL;
+	*wd_obtain = NULL;
 
 	return NULL;
 }
@@ -406,7 +406,7 @@ void free_io_param_with_buffer(struct cis_message *io_param)
 
 int cis_call_uvb(u8 index, struct udfi_para *para)
 {
-	int err;
+	int err = 0;
 	struct uvb_window *window = NULL;
 	struct uvb_window_description *wd = NULL;
 	struct cis_message *io_param = NULL;
@@ -430,6 +430,7 @@ int cis_call_uvb(u8 index, struct udfi_para *para)
 
 	if (!wd->buffer) {
 		pr_err("no window buffer to save data\n");
+		err = -EOPNOTSUPP;
 		goto free_obtain;
 	}
 
@@ -477,7 +478,7 @@ free_obtain:
 
 int cis_call_uvb_sync(u8 index, struct udfi_para *para)
 {
-	int err;
+	int err = 0;
 	struct uvb_window *window = NULL;
 	struct uvb_window_description *wd = NULL;
 	u64 *wd_obtain = NULL;
@@ -502,6 +503,7 @@ int cis_call_uvb_sync(u8 index, struct udfi_para *para)
 
 	if (!wd->buffer) {
 		pr_err("sync call no window buffer to save data\n");
+		err = -EOPNOTSUPP;
 		goto free_obtain;
 	}
 
