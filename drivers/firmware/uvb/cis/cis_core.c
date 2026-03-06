@@ -73,7 +73,7 @@ static int uvb_window_lock_init(void)
 				free_uvb_window_lock();
 				return -ENOMEM;
 			}
-			lock_node->lock.counter = 0;
+			atomic_set(&lock_node->lock, 0);
 			lock_node->window_address = uvb->wd[j].address;
 			hash_add(uvb_lock_table, &lock_node->node, uvb->wd[j].address);
 		}
