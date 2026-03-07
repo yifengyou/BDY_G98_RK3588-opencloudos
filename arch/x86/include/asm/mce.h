@@ -357,7 +357,7 @@ extern void zx_apei_mce_report_zdi_error(struct cper_sec_proc_generic *zdi_err);
  * Exception: Keep "V2, etc." with their originals.
  */
 enum smca_bank_types {
-	SMCA_CS,	/* Coherent Slave */
+	SMCA_CS,	/* Coherent Station */
 	SMCA_CS_V2,
 	SMCA_DE,	/* Decoder Unit */
 	SMCA_EX,	/* Execution Unit */
