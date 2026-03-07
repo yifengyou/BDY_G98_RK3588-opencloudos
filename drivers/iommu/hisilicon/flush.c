@@ -422,6 +422,18 @@ void ummu_device_flush_plb_all(struct iommu_domain *domain)
 	}
 }
 
+void ummu_device_flush_ioplb_all(struct ummu_device *ummu)
+{
+	struct ummu_mcmdq_ent cmd = {
+		.opcode = CMD_PLBI_OS_EID,
+		.plbi = {
+			.tecte_tag = LOCAL_TECT_TAG,
+		},
+	};
+
+	ummu_mcmdq_issue_cmd_with_sync(ummu, &cmd);
+}
+
 int ummu_device_check_pa_continuity(struct ummu_device *ummu, u64 addr,
 				    u32 size_order, u32 id)
 {

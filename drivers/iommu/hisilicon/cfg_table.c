@@ -342,7 +342,7 @@ const struct ummu_capability *ummu_get_cap(void)
 
 static struct ummu_tct_desc_cfg *ummu_get_local_tct_table(void)
 {
-	struct ummu_tct_desc_cfg *cfg;
+	struct ummu_tct_desc_cfg *cfg = NULL;
 	struct os_meta *meta;
 	int ret;
 

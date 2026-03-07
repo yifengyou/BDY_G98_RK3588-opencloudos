@@ -29,5 +29,4 @@ int ummu_set_bypass_mpam(struct ummu_device *ummu, int partid, int pmg);
 int ummu_get_bypass_mpam(struct ummu_device *ummu, int *partid, int *pmg);
 int ummu_set_uotr_mpam(struct ummu_device *ummu, int partid, int pmg);
 int ummu_get_uotr_mpam(struct ummu_device *ummu, int *partid, int *pmg);
-
 #endif  /* __UMMU_QOS_H__ */

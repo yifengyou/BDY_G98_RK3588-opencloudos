@@ -220,7 +220,6 @@
 
 #define PERMQ_RELEASE_TIMEOUT_US 100
 #define UMMU_CONS_POLL_TIMEOUT_US 5
-
 #define PERMQ_TIMEOUT_US 1000
 
 #endif /* __UMMU_REGS_H__ */
