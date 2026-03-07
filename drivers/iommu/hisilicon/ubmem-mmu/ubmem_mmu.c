@@ -688,10 +688,7 @@ static bool ubmem_mmu_tdev_support_attr(struct ummu_core_device *core_device,
 	struct ubmem_mmu_device *ubmem_dev = core_to_ubmem_mmu_dev(core_device);
 	struct hisi_ummu_tdev_info *info;
 	struct ubrt_fwnode *ubrt_fw;
-	struct ummu_node *node;
-	u16 ummu_mapping;
-	u32 ummu_id;
-	int ret;
+	u32 index;
 
 	if (!attr || !attr->priv ||
 		attr->priv_len < sizeof(struct hisi_ummu_tdev_info))
@@ -703,23 +700,15 @@ static bool ubmem_mmu_tdev_support_attr(struct ummu_core_device *core_device,
 		return false;
 	}
 
-	ummu_mapping = __ffs(info->v1.ummu_idx_mask);
-	ret = ubrt_get_interrupt_id(ummu_mapping, &ummu_id);
-	if (ret) {
-		dev_err(ubmem_dev->ummu.dev, "get ummu_id failed, ummu_mapping %u.\n",
-			ummu_mapping);
+	index = __ffs(info->v1.ummu_idx_mask);
+	ubrt_fw = ubrt_fwnode_get_by_idx(index, UBRT_UMMU);
+	if (!ubrt_fw) {
+		dev_err(ubmem_dev->ummu.dev, "get ubrt fw failed, index = %u.\n",
+			index);
 		return false;
 	}
 
-	ubrt_fw = ubrt_fwnode_get(ubmem_dev->ummu.dev->fwnode);
-	if (!ubrt_fw || ubrt_fw->type != UBRT_UMMU) {
-		dev_err(ubmem_dev->ummu.dev, "get fwnode failed, exist = %d, type = %d.\n",
-			!!(ubrt_fw), (int)(ubrt_fw ? ubrt_fw->type : -1));
-		return false;
-	}
-
-	node = (struct ummu_node *)ubrt_fw->ubrt_node;
-	return node->intr_id == ummu_id;
+	return (ubrt_fw == ubrt_fwnode_get(ubmem_dev->ummu.dev->fwnode));
 }
 
 static struct ummu_core_ops ubmm_mmu_core_ops = {
