@@ -1033,6 +1033,9 @@ struct folio *filemap_alloc_folio(gfp_t gfp, unsigned int order)
 	int n;
 	struct folio *folio;
 
+	if (filemap_alloc_local_enabled())
+		return filemap_try_alloc_local(gfp, order);
+
 	if (cpuset_do_page_mem_spread()) {
 		unsigned int cpuset_mems_cookie;
 		do {

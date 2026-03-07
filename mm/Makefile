@@ -142,3 +142,4 @@ obj-$(CONFIG_SHRINKER_DEBUG) += shrinker_debug.o
 obj-y += unevictable.o
 obj-$(CONFIG_ASYNC_FORK) += async_fork.o
 obj-$(CONFIG_IEE) += haoc/
+obj-$(CONFIG_FILEMAP_LOCAL_ALLOC) += filemap_local.o
