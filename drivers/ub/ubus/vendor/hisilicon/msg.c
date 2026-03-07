@@ -626,7 +626,18 @@ int hi_message_sync_request_sched(struct message_device *mdev,
 int hi_message_private(struct message_device *mdev, struct msg_info *info,
 		       u8 opcode)
 {
-	return hi_message_sync(mdev, info, HISI_PRIVATE, opcode, false);
+	int ret, i = 1;
+
+	while (1) {
+		ret = hi_message_sync(mdev, info, HISI_PRIVATE, opcode, false);
+		if (ret != -ETIMEDOUT)
+			return ret;
+
+		i++;
+
+		if (!msg_retry || i > RETRY_COUNT)
+			return -ETIMEDOUT;
+	}
 }
 
 static struct message_ops hi_message_ops = {

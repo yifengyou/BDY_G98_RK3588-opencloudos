@@ -407,16 +407,6 @@ link_down_notify:
 	ub_notify_share_port(port, UB_PORT_EVENT_LINK_DOWN);
 }
 
-void ub_link_change_handler(struct work_struct *work)
-{
-	struct ub_port *port = container_of(work, struct ub_port, link_work);
-
-	if (port->link_event == UB_LINK_UP)
-		ublc_link_up_handle(port);
-	else
-		ublc_link_down_handle(port);
-}
-
 static void ub_link_handle_event(struct ub_port *port, enum ub_link_event event)
 {
 	if (event == UB_LINK_UP)

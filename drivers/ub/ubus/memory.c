@@ -145,6 +145,51 @@ int ub_mem_drain_state(u32 scna)
 }
 EXPORT_SYMBOL_GPL(ub_mem_drain_state);
 
+void ub_mem_drain_start_enhanced(void)
+{
+	struct ub_mem_device *mem_device;
+	struct ub_bus_controller *ubc;
+
+	list_for_each_entry(ubc, &ubc_list, node) {
+		mem_device = ubc->mem_device;
+		if (!mem_device) {
+			dev_warn(&ubc->dev, "ubc mem_device is null.\n");
+			continue;
+		}
+		if (mem_device->ops && mem_device->ops->mem_drain_start)
+			mem_device->ops->mem_drain_start(ubc);
+		else
+			dev_warn(&ubc->dev, "ub mem_device ops mem_drain_start is null.\n");
+	}
+}
+EXPORT_SYMBOL_GPL(ub_mem_drain_start_enhanced);
+
+int ub_mem_drain_state_enhanced(void)
+{
+	struct ub_mem_device *mem_device;
+	struct ub_bus_controller *ubc;
+	int ret = 0;
+
+	list_for_each_entry(ubc, &ubc_list, node) {
+		mem_device = ubc->mem_device;
+		if (!mem_device) {
+			dev_warn(&ubc->dev, "ubc mem_device is null.\n");
+			continue;
+		}
+
+		if (mem_device->ops && mem_device->ops->mem_drain_state) {
+			ret = mem_device->ops->mem_drain_state(ubc);
+			if (!ret)
+				return ret;
+		} else {
+			dev_warn(&ubc->dev, "ub memory decoder ops mem_drain_state is null.\n");
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ub_mem_drain_state_enhanced);
+
 int ub_mem_get_numa_id(u32 scna)
 {
 	struct ub_bus_controller *ubc;

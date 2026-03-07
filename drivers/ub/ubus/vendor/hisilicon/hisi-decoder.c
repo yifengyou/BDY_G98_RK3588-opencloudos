@@ -715,29 +715,35 @@ void hi_free_decoder_table(struct ub_decoder *decoder)
 
 int hi_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size)
 {
-	int ret;
 	struct decoder_map_info info = {
 		.pa = addr,
 		.size = size,
 	};
+	int ret;
 
-	if (size < SZ_1M)
-		size = SZ_1M;
+	info.size = ALIGN(info.size, SZ_1M);
 	ret = handle_table(decoder, &info, false);
 	if (ret)
 		return ret;
-	return hi_decoder_cmd_request(decoder, addr, size, TLBI_PARTIAL);
+	return hi_decoder_cmd_request(decoder, info.pa, info.size, TLBI_PARTIAL);
 }
 
 int hi_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
 {
-	if (info->size < SZ_1M)
-		info->size = SZ_1M;
+	info->size = ALIGN(info->size, SZ_1M);
+
 	ub_info(decoder->uent,
 		"decoder map, pa=%#llx, uba=%#llx, size=%#llx, cna=%#x, orderid=%#x, ordertype=%#x, eid_l=%#llx, eid_h=%#llx, upi=%#x src_eid=%#x\n",
 		info->pa, info->uba, info->size, info->tpg_num, info->order_id,
 		info->order_type, info->eid_low, info->eid_high, info->upi,
 		info->src_eid);
+
+	if (info->pa < decoder->mmio_base_addr ||
+	    info->pa + info->size - 1 > decoder->mmio_end_addr ||
+	    info->pa > info->pa + info->size - 1) {
+		pr_err("decoder map range check error\n");
+		return -EINVAL;
+	}
 
 	return handle_table(decoder, info, true);
 }

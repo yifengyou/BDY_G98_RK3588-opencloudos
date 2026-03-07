@@ -172,6 +172,7 @@ static void vfio_ub_intr_disable(struct vfio_ub_core_device *vdev)
 	vdev->irq_type = VFIO_UB_NUM_IRQS;
 	vdev->num_ctx = 0;
 	kfree(vdev->ctx);
+	vdev->ctx = NULL;
 }
 
 static int vfio_ub_intr_enable(struct vfio_ub_core_device *vdev, int nvec)
@@ -188,6 +189,7 @@ static int vfio_ub_intr_enable(struct vfio_ub_core_device *vdev, int nvec)
 		if (ret > 0)
 			ub_disable_intr(uent);
 		kfree(vdev->ctx);
+		vdev->ctx = NULL;
 		return ret;
 	}
 

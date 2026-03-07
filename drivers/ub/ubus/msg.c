@@ -103,8 +103,20 @@ void message_remove_device(struct ub_entity *uent)
 int message_sync_request(struct message_device *mdev, struct msg_info *info,
 			 u8 code)
 {
-	if (mdev->ops->sync_request)
-		return mdev->ops->sync_request(mdev, info, code);
+	int ret, i = 1;
+
+	if (mdev->ops->sync_request) {
+		while (1) {
+			ret = mdev->ops->sync_request(mdev, info, code);
+			if (ret != -ETIMEDOUT)
+				return ret;
+
+			i++;
+
+			if (!msg_retry || i > RETRY_COUNT)
+				return -ETIMEDOUT;
+		}
+	}
 
 	return -ENOTTY;
 }
@@ -131,8 +143,20 @@ EXPORT_SYMBOL_GPL(message_response);
 int message_sync_enum(struct message_device *mdev, struct msg_info *info,
 		      u8 cmd)
 {
-	if (mdev->ops->sync_enum)
-		return mdev->ops->sync_enum(mdev, info, cmd);
+	int ret, i = 1;
+
+	if (mdev->ops->sync_enum) {
+		while (1) {
+			ret = mdev->ops->sync_enum(mdev, info, cmd);
+			if (ret != -ETIMEDOUT)
+				return ret;
+
+			i++;
+
+			if (!msg_retry || i > RETRY_COUNT)
+				return -ETIMEDOUT;
+		}
+	}
 
 	return -ENOTTY;
 }

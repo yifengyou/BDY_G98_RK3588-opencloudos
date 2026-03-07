@@ -162,12 +162,14 @@ static u8 ub_idevice_pue_add_handler(struct ub_bus_controller *ubc, struct vdm_m
 	struct idev_pue_reg_pld *pld = &pkt->pd_reg_pld;
 	struct ub_entity *pue, *alloc_dev = NULL;
 	struct ue_map map = {};
+	char buf[SZ_64] = {};
 	u8 status;
 	int ret;
 
 	/* search corresponding device by guid in message payload */
 	pue = inner_ub_get_ent_by_guid((guid_t *)pld->guid, &ubc->devs);
 	if (!pue) {
+		(void)ub_show_guid((struct ub_guid *)pld->guid, buf);
 		dev_err(&ubc->dev, "find uent by guid in pue reg func failed\n");
 		status = UB_MSG_RSP_EXEC_ENODEV;
 		goto pue_reg_rsp;
