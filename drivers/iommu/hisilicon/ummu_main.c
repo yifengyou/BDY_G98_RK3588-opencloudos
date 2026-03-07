@@ -30,17 +30,16 @@
 #define UMMU_DRV_NAME "ummu"
 #define HISI_VENDOR_ID 0xCC08
 
-static bool en_sva_indep_page_table;
-module_param(en_sva_indep_page_table, bool, 0444);
-MODULE_PARM_DESC(
-	en_sva_indep_page_table,
-	"The user-mode sva uses an independent page table, does not share a process page table.");
+static bool sva_separated_mode;
+module_param(sva_separated_mode, bool, 0444);
+MODULE_PARM_DESC(sva_separated_mode,
+	"Enable user-mode SVA with an independent page table (no process page table sharing).");
 
 static u16 ummu_chip_identifier;
 
-bool ummu_sva_indep_page_table_enable(void)
+bool ummu_sva_separated_enabled(void)
 {
-	return en_sva_indep_page_table;
+	return sva_separated_mode;
 }
 
 int ummu_write_reg_sync(struct ummu_device *ummu, u32 val,
