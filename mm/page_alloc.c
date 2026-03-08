@@ -4473,6 +4473,18 @@ retry:
 	if (current->flags & PF_MEMALLOC)
 		goto nopage;
 
+	/*
+	 * Try global early OOM before entering heavy direct reclaim if
+	 * enabled and thresholds are exceeded. This reduces latency by
+	 * killing memory hogs early rather than spending time on reclaim.
+	 */
+	if (try_global_early_oom(ac->zonelist, ac->nodemask, gfp_mask)) {
+		/* Try allocation again after killing a process */
+		page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+		if (page)
+			goto got_pg;
+	}
+
 	/* Try direct reclaim and then allocating */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);

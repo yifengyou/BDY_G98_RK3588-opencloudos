@@ -1452,3 +1452,92 @@ bool try_early_oom(struct mem_cgroup *memcg)
 }
 
 #endif /* CONFIG_MEMCG */
+
+/*
+ * Global Early OOM implementation
+ * Triggers OOM kill early when system available memory falls below threshold
+ */
+
+/* sysctl parameters for global early OOM */
+int sysctl_global_early_oom __read_mostly;
+int sysctl_global_early_oom_threshold __read_mostly = 10;
+
+/*
+ * Check if global early OOM should be triggered.
+ * Triggers when system available memory falls below threshold percentage.
+ *
+ * Available memory calculation uses si_mem_available() which considers:
+ *   - Free pages minus reserved pages
+ *   - Reclaimable page cache (capped conservatively)
+ *   - Reclaimable slab memory
+ *
+ * This is similar to the memcg early OOM but works at system level.
+ */
+bool should_trigger_global_early_oom(void)
+{
+	long available;
+	unsigned long totalram, threshold_pages;
+	int threshold;
+
+	if (!READ_ONCE(sysctl_global_early_oom))
+		return false;
+
+	threshold = READ_ONCE(sysctl_global_early_oom_threshold);
+	if (threshold <= 0 || threshold > 100)
+		return false;
+
+	available = si_mem_available();
+	if (available < 0)
+		available = 0;
+
+	totalram = totalram_pages();
+	if (totalram == 0)
+		return false;
+
+	/*
+	 * Trigger early OOM when available memory falls below threshold%.
+	 * e.g., threshold=10 means trigger when available < 10% of total RAM.
+	 */
+	threshold_pages = totalram / 100 * threshold;
+	return (unsigned long)available < threshold_pages;
+}
+
+/*
+ * Try to trigger global early OOM.
+ * Returns true if an OOM kill was performed.
+ */
+bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
+			  gfp_t gfp_mask)
+{
+	struct oom_control oc = {
+		.zonelist = zonelist,
+		.nodemask = nodemask,
+		.memcg = NULL,
+		.gfp_mask = gfp_mask,
+		.order = 0,
+	};
+
+	if (!should_trigger_global_early_oom())
+		return false;
+
+	if (!mutex_trylock(&oom_lock))
+		return false;
+
+	/* Double check after acquiring the lock */
+	if (!should_trigger_global_early_oom()) {
+		mutex_unlock(&oom_lock);
+		return false;
+	}
+
+	if (!oom_killer_disabled) {
+		select_bad_process(&oc);
+		if (oc.chosen && oc.chosen != (void *)-1UL) {
+			oom_kill_process(&oc, "Global early OOM (low memory threshold)");
+			mutex_unlock(&oom_lock);
+			return true;
+		}
+	}
+
+	mutex_unlock(&oom_lock);
+	return false;
+}
