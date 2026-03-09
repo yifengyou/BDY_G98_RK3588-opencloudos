@@ -75,22 +75,18 @@
 #define MSR_IA32_UMWAIT_CONTROL			0xe1
 #define MSR_IA32_UMWAIT_CONTROL_C02_DISABLE	BIT(0)
 #define MSR_IA32_UMWAIT_CONTROL_RESERVED	BIT(1)
-
-#define MSR_ZX_PAUSE_CONTROL			0x187f
-#define MSR_ZX_PAUSE_CONTROL_C02_DISABLE	BIT(0)
-#define MSR_ZX_PAUSE_CONTROL_RESERVED		BIT(1)
-
 /*
  * The time field is bit[31:2], but representing a 32bit value with
  * bit[1:0] zero.
  */
 #define MSR_IA32_UMWAIT_CONTROL_TIME_MASK	(~0x03U)
 
+#define MSR_PAUSEOPT_CONTROL			0x187f
 /*
  * The time field is bit[31:2], but representing a 32bit value with
  * bit[1:0] zero.
  */
-#define MSR_ZX_PAUSE_CONTROL_TIME_MASK		(~0x03U)
+#define MSR_PAUSEOPT_CONTROL_TIME_MASK		(~0x03U)
 
 /* Abbreviated from Intel SDM name IA32_CORE_CAPABILITIES */
 #define MSR_IA32_CORE_CAPS			  0x000000cf
@@ -860,10 +856,10 @@
 
 /*
  * Zhaoxin extend VMCS capabilities:
- *     bit 0: exec-cntl3 VMCS field.
+ *	bit 0: exec-cntl3 VMCS field.
  */
-#define MSR_ZX_EXT_VMCS_CAPS                   0x1675
-#define MSR_ZX_VMCS_EXEC_CTL3                  BIT(0)
+#define MSR_ZX_EXT_VMCS_CAPS			0x1675
+#define MSR_ZX_VMCS_EXEC_CTL3_EN		BIT(0)
 
 /* Transmeta defined MSRs */
 #define MSR_TMTA_LONGRUN_CTRL		0x80868010
@@ -1200,6 +1196,9 @@
 #define MSR_IA32_VMX_TRUE_ENTRY_CTLS     0x00000490
 #define MSR_IA32_VMX_VMFUNC             0x00000491
 #define MSR_IA32_VMX_PROCBASED_CTLS3	0x00000492
+
+/* Zhaoxin VT MSRs */
+#define MSR_ZX_VMX_PROCBASED_CTLS3      0x12A7
 
 /* VMX_BASIC bits and bitmasks */
 #define VMX_BASIC_VMCS_SIZE_SHIFT	32

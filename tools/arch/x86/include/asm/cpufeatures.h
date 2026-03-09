@@ -496,8 +496,8 @@
 #define X86_FEATURE_HYGON_SM3		(29*32 + 1) /* "sm3" SM3 instructions */
 #define X86_FEATURE_HYGON_SM4		(29*32 + 2) /* "sm4" SM4 instructions */
 
-/* VIA/Cyrix/Centaur-defined CPU features, CPUID level 0xC0000006, word 21 */
-#define X86_FEATURE_ZXPAUSE		(30*32 + 0) /* ZHAOXIN ZXPAUSE */
+/* Zhaoxin/Centaur-defined CPU features, CPUID level 0xC0000006, word 30 */
+#define X86_FEATURE_PAUSEOPT            (30*32+ 0) /* ZHAOXIN PAUSEOPT */
 
 #define X86_FEATURE_PREFETCHI		(20*32+20) /* Prefetch Data/Instruction to Cache Level */
 
