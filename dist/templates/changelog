@@ -1,3 +1,14 @@
+* Mon Mar  9 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.4
+- scheduler: modify run_delay stat
+- mm: oom: implement global early oom for low memory threshold
+- mm: oom: implement early oom for memcg threshold
+- config,debug: enable CONFIG_KASAN_VMALLOC in debug.config
+- sched/ext: Fix scx vs sched_delayed
+- sched: Pass correct scheduling policy to __setscheduler_class
+- rue/scx: ensure compatibility to ignore cpu affinity for SCHED_EXT
+- sched/scx: Fix bugs in the backported some codes
+- enable firmware compression loading support for kernel
+
 * Mon Mar  2 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.3
 - Merge branch 'eevdf_complete_part2_2_11' into 'release' (merge request !959)
 - Merge branch 'eevdf_part1_arm_compile_failed' into 'release' (merge request !1014)
