@@ -27,8 +27,8 @@ config UB_UMMU_SVA_SEPARATED_PAGES
 	default n
 	help
 	  the hardware does not support IOPF capability, using SVA
-	  ared page tables can lead to page faults due to periodic
-	  mory tasks. By separating the process page table from the
+	  armed page tables can lead to page faults due to periodic
+	  memory tasks. By separating the process page table from the
 	  MMU page table, the goal of SVA programming is achieved.
 	  using SVA in this scenario say 'Y' here.
 endif
