@@ -186,17 +186,6 @@ void ubrt_fwnode_del(u32 index, enum ubrt_node_type type);
  */
 void ubrt_fwnode_del_all(void);
 
-/**
- * ubrt_get_interrupt_id() - Get the interrupt ID of an UMMU node
- * @ummu_map: Index of the UMMU device.
- * @intr_id: Pointer to the interrupt ID.
- *
- * Obtain the intr_id of ummu_node through ummu_map.
- *
- * Return: 0 if success, or error code if failed.
- */
-int ubrt_get_interrupt_id(u16 ummu_map, u32 *intr_id);
-
 #if IS_ENABLED(CONFIG_UB_UBFI)
 extern struct list_head ubc_list;
 extern u32 ubc_eid_start;
@@ -217,6 +206,12 @@ extern u8 ubc_feature;
  * information table.
  */
 void ubrt_iommu_get_resv_regions(struct device *dev, struct list_head *list);
+
+#else /* !CONFIG_UB_UBFI */
+
+static inline
+void ubrt_iommu_get_resv_regions(struct device *dev, struct list_head *list) {}
+
 #endif /* CONFIG_UB_UBFI */
 
 #endif /* _UB_UBFI_UBFI_H_ */
