@@ -17,8 +17,6 @@ void ub_mem_decoder_init(struct ub_entity *uent);
 void ub_mem_decoder_uninit(struct ub_entity *uent);
 void ub_mem_init_usi(struct ub_entity *uent);
 void ub_mem_uninit_usi(struct ub_entity *uent);
-void ub_mem_drain_start_enhanced(void);
-int ub_mem_drain_state_enhanced(void);
 
 struct ub_mem_ras_err_info {
 	enum ras_err_type type;
