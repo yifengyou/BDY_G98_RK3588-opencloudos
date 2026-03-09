@@ -47,7 +47,18 @@ void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 	update_avg(&stats->wait_avg, delta);
 	__schedstat_set(stats->wait_start, 0);
 }
+void update_last_queued(void)
+{
+	unsigned long now;
+	struct rq *rq;
 
+	rq = cpu_rq(smp_processor_id());
+	if (rq) {
+			now = rq->clock;
+			current->sched_info.last_queued = now;
+	}
+}
+EXPORT_SYMBOL(update_last_queued);
 void __update_stats_enqueue_sleeper(struct rq *rq, struct task_struct *p,
 				    struct sched_statistics *stats)
 {

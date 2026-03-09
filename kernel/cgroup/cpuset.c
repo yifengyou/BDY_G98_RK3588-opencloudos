@@ -3413,6 +3413,7 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 		cpu_total += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
 		cpu_total_v2 += cpu_total;
 
+		total_steal += steal;
 		if (!cgroup_subsys_on_dfl(cpuset_cgrp_subsys)) {
 			cpuacct_cgroupfs_cpu_usage(css, i, &sys, &usr);
 			acct_total = sys + usr;
@@ -3421,7 +3422,6 @@ int cpuset_cgroupfs_stat_cpuacct(struct cpuset *cs, struct seq_file *m, void *v,
 			total_sys += sys;
 			total_usr += usr;
 			total_idle += cpu_idle;
-			total_steal += steal;
 			if (k < num_cpu) {
 				res[k].sys = sys;
 				res[k].usr = usr;
