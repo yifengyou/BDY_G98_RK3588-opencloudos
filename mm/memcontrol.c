@@ -3467,6 +3467,7 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	unsigned int reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
 	bool drained = false;
 	bool raised_max_event = false;
+	bool early_oom_tried = false;
 	unsigned long pflags;
 	bool need_reclaim = sysctl_vm_memory_qos && memcg_reclaim_prio_exist();
 #ifdef CONFIG_CGROUP_SLI
@@ -3516,6 +3517,18 @@ retry_failed_reclaim:
 
 	memcg_memory_event(mem_over_limit, MEMCG_MAX);
 	raised_max_event = true;
+
+	/*
+	 * Try early OOM before entering heavy reclaim if enabled and
+	 * thresholds are exceeded. This reduces latency by killing
+	 * memory hogs early rather than spending time on reclaim.
+	 * Only try once per charge attempt to avoid infinite loops.
+	 */
+	if (!early_oom_tried && try_early_oom(mem_over_limit)) {
+		early_oom_tried = true;
+		goto retry;
+	}
+	early_oom_tried = true;
 
 	psi_memstall_enter(&pflags);
 #ifdef CONFIG_CGROUP_SLI
@@ -7193,6 +7206,12 @@ static int mem_cgroup_page_cache_hit_show(struct seq_file *m, void *v)
 static int memory_oom_group_show(struct seq_file *m, void *v);
 static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 				      char *buf, size_t nbytes, loff_t off);
+static int memory_early_oom_show(struct seq_file *m, void *v);
+static ssize_t memory_early_oom_write(struct kernfs_open_file *of,
+				     char *buf, size_t nbytes, loff_t off);
+static int memory_early_oom_threshold_show(struct seq_file *m, void *v);
+static ssize_t memory_early_oom_threshold_write(struct kernfs_open_file *of,
+					       char *buf, size_t nbytes, loff_t off);
 
 static struct cftype mem_cgroup_legacy_files[] = {
 	{
@@ -7288,6 +7307,18 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
 		.seq_show = memory_oom_group_show,
 		.write = memory_oom_group_write,
+	},
+	{
+		.name = "early_oom",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_early_oom_show,
+		.write = memory_early_oom_write,
+	},
+	{
+		.name = "early_oom_threshold",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_early_oom_threshold_show,
+		.write = memory_early_oom_threshold_write,
 	},
 	{
 		.name = "async_ratio",
@@ -7824,6 +7855,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #endif
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
+		/* Inherit early OOM settings from parent */
+		WRITE_ONCE(memcg->early_oom_enabled, READ_ONCE(parent->early_oom_enabled));
+		WRITE_ONCE(memcg->early_oom_threshold, READ_ONCE(parent->early_oom_threshold));
 		memcg->async_wmark = parent->async_wmark;
 		memcg->async_distance_factor = parent->async_distance_factor ?
 						: ASYNC_DISTANCE_DEF;
@@ -7857,6 +7891,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 
 	if (!parent) {
 		memcg->async_wmark_delta = -1;
+		/* Default early OOM threshold for root (inherited by children) */
+		WRITE_ONCE(memcg->early_oom_enabled, 0);
+		WRITE_ONCE(memcg->early_oom_threshold, 10);
 		root_mem_cgroup = memcg;
 		return &memcg->css;
 	}
@@ -9378,6 +9415,68 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static int memory_early_oom_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%d\n", READ_ONCE(memcg->early_oom_enabled));
+
+	return 0;
+}
+
+static ssize_t memory_early_oom_write(struct kernfs_open_file *of,
+				     char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret, enabled;
+
+	buf = strstrip(buf);
+	if (!buf)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 0, &enabled);
+	if (ret)
+		return ret;
+
+	if (enabled != 0 && enabled != 1)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->early_oom_enabled, enabled);
+
+	return nbytes;
+}
+
+static int memory_early_oom_threshold_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%d\n", READ_ONCE(memcg->early_oom_threshold));
+
+	return 0;
+}
+
+static ssize_t memory_early_oom_threshold_write(struct kernfs_open_file *of,
+					       char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret, threshold;
+
+	buf = strstrip(buf);
+	if (!buf)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 0, &threshold);
+	if (ret)
+		return ret;
+
+	if (threshold < 1 || threshold > 100)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->early_oom_threshold, threshold);
+
+	return nbytes;
+}
+
 static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 			      size_t nbytes, loff_t off)
 {
@@ -9592,6 +9691,18 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
 		.seq_show = memory_oom_group_show,
 		.write = memory_oom_group_write,
+	},
+	{
+		.name = "early_oom",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_early_oom_show,
+		.write = memory_early_oom_write,
+	},
+	{
+		.name = "early_oom_threshold",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_early_oom_threshold_show,
+		.write = memory_early_oom_threshold_write,
 	},
 	{
 		.name = "reclaim",

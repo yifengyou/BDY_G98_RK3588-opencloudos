@@ -122,4 +122,19 @@ extern int oom_evaluate_task(struct task_struct *task, void *arg);
 extern struct task_struct *find_lock_task_mm(struct task_struct *p);
 
 extern int sysctl_oom_kill_largest_task;
+
+/* Early OOM: Trigger OOM kill early when memcg available memory falls below threshold */
+extern bool try_early_oom(struct mem_cgroup *memcg);
+extern bool should_trigger_early_oom(struct mem_cgroup *memcg);
+
+/*
+ * Global Early OOM: Trigger OOM kill early when system available memory
+ * falls below threshold percentage.
+ */
+extern int sysctl_global_early_oom;
+extern int sysctl_global_early_oom_threshold;
+extern bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
+				 gfp_t gfp_mask);
+extern bool should_trigger_global_early_oom(void);
+
 #endif /* _INCLUDE_LINUX_OOM_H */

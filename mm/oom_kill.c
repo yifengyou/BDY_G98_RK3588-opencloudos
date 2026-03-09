@@ -1305,3 +1305,239 @@ put_task:
 	return -ENOSYS;
 #endif /* CONFIG_MMU */
 }
+
+/*
+ * Early OOM implementation for memory cgroups
+ * Triggers OOM kill early when memcg available memory falls below threshold
+ */
+#ifdef CONFIG_MEMCG
+
+/*
+ * Calculate available memory for a memcg, considering reclaimable page cache.
+ * Similar to system-level MemAvailable calculation:
+ *   available = free + reclaimable_cache
+ * where:
+ *   free = limit - usage
+ *   reclaimable_cache = file_pages - shmem (shmem is not reclaimable)
+ *
+ * We use half of reclaimable cache to be conservative, similar to how
+ * si_mem_available() caps pagecache contribution.
+ *
+ * Note: There's an inherent race between reading file_pages and shmem.
+ * This is acceptable as memcg stats are approximate by design (percpu
+ * batching), and this is used for heuristic decisions. The same pattern
+ * is used in mem_cgroup_wb_stats() and other kernel code.
+ */
+static unsigned long memcg_available_memory(struct mem_cgroup *memcg)
+{
+	unsigned long usage, limit, free_pages;
+	unsigned long file_pages, shmem, reclaimable;
+
+	usage = page_counter_read(&memcg->memory);
+	limit = READ_ONCE(memcg->memory.max);
+
+	if (limit == PAGE_COUNTER_MAX || limit == 0)
+		return ULONG_MAX;
+
+	/* Free memory in the cgroup */
+	free_pages = (usage < limit) ? (limit - usage) : 0;
+
+	/*
+	 * Reclaimable page cache: file pages minus shmem.
+	 * Shmem (tmpfs, shared memory) is not reclaimable without swapping.
+	 *
+	 * Read both values and handle potential inconsistency due to
+	 * concurrent updates. If shmem > file_pages due to race, treat
+	 * reclaimable as 0 (conservative fallback).
+	 */
+	file_pages = memcg_page_state(memcg, NR_FILE_PAGES);
+	shmem = memcg_page_state(memcg, NR_SHMEM);
+	reclaimable = (file_pages > shmem) ? (file_pages - shmem) : 0;
+
+	/*
+	 * Use half of reclaimable cache to be conservative.
+	 * Not all page cache can be freed - some is actively used.
+	 */
+	return free_pages + reclaimable / 2;
+}
+
+/*
+ * Check if early OOM should be triggered for a memcg
+ * Triggers when available memory falls below threshold percentage of limit
+ */
+bool should_trigger_early_oom(struct mem_cgroup *memcg)
+{
+	unsigned long limit, available, threshold_pages;
+	int threshold;
+
+	if (!memcg || memcg == root_mem_cgroup)
+		return false;
+
+	/* Check if OOM killer is disabled for this memcg */
+	if (READ_ONCE(memcg->oom_kill_disable))
+		return false;
+
+	if (!READ_ONCE(memcg->early_oom_enabled))
+		return false;
+
+	threshold = READ_ONCE(memcg->early_oom_threshold);
+	if (threshold <= 0 || threshold > 100)
+		return false;
+
+	limit = READ_ONCE(memcg->memory.max);
+	if (limit == PAGE_COUNTER_MAX || limit == 0)
+		return false;
+
+	available = memcg_available_memory(memcg);
+	if (available == ULONG_MAX)
+		return false;
+
+	/*
+	 * Trigger early OOM when available memory falls below threshold%.
+	 * e.g., threshold=10 means trigger when available < 10% of limit.
+	 */
+	threshold_pages = limit / 100 * threshold;
+	return available < threshold_pages;
+}
+
+/*
+ * Try to trigger early OOM for a memcg
+ * Returns true if an OOM kill was performed
+ */
+bool try_early_oom(struct mem_cgroup *memcg)
+{
+	struct oom_control oc = {
+		.zonelist = NULL,
+		.nodemask = NULL,
+		.memcg = memcg,
+		.gfp_mask = GFP_KERNEL,
+		.order = 0,
+	};
+
+	if (!should_trigger_early_oom(memcg))
+		return false;
+
+	if (!mutex_trylock(&oom_lock))
+		return false;
+
+	/* Double check after acquiring the lock */
+	if (!should_trigger_early_oom(memcg)) {
+		mutex_unlock(&oom_lock);
+		return false;
+	}
+
+	if (!oom_killer_disabled) {
+		select_bad_process(&oc);
+		if (oc.chosen && oc.chosen != (void *)-1UL) {
+			oom_kill_process(&oc, "Early OOM (memcg threshold)");
+			mutex_unlock(&oom_lock);
+			return true;
+		}
+	}
+
+	mutex_unlock(&oom_lock);
+	return false;
+}
+
+#else /* CONFIG_MEMCG */
+
+bool should_trigger_early_oom(struct mem_cgroup *memcg)
+{
+	return false;
+}
+
+bool try_early_oom(struct mem_cgroup *memcg)
+{
+	return false;
+}
+
+#endif /* CONFIG_MEMCG */
+
+/*
+ * Global Early OOM implementation
+ * Triggers OOM kill early when system available memory falls below threshold
+ */
+
+/* sysctl parameters for global early OOM */
+int sysctl_global_early_oom __read_mostly;
+int sysctl_global_early_oom_threshold __read_mostly = 10;
+
+/*
+ * Check if global early OOM should be triggered.
+ * Triggers when system available memory falls below threshold percentage.
+ *
+ * Available memory calculation uses si_mem_available() which considers:
+ *   - Free pages minus reserved pages
+ *   - Reclaimable page cache (capped conservatively)
+ *   - Reclaimable slab memory
+ *
+ * This is similar to the memcg early OOM but works at system level.
+ */
+bool should_trigger_global_early_oom(void)
+{
+	long available;
+	unsigned long totalram, threshold_pages;
+	int threshold;
+
+	if (!READ_ONCE(sysctl_global_early_oom))
+		return false;
+
+	threshold = READ_ONCE(sysctl_global_early_oom_threshold);
+	if (threshold <= 0 || threshold > 100)
+		return false;
+
+	available = si_mem_available();
+	if (available < 0)
+		available = 0;
+
+	totalram = totalram_pages();
+	if (totalram == 0)
+		return false;
+
+	/*
+	 * Trigger early OOM when available memory falls below threshold%.
+	 * e.g., threshold=10 means trigger when available < 10% of total RAM.
+	 */
+	threshold_pages = totalram / 100 * threshold;
+	return (unsigned long)available < threshold_pages;
+}
+
+/*
+ * Try to trigger global early OOM.
+ * Returns true if an OOM kill was performed.
+ */
+bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
+			  gfp_t gfp_mask)
+{
+	struct oom_control oc = {
+		.zonelist = zonelist,
+		.nodemask = nodemask,
+		.memcg = NULL,
+		.gfp_mask = gfp_mask,
+		.order = 0,
+	};
+
+	if (!should_trigger_global_early_oom())
+		return false;
+
+	if (!mutex_trylock(&oom_lock))
+		return false;
+
+	/* Double check after acquiring the lock */
+	if (!should_trigger_global_early_oom()) {
+		mutex_unlock(&oom_lock);
+		return false;
+	}
+
+	if (!oom_killer_disabled) {
+		select_bad_process(&oc);
+		if (oc.chosen && oc.chosen != (void *)-1UL) {
+			oom_kill_process(&oc, "Global early OOM (low memory threshold)");
+			mutex_unlock(&oom_lock);
+			return true;
+		}
+	}
+
+	mutex_unlock(&oom_lock);
+	return false;
+}
