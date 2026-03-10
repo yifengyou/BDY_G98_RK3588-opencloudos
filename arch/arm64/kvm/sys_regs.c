@@ -1400,6 +1400,7 @@ static u64 __kvm_read_sanitised_id_reg(const struct kvm_vcpu *vcpu,
 
 		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_SME);
 		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_NMI);
+		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_NMI), vcpu->kvm->arch.pfr1_nmi);
 		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MPAM_frac);
 		break;
 	case SYS_ID_AA64ISAR1_EL1:
@@ -1700,6 +1701,14 @@ static int set_id_aa64pfr1_el1(struct kvm_vcpu *vcpu,
 {
 	u64 hw_val = read_sanitised_ftr_reg(SYS_ID_AA64PFR1_EL1);
 	u64 mpam_mask = ID_AA64PFR1_EL1_MPAM_frac_MASK;
+	u8 nmi;
+
+	nmi = cpuid_feature_extract_unsigned_field(user_val, ID_AA64PFR1_EL1_NMI_SHIFT);
+	if (nmi > ID_AA64PFR1_EL1_NMI_IMP ||
+		(nmi && (!cpus_have_const_cap(ARM64_HAS_NMI) || static_branch_unlikely(&vgic_v3_cpuif_trap))))
+		return -EINVAL;
+
+	vcpu->kvm->arch.pfr1_nmi = nmi;
 
 	/* See set_id_aa64pfr0_el1 for comment about MPAM */
 	if ((hw_val & mpam_mask) == (user_val & mpam_mask))
@@ -2072,6 +2081,9 @@ static bool access_spsr(struct kvm_vcpu *vcpu,
  * guest...
  */
 static const struct sys_reg_desc sys_reg_descs[] = {
+	{ SYS_DESC(SYS_ALLINT_CLR), undef_access },
+	{ SYS_DESC(SYS_ALLINT_SET), undef_access },
+
 	{ SYS_DESC(SYS_DC_ISW), access_dcsw },
 	{ SYS_DESC(SYS_DC_IGSW), access_dcgsw },
 	{ SYS_DESC(SYS_DC_IGDSW), access_dcgsw },
@@ -2295,6 +2307,8 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ SYS_DESC(SYS_SPSR_EL1), access_spsr},
 	{ SYS_DESC(SYS_ELR_EL1), access_elr},
 
+	{ SYS_DESC(SYS_ALLINT), undef_access },
+
 	{ SYS_DESC(SYS_AFSR0_EL1), access_vm_reg, reset_unknown, AFSR0_EL1 },
 	{ SYS_DESC(SYS_AFSR1_EL1), access_vm_reg, reset_unknown, AFSR1_EL1 },
 	{ SYS_DESC(SYS_ESR_EL1), access_vm_reg, reset_unknown, ESR_EL1 },
@@ -2353,6 +2367,7 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ SYS_DESC(SYS_ICC_IAR0_EL1), write_to_read_only },
 	{ SYS_DESC(SYS_ICC_EOIR0_EL1), read_from_write_only },
 	{ SYS_DESC(SYS_ICC_HPPIR0_EL1), write_to_read_only },
+	{ SYS_DESC(SYS_ICC_NMIAR1_EL1), undef_access },
 	{ SYS_DESC(SYS_ICC_DIR_EL1), read_from_write_only },
 	{ SYS_DESC(SYS_ICC_RPR_EL1), write_to_read_only },
 	{ SYS_DESC(SYS_ICC_SGI1R_EL1), access_gic_sgi },

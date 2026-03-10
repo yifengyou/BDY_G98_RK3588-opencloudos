@@ -174,8 +174,16 @@ static inline bool has_v3_3_nmi(void)
 {
 	return gic_data.has_nmi && system_uses_nmi();
 }
+static bool system_is_nmi_capable(void)
+{
+	return gic_data.has_nmi && cpus_have_const_cap(ARM64_HAS_NMI);
+}
 #else
 static inline bool has_v3_3_nmi(void)
+{
+	return false;
+}
+static bool system_is_nmi_capable(void)
 {
 	return false;
 }
@@ -2432,6 +2440,7 @@ static void __init gic_of_setup_kvm_info(struct device_node *node)
 
 	gic_v3_kvm_info.has_v4 = gic_data.rdists.has_vlpis;
 	gic_v3_kvm_info.has_v4_1 = gic_data.rdists.has_rvpeid;
+	gic_v3_kvm_info.has_nmi = system_is_nmi_capable();
 	vgic_set_kvm_info(&gic_v3_kvm_info);
 }
 
@@ -2774,6 +2783,7 @@ static void __init gic_acpi_setup_kvm_info(void)
 
 	gic_v3_kvm_info.has_v4 = gic_data.rdists.has_vlpis;
 	gic_v3_kvm_info.has_v4_1 = gic_data.rdists.has_rvpeid;
+	gic_v3_kvm_info.has_nmi = system_is_nmi_capable();
 	vgic_set_kvm_info(&gic_v3_kvm_info);
 }
 
