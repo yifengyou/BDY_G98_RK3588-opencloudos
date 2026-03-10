@@ -136,7 +136,7 @@ bool __init microcode_loader_disabled(void)
 void __init load_ucode_bsp(void)
 {
 	unsigned int cpuid_1_eax;
-	bool intel = true;
+	unsigned int x86_vendor;
 
 	if (cmdline_find_option_bool(boot_command_line, "dis_ucode_ldr") > 0)
 		dis_ucode_ldr = true;
@@ -145,8 +145,9 @@ void __init load_ucode_bsp(void)
 		return;
 
 	cpuid_1_eax = native_cpuid_eax(1);
+	x86_vendor = x86_cpuid_vendor();
 
-	switch (x86_cpuid_vendor()) {
+	switch (x86_vendor) {
 	case X86_VENDOR_INTEL:
 		if (x86_family(cpuid_1_eax) < 6)
 			return;
@@ -155,21 +156,36 @@ void __init load_ucode_bsp(void)
 	case X86_VENDOR_AMD:
 		if (x86_family(cpuid_1_eax) < 0x10)
 			return;
-		intel = false;
 		break;
 
 	case X86_VENDOR_HYGON:
-		intel = false;
+		break;
+
+	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
+		if ((cpuid_eax(0xC0000000) < 0xC0000004) || !(cpuid_edx(0xC0000004) & 0x1))
+			return;
 		break;
 
 	default:
 		return;
 	}
 
-	if (intel)
+	switch (x86_vendor) {
+	case X86_VENDOR_INTEL:
 		load_ucode_intel_bsp(&early_data);
-	else
+		break;
+	case X86_VENDOR_AMD:
+	case X86_VENDOR_HYGON:
 		load_ucode_amd_bsp(&early_data, cpuid_1_eax);
+		break;
+	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
+		load_ucode_zhaoxin_bsp(&early_data);
+		break;
+	default:
+		return;
+	}
 }
 
 void load_ucode_ap(void)
@@ -197,6 +213,11 @@ void load_ucode_ap(void)
 		break;
 	case X86_VENDOR_HYGON:
 		load_ucode_amd_ap(cpuid_1_eax);
+		break;
+	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
+		if ((cpuid_eax(0xC0000000) >= 0xC0000004) && (cpuid_edx(0xC0000004) & 0x1))
+			load_ucode_zhaoxin_ap();
 		break;
 	default:
 		break;
@@ -259,6 +280,10 @@ static void reload_early_microcode(unsigned int cpu)
 		break;
 	case X86_VENDOR_HYGON:
 		reload_ucode_amd(cpu);
+		break;
+	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
+		reload_ucode_zhaoxin();
 		break;
 	default:
 		break;
@@ -849,6 +874,9 @@ static int __init microcode_init(void)
 		microcode_ops = init_amd_microcode();
 	else if (c->x86_vendor == X86_VENDOR_HYGON)
 		microcode_ops = init_hygon_microcode();
+	else if (c->x86_vendor == X86_VENDOR_ZHAOXIN ||
+		 c->x86_vendor == X86_VENDOR_CENTAUR)
+		microcode_ops = init_zhaoxin_microcode();
 	else
 		pr_err("no support for this CPU vendor\n");
 
