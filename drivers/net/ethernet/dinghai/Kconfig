@@ -1,0 +1,97 @@
+config NET_VENDOR_DINGHAI
+    tristate "Dinghai Devices"
+    depends on (X86 || ARM64)
+    default y
+    help
+      If you have a Ethernet DINGHAI device belonging to this
+	  class, say y.
+
+if NET_VENDOR_DINGHAI
+
+config DINGHAI_DH_CMD
+    tristate "Dinghai DH_CMD Support"
+    depends on (X86 || ARM64)
+    default m
+    help
+      Command interface for Dinghai devices.
+
+config DINGHAI_EN_AUX
+    tristate "Dinghai Auxiliary Support"
+    depends on (X86 || ARM64)
+    default y
+    help
+      Auxiliary functionality for Dinghai devices.
+
+config DINGHAI_NP
+    tristate "Dinghai NP Support"
+    default m
+    depends on DINGHAI_DH_CMD && (X86 || ARM64)
+    help
+      Network Processor (NP) support. Requires DINGHAI_DH_CMD.
+
+config DINGHAI_PTP
+    tristate "Dinghai PTP Support"
+    depends on (X86 || ARM64)
+    default m
+    depends on DINGHAI_DH_CMD && PTP_1588_CLOCK && (X86 || ARM64)
+    help
+      Precision Time Protocol (PTP) support. Requires DINGHAI_DH_CMD and PTP_1588_CLOCK.
+
+config DINGHAI_TSN
+    bool "Dinghai Support TSN Macro"
+    depends on (X86 || ARM64)
+    default y
+    help
+      Enable TSN-related compile-time macros.
+
+config DINGHAI_TSN_M
+    tristate "Dinghai TSN Module Support"
+    depends on (X86 || ARM64)
+    default m
+    help
+      TSN runtime module support.
+
+config ZXDH_SF
+    tristate "Dinghai SF Support"
+    depends on (X86 || ARM64)
+    default y
+    help
+      Sub-Function (SF) support.
+
+config ZXDH_MSGQ
+    tristate "Dinghai MSGQ Support"
+    depends on (X86 || ARM64)
+    default m
+    help
+      Message queue support.
+
+config DINGHAI_SEC
+    tristate "Dinghai SEC Support"
+    depends on (X86 || ARM64)
+    default n
+    help
+      Security (SEC) module support.
+
+config DINGHAI_AUXILIARY
+    tristate "Dinghai AUXILIARY Support"
+    depends on (X86 || ARM64)
+    default m
+    help
+      Enable Dinghai AUXILIARY module Support
+
+# Main PF driver
+config DINGHAI_PF
+    tristate "Dinghai PF Support"
+    default m
+    depends on DINGHAI_DH_CMD
+    depends on DINGHAI_AUXILIARY
+    depends on DINGHAI_NP
+    depends on DINGHAI_PTP
+    depends on DINGHAI_TSN_M
+    depends on (X86 || ARM64)
+    help
+      Primary Function (PF) driver for Dinghai devices.
+      This driver requires CMD, Auxiliary, NP, PTP, and TSN modules.
+      Note: PTP also requires PTP_1588_CLOCK to be enabled.
+
+endif # NET_VENDOR_DINGHAI
