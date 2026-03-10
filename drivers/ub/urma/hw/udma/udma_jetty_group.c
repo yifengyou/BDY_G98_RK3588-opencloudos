@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
-/* Copyright(c) 2025 HiSilicon Technologies CO., Ltd. All rights reserved. */
+/* Copyright(c) 2026 HiSilicon Technologies CO., Ltd. All rights reserved. */
 
 #define dev_fmt(fmt) "UDMA: " fmt
 #define pr_fmt(fmt) "UDMA: " fmt

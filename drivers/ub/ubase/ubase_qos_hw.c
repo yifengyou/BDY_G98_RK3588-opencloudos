@@ -861,7 +861,6 @@ static void ubase_init_udma_dscp_vl(struct ubase_dev *udev)
 
 static void ubase_parse_max_vl(struct ubase_dev *udev)
 {
-	struct ubase_adev_caps *udma_caps = &udev->caps.udma_caps;
 	struct ubase_adev_qos *qos = &udev->qos.adev_qos;
 	u8 i, ue_max_vl_id = 0;
 
@@ -879,7 +878,7 @@ static void ubase_parse_max_vl(struct ubase_dev *udev)
 	qos->ue_max_vl_id = ue_max_vl_id;
 
 	if (ubase_dev_urma_supported(udev) && !udev->use_fixed_rc_num)
-		udma_caps->rc_max_cnt *= (ue_max_vl_id + 1);
+		udev->caps.udma_caps.rc_max_cnt *= (ue_max_vl_id + 1);
 }
 
 static u8 ubase_get_nic_max_vl(struct ubase_dev *udev)
@@ -953,7 +952,7 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 
 	if (!cdma_vl_cnt) {
 		ubase_err(udev, "cdma doesn't have any vl.\n");
-		return -EIO;
+		return -EINVAL;
 	}
 
 	udev->qos.adev_qos.ctp_vl_num = cdma_vl_cnt;
@@ -1004,10 +1003,18 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 		return ret;
 	}
 
+	/* For compatibility, if the control plane returns 0,
+	 * the value returned by the IMP is used by default.
+	 */
 	rc_max_cnt = le16_to_cpu(resp.rc_max_cnt);
 	if (rc_max_cnt != 0) {
 		udev->use_fixed_rc_num = true;
 		udev->caps.udma_caps.rc_max_cnt = rc_max_cnt;
+	}
+
+	if (!udev->caps.udma_caps.rc_max_cnt) {
+		ubase_err(udev, "rc max cnt is zero.\n");
+		return -EINVAL;
 	}
 
 	unic_sl_bitmap = le16_to_cpu(resp.unic_sl_bitmap);
@@ -1030,12 +1037,12 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 
 	if (!unic_sl_cnt) {
 		ubase_err(udev, "nic doesn't have any sl.\n");
-		return -EIO;
+		return -EINVAL;
 	}
 
 	if (!ubase_check_udma_sl_valid(udev, udma_tp_sl_cnt, udma_ctp_sl_cnt)) {
 		ubase_err(udev, "udma doesn't have any sl.\n");
-		return -EIO;
+		return -EINVAL;
 	}
 
 	udev->qos.adev_qos.nic_sl_num = unic_sl_cnt;

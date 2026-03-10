@@ -24,7 +24,6 @@
 #include "udma_jfr.h"
 #include "udma_cmd.h"
 #include "udma_ctx.h"
-#include "udma_rct.h"
 #include "udma_tid.h"
 #include "udma_dfx.h"
 #include "udma_eid.h"
@@ -144,8 +143,7 @@ static void udma_set_dev_caps(struct ubcore_device_attr *attr, struct udma_dev *
 	attr->port_cnt = udma_dev->caps.port_num;
 	attr->dev_cap.ceq_cnt = udma_dev->caps.comp_vector_cnt;
 	attr->dev_cap.max_ue_cnt = udma_dev->caps.ue_cnt;
-	attr->dev_cap.max_rc = udma_dev->caps.rc_queue_num;
-	attr->dev_cap.max_rc_depth = udma_dev->caps.rc_queue_depth;
+	attr->dev_cap.max_rc = udma_dev->caps.rc_max_cnt;
 	attr->dev_cap.max_eid_cnt = udma_dev->caps.seid.max_cnt;
 	attr->dev_cap.feature.bs.jfc_inline = (udma_dev->caps.feature &
 					       UDMA_CAP_FEATURE_JFC_INLINE) ? 1 : 0;
@@ -243,6 +241,22 @@ static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *
 
 static void udma_disassociate_ucontext(struct ubcore_ucontext *uctx)
 {
+}
+
+static int udma_config_device(struct ubcore_device *ubcore_dev,
+			      struct ubcore_device_cfg *cfg)
+{
+	struct udma_dev *dev = to_udma_dev(ubcore_dev);
+
+	if ((cfg->mask.bs.reserved_jetty_id_min && cfg->reserved_jetty_id_min != 0) ||
+	    (cfg->mask.bs.reserved_jetty_id_max && cfg->reserved_jetty_id_max !=
+	    dev->caps.public_jetty.max_cnt - 1)) {
+		dev_err(dev->dev, "public jetty range must 0-%u.\n",
+			dev->caps.public_jetty.max_cnt - 1);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static struct ubcore_ops g_dev_ops = {
@@ -740,7 +754,6 @@ static int udma_query_wqebb_va(struct udma_dev *dev)
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
-#define RC_QUEUE_ENTRY_SIZE 64
 	struct ubase_adev_caps *a_caps;
 	uint32_t jetty_grp_cnt;
 	int ret;
@@ -766,13 +779,9 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.jetty.start_idx = a_caps->jfs.start_idx;
 	udma_dev->caps.jetty.next_idx = udma_dev->caps.jetty.start_idx;
 	udma_dev->caps.cqe_size = UDMA_CQE_SIZE;
-	udma_dev->caps.rc_queue_num = a_caps->rc_max_cnt;
-	udma_dev->caps.rc_queue_depth = a_caps->rc_que_depth;
-	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
-	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
-	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
 	udma_dev->caps.ipourma_en = ubase_adev_ip_over_urma_supported(udma_dev->comdev.adev);
 	udma_dev->caps.ctp_en = !(ubase_adev_ip_over_urma_utp_supported(udma_dev->comdev.adev));
+	udma_dev->caps.rc_max_cnt = a_caps->rc_max_cnt;
 
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)

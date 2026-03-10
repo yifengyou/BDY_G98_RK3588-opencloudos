@@ -125,7 +125,6 @@ struct udma_dev {
 	struct udma_table jfc_table;
 	struct udma_table jetty_grp_table;
 	struct udma_ida rsvd_jetty_ida_table;
-	struct udma_table rc_table;
 	struct xarray crq_nb_table;
 	struct xarray npu_nb_table;
 	struct mutex npu_nb_mutex;

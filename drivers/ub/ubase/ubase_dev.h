@@ -180,6 +180,12 @@ struct ubase_tp_layer_ctx {
 	struct ubase_tpg	*tpg;
 };
 
+struct ubase_rc_queue {
+	dma_addr_t	iova;
+	void		*va;
+	struct page	*page;
+};
+
 struct ubase_reset_stat {
 	u32 reset_done_cnt;
 	u32 hw_reset_done_cnt;
@@ -387,6 +393,7 @@ struct ubase_dev {
 	struct ubase_ctx_buf	ctx_buf;
 	struct ubase_ta_layer_ctx	ta_ctx;
 	struct ubase_tp_layer_ctx	tp_ctx;
+	struct ubase_rc_queue	*rc_entry;
 	u32			cap_bits[UBASE_CAP_LEN];
 	struct ubase_irq_table	irq_table;
 	struct ubase_mbox_cmd	mb_cmd;

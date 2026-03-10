@@ -15,6 +15,7 @@
 #include "ubase_hw.h"
 #include "ubase_mailbox.h"
 #include "ubase_pmem.h"
+#include "ubase_rct.h"
 #include "ubase_reset.h"
 #include "ubase_stats.h"
 #include "ubase_dev.h"
@@ -800,6 +801,10 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 	{
 		"init hw", UBASE_SUP_NO_PMU, 1,
 		ubase_hw_init, ubase_hw_uninit
+	},
+	{
+		"init rc buf", UBASE_SUP_UDMA, 1,
+		ubase_rc_init, ubase_rc_uninit
 	},
 	{
 		"init debugfs", UBASE_SUP_ALL, 0,

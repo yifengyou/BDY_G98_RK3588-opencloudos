@@ -785,53 +785,6 @@ void udma_k_free_buf(struct udma_dev *dev, struct udma_buf *buf)
 		udma_free_normal_buf(dev, size, buf);
 }
 
-void *udma_alloc_iova(struct udma_dev *udma_dev, size_t memory_size, dma_addr_t *addr)
-{
-	struct iova_slot *slot;
-	uint32_t npage;
-	size_t sizep;
-	int ret;
-
-	slot = dma_alloc_iova(udma_dev->dev, memory_size, 0, addr, &sizep);
-	if (IS_ERR_OR_NULL(slot)) {
-		dev_err(udma_dev->dev,
-			"failed to dma alloc iova, size = %lu, ret = %ld.\n",
-			memory_size, PTR_ERR(slot));
-		return NULL;
-	}
-
-	npage = sizep >> PAGE_SHIFT;
-	ret = ummu_fill_pages(slot, *addr, npage);
-	if (ret) {
-		dev_err(udma_dev->dev,
-			"ummu fill pages failed, npage = %u, ret = %d", npage, ret);
-		dma_free_iova(slot);
-		return NULL;
-	}
-
-	return (void *)slot;
-}
-
-void udma_free_iova(struct udma_dev *udma_dev, size_t memory_size, void *kva_or_slot,
-		    dma_addr_t addr)
-{
-	size_t aligned_memory_size;
-	struct iova_slot *slot;
-	uint32_t npage;
-	int ret;
-
-	aligned_memory_size = PAGE_ALIGN(memory_size);
-	npage = aligned_memory_size >> PAGE_SHIFT;
-	slot = (struct iova_slot *)kva_or_slot;
-	ret = ummu_drain_pages(slot, addr, npage);
-	if (ret)
-		dev_err(udma_dev->dev,
-			"ummu drain pages failed, npage = %u, ret = %d.\n",
-			npage, ret);
-
-	dma_free_iova(slot);
-}
-
 int udma_query_ue_idx(struct ubcore_device *ubcore_dev, struct ubcore_devid *devid,
 		      uint16_t *ue_idx)
 {

@@ -104,6 +104,19 @@ static void ubase_check_dev_caps_comm(struct ubase_dev *udev)
 	}
 }
 
+static int ubase_check_dev_caps_rct(struct ubase_dev *udev)
+{
+	if (!ubase_dev_udma_supported(udev))
+		return 0;
+
+	if (!udev->caps.udma_caps.rc_que_depth) {
+		ubase_err(udev, "failed to check rct caps: depth = 0.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int ubase_check_dev_caps_extdb(struct ubase_dev *udev)
 {
 	UBASE_DEFINE_TA_DMA_BUFS(udev);
@@ -122,7 +135,13 @@ static int ubase_check_dev_caps_extdb(struct ubase_dev *udev)
 
 static int ubase_check_dev_caps(struct ubase_dev *udev)
 {
+	int ret;
+
 	ubase_check_dev_caps_comm(udev);
+
+	ret = ubase_check_dev_caps_rct(udev);
+	if (ret)
+		return ret;
 
 	return ubase_check_dev_caps_extdb(udev);
 }

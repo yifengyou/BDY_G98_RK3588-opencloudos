@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
-/* Copyright(c) 2025 HiSilicon Technologies CO., Ltd. All rights reserved. */
+/* Copyright(c) 2026 HiSilicon Technologies CO., Ltd. All rights reserved. */
 
 #ifndef __UDMA_JETTY_GROUP_H__
 #define __UDMA_JETTY_GROUP_H__
