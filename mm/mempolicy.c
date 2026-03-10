@@ -2198,7 +2198,8 @@ bool mempolicy_in_oom_domain(struct task_struct *tsk,
 }
 
 static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
-						int nid, nodemask_t *nodemask)
+						int nid, nodemask_t *nodemask,
+						nodemask_t *fallback_nodemask)
 {
 	struct page *page;
 	gfp_t preferred_gfp;
@@ -2206,16 +2207,41 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	/*
 	 * This is a two pass approach. The first pass will only try the
 	 * preferred nodes but skip the direct reclaim and allow the
-	 * allocation to fail, while the second pass will try all the
-	 * nodes in system.
+	 * allocation to fail. The second pass will try fallback nodes
+	 * if specified, otherwise all nodes in system.
 	 */
 	preferred_gfp = gfp | __GFP_NOWARN;
 	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
 	page = __alloc_pages(preferred_gfp, order, nid, nodemask);
 	if (!page)
-		page = __alloc_pages(gfp, order, nid, NULL);
+		page = __alloc_pages(gfp, order, nid, fallback_nodemask);
 
 	return page;
+}
+
+/**
+ * mpol_update_interleave_stats - Update interleave allocation hit statistics
+ * @pol: Pointer to the NUMA mempolicy
+ * @page: Allocated page
+ * @nid: The node id that was targeted for allocation
+ *
+ * This function checks if the allocation is for interleave policy and updates
+ * NUMA interleave hit statistics when the allocation hits the targeted node.
+ * Should be called after page allocation for MPOL_INTERLEAVE and
+ * MPOL_WEIGHTED_INTERLEAVE policies.
+ */
+static void mpol_update_interleave_stats(struct mempolicy *pol, struct page *page, int nid)
+{
+	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
+		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {
+		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
+		if (static_branch_likely(&vm_numa_stat_key) &&
+		    page_to_nid(page) == nid) {
+			preempt_disable();
+			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
+			preempt_enable();
+		}
+	}
 }
 
 /**
@@ -2237,7 +2263,7 @@ struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		return alloc_pages_preferred_many(gfp, order, nid, nodemask, NULL);
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2274,16 +2300,7 @@ struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 
 	page = __alloc_pages(gfp, order, nid, nodemask);
 
-	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
-		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {
-		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
-		if (static_branch_likely(&vm_numa_stat_key) &&
-		    page_to_nid(page) == nid) {
-			preempt_disable();
-			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
-			preempt_enable();
-		}
-	}
+	mpol_update_interleave_stats(pol, page, nid);
 
 	return page;
 }
