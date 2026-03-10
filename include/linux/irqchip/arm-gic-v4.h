@@ -26,6 +26,11 @@ struct its_vm {
 	unsigned long		*db_bitmap;
 	int			nr_db_lpis;
 	u32			vlpi_count[GICv4_ITS_LIST_MAX];
+#ifdef CONFIG_ARM64_HISI_IPIV
+	KABI_EXTEND(struct page         *vpeid_page)
+	KABI_EXTEND(bool			enable_ipiv_from_vmm)
+	KABI_EXTEND(bool			enable_ipiv_from_guest)
+#endif
 };
 
 /* Embedded in kvm_vcpu.arch */
