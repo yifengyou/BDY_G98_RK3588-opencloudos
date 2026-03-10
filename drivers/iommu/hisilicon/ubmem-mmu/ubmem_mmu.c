@@ -17,8 +17,8 @@
 #include <linux/maple_tree.h>
 #include <linux/interrupt.h>
 #include <ub/ubfi/ubfi.h>
+#include <linux/hisi_ummu.h>
 
-#include "../ummu_cfg_v1.h"
 #include "ubmem_mmu.h"
 
 #define UMMU_MEM_MAX_GRANULE 8

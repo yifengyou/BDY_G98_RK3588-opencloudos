@@ -17,8 +17,8 @@
 #include <linux/cleanup.h>
 #include <linux/iommufd.h>
 #include <linux/ummu_core.h>
+#include <linux/hisi_ummu.h>
 
-#include "../ummu_cfg_v1.h"
 #include "logic_ummu.h"
 
 struct logic_ummu_device {

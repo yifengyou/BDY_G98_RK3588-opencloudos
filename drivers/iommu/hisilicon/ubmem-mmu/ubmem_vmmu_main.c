@@ -13,7 +13,7 @@
 #include <linux/ummu_core.h>
 #include <ub/ubfi/ubfi.h>
 #include <linux/hash.h>
-#include "../ummu_cfg_v1.h"
+#include <linux/hisi_ummu.h>
 #include "../logic_ummu/logic_ummu.h"
 
 /* ubmem_vmmu driver version release no. */
