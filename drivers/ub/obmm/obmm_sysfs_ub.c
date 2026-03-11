@@ -254,8 +254,6 @@ static const struct attribute_group export_attrs_group = {
 static const struct attribute_group *obmm_import_attrs_groups_list[][3] = {
 	{ &root_attrs_group, &import_attrs_groups[0], NULL },
 	{ &root_attrs_group, &import_attrs_groups[1], NULL },
-	{ &root_attrs_group, &import_attrs_groups[2], NULL },
-	{ &root_attrs_group, &import_attrs_groups[3], NULL },
 };
 
 static const struct attribute_group *obmm_export_attrs_groups[] = {
