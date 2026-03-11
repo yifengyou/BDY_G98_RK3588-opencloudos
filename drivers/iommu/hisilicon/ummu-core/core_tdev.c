@@ -143,7 +143,7 @@ static int init_tdev(struct tid_dev *tdev, struct tdev_attr *attr, u32 *ptid,
 	return 0;
 }
 
-static struct iommu_device *select_ummu_device(struct tdev_attr *attr)
+static struct iommu_device *get_iommu_dev(struct tdev_attr *attr)
 {
 	struct ummu_core_device *entry;
 
@@ -160,19 +160,6 @@ static struct iommu_device *select_ummu_device(struct tdev_attr *attr)
 
 	pr_err("ummu device not found.\n");
 	return NULL;
-}
-
-static struct iommu_device *get_iommu_dev(struct tdev_attr *attr)
-{
-	struct iommu_device *dev;
-
-	dev = select_ummu_device(attr);
-	if (!dev) {
-		pr_err("get ummu device failed.\n");
-		return NULL;
-	}
-
-	return dev;
 }
 
 static void set_dma_configure(struct device *dev, enum dev_dma_attr attr)

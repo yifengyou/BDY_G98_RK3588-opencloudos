@@ -858,13 +858,7 @@ static struct miscdevice tid_misc_device = {
 
 int tid_misc_init(void)
 {
-	int ret;
-
-	ret = misc_register(&tid_misc_device);
-	if (ret)
-		return ret;
-
-	return ret;
+	return misc_register(&tid_misc_device);
 }
 
 void tid_misc_exit(void)
