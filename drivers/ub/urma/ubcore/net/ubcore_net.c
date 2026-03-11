@@ -156,19 +156,10 @@ int ubcore_net_comm_init(void)
 		ubcore_log_err("Failed to init session service");
 		return -EINVAL;
 	}
-	if (ubcore_sock_init() != 0) {
-		ubcore_log_err("connect type unrecognized!");
-		goto uninit_session;
-	}
 	return 0;
-
-uninit_session:
-	ubcore_session_uninit();
-	return -EINVAL;
 }
 
 void ubcore_net_comm_uninit(void)
 {
-	ubcore_sock_uninit();
 	ubcore_session_uninit();
 }

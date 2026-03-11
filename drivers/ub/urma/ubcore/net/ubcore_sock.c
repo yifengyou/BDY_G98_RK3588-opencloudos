@@ -26,7 +26,6 @@
 #include "ubcore_sock.h"
 
 #define IPV4_MAP_IPV6_PREFIX 0x0000ffff
-#define SOCK_PORT 1226
 #define SOCK_MSG_MAX_LEN 4096
 #define SK_EVENT_TIME_LIMIT 300
 
@@ -104,98 +103,9 @@ static int k_setsockopt_keepalive(struct socket *sock)
 	return 0;
 }
 
-static inline void k_setsockopt_reuse(struct socket *sock)
-{
-	sock->sk->sk_reuse = true;
-}
-
 static inline void k_close(struct socket *sock)
 {
 	sock_release(sock);
-}
-
-static struct socket *k_listen(union ubcore_net_addr_union *ub_addr,
-			       uint16_t port)
-{
-	struct socket *sock = NULL;
-	struct sockaddr_in6 sk_addr_inner = { 0 };
-	struct sockaddr *sk_addr = (struct sockaddr *)&sk_addr_inner;
-	int sk_addr_size, backlog = 128;
-	int ret;
-
-	k_parse_addr(ub_addr, port, sk_addr, &sk_addr_size);
-
-	ret = sock_create(sk_addr->sa_family, SOCK_STREAM, 0, &sock);
-	if (ret < 0) {
-		ubcore_log_err("Failed to create socket");
-		return NULL;
-	}
-
-	k_setsockopt_reuse(sock);
-
-	ret = kernel_bind(sock, sk_addr, sk_addr_size);
-	if (ret < 0) {
-		ubcore_log_err("Failed to call kernel_bind, ret: %d.\n", ret);
-		goto destroy_sock;
-	}
-
-	ret = kernel_listen(sock, backlog);
-	if (ret < 0) {
-		ubcore_log_err("Failed to call kernel_listen");
-		goto destroy_sock;
-	}
-
-	return sock;
-
-destroy_sock:
-	k_close(sock);
-	return NULL;
-}
-
-static struct socket *k_accept(struct socket *sock,
-			       union ubcore_net_addr_union *ub_addr)
-{
-	struct socket *newsock = NULL;
-	struct sockaddr_in6 sk_addr_inner = { 0 };
-	struct sockaddr *sk_addr = (struct sockaddr *)&sk_addr_inner;
-	int ret;
-
-	ret = kernel_accept(sock, &newsock, 0);
-	if (ret < 0) {
-		ubcore_log_err("Failed to call kernel_accept");
-		return NULL;
-	}
-
-	ret = kernel_getpeername(newsock, sk_addr);
-	if (ret == sizeof(struct sockaddr_in6) &&
-	    sk_addr->sa_family == AF_INET6) {
-		struct sockaddr_in6 *sk_addr_in6 =
-			(struct sockaddr_in6 *)sk_addr;
-
-		memcpy(&ub_addr->in6, &sk_addr_in6->sin6_addr,
-		       sizeof(sk_addr_in6->sin6_addr));
-	} else if (ret == sizeof(struct sockaddr_in) &&
-		   sk_addr->sa_family == AF_INET) {
-		struct sockaddr_in *sk_addr_in = (struct sockaddr_in *)sk_addr;
-
-		ub_addr->in4.addr = sk_addr_in->sin_addr.s_addr;
-		ub_addr->in4.reserved2 = IPV4_MAP_IPV6_PREFIX;
-	} else {
-		ubcore_log_err("Failed to call kernel_getpeername");
-		goto destroy_sock;
-	}
-
-	ret = k_setsockopt_keepalive(newsock);
-	if (ret < 0) {
-		ubcore_log_err("Failed to set socket keepalive");
-		goto destroy_sock;
-	}
-
-	return newsock;
-
-destroy_sock:
-	k_close(newsock);
-	return NULL;
 }
 
 static struct socket *k_connect(union ubcore_net_addr_union *ub_addr,
@@ -234,17 +144,6 @@ destroy_sock:
 	return NULL;
 }
 
-static int k_recvmsg(struct socket *sock, void *buf, size_t buf_size, int flags)
-{
-	struct msghdr msg = { 0 };
-	struct kvec vec;
-
-	vec.iov_base = buf;
-	vec.iov_len = buf_size;
-
-	return kernel_recvmsg(sock, &msg, &vec, 1, buf_size, flags);
-}
-
 static struct sk_service ss = { 0 };
 
 static void sk_entry_release(struct kref *ref)
@@ -280,15 +179,6 @@ static inline void sk_entry_add_to_ready_list(struct sk_entry *entry)
 	// Check if the current entry is in the list
 	if (list_empty(&entry->ready_list_entry))
 		list_add(&entry->ready_list_entry, &ss.ready_list);
-}
-
-static inline void sk_entry_remove_from_ready_list(struct sk_entry *entry)
-{
-	// Check if the current entry is in the list
-	// The entry is Initialized after removing from the ready list,
-	// prepared for future insertion.
-	if (!list_empty(&entry->ready_list_entry))
-		list_del_init(&entry->ready_list_entry);
 }
 
 static int sk_wait_callback(wait_queue_entry_t *wait, unsigned int mode,
@@ -366,45 +256,6 @@ static struct sk_entry *sk_entry_create(struct socket *sock,
 	return entry;
 }
 
-static struct sk_entry *sk_entry_create_listen(union ubcore_net_addr_union addr)
-{
-	struct sk_entry *entry;
-	struct socket *sock;
-
-	sock = k_listen(&addr, ss.port);
-	if (!sock) {
-		ubcore_log_err("Failed to create listen socket");
-		return NULL;
-	}
-
-	entry = sk_entry_create(sock, SOCK_LISTEN, addr);
-	if (!entry) {
-		ubcore_log_err("Failed to create sock entry");
-		k_close(sock);
-	}
-	return entry;
-}
-
-static struct sk_entry *sk_entry_create_accept(struct socket *sock)
-{
-	struct sk_entry *entry;
-	struct socket *newsock;
-	union ubcore_net_addr_union addr = { 0 };
-
-	newsock = k_accept(sock, &addr);
-	if (!newsock) {
-		ubcore_log_err("Failed to create accept socket");
-		return NULL;
-	}
-
-	entry = sk_entry_create(newsock, SOCK_ACCEPT, addr);
-	if (!entry) {
-		ubcore_log_err("Failed to register accept sock entry");
-		k_close(newsock);
-	}
-	return entry;
-}
-
 static struct sk_entry *
 sk_entry_create_connect(union ubcore_net_addr_union addr)
 {
@@ -451,131 +302,6 @@ static struct sk_entry *sk_entry_find_by_addr(union ubcore_net_addr_union addr)
 	}
 	sk_entry_ref_acquire(entry);
 	return entry;
-}
-
-static int sk_handle_msg(struct sk_entry *entry)
-{
-	struct ubcore_net_msg msg = { 0 };
-	struct ubcore_device *dev = NULL;
-	size_t ret;
-
-	ret = k_recvmsg(entry->sock, &msg, MSG_HDR_SIZE, 0);
-	if (ret != MSG_HDR_SIZE || msg.len > SOCK_MSG_MAX_LEN) {
-		ubcore_log_err("Failed to recv sock hdr, recv: %zu, " MSG_FMT,
-			       ret, MSG_ARG(&msg));
-		return -EINVAL;
-	}
-
-	msg.data = kcalloc(1, msg.len, GFP_KERNEL);
-	if (IS_ERR_OR_NULL(msg.data)) {
-		ubcore_log_err("Failed to alloc sock msg data, " MSG_FMT,
-			       MSG_ARG(&msg));
-		return -EINVAL;
-	}
-
-	ret = k_recvmsg(entry->sock, msg.data, msg.len, 0);
-	if (ret != msg.len) {
-		ubcore_log_err("Failed to recv sock data, recv: %zu, " MSG_FMT,
-			       ret, MSG_ARG(&msg));
-		kfree(msg.data);
-		return -EINVAL;
-	}
-
-	dev = ubcore_find_device((union ubcore_eid *)&entry->ub_addr,
-				 (enum ubcore_transport_type)(msg.cap));
-	if (!dev) {
-		ubcore_log_err(
-			"Failed to find device when handle sock msg, " MSG_FMT,
-			MSG_ARG(&msg));
-		kfree(msg.data);
-		return 0;
-	}
-
-	ubcore_log_info("Handle sock message, " MSG_FMT, MSG_ARG(&msg));
-	ubcore_net_handle_msg(dev, &msg, (void *)entry);
-
-	ubcore_put_device(dev);
-
-	kfree(msg.data);
-	return 0;
-}
-
-static int sk_event_loop(void *data)
-{
-	wait_queue_entry_t wait;
-
-	init_waitqueue_entry(&wait, current);
-
-	while (!kthread_should_stop()) {
-		ktime_t expires;
-		ktime_t time_limit = ktime_set(SK_EVENT_TIME_LIMIT, 0);
-		unsigned long flags;
-
-		spin_lock_irqsave(&ss.lock, flags);
-		while (!list_empty(&ss.ready_list)) {
-			int is_sock_inactive = 0;
-			struct sk_entry *cur;
-			__poll_t events;
-
-			cur = list_first_entry(&ss.ready_list, struct sk_entry,
-					       ready_list_entry);
-			events = (*cur->sock->ops->poll)(NULL, cur->sock,
-							 &cur->pt);
-
-			ubcore_log_info("Events occur, %x, addr:" EID_FMT,
-					events, EID_ARGS(cur->ub_addr));
-			if (events & (POLLERR | POLLHUP | POLLRDHUP))
-				is_sock_inactive = -1;
-			else if (events & POLLIN) {
-				spin_unlock_irqrestore(&ss.lock, flags);
-				if (cur->sk_type == SOCK_LISTEN)
-					(void)sk_entry_create_accept(cur->sock);
-				else
-					is_sock_inactive = sk_handle_msg(cur);
-				spin_lock_irqsave(&ss.lock, flags);
-			} else {
-				// No remaining data to process.
-				sk_entry_remove_from_ready_list(cur);
-			}
-			// Prevent the socket from being re-added to the ready list
-			if (is_sock_inactive) {
-				atomic_set(&cur->inactive, 1);
-				sk_entry_remove_from_ready_list(cur);
-				sk_entry_remove_from_all_list(cur);
-
-				// Release sock will invoke sk_wait_callback
-				spin_unlock_irqrestore(&ss.lock, flags);
-				sk_entry_ref_release(cur);
-				spin_lock_irqsave(&ss.lock, flags);
-			}
-		}
-		spin_unlock_irqrestore(&ss.lock, flags);
-
-		if (signal_pending(current)) {
-			ubcore_log_err("pending signal error");
-			break;
-		}
-
-		set_current_state(TASK_INTERRUPTIBLE);
-		__add_wait_queue_exclusive(&ss.wq, &wait);
-		expires = ktime_add(ktime_get(), time_limit);
-		schedule_hrtimeout_range(&expires, 0, HRTIMER_MODE_ABS);
-		set_current_state(TASK_RUNNING);
-		__remove_wait_queue(&ss.wq, &wait);
-	}
-
-	while (!list_empty(&ss.all_list)) {
-		struct sk_entry *cur;
-
-		cur = list_first_entry(&ss.all_list, struct sk_entry,
-				       all_list_entry);
-		if (cur->whead)
-			__remove_wait_queue(cur->whead, &cur->wait);
-		sk_entry_remove_from_ready_list(cur);
-		sk_entry_remove_from_all_list(cur);
-		sk_entry_ref_release(cur);
-	}
-	return 0;
 }
 
 static int ubcore_sock_send_inner(struct ubcore_device *dev,
@@ -625,31 +351,6 @@ int ubcore_sock_send_to(struct ubcore_device *dev, struct ubcore_net_msg *msg,
 	ret = ubcore_sock_send_inner(dev, msg, entry);
 	sk_entry_ref_release(entry);
 	return ret;
-}
-
-int ubcore_sock_init(void)
-{
-	union ubcore_net_addr_union any_addr6 = { 0 };
-
-	ubcore_log_info("sock service init\n");
-
-	INIT_LIST_HEAD(&ss.all_list);
-	INIT_LIST_HEAD(&ss.ready_list);
-	spin_lock_init(&ss.lock);
-	ss.port = SOCK_PORT;
-	init_waitqueue_head(&ss.wq);
-
-	if (sk_entry_create_listen(any_addr6) == NULL) {
-		ubcore_log_err("Failed to register ipv6 listen sock entry");
-		return -EINVAL;
-	}
-
-	ss.daemon = kthread_run(sk_event_loop, NULL, "sk_event_loop");
-	if (IS_ERR(ss.daemon)) {
-		ubcore_log_err("sock thread launch failed");
-		return -EINVAL;
-	}
-	return 0;
 }
 
 void ubcore_sock_uninit(void)

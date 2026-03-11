@@ -81,6 +81,8 @@ void uburma_write_event_with_free_fn(
 	event->event_type = event_type;
 	event->counter = counter;
 	event->event_data_free_fn = event_data_free_fn;
+	INIT_LIST_HEAD(&event->node);
+	INIT_LIST_HEAD(&event->obj_node);
 
 	list_add_tail(&event->node, &jfe->event_list);
 	if (obj_event_list)

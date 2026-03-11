@@ -20,7 +20,6 @@ int ubcore_sock_send(struct ubcore_device *dev, void *conn,
 int ubcore_sock_send_to(struct ubcore_device *dev, struct ubcore_net_msg *msg,
 			union ubcore_eid addr);
 
-int ubcore_sock_init(void);
 void ubcore_sock_uninit(void);
 
 #endif

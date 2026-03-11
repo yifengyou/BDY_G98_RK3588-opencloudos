@@ -59,6 +59,10 @@ int ubcore_cm_recv(struct ubcore_device *dev, struct ubcore_cm_recv_cr *recv_cr)
 	union ubcore_eid addr = recv_cr->cr->remote_id.eid;
 	struct ubcore_net_msg msg = { 0 };
 
+	if (recv_cr->payload != 0 && recv_cr->payload_len < MSG_HDR_SIZE) {
+		ubcore_log_err("Invalid recv_cr payload");
+		return -EINVAL;
+	}
 	(void)memcpy(&msg, (void *)(recv_cr->payload), MSG_HDR_SIZE);
 	msg.data = (void *)(recv_cr->payload + MSG_HDR_SIZE);
 

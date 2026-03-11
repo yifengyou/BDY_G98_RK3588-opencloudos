@@ -381,6 +381,11 @@ static int ubagg_get_seg_info(struct ubcore_device *dev,
 		ubagg_log_err("Failed to find seg.\n");
 		return -1;
 	}
+	if (user_ctl->out.addr != 0 &&
+	    user_ctl->out.len < sizeof(tmp_seg->ex_info.slaves)) {
+		ubagg_log_err("Invalid user out");
+		return -1;
+	}
 	memcpy((void *)user_ctl->out.addr, tmp_seg->ex_info.slaves,
 	       sizeof(tmp_seg->ex_info.slaves));
 	spin_unlock(&ubagg_seg_ht->lock);
@@ -678,6 +683,12 @@ static struct ubcore_jfr *ubagg_create_jfr(struct ubcore_device *ub_dev,
 	jfr->base.jfr_id.id = id;
 	jfr->token_id = id;
 
+	if (udata->udrv_data->in_addr != 0 &&
+		udata->udrv_data->in_len > sizeof(struct ubagg_jetty_exchange_info)) {
+		ubagg_log_err(
+			"invalid udrv_data in_len.\n");
+		goto FREE_JFR;
+	}
 	ret = copy_from_user(&jfr->ex_info,
 			     (void __user *)udata->udrv_data->in_addr,
 			     udata->udrv_data->in_len);
@@ -787,6 +798,12 @@ static struct ubcore_jetty *ubagg_create_jetty(struct ubcore_device *dev,
 	jetty->base.jetty_cfg = *cfg;
 	jetty->base.jetty_id.id = id;
 	jetty->token_id = id;
+	if (udata->udrv_data->in_addr != 0 &&
+		udata->udrv_data->in_len > sizeof(struct ubagg_jetty_exchange_info)) {
+		ubagg_log_err(
+			"invalid udrv_data in_len.\n");
+		goto FREE_JETTY;
+	}
 	ret = copy_from_user(&jetty->ex_info,
 			     (void __user *)udata->udrv_data->in_addr,
 			     udata->udrv_data->in_len);
@@ -805,7 +822,7 @@ static struct ubcore_jetty *ubagg_create_jetty(struct ubcore_device *dev,
 					       &tmp_jetty->hnode);
 		spin_unlock(&ubagg_jetty_ht->lock);
 		kfree(tmp_jetty);
-		goto FREE_ID;
+		goto FREE_JETTY;
 	}
 
 	ubagg_hash_table_add_nolock(ubagg_jetty_ht, &jetty->hnode, id);
