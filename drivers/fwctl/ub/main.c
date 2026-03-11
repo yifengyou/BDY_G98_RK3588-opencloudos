@@ -15,9 +15,18 @@
 #define MAX_IOCTL_COUNT 1024
 #define TIME_WINDOW_MS 3000
 #define TIME_WINDOW_JIFFIES msecs_to_jiffies(TIME_WINDOW_MS)
+#define UBCTL_UNSUPPORTED_RPCCMD_CNT_A_0 3
+#define UBCTL_UNSUPPORTED_RPCCMD_CNT_K_0 12
+#define UBCTL_CMD_CNT_MAX 100
 
 struct ubctl_uctx {
 	struct fwctl_uctx uctx;
+};
+
+struct ubctl_env_type_info {
+	u32 env_type;
+	enum ub_fwctl_cmdrpc_type unsupported_rpccmd[UBCTL_CMD_CNT_MAX];
+	u32 rpc_cmd_count;
 };
 
 static int ubctl_open_uctx(struct fwctl_uctx *uctx)
@@ -93,6 +102,43 @@ static int ubctl_cmd_err(struct ubctl_dev *ucdev, int ret, struct fwctl_rpc_ub_o
 	return ret;
 }
 
+static int ubctl_check_rpc_cmd(struct ubctl_dev *ucdev, u32 rpc_cmd)
+{
+	static struct ubctl_env_type_info ubctl_env_type_info_table[] = {
+		{ UBASE_HW_VER_A_0,
+		  { UTOOL_CMD_QUERY_SCC_VERSION, UTOOL_CMD_QUERY_SCC_LOG },
+		  UBCTL_UNSUPPORTED_RPCCMD_CNT_A_0 },
+
+		{ UBASE_HW_VER_K_0,
+		  { UTOOL_CMD_QUERY_DL_BIST, UTOOL_CMD_CONF_DL_BIST, UTOOL_CMD_QUERY_DL_BIST_ERR,
+		    UTOOL_CMD_QUERY_DL_RT_BANDWIDTH, UTOOL_CMD_QUERY_LOOPBACK,
+		    UTOOL_CMD_CONF_LOOPBACK, UTOOL_CMD_QUERY_PRBS_EN,
+		    UTOOL_CMD_CONF_PRBS_EN, UTOOL_CMD_QUERY_PRBS_RESULT,
+		    UTOOL_CMD_QUERY_PORT_PKT_STATS, UTOOL_CMD_QUERY_PORT_LINK_STATS },
+		  UBCTL_UNSUPPORTED_RPCCMD_CNT_K_0 },
+	};
+	int env_type_cnt = ARRAY_SIZE(ubctl_env_type_info_table);
+	u32 env_type;
+	int i, j;
+
+	env_type = ubase_get_hw_ver(ucdev->adev);
+	for (i = 0; i < env_type_cnt; i++) {
+		if (ubctl_env_type_info_table[i].env_type != env_type)
+			continue;
+		for (j = 0; j < ubctl_env_type_info_table[i].rpc_cmd_count; j++) {
+			if (ubctl_env_type_info_table[i].unsupported_rpccmd[j] != rpc_cmd)
+				continue;
+			ubctl_err(ucdev, "rpc cmd(0x%x) cannot be used in current env type(%u)\n",
+				  rpc_cmd, env_type);
+			return -ENOTTY;
+		}
+		return 0;
+	}
+	ubctl_err(ucdev, "env type(%u) is not support.\n", env_type);
+
+	return -ENOTTY;
+}
+
 static int ub_cmd_do(struct ubctl_dev *ucdev,
 		     struct ubctl_query_cmd_param *query_cmd_param)
 {
@@ -131,6 +177,10 @@ static void *ubctl_fw_rpc(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
 		  opcode, in_len, *out_len);
 
 	ret = ubctl_legitimacy_rpc(ucdev, *out_len, scope);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = ubctl_check_rpc_cmd(ucdev, opcode);
 	if (ret)
 		return ERR_PTR(ret);
 
