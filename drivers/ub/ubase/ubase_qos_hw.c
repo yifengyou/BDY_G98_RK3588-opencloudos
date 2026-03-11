@@ -1167,7 +1167,7 @@ static int __ubase_restore_initial_qset_qos(struct ubase_dev *udev)
 	u32 vl_maxrate[UBASE_MAX_VL_NUM] = {0};
 	u8 vl_tsa[UBASE_MAX_VL_NUM] = {0};
 	u8 vl_bw[UBASE_MAX_VL_NUM] = {0};
-	u16 vl_bitmap = 0;
+	unsigned long vl_bitmap = 0;
 	int ret;
 	u8 i;
 
@@ -1175,7 +1175,7 @@ static int __ubase_restore_initial_qset_qos(struct ubase_dev *udev)
 		return 0;
 
 	for (i = 0; i < initial_qos->num; i++) {
-		set_bit(initial_qos->vl[i], (unsigned long *)&vl_bitmap);
+		set_bit(initial_qos->vl[i], &vl_bitmap);
 		vl_bw[i] = initial_qos->qset_weight[i];
 		vl_tsa[i] = vl_bw[i] ? UBASE_SL_DWRR : UBASE_SL_SP;
 		vl_maxrate[i] = initial_qos->rate[i];
