@@ -65,6 +65,7 @@ __ping_tjetty_new_entry(struct ubcore_device *dev, union ubcore_eid *dst_eid,
 		.id.id = remote_jetty_id,
 		.trans_mode = UBCORE_TP_RM,
 		.type = UBCORE_JETTY,
+		.tp_type = UBCORE_CTP,
 		.eid_index = eid_index,
 	};
 	struct ubcore_tjetty *tjetty = NULL;
