@@ -4291,6 +4291,9 @@ static bool lruvec_is_reclaimable(struct lruvec *lruvec, struct scan_control *sc
 /* to protect the working set of the last N jiffies */
 static unsigned long lru_gen_min_ttl __read_mostly;
 
+/* should we print LRU generation info on OOMs? */
+static bool lru_gen_oom_print __read_mostly;
+
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
 	struct mem_cgroup *memcg;
@@ -5543,9 +5546,33 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 static struct kobj_attribute lru_gen_enabled_attr = __ATTR_RW(enabled);
 
+static ssize_t oom_print_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", (unsigned int)READ_ONCE(lru_gen_oom_print));
+}
+
+static ssize_t oom_print_store(struct kobject *kobj, struct kobj_attribute *attr,
+			     const char *buf, size_t len)
+{
+	unsigned int enabled;
+
+	if (kstrtouint(buf, 0, &enabled))
+		return -EINVAL;
+
+	if (enabled > 1)
+		return -EINVAL;
+
+	WRITE_ONCE(lru_gen_oom_print, !!enabled);
+
+	return len;
+}
+
+static struct kobj_attribute lru_gen_oom_print_attr = __ATTR_RW(oom_print);
+
 static struct attribute *lru_gen_attrs[] = {
 	&lru_gen_min_ttl_attr.attr,
 	&lru_gen_enabled_attr.attr,
+	&lru_gen_oom_print_attr.attr,
 	NULL
 };
 
@@ -6127,7 +6154,7 @@ static int lru_gen_oom_get_swappiness(struct mem_cgroup *memcg)
 
 #define LRU_GEN_OOM_INFO_PATH_MAX 512
 
-void lru_gen_oom_info_format(struct mem_cgroup *memcg_oom, struct seq_buf *s)
+static void __lru_gen_oom_info_format(struct mem_cgroup *memcg_oom, struct seq_buf *s)
 {
 	int nid;
 	char buf[LRU_GEN_OOM_INFO_PATH_MAX];
@@ -6148,6 +6175,21 @@ void lru_gen_oom_info_format(struct mem_cgroup *memcg_oom, struct seq_buf *s)
 			lru_gen_seq_format_node(nid, lruvec, s);
 		}
 	}
+}
+
+void lru_gen_oom_info_format(struct mem_cgroup *memcg, struct seq_buf *s)
+{
+	if (!lru_gen_enabled() || !READ_ONCE(lru_gen_oom_print))
+		return;
+
+	pr_info("LRU generation stats for ");
+	pr_cont_cgroup_path(memcg->css.cgroup);
+	pr_cont(":");
+	seq_buf_clear(s);
+
+	__lru_gen_oom_info_format(memcg, s);
+
+	seq_buf_do_printk(s, KERN_INFO);
 }
 
 #else /* !CONFIG_LRU_GEN */
