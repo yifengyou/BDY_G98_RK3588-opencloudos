@@ -1412,6 +1412,7 @@ bool try_early_oom(struct mem_cgroup *memcg)
 		.memcg = memcg,
 		.gfp_mask = GFP_KERNEL,
 		.order = 0,
+		.constraint = CONSTRAINT_MEMCG,
 	};
 
 	if (!should_trigger_early_oom(memcg))
@@ -1425,6 +1426,13 @@ bool try_early_oom(struct mem_cgroup *memcg)
 		mutex_unlock(&oom_lock);
 		return false;
 	}
+
+	/*
+	 * Set totalpages for proper oom_score_adj calculation.
+	 * Without this, oom_badness() would ignore oom_score_adj values
+	 * because adj *= totalpages / 1000 becomes 0 when totalpages is 0.
+	 */
+	oc.totalpages = mem_cgroup_get_max(memcg) ?: 1;
 
 	if (!oom_killer_disabled) {
 		select_bad_process(&oc);
@@ -1505,6 +1513,11 @@ bool should_trigger_global_early_oom(void)
 /*
  * Try to trigger global early OOM.
  * Returns true if an OOM kill was performed.
+ *
+ * Note: Unlike out_of_memory() which calls constrained_alloc() to handle
+ * NUMA memory policy and cpuset constraints, this simplified implementation
+ * uses system-wide totalpages. This is acceptable for early OOM which is
+ * a heuristic optimization, not a precise memory accounting mechanism.
  */
 bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
 			  gfp_t gfp_mask)
@@ -1515,6 +1528,7 @@ bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
 		.memcg = NULL,
 		.gfp_mask = gfp_mask,
 		.order = 0,
+		.constraint = CONSTRAINT_NONE,
 	};
 
 	if (!should_trigger_global_early_oom())
@@ -1528,6 +1542,13 @@ bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
 		mutex_unlock(&oom_lock);
 		return false;
 	}
+
+	/*
+	 * Set totalpages for proper oom_score_adj calculation.
+	 * Without this, oom_badness() would ignore oom_score_adj values
+	 * because adj *= totalpages / 1000 becomes 0 when totalpages is 0.
+	 */
+	oc.totalpages = totalram_pages() + total_swap_pages;
 
 	if (!oom_killer_disabled) {
 		select_bad_process(&oc);
