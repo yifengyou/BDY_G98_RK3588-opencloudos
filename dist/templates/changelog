@@ -1,3 +1,15 @@
+* Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.6
+- mm: workaround for LRU_REFS_WIDTH=0 caused by PG_dropbehind
+- Revert "mm: free up PG_slab"
+- wifi: ath11k: fix RCU stall while reaping monitor destination ring
+- jfs: add check read-only before truncation in jfs_truncate_nolock()
+- x86/resctrl: Fix allocation of cleanest CLOSID on platforms with no monitors
+- fs/jfs: Add validity check for db_maxag and db_agpref
+- perf/x86/intel: Fix IA32_PMC_x_CFG_B MSRs access error
+- md/md-bitmap: fix wrong bitmap_limit for clustermd when write sb
+- md/raid10: wait barrier before returning discard request with REQ_NOWAIT
+- Bluetooth: hci_core: lookup hci_conn on RX path on protocol side
+
 * Mon Mar  9 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.4
 - scheduler: modify run_delay stat
 - mm: oom: implement global early oom for low memory threshold
