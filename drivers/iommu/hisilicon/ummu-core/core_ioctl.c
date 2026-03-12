@@ -854,6 +854,7 @@ static struct miscdevice tid_misc_device = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = TID_MISC_NAME,
 	.fops = &misc_fops,
+	.mode = 0666,
 };
 
 int tid_misc_init(void)
