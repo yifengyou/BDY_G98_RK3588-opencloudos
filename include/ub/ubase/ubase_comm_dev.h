@@ -37,6 +37,10 @@ struct iova_slot;
 				 UBASE_SUP_CDMA | UBASE_SUP_PMU)
 #define UBASE_SUP_NO_PMU	(UBASE_SUP_ALL ^ UBASE_SUP_PMU)
 
+#define UBASE_HW_VER_UNKNOWN	(0U)
+#define UBASE_HW_VER_A_0	(1000U)
+#define UBASE_HW_VER_K_0	(2000U)
+
 enum ubase_reset_type {
 	UBASE_NO_RESET,
 	UBASE_ELR_RESET,
@@ -368,6 +372,7 @@ struct ubase_bus_eid {
 	u32 eid[UBASE_BUS_EID_LEN];
 };
 
+u32 ubase_get_hw_ver(struct auxiliary_device *adev);
 bool ubase_adev_ubl_supported(struct auxiliary_device *adev);
 bool ubase_adev_ctrlq_supported(struct auxiliary_device *adev);
 bool ubase_adev_eth_mac_supported(struct auxiliary_device *adev);
