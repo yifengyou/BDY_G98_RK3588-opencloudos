@@ -1,3 +1,7 @@
+* Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.8
+- tools,perf: fix perf annotate segment fault on loongarch64
+- mm: add a print lru gen oom info switch in sysfs
+
 * Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.7
 - mm: oom: fix early oom to respect gfp_mask and improve threshold precision
 - mm: oom: fix oc.totalpages uninitialized in early oom
