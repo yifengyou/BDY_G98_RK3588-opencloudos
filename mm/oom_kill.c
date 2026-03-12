@@ -1395,25 +1395,54 @@ bool should_trigger_early_oom(struct mem_cgroup *memcg)
 	/*
 	 * Trigger early OOM when available memory falls below threshold%.
 	 * e.g., threshold=10 means trigger when available < 10% of limit.
+	 *
+	 * Use (limit * threshold / 100) instead of (limit / 100 * threshold)
+	 * for better precision with small limits. No overflow risk as limit
+	 * is capped at physical memory size and threshold <= 100.
 	 */
-	threshold_pages = limit / 100 * threshold;
+	threshold_pages = limit * threshold / 100;
 	return available < threshold_pages;
+}
+
+/*
+ * Check if gfp_mask allows triggering early OOM.
+ * Skip early OOM for allocations that:
+ * - Cannot sleep (GFP_ATOMIC, GFP_NOWAIT) - OOM killer may sleep
+ * - Explicitly don't want OOM (__GFP_NORETRY)
+ * - Are willing to fail (__GFP_RETRY_MAYFAIL)
+ */
+static inline bool gfp_allows_early_oom(gfp_t gfp_mask)
+{
+	if (!gfpflags_allow_blocking(gfp_mask))
+		return false;
+
+	if (gfp_mask & (__GFP_NORETRY | __GFP_RETRY_MAYFAIL))
+		return false;
+
+	return true;
 }
 
 /*
  * Try to trigger early OOM for a memcg
  * Returns true if an OOM kill was performed
  */
-bool try_early_oom(struct mem_cgroup *memcg)
+bool try_early_oom(struct mem_cgroup *memcg, gfp_t gfp_mask)
 {
 	struct oom_control oc = {
 		.zonelist = NULL,
 		.nodemask = NULL,
 		.memcg = memcg,
-		.gfp_mask = GFP_KERNEL,
+		.gfp_mask = gfp_mask,
 		.order = 0,
 		.constraint = CONSTRAINT_MEMCG,
 	};
+
+	/*
+	 * Skip early OOM for allocations that cannot block or
+	 * explicitly don't want OOM killer intervention.
+	 */
+	if (!gfp_allows_early_oom(gfp_mask))
+		return false;
 
 	if (!should_trigger_early_oom(memcg))
 		return false;
@@ -1454,7 +1483,7 @@ bool should_trigger_early_oom(struct mem_cgroup *memcg)
 	return false;
 }
 
-bool try_early_oom(struct mem_cgroup *memcg)
+bool try_early_oom(struct mem_cgroup *memcg, gfp_t gfp_mask)
 {
 	return false;
 }
@@ -1505,8 +1534,12 @@ bool should_trigger_global_early_oom(void)
 	/*
 	 * Trigger early OOM when available memory falls below threshold%.
 	 * e.g., threshold=10 means trigger when available < 10% of total RAM.
+	 *
+	 * Use (totalram * threshold / 100) instead of (totalram / 100 * threshold)
+	 * for better precision. No overflow risk as totalram is physical memory
+	 * size (max ~2^46 pages for 256PB) and threshold <= 100.
 	 */
-	threshold_pages = totalram / 100 * threshold;
+	threshold_pages = totalram * threshold / 100;
 	return (unsigned long)available < threshold_pages;
 }
 
@@ -1530,6 +1563,13 @@ bool try_global_early_oom(struct zonelist *zonelist, nodemask_t *nodemask,
 		.order = 0,
 		.constraint = CONSTRAINT_NONE,
 	};
+
+	/*
+	 * Skip early OOM for allocations that cannot block or
+	 * explicitly don't want OOM killer intervention.
+	 */
+	if (!gfp_allows_early_oom(gfp_mask))
+		return false;
 
 	if (!should_trigger_global_early_oom())
 		return false;

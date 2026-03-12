@@ -3524,7 +3524,7 @@ retry_failed_reclaim:
 	 * memory hogs early rather than spending time on reclaim.
 	 * Only try once per charge attempt to avoid infinite loops.
 	 */
-	if (!early_oom_tried && try_early_oom(mem_over_limit)) {
+	if (!early_oom_tried && try_early_oom(mem_over_limit, gfp_mask)) {
 		early_oom_tried = true;
 		goto retry;
 	}
