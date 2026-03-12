@@ -19,6 +19,8 @@
 #define UBCTL_UNSUPPORTED_RPCCMD_CNT_K_0 12
 #define UBCTL_CMD_CNT_MAX 100
 
+static DEFINE_MUTEX(g_fifo_lock);
+
 struct ubctl_uctx {
 	struct fwctl_uctx uctx;
 };
@@ -58,28 +60,34 @@ static int ubctl_legitimacy_rpc(struct ubctl_dev *ucdev, size_t out_len,
 	unsigned long record_jiffies = 0;
 	int kfifo_ret = 0;
 
+	mutex_lock(&g_fifo_lock);
 	while (kfifo_peek(&ucdev->ioctl_fifo, &record_jiffies) && record_jiffies) {
 		if (time_after(record_jiffies, earliest_jiffies))
 			break;
 
 		kfifo_ret = kfifo_get(&ucdev->ioctl_fifo, &record_jiffies);
 		if (!kfifo_ret) {
+			mutex_unlock(&g_fifo_lock);
 			ubctl_err(ucdev, "unexpected events occurred while obtaining data.\n");
 			return kfifo_ret;
 		}
 	}
 
 	if (kfifo_is_full(&ucdev->ioctl_fifo)) {
-		ubctl_err(ucdev, "the current number of valid requests exceeds the limit.\n");
+		mutex_unlock(&g_fifo_lock);
+		ubctl_err(ucdev, "the current number of valid requests exceeds the limit, record_jiffies = %lu, current_jiffies = %lu.\n",
+				 record_jiffies, current_jiffies);
 		return -EBADMSG;
 	}
 
 	kfifo_ret = kfifo_put(&ucdev->ioctl_fifo, current_jiffies);
 	if (!kfifo_ret) {
+		mutex_unlock(&g_fifo_lock);
 		ubctl_err(ucdev, "unexpected events occurred while writing data.\n");
 		return kfifo_ret;
 	}
 
+	mutex_unlock(&g_fifo_lock);
 	if (out_len < sizeof(struct fwctl_rpc_ub_out)) {
 		ubctl_dbg(ucdev, "outlen %zu is less than min value %zu.\n",
 			  out_len, sizeof(struct fwctl_rpc_ub_out));
