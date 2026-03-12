@@ -1307,6 +1307,24 @@ put_task:
 }
 
 /*
+ * Check if gfp_mask allows triggering early OOM.
+ * Skip early OOM for allocations that:
+ * - Cannot sleep (GFP_ATOMIC, GFP_NOWAIT) - OOM killer may sleep
+ * - Explicitly don't want OOM (__GFP_NORETRY)
+ * - Are willing to fail (__GFP_RETRY_MAYFAIL)
+ */
+static inline bool gfp_allows_early_oom(gfp_t gfp_mask)
+{
+	if (!gfpflags_allow_blocking(gfp_mask))
+		return false;
+
+	if (gfp_mask & (__GFP_NORETRY | __GFP_RETRY_MAYFAIL))
+		return false;
+
+	return true;
+}
+
+/*
  * Early OOM implementation for memory cgroups
  * Triggers OOM kill early when memcg available memory falls below threshold
  */
@@ -1402,24 +1420,6 @@ bool should_trigger_early_oom(struct mem_cgroup *memcg)
 	 */
 	threshold_pages = limit * threshold / 100;
 	return available < threshold_pages;
-}
-
-/*
- * Check if gfp_mask allows triggering early OOM.
- * Skip early OOM for allocations that:
- * - Cannot sleep (GFP_ATOMIC, GFP_NOWAIT) - OOM killer may sleep
- * - Explicitly don't want OOM (__GFP_NORETRY)
- * - Are willing to fail (__GFP_RETRY_MAYFAIL)
- */
-static inline bool gfp_allows_early_oom(gfp_t gfp_mask)
-{
-	if (!gfpflags_allow_blocking(gfp_mask))
-		return false;
-
-	if (gfp_mask & (__GFP_NORETRY | __GFP_RETRY_MAYFAIL))
-		return false;
-
-	return true;
 }
 
 /*
