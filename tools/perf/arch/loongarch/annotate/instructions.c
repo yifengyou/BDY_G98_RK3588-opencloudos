@@ -20,6 +20,9 @@ static int loongarch_call__parse(struct arch *arch, struct ins_operands *ops, st
 	ops->target.addr = strtoull(c, &endptr, 16);
 
 	name = strchr(endptr, '<');
+	if (name == NULL)
+		return -1;
+
 	name++;
 
 	if (arch->objdump.skip_functions_char &&
