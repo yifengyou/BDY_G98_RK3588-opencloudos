@@ -2188,13 +2188,7 @@ void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 	seq_buf_do_printk(&s, KERN_INFO);
 
 #ifdef CONFIG_LRU_GEN
-	pr_info("LRU generation stats for ");
-	pr_cont_cgroup_path(memcg->css.cgroup);
-	pr_cont(":");
-	seq_buf_clear(&s);
-
 	lru_gen_oom_info_format(memcg, &s);
-	seq_buf_do_printk(&s, KERN_INFO);
 #endif
 }
 
