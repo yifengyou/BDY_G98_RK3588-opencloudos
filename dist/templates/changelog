@@ -1,5 +1,11 @@
+* Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.7
+- mm: oom: fix early oom to respect gfp_mask and improve threshold precision
+- mm: oom: fix oc.totalpages uninitialized in early oom
+
 * Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.6
 - mm: workaround for LRU_REFS_WIDTH=0 caused by PG_dropbehind
+
+* Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.5
 - Revert "mm: free up PG_slab"
 - wifi: ath11k: fix RCU stall while reaping monitor destination ring
 - jfs: add check read-only before truncation in jfs_truncate_nolock()
