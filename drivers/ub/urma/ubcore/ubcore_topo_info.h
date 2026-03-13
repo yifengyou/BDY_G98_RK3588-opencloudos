@@ -35,6 +35,19 @@ struct ubcore_topo_agg_dev {
 	struct ubcore_topo_ue ues[IODIE_NUM];
 };
 
+struct ubcore_topo_physical_dev {
+	char dev_name[UBCORE_MAX_DEV_NAME];
+	uint32_t chip_id;
+	uint32_t primary_eid_idx;
+	uint32_t port_eid_idx[PORT_NUM];
+};
+
+struct ubcore_topo_bonding_dev {
+	char dev_name[UBCORE_MAX_DEV_NAME];
+	uint32_t bonding_eid_idx;
+	struct ubcore_topo_physical_dev physical_devs[IODIE_NUM];
+};
+
 struct ubcore_topo_link {
 	uint32_t peer_node; // node id
 	uint32_t peer_iodie; // iodie idx
@@ -76,5 +89,8 @@ int ubcore_get_main_primary_eid(union ubcore_eid *eid,
 
 int ubcore_get_primary_eid_by_agg_eid(union ubcore_eid *agg_eid,
 	union ubcore_eid *primary_eid);
+
+int ubcore_get_topo_bonding_dev_by_agg_eid(union ubcore_eid *agg_eid,
+	struct ubcore_topo_bonding_dev *out);
 
 #endif // UBCORE_TOPO_INFO_H

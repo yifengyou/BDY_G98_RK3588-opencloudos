@@ -122,6 +122,13 @@ static const struct genl_ops ubcore_genl_ops[] = {
 		.flags = GENL_ADMIN_PERM,
 		.doit = ubcore_set_sl
 	},
+	{
+		.cmd = UBCORE_CMD_GET_TOPO_BONDING_DEV,
+		.policy = ubcore_policy,
+		.maxattr = ARRAY_SIZE(ubcore_policy) - 1,
+		.flags = GENL_ADMIN_PERM,
+		.doit = ubcore_get_topo_bonding_dev_ops
+	},
 };
 
 /* ubcore family definition */
