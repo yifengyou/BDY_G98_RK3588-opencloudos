@@ -9239,7 +9239,7 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
 {
 	struct sched_entity *se;
 	struct task_struct *p;
-	int new_tasks;
+	int new_tasks = 0;
 
 again:
 	p = pick_task_fair(rq);
