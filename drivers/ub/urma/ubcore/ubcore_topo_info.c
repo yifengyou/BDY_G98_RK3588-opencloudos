@@ -318,7 +318,7 @@ static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 				EID_LEN);
 			*entity_id = agg_dev->ues[iodie_id].entity_id;
 			*chip_id = agg_dev->ues[iodie_id].chip_id;
-			ubcore_log_warn(
+			ubcore_log_info(
 				"find primary eid: "EID_FMT", entity_id: %u, chip_id: %u.\n",
 				EID_ARGS(*primary_eid), *entity_id, *chip_id);
 			return 0;
@@ -334,10 +334,10 @@ static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 					EID_LEN);
 				*entity_id = agg_dev->ues[iodie_id].entity_id;
 				*chip_id = agg_dev->ues[iodie_id].chip_id;
-				ubcore_log_warn(
+				ubcore_log_info(
 					"find primary eid by port eid, port_eid: "EID_FMT
 					", ", EID_ARGS(*(union ubcore_eid *)eid_raw));
-				ubcore_log_warn(
+				ubcore_log_info(
 					"primary eid: "EID_FMT", entity_id: %u, chip_id: %u.\n",
 					EID_ARGS(*primary_eid), *entity_id, *chip_id);
 				return 0;
