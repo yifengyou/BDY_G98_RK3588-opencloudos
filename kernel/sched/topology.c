@@ -4,6 +4,9 @@
  */
 
 #include <linux/bsearch.h>
+#ifdef CONFIG_IDLE_REVERT
+#include "per_llc_cpu.h"
+#endif
 
 DEFINE_MUTEX(sched_domains_mutex);
 
@@ -632,8 +635,12 @@ static void destroy_sched_domain(struct sched_domain *sd)
 	 */
 	free_sched_groups(sd->groups, 1);
 
-	if (sd->shared && atomic_dec_and_test(&sd->shared->ref))
+	if (sd->shared && atomic_dec_and_test(&sd->shared->ref)) {
+#ifdef CONFIG_IDLE_REVERT
+		sd_llc_free(sd);
+#endif
 		kfree(sd->shared);
+	}
 	kfree(sd);
 }
 
@@ -681,6 +688,10 @@ static void update_top_cache_domain(int cpu)
 	struct sched_domain *sd;
 	int id = cpu;
 	int size = 1;
+#ifdef CONFIG_IDLE_REVERT
+	struct per_llc_cpu *llc_overload_cpus = NULL;
+	struct rq *rq = cpu_rq(cpu);
+#endif
 
 	sd = highest_flag_domain(cpu, SD_SHARE_PKG_RESOURCES);
 	if (sd) {
@@ -689,6 +700,11 @@ static void update_top_cache_domain(int cpu)
 		sds = sd->shared;
 	}
 
+#ifdef CONFIG_IDLE_REVERT
+	if (sds)
+		llc_overload_cpus = sds->llc_overload_cpus;
+	rcu_assign_pointer(rq->llc_overload_cpus, llc_overload_cpus);
+#endif
 	rcu_assign_pointer(per_cpu(sd_llc, cpu), sd);
 	per_cpu(sd_llc_size, cpu) = size;
 	per_cpu(sd_llc_id, cpu) = id;
@@ -1115,7 +1131,6 @@ build_overlap_sched_groups(struct sched_domain *sd, int cpu)
 	sd->groups = first;
 
 	return 0;
-
 fail:
 	free_sched_groups(first, 0);
 
@@ -1475,6 +1490,19 @@ static void set_domain_attribute(struct sched_domain *sd,
 static void __sdt_free(const struct cpumask *cpu_map);
 static int __sdt_alloc(const struct cpumask *cpu_map);
 
+#ifdef CONFIG_IDLE_REVERT
+static int sd_llc_init(const struct cpumask *cpu_map, struct s_data *d);
+static void sd_llc_exit(const struct cpumask *cpu_map);
+#else
+static int sd_llc_init(const struct cpumask *cpu_map, struct s_data *d)
+{
+	return 0;
+}
+static void sd_llc_exit(const struct cpumask *cpu_map)
+{
+}
+#endif
+
 static void __free_domain_allocs(struct s_data *d, enum s_alloc what,
 				 const struct cpumask *cpu_map)
 {
@@ -1487,6 +1515,7 @@ static void __free_domain_allocs(struct s_data *d, enum s_alloc what,
 		free_percpu(d->sd);
 		fallthrough;
 	case sa_sd_storage:
+		sd_llc_exit(cpu_map);
 		__sdt_free(cpu_map);
 		fallthrough;
 	case sa_none:
@@ -1799,8 +1828,8 @@ static struct sched_domain_topology_level *next_tl(struct sched_domain_topology_
 	return tl;
 }
 
-#define for_each_sd_topology(tl)			\
-	for (tl = sched_domain_topology; tl->mask; tl = next_tl(tl))
+#define for_each_sd_topology(tl)    \
+		for (tl = sched_domain_topology; tl->mask; tl = next_tl(tl))
 
 void __init set_sched_topology(struct sched_domain_topology_level *tl)
 {
@@ -2470,6 +2499,47 @@ static bool topology_span_sane(struct sched_domain_topology_level *tl,
 	return true;
 }
 
+#ifdef CONFIG_IDLE_REVERT
+static int sd_llc_init(const struct cpumask *mask, struct s_data *d)
+{
+	struct sched_domain *sd, *hsd;
+	int i;
+
+	for_each_cpu(i, mask) {
+		/* Find highest domain that shares resources */
+		hsd = NULL;
+		for (sd = *per_cpu_ptr(d->sd, i); sd; sd = sd->parent) {
+			if (!(sd->flags & SD_SHARE_PKG_RESOURCES))
+				break;
+			hsd = sd;
+		}
+		if (hsd && sd_llc_alloc(hsd))
+			return 1;
+	}
+
+	return 0;
+}
+
+static void sd_llc_exit(const struct cpumask *mask)
+{
+	struct sched_domain_topology_level *tl;
+	struct sched_domain *sd;
+	struct sd_data *sdd;
+	int j;
+
+	for_each_sd_topology(tl) {
+		sdd = &tl->data;
+		if (!sdd)
+			continue;
+		for_each_cpu(j, mask) {
+			sd = *per_cpu_ptr(sdd->sd, j);
+			if (sd)
+				sd_llc_free(sd);
+		}
+	}
+}
+#endif
+
 /*
  * Build sched domains for a given set of CPUs and attach the sched domains
  * to the individual CPUs
@@ -2608,6 +2678,14 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 			init_sched_groups_capacity(i, sd);
 		}
 	}
+
+	/*
+	 * Allocate per-llc variable, it mainly prioritize select tasks for CPUs under
+	 * the same LLC, and this optimization is mainly aimed at AMD CCD architecture
+	 * which share L3 cache resources.
+	 */
+	if (sd_llc_init(cpu_map, &d))
+		sd_llc_exit(cpu_map);
 
 	/* Attach the domains */
 	rcu_read_lock();

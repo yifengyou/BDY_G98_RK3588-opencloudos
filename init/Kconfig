@@ -1419,6 +1419,19 @@ config CHECKPOINT_RESTORE
 
 	  If unsure, say N here.
 
+config IDLE_REVERT
+	bool "revert new idle cpu to running to improve CPU utilization"
+	depends on SMP
+	default n
+	help
+	  The IDLE_REVERT feature leverages the cache coherency of L3/L2 caches by intercepting
+	  the execution flow before the sched_balance_newidle() function is called. It performs
+	  a rapid scan of CPUs within the same L2 or L3 cache domain to identify any pending tasks.
+	  By quickly pulling a task to execute, the feature aims to enhance overall
+	  application performance.
+
+	  If unsure, say N here.
+
 config BT_SCHED
 	bool "offline sched class"
 	default n

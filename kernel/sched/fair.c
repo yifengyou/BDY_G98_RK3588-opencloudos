@@ -61,6 +61,9 @@
 #include "fair.h"
 #include "stats.h"
 #include "autogroup.h"
+#ifdef CONFIG_IDLE_REVERT
+#include "per_llc_cpu.h"
+#endif
 
 /*
  * Targeted preemption latency for CPU-bound tasks:
@@ -110,6 +113,16 @@ static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
 unsigned int sysctl_sched_child_runs_first __read_mostly;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
+
+#ifdef CONFIG_IDLE_REVERT
+/*
+ * We need to control the frequency of obtaining tasks from
+ * shared LLC cpus
+ */
+unsigned int sysctl_sched_idle_revert_min			= 100000UL;
+unsigned int __read_mostly sysctl_tg_idle_revert_enabled;
+unsigned int __read_mostly sysctl_tg_idle_revert_scan_count = 128; /* AMD Zen1-5, per llc cpus max is 16 */
+#endif
 
 int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
@@ -5920,6 +5933,9 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long queued_delta, runnable_delta, idle_delta, dequeue = 1;
+#ifdef CONFIG_IDLE_REVERT
+	long llc_task_delta;
+#endif
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5952,6 +5968,9 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	queued_delta = cfs_rq->h_nr_queued;
 	runnable_delta = cfs_rq->h_nr_runnable;
 	idle_delta = cfs_rq->h_nr_idle;
+#ifdef CONFIG_IDLE_REVERT
+	llc_task_delta = cfs_rq->llc_h_nr_runnable;
+#endif
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
 		int flags;
@@ -5976,6 +5995,9 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_queued -= queued_delta;
 		qcfs_rq->h_nr_runnable -= runnable_delta;
 		qcfs_rq->h_nr_idle -= idle_delta;
+#ifdef CONFIG_IDLE_REVERT
+		qcfs_rq->llc_h_nr_runnable -= llc_task_delta;
+#endif
 
 		if (qcfs_rq->load.weight) {
 			/* Avoid re-evaluating load for this entity: */
@@ -5999,10 +6021,20 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_queued -= queued_delta;
 		qcfs_rq->h_nr_runnable -= runnable_delta;
 		qcfs_rq->h_nr_idle -= idle_delta;
+#ifdef CONFIG_IDLE_REVERT
+		qcfs_rq->llc_h_nr_runnable -= llc_task_delta;
+#endif
 	}
 
 	/* At this point se is NULL and we are at root level*/
 	sub_nr_running(rq, queued_delta);
+
+#ifdef CONFIG_IDLE_REVERT
+	if (!se) {
+		if (llc_need_clear(rq))
+			llc_overload_clear(rq);
+	}
+#endif
 
 done:
 	/*
@@ -6022,6 +6054,9 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long queued_delta, runnable_delta, idle_delta;
+#ifdef CONFIG_IDLE_REVERT
+	long llc_task_delta;
+#endif
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
@@ -6057,6 +6092,9 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	queued_delta = cfs_rq->h_nr_queued;
 	runnable_delta = cfs_rq->h_nr_runnable;
 	idle_delta = cfs_rq->h_nr_idle;
+#ifdef CONFIG_IDLE_REVERT
+	llc_task_delta = cfs_rq->llc_h_nr_runnable;
+#endif
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
 
@@ -6076,6 +6114,9 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_queued += queued_delta;
 		qcfs_rq->h_nr_runnable += runnable_delta;
 		qcfs_rq->h_nr_idle += idle_delta;
+#ifdef CONFIG_IDLE_REVERT
+		qcfs_rq->llc_h_nr_runnable += llc_task_delta;
+#endif
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(qcfs_rq))
@@ -6094,6 +6135,9 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_queued += queued_delta;
 		qcfs_rq->h_nr_runnable += runnable_delta;
 		qcfs_rq->h_nr_idle += idle_delta;
+#ifdef CONFIG_IDLE_REVERT
+		qcfs_rq->llc_h_nr_runnable += llc_task_delta;
+#endif
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(qcfs_rq))
@@ -6102,6 +6146,11 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, queued_delta);
+
+#ifdef CONFIG_IDLE_REVERT
+	if (llc_need_set(rq))
+		llc_overload_set(rq);
+#endif
 
 unthrottle_throttle:
 	assert_list_leaf_cfs_rq(rq);
@@ -6976,6 +7025,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int h_nr_runnable = 1;
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 	u64 slice = 0;
+#ifdef CONFIG_IDLE_REVERT
+	bool tg_idle_revert_enabled = cgroup_idle_revert_enable(se);
+#endif
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -7029,6 +7081,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = 1;
 
+#ifdef CONFIG_IDLE_REVERT
+		if (tg_idle_revert_enabled)
+			cfs_rq->llc_h_nr_runnable += h_nr_runnable;
+#endif
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
 			goto enqueue_throttle;
@@ -7055,6 +7111,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = 1;
 
+#ifdef CONFIG_IDLE_REVERT
+		if (tg_idle_revert_enabled)
+			cfs_rq->llc_h_nr_runnable += h_nr_runnable;
+#endif
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
 			goto enqueue_throttle;
@@ -7062,6 +7122,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, 1);
+#ifdef CONFIG_IDLE_REVERT
+	if (llc_need_set(rq))
+		llc_overload_set(rq);
+#endif
 
 	/*
 	 * Since new tasks are assigned an initial util_avg equal to
@@ -7108,6 +7172,9 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	struct cfs_rq *cfs_rq;
 	bool task_delayed = flags & DEQUEUE_DELAYED;
 	u64 slice = 0;
+#ifdef CONFIG_IDLE_REVERT
+	bool tg_idle_revert_enabled = cgroup_idle_revert_enable(se);
+#endif
 
 	if (entity_is_task(se)) {
 		p = task_of(se);
@@ -7131,6 +7198,10 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		cfs_rq->h_nr_runnable -= h_nr_runnable;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->h_nr_idle -= h_nr_idle;
+#ifdef CONFIG_IDLE_REVERT
+		if (tg_idle_revert_enabled)
+			cfs_rq->llc_h_nr_runnable -= h_nr_runnable;
+#endif
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = h_nr_queued;
@@ -7172,6 +7243,10 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		cfs_rq->h_nr_runnable -= h_nr_runnable;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->h_nr_idle -= h_nr_idle;
+#ifdef CONFIG_IDLE_REVERT
+		if (tg_idle_revert_enabled)
+			cfs_rq->llc_h_nr_runnable -= h_nr_runnable;
+#endif
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = h_nr_queued;
@@ -7183,6 +7258,12 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	}
 
 	sub_nr_running(rq, h_nr_queued);
+#ifdef CONFIG_IDLE_REVERT
+	if (!se) {
+		if (llc_need_clear(rq))
+			llc_overload_clear(rq);
+	}
+#endif
 
 	/* balance early to pull high priority tasks */
 	if (unlikely(!was_sched_idle && sched_idle_rq(rq)))
@@ -7730,6 +7811,61 @@ static inline int select_idle_smt(struct task_struct *p, struct sched_domain *sd
 }
 
 #endif /* CONFIG_SCHED_SMT */
+
+#ifdef CONFIG_SMP
+int sysctl_smt_util_ratio = 100;
+
+#ifdef CONFIG_SCHED_SMT
+static inline int core_remain_resource(int cpu)
+{
+	int first = cpumask_first(cpu_smt_mask(cpu));
+	struct rq *rq = cpu_rq(first);
+	unsigned long util = rq->cfs.avg.util_avg;
+	unsigned long capacity = capacity_of(first);
+
+	if (sched_feat(STOP_SMT_RACE) && static_branch_likely(&sched_smt_present))
+		return util * 100 < capacity * sysctl_smt_util_ratio;
+
+	return 0;
+}
+
+static inline int get_available_smt(int cpu)
+{
+	int new_cpu;
+
+	/* Be careful, only overload scenario is advised */
+	if (core_remain_resource(cpu))
+		new_cpu  = cpumask_first(cpu_smt_mask(cpu));
+	else
+		new_cpu = cpu;
+
+	return new_cpu;
+}
+
+static inline bool can_migrate_to_peer_smt(int cpu)
+{
+	if (core_remain_resource(cpu) &&
+	    cpumask_first(cpu_smt_mask(cpu)) != cpu)
+		return false;
+
+	return true;
+}
+
+#else
+static inline int core_remain_resource(int cpu)
+{
+	return 0;
+}
+static inline int get_available_smt(int cpu)
+{
+	return cpu;
+}
+static inline bool can_migrate_to_peer_smt(int cpu)
+{
+	return true;
+}
+#endif
+#endif
 
 /*
  * Scan the LLC domain for idle CPUs; this is dynamically regulated by
@@ -8888,6 +9024,9 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		/* Fast path */
 		new_cpu = select_idle_sibling(p, prev_cpu, new_cpu);
 	}
+
+	new_cpu = get_available_smt(new_cpu);
+
 	rcu_read_unlock();
 
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
@@ -9156,6 +9295,12 @@ simple:
 
 idle:
 	if (rf) {
+#ifdef CONFIG_IDLE_REVERT
+		if (cpu_idle_revert_enabled()) {
+			if (new_tasks > 0)
+				goto again;
+		}
+#endif
 		new_tasks = sched_balance_newidle(rq, rf);
 
 		/*
@@ -9593,6 +9738,9 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	if (p->sched_task_hot)
 		p->sched_task_hot = 0;
 
+	if (!can_migrate_to_peer_smt(env->dst_cpu))
+		return 0;
+
 	/*
 	 * We do not migrate tasks that are:
 	 * 1) delayed dequeued unless we migrate load, or
@@ -9942,6 +10090,178 @@ static void attach_tasks(struct lb_env *env)
 
 	rq_unlock(env->dst_rq, &rf);
 }
+
+#ifdef CONFIG_IDLE_REVERT
+/* Just refer to can_migrate_task(), reduce some unnecessary codes */
+static inline bool llc_task_allow_migrate(struct task_struct *p, struct rq *rq, struct rq *dst_rq)
+{
+	int dst_cpu = dst_rq->cpu;
+
+	lockdep_assert_rq_held(rq);
+
+	/* task cgroup is allowed, but cgroup is not setted */
+	if (sysctl_tg_idle_revert_enabled && !(p->se.idle_revert_enabled))
+		return false;
+
+	if (throttled_lb_pair(task_group(p), cpu_of(rq), dst_cpu))
+		return false;
+
+	if (!cpumask_test_cpu(dst_cpu, p->cpus_ptr)) {
+		schedstat_inc(p->stats.nr_failed_migrations_affine);
+		return false;
+	}
+
+	if (task_on_cpu(rq, p)) {
+		schedstat_inc(p->stats.nr_failed_migrations_running);
+		return false;
+	}
+
+	return true;
+}
+
+static struct task_struct *
+llc_detach_next_task(struct cfs_rq *cfs_rq, struct rq *dst_rq)
+{
+	int dst_cpu = dst_rq->cpu;
+	struct task_struct *p;
+	struct rq *rq = rq_of(cfs_rq);
+	int scan = 0;
+
+	lockdep_assert_rq_held(rq);
+
+	list_for_each_entry_reverse(p, &rq->cfs_tasks, se.group_node) {
+		/* when task group enabled, so only */
+		if (scan > sysctl_tg_idle_revert_scan_count)
+			break;
+
+		if (llc_task_allow_migrate(p, rq, dst_rq)) {
+			llc_detach_task(p, rq, dst_cpu);
+			return p;
+		}
+		scan++;
+	}
+	return NULL;
+}
+
+int llc_get_task(struct rq *dst_rq, struct rq_flags *dst_rf,
+		 bool *locked, int src_cpu)
+{
+	struct task_struct *p = NULL;
+	struct rq_flags rf;
+	int hit = 0;
+	int dst_cpu = dst_rq->cpu;
+	struct rq *src_rq = cpu_rq(src_cpu);
+
+	if (dst_cpu == src_cpu)
+		return 0;
+
+	if (src_rq->cfs.h_nr_runnable < IDLE_THRESHOLD_H)
+		return 0;
+
+	if (sysctl_tg_idle_revert_enabled &&
+	    src_rq->cfs.llc_h_nr_runnable < IDLE_THRESHOLD_L)
+		return 0;
+
+	if (*locked) {
+		rq_unpin_lock(dst_rq, dst_rf);
+		raw_spin_rq_unlock(dst_rq);
+		*locked = false;
+	}
+	rq_lock_irqsave(src_rq, &rf);
+	update_rq_clock(src_rq);
+
+	/* with cgroup tasks or all tasks */
+	if (cpu_active(src_cpu))
+		p = llc_detach_next_task(&src_rq->cfs, dst_rq);
+
+	rq_unlock(src_rq, &rf);
+
+	if (p) {
+		raw_spin_rq_lock(dst_rq);
+		rq_repin_lock(dst_rq, dst_rf);
+		*locked = true;
+		update_rq_clock(dst_rq);
+		attach_task(dst_rq, p);
+		hit = 1;
+	}
+	local_irq_restore(rf.flags);
+
+	return hit;
+}
+
+int llc_try_idle_revert(struct rq *dst_rq, struct rq_flags *dst_rf)
+{
+	int src_cpu;
+	int dst_cpu = dst_rq->cpu;
+	bool locked = true;
+	int hit = 0;
+	struct per_llc_cpu *overload_cpus;
+
+	if (!cpu_active(dst_cpu))
+		return 0;
+
+	/* Avoid too frequent try get task from share LLC cpus */
+	if (dst_rq->avg_idle < sysctl_sched_idle_revert_min)
+		return 0;
+
+	rcu_read_lock();
+	overload_cpus = rcu_dereference(dst_rq->llc_overload_cpus);
+	if (!overload_cpus) {
+		rcu_read_unlock();
+		return 0;
+	}
+
+#ifdef CONFIG_SCHED_SMT
+	/*
+	 * We always prioritize selecting processes from SMT so that hot data is in cache.
+	 */
+	if (static_branch_likely(&sched_smt_present)) {
+		for_each_cpu(src_cpu, cpu_smt_mask(dst_cpu)) {
+			if (per_llc_cpu_test_id(overload_cpus, src_cpu) &&
+			    llc_get_task(dst_rq, dst_rf, &locked, src_cpu)) {
+				hit = 1;
+				goto out;
+			}
+		}
+	}
+#endif
+
+	per_llc_cpu_for_each(overload_cpus, dst_cpu, src_cpu) {
+		/* Avoid cmdline 'nosmt' caused cpus id are not consecutive */
+		if (!cpu_active(src_cpu))
+			continue;
+		/*
+		 * There must make sure the dst_cpu is shared LLC and is
+		 * not the same cpu with src_cpu.
+		 */
+		if (dst_cpu == src_cpu || !cpus_share_cache(dst_cpu, src_cpu))
+			continue;
+
+		if (llc_get_task(dst_rq, dst_rf, &locked, src_cpu)) {
+			hit = 1;
+			goto out;
+		}
+	}
+out:
+	rcu_read_unlock();
+	if (!locked) {
+		raw_spin_rq_lock(dst_rq);
+		rq_repin_lock(dst_rq, dst_rf);
+	}
+
+	/* hit == 0, it means find a task is failed */
+	if (!hit)
+		schedstat_inc(dst_rq->idle_revert_fail);
+	else
+		schedstat_inc(dst_rq->idle_revert_success);
+
+	hit |= (dst_rq->cfs.h_nr_queued > 0);
+	if (dst_rq->nr_running != dst_rq->cfs.h_nr_queued)
+		hit = -1;
+
+	return hit;
+}
+#endif /* CONFIG_IDLE_REVERT */
 
 #ifdef CONFIG_NO_HZ_COMMON
 static inline bool cfs_rq_has_blocked(struct cfs_rq *cfs_rq)

@@ -10545,6 +10545,10 @@ void __init sched_init(void)
 		ptr += nr_cpu_ids * sizeof(void **);
 
 #endif /* CONFIG_RT_GROUP_SCHED */
+#ifdef CONFIG_IDLE_REVERT
+		/* root cgroup is not allowed. */
+		root_task_group.idle_revert_enabled = 0;
+#endif
 	}
 
 	init_rt_bandwidth(&def_rt_bandwidth, global_rt_period(), global_rt_runtime());
@@ -11056,6 +11060,9 @@ struct task_group *sched_create_group(struct task_group *parent)
 #endif
 	alloc_uclamp_sched_group(tg, parent);
 
+#ifdef CONFIG_IDLE_REVERT
+	tg->idle_revert_enabled = parent->idle_revert_enabled;
+#endif
 #ifdef CONFIG_BT_GROUP_SCHED
 	mutex_init(&tg->offline_mutex);
 #endif
@@ -11136,6 +11143,10 @@ static void sched_change_group(struct task_struct *tsk)
 
 #ifdef CONFIG_HT_ISOLATE
 	tsk->ht_sensi_type = tg->ht_sensi_type;
+#endif
+
+#ifdef CONFIG_IDLE_REVERT
+	tsk->se.idle_revert_enabled = tg->idle_revert_enabled;
 #endif
 
 #ifdef CONFIG_BT_GROUP_SCHED
@@ -12268,6 +12279,87 @@ static int cpu_quota_aware_write_u64(struct cgroup_subsys_state *css,
 
 #endif
 
+#ifdef CONFIG_IDLE_REVERT
+static int tg_idle_revert_set(struct task_struct *tsk, s64 enabled)
+{
+	int queued, running;
+	struct rq_flags rf;
+	struct rq *rq;
+	struct sched_entity *se = &tsk->se;
+
+	if (se->idle_revert_enabled == enabled)
+		return 0;
+
+	rq = task_rq_lock(tsk, &rf);
+	update_rq_clock(rq);
+
+	running = task_current(rq, tsk);
+	queued = task_on_rq_queued(tsk);
+
+	if (queued)
+		dequeue_task(rq, tsk, DEQUEUE_SAVE | DEQUEUE_NOCLOCK);
+	if (running)
+		put_prev_task(rq, tsk);
+
+	se->idle_revert_enabled = enabled;
+
+	if (queued)
+		enqueue_task(rq, tsk, ENQUEUE_RESTORE | ENQUEUE_NOCLOCK);
+	if (running)
+		set_next_task(rq, tsk);
+
+	task_rq_unlock(rq, tsk, &rf);
+
+	return 0;
+}
+
+static int tg_idle_revert_conf(struct task_group *tg, void *data)
+{
+	struct cgroup_subsys_state *css = &tg->css;
+	struct css_task_iter it;
+	struct task_struct *tsk;
+
+	tg->idle_revert_enabled = *(s64 *)data;
+
+	css_task_iter_start(css, 0, &it);
+	while ((tsk = css_task_iter_next(&it)))
+		tg_idle_revert_set(tsk, tg->idle_revert_enabled);
+	css_task_iter_end(&it);
+
+	return 0;
+}
+
+static u64 cpu_idle_revert_show(struct cgroup_subsys_state *css,
+				struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+
+	return tg->idle_revert_enabled;
+}
+
+static int cpu_idle_revert_write(struct cgroup_subsys_state *css,
+				 struct cftype *cft, u64 val)
+{
+	struct task_group *tg = css_tg(css);
+
+	if (!sched_feat(IDLE_REVERT)
+	    || !sysctl_tg_idle_revert_enabled)
+		return -EINVAL;
+
+	if (val > 1 || val < 0)
+		return -EINVAL;
+
+	if (tg->idle_revert_enabled == val)
+		return 0;
+
+	rcu_read_lock();
+	walk_tg_tree_from(tg, tg_idle_revert_conf, tg_nop, (void *)(&val));
+	rcu_read_unlock();
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_EXT_GROUP_SCHED
 static u64 cpu_scx_read_u64(struct cgroup_subsys_state *css,
 			    struct cftype *cft)
@@ -12497,6 +12589,14 @@ static struct cftype cpu_legacy_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_scx_read_u64,
 		.write_u64 = cpu_scx_write_u64,
+	},
+#endif
+#ifdef CONFIG_IDLE_REVERT
+	{
+		.name = "cfs_idle_revert",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_idle_revert_show,
+		.write_u64 = cpu_idle_revert_write,
 	},
 #endif
 	{ }	/* Terminate */
@@ -13036,6 +13136,14 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_bt_suppress_percent_read_u64,
 		.write_u64 = cpu_bt_suppress_percent_write_u64,
+	},
+#endif
+#ifdef CONFIG_IDLE_REVERT
+	{
+		.name = "cfs_idle_revert",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_idle_revert_show,
+		.write_u64 = cpu_idle_revert_write,
 	},
 #endif
 	{ }	/* terminate */

@@ -105,6 +105,9 @@
 
 struct rq;
 struct cpuidle_state;
+#ifdef CONFIG_IDLE_REVERT
+struct per_llc_cpu;
+#endif
 
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
@@ -553,6 +556,9 @@ struct task_group {
 	struct uclamp_se	uclamp[UCLAMP_CNT];
 #endif
 
+#ifdef CONFIG_IDLE_REVERT
+	u64 idle_revert_enabled;
+#endif
 #ifdef CONFIG_SCHED_SOFT_DOMAIN
 	KABI_USE(1, struct soft_domain_ctx *sf_ctx);
 #else
@@ -830,6 +836,9 @@ struct cfs_rq {
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
+#ifdef CONFIG_IDLE_REVERT
+	unsigned long		llc_h_nr_runnable; /* idle revert statistics */
+#endif
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 };
@@ -1333,6 +1342,9 @@ struct rq {
 #endif
 	struct rt_rq		rt;
 	struct dl_rq		dl;
+#ifdef CONFIG_IDLE_REVERT
+	struct per_llc_cpu	*llc_overload_cpus;
+#endif
 #ifdef CONFIG_SCHED_CLASS_EXT
 	struct scx_rq		scx;
 #endif
@@ -1487,6 +1499,10 @@ struct rq {
 	/* try_to_wake_up() stats */
 	unsigned int		ttwu_count;
 	unsigned int		ttwu_local;
+#ifdef CONFIG_IDLE_REVERT
+	unsigned int		idle_revert_success;
+	unsigned int		idle_revert_fail;
+#endif
 #endif
 
 #ifdef CONFIG_CPU_IDLE

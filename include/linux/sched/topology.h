@@ -103,6 +103,9 @@ struct sched_domain_shared {
 	atomic_t	nr_busy_cpus;
 	int		has_idle_cores;
 	int		nr_idle_scan;
+#ifdef CONFIG_IDLE_REVERT
+	struct per_llc_cpu *llc_overload_cpus;
+#endif
 };
 
 struct sched_domain {
