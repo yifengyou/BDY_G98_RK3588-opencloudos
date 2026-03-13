@@ -10,12 +10,15 @@
 #include <linux/writeback.h>
 #include <linux/shmem_fs.h>
 #include <linux/pagemap.h>
+#include <linux/mmzone.h>
 #include <linux/atomic.h>
 #include <linux/module.h>
 #include <linux/swap.h>
 #include <linux/dax.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include "swap_table.h"
+#include "internal.h"
 
 /*
  *		Double CLOCK lists
@@ -173,9 +176,13 @@
 #define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) + \
 			 WORKINGSET_SHIFT + NODES_SHIFT + \
 			 MEM_CGROUP_ID_SHIFT)
+#define EVICTION_SHIFT_ANON	(EVICTION_SHIFT + SWAP_COUNT_SHIFT)
 #define EVICTION_BITS	(BITS_PER_LONG - (EVICTION_SHIFT))
+#define EVICTION_BITS_ANON	(BITS_PER_LONG - (EVICTION_SHIFT_ANON))
 #define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
+#define EVICTION_MASK_ANON	(~0UL >> EVICTION_SHIFT_ANON)
 #define LRU_GEN_EVICTION_BITS	(EVICTION_BITS - LRU_REFS_WIDTH)
+#define LRU_GEN_EVICTION_BITS_ANON	(EVICTION_BITS_ANON - LRU_REFS_WIDTH)
 
 /*
  * Eviction timestamps need to be able to cover the full range of
@@ -185,13 +192,12 @@
  * that case, we have to sacrifice granularity for distance, and group
  * evictions into coarser buckets by shaving off lower timestamp bits.
  */
-static unsigned int bucket_order __read_mostly;
-static unsigned int lru_gen_bucket_order __read_mostly;
+static unsigned int bucket_order[ANON_AND_FILE] __read_mostly;
+static unsigned int lru_gen_bucket_order[ANON_AND_FILE] __read_mostly;
 
 static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
 			 bool workingset)
 {
-	eviction &= EVICTION_MASK;
 	eviction = (eviction << MEM_CGROUP_ID_SHIFT) | memcgid;
 	eviction = (eviction << NODES_SHIFT) | pgdat->node_id;
 	eviction = (eviction << WORKINGSET_SHIFT) | workingset;
@@ -387,7 +393,8 @@ static void *lru_gen_eviction(struct folio *folio)
 	token = max(refs - 1, 0);
 	token <<= LRU_GEN_EVICTION_BITS;
 	token |= lru_eviction(lruvec, type, delta,
-			      LRU_GEN_EVICTION_BITS, lru_gen_bucket_order);
+			      type ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON,
+			      lru_gen_bucket_order[type]);
 	atomic_long_add(delta, &lrugen->evicted[hist][type][tier]);
 
 	return pack_shadow(mem_cgroup_id(memcg), pgdat, token, refs);
@@ -397,7 +404,7 @@ static void *lru_gen_eviction(struct folio *folio)
  * Tests if the shadow entry is for a folio that was recently evicted.
  * Fills in @lruvec, @token, @workingset with the values unpacked from shadow.
  */
-static bool inline lru_gen_test_recent(struct lruvec *lruvec, bool type,
+static inline bool lru_gen_test_recent(struct lruvec *lruvec, bool type,
 				       unsigned long distance)
 {
 	int hist;
@@ -469,7 +476,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 	refault_distance = lru_distance(lruvec, type, token,
-				LRU_GEN_EVICTION_BITS, lru_gen_bucket_order);
+					type ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON,
+					lru_gen_bucket_order[type]);
 	workingset_refault_track(lruvec, refault_distance);
 	/* Check if the gen the page was evicted from still exist */
 	recent = lru_gen_test_recent(lruvec, type, refault_distance);
@@ -573,6 +581,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 {
 	struct pglist_data *pgdat = folio_pgdat(folio);
+	int file = folio_is_file_lru(folio);
 	unsigned long eviction;
 	struct lruvec *lruvec;
 	int memcgid;
@@ -589,9 +598,11 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	/* XXX: target_memcg can be NULL, go through lruvec */
 	memcgid = mem_cgroup_id(lruvec_memcg(lruvec));
 	eviction = lru_eviction(lruvec, folio_is_file_lru(folio),
-				folio_nr_pages(folio), EVICTION_BITS, bucket_order);
+				folio_nr_pages(folio),
+				file ? EVICTION_BITS : EVICTION_BITS_ANON,
+				bucket_order[file]);
 	return pack_shadow(memcgid, pgdat, eviction,
-				folio_test_workingset(folio));
+			   folio_test_workingset(folio));
 }
 
 /**
@@ -665,14 +676,17 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 	if (lru_gen_enabled()) {
 		bool recent;
 		refault_distance = lru_distance(eviction_lruvec, file, eviction,
-						LRU_GEN_EVICTION_BITS, lru_gen_bucket_order);
+						file ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON,
+						lru_gen_bucket_order[file]);
 		recent = lru_gen_test_recent(eviction_lruvec, file, refault_distance);
 		mem_cgroup_put(eviction_memcg);
 		return recent;
 	}
 
 	refault_distance = lru_distance(eviction_lruvec, file,
-					eviction, EVICTION_BITS, bucket_order);
+					eviction,
+					file ? EVICTION_BITS : EVICTION_BITS_ANON,
+					bucket_order[file]);
 
 	if (tracking)
 		workingset_refault_track(eviction_lruvec, refault_distance);
@@ -963,14 +977,21 @@ static int __init workingset_init(void)
 	 */
 	max_order = fls_long(totalram_pages() - 1);
 	if (max_order > EVICTION_BITS)
-		bucket_order = max_order - EVICTION_BITS;
-	pr_info("workingset: timestamp_bits=%d max_order=%d bucket_order=%u\n",
-		EVICTION_BITS, max_order, bucket_order);
+		bucket_order[WORKINGSET_FILE] = max_order - EVICTION_BITS;
+	if (max_order > EVICTION_BITS_ANON)
+		bucket_order[WORKINGSET_ANON] = max_order - EVICTION_BITS_ANON;
+	pr_info("workingset: timestamp_bits=%d/%d max_order=%d bucket_order=%u/%u\n",
+		EVICTION_BITS, EVICTION_BITS_ANON, max_order,
+		bucket_order[WORKINGSET_FILE], bucket_order[WORKINGSET_ANON]);
 #ifdef CONFIG_LRU_GEN
 	if (max_order > LRU_GEN_EVICTION_BITS)
-		lru_gen_bucket_order = max_order - LRU_GEN_EVICTION_BITS;
-	pr_info("workingset: lru_gen_timestamp_bits=%d lru_gen_bucket_order=%u\n",
-		LRU_GEN_EVICTION_BITS, lru_gen_bucket_order);
+		lru_gen_bucket_order[WORKINGSET_FILE] = max_order - LRU_GEN_EVICTION_BITS;
+	if (max_order > LRU_GEN_EVICTION_BITS_ANON)
+		lru_gen_bucket_order[WORKINGSET_ANON] = max_order - LRU_GEN_EVICTION_BITS_ANON;
+	pr_info("workingset: lru_gen_timestamp_bits=%d/%d lru_gen_bucket_order=%u/%u\n",
+		LRU_GEN_EVICTION_BITS, LRU_GEN_EVICTION_BITS_ANON,
+		lru_gen_bucket_order[WORKINGSET_FILE],
+		lru_gen_bucket_order[WORKINGSET_ANON]);
 #endif
 
 	workingset_shadow_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE |
