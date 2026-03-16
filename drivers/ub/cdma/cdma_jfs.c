@@ -534,10 +534,11 @@ int cdma_delete_jfs(struct cdma_dev *cdev, u32 jfs_id)
 	int ret;
 
 	if (jfs_id >= cdev->caps.jfs.start_idx + cdev->caps.jfs.max_cnt) {
-		dev_info(cdev->dev,
-			 "jfs id invalid, jfs_id = %u, start_idx = %u, max_cnt = %u.\n",
-			 jfs_id, cdev->caps.jfs.start_idx,
-			 cdev->caps.jfs.max_cnt);
+		dev_info(
+			cdev->dev,
+			"jfs id invalid, jfs_id = %u, start_idx = %u, max_cnt = %u.\n",
+			jfs_id, cdev->caps.jfs.start_idx,
+			cdev->caps.jfs.max_cnt);
 		return -EINVAL;
 	}
 

@@ -109,8 +109,8 @@ void cdma_seg_ungrant(struct cdma_segment *seg)
 
 	token_info.tokenVal = seg->base.token_value;
 
-	iommu_sva_ungrant(seg->ksva, (void *)seg->base.sva,
-			  seg->base.len, &token_info);
+	iommu_sva_ungrant(seg->ksva, (void *)seg->base.sva, seg->base.len,
+			  &token_info);
 }
 
 struct dma_seg *cdma_import_seg(struct dma_seg_cfg *cfg)
