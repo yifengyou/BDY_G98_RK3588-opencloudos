@@ -5,6 +5,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
 
@@ -362,13 +363,56 @@ static int ubase_dbg_dump_perf_stats_ub(struct seq_file *s,
 	return 0;
 }
 
+static int ubase_dbg_dump_perf_stats_eth(struct seq_file *s, struct ubase_dev *udev)
+{
+#define UBASE_ETH_PERF_STATS_PERIOD	1000
+
+	struct ubase_eth_mac_stats old_data = {0};
+	struct ubase_eth_mac_stats cur_data = {0};
+	u64 port_tx_bw, port_rx_bw;
+	int ret;
+
+	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits) ||
+	     test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		return -EBUSY;
+
+	ret = __ubase_get_eth_port_stats(udev, &old_data);
+	if (ret) {
+		ubase_err(udev,
+			  "failed to get first eth stats, ret = %d.\n", ret);
+		return ret;
+	}
+
+	msleep(UBASE_ETH_PERF_STATS_PERIOD);
+
+	ret = __ubase_get_eth_port_stats(udev, &cur_data);
+	if (ret) {
+		ubase_err(udev,
+			  "failed to get second eth stats, ret = %d.\n", ret);
+		return ret;
+	}
+
+	port_tx_bw = (cur_data.tx_total_octets - old_data.tx_total_octets) *
+		     BITS_PER_BYTE / UBASE_ETH_PERF_STATS_PERIOD;
+	port_rx_bw = (cur_data.rx_total_octets - old_data.rx_total_octets) *
+		     BITS_PER_BYTE / UBASE_ETH_PERF_STATS_PERIOD;
+
+	seq_printf(s, "perf_stats_period: %d(ms)\n", UBASE_ETH_PERF_STATS_PERIOD);
+	seq_printf(s, "port_tx_bw: %llu(kbps)\n", port_tx_bw);
+	seq_printf(s, "port_rx_bw: %llu(kbps)\n", port_rx_bw);
+
+	return 0;
+}
+
 static int ubase_dbg_dump_perf_stats(struct seq_file *s, void *data)
 {
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
-	int ret = 0;
+	int ret;
 
 	if (ubase_dev_ubl_supported(udev))
 		ret = ubase_dbg_dump_perf_stats_ub(s, udev);
+	else
+		ret = ubase_dbg_dump_perf_stats_eth(s, udev);
 
 	return ret;
 }
