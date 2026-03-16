@@ -9297,6 +9297,7 @@ idle:
 	if (rf) {
 #ifdef CONFIG_IDLE_REVERT
 		if (cpu_idle_revert_enabled()) {
+			new_tasks = llc_try_idle_revert(rq, rf);
 			if (new_tasks > 0)
 				goto again;
 		}
