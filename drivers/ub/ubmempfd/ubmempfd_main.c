@@ -406,4 +406,5 @@ module_init(ubmempfd_core_init);
 module_exit(ubmempfd_core_exit);
 
 MODULE_DESCRIPTION("Hisilicon UB Memory Provider File Descriptor Driver For Qemu");
+MODULE_AUTHOR("HiSilicon Tech. Co., Ltd.");
 MODULE_LICENSE("GPL");
