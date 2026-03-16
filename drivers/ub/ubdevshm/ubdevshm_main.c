@@ -374,9 +374,9 @@ static bool role_provider_equal(struct access_ctx_inner *ctx, void *arg)
 }
 
 static struct access_ctx_inner *find_get_access_ctx(struct shm_container *cntr,
-						    struct mem_uva *va, bool unique, bool is_equal,
-						    bool (*equal)(struct access_ctx_inner*, void*),
-						    void *arg)
+						struct mem_uva *va, bool unique, bool is_equal,
+						bool (*equal)(struct access_ctx_inner *, void *),
+						void *arg)
 {
 	struct access_ctx_inner *ctx = NULL, *pos = NULL, *n = NULL;
 	struct shm_area *sa;
@@ -634,8 +634,7 @@ int ubdevshm_register_segment(unsigned long *handle, struct mem_uva *va)
 	if (ret)
 		goto fail_cntr;
 
-	if (found)
-		shm_container_put(cntr);
+	shm_container_put(cntr);
 
 	return ret;
 
@@ -891,6 +890,7 @@ int ubdevshm_acquire_uba(struct access_ctx *ctx, struct mem_uva *va, union acqui
 		} else {
 			pr_err("ctx acquire ref is zero\n");
 			ctx_inner->provider->ops->release(&ctx_inner->seg.uba);
+			ret = -ENOENT;
 		}
 	}
 	access_ctx_put(ctx_inner);
@@ -916,21 +916,25 @@ static bool is_equal_uba(struct mem_uba *a, struct mem_uba *b)
 	return false;
 }
 
-int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba)
+static int find_get_shm_container_context(struct access_ctx *ctx, struct mem_uba *uba,
+			 struct shm_container **rcntr, struct access_ctx_inner **rctx_inner)
 {
 	struct access_ctx_inner *ctx_inner;
 	struct shm_container *cntr;
-	int ret, refret;
-
-	if (!uba) {
-		pr_err("uba is NULL\n");
-		return -EINVAL;
-	}
+	void *mem_handle = uba->mem_handle;
+	int ret;
 
 	if (!ctx) { // simple mode
-		ctx_inner = find_get_access_ctx_by_id((u64)uba->mem_handle);
+		uintptr_t handle_to_int = (uintptr_t)mem_handle;
+
+		ctx_inner = find_get_access_ctx_by_id(handle_to_int);
 		if (!ctx_inner) {
 			pr_err("find access ctx inner failed\n");
+			return -ENOENT;
+		}
+		cntr = find_get_shm_container(is_same_role_cb, &ctx_inner->user);
+		if (!cntr) {
+			access_ctx_put(ctx_inner);
 			return -ENOENT;
 		}
 	} else { // grant mode
@@ -940,10 +944,34 @@ int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba)
 		if (!is_same_role_task(&ctx_inner->user, current)) {
 			ret = -EINVAL;
 			access_ctx_put(ctx_inner);
-			shm_container_put(cntr);
 			goto out;
 		}
 	}
+
+	*rcntr = cntr;
+	*rctx_inner = ctx_inner;
+
+	return 0;
+
+out:
+	shm_container_put(cntr);
+	return ret;
+}
+
+int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba)
+{
+	struct access_ctx_inner *ctx_inner;
+	struct shm_container *cntr;
+	int ret;
+
+	if (!uba) {
+		pr_err("uba is NULL\n");
+		return -EINVAL;
+	}
+
+	ret = find_get_shm_container_context(ctx, uba, &cntr, &ctx_inner);
+	if (ret)
+		return ret;
 
 	if (!is_equal_uba(&ctx_inner->seg.uba, uba)) {
 		ret = -EINVAL;
@@ -967,13 +995,14 @@ int ubdevshm_release_uba(struct access_ctx *ctx, struct mem_uba *uba)
 		 * counting to zero if it happens to execute the current line of code.
 		 */
 		mutex_lock(&cntr->lock);
-		refret = refcount_inc_not_zero(&ctx_inner->acquire_refcnt);
-		if (refret) // The situation should not have happened
-			pr_err("refcnt is not zero, refcount fail.\n");
+		// This situtation should not have happened.
+		if (refcount_inc_not_zero(&ctx_inner->acquire_refcnt))
+			pr_warn("refcnt is not zero, refcount is fail.\n");
 		mutex_unlock(&cntr->lock);
 	}
 	access_ctx_put(ctx_inner);
 out:
+	shm_container_put(cntr);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ubdevshm_release_uba);
