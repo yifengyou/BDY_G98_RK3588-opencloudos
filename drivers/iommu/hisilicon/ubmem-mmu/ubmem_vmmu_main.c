@@ -265,8 +265,7 @@ ubmem_vmmu_get_map_ctx(struct ubmem_vmmu_domain *mdom, u64 uba)
 	if (!map_ctx)
 		return NULL;
 
-	pr_debug("ubm mmu map ctx, ctx 0x%llx, pid %d, hash_idx %u\n",
-		 (uint64_t)map_ctx, pid, hash_idx);
+	pr_debug("ubm mmu map ctx, pid %d, hash_idx %u\n", pid, hash_idx);
 	map_ctx->tid = mdom->base_domain.tid;
 	map_ctx->pid = current->pid;
 	map_ctx->uba_start = uba;
@@ -760,6 +759,7 @@ module_driver(ubmem_vmmu_driver, ubmem_vmmu_driver_register, ubmem_vmmu_driver_u
 
 MODULE_IMPORT_NS(UMMU_CORE_DRIVER);
 MODULE_IMPORT_NS(UMMU_INTERNAL);
-MODULE_DESCRIPTION("Hisilicon ub memory vmmu driver");
+MODULE_DESCRIPTION("Hisilicon ubmem vmmu driver");
+MODULE_AUTHOR("HiSilicon Tech. Co., Ltd.");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" UBMEM_VMMU_DRV_NAME);
