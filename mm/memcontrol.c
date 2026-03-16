@@ -11197,7 +11197,10 @@ static int max_retry_times = 5;
 static long memcg_prio_reclaim_async(void)
 {
 	struct mem_cgroup *memcg;
-	int prio;
+	struct mem_cgroup *victim;
+	int cursor_id = -1;
+	int prio, hierarchy_cnt, iter_count;
+	bool seen_cursor, fallback;
 	bool reclaim_succeed = false;
 	int nr_reclaimed;
 	int retry_times = 0;
@@ -11210,31 +11213,68 @@ retry:
 	retry_times++;
 	nr_reclaim_memcg = 0;
 	zero_reclaim_memcg = 0;
-	rcu_read_lock();
-	list_for_each_entry_rcu(memcg, &memcg_global_reclaim_list.list,
+	iter_count = 0;
+	hierarchy_cnt = memcg_get_prio_hierarchy_count(memcg_cur_reclaim_prio);
+
+	for (;;) {
+		victim = NULL;
+		seen_cursor = (cursor_id == -1);
+		fallback = false;
+scan_again:
+		rcu_read_lock();
+		list_for_each_entry_rcu(memcg, &memcg_global_reclaim_list.list,
 				prio_list_async) {
-		prio = memcg_get_prio(memcg);
-		if (prio < memcg_cur_reclaim_prio)
-			continue;
 
-		if (memcg_reclaim_goal > 0) {
-			nr_reclaim_memcg++;
-			nr_reclaimed = try_to_free_mem_cgroup_pages(memcg,
-					memcg_reclaim_goal, GFP_KERNEL, true);
-			if (!RUE_CALL_TYPE(MEM, mem_cgroup_notify_reclaim, bool,
-					   memcg, nr_reclaimed))
-				break;
+			prio = memcg_get_prio(memcg);
+			if (prio < memcg_cur_reclaim_prio)
+				continue;
 
-			if (nr_reclaimed == 0)
-				zero_reclaim_memcg++;
-			if (atomic_long_read(&memcg_reclaimed_count) >
-				memcg_reclaim_goal) {
-				reclaim_succeed = true;
+			if (!fallback && !seen_cursor) {
+				if (memcg->css.id == cursor_id)
+					seen_cursor = true;
+				continue;
+			}
+
+			if (css_tryget(&memcg->css)) {
+				victim = memcg;
 				break;
 			}
 		}
+		rcu_read_unlock();
+
+		/* Fallback only once per loop. */
+		if (!victim && !fallback) {
+			fallback = true;
+			goto scan_again;
+		}
+		if (!victim)
+			break;
+
+		nr_reclaim_memcg++;
+		nr_reclaimed = try_to_free_mem_cgroup_pages(victim,
+			memcg_reclaim_goal, GFP_KERNEL, true);
+		cursor_id = victim->css.id;
+		if (!RUE_CALL_TYPE(MEM, mem_cgroup_notify_reclaim, bool,
+					   memcg, nr_reclaimed)) {
+			css_put(&victim->css);
+			break;
+		}
+
+		if (nr_reclaimed == 0)
+			zero_reclaim_memcg++;
+		if (atomic_long_read(&memcg_reclaimed_count) >
+			memcg_reclaim_goal) {
+			reclaim_succeed = true;
+			css_put(&victim->css);
+			break;
+		}
+		iter_count++;
+		if (iter_count >= hierarchy_cnt) {
+			css_put(&victim->css);
+			break;
+		}
+		css_put(&victim->css);
 	}
-	rcu_read_unlock();
 
 	if (reclaim_succeed)
 		return HZ / 2;
