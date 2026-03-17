@@ -936,7 +936,7 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	msg.out_size = sizeof(resp);
 	msg.out = &resp;
 
-	ret = __ubase_ctrlq_send(udev, &msg, NULL);
+	ret = __ubase_ctrlq_send(udev, &msg, true, NULL);
 	if (ret) {
 		ubase_err(udev,
 			  "failed to send ctrlq msg when query vl, ret = %d.\n", ret);
@@ -997,7 +997,7 @@ static int ubase_ctrlq_query_sl(struct ubase_dev *udev)
 	msg.out_size = sizeof(resp);
 	msg.out = &resp;
 
-	ret = __ubase_ctrlq_send(udev, &msg, NULL);
+	ret = __ubase_ctrlq_send(udev, &msg, true, NULL);
 	if (ret) {
 		ubase_err(udev,
 			  "failed to send ctrlq msg when query sl, ret = %d.\n", ret);

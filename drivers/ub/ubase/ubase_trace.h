@@ -260,6 +260,9 @@ DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_mue2ue_resp,
 DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_ue_req,
 	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
 	TP_ARGS(dev, bus_ue_id, buf, len));
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_parse_ue_msg,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
 
 TRACE_EVENT(ubase_misc_event_cause,
 	TP_PROTO(struct device *dev, unsigned long event_cause),
