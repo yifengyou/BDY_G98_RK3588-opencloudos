@@ -112,7 +112,6 @@ static const struct genl_ops ubcore_genl_ops[] = {
 	  .policy = ubcore_policy,
 	  .maxattr = ARRAY_SIZE(ubcore_policy) - 1,
 
-	  .flags = GENL_ADMIN_PERM,
 	  .doit = ubcore_get_topo_info
 	},
 	{
