@@ -12,7 +12,8 @@
 #include <linux/random.h>
 #include <ub/urma/ubcore_uapi.h>
 #include "ubcore_log.h"
-#include "net/ubcore_net.h"
+#include "net/ubcore_protocol.h"
+#include "net/ubcore_comm.h"
 #include "net/ubcore_session.h"
 #include "ubcore_connect_adapter.h"
 #include "ubcore_priv.h"

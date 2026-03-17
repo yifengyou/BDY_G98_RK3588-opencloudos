@@ -11,7 +11,9 @@
 
 #include <ub/urma/ubcore_uapi.h>
 #include "ubcore_connect_bonding.h"
-#include "net/ubcore_net.h"
+#include "net/ubcore_protocol.h"
+#include "net/ubcore_comm.h"
+#include "net/ubcore_session.h"
 #include "ubcore_priv.h"
 #include "ubcore_topo_info.h"
 #include "ubcore_log.h"

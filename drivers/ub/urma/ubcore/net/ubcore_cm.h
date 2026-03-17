@@ -13,7 +13,8 @@
 #define UBCORE_CM_H
 
 #include <ub/urma/ubcore_types.h>
-#include "ubcore_net.h"
+#include "ubcore_protocol.h"
+#include "ubcore_comm.h"
 
 typedef int (*ubcore_cm_eid_ops)(struct ubcore_device *dev,
 				 struct ubcore_eid_info *eid_info,
@@ -64,5 +65,10 @@ int ubcore_ubcm_send(struct ubcore_device *dev, void *conn,
 		     struct ubcore_net_msg *msg);
 int ubcore_ubcm_send_to(struct ubcore_device *dev, union ubcore_eid addr,
 			struct ubcore_net_msg *msg);
+
+void ubcore_cm_register_endpoint(struct ubcore_comm_endpoint *ep,
+				 struct ubcore_device *dev,
+				 uint32_t eid_index);
+void ubcore_cm_unregister_endpoint(struct ubcore_comm_endpoint *ep);
 
 #endif /* UBCORE_CM_H */
