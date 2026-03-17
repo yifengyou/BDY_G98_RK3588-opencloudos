@@ -509,7 +509,8 @@ static int unic_change_mtu(struct net_device *netdev, int new_mtu)
 	int ret;
 
 	if (netif_running(netdev)) {
-		unic_err(unic_dev, "failed to change MTU, due to network interface is up, please down it first and try again.\n");
+		unic_err(unic_dev,
+			 "failed to change MTU, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 

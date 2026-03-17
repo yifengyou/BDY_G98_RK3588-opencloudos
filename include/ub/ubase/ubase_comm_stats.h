@@ -304,4 +304,4 @@ int ubase_get_ub_dl_pkt_stats(struct auxiliary_device *adev, u64 port_bitmap,
 			      struct ubase_ub_dl_pkt_stats_result *data,
 			      u32 data_size);
 
-#endif /* _UBASE_COMM_STATS_H */
+#endif /* _UBASE_COMM_STATS_H_ */

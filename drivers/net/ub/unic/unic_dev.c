@@ -319,7 +319,7 @@ static void unic_uninit_channels_attr(struct unic_dev *unic_dev)
 	struct unic_channels *channels = &unic_dev->channels;
 
 	/* Prevent residual QoS configurations caused by the unic driver. */
-	(void)ubase_restore_initial_qset_qos(adev);
+	ubase_restore_initial_qset_qos(adev);
 
 	mutex_destroy(&channels->mutex);
 }
@@ -705,6 +705,7 @@ static void unic_sync_bond_port(struct unic_dev *unic_dev)
 static void unic_periodic_service_task(struct unic_dev *unic_dev)
 {
 #define UNIC_UPDATE_STATS_TIMER_INTERVAL	300UL
+
 	unsigned long delta = round_jiffies_relative(HZ);
 
 	unic_link_status_update(unic_dev);

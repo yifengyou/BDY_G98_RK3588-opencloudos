@@ -35,4 +35,4 @@ void ubase_dbg_uninit(struct ubase_dev *udev);
 int ubase_dbg_register_debugfs(void);
 void ubase_dbg_unregister_debugfs(void);
 
-#endif
+#endif /* __UBASE_DEBUGFS_H__ */

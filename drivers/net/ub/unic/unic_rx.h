@@ -175,4 +175,4 @@ int unic_poll_rx(struct unic_channel *c, int budget,
 void unic_clear_rq(struct unic_rq *rq);
 void unic_send_skb_to_stack(struct unic_channel *c, struct sk_buff *skb);
 
-#endif
+#endif /* __UNIC_RX_H__ */

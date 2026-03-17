@@ -629,6 +629,8 @@ static int ubase_handle_activate_resp(void *dev, void *data, u32 len)
 		return -EINVAL;
 	}
 
+	ubase_dbg(udev, "recv activate resp.\n");
+
 	msn = le16_to_cpu(resp->msn);
 	self = &udev->act_ctx.self;
 	if (self->wait_msn == msn) {
@@ -1470,6 +1472,17 @@ struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_adev_qos);
 
+/**
+ * ubase_adev_mac_stats_supported - determine whether mac statistics querying
+ * is supported
+ * @adev: auxiliary device
+ *
+ * The function is used to determine whether the auxiliary device supports
+ * querying mac statistics.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_mac_stats_supported(struct auxiliary_device *adev)
 {
 	if (!adev)

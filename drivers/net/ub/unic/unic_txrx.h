@@ -256,4 +256,4 @@ int unic_napi_poll(struct napi_struct *napi, int budget);
 void unic_cq_doorbell(struct unic_cq *cq, u32 last_ci);
 void unic_clear_all_queue(struct net_device *netdev);
 
-#endif
+#endif /* __UNIC_TXRX_H__ */

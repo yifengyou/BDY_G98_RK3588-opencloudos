@@ -132,4 +132,4 @@ void ubase_ctrlq_disable_remote(struct ubase_dev *udev);
 int ubase_ctrlq_ue_req_event_callback(struct ubase_dev *udev,
 				      struct ubase_ue2ue_ctrlq_head *cmd);
 
-#endif
+#endif /* __UBASE_CTRLQ_H__ */

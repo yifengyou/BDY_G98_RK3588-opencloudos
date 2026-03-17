@@ -11,9 +11,7 @@
 #include <linux/if_ether.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
 
-#ifndef UBL_ALEN
-#define UBL_ALEN 16
-#endif
+#include "unic_guid.h"
 
 #define UNIC_BITMAP_LEN		8
 #define UNIC_DBG_MAC_NUM	16
@@ -95,7 +93,7 @@ struct unic_dbg_comm_addr_node {
 		struct {
 			u8 mac_addr[ETH_ALEN];
 			u32	eport;
-	};
+		};
 	};
 };
 
@@ -122,4 +120,4 @@ int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_mac_tbl_list_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_mng_tbl_list_hw(struct seq_file *s, void *data);
 
-#endif /* _UNIC_ENTRY_DEBUGFS_H */
+#endif /* __UNIC_ENTRY_DEBUGFS_H__ */

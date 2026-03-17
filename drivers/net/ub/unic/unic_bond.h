@@ -48,4 +48,4 @@ int unic_update_bond_ipaddr(struct unic_dev *unic_dev, struct sockaddr *sa,
 			    u16 ip_mask, enum UNIC_COMM_ADDR_STATE state);
 int unic_sync_bond_status(struct net_device *netdev);
 
-#endif
+#endif /* __UNIC_BOND_H__ */

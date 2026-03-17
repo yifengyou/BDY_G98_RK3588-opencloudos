@@ -7,16 +7,9 @@
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
 #include <linux/spinlock.h>
-#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
-#include <net/ub/ubl.h>
-#endif
 #include <ub/ubase/ubase_comm_cmd.h>
 
 #include "unic_guid.h"
-
-#ifndef UBL_ALEN
-#define UBL_ALEN 16
-#endif
 
 static bool unic_is_valid_net_guid(u8 *guid)
 {

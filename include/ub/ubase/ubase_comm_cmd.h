@@ -202,4 +202,4 @@ int ubase_register_crq_event(struct auxiliary_device *aux_dev,
 			     struct ubase_crq_event_nb *nb);
 void ubase_unregister_crq_event(struct auxiliary_device *aux_dev, u16 opcode);
 
-#endif
+#endif /* _UBASE_COMM_CMD_H_ */

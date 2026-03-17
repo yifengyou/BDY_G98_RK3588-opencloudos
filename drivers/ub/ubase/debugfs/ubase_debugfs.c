@@ -105,6 +105,7 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 	for (i = 0; i < ARRAY_SIZE(ubase_common_caps_info); i++)
 		seq_printf(s, ubase_common_caps_info[i].format,
 			   ubase_common_caps_info[i].caps_info);
+
 	seq_printf(s, "\tfw_version: %u.%u.%u.%u\n",
 		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE3_MASK),
 		   u32_get_bits(dev_caps->fw_version, UBASE_FW_VERSION_BYTE2_MASK),
@@ -454,7 +455,7 @@ static bool __ubase_dbg_dentry_support(struct device *dev, u32 property)
  * @property: property of debugfs dentry or debufs cmd file
  *
  * The function is used in the 'support' functions of 'struct ubase_dbg_cmd_info'
- * and 'struct ubase_dbg_cmd_info‘ to determine whether to create debugfs dentries
+ * and 'struct ubase_dbg_cmd_info' to determine whether to create debugfs dentries
  * and debugfs cmd files.
  *
  * Context: Any context.

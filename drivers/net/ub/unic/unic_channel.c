@@ -52,7 +52,8 @@ static int unic_check_set_channels_available(struct net_device *ndev)
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 
 	if (netif_running(ndev)) {
-		unic_err(unic_dev, "failed to set channels, due to network interface is up, please down it first and try again.\n");
+		unic_err(unic_dev,
+			 "failed to set channels, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 
@@ -358,7 +359,8 @@ int unic_set_channels_param(struct net_device *ndev,
 	if (ret)
 		return ret;
 
-	if (!unic_is_channels_param_changed(unic_dev, param, kernel_param, &new_param))
+	if (!unic_is_channels_param_changed(unic_dev, param, kernel_param,
+					    &new_param))
 		return 0;
 
 	ret = unic_alloc_txrx_stats(unic_dev, &sq_stats, &rq_stats);

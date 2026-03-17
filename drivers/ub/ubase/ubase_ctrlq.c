@@ -154,7 +154,7 @@ static int ubase_ctrlq_msg_queue_init(struct ubase_dev *udev)
 	struct ubase_ctrlq_msg_ctx *ctx;
 	u16 i;
 
-	udev->ctrlq.msg_queue = kzalloc(depth * msg_ctx_size, GFP_KERNEL);
+	udev->ctrlq.msg_queue = kcalloc(depth, msg_ctx_size, GFP_KERNEL);
 	if (!udev->ctrlq.msg_queue) {
 		ubase_err(udev, "failed to alloc ctrlq msg queue.\n");
 		return -ENOMEM;
@@ -1715,14 +1715,14 @@ int ubase_ctrlq_send_ue_req(struct auxiliary_device *adev, void *data, u16 len)
 	udev = __ubase_get_udev_by_adev(adev);
 	if (len < UBASE_CTRLQ_UE_MSG_HDR_LEN) {
 		ubase_err(udev,
-			  "ubase ctrlq send ue req len invalid, len = %u.\n",
+			  "ubase ctrlq send ue req len invalid, len = %hu.\n",
 			  len);
 		return -EINVAL;
 	}
 
 	if (cmd->in_size > (len - UBASE_CTRLQ_UE_MSG_HDR_LEN)) {
 		ubase_err(udev,
-			  "ubase ctrlq send ue req len error, len = %u, size = %u.\n",
+			  "ubase ctrlq send ue req len error, len = %hu, size = %hu.\n",
 			  len, cmd->in_size);
 		return -EINVAL;
 	}
@@ -1730,7 +1730,7 @@ int ubase_ctrlq_send_ue_req(struct auxiliary_device *adev, void *data, u16 len)
 	mbx_ue_id = le16_to_cpu(cmd->head.mbx_ue_id);
 	if (!ubase_mbx_ue_id_is_valid(mbx_ue_id, udev)) {
 		ubase_err(udev,
-			  "ubase ctrlq send ue req mbx ue id = %u error.\n",
+			  "ubase ctrlq send ue req mbx ue id = %hu error.\n",
 			  mbx_ue_id);
 		return -EINVAL;
 	}

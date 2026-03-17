@@ -18,23 +18,21 @@
 #define CREATE_TRACE_POINTS
 #include "ubase_trace.h"
 
-static int ubase_alloc_cmd_queue(struct ubase_dev *udev,
-				 struct ubase_cmdq_ring *ring)
+static inline int ubase_alloc_cmd_queue(struct ubase_dev *udev,
+					struct ubase_cmdq_ring *ring)
 {
 	size_t size = ring->desc_num * sizeof(struct ubase_cmdq_desc);
 
 	ring->desc = dma_alloc_coherent(udev->dev, size, &ring->desc_dma_addr,
 					GFP_KERNEL);
-	if (!ring->desc) {
-		ubase_err(udev, "failed to alloc cmdq dma addr.\n");
+	if (!ring->desc)
 		return -ENOMEM;
-	}
 
 	return 0;
 }
 
-static void ubase_free_cmd_queue(struct ubase_dev *udev,
-				 struct ubase_cmdq_ring *ring)
+static inline void ubase_free_cmd_queue(struct ubase_dev *udev,
+					struct ubase_cmdq_ring *ring)
 {
 	size_t size = ring->desc_num * sizeof(struct ubase_cmdq_desc);
 
@@ -240,7 +238,7 @@ static int ubase_csq_clean(struct ubase_dev *udev)
 	if (!ubase_csq_data_is_valid(udev, hw_ci)) {
 		ubase_warn(udev,
 			   "the cmd head is incorrect! cmd head = (%lld, %u-%u).\n",
-			 hw_ci, csq->pi, csq->ci);
+			   hw_ci, csq->pi, csq->ci);
 		ubase_warn(udev,
 			   "any further commands to the firmware are disabled!\n");
 		set_bit(UBASE_STATE_CMD_DISABLE, &udev->hw.state);
@@ -276,8 +274,8 @@ int ubase_send_cmd(struct ubase_dev *udev,
 	if (num > free_num) {
 		csq->ci = ubase_read_dev(&udev->hw, UBASE_CSQ_HEAD_REG);
 		ubase_warn(udev,
-			   "the requested space(%d) exceeds the remaining space(%d).\n",
-			   num, free_num);
+			   "the requested space(%d) exceeds the remaining space(%d), csq ci: %u.\n",
+			   num, free_num, csq->ci);
 		ret = -EBUSY;
 		goto err_unlock;
 	}

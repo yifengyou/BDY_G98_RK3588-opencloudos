@@ -45,4 +45,4 @@ void ubase_ubus_reinit(struct device *dev);
 
 void ubase_ubus_fault_log(struct ubase_dev *udev, u32 event_id, void *data);
 
-#endif
+#endif /* __UBASE_UBUS_H__ */

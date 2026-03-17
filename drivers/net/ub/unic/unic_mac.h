@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-/* Huawei UNIC Linux driver
- * Copyright (c) 2024-2025 Hisilicon Limited.
+/* SPDX-License-Identifier: GPL-2.0+ */
+/*
+ * Copyright (c) 2025 HiSilicon Technologies Co., Ltd. All rights reserved.
  *
  */
 
@@ -24,4 +24,4 @@ void unic_uninit_mac_table(struct unic_dev *unic_dev);
 void unic_deactivate_mac_table(struct unic_dev *unic_dev);
 void unic_activate_mac_table(struct unic_dev *unic_dev);
 
-#endif
+#endif /* __UNIC_MAC_H__ */

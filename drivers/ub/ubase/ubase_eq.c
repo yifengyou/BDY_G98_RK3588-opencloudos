@@ -601,8 +601,8 @@ static int ubase_request_misc_irq(struct ubase_dev *udev)
 		return 0;
 
 	irq = irq_table->irqs[UBASE_MISC_IRQ_INDEX];
-	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d", udev->dev_id,
-		 "misc", 0);
+	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d",
+		 udev->dev_id, "misc", 0);
 	ret = request_irq(irq->irqn, ubase_misc_int_handler, 0, irq->name, udev);
 	if (ret) {
 		ubase_err(udev,
@@ -627,7 +627,7 @@ static inline void ubase_poll_aeqe(struct ubase_dev *udev,
 	end = msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT) + jiffies;
 
 	while (time_before(jiffies, end)) {
-		(void)ubase_async_event_handler(udev);
+		ubase_async_event_handler(udev);
 		if (!atomic_read(&udev->mb_cmd.mbx_cnt) ||
 		    kthread_should_stop())
 			break;
@@ -671,8 +671,8 @@ static int ubase_request_aeq_irq(struct ubase_dev *udev)
 		return 0;
 
 	irq = irq_table->irqs[UBASE_AEQ_IRQ_INDEX];
-	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d", udev->dev_id,
-		 "aeq", 0);
+	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d",
+		 udev->dev_id, "aeq", 0);
 
 	ret = ubase_create_eq(udev, &aeq->eq, 0, irq, UBASE_EQ_TYPE_AEQ);
 	if (ret) {
@@ -696,8 +696,7 @@ static int ubase_request_aeq_irq(struct ubase_dev *udev)
 
 	init_completion(&aeq->poll);
 
-	(void)snprintf(task_name, UBASE_INT_NAME_LEN, "ubase_ae%d",
-		       udev->dev_id);
+	snprintf(task_name, UBASE_INT_NAME_LEN, "ubase_ae%d", udev->dev_id);
 	aeq->ae_task = kthread_run(ubase_ae_task_handle, udev, task_name);
 	if (IS_ERR(aeq->ae_task)) {
 		ret = PTR_ERR(aeq->ae_task);
@@ -807,8 +806,8 @@ static int ubase_request_ceq_irq(struct ubase_dev *udev, struct ubase_ceq *ceq,
 	int ret;
 
 	irq = irq_table->irqs[index + UBASE_CEQ_IRQ_INDEX];
-	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%u", udev->dev_id,
-		 "ceq", index);
+	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%u",
+		 udev->dev_id, "ceq", index);
 	ceq->udev = udev;
 	ret = ubase_create_eq(udev, &ceq->eq, index, irq, UBASE_EQ_TYPE_CEQ);
 	if (ret) {
@@ -1102,10 +1101,10 @@ static int __ubase_event_register(struct ubase_dev *udev,
  * @adev: auxiliary device
  * @cb: asynchronous event notification block
  *
- * This function uses `blocking_notifier_chain_register` to register the
+ * This function uses 'blocking_notifier_chain_register' to register the
  * asynchronous event handling function. When the ubase driver receives an
  * asynchronous event and matches it with the registered event notification
- * block, it calls the registered function via `blocking_notifier_call_chain`.
+ * block, it calls the registered function via 'blocking_notifier_call_chain'.
  *
  * Context: Process context, Takes and releases the RCU lock.
  * Return: 0 on success, negative error code otherwise
@@ -1151,7 +1150,7 @@ static void __ubase_event_unregister(struct ubase_dev *udev,
  * @adev: auxiliary device
  * @cb: ubase asynchronous event notification block
  *
- * This function uses `blocking_notifier_chain_unregister` to unregister the
+ * This function uses 'blocking_notifier_chain_unregister' to unregister the
  * asynchronous event handling function.
  *
  * Context: Process context, Takes and releases the RCU lock.
@@ -1172,10 +1171,10 @@ EXPORT_SYMBOL(ubase_event_unregister);
  * @comp_handler: completion event processing function. nb: struct notifier_block,
  * jfcn: jfc index, data: self-defined data pointer.
  *
- * This function uses `atomic_notifier_chain_register` to register the
+ * This function uses 'atomic_notifier_chain_register' to register the
  * completion event handling function. When the ubase driver receives a
  * completion event that matches a registered auxiliary device, it calls the
- * registered function via `atomic_notifier_call_chain`.
+ * registered function via 'atomic_notifier_call_chain'.
  *
  * Context: Process context, may sleep
  * Return: 0 on success, negative error code otherwise
@@ -1211,7 +1210,7 @@ EXPORT_SYMBOL(ubase_comp_register);
  * ubase_comp_unregister() - unregister completion event processing function
  * @adev: auxiliary device
  *
- * This function uses `atomic_notifier_chain_unregister` to unregister the
+ * This function uses 'atomic_notifier_chain_unregister' to unregister the
  * completion event handling function.
  *
  * Context: Process context, Takes and releases the RCU lock.

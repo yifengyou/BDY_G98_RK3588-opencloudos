@@ -19,6 +19,7 @@ enum ubase_drv_type {
 	UBASE_DRV_UVB,
 	UBASE_DRV_MAX,
 };
+
 enum ubase_subevent_jetty_type {
 	UBASE_SUBEVENT_TYPE_JFS_CHECK_ERROR = 0x01,
 	UBASE_SUBEVENT_TYPE_JFR_CHECK_ERROR,
@@ -134,4 +135,4 @@ int ubase_comp_register(struct auxiliary_device *adev,
 					    unsigned long jfcn, void *data));
 void ubase_comp_unregister(struct auxiliary_device *adev);
 
-#endif
+#endif /* _UBASE_COMM_EQ_H_ */

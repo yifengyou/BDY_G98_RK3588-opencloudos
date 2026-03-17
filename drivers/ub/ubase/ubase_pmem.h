@@ -12,4 +12,4 @@
 int ubase_prealloc_mem_init(struct ubase_dev *udev);
 void ubase_prealloc_mem_uninit(struct ubase_dev *udev);
 
-#endif /* _UBASE_PMEM_H */
+#endif /* __UBASE_PMEM_H__ */

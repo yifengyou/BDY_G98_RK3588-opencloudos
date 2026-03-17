@@ -185,7 +185,7 @@ static struct ubase_ctrlq_event_nb unic_ctrlq_events[] = {
 		.service_type = UBASE_CTRLQ_SER_TYPE_IP_ACL,
 		.opcode = UBASE_CTRLQ_OPC_NOTIFY_IP,
 		.crq_handler = unic_handle_notify_ip_event,
-	}
+	},
 };
 
 static void unic_unregister_ctrlq_event(struct auxiliary_device *adev,

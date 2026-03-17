@@ -364,7 +364,8 @@ static int unic_dscp_prio_check(struct net_device *netdev, struct dcb_app *app)
 		return -EOPNOTSUPP;
 
 	if (netif_running(netdev)) {
-		unic_err(unic_dev, "failed to set dscp-prio, due to network interface is up, please down it first and try again.\n");
+		unic_err(unic_dev,
+			 "failed to set dscp-prio, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 

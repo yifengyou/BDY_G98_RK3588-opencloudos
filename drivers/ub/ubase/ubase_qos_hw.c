@@ -529,7 +529,6 @@ int ubase_set_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos)
 		return -EINVAL;
 
 	udev = dev_get_drvdata(dev);
-
 	if (ubase_check_sl_bitmap(udev, sl_priqos->sl_bitmap))
 		return -EINVAL;
 
@@ -939,7 +938,8 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 	ret = __ubase_ctrlq_send(udev, &msg, true, NULL);
 	if (ret) {
 		ubase_err(udev,
-			  "failed to send ctrlq msg when query vl, ret = %d.\n", ret);
+			  "failed to send ctrlq msg when query vl, ret = %d.\n",
+			  ret);
 		return ret;
 	}
 
@@ -1085,7 +1085,6 @@ static int ubase_save_initial_qos_configuration(struct ubase_dev *udev)
 {
 	struct ubase_initial_qset_qos *initial_qos = &udev->qos.initial_qos;
 	struct ubase_query_tm_queue_cmd tm_queue = {0};
-
 	struct ubase_query_tm_qset_cmd tm_qset = {0};
 	int ret;
 	u8 i;
@@ -1209,7 +1208,7 @@ int ubase_qos_init(struct ubase_dev *udev)
 
 void ubase_qos_uninit(struct ubase_dev *udev)
 {
-	(void)__ubase_restore_initial_qset_qos(udev);
+	__ubase_restore_initial_qset_qos(udev);
 }
 
 static bool ubase_is_udma_tp_vl(struct ubase_adev_qos *qos, u8 vl)

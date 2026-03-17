@@ -860,9 +860,10 @@ void unic_destroy_sq(struct unic_dev *unic_dev, u32 num)
 static int unic_apply_ub_pkt(struct unic_dev *unic_dev, struct unic_sq *sq,
 			     struct sk_buff *skb)
 {
-	struct ublhdr *ubl = (struct ublhdr *)skb->data;
+	struct ublhdr *ubl;
 
 	if (unic_dev_ubl_supported(unic_dev)) {
+		ubl = (struct ublhdr *)skb->data;
 		if (unlikely(ubl->cfg == UB_NOIP_CFG_TYPE)) {
 			unic_sq_stats_inc(sq, cfg5_drop_cnt);
 			return -EIO;
