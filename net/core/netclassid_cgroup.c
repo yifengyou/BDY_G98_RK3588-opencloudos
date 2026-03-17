@@ -941,6 +941,14 @@ static int read_class_stat(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static int read_class_perdev_stat(struct seq_file *sf, void *v)
+{
+	struct cgroup_subsys_state *css = seq_css(sf);
+
+	RUE_CALL_INT(NET, read_perdev_stat, css, sf);
+	return 0;
+}
+
 static int rx_dump(struct seq_file *sf, void *v)
 {
 	RUE_CALL_VOID(NET, dump_rx_tb, sf);
@@ -1004,6 +1012,12 @@ static struct cftype ss_files[] = {
 		.flags		= CFTYPE_NOT_ON_ROOT,
 		.seq_show	= read_class_stat,
 	},
+	{
+		.name		= "perdev_stat",
+		.flags		= CFTYPE_NOT_ON_ROOT,
+		.seq_show	= read_class_perdev_stat,
+	},
+
 	{
 		.name		= "rx_dump",
 		.flags		= CFTYPE_ONLY_ON_ROOT,
