@@ -652,6 +652,36 @@ free_seg:
 	return ret;
 }
 
+static int sentry_jetty_set_priority(struct ubcore_device *device,
+		  struct ubcore_jetty_cfg *jetty_cfg)
+{
+	struct ubcore_device_attr attr = {0};
+	int set_priority_ret = 0;
+	int ret = 0;
+	int i;
+
+	ret = ubcore_query_device_attr(device, &attr);
+	if (ret == 0) {
+		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
+			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
+				jetty_cfg->priority = i;
+				pr_info(
+					"create jetty set priority : %d, tp_type : ctp\n", i);
+				set_priority_ret = 1;
+				break;
+			}
+		}
+		if (set_priority_ret == 0) {
+			pr_err("set priority default value : 0\n");
+			return -EINVAL;
+		}
+	} else {
+		pr_err("Failed to ubcore get dev_attr!\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 /**
  * sentry_create_jetty - Create a URMA jetty endpoint
  * @device: URMA device to create jetty on
@@ -673,6 +703,8 @@ static struct ubcore_jetty *sentry_create_jetty(struct ubcore_device *device,
 						struct ubcore_jfr *jfr,
 						uint32_t jetty_id)
 {
+	int ret;
+
 	struct ubcore_jetty_cfg jetty_cfg = {
 		.id = jetty_id,
 		.flag.bs.share_jfr = 1,
@@ -688,6 +720,10 @@ static struct ubcore_jetty *sentry_create_jetty(struct ubcore_device *device,
 		.recv_jfc = jfc_r,
 		.jfr = jfr,
 	};
+
+	ret = sentry_jetty_set_priority(device, &jetty_cfg);
+	if (ret)
+		pr_info("set priority failed, use default value : 0\n");
 
 	return ubcore_create_jetty(device, &jetty_cfg, NULL, NULL);
 }
