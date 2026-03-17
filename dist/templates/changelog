@@ -1,3 +1,24 @@
+* Tue Mar 17 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-48
+- sched: IDLE_REVERT: Fixing soft lockup issues caused by key func
+- Merge branch 'swap-table-part3' into 'release' (merge request !1006)
+- mm, swap: no need to clear the shadow explicitly
+- mm, swap: simplify checking if a folio is swapped
+- mm, swap: no need to truncate the scan border
+- mm, swap: use the swap table to track the swap count
+- mm, swap: simplify swap table sanity range check
+- mm, swap: mark bad slots in swap table directly
+- mm, swap: implement helpers for reserving data in the swap table
+- mm/workingset: leave highest bits empty for anon shadow
+- mm, swap: consolidate bad slots setup and make it more robust
+- mm, swap: remove redundant arguments and locking for enabling a device
+- mm, swap: clean up swapon process and locking
+- mm, swap: protect si->swap_file properly and use as a mount indicator
+- mm, swap: minor update for function name and comments
+- mm/workingset: no need to mask the eviciton token
+- Merge branch 'idle_revert_smt_race' into 'release' (merge request !1047)
+- sched/fair: Avoid frequent migration of high concurrency threads between SMT
+- sched: IDLE_REVERT: A Optimization Based on Cache Awareness
+
 * Thu Mar 12 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-47.8
 - tools,perf: fix perf annotate segment fault on loongarch64
 - mm: add a print lru gen oom info switch in sysfs
