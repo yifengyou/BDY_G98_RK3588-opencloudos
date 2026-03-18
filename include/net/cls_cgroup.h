@@ -58,8 +58,10 @@ struct cls_cgroup_stats {
 	spinlock_t lock;
 	atomic64_t dropped;
 	atomic64_t throttle_count;
-	atomic64_t packets[MAX_NIC_SUPPORT];
-	atomic64_t bytes[MAX_NIC_SUPPORT];
+	atomic64_t ipv4_packets[MAX_NIC_SUPPORT];
+	atomic64_t ipv4_bytes[MAX_NIC_SUPPORT];
+	atomic64_t ipv6_packets[MAX_NIC_SUPPORT];
+	atomic64_t ipv6_bytes[MAX_NIC_SUPPORT];
 };
 
 struct cgroup_cls_state {
