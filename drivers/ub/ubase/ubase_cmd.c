@@ -464,8 +464,12 @@ static void ubase_cmd_setup_desc_by_inbuf(struct ubase_dev *udev,
 					  u16 num)
 {
 	ubase_cmd_setup_basic_desc(&desc[0], in->opcode, in->is_read, num);
-	if (in->data)
+	if (in->data) {
+		/* the size of the desc is the larger value between in and out.
+		 * the data_size is copied and filled into the subsequent desc.
+		 */
 		memcpy(desc->data, in->data, in->data_size);
+	}
 }
 
 static void ubase_cmd_setup_desc_by_outbuf(struct ubase_dev *udev,
@@ -669,11 +673,6 @@ void ubase_crq_service_task(struct ubase_delay_work *ubase_work)
 	clear_bit(UBASE_STATE_CRQ_HANDLING, &udev->service_task.state);
 }
 
-static bool ubase_cmd_is_mbx_avail(struct ubase_dev *udev)
-{
-	return true;
-}
-
 static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 					union ubase_mbox *mbx)
 {
@@ -726,7 +725,7 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 	ubase_setup_mbx_info(udev, mbx);
 
 	end = msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT) + jiffies;
-	while (ubase_cmd_is_mbx_avail(udev)) {
+	while (1) {
 		ret = __ubase_cmd_send_inout(udev, in, out);
 		if (!ret)
 			break;

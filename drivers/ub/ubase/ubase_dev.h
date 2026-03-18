@@ -556,7 +556,7 @@ static inline u32 ubase_ta_timer_align_size(struct ubase_dev *udev)
 static inline bool ubase_mbx_ue_id_is_valid(u16 mbx_ue_id,
 					    struct ubase_dev *udev)
 {
-	if (!mbx_ue_id || (mbx_ue_id > udev->caps.dev_caps.ue_num - 1))
+	if (!mbx_ue_id || (mbx_ue_id >= udev->caps.dev_caps.ue_num))
 		return false;
 
 	return true;

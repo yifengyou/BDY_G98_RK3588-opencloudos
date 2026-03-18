@@ -137,9 +137,9 @@ static void ubase_ctrlq_table_uninit(struct ubase_dev *udev)
 	ubase_ctrlq_free_crq_tbl_mem(udev);
 }
 
-static inline u16 ubase_ctrlq_msg_queue_depth(struct ubase_dev *udev)
+static inline u32 ubase_ctrlq_msg_queue_depth(struct ubase_dev *udev)
 {
-	return udev->ctrlq.csq.depth << 1;
+	return (u32)udev->ctrlq.csq.depth << 1;
 }
 
 static inline u16 ubase_ctrlq_max_seq(struct ubase_dev *udev)
@@ -150,9 +150,9 @@ static inline u16 ubase_ctrlq_max_seq(struct ubase_dev *udev)
 static int ubase_ctrlq_msg_queue_init(struct ubase_dev *udev)
 {
 	u16 msg_ctx_size = sizeof(struct ubase_ctrlq_msg_ctx);
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
-	u16 i;
+	u32 i;
 
 	udev->ctrlq.msg_queue = kcalloc(depth, msg_ctx_size, GFP_KERNEL);
 	if (!udev->ctrlq.msg_queue) {
@@ -368,9 +368,9 @@ err_msg_queue_init:
 static void ubase_ctrlq_clean_msg_queue(struct ubase_dev *udev)
 {
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
-	u16 i;
+	u32 i;
 
 	spin_lock_bh(&csq->lock);
 	for (i = 0; i < depth; i++) {
@@ -412,9 +412,9 @@ static void ubase_ctrlq_clean_pending_msgs(struct ubase_dev *udev)
 #define UBASE_CTRLQ_CLEAN_WAIT_TIME	5
 
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
-	u16 i;
+	u32 i;
 
 	spin_lock_bh(&csq->lock);
 	for (i = 1; i < depth; i++) {
@@ -648,7 +648,7 @@ static int ubase_ctrlq_wait_completed(struct ubase_dev *udev, u16 seq,
 #define UBASE_CTRLQ_TIMEOUT_CASE_SHUT_DOWN 500
 
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
 	u32 timeout;
 	int ret;
@@ -679,7 +679,7 @@ static int ubase_ctrlq_wait_completed(struct ubase_dev *udev, u16 seq,
 static int ubase_ctrlq_alloc_seq(struct ubase_dev *udev, u16 *seq)
 {
 	struct ubase_ctrlq_msg_ctx *ctx = udev->ctrlq.msg_queue;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	u16 max_seq = ubase_ctrlq_max_seq(udev);
 	u16 next_seq = udev->ctrlq.csq_next_seq;
 	u32 i, loop = 0;
@@ -707,7 +707,7 @@ success:
 static void ubase_ctrlq_free_seq(struct ubase_dev *udev, u16 seq)
 {
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
 
 	spin_lock_bh(&csq->lock);
@@ -720,7 +720,7 @@ static void ubase_ctrlq_addto_msg_queue(struct ubase_dev *udev, u16 seq,
 					struct ubase_ctrlq_msg *msg,
 					struct ubase_ctrlq_ue_info *ue_info)
 {
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
 
 	if (!(ubase_ctrlq_msg_is_sync_req(msg) ||
@@ -1051,7 +1051,7 @@ static void ubase_ctrlq_notify_completed(struct ubase_dev *udev,
 					 struct ubase_ctrlq_base_block *head,
 					 u16 seq, void *msg, u16 msg_len)
 {
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
 
 	ctx = &udev->ctrlq.msg_queue[seq % depth];
@@ -1127,7 +1127,7 @@ void ubase_ctrlq_handle_crq_msg(struct ubase_dev *udev,
 {
 	bool is_pushed = !!(seq & UBASE_CTRLQ_SEQ_MASK);
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_msg_ctx *ctx;
 
 	if (!is_pushed) {
@@ -1185,7 +1185,7 @@ static void ubase_ctrlq_handle_other_msg(struct ubase_dev *udev,
 	u16 resp_len, seq = le16_to_cpu(head->seq);
 	bool is_pushed = !!(seq & UBASE_CTRLQ_SEQ_MASK);
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
-	u16 depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ue2ue_ctrlq_head *ue2ue_head;
 	struct ubase_ctrlq_msg_ctx ctx = {0};
 	struct ubase_cmd_buf in;
@@ -1335,7 +1335,7 @@ void ubase_ctrlq_crq_service_task(struct ubase_delay_work *ubase_work)
 
 void ubase_ctrlq_clean_service_task(struct ubase_dev *udev)
 {
-	u16 i, depth = ubase_ctrlq_msg_queue_depth(udev);
+	u32 i, depth = ubase_ctrlq_msg_queue_depth(udev);
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
 	struct ubase_ctrlq_msg_ctx *ctx;
 
