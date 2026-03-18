@@ -644,7 +644,7 @@ static void unic_sq_free_tx_buff_resources(struct auxiliary_device *adev,
 	for (i = 0; i < tx_buff->num; i++) {
 		page_info = &tx_buff->page_info[i];
 		dma_unmap_page(adev->dev.parent, page_info->sge_dma_addr,
-			       PAGE_SIZE, DMA_FROM_DEVICE);
+			       PAGE_SIZE, DMA_TO_DEVICE);
 		__free_page(page_info->p);
 	}
 
@@ -680,7 +680,7 @@ static int unic_sq_alloc_tx_buff_resources(struct auxiliary_device *adev,
 		page_info->sge_dma_addr = dma_map_page(adev->dev.parent,
 						       page_info->p, 0,
 						       PAGE_SIZE,
-						       DMA_FROM_DEVICE);
+						       DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(adev->dev.parent,
 					       page_info->sge_dma_addr))) {
 			dev_err(adev->dev.parent,
