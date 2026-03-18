@@ -1233,7 +1233,7 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (!unic_dev_ubl_supported(unic_dev) &&
 	    skb_put_padto(skb, UNIC_MIN_TX_LEN)) {
 		unic_sq_stats_inc(sq, pad_err);
-		goto xmit_drop_pkt;
+		goto xmit_pad_err;
 	}
 
 	/* Prefetch the data used later */
@@ -1269,8 +1269,9 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	return NETDEV_TX_OK;
 
 xmit_drop_pkt:
-	unic_tx_compensate_doorbell(sq);
 	dev_kfree_skb_any(skb);
+xmit_pad_err:
+	unic_tx_compensate_doorbell(sq);
 	return NETDEV_TX_OK;
 }
 
