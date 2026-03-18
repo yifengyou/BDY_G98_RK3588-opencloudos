@@ -226,6 +226,9 @@ static void tid_munmap(struct vm_area_struct *area)
 	bool set;
 
 	map_info = area->vm_private_data;
+	if (!map_info)
+		return;
+
 	start = (area->vm_start - map_info->vm_start) / PAGE_SIZE;
 	end = (area->vm_end - map_info->vm_start) / PAGE_SIZE;
 
@@ -238,39 +241,43 @@ static void tid_munmap(struct vm_area_struct *area)
 	}
 
 	area->vm_private_data = NULL;
+
+	/*
+	 * Release block/queue resources when all pages are unmapped.
+	 */
 	if (map_info->page_cnt <= 0) {
 		WARN_ON(map_info->page_cnt < 0);
-		goto release;
+
+		if (map_info->type == MMAP_TYPE_BLOCK) {
+			release_args.block_index = map_info->block_index;
+			release_args.type = UMMU_BLOCK;
+		} else {
+			release_args.type = UMMU_QUEUE_LIST;
+		}
+
+		mutex_lock(&global_proc_mtx);
+		manager = xa_load(&proc_info_xa, key);
+		if (manager) {
+			mutex_lock(&manager->proc_mtx);
+			mutex_unlock(&global_proc_mtx);
+
+			entry = xa_load(&manager->tid_xa, map_info->tid);
+			if (entry && entry->tid == map_info->tid) {
+				ummu_core_put_resource(entry->sva, entry->dev,
+							&release_args);
+				atomic_dec(&entry->mmap_count);
+			}
+			mutex_unlock(&manager->proc_mtx);
+		} else {
+			mutex_unlock(&global_proc_mtx);
+		}
 	}
 
-	return;
-
-release:
-	if (map_info->type == MMAP_TYPE_BLOCK) {
-		release_args.block_index = map_info->block_index;
-		release_args.type = UMMU_BLOCK;
-	} else
-		release_args.type = UMMU_QUEUE_LIST;
-
-	mutex_lock(&global_proc_mtx);
-	manager = xa_load(&proc_info_xa, key);
-	if (!manager) {
-		mutex_unlock(&global_proc_mtx);
-		return;
-	}
-
-	mutex_lock(&manager->proc_mtx);
-	mutex_unlock(&global_proc_mtx);
-
-	entry = xa_load(&manager->tid_xa, map_info->tid);
-	if (!entry || entry->tid != map_info->tid) {
-		mutex_unlock(&manager->proc_mtx);
-		return;
-	}
-
-	ummu_core_put_resource(entry->sva, entry->dev, &release_args);
-	atomic_dec(&entry->mmap_count);
-	mutex_unlock(&manager->proc_mtx);
+	/*
+	 * Always release mmap_info via kref_put.
+	 * Each VMA close corresponds to one VMA open (during split),
+	 * so kref_put must be called for every close to maintain balance.
+	 */
 	kref_put(&map_info->ref, release_tid_mmap_info);
 }
 
