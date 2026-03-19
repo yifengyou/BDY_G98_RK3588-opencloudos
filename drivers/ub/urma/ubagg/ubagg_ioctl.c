@@ -1109,34 +1109,6 @@ static struct ubagg_device *ubagg_dev_create(struct ubagg_add_dev *arg)
 	return ubagg_dev;
 }
 
-static void ubagg_dev_destroy(char *name)
-{
-	struct ubagg_device *dev = NULL;
-	unsigned long flags;
-	bool dev_exist = false;
-
-	spin_lock_irqsave(&g_ubagg_dev_list_lock, flags);
-	list_for_each_entry(dev, &g_ubagg_dev_list, list_node) {
-		if (strncmp(dev->ub_dev.dev_name, name,
-			    UBAGG_MAX_DEV_NAME_LEN) == 0) {
-			dev_exist = true;
-			list_del(&dev->list_node);
-			ubagg_dev_ref_put(dev);
-			break;
-		}
-	}
-	spin_unlock_irqrestore(&g_ubagg_dev_list_lock, flags);
-
-	if (!dev_exist) {
-		ubagg_log_err("ubagg device %s is not exist in list\n", name);
-		return;
-	}
-
-	ubcore_unregister_device(&dev->ub_dev);
-	free_ubagg_dev_bitmap(dev);
-	ubagg_dev_ref_put(dev);
-}
-
 static int ubagg_check_add_dev_para_valid(struct ubagg_add_dev *arg)
 {
 	if (strnlen(arg->in.master_dev_name, UBAGG_MAX_DEV_NAME_LEN) >=
@@ -1195,15 +1167,7 @@ static int ubagg_cmd_add_dev(struct ubagg_cmd_hdr *hdr)
 		return -1;
 	}
 
-	if (!try_module_get(THIS_MODULE)) {
-		ubagg_log_err("try_module_get for ubagg fail.\n");
-		goto module_get_fail;
-	}
 	return 0;
-
-module_get_fail:
-	ubagg_dev_destroy(ubagg_dev->master_dev_name);
-	return -ENODEV;
 }
 
 static int ubagg_cmd_rmv_dev(struct ubagg_cmd_hdr *hdr)
@@ -1242,7 +1206,6 @@ static int ubagg_cmd_rmv_dev(struct ubagg_cmd_hdr *hdr)
 	ubcore_unregister_device(&ubagg_dev->ub_dev);
 	free_ubagg_dev_bitmap(ubagg_dev);
 	ubagg_dev_ref_put(ubagg_dev);
-	module_put(THIS_MODULE);
 	return 0;
 }
 
@@ -2175,4 +2138,20 @@ long ubagg_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ubagg_log_err("Wrong command type:%u", hdr.command);
 		return -EINVAL;
 	}
+}
+
+void ubagg_clear_dev_list(void)
+{
+	struct ubagg_device *dev, *next = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&g_ubagg_dev_list_lock, flags);
+	list_for_each_entry_safe(dev, next, &g_ubagg_dev_list, list_node) {
+		list_del_init(&dev->list_node);
+		ubcore_unregister_device(&dev->ub_dev);
+		free_ubagg_dev_bitmap(dev);
+		ubagg_dev_ref_put(dev);
+		ubagg_dev_ref_put(dev);
+	}
+	spin_unlock_irqrestore(&g_ubagg_dev_list_lock, flags);
 }

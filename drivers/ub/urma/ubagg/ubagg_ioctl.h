@@ -202,4 +202,6 @@ struct ubagg_add_dev_by_uvs {
 };
 
 long ubagg_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+
+void ubagg_clear_dev_list(void);
 #endif // UBAGG_IOCTL_H
