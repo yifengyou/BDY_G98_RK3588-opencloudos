@@ -938,6 +938,13 @@ static bool ubase_ctrlq_crq_is_empty(struct ubase_dev *udev, struct ubase_hw *hw
 {
 	udev->ctrlq.crq.pi = ubase_read_dev(hw, UBASE_CTRLQ_CRQ_TAIL_REG);
 
+	if (unlikely(udev->ctrlq.crq.pi >= udev->ctrlq.crq.depth)) {
+		ubase_err_rl(udev, udev->log_rs.ctrlq_pi_invalid_cnt,
+			     "ctrlq crq pi exceeds depth, pi=%hu, depth=%hu.\n",
+			     udev->ctrlq.crq.pi, udev->ctrlq.crq.depth);
+		return true;
+	}
+
 	return udev->ctrlq.crq.pi == udev->ctrlq.crq.ci;
 }
 
@@ -1245,9 +1252,28 @@ static inline void ubase_ctrlq_reset_crq_ci(struct ubase_dev *udev)
 {
 	struct ubase_ctrlq_ring *crq = &udev->ctrlq.crq;
 
-	crq->pi = ubase_read_dev(&udev->hw, UBASE_CTRLQ_CRQ_TAIL_REG);
 	crq->ci = crq->pi;
 	ubase_write_dev(&udev->hw, UBASE_CTRLQ_CRQ_HEAD_REG, crq->ci);
+}
+
+static bool ubase_ctrlq_check_bb_num(struct ubase_dev *udev, u8 bb_num)
+{
+	struct ubase_ctrlq_ring *crq = &udev->ctrlq.crq;
+	u32 remain_bb_num = crq->pi >= crq->ci ? crq->pi - crq->ci :
+			    (u32)crq->pi + crq->depth - crq->ci;
+
+	if (unlikely(!bb_num || bb_num > UBASE_CTRLQ_MAX_BB)) {
+		ubase_err(udev, "ctrlq crq bb_num(%u) is invalid.\n", bb_num);
+		return false;
+	}
+
+	if (unlikely(bb_num > remain_bb_num)) {
+		ubase_err(udev, "ctrlq crq bb_num(%u) more than the remain_bb_num(%u).\n",
+			  bb_num, remain_bb_num);
+		return false;
+	}
+
+	return true;
 }
 
 static void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
@@ -1274,9 +1300,7 @@ static void ubase_ctrlq_crq_handler(struct ubase_dev *udev)
 		seq = le16_to_cpu(head.seq);
 		bb_num = head.bb_num;
 
-		if (unlikely(!bb_num || bb_num > UBASE_CTRLQ_MAX_BB)) {
-			ubase_err(udev, "ctrlq crq bb_num(%u) is invalid.\n",
-				  bb_num);
+		if (!ubase_ctrlq_check_bb_num(udev, bb_num)) {
 			ubase_ctrlq_reset_crq_ci(udev);
 			return;
 		}

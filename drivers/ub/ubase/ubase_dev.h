@@ -357,6 +357,7 @@ struct ubase_log_rs {
 	u16 ctrlq_other_seq_invalid_log_cnt;
 	u64 aeq_event_type_exceed_max_cnt;
 	u32 ctrlq_wait_resp_timeout_cnt;
+	u32 ctrlq_pi_invalid_cnt;
 };
 
 enum ubase_node_type {
