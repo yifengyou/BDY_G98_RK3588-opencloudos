@@ -31,6 +31,7 @@
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 #include "udma_mue.h"
+#include "udma_jetty_group.h"
 
 #define UDMA_DRV_VER "1.0"
 
