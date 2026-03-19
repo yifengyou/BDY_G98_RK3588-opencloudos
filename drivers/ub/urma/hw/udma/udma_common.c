@@ -725,7 +725,12 @@ udma_alloc_hugepage(struct udma_dev *dev, uint32_t len)
 
 static void udma_free_hugepage(struct udma_dev *dev, struct udma_hugepage *hugepage)
 {
-	struct udma_hugepage_priv *priv = hugepage->priv;
+	struct udma_hugepage_priv *priv = NULL;
+
+	if (hugepage == NULL)
+		return;
+
+	priv = hugepage->priv;
 
 	if (dfx_switch)
 		dev_info_ratelimited(dev->dev, "return_hugepage, seq=%u.\n", priv->seq);

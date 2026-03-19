@@ -1048,8 +1048,12 @@ static bool udma_batch_query_jetty_fd(struct udma_dev *dev,
 	}
 
 	while (true) {
-		if (udma_wait_timeout(&sum_times, times, ta_timeout))
+		if (udma_wait_timeout(&sum_times, times, ta_timeout)) {
+			dev_warn_ratelimited(dev->dev,
+					     "timeout after %u ms, not all jetty get flush done.\n",
+					     sum_times);
 			break;
+		}
 		times++;
 		if (times < batch_flush_query_freq)
 			times = batch_flush_query_freq;
@@ -1156,8 +1160,9 @@ static int udma_batch_modify_jetty_precondition(struct udma_dev *dev,
 
 	while (true) {
 		if (udma_wait_timeout(&sum_times, times, ta_timeout)) {
-			dev_warn(dev->dev, "timeout after %u ms, not all jetty get ack.\n",
-				 sum_times);
+			dev_warn_ratelimited(dev->dev,
+					     "timeout after %u ms, not all jetty get ack.\n",
+					     sum_times);
 			break;
 		}
 		times++;

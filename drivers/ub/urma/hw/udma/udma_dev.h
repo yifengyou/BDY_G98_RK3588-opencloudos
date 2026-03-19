@@ -135,6 +135,7 @@ struct udma_dev {
 	resource_size_t db_base;
 	void __iomem *k_db_base;
 	struct workqueue_struct *act_workq;
+	struct workqueue_struct *ae_workq;
 	struct xarray ksva_table;
 	struct mutex ksva_mutex;
 	struct xarray eid_table;

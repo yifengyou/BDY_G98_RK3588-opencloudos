@@ -108,6 +108,7 @@ struct ubcore_ucontext *udma_alloc_ucontext(struct ubcore_device *ub_dev,
 	}
 
 	ctx->dev = dev;
+	ctx->mm = current->mm;
 	INIT_LIST_HEAD(&ctx->pgdir_list);
 	mutex_init(&ctx->pgdir_mutex);
 	INIT_LIST_HEAD(&ctx->hugepage_list);
@@ -137,6 +138,7 @@ err_free_ctx:
 int udma_free_ucontext(struct ubcore_ucontext *ucontext)
 {
 	struct udma_dev *udma_dev = to_udma_dev(ucontext->ub_dev);
+	struct ummu_invalid_cfg_param inva_param = {};
 	struct udma_hugepage_priv *priv;
 	struct udma_hugepage_priv *tmp;
 	struct vm_area_struct *vma;
@@ -146,7 +148,9 @@ int udma_free_ucontext(struct ubcore_ucontext *ucontext)
 
 	ctx = to_udma_context(ucontext);
 
-	ret = ummu_core_invalidate_cfg_table(ctx->tid);
+	inva_param.tid = ctx->tid;
+	inva_param.mm = ctx->mm;
+	ret = ummu_core_invalidate_cfg(&inva_param);
 	if (ret)
 		dev_err(udma_dev->dev, "invalidate cfg_table failed, ret=%d.\n", ret);
 
