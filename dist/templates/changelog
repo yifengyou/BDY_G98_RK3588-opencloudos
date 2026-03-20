@@ -1,3 +1,10 @@
+* Fri Mar 20 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-48.1
+- proc: fix the display error of the processes field in /proc/stat
+- config: enable CONFIG_HIST_TRIGGERS and CONFIG_SYNTH_EVENTS for ftrace latency monitoring
+- netfilter: br_netfilter: workaroud for docker network and br_netfilter
+- mm: unevictable: Add memory cgroup v2 support
+- mm: unevictable: Fix evictable failed when global switch convert to disable
+
 * Tue Mar 17 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-48
 - sched: IDLE_REVERT: Fixing soft lockup issues caused by key func
 - Merge branch 'swap-table-part3' into 'release' (merge request !1006)
