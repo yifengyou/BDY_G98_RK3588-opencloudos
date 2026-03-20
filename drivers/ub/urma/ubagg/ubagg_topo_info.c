@@ -127,3 +127,32 @@ void delete_ubagg_topo_map(struct ubagg_topo_map *topo_map)
 		return;
 	kfree(topo_map);
 }
+
+struct ubagg_topo_node *find_cur_topo_node(struct ubagg_topo_map *topo_map)
+{
+	for (int i = 0; i < topo_map->node_num; i++)
+		if (topo_map->topo_infos[i].is_current)
+			return &(topo_map->topo_infos[i]);
+	ubagg_log_err("can not find cur node index\n");
+	return NULL;
+}
+
+struct ubagg_topo_agg_dev *
+find_cur_topo_agg_dev(struct ubagg_topo_map *topo_map,
+		      union ubcore_eid *bonding_eid)
+{
+	struct ubagg_topo_node *cur_node = NULL;
+
+	cur_node = find_cur_topo_node(topo_map);
+	if (cur_node == NULL) {
+		ubagg_log_err("find cur node index failed\n");
+		return NULL;
+	}
+	for (int i = 0; i < DEV_NUM; i++) {
+		char *bonding_eid_i = cur_node->agg_devs[i].agg_eid;
+
+		if (memcmp(bonding_eid_i, bonding_eid->raw, EID_LEN) == 0)
+			return &(cur_node->agg_devs[i]);
+	}
+	return NULL;
+}

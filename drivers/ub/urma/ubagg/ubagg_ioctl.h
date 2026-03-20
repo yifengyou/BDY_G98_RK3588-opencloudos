@@ -181,6 +181,7 @@ enum ubagg_userctl_opcode {
 struct ubagg_slave_device {
 	int slave_dev_num;
 	char slave_dev_name[UBAGG_MAX_DEV_NUM][UBAGG_MAX_DEV_NAME_LEN];
+	struct ubagg_physical_device physical_devices[IODIE_NUM];
 };
 
 struct ubagg_topo_info_out {
