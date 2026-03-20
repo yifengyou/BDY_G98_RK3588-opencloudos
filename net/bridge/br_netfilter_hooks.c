@@ -48,6 +48,10 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #endif
 
+bool fix_conntrack_reset = true;
+module_param(fix_conntrack_reset, bool, 0644);
+MODULE_PARM_DESC(fix_conntrack_ret, "pass conntrack cloned skbs");
+
 static unsigned int brnf_net_id __read_mostly;
 
 struct brnf_net {
@@ -609,9 +613,11 @@ static unsigned int br_nf_local_in(void *priv,
 	struct nf_conn *ct;
 	int ret;
 
-	if (promisc) {
-		nf_reset_ct(skb);
-		return NF_ACCEPT;
+	if (likely(fix_conntrack_reset)) {
+		if (promisc) {
+			nf_reset_ct(skb);
+			return NF_ACCEPT;
+		}
 	}
 
 	if (!nfct || skb->pkt_type == PACKET_HOST)
