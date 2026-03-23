@@ -4118,29 +4118,20 @@ unlock:
 	return success;
 }
 
-static unsigned long wait_for_aging(struct lruvec *lruvec, unsigned long max_seq)
+static unsigned long wait_for_aging(struct lruvec *lruvec)
 {
+	DEFINE_MAX_SEQ(lruvec);
 	unsigned int timeout = HZ; /* Wait for at most one second */
-	DECLARE_WAITQUEUE(wait, current);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
-	if (max_seq < READ_ONCE(lrugen->max_seq))
-		goto out;
-	if (!atomic_long_read(&lruvec->mm_state.nr_walkers))
-		goto out;
-
-	add_wait_queue(&lruvec->mm_state.wait, &wait);
-	for (;;) {
-		if (max_seq < READ_ONCE(lrugen->max_seq))
-			break;
+	do {
 		if (!atomic_long_read(&lruvec->mm_state.nr_walkers))
 			break;
-		if (!--timeout)
+		if (max_seq < READ_ONCE(lrugen->max_seq))
 			break;
-		schedule_timeout_uninterruptible(1);
-	}
-	remove_wait_queue(&lruvec->mm_state.wait, &wait);
-out:
+		schedule_timeout_interruptible(1);
+	} while (timeout--);
+
 	return READ_ONCE(lrugen->max_seq);
 }
 
@@ -4197,8 +4188,6 @@ done:
 		success = inc_max_seq(lruvec, seq, swappiness, force_scan);
 		if (do_walk)
 			atomic_long_dec(&lruvec->mm_state.nr_walkers);
-		if (wq_has_sleeper(&lruvec->mm_state.wait))
-			wake_up_all(&lruvec->mm_state.wait);
 		WARN_ON_ONCE(!success);
 	} else {
 		if (do_walk)
@@ -4207,7 +4196,7 @@ done:
 
 	/* Race, wait for other walkers to exit or anything calls inc_max_seq */
 	if (!success && wait_on_failure)
-		success = seq < wait_for_aging(lruvec, seq);
+		success = seq < wait_for_aging(lruvec);
 
 	return success;
 }
@@ -4972,36 +4961,24 @@ retry:
 	return scanned;
 }
 
-static long lruvec_gen_size(struct lruvec *lruvec, unsigned long max_seq,
+static long get_nr_evitable(struct lruvec *lruvec, unsigned long max_evict_seq,
 			    int swappiness)
 {
+	long nr = 0;
 	int gen, type, zone;
-	unsigned long size = 0;
 	DEFINE_MIN_SEQ(lruvec);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
 	for_each_evictable_type(type, swappiness) {
 		unsigned long seq;
-		for (seq = min_seq[type]; seq <= max_seq; seq++) {
+		for (seq = min_seq[type]; seq <= max_evict_seq; seq++) {
 			gen = lru_gen_from_seq(seq);
 			for (zone = 0; zone < MAX_NR_ZONES; zone++)
-				size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+				nr += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
 		}
 	}
 
-	return size;
-}
-
-static long lruvec_is_evictable(struct lruvec *lruvec, struct scan_control *sc,
-				int swappiness)
-{
-	DEFINE_MAX_SEQ(lruvec);
-	DEFINE_MIN_SEQ(lruvec);
-
-	if (mem_cgroup_below_min(sc->target_mem_cgroup, lruvec_memcg(lruvec)))
-		return false;
-
-	return evictable_min_seq(min_seq, swappiness) + MIN_NR_GENS <= max_seq;
+	return nr;
 }
 
 static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
@@ -5022,28 +4999,35 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
  * 1. Defer try_to_inc_max_seq() to workqueues to reduce latency for memcg
  *    reclaim.
  */
-static bool prepare_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+static long prepare_to_scan(struct lruvec *lruvec, struct scan_control *sc,
 			    int swappiness, bool *rotate)
 {
-	DEFINE_MAX_SEQ(lruvec);
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+	unsigned long nr_to_scan = 0, max_seq;
 
-	/* wait for concurrent aging to prevent early OOM with high pressure */
-	if (!sc->priority)
-		max_seq = wait_for_aging(lruvec, max_seq);
-
-	/* if aging needed, try age first to generate cold gens */
-	if (should_run_aging(lruvec, max_seq, sc->priority, swappiness)) {
-		if (try_to_inc_max_seq(lruvec, max_seq, !sc->priority, swappiness, false))
-			*rotate = true;
-	}
-
-	/* out of cold pages, over reclaimed, or raced on age, rotate and abort */
-	if (!lruvec_is_evictable(lruvec, sc, swappiness)) {
+	if (mem_cgroup_below_min(sc->target_mem_cgroup, memcg)) {
 		*rotate = true;
-		return false;
+		return 0;
 	}
 
-	return true;
+	if (!sc->priority)
+		max_seq = wait_for_aging(lruvec);
+	else
+		max_seq = READ_ONCE(lruvec->lrugen.max_seq);
+
+	nr_to_scan = get_nr_evitable(lruvec, max_seq, swappiness);
+	/* try to scrape all its memory without aging if this memcg was deleted */
+	if (!mem_cgroup_online(memcg))
+		return nr_to_scan;
+
+	nr_to_scan >>= sc->priority;
+	if (!should_run_aging(lruvec, max_seq, sc->priority, swappiness))
+		return max_t(long, MIN_LRU_BATCH, nr_to_scan);
+
+	if (try_to_inc_max_seq(lruvec, max_seq, !sc->priority, swappiness, false))
+		*rotate = true;
+
+	return nr_to_scan;
 }
 
 static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
@@ -5058,7 +5042,7 @@ static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
 	if (!root_reclaim(sc))
 		return false;
 
-	if (sc->nr_reclaimed >= max(sc->nr_to_reclaim, compact_gap(sc->order)))
+	if (compact_gap(sc->order))
 		return true;
 
 	/* check the order to exclude compaction-induced reclaim */
@@ -5082,26 +5066,24 @@ static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
 
 static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
-	long nr_to_scan;
 	bool rotate = false;
-	unsigned long delta, scanned = 0;
-	int swappiness = get_swappiness(lruvec, sc);
-	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
-
-	DEFINE_MAX_SEQ(lruvec);
-	nr_to_scan = lruvec_gen_size(lruvec, max_seq, swappiness);
-
-	/* try to scrape all its memory without aging if this memcg was deleted */
-	if (mem_cgroup_online(memcg))
-		nr_to_scan >>= sc->priority;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	unsigned long delta, nr_to_scan, scanned = 0;
 
 	while (true) {
-		if (!prepare_to_scan(lruvec, sc, swappiness, &rotate))
+		int swappiness = get_swappiness(lruvec, sc);
+
+		nr_to_scan = prepare_to_scan(lruvec, sc, swappiness, &rotate);
+		if (!nr_to_scan)
 			break;
 
 		delta = evict_folios(lruvec, sc, swappiness);
-		if (!delta)
+		if (!delta) {
+			if (evictable_min_seq(lrugen->min_seq, swappiness) >
+			    lrugen->max_seq - MIN_NR_GENS)
+				rotate = true;
 			break;
+		}
 
 		scanned += delta;
 		if (scanned > nr_to_scan)
@@ -5956,8 +5938,6 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 		INIT_LIST_HEAD(&lrugen->folios[gen][type][zone]);
 
 	lruvec->mm_state.seq = MIN_NR_GENS;
-
-	init_waitqueue_head(&lruvec->mm_state.wait);
 }
 
 #ifdef CONFIG_MEMCG

@@ -478,8 +478,6 @@ struct lru_gen_mm_state {
 	unsigned long *filters[NR_BLOOM_FILTERS];
 	/* the mm stats for debugging */
 	unsigned long stats[NR_HIST_GENS][NR_MM_STATS];
-	/* to wait for the last page table walker to finish */
-	struct wait_queue_head wait;
 	/* the number of concurrent page table walkers */
 	atomic_long_t nr_walkers;
 };
