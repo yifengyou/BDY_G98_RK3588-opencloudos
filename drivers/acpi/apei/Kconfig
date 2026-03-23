@@ -43,6 +43,11 @@ config ACPI_APEI_GHES_ARMP_VENDOR_INFO
 	  for platform-related fault status to handle system failures. This
 	  functionality requires support from both the chip and the firmware.
 
+config ACPI_APEI_RAS_CRITICAL
+	bool
+	depends on ACPI_APEI_GHES_ARMP_VENDOR_INFO && NUMA_REMOTE
+	default y
+
 config ACPI_APEI_PCIEAER
 	bool "APEI PCIe AER logging/recovering support"
 	depends on ACPI_APEI && PCIEAER
