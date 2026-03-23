@@ -485,10 +485,13 @@ static void memory_failure_cb(struct callback_head *twork)
 	ret = memory_failure(twcb->pfn, twcb->flags);
 	gen_pool_free(ghes_estatus_pool, (unsigned long)twcb, sizeof(*twcb));
 
-	if (!ret || ret == -EHWPOISON || ret == -EOPNOTSUPP)
+	if (!ret || ret == -EHWPOISON || ret == -EOPNOTSUPP) {
+		gen_pool_free(ghes_estatus_pool, (unsigned long)twcb, sizeof(*twcb));
 		return;
+	}
 
 	kill_accessing_process(twcb->pfn, twcb->flags, true);
+	gen_pool_free(ghes_estatus_pool, (unsigned long)twcb, sizeof(*twcb));
 }
 
 static bool ghes_do_memory_failure(u64 physical_addr, int flags)
