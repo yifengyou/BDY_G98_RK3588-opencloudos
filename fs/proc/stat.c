@@ -212,7 +212,7 @@ static int show_stat(struct seq_file *p, void *v)
 	seq_printf(p,
 		"\nctxt %llu\n"
 		"btime %llu\n"
-		"processes %d\n"
+		"processes %lu\n"
 		"procs_running %u\n"
 		"procs_blocked %u\n",
 		nr_context_switches(),

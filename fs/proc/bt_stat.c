@@ -168,7 +168,7 @@ static int __show_stat(struct seq_file *p, void *v, bool show_iowait_bt)
 	seq_printf(p,
 		"\nctxt %llu\n"
 		"btime %llu\n"
-		"processes %d\n"
+		"processes %lu\n"
 		"procs_running %d\n"
 		"procs_blocked %d\n"
 		"procs_blocked_bt %lu\n",
