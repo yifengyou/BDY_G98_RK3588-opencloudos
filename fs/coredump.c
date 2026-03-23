@@ -620,6 +620,9 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 
 	audit_core_dumps(siginfo->si_signo);
 
+	if (mm_is_critical_error(mm))
+		goto fail;
+
 	binfmt = mm->binfmt;
 	if (!binfmt || !binfmt->core_dump)
 		goto fail;
@@ -1304,6 +1307,18 @@ static bool dump_vma_snapshot(struct coredump_params *cprm)
 
 		if (m->dump_size == DUMP_SIZE_MAYBE_ELFHDR_PLACEHOLDER) {
 			char elfmag[SELFMAG];
+
+			/*
+			 * When a critical fault is triggered, the process might have already passed
+			 * the initial checks in do_coredump. Since this path potentially involves
+			 * multiple accesses to user memory in a loop, if the mm is marked as
+			 * critical, we should skip the operation directly, release resources, and
+			 * return failure.
+			 */
+			if (mm_is_critical_error(mm)) {
+				free_vma_snapshot(cprm);
+				return false;
+			}
 
 			if (copy_from_user(elfmag, (void __user *)m->start, SELFMAG) ||
 					memcmp(elfmag, ELFMAG, SELFMAG) != 0) {

@@ -6750,6 +6750,11 @@ int __access_remote_vm(struct mm_struct *mm, unsigned long addr, void *buf,
 				break;
 		} else {
 			int ret = 0;
+
+			if (mm_is_critical_error(mm)) {
+				mmap_read_unlock(mm);
+				return 0;
+			}
 			bytes = len;
 			offset = addr & (PAGE_SIZE-1);
 			if (bytes > PAGE_SIZE-offset)
