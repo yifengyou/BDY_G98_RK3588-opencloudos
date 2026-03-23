@@ -37,6 +37,7 @@ struct ktid_info {
 	struct iommu_sva *sva;
 	struct device *dev;
 	u64 hw_cap;
+	atomic_t mmap_count;
 };
 
 struct mmap_info {
@@ -268,6 +269,7 @@ release:
 	}
 
 	ummu_core_put_resource(entry->sva, entry->dev, &release_args);
+	atomic_dec(&entry->mmap_count);
 	mutex_unlock(&manager->proc_mtx);
 	kref_put(&map_info->ref, release_tid_mmap_info);
 }
@@ -544,6 +546,12 @@ static int tid_map_resource(struct file *filp, struct vm_area_struct *vma)
 		goto free_map_info;
 	}
 
+	/*
+	 * Increment mmap count to prevent FREE_TID while mmap is active.
+	 * This must be done while holding proc_mtx to prevent race with
+	 * FREE_TID checking the count.
+	 */
+	atomic_inc(&entry->mmap_count);
 	mutex_unlock(&manager->proc_mtx);
 
 	bitmap_fill(map_info->bitmap, map_info->page_cnt);
@@ -679,6 +687,7 @@ static int sva_mode_alloc_tid(struct proc_manager *manager,
 	if (!entry)
 		return -ENOMEM;
 
+	atomic_set(&entry->mmap_count, 0);
 	entry->mode = tid_data->mode;
 	entry->tid = UMMU_INVALID_TID;
 
@@ -733,6 +742,14 @@ static int sva_mode_free_tid(struct proc_manager *manager,
 	entry = xa_load(&manager->tid_xa, tid_data->tid);
 	if (!entry)
 		return -EINVAL;
+
+	/*
+	 * Prevent FREE_TID while there are active mmaps.
+	 * This ensures sva and dev remain valid for munmap to release
+	 * block/queue resources.
+	 */
+	if (atomic_read(&entry->mmap_count) > 0)
+		return -EBUSY;
 
 	xa_erase(&manager->tid_xa, entry->tid);
 	release_tid_resource(entry);
