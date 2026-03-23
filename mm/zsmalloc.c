@@ -158,6 +158,7 @@
  *  (reason above)
  */
 #ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+#define ZS_HUGE_CLASS_ORDER_MAX		(ZSMALLOC_HIGHORDER_MAX_ORDER + 1)
 #define ZS_PAGE_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
 #define ZS_PAGE_SIZE_CLASSES		(DIV_ROUND_UP(PAGE_SIZE - ZS_MIN_ALLOC_SIZE, \
 						      ZS_PAGE_SIZE_CLASS_DELTA) + 1)
@@ -205,7 +206,11 @@ struct zs_size_stat {
 static struct dentry *zs_stat_root;
 #endif
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+static size_t huge_class_size[ZS_HUGE_CLASS_ORDER_MAX];
+#else
 static size_t huge_class_size;
+#endif
 
 struct size_class {
 	spinlock_t lock;
@@ -1341,6 +1346,14 @@ void zs_unmap_object(struct zs_pool *pool, unsigned long handle)
 }
 EXPORT_SYMBOL_GPL(zs_unmap_object);
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+/* Returns the huge-class threshold for the given order. */
+size_t zs_huge_class_size(struct zs_pool *pool, unsigned int order)
+{
+	return huge_class_size[min_t(unsigned int, order, ZS_HUGE_CLASS_ORDER_MAX - 1)];
+}
+EXPORT_SYMBOL_GPL(zs_huge_class_size);
+#else
 /**
  * zs_huge_class_size() - Returns the size (in bytes) of the first huge
  *                        zsmalloc &size_class.
@@ -1359,6 +1372,7 @@ size_t zs_huge_class_size(struct zs_pool *pool)
 	return huge_class_size;
 }
 EXPORT_SYMBOL_GPL(zs_huge_class_size);
+#endif
 
 static unsigned long obj_malloc(struct zs_pool *pool,
 				struct zspage *zspage, unsigned long handle)
@@ -2251,13 +2265,27 @@ struct zs_pool *zs_create_pool(const char *name)
 		objs_per_zspage = pages_per_zspage * PAGE_SIZE *
 				  (1 << order) / size;
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		/*
+		 * A huge class means an object completely occupies the zspage,
+		 * that is pages_per_zspage==1 && objs_per_zspage==1, with no
+		 * sharing, so the space saved by compression will be lost.
+		 * Therefore, we add a non-compression threshold to avoid
+		 * ineffective compression.
+		 */
+		if ((pages_per_zspage != 1 || objs_per_zspage != 1) &&
+		    !huge_class_size[order]) {
+			huge_class_size[order] = size;
+			huge_class_size[order] -= (ZS_HANDLE_SIZE - 1);
+		}
+#else
 		/*
 		 * We iterate from biggest down to smallest classes,
 		 * so huge_class_size holds the size of the first huge
 		 * class. Any object bigger than or equal to that will
 		 * endup in the huge class.
 		 */
-		if (pages_per_zspage != 1 && objs_per_zspage != 1 &&
+		if ((pages_per_zspage != 1 || objs_per_zspage != 1) &&
 				!huge_class_size) {
 			huge_class_size = size;
 			/*
@@ -2271,6 +2299,7 @@ struct zs_pool *zs_create_pool(const char *name)
 			 */
 			huge_class_size -= (ZS_HANDLE_SIZE - 1);
 		}
+#endif
 
 		/*
 		 * size_class is used for normal zsmalloc operation such

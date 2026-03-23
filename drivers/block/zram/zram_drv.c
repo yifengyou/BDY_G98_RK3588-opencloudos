@@ -1266,8 +1266,13 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 		return false;
 	}
 
-	if (!huge_class_size)
+	if (!huge_class_size) {
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		huge_class_size = zs_huge_class_size(zram->mem_pool, 0);
+#else
 		huge_class_size = zs_huge_class_size(zram->mem_pool);
+#endif
+	}
 	return true;
 }
 
