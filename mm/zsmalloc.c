@@ -1631,6 +1631,7 @@ static void zs_object_copy(struct size_class *class, unsigned long dst,
 				unsigned long src)
 {
 	struct page *s_page, *d_page;
+	unsigned int page_size = PAGE_SIZE;
 	unsigned int s_objidx, d_objidx;
 	unsigned long s_off, d_off;
 	void *s_addr, *d_addr;
@@ -1642,14 +1643,20 @@ static void zs_object_copy(struct size_class *class, unsigned long dst,
 	obj_to_location(src, &s_page, &s_objidx);
 	obj_to_location(dst, &d_page, &d_objidx);
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+	s_off = (class->size * s_objidx) & (page_size - 1);
+	d_off = (class->size * d_objidx) & (page_size - 1);
+#else
 	s_off = offset_in_page(class->size * s_objidx);
 	d_off = offset_in_page(class->size * d_objidx);
+#endif
 
-	if (s_off + class->size > PAGE_SIZE)
-		s_size = PAGE_SIZE - s_off;
+	if (s_off + class->size > page_size)
+		s_size = page_size - s_off;
 
-	if (d_off + class->size > PAGE_SIZE)
-		d_size = PAGE_SIZE - d_off;
+	if (d_off + class->size > page_size)
+		d_size = page_size - d_off;
 
 	s_addr = kmap_atomic(s_page);
 	d_addr = kmap_atomic(d_page);
@@ -1674,7 +1681,7 @@ static void zs_object_copy(struct size_class *class, unsigned long dst,
 		 * kunmap_atomic(d_addr). For more details see
 		 * Documentation/mm/highmem.rst.
 		 */
-		if (s_off >= PAGE_SIZE) {
+		if (s_off >= page_size) {
 			kunmap_atomic(d_addr);
 			kunmap_atomic(s_addr);
 			s_page = get_next_page(s_page);
@@ -1684,7 +1691,7 @@ static void zs_object_copy(struct size_class *class, unsigned long dst,
 			s_off = 0;
 		}
 
-		if (d_off >= PAGE_SIZE) {
+		if (d_off >= page_size) {
 			kunmap_atomic(d_addr);
 			d_page = get_next_page(d_page);
 			d_addr = kmap_atomic(d_page);
@@ -1708,11 +1715,15 @@ static unsigned long find_alloced_obj(struct size_class *class,
 	int index = *obj_idx;
 	unsigned long handle = 0;
 	void *addr = kmap_atomic(page);
+	unsigned int page_size = PAGE_SIZE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+#endif
 
 	offset = get_first_obj_offset(page);
 	offset += class->size * index;
 
-	while (offset < PAGE_SIZE) {
+	while (offset < page_size) {
 		if (obj_allocated(page, addr + offset, &handle))
 			break;
 
@@ -1919,6 +1930,11 @@ static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 	 */
 	VM_BUG_ON_PAGE(PageIsolated(page), page);
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	/* Refuse to isolate high-order zspages. */
+	if (PageCompound(page))
+		return false;
+#endif
 	return true;
 }
 
@@ -1934,6 +1950,8 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	unsigned long handle;
 	unsigned long old_obj, new_obj;
 	unsigned int obj_idx;
+	unsigned int page_size = PAGE_SIZE;
+	unsigned int order = 0;
 
 	/*
 	 * We cannot support the _NO_COPY case here, because copy needs to
@@ -1955,6 +1973,16 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	 */
 	write_lock(&pool->migrate_lock);
 	class = zspage_class(pool, zspage);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+	order = class_size_to_zs_order(class->size);
+
+	/* To avoid order inconsistencies in migration. */
+	if (WARN_ON_ONCE(order > 0 && compound_order(newpage) != order)) {
+		write_unlock(&pool->migrate_lock);
+		return -EINVAL;
+	}
+#endif
 
 	/*
 	 * the class lock protects zpage alloc/free in the zspage.
@@ -1970,10 +1998,10 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	 * Here, any user cannot access all objects in the zspage so let's move.
 	 */
 	d_addr = kmap_atomic(newpage);
-	memcpy(d_addr, s_addr, PAGE_SIZE);
+	memcpy(d_addr, s_addr, page_size);
 	kunmap_atomic(d_addr);
 
-	for (addr = s_addr + offset; addr < s_addr + PAGE_SIZE;
+	for (addr = s_addr + offset; addr < s_addr + page_size;
 					addr += class->size) {
 		if (obj_allocated(page, addr, &handle)) {
 
@@ -1997,8 +2025,8 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 
 	get_page(newpage);
 	if (page_zone(newpage) != page_zone(page)) {
-		dec_zone_page_state(page, NR_ZSPAGES);
-		inc_zone_page_state(newpage, NR_ZSPAGES);
+		mod_zone_page_state(page_zone(page), NR_ZSPAGES, -(1 << order));
+		mod_zone_page_state(page_zone(newpage), NR_ZSPAGES, (1 << order));
 	}
 
 	reset_page(page);
@@ -2096,6 +2124,7 @@ static unsigned long zs_can_compact(struct size_class *class)
 	unsigned long obj_wasted;
 	unsigned long obj_allocated = zs_stat_get(class, ZS_OBJS_ALLOCATED);
 	unsigned long obj_used = zs_stat_get(class, ZS_OBJS_INUSE);
+	unsigned long pages_per_zspage;
 
 	if (obj_allocated <= obj_used)
 		return 0;
@@ -2103,7 +2132,11 @@ static unsigned long zs_can_compact(struct size_class *class)
 	obj_wasted = obj_allocated - obj_used;
 	obj_wasted /= class->objs_per_zspage;
 
-	return obj_wasted * class->pages_per_zspage;
+	pages_per_zspage = class->pages_per_zspage;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	pages_per_zspage *= (1 << class_size_to_zs_order(class->size));
+#endif
+	return obj_wasted * pages_per_zspage;
 }
 
 static unsigned long __zs_compact(struct zs_pool *pool,
@@ -2112,6 +2145,13 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 	struct zspage *src_zspage = NULL;
 	struct zspage *dst_zspage = NULL;
 	unsigned long pages_freed = 0;
+	unsigned int order = 0;
+	unsigned long pages_per_free;
+
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	order = class_size_to_zs_order(class->size);
+#endif
+	pages_per_free = class->pages_per_zspage * (1 << order);
 
 	/*
 	 * protect the race between zpage migration and zs_free
@@ -2139,7 +2179,7 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 		fg = putback_zspage(class, src_zspage);
 		if (fg == ZS_INUSE_RATIO_0) {
 			free_zspage(pool, class, src_zspage);
-			pages_freed += class->pages_per_zspage;
+			pages_freed += pages_per_free;
 		}
 		src_zspage = NULL;
 
