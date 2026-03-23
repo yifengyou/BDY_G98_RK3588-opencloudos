@@ -908,6 +908,10 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 	struct page *page, *next;
 	int fg;
 	unsigned int class_idx;
+	unsigned int order = 0;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	order = class_size_to_zs_order(class->size);
+#endif
 
 	get_zspage_mapping(zspage, &class_idx, &fg);
 
@@ -922,15 +926,21 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 		next = get_next_page(page);
 		reset_page(page);
 		unlock_page(page);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		mod_zone_page_state(page_zone(page), NR_ZSPAGES, -(1 << order));
+		__free_pages(page, order);
+#else
 		dec_zone_page_state(page, NR_ZSPAGES);
-		put_page(page);
+		__free_page(page);
+#endif
 		page = next;
 	} while (page != NULL);
 
 	cache_free_zspage(pool, zspage);
 
 	class_stat_dec(class, ZS_OBJS_ALLOCATED, class->objs_per_zspage);
-	atomic_long_sub(class->pages_per_zspage, &pool->pages_allocated);
+	atomic_long_sub(class->pages_per_zspage * (1 << order),
+			&pool->pages_allocated);
 }
 
 static void free_zspage(struct zs_pool *pool, struct size_class *class,
@@ -959,6 +969,10 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 	unsigned int freeobj = 1;
 	unsigned long off = 0;
 	struct page *page = get_first_page(zspage);
+	unsigned int page_size = PAGE_SIZE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+#endif
 
 	while (page) {
 		struct page *next_page;
@@ -970,7 +984,7 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 		vaddr = kmap_atomic(page);
 		link = (struct link_free *)vaddr + off / sizeof(*link);
 
-		while ((off += class->size) < PAGE_SIZE) {
+		while ((off += class->size) < page_size) {
 			link->next = freeobj++ << OBJ_TAG_BITS;
 			link += class->size / sizeof(*link);
 		}
@@ -992,7 +1006,7 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 		}
 		kunmap_atomic(vaddr);
 		page = next_page;
-		off %= PAGE_SIZE;
+		off %= page_size;
 	}
 
 	set_freeobj(zspage, 0);
@@ -1039,6 +1053,9 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 					gfp_t gfp)
 {
 	int i;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	unsigned int order = class_size_to_zs_order(class->size);
+#endif
 	struct page *pages[ZS_MAX_PAGES_PER_ZSPAGE];
 	struct zspage *zspage = cache_alloc_zspage(pool, gfp);
 
@@ -1047,6 +1064,10 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 
 	if (!IS_ENABLED(CONFIG_COMPACTION))
 		gfp &= ~__GFP_MOVABLE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	if (order > 0)
+		gfp |= __GFP_COMP;
+#endif
 
 	zspage->magic = ZSPAGE_MAGIC;
 	migrate_lock_init(zspage);
@@ -1054,6 +1075,20 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	for (i = 0; i < class->pages_per_zspage; i++) {
 		struct page *page;
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		page = alloc_pages(gfp, order);
+		if (!page) {
+			while (--i >= 0) {
+				mod_zone_page_state(page_zone(pages[i]), NR_ZSPAGES,
+						    -(1 << order));
+				__free_pages(pages[i], order);
+			}
+			cache_free_zspage(pool, zspage);
+			return NULL;
+		}
+
+		mod_zone_page_state(page_zone(page), NR_ZSPAGES, 1 << order);
+#else
 		page = alloc_page(gfp);
 		if (!page) {
 			while (--i >= 0) {
@@ -1065,6 +1100,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		}
 
 		inc_zone_page_state(page, NR_ZSPAGES);
+#endif
 		pages[i] = page;
 	}
 
@@ -1117,6 +1153,10 @@ static void *__zs_map_object(struct mapping_area *area,
 	int sizes[2];
 	void *addr;
 	char *buf = area->vm_buf;
+	unsigned int page_size = PAGE_SIZE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(size);
+#endif
 
 	/* disable page faults to match kmap_atomic() return conditions */
 	pagefault_disable();
@@ -1125,7 +1165,7 @@ static void *__zs_map_object(struct mapping_area *area,
 	if (area->vm_mm == ZS_MM_WO)
 		goto out;
 
-	sizes[0] = PAGE_SIZE - off;
+	sizes[0] = page_size - off;
 	sizes[1] = size - sizes[0];
 
 	/* copy object to per-cpu buffer */
@@ -1145,6 +1185,10 @@ static void __zs_unmap_object(struct mapping_area *area,
 	int sizes[2];
 	void *addr;
 	char *buf;
+	unsigned int page_size = PAGE_SIZE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(size);
+#endif
 
 	/* no write fastpath */
 	if (area->vm_mm == ZS_MM_RO)
@@ -1155,7 +1199,7 @@ static void __zs_unmap_object(struct mapping_area *area,
 	size -= ZS_HANDLE_SIZE;
 	off += ZS_HANDLE_SIZE;
 
-	sizes[0] = PAGE_SIZE - off;
+	sizes[0] = page_size - off;
 	sizes[1] = size - sizes[0];
 
 	/* copy per-cpu buffer to object */
@@ -1255,6 +1299,7 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 {
 	struct zspage *zspage;
 	struct page *page;
+	unsigned int page_size = PAGE_SIZE;
 	unsigned long obj, off;
 	unsigned int obj_idx;
 
@@ -1286,12 +1331,17 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 	read_unlock(&pool->migrate_lock);
 
 	class = zspage_class(pool, zspage);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+	off = (class->size * obj_idx) & (page_size - 1);
+#else
 	off = offset_in_page(class->size * obj_idx);
+#endif
 
 	local_lock(&zs_map_area.lock);
 	area = this_cpu_ptr(&zs_map_area);
 	area->vm_mm = mm;
-	if (off + class->size <= PAGE_SIZE) {
+	if (off + class->size <= page_size) {
 		/* this object is contained entirely within a page */
 		area->vm_addr = kmap_atomic(page);
 		ret = area->vm_addr + off;
@@ -1316,6 +1366,7 @@ void zs_unmap_object(struct zs_pool *pool, unsigned long handle)
 {
 	struct zspage *zspage;
 	struct page *page;
+	unsigned int page_size = PAGE_SIZE;
 	unsigned long obj, off;
 	unsigned int obj_idx;
 
@@ -1326,10 +1377,15 @@ void zs_unmap_object(struct zs_pool *pool, unsigned long handle)
 	obj_to_location(obj, &page, &obj_idx);
 	zspage = get_zspage(page);
 	class = zspage_class(pool, zspage);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class->size);
+	off = (class->size * obj_idx) & (page_size - 1);
+#else
 	off = offset_in_page(class->size * obj_idx);
+#endif
 
 	area = this_cpu_ptr(&zs_map_area);
-	if (off + class->size <= PAGE_SIZE)
+	if (off + class->size <= page_size)
 		kunmap_atomic(area->vm_addr);
 	else {
 		struct page *pages[2];
@@ -1384,6 +1440,10 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 
 	struct page *m_page;
 	unsigned long m_offset;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	unsigned int order;
+	unsigned int page_size;
+#endif
 	void *vaddr;
 
 	class = pool->size_class[zspage->class];
@@ -1391,8 +1451,16 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 	obj = get_freeobj(zspage);
 
 	offset = obj * class->size;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	order = class_size_to_zs_order(class->size);
+	page_size = PAGE_SIZE << order;
+
+	nr_page = offset >> (PAGE_SHIFT + order);
+	m_offset = offset & (page_size - 1);
+#else
 	nr_page = offset >> PAGE_SHIFT;
 	m_offset = offset_in_page(offset);
+#endif
 	m_page = get_first_page(zspage);
 
 	for (i = 0; i < nr_page; i++)
@@ -1433,6 +1501,7 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	struct size_class *class;
 	int newfg;
 	struct zspage *zspage;
+	unsigned int order = 0;
 
 	if (unlikely(!size || size > ZS_MAX_ALLOC_SIZE))
 		return (unsigned long)ERR_PTR(-EINVAL);
@@ -1472,7 +1541,11 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	insert_zspage(class, zspage, newfg);
 	set_zspage_mapping(zspage, class->index, newfg);
 	record_obj(handle, obj);
-	atomic_long_add(class->pages_per_zspage, &pool->pages_allocated);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	order = class_size_to_zs_order(class->size);
+#endif
+	atomic_long_add(class->pages_per_zspage * (1 << order),
+			&pool->pages_allocated);
 	class_stat_inc(class, ZS_OBJS_ALLOCATED, class->objs_per_zspage);
 	class_stat_inc(class, ZS_OBJS_INUSE, 1);
 
@@ -1490,12 +1563,19 @@ static void obj_free(int class_size, unsigned long obj)
 	struct link_free *link;
 	struct zspage *zspage;
 	struct page *f_page;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	unsigned int page_size = class_size_to_zs_size(class_size);
+#endif
 	unsigned long f_offset;
 	unsigned int f_objidx;
 	void *vaddr;
 
 	obj_to_location(obj, &f_page, &f_objidx);
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	f_offset = (class_size * f_objidx) & (page_size - 1);
+#else
 	f_offset = offset_in_page(class_size * f_objidx);
+#endif
 	zspage = get_zspage(f_page);
 
 	vaddr = kmap_atomic(f_page);
