@@ -663,6 +663,7 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 		int ret = bdev_swapin_folio(sis->bdev, swap_folio_sector(folio), folio);
 		if (ret != -EOPNOTSUPP) {
 			if (!ret) {
+				count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN);
 				count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 				count_vm_events(PSWPIN, folio_nr_pages(folio));
 			}
