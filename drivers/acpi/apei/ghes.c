@@ -500,6 +500,8 @@ static void ghes_handle_critical_ras(unsigned long pfn)
 	set_bit(MMF_CRITICAL_ERR, &mm->flags);
 	pr_warn_ratelimited(GHES_PFX "detected critical ras on pfn: %#lx, nid: %d, comm: %s, pid: %d, tgid: %d\n",
 		pfn, nid, current->comm, current->pid, current->tgid);
+
+	do_send_sig_info(SIGBUS, SEND_SIG_PRIV, current, PIDTYPE_TGID);
 }
 
 /**
