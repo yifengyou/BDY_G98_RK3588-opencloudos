@@ -166,9 +166,6 @@ static int ummu_config_update(struct platform_device *pdev,
 			return ret;
 	}
 
-	dev_info(&pdev->dev, "interrupt_id[0x%x], pxm[%u], its_index[%u], vendor_id[0x%x]\n",
-		 ((type == UBRT_UMMU) ? ummu_node->intr_id : ummu_node->pmu_intr_id),
-		 ummu_node->pxm, ummu_node->its_index, ummu_node->vendor_id);
 	return 0;
 }
 
