@@ -34,6 +34,15 @@ config ACPI_APEI_GHES
 	  by firmware to produce more valuable hardware error
 	  information for Linux.
 
+config ACPI_APEI_GHES_ARMP_VENDOR_INFO
+	bool "ARM processor vendor specific error info"
+	depends on ARM64 && ACPI_APEI_GHES
+	default n
+	help
+	  Parse vendor specific error info of ARM processor error section,
+	  for platform-related fault status to handle system failures. This
+	  functionality requires support from both the chip and the firmware.
+
 config ACPI_APEI_PCIEAER
 	bool "APEI PCIe AER logging/recovering support"
 	depends on ACPI_APEI && PCIEAER
