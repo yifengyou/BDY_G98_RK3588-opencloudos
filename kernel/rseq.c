@@ -180,6 +180,9 @@ static int rseq_get_rseq_cs(struct task_struct *t, struct rseq_cs *rseq_cs)
 	u32 sig;
 	int ret;
 
+	if (mm_is_critical_error(t->mm))
+		return -EFAULT;
+
 	ret = rseq_get_rseq_cs_ptr_val(t->rseq, &ptr);
 	if (ret)
 		return ret;
