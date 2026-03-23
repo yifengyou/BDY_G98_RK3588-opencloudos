@@ -619,25 +619,32 @@ static int zs_stats_size_show(struct seq_file *s, void *v)
 	int objs_per_zspage;
 	unsigned long obj_allocated, obj_used, pages_used, freeable;
 	unsigned long total_objs = 0, total_used_objs = 0, total_pages = 0;
-	unsigned long total_freeable = 0;
+	unsigned long total_freeable = 0, total_mem_kb = 0, total_util_pct = 0;
 	unsigned long inuse_totals[NR_FULLNESS_GROUPS] = {0, };
 
-	seq_printf(s, " %5s %5s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %13s %10s %10s %16s %8s\n",
-			"class", "size", "10%", "20%", "30%", "40%",
+	seq_printf(s, " %5s %5s %5s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %13s %10s %6s %10s %10s %16s %16s %8s\n",
+			"class", "size", "order", "10%", "20%", "30%", "40%",
 			"50%", "60%", "70%", "80%", "90%", "99%", "100%",
-			"obj_allocated", "obj_used", "pages_used",
-			"pages_per_zspage", "freeable");
+			"obj_allocated", "obj_used", "util%", "pages_used",
+			"mem_kb", "pages_per_zspage", "objs_per_zspage",
+			"freeable");
 
 	for (i = 0; i < ZS_SIZE_CLASSES; i++) {
+		unsigned int order = 0;
+		unsigned long mem_kb, util_pct;
 
 		class = pool->size_class[i];
 
 		if (class->index != i)
 			continue;
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		order = class_size_to_zs_order(class->size);
+#endif
+
 		spin_lock(&class->lock);
 
-		seq_printf(s, " %5u %5u ", i, class->size);
+		seq_printf(s, " %5u %5u %5u", i, class->size, order);
 		for (fg = ZS_INUSE_RATIO_10; fg < NR_FULLNESS_GROUPS; fg++) {
 			inuse_totals[fg] += zs_stat_get(class, fg);
 			seq_printf(s, "%9lu ", zs_stat_get(class, fg));
@@ -651,26 +658,30 @@ static int zs_stats_size_show(struct seq_file *s, void *v)
 		objs_per_zspage = class->objs_per_zspage;
 		pages_used = obj_allocated / objs_per_zspage *
 				class->pages_per_zspage;
+		mem_kb = pages_used * (1U << order) * (PAGE_SIZE / 1024);
+		util_pct = obj_allocated ? (obj_used * 100 / obj_allocated) : 0;
 
-		seq_printf(s, "%13lu %10lu %10lu %16d %8lu\n",
-			   obj_allocated, obj_used, pages_used,
-			   class->pages_per_zspage, freeable);
+		seq_printf(s, "%13lu %10lu %6lu%% %10lu %10lu %16d %16d %8lu\n",
+			   obj_allocated, obj_used, util_pct, pages_used, mem_kb,
+			   class->pages_per_zspage, objs_per_zspage, freeable);
 
 		total_objs += obj_allocated;
 		total_used_objs += obj_used;
 		total_pages += pages_used;
+		total_mem_kb += mem_kb;
 		total_freeable += freeable;
 	}
 
 	seq_puts(s, "\n");
-	seq_printf(s, " %5s %5s ", "Total", "");
+	seq_printf(s, " %5s %5s %5s", "Total", "", "");
 
 	for (fg = ZS_INUSE_RATIO_10; fg < NR_FULLNESS_GROUPS; fg++)
 		seq_printf(s, "%9lu ", inuse_totals[fg]);
 
-	seq_printf(s, "%13lu %10lu %10lu %16s %8lu\n",
-		   total_objs, total_used_objs, total_pages, "",
-		   total_freeable);
+	total_util_pct = total_objs ? (total_used_objs * 100 / total_objs) : 0;
+	seq_printf(s, "%13lu %10lu %6lu%% %10lu %10lu %16s %16s %8lu\n",
+		   total_objs, total_used_objs, total_util_pct, total_pages,
+		   total_mem_kb, "", "", total_freeable);
 
 	return 0;
 }
