@@ -66,6 +66,13 @@
 
 #define ZSPAGE_MAGIC	0x58
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+/* High-order compound pages per zspage slot, up to order 9. */
+#define ZSMALLOC_HIGHORDER_MAX_ORDER	9
+#define ZSMALLOC_HIGHORDER_NR_PAGES	(1 << ZSMALLOC_HIGHORDER_MAX_ORDER)
+#define ZSMALLOC_HIGHORDER_MAX_BYTES	(PAGE_SIZE * ZSMALLOC_HIGHORDER_NR_PAGES)
+#endif
+
 /*
  * This must be power of 2 and greater than or equal to sizeof(link_free).
  * These two conditions ensure that any 'struct link_free' itself doesn't
@@ -117,6 +124,12 @@
 #define HUGE_BITS	1
 #define FULLNESS_BITS	4
 #define CLASS_BITS	8
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+/* Supports up to 16383 classes. */
+#define ZSPAGE_CLASS_BITS 14
+#else
+#define ZSPAGE_CLASS_BITS (CLASS_BITS + 1)
+#endif
 #define MAGIC_VAL_BITS	8
 
 #define ZS_MAX_PAGES_PER_ZSPAGE	(_AC(CONFIG_ZSMALLOC_CHAIN_SIZE, UL))
@@ -125,7 +138,11 @@
 #define ZS_MIN_ALLOC_SIZE \
 	MAX(32, (ZS_MAX_PAGES_PER_ZSPAGE << PAGE_SHIFT >> OBJ_INDEX_BITS))
 /* each chunk includes extra space to keep handle */
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+#define ZS_MAX_ALLOC_SIZE	ZSMALLOC_HIGHORDER_MAX_BYTES
+#else
 #define ZS_MAX_ALLOC_SIZE	PAGE_SIZE
+#endif
 
 /*
  * On systems with 4K page size, this gives 255 size classes! There is a
@@ -140,9 +157,19 @@
  *  ZS_MIN_ALLOC_SIZE and ZS_SIZE_CLASS_DELTA must be multiple of ZS_ALIGN
  *  (reason above)
  */
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+#define ZS_PAGE_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
+#define ZS_PAGE_SIZE_CLASSES		(DIV_ROUND_UP(PAGE_SIZE - ZS_MIN_ALLOC_SIZE, \
+						      ZS_PAGE_SIZE_CLASS_DELTA) + 1)
+#define ZS_HIGHORDER_CLASS_DELTA	256
+#define ZS_HIGHORDER_SIZE_CLASSES	(DIV_ROUND_UP(ZSMALLOC_HIGHORDER_MAX_BYTES - PAGE_SIZE, \
+						      ZS_HIGHORDER_CLASS_DELTA) + 1)
+#define ZS_SIZE_CLASSES		(ZS_PAGE_SIZE_CLASSES + ZS_HIGHORDER_SIZE_CLASSES)
+#else
 #define ZS_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
 #define ZS_SIZE_CLASSES	(DIV_ROUND_UP(ZS_MAX_ALLOC_SIZE - ZS_MIN_ALLOC_SIZE, \
 				      ZS_SIZE_CLASS_DELTA) + 1)
+#endif
 
 /*
  * Pages are distinguished by the ratio of used memory (that is the ratio
@@ -196,6 +223,22 @@ struct size_class {
 	struct zs_size_stat stats;
 };
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+static inline unsigned int class_size_to_zs_order(unsigned long size)
+{
+	if (size > PAGE_SIZE)
+		return min_t(unsigned int, get_order(size),
+			     ZSMALLOC_HIGHORDER_MAX_ORDER);
+
+	return 0;
+}
+
+static inline unsigned int class_size_to_zs_size(unsigned long size)
+{
+	return PAGE_SIZE * (1 << class_size_to_zs_order(size));
+}
+#endif
+
 /*
  * Placed within free objects to form a singly linked list.
  * For every zspage, zspage->freeobj gives head of this list.
@@ -245,7 +288,7 @@ struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
 		unsigned int fullness:FULLNESS_BITS;
-		unsigned int class:CLASS_BITS + 1;
+		unsigned int class:ZSPAGE_CLASS_BITS;
 		unsigned int magic:MAGIC_VAL_BITS;
 	};
 	unsigned int inuse;
@@ -506,11 +549,25 @@ static int get_size_class_index(int size)
 {
 	int idx = 0;
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	if (size > PAGE_SIZE + ZS_HANDLE_SIZE) {
+		idx = ZS_PAGE_SIZE_CLASSES;
+		idx += DIV_ROUND_UP(size - PAGE_SIZE, ZS_HIGHORDER_CLASS_DELTA);
+
+		return min_t(int, ZS_SIZE_CLASSES - 1, idx);
+	} else if (size > ZS_MIN_ALLOC_SIZE) {
+		idx = DIV_ROUND_UP(size - ZS_MIN_ALLOC_SIZE,
+				   ZS_PAGE_SIZE_CLASS_DELTA);
+	}
+
+	return min_t(int, ZS_PAGE_SIZE_CLASSES - 1, idx);
+#else
 	if (likely(size > ZS_MIN_ALLOC_SIZE))
 		idx = DIV_ROUND_UP(size - ZS_MIN_ALLOC_SIZE,
 				ZS_SIZE_CLASS_DELTA);
 
 	return min_t(int, ZS_SIZE_CLASSES - 1, idx);
+#endif
 }
 
 static inline void class_stat_inc(struct size_class *class,
@@ -1036,7 +1093,8 @@ static inline int __zs_cpu_up(struct mapping_area *area)
 	 */
 	if (area->vm_buf)
 		return 0;
-	area->vm_buf = kmalloc(ZS_MAX_ALLOC_SIZE, GFP_KERNEL);
+	/* Reduce allocation failures when memory is fragmented. */
+	area->vm_buf = kvmalloc(ZS_MAX_ALLOC_SIZE, GFP_KERNEL);
 	if (!area->vm_buf)
 		return -ENOMEM;
 	return 0;
@@ -1044,7 +1102,7 @@ static inline int __zs_cpu_up(struct mapping_area *area)
 
 static inline void __zs_cpu_down(struct mapping_area *area)
 {
-	kfree(area->vm_buf);
+	kvfree(area->vm_buf);
 	area->vm_buf = NULL;
 }
 
@@ -2110,6 +2168,10 @@ static int calculate_zspage_chain_size(int class_size)
 {
 	int i, min_waste = INT_MAX;
 	int chain_size = 1;
+	unsigned int page_size = PAGE_SIZE;
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+	page_size = class_size_to_zs_size(class_size);
+#endif
 
 	if (is_power_of_2(class_size))
 		return chain_size;
@@ -2117,7 +2179,7 @@ static int calculate_zspage_chain_size(int class_size)
 	for (i = 1; i <= ZS_MAX_PAGES_PER_ZSPAGE; i++) {
 		int waste;
 
-		waste = (i * PAGE_SIZE) % class_size;
+		waste = (i * page_size) % class_size;
 		if (waste < min_waste) {
 			min_waste = waste;
 			chain_size = i;
@@ -2168,12 +2230,26 @@ struct zs_pool *zs_create_pool(const char *name)
 		int objs_per_zspage;
 		struct size_class *class;
 		int fullness;
+		unsigned int order = 0;
 
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		size = ZS_MIN_ALLOC_SIZE + i * ZS_PAGE_SIZE_CLASS_DELTA;
+
+		if (i >= ZS_PAGE_SIZE_CLASSES)
+			size = PAGE_SIZE + (i - ZS_PAGE_SIZE_CLASSES) *
+					   ZS_HIGHORDER_CLASS_DELTA;
+#else
 		size = ZS_MIN_ALLOC_SIZE + i * ZS_SIZE_CLASS_DELTA;
+#endif
 		if (size > ZS_MAX_ALLOC_SIZE)
 			size = ZS_MAX_ALLOC_SIZE;
+
+#ifdef CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+		order = class_size_to_zs_order(size);
+#endif
 		pages_per_zspage = calculate_zspage_chain_size(size);
-		objs_per_zspage = pages_per_zspage * PAGE_SIZE / size;
+		objs_per_zspage = pages_per_zspage * PAGE_SIZE *
+				  (1 << order) / size;
 
 		/*
 		 * We iterate from biggest down to smallest classes,
