@@ -813,12 +813,13 @@ static void uburma_release_jfce_event(struct uburma_jfc_uobj *jfc_uobj)
 {
 	struct uburma_jfce_uobj *jfce_uobj;
 
-	if (!IS_ERR(jfc_uobj->jfce)) {
+	if (!IS_ERR_OR_NULL(jfc_uobj->jfce)) {
 		jfce_uobj = container_of(jfc_uobj->jfce,
 					 struct uburma_jfce_uobj, uobj);
 		uburma_release_comp_event(jfce_uobj,
 					  &jfc_uobj->comp_event_list);
 		uobj_put(jfc_uobj->jfce);
+		jfc_uobj->jfce = NULL;
 	}
 }
 
