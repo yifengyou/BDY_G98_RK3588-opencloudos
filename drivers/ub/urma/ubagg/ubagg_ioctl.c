@@ -24,7 +24,7 @@
 #include "ubagg_hash_table.h"
 
 #define UBAGG_DEVICE_MAX_EID_CNT 128
-#define UBAGG_MAX_BONDING_DEV_NUM 256
+#define UBAGG_MAX_BONDING_DEV_NUM 1024
 #define UBAGG_DEV_NAME_PREFIX "bonding_dev_"
 #define MAX_NUM_LEN 11
 #define BITMAP_OFFSET 1025
@@ -2092,6 +2092,7 @@ static int ubagg_delete_dev(const struct ubagg_delete_dev_arg *arg)
 	rmv_dev_from_list(dev);
 	ubcore_unregister_device(&dev->ub_dev);
 	uninit_ubagg_res(dev);
+	release_bond_device_id_with_name(dev->master_dev_name);
 
 	ubagg_dev_ref_put(dev);
 
