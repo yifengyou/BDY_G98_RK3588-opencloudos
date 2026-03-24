@@ -1530,7 +1530,20 @@ free_resp:
 
 bool ubcore_dev_accessible(struct ubcore_device *dev, struct net *net)
 {
-	return (g_shared_ns || net_eq(net, read_pnet(&dev->ldev.net)));
+	struct ubcore_logic_device *ldev;
+
+	if (g_shared_ns || net_eq(net, read_pnet(&dev->ldev.net)))
+		return true;
+
+	mutex_lock(&dev->ldev_mutex);
+	list_for_each_entry(ldev, &dev->ldev_list, node) {
+		if (net_eq(read_pnet(&ldev->net), net)) {
+			mutex_unlock(&dev->ldev_mutex);
+			return true;
+		}
+	}
+	mutex_unlock(&dev->ldev_mutex);
+	return false;
 }
 
 struct ubcore_ucontext *
@@ -1548,6 +1561,12 @@ ubcore_alloc_ucontext(struct ubcore_device *dev, uint32_t eid_index,
 	    eid_index >= UBCORE_MAX_EID_CNT) {
 		ubcore_log_err("Invalid argument.\n");
 		return ERR_PTR(-EINVAL);
+	}
+
+	if (!ubcore_dev_accessible(dev, current->nsproxy->net_ns) ||
+		!ubcore_eid_accessible(dev, eid_index)) {
+		ubcore_log_err("Device or EID not accessible.\n");
+		return ERR_PTR(-EPERM);
 	}
 
 	ret = ubcore_cgroup_try_charge(&cg_obj, dev,
@@ -1887,16 +1906,18 @@ static void ubcore_invalidate_eid_ns(struct ubcore_device *dev, struct net *net)
 static void ubcore_reset_eid_ns(struct ubcore_device *dev, struct net *net)
 {
 	struct ubcore_eid_entry *e;
+	struct net *dev_net;
 	uint32_t i;
 
 	if (dev->eid_table.eid_entries == NULL)
 		return;
 
+	dev_net = read_pnet(&dev->ldev.net);
 	spin_lock(&dev->eid_table.lock);
 	for (i = 0; i < dev->eid_table.eid_cnt; i++) {
 		e = &dev->eid_table.eid_entries[i];
 		if (e->valid && net_eq(e->net, net))
-			e->net = &init_net;
+			e->net = dev_net;
 
 	}
 	spin_unlock(&dev->eid_table.lock);
@@ -1922,10 +1943,7 @@ static int ubcore_modify_dev_ns(struct ubcore_device *dev, struct net *net,
 		goto out;
 	}
 
-	if (exit)
-		ubcore_invalidate_eid_ns(dev, cur);
-	else
-		ubcore_modify_eid_ns(dev, net);
+	ubcore_modify_eid_ns(dev, net);
 
 out:
 	ubcore_clients_add(dev);
@@ -2001,6 +2019,7 @@ int ubcore_expose_dev_ns(char *device_name, uint32_t ns_fd)
 {
 	struct ubcore_device *dev;
 	struct net *net;
+	struct net *cur;
 	int ret = 0;
 
 	net = get_net_ns_by_fd(ns_fd);
@@ -2020,6 +2039,13 @@ int ubcore_expose_dev_ns(char *device_name, uint32_t ns_fd)
 		ubcore_log_err("Failed to find device.\n");
 		ret = -ENODEV;
 		goto put_net;
+	}
+
+	cur = read_pnet(&dev->ldev.net);
+	if (net_eq(net, cur)) {
+		ubcore_log_info("Device %s is already in net: %u\n",
+				device_name, net->ns.inum);
+		goto put_device;
 	}
 
 	down_read(&g_ubcore_net_rwsem);
@@ -2135,6 +2161,7 @@ int ubcore_set_dev_eid_ns(char *device_name, uint32_t eid_index, uint32_t ns_fd)
 	union ubcore_eid eid = { 0 };
 	bool is_ldev_exist = false;
 	struct net *net;
+	struct net *cur;
 	int ret = 0;
 
 	dev = ubcore_find_device_with_name(device_name);
@@ -2146,31 +2173,39 @@ int ubcore_set_dev_eid_ns(char *device_name, uint32_t eid_index, uint32_t ns_fd)
 	net = get_net_ns_by_fd(ns_fd);
 	if (IS_ERR(net)) {
 		ubcore_log_err("failed to get ns by fd.\n");
-		ubcore_put_device(dev);
-		return PTR_ERR(net);
+		ret = PTR_ERR(net);
+		goto put_device;
 	}
 
-	mutex_lock(&dev->ldev_mutex);
-	list_for_each_entry(tmp_ldev, &dev->ldev_list, node) {
-		if (net_eq(read_pnet(&tmp_ldev->net), net)) {
-			is_ldev_exist = true;
-			break;
-		}
+	cur = read_pnet(&dev->ldev.net);
+	if (net_eq(net, cur)) {
+		ubcore_log_info("Device %s is already in net: %u\n",
+				device_name, net->ns.inum);
+		is_ldev_exist = true;
 	}
-	mutex_unlock(&dev->ldev_mutex);
+
+	if (!is_ldev_exist) {
+		mutex_lock(&dev->ldev_mutex);
+		list_for_each_entry(tmp_ldev, &dev->ldev_list, node) {
+			if (net_eq(read_pnet(&tmp_ldev->net), net)) {
+				is_ldev_exist = true;
+				break;
+			}
+		}
+		mutex_unlock(&dev->ldev_mutex);
+	}
 
 	if (is_ldev_exist == false) {
 		ubcore_log_err("failed to find ldev for dev_name:%s, net_fd:%u.\n",
 			device_name, ns_fd);
-		ubcore_put_device(dev);
-		return -EPERM;
+		ret = -EPERM;
+		goto put_net;
 	}
 
 	// get eid
 	ret = ubcore_get_eid_by_idx(dev, eid_index, &eid);
 	if (ret != 0) {
-		ubcore_put_device(dev);
-		return ret;
+		goto put_net;
 	}
 
 	// normal eid
@@ -2178,6 +2213,9 @@ int ubcore_set_dev_eid_ns(char *device_name, uint32_t eid_index, uint32_t ns_fd)
 	ubcore_log_info("set dev:%s eid: "EID_FMT", idx: %u ns:%u\n",
 		device_name, EID_ARGS(dev->eid_table.eid_entries[eid_index].eid), eid_index, ns_fd);
 
+put_net:
+	put_net(net);
+put_device:
 	ubcore_put_device(dev);
 	return ret;
 }
@@ -2209,7 +2247,6 @@ void ubcore_net_exit(struct net *net)
 			if (dev->transport_type != UBCORE_TRANSPORT_UB)
 				continue;
 			ubcore_remove_one_logic_device(dev, net);
-			ubcore_invalidate_eid_ns(dev, net);
 			ubcore_reset_eid_ns(dev, net);
 			(void)ubcore_modify_dev_ns(dev, &init_net, true);
 		}
