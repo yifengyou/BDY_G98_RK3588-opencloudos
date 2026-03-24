@@ -352,7 +352,7 @@ static int uburma_jfce_wait(struct uburma_jfce_uobj *jfce, struct file *filp,
 	}
 
 	if (ret < 0) {
-		uburma_log_err("Failed to wait jfce event");
+		uburma_log_err("Failed to wait jfce event, ret: %d.\n", ret);
 		return ret;
 	}
 

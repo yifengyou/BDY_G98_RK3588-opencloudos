@@ -842,6 +842,39 @@ del_jfc_s:
 	return ret;
 }
 
+static void ubmad_delete_jetty(struct ubcore_jetty *jetty)
+{
+	uint32_t jetty_id = jetty->jetty_id.id;
+	int ret;
+
+	ret = ubcore_delete_jetty(jetty);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jetty, id: %u, ret: %d.\n",
+			jetty_id, ret);
+}
+
+static void ubmad_delete_jfr(struct ubcore_jfr *jfr)
+{
+	uint32_t jfr_id = jfr->jfr_id.id;
+	int ret;
+
+	ret = ubcore_delete_jfr(jfr);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jfr, id: %u, ret: %d.\n",
+			jfr_id, ret);
+}
+
+static void ubmad_delete_jfc(struct ubcore_jfc *jfc)
+{
+	uint32_t jfc_id = jfc->id;
+	int ret;
+
+	ret = ubcore_delete_jfc(jfc);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jfc, id: %u, ret: %d.\n",
+			jfc_id, ret);
+}
+
 static void ubmad_uninit_jetty_rsrc(struct ubmad_jetty_resource *rsrc)
 {
 	struct ubmad_tjetty *tjetty;
@@ -864,16 +897,16 @@ static void ubmad_uninit_jetty_rsrc(struct ubmad_jetty_resource *rsrc)
 	spin_unlock_irqrestore(&rsrc->tjetty_hlist_lock, flag);
 
 	ubmad_destroy_seg(rsrc);
-	(void)ubcore_delete_jetty(rsrc->jetty);
+	ubmad_delete_jetty(rsrc->jetty);
 	rsrc->jetty = NULL;
 
-	(void)ubcore_delete_jfr(rsrc->jfr);
+	ubmad_delete_jfr(rsrc->jfr);
 	rsrc->jfr = NULL;
 
-	(void)ubcore_delete_jfc(rsrc->jfc_r);
+	ubmad_delete_jfc(rsrc->jfc_r);
 	rsrc->jfc_r = NULL;
 
-	(void)ubcore_delete_jfc(rsrc->jfc_s);
+	ubmad_delete_jfc(rsrc->jfc_s);
 	rsrc->jfc_s = NULL;
 }
 

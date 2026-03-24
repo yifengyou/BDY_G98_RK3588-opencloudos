@@ -215,7 +215,7 @@ ubcore_find_remove_ex_tp_info(struct ubcore_device *dev, uint64_t tp_handle)
 						     hash, &tp_handle);
 	if (!ex_tp_info) {
 		spin_unlock(&dev->ht[UBCORE_HT_EX_TP].lock);
-		ubcore_log_warn("Failed to find ex_tp_info, tp_handle: %llu.\n",
+		ubcore_log_info("Do not find ex_tp_info, tp_handle: %llu.\n",
 				tp_handle);
 		return NULL;
 	}
