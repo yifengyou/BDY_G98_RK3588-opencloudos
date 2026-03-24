@@ -206,9 +206,8 @@ static int ubcm_add_device(struct ubcore_device *device)
 	spin_lock_init(&cm_dev->agent_lock);
 	ret = ubcm_get_ubc_dev(device);
 	if (ret != 0)
-		goto free_dev;
+		goto put_dev;
 	cm_dev->device = device;
-	ubcore_set_client_ctx_data(device, &g_ubcm_client, cm_dev);
 
 	cm_dev->agent = ubmad_register_agent(device, ubcm_send_handler,
 					     ubcm_recv_handler, (void *)cm_dev);
@@ -222,12 +221,12 @@ static int ubcm_add_device(struct ubcore_device *device)
 	list_add_tail(&cm_dev->list_node, &cm_ctx->device_list);
 	spin_unlock(&cm_ctx->device_lock);
 
+	ubcore_set_client_ctx_data(device, &g_ubcm_client, cm_dev);
+
 	return 0;
 put_dev:
-	/* Note: cm_dev will free next */
+	/* Note: cm_dev will free */
 	ubcm_put_device(cm_dev);
-free_dev:
-	kfree(cm_dev);
 	return ret;
 }
 
@@ -236,7 +235,7 @@ static void ubcm_remove_device(struct ubcore_device *device, void *client_ctx)
 	struct ubcm_device *cm_dev = (struct ubcm_device *)client_ctx;
 	struct ubcm_context *cm_ctx = get_ubcm_ctx();
 
-	if (cm_dev->device != device) {
+	if (cm_dev == NULL || cm_dev->device != device) {
 		ubcore_log_err("Invalid parameter.\n");
 		return;
 	}
