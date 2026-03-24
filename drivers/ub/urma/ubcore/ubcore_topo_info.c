@@ -378,6 +378,7 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 	struct ubcore_topo_node *src_topo_info = NULL;
 	struct ubcore_topo_node *dst_topo_info = NULL;
 	uint32_t num = route_list->route_num;
+	int ret = 0;
 
 	src_topo_info = ubcore_get_topo_info_by_agg_eid(src_v_eid, &src_dev_id);
 	if (IS_ERR_OR_NULL(src_topo_info)) {
@@ -396,8 +397,9 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
 		for (port_id = 0; port_id < MAX_PORT_NUM; port_id++) {
 			if (num >= UBCORE_MAX_ROUTE_NUM) {
-				ubcore_log_warn("Invalid route num.\n");
-				return -EINVAL;
+				route_list->route_num = UBCORE_MAX_ROUTE_NUM;
+				ubcore_log_warn("Invalid route num, num = %d.\n", num);
+				return 0;
 			}
 			if (!is_eid_valid(src_agg_dev->ues[iodie_id].port_eid[port_id]) ||
 				src_topo_info->links[iodie_id][port_id].peer_port == UINT32_MAX) {
@@ -426,7 +428,9 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 	}
 
 	route_list->route_num = num;
-	return 0;
+	ubcore_log_err("get topo port eid, route_num: %u.\n", num);
+
+	return ret;
 }
 
 int ubcore_get_primary_eid_by_agg_eid(union ubcore_eid *agg_eid,
@@ -457,13 +461,12 @@ int ubcore_get_primary_eid_by_agg_eid(union ubcore_eid *agg_eid,
 static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	union ubcore_eid *dst_v_eid, struct ubcore_route_list *route_list)
 {
-	int src_dev_id, dst_dev_id, iodie_id, port_id, remote_port_id;
+	int src_dev_id, dst_dev_id, iodie_id;
 	struct ubcore_topo_agg_dev *src_agg_dev = NULL;
 	struct ubcore_topo_agg_dev *dst_agg_dev = NULL;
 	struct ubcore_topo_node *src_topo_info = NULL;
 	struct ubcore_topo_node *dst_topo_info = NULL;
 	uint32_t num = route_list->route_num;
-	bool has_link = false;
 
 	src_topo_info = ubcore_get_topo_info_by_agg_eid(src_v_eid, &src_dev_id);
 	if (IS_ERR_OR_NULL(src_topo_info)) {
@@ -479,27 +482,6 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	}
 	dst_agg_dev = &dst_topo_info->agg_devs[dst_dev_id];
 
-	// update route---check if physical link exists
-	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
-		for (port_id = 0; port_id < PORT_NUM; port_id++) {
-			remote_port_id = src_topo_info->links[iodie_id][port_id].peer_port;
-			if (remote_port_id == UINT32_MAX)
-				continue;
-
-			if (src_topo_info->links[iodie_id][port_id].peer_node
-				== dst_topo_info->id) {
-				has_link = true;
-				break;
-			}
-		}
-		if (has_link == true)
-			break;
-
-	}
-	if (has_link == false) {
-		ubcore_log_err("No links to dst eid.\n");
-		return -EINVAL;
-	}
 	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
 		route_list->buf[num + iodie_id].flag.bs.ctp = 1;
 		route_list->buf[num + iodie_id].hops = 0;
@@ -513,6 +495,8 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	}
 
 	route_list->route_num += IODIE_NUM;
+	ubcore_log_err("get topo primary eid, route_num: %u.\n", num);
+
 	return 0;
 }
 
