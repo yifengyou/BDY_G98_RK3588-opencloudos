@@ -10,7 +10,9 @@
 
 #include "ipourma_types.h"
 
-int ipourma_resolve_ipaddr(struct net_device *dev,
-	u16 proto, union ubcore_eid *eid, struct in6_addr *addr);
+void ipourma_resolve_eids(struct net_device *dev, struct sk_buff *skb, u16 proto,
+			  union ubcore_eid *src_eid, union ubcore_eid *dst_eid);
+int ipourma_resolve_ipaddr(struct net_device *dev, u16 proto,
+			   union ubcore_eid *eid, struct in6_addr *addr);
 
 #endif

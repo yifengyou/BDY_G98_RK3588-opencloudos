@@ -24,6 +24,8 @@
 #include "ipourma_ub.h"
 #include "ipourma_main.h"
 #include "ipourma_ip.h"
+#include "ipourma_err.h"
+#include "ipourma_utils.h"
 #include "ipourma_addr_res.h"
 #include "ipourma_ethtool.h"
 #include "ipourma_netlink.h"
@@ -161,7 +163,15 @@ STATIC void ipourma_add_route_entry(struct work_struct *work)
 
 STATIC int ipourma_ndo_init(struct net_device *dev)
 {
-	// this function will be filled in the next commit
+	if (IS_ERR_OR_NULL(dev))
+		return -EINVAL;
+	/* supports scatter/gather */
+	dev->features |= NETIF_F_SG;
+	/* HW DO NOT support TSO */
+	dev->hw_features &= ~NETIF_F_FRAGLIST;
+
+	ipourma_urma_dev_init(dev);
+
 	return 0;
 }
 
@@ -170,45 +180,185 @@ STATIC void ipourma_ndo_uninit(struct net_device *dev)
 	// do uninit in ipourma_stop
 }
 
+STATIC inline void ipourma_napi_enable(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	napi_enable(&priv->napi_send);
+	napi_enable(&priv->napi_recv);
+}
+
+STATIC inline void ipourma_rearm_jfc(struct ipourma_dev_priv *priv)
+{
+	if (IS_ERR_OR_NULL(priv->rx_jfc) || ubcore_rearm_jfc(priv->rx_jfc, false) != 0) {
+		netdev_dbg(priv->dev, "%s\n", ipourma_err_desc(IPOURMA_REARM_JFC_FAILED));
+		priv->runtime_stats.rx_stats.rearm_failed++;
+	} else
+		priv->runtime_stats.rx_stats.rearm_success++;
+	if (IS_ERR_OR_NULL(priv->tx_jfc) || ubcore_rearm_jfc(priv->tx_jfc, false) != 0) {
+		netdev_dbg(priv->dev, "%s\n", ipourma_err_desc(IPOURMA_REARM_JFC_FAILED));
+		priv->runtime_stats.tx_stats.rearm_failed++;
+	} else
+		priv->runtime_stats.tx_stats.rearm_success++;
+}
+
 STATIC int ipourma_open(struct net_device *dev)
 {
-	// this function will be filled in the next commit
+	struct ipourma_dev_priv *priv;
+
+	if (IS_ERR_OR_NULL(dev))
+		return -EINVAL;
+	priv = netdev_priv(dev);
+
+	atomic_set(&(priv->need_set_ip_route), 0);
+	if (IS_ERR_OR_NULL(priv->net_config_wq))
+		return -EINVAL;
+	queue_work(priv->net_config_wq, &(priv->set_ip));
+	queue_work(priv->net_config_wq, &(priv->set_route));
+
+	ipourma_restart_rings(priv);
+	ipourma_napi_enable(dev);
+	netif_start_queue(dev);
+	dev->flags |= IFF_RUNNING;
+	netif_carrier_on(dev);
+	set_bit(IPOURMA_DEV_ADMIN_UP, &priv->flags);
+	ipourma_rearm_jfc(priv);
+	netdev_info(dev, "Device opened.\n");
+
 	return 0;
 }
 
 STATIC inline void ipourma_napi_disable(struct net_device *dev)
 {
-	// this function will be filled in the next commit
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	napi_disable(&priv->napi_send);
+	napi_disable(&priv->napi_recv);
 }
 
 STATIC int ipourma_stop(struct net_device *dev)
 {
-	// this function will be filled in the next commit
+	struct ipourma_dev_priv *priv;
+
+	if (IS_ERR_OR_NULL(dev))
+		return -EINVAL;
+	priv = netdev_priv(dev);
+
+	ipourma_napi_disable(dev);
+	clear_bit(IPOURMA_DEV_ADMIN_UP, &priv->flags);
+	netif_stop_queue(dev);
+	if (!IS_ERR_OR_NULL(priv->rx_wq))
+		flush_workqueue(priv->rx_wq);
+	ipourma_reset_rings(priv);
+	ipourma_lru_clear(&priv->tjetty_lru);
+	netif_carrier_off(dev);
+	dev->flags &= ~IFF_RUNNING;
+	queue_work(priv->net_config_wq, &(priv->unset_route));
+
+	netdev_info(dev, "Device closed.\n");
+
 	return 0;
 }
 
 STATIC int ipourma_change_mtu(struct net_device *dev, int mtu)
 {
-	// this function will be filled in the next commit
+	bool flag;
+
+	if (IS_ERR_OR_NULL(dev))
+		return -EINVAL;
+
+	/* if device is running, then user should not change the mtu */
+	if (netif_running(dev)) {
+		pr_err("cannot change mtu when device is running\n");
+		return -EINVAL;
+	}
+
+	/* check ranges */
+	if ((mtu < IPOURMA_MIN_MTU) || (mtu > IPOURMA_MAX_MTU))
+		return -EINVAL;
+
+	flag = netif_carrier_ok(dev);
+	netif_carrier_off(dev);
+	dev->mtu = (uint32_t)mtu;
+	if (flag)
+		netif_carrier_on(dev);
+	pr_info("change mtu to %d success!\n", dev->mtu);
 	return 0;
 }
 
 STATIC netdev_features_t ipourma_fix_features(struct net_device *dev,
 	netdev_features_t features)
 {
-	// this function will be filled in the next commit
+	if (IS_ERR_OR_NULL(dev))
+		return -EINVAL;
+
+	features &= ~(NETIF_F_GSO | NETIF_F_TSO | NETIF_F_SG);
 	return features;
 }
 
 STATIC netdev_tx_t ipourma_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	// this function will be filled in the next commit
+	union ubcore_eid src_eid, dst_eid;
+	struct ipourma_dev_priv *priv;
+	u16 proto;
+	int ret;
+
+	if (IS_ERR_OR_NULL(dev) || IS_ERR_OR_NULL(skb) ||
+		IS_ERR_OR_NULL(skb->head) || IS_ERR_OR_NULL(skb->data))
+		return -EINVAL;
+
+	priv  = netdev_priv(dev);
+	priv->runtime_stats.tx_stats.num_recv_pkts_from_kernel++;
+	proto = ntohs(skb->protocol);
+
+	pr_skb_head_plus_linear(skb, "start xmit");
+	/* only support IPv6 */
+	if (proto != ETH_P_IPV6) {
+		priv->runtime_stats.tx_stats.not_ipv6_proto++;
+		netdev_dbg(dev, "Unsupported ether type: %u", proto);
+		goto drop_out;
+	}
+	/* check skb */
+	ret = ipourma_check_skb(dev, skb);
+	if (ret != IPOURMA_OK)
+		goto drop_out;
+
+	ipourma_resolve_eids(dev, skb, proto, &src_eid, &dst_eid);
+
+	ret = ipourma_xmit(dev, skb, &src_eid, &dst_eid);
+	if (ret != IPOURMA_OK)
+		goto err_out;
+
+	return NETDEV_TX_OK;
+
+drop_out:
+	dev->stats.tx_dropped++;
+	dev_kfree_skb_any(skb);
+	return NETDEV_TX_OK;
+err_out:
+	dev->stats.tx_errors++;
+	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
 }
 
 STATIC void ipourma_timeout(struct net_device *dev, unsigned int txqueue)
 {
-	// this function will be filled in the next commit
+	struct ipourma_dev_priv *priv;
+
+	if (IS_ERR_OR_NULL(dev))
+		return;
+
+	priv = netdev_priv(dev);
+	netdev_err(dev, "Transmit timeout at %ld, latency %d\n",
+		jiffies, jiffies_to_msecs(jiffies - dev_trans_start(dev)));
+	if (IS_ERR_OR_NULL(priv->eid_info))
+		return;
+	for (int i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
+		if (eid_is_empty(&priv->eid_info[i].eid))
+			continue;
+		netdev_err(dev, "queue stopped %d, tx_head %u, tx_tail %u\n",
+			netif_queue_stopped(dev), priv->tx_head[i], priv->tx_tail[i]);
+	}
 }
 
 /*
@@ -221,7 +371,17 @@ STATIC int ipourma_get_iflink(const struct net_device *dev)
 
 STATIC int ipourma_set_mac(struct net_device *dev, void *addr)
 {
-	// this function will be filled in the next commit
+	struct sockaddr *sa = addr;
+
+	if (IS_ERR_OR_NULL(dev) || IS_ERR_OR_NULL(addr))
+		return -EINVAL;
+	if (!is_valid_ether_addr(sa->sa_data))
+		return -EINVAL;
+	if (!(dev->priv_flags & IFF_LIVE_ADDR_CHANGE) && netif_running(dev))
+		return -EBUSY;
+
+	memcpy((void *)dev->dev_addr, sa->sa_data, dev->addr_len);
+
 	return 0;
 }
 

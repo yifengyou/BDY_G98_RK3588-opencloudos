@@ -69,7 +69,6 @@ enum {
 					sizeof(struct ipourma_header)),
 	IPOURMA_MIN_MTU             = 1280,
 	IPOURMA_DEFAULT_MTU         = IPOURMA_MAX_MTU,
-	IPOURMA_MIN_SKB_LEN         = 68,
 	IPOURMA_ALEN                = 6,
 	IPOURMA_DEFAULT_TJETTY_CAP  = 256,
 	IPOURMA_MAX_EID_CNT         = 32,
@@ -261,6 +260,8 @@ struct ipourma_tjetty_hash_node {
 	struct list_head lru_list;
 	union ubcore_eid key[2];
 	struct ubcore_tjetty *tjetty;
+	struct work_struct unimport_work;
+	struct ipourma_tjetty_lru *tjetty_lru;
 	u64 last_jiffies;
 };
 

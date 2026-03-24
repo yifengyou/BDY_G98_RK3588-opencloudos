@@ -477,6 +477,113 @@ int ipourma_reset_rings(struct ipourma_dev_priv *priv)
 	return IPOURMA_OK;
 }
 
+STATIC inline void ipourma_restart_rx_segments(struct ipourma_dev_priv *priv,
+						struct ipourma_rx_buf *rx_req)
+{
+	struct ubcore_seg_cfg cfg = { 0 };
+
+	ipourma_build_seg_cfg(&cfg, (u64)rx_req->buf_aligned, priv->skb_buf_size);
+	ipourma_register_rx_segments(priv->dev, &cfg, rx_req);
+}
+
+int ipourma_restart_rings(struct ipourma_dev_priv *priv)
+{
+	struct ubcore_seg_cfg cfg = { 0 };
+
+	if (IS_ERR_OR_NULL(priv->jetty) || IS_ERR_OR_NULL(priv->jfr))
+		return IPOURMA_OK;
+	for (int i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
+		if (eid_is_empty(&priv->eid_info[i].eid))
+			continue;
+		if (!IS_ERR_OR_NULL(priv->jetty[i]) || !IS_ERR_OR_NULL(priv->jfr[i]))
+			continue;
+		ipourma_init_urma_resources_by_eid(priv, i);
+		ipourma_init_tx_bufs(priv, i);
+
+		for (u32 j = 0; j < priv->rx_buf_num; j++) {
+			ipourma_build_seg_cfg(&cfg, (u64)priv->rx_buf_aligned[i][j],
+							IPOURMA_REGISTER_SEG_SIZE);
+			priv->ipourma_ub_rx_seg[i][j] = ubcore_register_seg(priv->urma_dev,
+											&cfg, NULL);
+		}
+		for (u32 j = 0; j < ipourma_rx_ring_size; j++) {
+			ipourma_restart_rx_segments(priv, &priv->rx_ring[i][j]);
+			ipourma_urma_post_recv(priv->dev, i, j);
+		}
+	}
+	return IPOURMA_OK;
+}
+
+STATIC int ipourma_init_rings_tables(struct net_device *dev)
+{
+	size_t size = sizeof(spinlock_t) * IPOURMA_MAX_EID_CNT;
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+	int cnt = IPOURMA_MAX_EID_CNT;
+
+	priv->tx_head = kcalloc(cnt, sizeof(u32), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->tx_head))
+		goto tx_head_failed;
+	priv->tx_tail = kcalloc(cnt, sizeof(u32), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->tx_tail))
+		goto tx_tail_failed;
+	priv->tx_count = kcalloc(cnt, sizeof(u32), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->tx_count))
+		goto tx_count_failed;
+	priv->tx_ring = kcalloc(cnt, sizeof(struct ipourma_tx_buf *), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->tx_ring))
+		goto tx_ring_failed;
+	priv->rx_ring = kcalloc(cnt, sizeof(struct ipourma_rx_buf *), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->rx_ring))
+		goto rx_ring_failed;
+	priv->tx_ring_locks = kzalloc(size, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->tx_ring_locks))
+		goto tx_ring_locks_failed;
+	return IPOURMA_OK;
+
+tx_ring_locks_failed:
+	kfree(priv->rx_ring);
+rx_ring_failed:
+	kfree(priv->tx_ring);
+tx_ring_failed:
+	kfree(priv->tx_count);
+tx_count_failed:
+	kfree(priv->tx_tail);
+tx_tail_failed:
+	kfree(priv->tx_head);
+tx_head_failed:
+	netdev_err(priv->dev, "%s\n", ipourma_err_desc(IPOURMA_INIT_RINGS_TABLE_FAILED));
+	return IPOURMA_INIT_RINGS_TABLE_FAILED;
+}
+
+/**
+ * @note: tx_buf & rx_buf are initialized dynamically
+ */
+int ipourma_init_rings(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+	int ret = IPOURMA_OK;
+
+	priv->skb_buf_size = priv->urma_mtu < IPOURMA_SEGMENT_ALIGN_SIZE ?
+					IPOURMA_SEGMENT_ALIGN_SIZE : priv->urma_mtu;
+
+	ret = ipourma_init_rings_tables(dev);
+	if (ret != IPOURMA_OK)
+		return ret;
+
+	if (priv->urma_mtu > IPOURMA_SEGMENT_ALIGN_SIZE) {
+		priv->tx_buf_size = (priv->urma_mtu + IPOURMA_SEGMENT_ALIGN_SIZE - 1) &
+							~(IPOURMA_SEGMENT_ALIGN_SIZE - 1);
+	} else {
+		priv->tx_buf_size = IPOURMA_SEGMENT_ALIGN_SIZE;
+	}
+	priv->rx_buf_num = DIV_ROUND_UP(ipourma_rx_ring_size * priv->skb_buf_size,
+					IPOURMA_REGISTER_SEG_SIZE);
+	priv->tx_buf_num = DIV_ROUND_UP(ipourma_tx_ring_size * priv->tx_buf_size,
+					IPOURMA_REGISTER_SEG_SIZE);
+
+	return ret;
+}
+
 void ipourma_uninit_tjetty_hmap(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
@@ -560,6 +667,14 @@ STATIC struct ubcore_jetty *ipourma_create_jetty(struct net_device *dev,
 	return ubcore_create_jetty(priv->urma_dev, &jetty_cfg, NULL, NULL);
 }
 
+STATIC struct ubcore_jfc *ipourma_create_jfc(struct net_device *dev,
+					     ubcore_comp_callback_t jfce_handler,
+					     u32 depth)
+{
+	// this function will be filled in the next commit
+	return NULL;
+}
+
 STATIC void ipourma_uninit_misc(struct ipourma_dev_priv *priv)
 {
 	if (!IS_ERR_OR_NULL(priv->tjetty_lru.tjetty_wq)) {
@@ -629,6 +744,67 @@ void ipourma_uninit_urma_resources(struct net_device *dev)
 	}
 }
 
+STATIC int ipourma_init_misc(struct ipourma_dev_priv *priv)
+{
+	priv->max_send_sge = IPOURMA_MAX_URMA_SEND_SGES;
+	priv->urma_mtu = IPOURMA_URMA_MAX_MTU;
+	priv->urma_op_mode = UBCORE_OPC_SEND;
+	priv->urma_transport_mode = UBCORE_TP_RM;
+
+	priv->tjetty_lru.tjetty_wq = alloc_workqueue("ipourma_tjetty_wq", WQ_MEM_RECLAIM, 0);
+	if (IS_ERR_OR_NULL(priv->tjetty_lru.tjetty_wq))
+		goto tjetty_wq_failed;
+
+	priv->tx_wq = alloc_ordered_workqueue("ipourma_tx_wq", 0);
+	if (IS_ERR_OR_NULL(priv->tx_wq))
+		goto tx_wq_failed;
+
+	priv->rx_wq = alloc_workqueue("ipourma_rx_wq", WQ_MEM_RECLAIM, 0);
+	if (IS_ERR_OR_NULL(priv->rx_wq))
+		goto rx_wq_failed;
+
+	/* Net configurations should be called in order. */
+	priv->net_config_wq = alloc_ordered_workqueue("net_config_wq", 0);
+	if (IS_ERR_OR_NULL(priv->net_config_wq))
+		goto net_config_wq_failed;
+
+	return IPOURMA_OK;
+net_config_wq_failed:
+	destroy_workqueue(priv->rx_wq);
+	priv->rx_wq = NULL;
+rx_wq_failed:
+	destroy_workqueue(priv->tx_wq);
+	priv->tx_wq = NULL;
+tx_wq_failed:
+	destroy_workqueue(priv->tjetty_lru.tjetty_wq);
+	priv->tjetty_lru.tjetty_wq = NULL;
+tjetty_wq_failed:
+	return -1;
+}
+
+STATIC int ipourma_init_urma_resources_table(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+	int ret = IPOURMA_OK;
+
+	priv->jfr = kcalloc(IPOURMA_MAX_EID_CNT, sizeof(struct ubcore_jfr *), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->jfr)) {
+		ret = IPOURMA_CREATE_JFR_TABLE_FAILED;
+		goto jfr_table_failed;
+	}
+	priv->jetty = kcalloc(IPOURMA_MAX_EID_CNT, sizeof(struct ubcore_jetty *), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(priv->jetty)) {
+		ret = IPOURMA_CREATE_JETTY_TABLE_FAILED;
+		goto jetty_table_failed;
+	}
+	return ret;
+jetty_table_failed:
+	kfree(priv->jfr);
+	priv->jfr = NULL;
+jfr_table_failed:
+	return ret;
+}
+
 static bool ipourma_check_dev_name(struct net_device *dev)
 {
 	char buf[IPOURMA_MAX_DEV_NAME] = {0};
@@ -674,6 +850,54 @@ jetty_failed:
 	ubcore_delete_jfr(priv->jfr[eid_idx]);
 	priv->jfr[eid_idx] = NULL;
 jfr_failed:
+	return ret;
+invalid_name:
+	return ret;
+}
+
+int ipourma_init_urma_resources(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+	int ret = IPOURMA_OK;
+
+	if (!ipourma_check_dev_name(dev))
+		goto invalid_name;
+
+	ret = ipourma_init_urma_resources_table(dev);
+	if (ret != IPOURMA_OK)
+		goto init_table_failed;
+
+	priv->tx_jfc = ipourma_create_jfc(dev, ipourma_handle_tx_cqe,
+								IPOURMA_TX_JFC_DEPTH);
+	if (IS_ERR_OR_NULL(priv->tx_jfc)) {
+		ret = IPOURMA_CREATE_JFC_FAILED;
+		pr_err("create tx jfc error, dev: %s\n", dev->name);
+		goto tx_jfc_failed;
+	}
+	priv->rx_jfc = ipourma_create_jfc(dev, ipourma_handle_rx_cqe,
+								IPOURMA_RX_JFC_DEPTH);
+	if (IS_ERR_OR_NULL(priv->rx_jfc)) {
+		ret = IPOURMA_CREATE_JFC_FAILED;
+		pr_err("create rx jfc error, dev: %s\n", dev->name);
+		goto rx_jfc_failed;
+	}
+
+	ret = ipourma_init_misc(priv);
+	if (ret != IPOURMA_OK) {
+		pr_err("%s create wq failed.\n", dev->name);
+		goto init_misc_failed;
+	}
+
+	return ret;
+
+init_misc_failed:
+	ubcore_delete_jfc(priv->rx_jfc);
+rx_jfc_failed:
+	ubcore_delete_jfc(priv->tx_jfc);
+	priv->tx_jfc = NULL;
+tx_jfc_failed:
+	ipourma_uninit_urma_resources_table(priv->dev);
+init_table_failed:
 	return ret;
 invalid_name:
 	return ret;
