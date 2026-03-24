@@ -8,8 +8,8 @@
  * Note:
  * History: 2025-06-07 Create file
  */
-#ifndef UBAGG_TOPO_INFO_H
-#define UBAGG_TOPO_INFO_H
+#ifndef ubagg_topo_info_H
+#define ubagg_topo_info_H
 
 #include <linux/types.h>
 
@@ -17,27 +17,39 @@
 #define MAX_PORT_NUM (9)
 #define MAX_NODE_NUM (16)
 #define IODIE_NUM (2)
+#define DEV_NUM (128)
 
-struct ubagg_iodie_info {
+struct ubagg_topo_ue {
+	uint32_t socket_id;
 	char primary_eid[EID_LEN];
 	char port_eid[MAX_PORT_NUM][EID_LEN];
-	char peer_port_eid[MAX_PORT_NUM][EID_LEN];
-	int socket_id;
 };
 
-struct ubagg_topo_info {
-	char bonding_eid[EID_LEN];
-	struct ubagg_iodie_info io_die_info[IODIE_NUM];
-	bool is_cur_node;
+struct ubagg_topo_agg_dev {
+	char agg_eid[EID_LEN];
+	struct ubagg_topo_ue ues[IODIE_NUM];
+};
+
+struct ubagg_topo_link {
+	uint32_t peer_node; // node id
+	uint32_t peer_iodie; // iodie idx
+	uint32_t peer_port; // port idx, UINT32_MAX indicates no connection
+};
+
+struct ubagg_topo_node {
+	uint32_t id;
+	uint32_t is_current;
+	struct ubagg_topo_link links[IODIE_NUM][MAX_PORT_NUM];
+	struct ubagg_topo_agg_dev agg_devs[DEV_NUM];
 };
 
 struct ubagg_topo_map {
-	struct ubagg_topo_info topo_infos[MAX_NODE_NUM];
+	struct ubagg_topo_node topo_infos[MAX_NODE_NUM];
 	uint32_t node_num;
 };
 
 struct ubagg_topo_map *
-create_global_ubagg_topo_map(struct ubagg_topo_info *topo_infos,
+create_global_ubagg_topo_map(struct ubagg_topo_node *topo_infos,
 			     uint32_t node_num);
 
 void delete_global_ubagg_topo_map(void);
@@ -45,8 +57,8 @@ void delete_global_ubagg_topo_map(void);
 struct ubagg_topo_map *get_global_ubagg_map(void);
 
 struct ubagg_topo_map *
-create_ubagg_topo_map_from_user(struct ubagg_topo_info *topo_infos,
+create_ubagg_topo_map_from_user(struct ubagg_topo_node *topo_infos,
 				uint32_t node_num);
 
 void delete_ubagg_topo_map(struct ubagg_topo_map *topo_map);
-#endif // UBAGG_TOPO_INFO_H
+#endif // ubcore_topo_node_H

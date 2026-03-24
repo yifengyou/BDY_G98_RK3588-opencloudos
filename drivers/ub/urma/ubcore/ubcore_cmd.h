@@ -127,7 +127,7 @@ struct ubcore_cmd_topo_info {
 	} in;
 	struct {
 		uint32_t node_num;
-		struct ubcore_topo_info topo_info;
+		struct ubcore_topo_node topo_info;
 	} out;
 };
 

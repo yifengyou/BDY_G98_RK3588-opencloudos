@@ -62,7 +62,7 @@ static LIST_HEAD(g_ubcore_net_list);
 static DEFINE_SPINLOCK(g_ubcore_net_lock);
 static DECLARE_RWSEM(g_ubcore_net_rwsem);
 
-static bool g_shared_ns = true;
+static bool g_shared_ns;
 
 static void ubcore_global_release_file(struct kref *ref)
 {

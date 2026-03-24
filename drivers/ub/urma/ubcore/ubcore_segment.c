@@ -243,7 +243,7 @@ struct ubcore_target_seg *ubcore_import_seg(struct ubcore_device *dev,
 
 	if (ubcore_is_bonding_dev(dev)) {
 		if (ubcore_connect_exchange_udata_when_import_seg(&cfg->seg,
-								  udata) != 0) {
+								  udata, dev) != 0) {
 			ubcore_log_err(
 				"failed to exchange udata when import seg\n");
 			return ERR_PTR(-ENOEXEC);

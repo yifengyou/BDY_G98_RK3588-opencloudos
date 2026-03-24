@@ -23,10 +23,11 @@ static inline bool ubcore_is_bonding_dev(struct ubcore_device *dev)
 }
 
 int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
-						  struct ubcore_udata *udata);
+				struct ubcore_udata *udata, struct ubcore_device *dev);
 
 int ubcore_connect_exchange_udata_when_import_jetty(
-	struct ubcore_tjetty_cfg *cfg, struct ubcore_udata *udata, bool is_jfr);
+	struct ubcore_tjetty_cfg *cfg, struct ubcore_udata *udata, bool is_jfr,
+	struct ubcore_device *dev);
 
 void ubcore_connect_bonding_init(void);
 

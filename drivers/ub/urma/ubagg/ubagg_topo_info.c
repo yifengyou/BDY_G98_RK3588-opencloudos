@@ -16,7 +16,7 @@
 static struct ubagg_topo_map *g_topo_map;
 
 struct ubagg_topo_map *
-create_global_ubagg_topo_map(struct ubagg_topo_info *topo_infos,
+create_global_ubagg_topo_map(struct ubagg_topo_node *topo_infos,
 			     uint32_t node_num)
 {
 	g_topo_map = create_ubagg_topo_map_from_user(topo_infos, node_num);
@@ -37,7 +37,7 @@ struct ubagg_topo_map *get_global_ubagg_map(void)
 }
 
 struct ubagg_topo_map *
-create_ubagg_topo_map_from_user(struct ubagg_topo_info *user_topo_infos,
+create_ubagg_topo_map_from_user(struct ubagg_topo_node *user_topo_infos,
 				uint32_t node_num)
 {
 	struct ubagg_topo_map *topo_map = NULL;
@@ -53,7 +53,7 @@ create_ubagg_topo_map_from_user(struct ubagg_topo_info *user_topo_infos,
 		return NULL;
 	ret = copy_from_user(topo_map->topo_infos,
 			     (void __user *)user_topo_infos,
-			     sizeof(struct ubagg_topo_info) * node_num);
+			     sizeof(struct ubagg_topo_node) * node_num);
 	if (ret != 0) {
 		ubagg_log_err("Failed to copy topo info\n");
 		kfree(topo_map);
