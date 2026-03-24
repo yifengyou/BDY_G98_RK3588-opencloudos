@@ -695,7 +695,7 @@ int register_local_cis_func(u32 call_id, u32 receiver_id, msg_handler func)
 	spin_lock_irqsave(&cis_register_lock, flags);
 	list_add_tail_rcu(&p->link, &g_local_cis_list);
 	spin_unlock_irqrestore(&cis_register_lock, flags);
-	pr_info("register cis func success\n");
+	pr_info("register cis func for callid=%08x recvid=%08x success\n", call_id, receiver_id);
 
 	return 0;
 }
@@ -729,7 +729,8 @@ int unregister_local_cis_func(u32 call_id, u32 receiver_id)
 	synchronize_rcu();
 
 	kfree(p);
-	pr_info("unregister cis func success\n");
+	pr_info("unregister cis func for callid=%08x recvid=%08x success\n",
+			call_id, receiver_id);
 
 	return 0;
 }

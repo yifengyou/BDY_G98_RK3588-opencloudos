@@ -13,8 +13,11 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/hashtable.h>
+#include <linux/auxiliary_bus.h>
+#include <ub/ubase/ubase_comm_dev.h>
 #include "cis_info_process.h"
 #include "uvb_info_process.h"
+#include "cis_ub.h"
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Call ID Service Framework");
@@ -140,6 +143,22 @@ void uninit_uvb(void)
 	free_uvb_window_lock();
 }
 
+static const struct auxiliary_device_id uvb_id_table[] = {
+	{
+		.name = UBASE_ADEV_NAME ".uvb",
+	},
+	{},
+};
+
+MODULE_DEVICE_TABLE(auxiliary, uvb_id_table);
+
+static struct auxiliary_driver uvb_drv = {
+	.probe = uvb_probe,
+	.remove = uvb_remove,
+	.name = "uvb",
+	.id_table = uvb_id_table,
+};
+
 static int __init cis_init(void)
 {
 	int err = 0;
@@ -147,23 +166,29 @@ static int __init cis_init(void)
 	err = init_cis_table();
 	if (err) {
 		pr_err("cis info init failed, err=%d\n", err);
-		return err;
+	} else {
+		err = init_global_vars();
+		if (err) {
+			pr_err("global vars malloc failed, err=%d\n", err);
+			return err;
+		}
+
+		err = init_uvb();
+		if (err) {
+			pr_err("uvb init failed, err=%d\n", err);
+			free_global_vars();
+			return err;
+		}
+		pr_info("cis uvb init success\n");
 	}
 
-	err = init_global_vars();
+	err = auxiliary_driver_register(&uvb_drv);
 	if (err) {
-		pr_err("global vars malloc failed, err=%d\n", err);
+		pr_err("failed to register uvb drv\n");
 		return err;
 	}
 
-	err = init_uvb();
-	if (err) {
-		pr_err("uvb init failed, err=%d\n", err);
-		free_global_vars();
-		return err;
-	}
-
-	pr_info("cis init success\n");
+	pr_info("register uvb over ub drv success\n");
 
 	return 0;
 }
@@ -172,6 +197,7 @@ static void __exit cis_exit(void)
 {
 	uninit_uvb();
 	free_global_vars();
+	auxiliary_driver_unregister(&uvb_drv);
 	pr_info("cis exit success\n");
 }
 
