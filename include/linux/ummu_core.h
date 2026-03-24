@@ -437,29 +437,24 @@ struct ummu_core_init_args {
 
 /**
  * struct ummu_mpam - Memory traffic monitoring of the UB device
- * @flags:		flags, see constants above
  * @eid:		entity id
- * @tid:		tid
+ * @tid:		tid; when set to UMMU_INVALID_TID, the I/O of the device
+ *			identified by eid is tagged with MPAM.
+ *			When tid is valid, the I/O of the device identified
+ *			by tid is tagged with MPAM.
  * @partid:		mpam partition id
  * @pmg:		mpam pmg
- * @s1mpam:		0 for ste mpam, 1 for cd mpam
- * @user_mpam_en:	0 for ummu mpam, 1 for user mpam
  */
 struct ummu_mpam {
-#define UMMU_DEV_SET_MPAM	(1 << 0)
-#define UMMU_DEV_GET_MPAM	(1 << 1)
-#define UMMU_DEV_SET_USER_MPAM_EN	(1 << 2)
-#define UMMU_DEV_GET_USER_MPAM_EN	(1 << 3)
-	int flags;
 	eid_t eid;
 	int tid;
 	int partid;
 	int pmg;
-	int s1mpam;
-	int user_mpam_en;
 
 	KABI_RESERVE(1)
 	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 enum ummu_device_config_type {

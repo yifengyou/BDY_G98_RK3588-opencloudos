@@ -11,8 +11,6 @@
 #include "ummu.h"
 
 enum ummu_mpam_type {
-	/* Memory traffic monitoring of the UB device. */
-	UMMU_MASTER_MPAM = 0,
 	/* Memory traffic monitoring of the UB device when ummu is bypassed. */
 	UMMU_BYPASS_MPAM,
 	/*
