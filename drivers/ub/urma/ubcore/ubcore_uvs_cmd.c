@@ -315,7 +315,7 @@ struct ubcore_uvs_global_cmd_func {
 static struct ubcore_uvs_global_cmd_func g_ubcore_uvs_global_cmd_funcs[] = {
 	[0] = { NULL, false },
 	[UBCORE_CMD_SET_TOPO] = { ubcore_cmd_set_topo, true },
-	[UBCORE_CMD_GET_ROUTE_LIST] = { ubcore_cmd_get_route_list, true},
+	[UBCORE_CMD_GET_ROUTE_LIST] = { ubcore_cmd_get_route_list, false },
 };
 
 int ubcore_uvs_global_cmd_parse(struct ubcore_global_file *file,

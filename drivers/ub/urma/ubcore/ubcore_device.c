@@ -2121,7 +2121,7 @@ static int ubcore_set_eid_ns_by_idx(struct ubcore_device *dev, uint32_t eid_idx,
 		return -EINVAL;
 	}
 
-	ubcore_dispatch_async_event(&(struct ubcore_event){
+	ubcore_dispatch_async_event(&(struct ubcore_event) {
 		.ub_dev = dev,
 		.event_type = UBCORE_EVENT_EID_CHANGE,
 		.element.eid_idx = eid_idx,

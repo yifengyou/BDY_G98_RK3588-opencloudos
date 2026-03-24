@@ -338,7 +338,6 @@ int ubcore_get_primary_eid(union ubcore_eid *eid, union ubcore_eid *primary_eid)
 				(char *)eid->raw,
 				primary_eid) == 0)
 				return 0;
-
 		}
 	}
 
@@ -402,7 +401,8 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 				return 0;
 			}
 			if (!is_eid_valid(src_agg_dev->ues[iodie_id].port_eid[port_id]) ||
-				src_topo_info->links[iodie_id][port_id].peer_port == UINT32_MAX) {
+				src_topo_info->links[iodie_id][port_id].peer_port == UINT32_MAX ||
+				src_topo_info->links[iodie_id][port_id].peer_node != dst_topo_info->id) {
 				continue;
 			}
 			// use link to get peer info
@@ -428,7 +428,6 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 	}
 
 	route_list->route_num = num;
-	ubcore_log_err("get topo port eid, route_num: %u.\n", num);
 
 	return ret;
 }
@@ -495,7 +494,6 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	}
 
 	route_list->route_num += IODIE_NUM;
-	ubcore_log_err("get topo primary eid, route_num: %u.\n", num);
 
 	return 0;
 }
