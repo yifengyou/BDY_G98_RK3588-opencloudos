@@ -748,8 +748,7 @@ struct ubcore_nlmsg *ubcore_new_mue_dev_msg(struct ubcore_device *dev)
 	(void)strscpy(data->dev_name, dev->dev_name, UBCORE_MAX_DEV_NAME - 1);
 
 	if (dev->netdev != NULL &&
-	    strnlen(dev->netdev->name, UBCORE_MAX_DEV_NAME) <
-		    UBCORE_MAX_DEV_NAME)
+	    strnlen(dev->netdev->name, IFNAMSIZ) < IFNAMSIZ)
 		(void)strscpy(data->netdev_name, dev->netdev->name,
 			      UBCORE_MAX_DEV_NAME - 1);
 
