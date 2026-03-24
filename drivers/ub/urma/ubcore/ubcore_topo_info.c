@@ -394,6 +394,56 @@ static struct ubcore_topo_node *
 	return NULL;
 }
 
+static void append_route_list(int num, int iodie_id, int port_id, int peer_port_id,
+	struct ubcore_topo_agg_dev *src_agg_dev, struct ubcore_topo_agg_dev *dst_agg_dev,
+	struct ubcore_route_list *route_list)
+{
+	(void)memcpy(&route_list->buf[num].src,
+		src_agg_dev->ues[iodie_id].port_eid[port_id],
+		sizeof(union ubcore_eid));
+	(void)memcpy(&route_list->buf[num].dst,
+		dst_agg_dev->ues[iodie_id].port_eid[peer_port_id],
+		sizeof(union ubcore_eid));
+	route_list->buf[num].chip_id = src_agg_dev->ues[iodie_id].chip_id;
+	route_list->buf[num].flag.bs.rtp = 1;
+	route_list->buf[num].flag.bs.ctp = 1;
+	route_list->buf[num].flag.bs.utp = 1;
+	route_list->buf[num].hops = 0;
+}
+
+static int get_route_port_eid_same_node(
+	struct ubcore_topo_agg_dev *src_agg_dev, struct ubcore_topo_agg_dev *dst_agg_dev,
+	struct ubcore_route_list *route_list)
+{
+	int iodie_id;
+	int port_id;
+	int num = route_list->route_num;
+
+	if (num >= UBCORE_MAX_ROUTE_NUM) {
+		ubcore_log_warn("Invalid route num, num = %d.\n", num);
+		return 0;
+	}
+
+	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
+		for (port_id = 0; port_id < MAX_PORT_NUM; port_id++) {
+			if (!is_eid_valid(src_agg_dev->ues[iodie_id].port_eid[port_id]) ||
+				!is_eid_valid(dst_agg_dev->ues[iodie_id].port_eid[port_id])) {
+				continue;
+			}
+			break;
+		}
+		if (port_id >= MAX_PORT_NUM) {
+			ubcore_log_err("No valid port_eid found, num = %d.\n", num);
+			return -EINVAL;
+		}
+		append_route_list(num, iodie_id, port_id, port_id, src_agg_dev,
+			dst_agg_dev, route_list);
+		num++;
+	}
+	route_list->route_num = num;
+	return 0;
+}
+
 static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 	union ubcore_eid *dst_v_eid, struct ubcore_route_list *route_list)
 {
@@ -418,6 +468,10 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 		return -EINVAL;
 	}
 	dst_agg_dev = &dst_topo_info->agg_devs[dst_dev_id];
+	// handle the possibility where src and dst share the same node.
+	if (src_topo_info->id == dst_topo_info->id) {
+		return get_route_port_eid_same_node(src_agg_dev, dst_agg_dev, route_list);
+	}
 
 	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
 		for (port_id = 0; port_id < MAX_PORT_NUM; port_id++) {
