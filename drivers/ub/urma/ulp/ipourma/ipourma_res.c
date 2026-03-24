@@ -12,6 +12,19 @@
 
 u32 ipourma_tx_ring_size __read_mostly = IPOURMA_TX_RING_SIZE;
 u32 ipourma_rx_ring_size __read_mostly = IPOURMA_RX_RING_SIZE;
+u32 ipourma_register_seg_size __read_mostly = IPOURMA_REGISTER_SEG_SIZE;
+u32 ipourma_jfs_depth;
+static u32 ipourma_jfr_depth;
+u32 ipourma_tx_jfc_depth;
+static u32 ipourma_rx_jfc_depth;
+
+void ipourma_ub_size_init(void)
+{
+	ipourma_jfs_depth = ipourma_tx_ring_size;
+	ipourma_jfr_depth = ipourma_rx_ring_size;
+	ipourma_tx_jfc_depth = ipourma_jfs_depth * (IPOURMA_TX_JFC_DEPTH / IPOURMA_JFS_DEPTH);
+	ipourma_rx_jfc_depth = ipourma_jfr_depth * (IPOURMA_RX_JFC_DEPTH / IPOURMA_JFR_DEPTH);
+}
 
 static void ipourma_uninit_tx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 {
@@ -58,20 +71,22 @@ void ipourma_uninit_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 			priv->rx_ring[eid_idx][i].skb_pass_up = NULL;
 		}
 	}
-	if (IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx]))
+
+	if (!IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx])) {
+		kfree(priv->ipourma_ub_rx_seg[eid_idx]);
+		priv->ipourma_ub_rx_seg[eid_idx] = NULL;
+	}
+
+	if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx]))
 		return;
 	for (u32 i = 0; i < priv->rx_buf_num; i++) {
-		if (IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx][i]))
-			continue;
-		ubcore_unregister_seg(priv->ipourma_ub_rx_seg[eid_idx][i]);
-		priv->ipourma_ub_rx_seg[eid_idx][i] = NULL;
 		if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx][i]))
 			continue;
 		kfree(priv->rx_buf_aligned[eid_idx][i]);
 		priv->rx_buf_aligned[eid_idx][i] = NULL;
 	}
-	kfree(priv->ipourma_ub_rx_seg[eid_idx]);
-	priv->ipourma_ub_rx_seg[eid_idx] = NULL;
+	kfree(priv->rx_buf_aligned[eid_idx]);
+	priv->rx_buf_aligned[eid_idx] = NULL;
 }
 
 void ipourma_uninit_rings_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx)
@@ -134,8 +149,8 @@ void ipourma_uninit_rings(struct net_device *dev)
 
 static int ipourma_alloc_tx_buf_aligned(struct ipourma_dev_priv *priv, u32 eid_idx, u32 idx)
 {
-	u32 offset = (idx * priv->tx_buf_size) % IPOURMA_REGISTER_SEG_SIZE;
-	u32 blk_idx = idx * priv->tx_buf_size / IPOURMA_REGISTER_SEG_SIZE;
+	u32 offset = (idx * priv->tx_buf_size) % ipourma_register_seg_size;
+	u32 blk_idx = idx * priv->tx_buf_size / ipourma_register_seg_size;
 	struct ipourma_tx_buf *tx_buf = &priv->tx_ring[eid_idx][idx];
 
 	tx_buf->buf_aligned = priv->tx_buf_aligned[eid_idx][blk_idx] + offset;
@@ -188,11 +203,11 @@ static int ipourma_init_tx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 	if (IS_ERR_OR_NULL(priv->ipourma_ub_tx_seg[eid_idx]))
 		goto alloc_tx_bufs_failed;
 	for (i = 0; i < priv->tx_buf_num; i++) {
-		priv->tx_buf_aligned[eid_idx][i] = kzalloc(IPOURMA_REGISTER_SEG_SIZE, GFP_KERNEL);
+		priv->tx_buf_aligned[eid_idx][i] = kzalloc(ipourma_register_seg_size, GFP_KERNEL);
 		if (IS_ERR_OR_NULL(priv->tx_buf_aligned[eid_idx][i]))
 			goto alloc_tx_bufs_failed;
 		ipourma_build_seg_cfg(&cfg, (u64)priv->tx_buf_aligned[eid_idx][i],
-						IPOURMA_REGISTER_SEG_SIZE);
+						ipourma_register_seg_size);
 		priv->ipourma_ub_tx_seg[eid_idx][i] = ubcore_register_seg(priv->urma_dev,
 									  &cfg, NULL);
 		if (IS_ERR_OR_NULL(priv->ipourma_ub_tx_seg[eid_idx][i]))
@@ -226,7 +241,7 @@ static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 	if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx]))
 		return IPOURMA_ADDRESS_NOT_ALIGNED;
 	for (i = 0; i < priv->rx_buf_num; i++) {
-		priv->rx_buf_aligned[eid_idx][i] = kzalloc(IPOURMA_REGISTER_SEG_SIZE,
+		priv->rx_buf_aligned[eid_idx][i] = kzalloc(ipourma_register_seg_size,
 							   GFP_KERNEL);
 		if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx][i])) {
 			ret = IPOURMA_ADDRESS_NOT_ALIGNED;
@@ -241,7 +256,7 @@ static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 	}
 	for (i = 0; i < priv->rx_buf_num; i++) {
 		ipourma_build_seg_cfg(&cfg, (u64)priv->rx_buf_aligned[eid_idx][i],
-							IPOURMA_REGISTER_SEG_SIZE);
+							ipourma_register_seg_size);
 		priv->ipourma_ub_rx_seg[eid_idx][i] = ubcore_register_seg(priv->urma_dev,
 										&cfg, NULL);
 		if (IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx][i])) {
@@ -513,7 +528,7 @@ int ipourma_restart_rings(struct ipourma_dev_priv *priv)
 
 		for (u32 j = 0; j < priv->rx_buf_num; j++) {
 			ipourma_build_seg_cfg(&cfg, (u64)priv->rx_buf_aligned[i][j],
-							IPOURMA_REGISTER_SEG_SIZE);
+							ipourma_register_seg_size);
 			priv->ipourma_ub_rx_seg[i][j] = ubcore_register_seg(priv->urma_dev,
 											&cfg, NULL);
 		}
@@ -588,9 +603,9 @@ int ipourma_init_rings(struct net_device *dev)
 		priv->tx_buf_size = IPOURMA_SEGMENT_ALIGN_SIZE;
 	}
 	priv->rx_buf_num = DIV_ROUND_UP(ipourma_rx_ring_size * priv->skb_buf_size,
-					IPOURMA_REGISTER_SEG_SIZE);
+					ipourma_register_seg_size);
 	priv->tx_buf_num = DIV_ROUND_UP(ipourma_tx_ring_size * priv->tx_buf_size,
-					IPOURMA_REGISTER_SEG_SIZE);
+					ipourma_register_seg_size);
 
 	return ret;
 }
@@ -628,6 +643,35 @@ int ipourma_init_tjetty_hmap(struct net_device *dev)
 	return ret;
 }
 
+static int ipourma_jetty_set_priority(struct ipourma_dev_priv *priv,
+					struct ubcore_jetty_cfg *jetty_cfg)
+{
+	struct ubcore_device_attr attr = {0};
+	int set_priority_ret = 0;
+	int ret = 0;
+	int i;
+
+	ret = ubcore_query_device_attr(priv->urma_dev, &attr);
+	if (ret == 0) {
+		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
+			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
+				jetty_cfg->priority = i;
+				netdev_info(priv->dev, "ipourma set ctp priority : %d\n", i);
+				set_priority_ret = 1;
+				break;
+			}
+		}
+		if (set_priority_ret == 0) {
+			netdev_err(priv->dev, "set priority default value : 0\n");
+			return -EINVAL;
+		}
+	} else {
+		netdev_err(priv->dev, "Failed to ubcore get dev_attr!\n");
+		return -EINVAL;
+	}
+	return IPOURMA_OK;
+}
+
 static struct ubcore_jfr *ipourma_create_jfr(
 	struct net_device *dev, u32 depth, u32 eid_index)
 {
@@ -663,17 +707,16 @@ static struct ubcore_jetty *ipourma_create_jetty(struct net_device *dev,
 	jetty_cfg.trans_mode = UBCORE_TP_RM;
 	jetty_cfg.eid_index = priv->eid_info[eid_index].eid_index;
 	jetty_cfg.jfs_depth = IPOURMA_JFS_DEPTH;
-	/* jetty_cfg.priority = 0; */
+	jetty_cfg.priority = 0;
 	jetty_cfg.max_send_sge = max_send_sge;
 	jetty_cfg.max_send_rsge = IPOURMA_MAX_URMA_RECV_SGES;
-	jetty_cfg.jfr_depth = IPOURMA_JFR_DEPTH;
+	jetty_cfg.jfr_depth = ipourma_jfr_depth;
 	jetty_cfg.max_recv_sge = max_recv_sge;
 	jetty_cfg.send_jfc = priv->tx_jfc;
 	jetty_cfg.recv_jfc = priv->rx_jfc;
 	jetty_cfg.jfr = priv->jfr[eid_index];
-	/* if (ipourma_jetty_set_priority(priv, &jetty_cfg) != IPOURMA_OK)
-	 *	return NULL;
-	 */
+	if (ipourma_jetty_set_priority(priv, &jetty_cfg) != IPOURMA_OK)
+		return NULL;
 
 	return ubcore_create_jetty(priv->urma_dev, &jetty_cfg, NULL, NULL);
 }
@@ -855,17 +898,17 @@ int ipourma_init_urma_resources_by_eid(struct ipourma_dev_priv *priv, u32 eid_id
 		goto invalid_name;
 	}
 
-	priv->jfr[eid_idx] = ipourma_create_jfr(dev, IPOURMA_JFR_DEPTH, eid_idx);
+	priv->jfr[eid_idx] = ipourma_create_jfr(dev, ipourma_jfr_depth, eid_idx);
 	if (IS_ERR_OR_NULL(priv->jfr[eid_idx])) {
 		ret = IPOURMA_CREATE_JFR_FAILED;
-		pr_err("create jfr error, dev: %s, i = %d\n", dev->name, eid_idx);
+		pr_err("create jfr error, dev: %s, i = %u\n", dev->name, eid_idx);
 		goto jfr_failed;
 	}
 	priv->jetty[eid_idx] = ipourma_create_jetty(dev,
 				IPOURMA_WELL_KNOWN_JETTY_ID + eid_idx, eid_idx);
 	if (IS_ERR_OR_NULL(priv->jetty[eid_idx])) {
 		ret = IPOURMA_CREATE_JETTY_FAILED;
-		pr_err("create tx jetty error, dev: %s, i = %d\n", dev->name, eid_idx);
+		pr_err("create tx jetty error, dev: %s, i = %u\n", dev->name, eid_idx);
 		goto jetty_failed;
 	}
 
@@ -893,14 +936,14 @@ int ipourma_init_urma_resources(struct net_device *dev)
 		goto init_table_failed;
 
 	priv->tx_jfc = ipourma_create_jfc(dev, ipourma_handle_tx_cqe,
-								IPOURMA_TX_JFC_DEPTH);
+								ipourma_tx_jfc_depth);
 	if (IS_ERR_OR_NULL(priv->tx_jfc)) {
 		ret = IPOURMA_CREATE_JFC_FAILED;
 		pr_err("create tx jfc error, dev: %s\n", dev->name);
 		goto tx_jfc_failed;
 	}
 	priv->rx_jfc = ipourma_create_jfc(dev, ipourma_handle_rx_cqe,
-								IPOURMA_RX_JFC_DEPTH);
+								ipourma_rx_jfc_depth);
 	if (IS_ERR_OR_NULL(priv->rx_jfc)) {
 		ret = IPOURMA_CREATE_JFC_FAILED;
 		pr_err("create rx jfc error, dev: %s\n", dev->name);

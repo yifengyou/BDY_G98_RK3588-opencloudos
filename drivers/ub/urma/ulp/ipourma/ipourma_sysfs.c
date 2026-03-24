@@ -320,8 +320,8 @@ static ssize_t max_concurrent_conn_store(struct device *dev,
 	 * prefix: '0x'--hexadecimal, '0'--octal, others--decimal format
 	 */
 	ret = kstrtoint(buf, 0, &new_capacity);
-	/* The new value must be between IPOURMA_JFS_DEPTH and IPOURMA_TX_JFC_DEPTH */
-	if (ret != 0 || new_capacity < IPOURMA_JFS_DEPTH || new_capacity > IPOURMA_TX_JFC_DEPTH) {
+	/* The new value must be between ipourma_jfs_depth and ipourma_tx_jfc_depth */
+	if (ret != 0 || new_capacity < ipourma_jfs_depth || new_capacity > ipourma_tx_jfc_depth) {
 		pr_err("%s: invalid input!\n", __func__);
 		return -EINVAL;
 	}

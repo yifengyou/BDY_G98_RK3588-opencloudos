@@ -495,7 +495,7 @@ int ipourma_register_rx_segments(struct net_device *dev,
 	u32 blk_idx;
 	u32 i;
 
-	blk_idx = rx_req->idx * priv->skb_buf_size / IPOURMA_REGISTER_SEG_SIZE;
+	blk_idx = rx_req->idx * priv->skb_buf_size / ipourma_register_seg_size;
 
 	for (i = 0; i < IPOURMA_MAX_RX_SGES; i++) {
 		rx_req->seg[i] = priv->ipourma_ub_rx_seg[rx_req->eid_index][blk_idx];
@@ -558,7 +558,7 @@ int ipourma_xmit(struct net_device *dev, struct sk_buff *skb,
 		priv->runtime_stats.tx_stats.tx_ring_full++;
 		return IPOURMA_TX_RING_FULL;
 	}
-	tx_idx = priv->tx_head[eid_idx] & (ipourma_tx_ring_size - 1);
+	tx_idx = priv->tx_head[eid_idx] % ipourma_tx_ring_size;
 	tx_req = &priv->tx_ring[eid_idx][tx_idx];
 	tx_req->tx_buf_in_use = 1;
 	if ((priv->tx_head[eid_idx] - priv->tx_tail[eid_idx]) == ipourma_tx_ring_size - 1) {
@@ -621,8 +621,8 @@ static int ipourma_alloc_rx_buffer(struct net_device *dev, u32 eid_idx, u32 idx)
 	if (IS_ERR_OR_NULL(skb_pass_up))
 		return IPOURMA_ALLOC_RX_SKB_FAILED;
 
-	blk_idx = idx * priv->skb_buf_size / IPOURMA_REGISTER_SEG_SIZE;
-	offset = (idx * priv->skb_buf_size) % IPOURMA_REGISTER_SEG_SIZE;
+	blk_idx = idx * priv->skb_buf_size / ipourma_register_seg_size;
+	offset = (idx * priv->skb_buf_size) % ipourma_register_seg_size;
 	priv->rx_ring[eid_idx][idx].buf_aligned = priv->rx_buf_aligned[eid_idx][blk_idx] + offset;
 
 	if (ipourma_register_rx_segments(dev, &cfg, &priv->rx_ring[eid_idx][idx])

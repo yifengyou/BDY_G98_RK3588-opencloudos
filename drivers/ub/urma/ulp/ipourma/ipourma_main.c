@@ -24,6 +24,18 @@
 #include "ub/urma/ubcore_uapi.h"
 #include "ipourma_main.h"
 
+static int tx_ring_size = IPOURMA_TX_RING_SIZE;
+module_param(tx_ring_size, int, 0644);
+MODULE_PARM_DESC(tx_ring_size, "size of tx ring, should be in [32, 2048]");
+
+static int rx_ring_size = IPOURMA_RX_RING_SIZE;
+module_param(rx_ring_size, int, 0644);
+MODULE_PARM_DESC(rx_ring_size, "size of rx ring, should be in [tx_ring_size, 4096]");
+
+static int page_level = IPOURMA_DEF_PAGE_LEVEL;
+module_param(page_level, int, 0644);
+MODULE_PARM_DESC(page_level, "register 2^page_level bytes memory at once, should be in [12, 21]");
+
 static int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev);
 static void ipourma_ubcore_remove_device(struct ubcore_device *ubc_dev, void *client_ctx);
 static void ipourma_unregister_netdev(struct ipourma_dev_priv *priv);
@@ -43,7 +55,11 @@ static int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev)
 {
 	struct net_device *ipou_ndev = NULL;
 	struct ipourma_dev_priv *priv = NULL;
+	uint32_t ipourma_en;
 
+	ipourma_en = ubc_dev->attr.dev_cap.feature.bs.ipourma_en;
+	if (ipourma_en == 0)
+		return -EOPNOTSUPP;
 	/* need to skip unsupported device */
 	if (strstr(ubc_dev->dev_name, "udma") == NULL)
 		return -EOPNOTSUPP;
@@ -234,8 +250,11 @@ static void ipourma_cleanup_res(struct net_device *dev)
 
 static void ipourma_proc_eid_exist(struct ipourma_dev_priv *priv)
 {
-	for (uint32_t i = 0; i < priv->eid_count; i++)
+	for (uint32_t i = 0; i < priv->eid_count; i++) {
+		if (eid_is_empty(&priv->eid_info_exist[i].eid))
+			continue;
 		ipourma_create_new_eid(priv, priv->eid_info_exist[i].eid_index);
+	}
 }
 
 /* register netdev */
@@ -317,16 +336,21 @@ static void ipourma_do_eid_change_handler(struct ubcore_event *event,
 	eid = ub_dev->eid_table.eid_entries[eid_idx].eid;
 	spin_unlock(&ub_dev->eid_table.lock);
 
+	if (eid_is_empty(&eid)) {
+		netdev_warn(priv->dev, "get an empty eid. eid index:%u\n", eid_idx);
+		return;
+	}
+
 	priv = ubcore_get_client_ctx_data(ub_dev, &g_ipourma_ubcore_client);
 	if (!IS_ERR_OR_NULL(priv)) {
 		if (!eid_is_empty(&priv->eid_info[eid_idx].eid)) {
-			netdev_dbg(priv->dev, "get an old eid. eid index:%d, eid:"EID_FMT"\n",
+			netdev_info(priv->dev, "get an old eid, index:%u, eid:"EID_FMT"\n",
 			eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
 			return;
 		}
 		priv->eid_info[eid_idx].eid = eid;
 		priv->eid_info[eid_idx].eid_index = eid_idx;
-		netdev_dbg(priv->dev, " get a new eid. eid index:%d, eid:"EID_FMT"\n",
+		netdev_info(priv->dev, " get a new eid, index:%u, eid:"EID_FMT"\n",
 			eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
 		atomic_add(1, &(priv->need_set_ip_route));
 		ipourma_create_new_eid(priv, eid_idx);
@@ -337,9 +361,39 @@ unlock_table_out:
 	spin_unlock(&ub_dev->eid_table.lock);
 }
 
+static int ipourma_param_init(void)
+{
+	if (tx_ring_size > IPOURMA_MAX_TX_RING_SIZE ||
+		rx_ring_size > IPOURMA_MAX_RX_RING_SIZE ||
+		tx_ring_size < IPOURMA_MIN_TX_RING_SIZE ||
+		rx_ring_size < IPOURMA_MIN_RX_RING_SIZE ||
+		tx_ring_size > rx_ring_size) {
+		pr_err("invalid ring size.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (page_level < IPOURMA_MIN_PAGE_LEVEL || page_level > IPOURMA_MAX_PAGE_LEVEL) {
+		pr_err("invalid page level.\n");
+		return -EOPNOTSUPP;
+	}
+
+	ipourma_tx_ring_size = tx_ring_size;
+	ipourma_rx_ring_size = rx_ring_size;
+	ipourma_register_seg_size = (1 << page_level);
+	ipourma_ub_size_init();
+
+	return 0;
+}
+
 static int __init ipourma_init(void)
 {
 	int ret = 0;
+
+	ret = ipourma_param_init();
+	if (ret != 0) {
+		pr_err("ipourma param init failed.\n");
+		return ret;
+	}
 
 	ret = ubcore_register_client(&g_ipourma_ubcore_client);
 	if (ret != 0) {

@@ -46,6 +46,9 @@ enum {
 	IPOURMA_TX_JFC_DEPTH        = 1024,
 	IPOURMA_RX_JFC_DEPTH        = 2048,
 	IPOURMA_SEGMENT_ALIGN_SIZE  = 4096,
+	IPOURMA_MIN_PAGE_LEVEL      = 12,
+	IPOURMA_DEF_PAGE_LEVEL      = 16,
+	IPOURMA_MAX_PAGE_LEVEL      = 21,
 	IPOURMA_REGISTER_SEG_SIZE   = 65536,
 	IPOURMA_MAX_URMA_SEND_SGES  = 13,
 	IPOURMA_MAX_URMA_RECV_SGES  = 1,
@@ -58,6 +61,10 @@ enum {
 	IPOURMA_NAPI_TX_WEIGHT      = 16,
 	IPOURMA_TX_RING_SIZE        = 128,
 	IPOURMA_RX_RING_SIZE        = 256,
+	IPOURMA_MIN_TX_RING_SIZE    = 32,
+	IPOURMA_MAX_TX_RING_SIZE    = 2048,
+	IPOURMA_MIN_RX_RING_SIZE    = 32,
+	IPOURMA_MAX_RX_RING_SIZE    = 4096,
 	IPOURMA_URMA_MAX_MTU        = 4096,
 	IPOURMA_MAX_MTU             = (IPOURMA_URMA_MAX_MTU -
 					sizeof(struct ipourma_header)),
@@ -137,6 +144,9 @@ enum {
 #define IFLA_IPOURMA_MAX (__IFLA_IPOURMA_MAX - 1)
 extern u32 ipourma_tx_ring_size;
 extern u32 ipourma_rx_ring_size;
+extern u32 ipourma_jfs_depth;
+extern u32 ipourma_tx_jfc_depth;
+extern u32 ipourma_register_seg_size;
 
 /* IPOURMA_MAX_CR_STATUS should be as same as the length of the enum ubcore_cr_status. Since
  * ubcore_cr_status is contiguous and starts from 0, we can use the value of the last item

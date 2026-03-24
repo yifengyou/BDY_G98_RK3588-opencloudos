@@ -10,6 +10,7 @@
 
 #include "ipourma_types.h"
 
+void ipourma_ub_size_init(void);
 void ipourma_uninit_rings_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
 void ipourma_uninit_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx);
 int ipourma_restart_rings(struct ipourma_dev_priv *priv);
