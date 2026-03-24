@@ -50,7 +50,7 @@ struct ubcore_route_list {
  */
 struct ubcore_ucontext *
 ubcore_alloc_ucontext(struct ubcore_device *dev, uint32_t eid_index,
-		      struct ubcore_udrv_priv *udrv_data);
+	struct ubcore_udrv_priv *udrv_data);
 /**
  * Free the allocated context.
  * @param[in] dev: device to free context.
@@ -59,7 +59,7 @@ ubcore_alloc_ucontext(struct ubcore_device *dev, uint32_t eid_index,
  * not by other kernel modules
  */
 void ubcore_free_ucontext(struct ubcore_device *dev,
-			  struct ubcore_ucontext *ucontext);
+			 struct ubcore_ucontext *ucontext);
 /**
  * add a function entity id (eid) to ub device (for uvs)
  * @param[in] dev: the ubcore_device handle;
@@ -68,7 +68,7 @@ void ubcore_free_ucontext(struct ubcore_device *dev,
  * @return: the index of eid/upi, less than 0 indicating error
  */
 int ubcore_add_ueid(struct ubcore_device *dev, uint16_t ue_idx,
-		    struct ubcore_ueid_cfg *cfg);
+			struct ubcore_ueid_cfg *cfg);
 /**
  * remove a function entity id (eid) specified by idx from ub device (for uvs)
  * @param[in] dev: the ubcore_device handle;
@@ -77,7 +77,7 @@ int ubcore_add_ueid(struct ubcore_device *dev, uint16_t ue_idx,
  * @return: 0 on success, other value on error
  */
 int ubcore_delete_ueid(struct ubcore_device *dev, uint16_t ue_idx,
-		       struct ubcore_ueid_cfg *cfg);
+				struct ubcore_ueid_cfg *cfg);
 /**
  * query device attributes
  * @param[in] dev: the ubcore_device handle;
@@ -85,7 +85,7 @@ int ubcore_delete_ueid(struct ubcore_device *dev, uint16_t ue_idx,
  * @return: 0 on success, other value on error
  */
 int ubcore_query_device_attr(struct ubcore_device *dev,
-			     struct ubcore_device_attr *attr);
+				struct ubcore_device_attr *attr);
 /**
  * query device status
  * @param[in] dev: the ubcore_device handle;
@@ -119,7 +119,7 @@ int ubcore_query_resource(struct ubcore_device *dev, struct ubcore_res_key *key,
  * @return: 0 on success, other value on error
  */
 int ubcore_config_device(struct ubcore_device *dev,
-			 struct ubcore_device_cfg *cfg);
+				struct ubcore_device_cfg *cfg);
 /**
  * set ctx data of a client
  * @param[in] dev: the ubcore_device handle;
@@ -136,7 +136,7 @@ void ubcore_set_client_ctx_data(struct ubcore_device *dev,
  * @return: client private data set before
  */
 void *ubcore_get_client_ctx_data(struct ubcore_device *dev,
-				 struct ubcore_client *client);
+				struct ubcore_client *client);
 /**
  * Register a new client to ubcore
  * @param[in] dev: the ubcore_device handle;
@@ -157,8 +157,8 @@ void ubcore_unregister_client(struct ubcore_client *rm_client);
  * @return: token id pointer on success, NULL on error
  */
 struct ubcore_token_id *ubcore_alloc_token_id(struct ubcore_device *dev,
-					      union ubcore_token_id_flag flag,
-					      struct ubcore_udata *udata);
+							union ubcore_token_id_flag flag,
+							struct ubcore_udata *udata);
 /**
  * free token id from ubcore device
  * @param[in] token_id: the token_id id alloced before;
@@ -207,10 +207,10 @@ int ubcore_unimport_seg(struct ubcore_target_seg *tseg);
  * @return: jfc pointer on success, NULL on error
  */
 struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
-				     struct ubcore_jfc_cfg *cfg,
-				     ubcore_comp_callback_t jfce_handler,
-				     ubcore_event_callback_t jfae_handler,
-				     struct ubcore_udata *udata);
+					struct ubcore_jfc_cfg *cfg,
+					ubcore_comp_callback_t jfce_handler,
+					ubcore_event_callback_t jfae_handler,
+					struct ubcore_udata *udata);
 /**
  * modify jfc from ubcore device.
  * @param[in] jfc: the jfc created before;
@@ -237,7 +237,7 @@ int ubcore_delete_jfc(struct ubcore_jfc *jfc);
  * jfc and return, these jfc before the failed jfc will be deleted normally.
  */
 int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
-			    int *bad_jfc_index);
+				int *bad_jfc_index);
 /**
  * rearm jfc.
  * @param[in] jfc: the jfc created before;
@@ -245,6 +245,65 @@ int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
  * @return: 0 on success, other value on error
  */
 int ubcore_rearm_jfc(struct ubcore_jfc *jfc, bool solicited_only);
+/**
+ * Alloc a jfc.
+ * @param[in] dev: the ubcore device handle;
+ * @param[in] cfg: configuration including: depth, flag, jfce, user context;
+ * @param[in] jfce_handler (optional): completion event handler
+ * @param[in] jfae_handler (optional): jfc async_event handler
+ * @param[out] jfc: handle of the allocated jfc;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_alloc_jfc(struct ubcore_device *dev, struct ubcore_jfc_cfg *cfg,
+	ubcore_comp_callback_t jfce_handler, ubcore_event_callback_t jfae_handler,
+	struct ubcore_jfc **jfc, struct ubcore_udata *udata);
+/**
+ * Set the opt of jfc.
+ * @param[in] jfc: handle of the allocated jfc;
+ * @param[in] opt: the opt to change cfg of jfc;
+ * @param[in] buf: the buffer to store the value;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_set_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Active the allocated jfc.
+ * Note: active_jfc and deactive_jfc do not support concurrency
+ * @param[in] jfc: handle of the allocated jfc;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_active_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata);
+/**
+ * Get the opt of jfc.
+ * @param[in] jfc: handle of the allocated jfc;
+ * @param[in] opt: the opt to change cfg of jfc;
+ * @param[out] buf: the buffer to store the value
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_get_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Deactivate the activated jfc.
+ * Note: active_jfc and deactive_jfc do not support concurrency
+ * @param[in] jfc: handle of the allocated jfc;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_deactive_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata);
+/**
+ * Free the allocated jfc.
+ * @param[in] jfc: handle of the allocated jfc;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * After free, the jfc pointer is no longer allowed to be accessed.
+ * Return: 0 on success, other value on error
+ */
+int ubcore_free_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata);
 /**
  * create jfs with ubcore device.
  * @param[in] dev: the ubcore device handle;
@@ -254,9 +313,9 @@ int ubcore_rearm_jfc(struct ubcore_jfc *jfc, bool solicited_only);
  * @return: jfs pointer on success, NULL on error
  */
 struct ubcore_jfs *ubcore_create_jfs(struct ubcore_device *dev,
-				     struct ubcore_jfs_cfg *cfg,
-				     ubcore_event_callback_t jfae_handler,
-				     struct ubcore_udata *udata);
+					struct ubcore_jfs_cfg *cfg,
+					ubcore_event_callback_t jfae_handler,
+					struct ubcore_udata *udata);
 /**
  * modify jfs from ubcore device.
  * @param[in] jfs: the jfs created before;
@@ -292,7 +351,7 @@ int ubcore_delete_jfs(struct ubcore_jfs *jfs);
  * jfs and return, these jfs before the failed jfs will be deleted normally.
  */
 int ubcore_delete_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num,
-			    int *bad_jfs_index);
+				int *bad_jfs_index);
 /**
  * return the wrs in JFS that is not consumed to the application through cr.
  * @param[in] jfs: the jfs created before;
@@ -314,6 +373,65 @@ struct ubcore_jfr *ubcore_create_jfr(struct ubcore_device *dev,
 				     struct ubcore_jfr_cfg *cfg,
 				     ubcore_event_callback_t jfae_handler,
 				     struct ubcore_udata *udata);
+/**
+ * Alloc a jfs.
+ * @param[in] dev: the ubcore device handle;
+ * @param[in] ctx: the urma context created before;
+ * @param[in] cfg: configuration including: depth, flag, jfce, user context;
+ * @param[in] jfae_handler (optional): jfs async_event handler
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[out] jfs: handle of the allocated jfs;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_alloc_jfs(struct ubcore_device *dev, struct ubcore_jfs_cfg *cfg,
+	ubcore_event_callback_t jfae_handler, struct ubcore_jfs **jfs, struct ubcore_udata *udata);
+/**
+ * Set the opt of jfs.
+ * @param[in] jfs: handle of the allocated jfs;
+ * @param[in] opt: the opt to change cfg of jfs;
+ * @param[in] buf: the buffer containing the value to set;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_set_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Active the allocated jfs.
+ * Note: active_jfs and deactive_jfs do not support concurrency
+ * @param[in] jfs: handle of the allocated jfs;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_active_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
+/**
+ * Get the opt of jfs.
+ * @param[in] jfs: handle of the allocated jfs;
+ * @param[in] opt: the opt to change cfg of jfs;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[out] buf: the buffer to store the value;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_get_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Deactivate the activated jfs.
+ * Note: active_jfs and deactive_jfs do not support concurrency
+ * @param[in] jfs: handle of the allocated jfs;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_deactive_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
+/**
+ * Free the allocated jfs.
+ * @param[in] jfs: handle of the allocated jfs;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * After free, the jfs pointer is no longer allowed to be accessed.
+ * Return: 0 on success, other value on error
+ */
+int ubcore_free_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata);
+
 /**
  * modify jfr from ubcore device.
  * @param[in] jfr: the jfr created before;
@@ -349,7 +467,7 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr);
  * jfr and return, these jfr before the failed jfr will be deleted normally.
  */
 int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
-			    int *bad_jfr_index);
+				int *bad_jfr_index);
 /**
  * create jetty with ubcore device.
  * @param[in] dev: the ubcore device handle;
@@ -358,6 +476,65 @@ int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
  * @param[in] udata (optional): ucontext and user space driver data
  * @return: jetty pointer on success, NULL on error
  */
+/**
+ * Alloc a jfr.
+ * @param[in] dev: the ubcore device handle;
+ * @param[in] ctx: the urma context created before;
+ * @param[in] cfg: configuration including: depth, flag, jfce, user context;
+ * @param[in] jfae_handler (optional): jfr async_event handler
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[out] jfr: handle of the allocated jfr;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_alloc_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg,
+	ubcore_event_callback_t jfae_handler, struct ubcore_jfr **jfr, struct ubcore_udata *udata);
+/**
+ * Set the opt of jfr.
+ * @param[in] jfr: handle of the allocated jfr;
+ * @param[in] opt: the opt to change cfg of jfr;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[in] buf: the buffer to store the value;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_set_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Active the allocated jfr.
+ * Note: active_jfr and deactive_jfr do not support concurrency
+ * @param[in] jfr: handle of the allocated jfr;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_active_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
+/**
+ * Get the opt of jfr.
+ * @param[in] jfr: handle of the allocated jfr;
+ * @param[in] opt: the opt to change cfg of jfr;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[out] buf: the buffer to store the value;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_get_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt,
+	void *buf, uint32_t len, struct ubcore_udata *udata);
+/**
+ * Deactivated the activated jfr.
+ * Note: active_jfr and deactive_jfr do not support concurrency
+ * @param[in] jfr: handle of the allocated jfr;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_deactive_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
+/**
+ * Free the allocated jfr.
+ * @param[in] jfr: handle of the allocated jfr;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * After free, the jfr pointer is no longer allowed to be accessed.
+ * Return: 0 on success, other value on error
+ */
+int ubcore_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
+
 struct ubcore_jetty *ubcore_create_jetty(struct ubcore_device *dev,
 					 struct ubcore_jetty_cfg *cfg,
 					 ubcore_event_callback_t jfae_handler,
@@ -398,7 +575,7 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty);
  * jetty and return, these jetty before the failed jetty will be deleted normally.
  */
 int ubcore_delete_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num,
-			      int *bad_jetty_index);
+					int *bad_jetty_index);
 /**
  * return the wrs in JETTY that is not consumed to the application through cr.
  * @param[in] jetty: the jetty created before;
@@ -408,7 +585,7 @@ int ubcore_delete_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num,
  * -1 on error
  */
 int ubcore_flush_jetty(struct ubcore_jetty *jetty, int cr_cnt,
-		       struct ubcore_cr *cr);
+				struct ubcore_cr *cr);
 /**
  * import jfr to ubcore device.
  * @param[in] dev: the ubcore device handle;
@@ -416,6 +593,64 @@ int ubcore_flush_jetty(struct ubcore_jetty *jetty, int cr_cnt,
  * @param[in] udata (optional): ucontext and user space driver data
  * @return: target jfr pointer on success, NULL on error
  */
+/**
+ * Alloc a jetty.
+ * @param[in] dev: the ubcore device handle;
+ * @param[in] ctx: the urma context created before;
+ * @param[in] cfg: configuration including: depth, flag, jfce, user context;
+ * @param[in] jfae_handler (optional): jetty async_event handler
+ * @param[in] udata (optional): ucontext and user space driver data
+ * @param[out] jetty: handle of the allocated jetty;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_alloc_jetty(struct ubcore_device *dev, struct ubcore_jetty_cfg *cfg,
+	ubcore_event_callback_t jfae_handler,
+	struct ubcore_jetty **jetty, struct ubcore_udata *udata);
+/**
+ * Set the opt of jetty.
+ * @param[in] jetty: handle of the allocated jetty;
+ * @param[in] opt: the opt to change cfg of jetty;
+ * @param[in] buf: the buffer to store the value;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_set_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf,
+	uint32_t len, struct ubcore_udata *udata);
+/**
+ * Active the allocated jetty.
+ * @param[in] jetty: handle of the allocated jetty;
+ * @param[in] udata (optional): ucontext and user space driver data;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_active_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+/**
+ * Get the opt of jetty.
+ * @param[in] jetty: handle of the allocated jetty;
+ * @param[in] opt: the opt to change cfg of jetty;
+ * @param[in] len: the len of the opt value(byte);
+ * @param[in] udata (optional): ucontext and user space driver data;
+ * @param[out] buf: the buffer to store the value;
+ * Return: 0 on success, other value on error
+ */
+int ubcore_get_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf,
+	uint32_t len, struct ubcore_udata *udata);
+/**
+ * Deactivated the activated jetty.
+ * @param[in] jetty: handle of the allocated jetty;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * Return: 0 on success, other value on error
+ */
+int ubcore_deactive_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+/**
+ * Free the allocated jetty.
+ * @param[in] jetty: handle of the allocated jetty;
+ * @param[in] udata (optional): ucontext and user space driver data
+ * After free, the jfc pointer is no longer allowed to be accessed.
+ * Return: 0 on success, other value on error
+ */
+int ubcore_free_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+
 struct ubcore_tjetty *ubcore_import_jfr(struct ubcore_device *dev,
 					struct ubcore_tjetty_cfg *cfg,
 					struct ubcore_udata *udata);
@@ -430,8 +665,8 @@ struct ubcore_tjetty *ubcore_import_jfr(struct ubcore_device *dev,
  */
 struct ubcore_tjetty *
 ubcore_import_jfr_ex(struct ubcore_device *dev, struct ubcore_tjetty_cfg *cfg,
-		     struct ubcore_active_tp_cfg *active_tp_cfg,
-		     struct ubcore_udata *udata);
+			struct ubcore_active_tp_cfg *active_tp_cfg,
+			struct ubcore_udata *udata);
 
 /**
  * unimport jfr from ubcore device.
@@ -447,8 +682,8 @@ int ubcore_unimport_jfr(struct ubcore_tjetty *tjfr);
  * @return: target jetty pointer on success, NULL on error
  */
 struct ubcore_tjetty *ubcore_import_jetty(struct ubcore_device *dev,
-					  struct ubcore_tjetty_cfg *cfg,
-					  struct ubcore_udata *udata);
+					struct ubcore_tjetty_cfg *cfg,
+					struct ubcore_udata *udata);
 
 /**
  * import jetty to ubcore device by control plane.
@@ -460,8 +695,8 @@ struct ubcore_tjetty *ubcore_import_jetty(struct ubcore_device *dev,
  */
 struct ubcore_tjetty *
 ubcore_import_jetty_ex(struct ubcore_device *dev, struct ubcore_tjetty_cfg *cfg,
-		       struct ubcore_active_tp_cfg *active_tp_cfg,
-		       struct ubcore_udata *udata);
+				struct ubcore_active_tp_cfg *active_tp_cfg,
+				struct ubcore_udata *udata);
 
 /**
  * unimport jetty from ubcore device.
@@ -492,9 +727,9 @@ int ubcore_bind_jetty(struct ubcore_jetty *jetty, struct ubcore_tjetty *tjetty,
  * Only supported by jetty with URMA_TM_RC.
  */
 int ubcore_bind_jetty_ex(struct ubcore_jetty *jetty,
-			 struct ubcore_tjetty *tjetty,
-			 struct ubcore_active_tp_cfg *active_tp_cfg,
-			 struct ubcore_udata *udata);
+				struct ubcore_tjetty *tjetty,
+				struct ubcore_active_tp_cfg *active_tp_cfg,
+				struct ubcore_udata *udata);
 /**
  * Unbind jetty: Unbind local jetty with remote jetty,
  * and tear down the transport channel between them.
@@ -529,10 +764,10 @@ int ubcore_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp);
  * @return: target jetty pointer on success, NULL on error
  */
 struct ubcore_tjetty *ubcore_import_jetty_async(struct ubcore_device *dev,
-						struct ubcore_tjetty_cfg *cfg,
-						int timeout,
-						struct ubcore_import_cb *cb,
-						struct ubcore_udata *udata);
+					struct ubcore_tjetty_cfg *cfg,
+					int timeout,
+					struct ubcore_import_cb *cb,
+					struct ubcore_udata *udata);
 /**
  * unimport jetty from ubcore device.
  * @param[in] tjetty: the target jetty imported before;
@@ -541,7 +776,7 @@ struct ubcore_tjetty *ubcore_import_jetty_async(struct ubcore_device *dev,
  * @return: 0 on success, other value on error
  */
 int ubcore_unimport_jetty_async(struct ubcore_tjetty *tjetty, int timeout,
-				struct ubcore_unimport_cb *cb);
+	struct ubcore_unimport_cb *cb);
 /**
  * Bind jetty: Bind local jetty with remote jetty, and construct a transport channel between them.
  * @param[in] jetty: local jetty to bind;
@@ -554,9 +789,9 @@ int ubcore_unimport_jetty_async(struct ubcore_tjetty *tjetty, int timeout,
  * Only supported by jetty with URMA_TM_RC.
  */
 int ubcore_bind_jetty_async(struct ubcore_jetty *jetty,
-			    struct ubcore_tjetty *tjetty, int timeout,
-			    struct ubcore_bind_cb *cb,
-			    struct ubcore_udata *udata);
+				struct ubcore_tjetty *tjetty, int timeout,
+				struct ubcore_bind_cb *cb,
+				struct ubcore_udata *udata);
 /**
  * Unbind jetty: Unbind local jetty with remote jetty,
  * and tear down the transport channel between them.
@@ -566,7 +801,7 @@ int ubcore_bind_jetty_async(struct ubcore_jetty *jetty,
  * @return: 0 on success, other value on error
  */
 int ubcore_unbind_jetty_async(struct ubcore_jetty *jetty, int timeout,
-			      struct ubcore_unbind_cb *cb);
+					struct ubcore_unbind_cb *cb);
 
 /**
  * get tp list from ubep.
@@ -579,8 +814,8 @@ int ubcore_unbind_jetty_async(struct ubcore_jetty *jetty, int timeout,
  * @return: 0 on success, other value on error
  */
 int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
-		       uint32_t *tp_cnt, struct ubcore_tp_info *tp_list,
-		       struct ubcore_udata *udata);
+				uint32_t *tp_cnt, struct ubcore_tp_info *tp_list,
+				struct ubcore_udata *udata);
 
 /**
  * set tp attributions by control plane.
@@ -597,9 +832,9 @@ int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
  * @return: 0 on success, other value on error
  */
 int ubcore_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
-		       const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
-		       const struct ubcore_tp_attr_value *tp_attr,
-		       struct ubcore_udata *udata);
+			const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
+			const struct ubcore_tp_attr_value *tp_attr,
+			struct ubcore_udata *udata);
 
 /**
  * get tp attributions by control plane.
@@ -617,9 +852,9 @@ int ubcore_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
  * @return: 0 on success, other value on error
  */
 int ubcore_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
-		       uint8_t *tp_attr_cnt, uint32_t *tp_attr_bitmap,
-		       struct ubcore_tp_attr_value *tp_attr,
-		       struct ubcore_udata *udata);
+				uint8_t *tp_attr_cnt, uint32_t *tp_attr_bitmap,
+				struct ubcore_tp_attr_value *tp_attr,
+				struct ubcore_udata *udata);
 
 /**
  * exchange tp info from ubep.
@@ -655,7 +890,7 @@ int ubcore_user_control(struct ubcore_device *dev,
  * ubcore_dispatch_async_event
  */
 void ubcore_register_event_handler(struct ubcore_device *dev,
-				   struct ubcore_event_handler *handler);
+	struct ubcore_event_handler *handler);
 /**
  * Client unregister async_event handler from ubcore
  * @param[in] dev: the ubcore device handle;

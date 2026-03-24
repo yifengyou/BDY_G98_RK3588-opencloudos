@@ -92,6 +92,34 @@ enum uburma_cmd {
 	UBURMA_CMD_SET_TP_ATTR,
 	UBURMA_CMD_GET_TP_ATTR,
 	UBURMA_CMD_EXCHANGE_TP_INFO,
+	UBURMA_CMD_GET_EID_BY_IP,
+	UBURMA_CMD_GET_IP_BY_EID,
+	UBURMA_CMD_GET_SMAC,
+	UBURMA_CMD_GET_DMAC,
+	UBURMA_CMD_ALLOC_JFC,
+	UBURMA_CMD_FREE_JFC,
+	UBURMA_CMD_SET_JFC_OPT,
+	UBURMA_CMD_GET_JFC_OPT,
+	UBURMA_CMD_ACTIVE_JFC,
+	UBURMA_CMD_DEACTIVE_JFC,
+	UBURMA_CMD_ALLOC_JFR,
+	UBURMA_CMD_FREE_JFR,
+	UBURMA_CMD_SET_JFR_OPT,
+	UBURMA_CMD_GET_JFR_OPT,
+	UBURMA_CMD_ACTIVE_JFR,
+	UBURMA_CMD_DEACTIVE_JFR,
+	UBURMA_CMD_ALLOC_JFS,
+	UBURMA_CMD_FREE_JFS,
+	UBURMA_CMD_SET_JFS_OPT,
+	UBURMA_CMD_GET_JFS_OPT,
+	UBURMA_CMD_ACTIVE_JFS,
+	UBURMA_CMD_DEACTIVE_JFS,
+	UBURMA_CMD_ALLOC_JETTY,
+	UBURMA_CMD_FREE_JETTY,
+	UBURMA_CMD_SET_JETTY_OPT,
+	UBURMA_CMD_GET_JETTY_OPT,
+	UBURMA_CMD_ACTIVE_JETTY,
+	UBURMA_CMD_DEACTIVE_JETTY,
 	UBURMA_CMD_MAX
 };
 
@@ -251,6 +279,185 @@ struct uburma_cmd_delete_jfr_batch {
 	} in;
 };
 
+struct uburma_cmd_alloc_jfr {
+	struct {
+		uint32_t depth;
+		uint32_t flag;
+		uint32_t trans_mode;
+		uint8_t max_sge;
+		uint8_t min_rnr_timer;
+		uint32_t jfc_id;
+		uint64_t jfc_handle;
+		uint32_t token;
+		uint32_t id;
+		uint64_t urma_jfr; /* urma jfr pointer */
+	} in;
+	struct {
+		uint32_t id;
+		uint32_t depth;
+		uint64_t handle; /* handle of the allocated jfr obj in kernel */
+		uint8_t max_sge;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_free_jfr {
+	struct {
+		uint64_t handle; /* handle of jfc, used to find jfc obj in kernel */
+	} in;
+	struct {
+		uint32_t async_events_reported;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_set_jfr_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_get_jfr_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct {
+		uint64_t buf;
+		uint32_t len;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_active_jfr {
+	struct {
+		uint64_t handle;          /* handle of jfr, used to find jfr obj in kernel */
+		uint32_t depth;
+		uint32_t flag;
+		uint32_t trans_mode;
+		uint8_t max_sge;
+		uint8_t min_rnr_timer;
+		uint32_t jfc_id;
+		uint64_t jfc_handle;
+		uint32_t token_value;
+		uint64_t urma_jfr_opt;
+	} in;
+	struct {
+		uint32_t id;
+		uint32_t depth;
+		uint64_t handle; /* handle of the allocated jfr obj in kernel */
+		uint8_t max_sge;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_deactive_jfr {
+	struct {
+	uint64_t handle;          /* handle of jfr, used to find jfr obj in kernel */
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_alloc_jfs {
+	struct {
+		uint32_t depth;
+		uint32_t flag;
+		uint32_t trans_mode;
+		uint8_t priority;
+		uint8_t max_sge;
+		uint8_t max_rsge;
+		uint32_t max_inline_data;
+		uint8_t rnr_retry;
+		uint8_t err_timeout;
+		uint32_t jfc_id;
+		uint64_t jfc_handle;
+		uint64_t urma_jfs; /* urma jfs pointer */
+	} in;
+	struct {
+		uint32_t id;
+		uint32_t depth;
+		uint8_t max_sge;
+		uint8_t max_rsge;
+		uint32_t max_inline_data;
+		uint64_t handle; /* handle of the allocated jfs obj in kernel */
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_free_jfs {
+	struct {
+		uint64_t handle; /* handle of jfc, used to find jfc obj in kernel */
+	} in;
+	struct {
+		uint32_t async_events_reported;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_set_jfs_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_get_jfs_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct {
+		uint64_t buf;
+		uint32_t len;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_active_jfs {
+	struct {
+		uint64_t handle;          /* handle of jfs, used to find jfs obj in kernel */
+		uint32_t depth;
+		uint32_t flag;
+		uint32_t trans_mode;
+		uint32_t priority;
+		uint8_t max_sge;
+		uint8_t max_rsge;
+		uint32_t max_inline_data;
+		uint8_t rnr_retry;
+		uint8_t err_timeout;
+		uint32_t jfc_id;
+		uint64_t jfc_handle;
+		uint64_t jfs_opt;
+	} in;
+		struct {
+		uint32_t id;
+		uint32_t depth;
+		uint8_t max_sge;
+		uint8_t max_rsge;
+		uint32_t max_inline_data;
+		uint64_t handle; /* handle of the allocated jfs obj in kernel */
+		} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_deactive_jfs {
+	struct {
+	uint64_t handle;          /* handle of jfr, used to find jfr obj in kernel */
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
 struct uburma_cmd_create_jfs {
 	struct {
 		uint32_t depth;
@@ -373,6 +580,80 @@ struct uburma_cmd_delete_jfc_batch {
 		uint32_t jfc_num;
 		uint64_t jfc_ptr;
 	} in;
+};
+
+struct uburma_cmd_alloc_jfc {
+	struct {
+		uint32_t depth;
+		uint32_t flag;
+		int jfce_fd;
+		uint64_t urma_jfc; /* urma jfc pointer */
+		uint32_t ceqn;     /* [Optional] event queue id */
+	} in;
+	struct {
+		uint32_t id;
+		uint32_t depth;
+		uint64_t handle; /* handle of the allocated jfc obj in kernel */
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_free_jfc {
+	struct {
+		uint64_t handle; /* handle of jfc, used to find jfc obj in kernel */
+	} in;
+	struct {
+		uint32_t comp_events_reported;
+		uint32_t async_events_reported;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_set_jfc_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_get_jfc_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct {
+		uint64_t buf;
+		uint32_t len;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_active_jfc {
+	struct {
+		uint64_t handle; /* handle of jfc, used to find jfc obj in kernel */
+		uint32_t depth;
+		uint32_t flag;
+		uint32_t ceqn;
+		uint64_t urma_jfc_opt;
+	} in;
+		struct {
+		uint32_t id;
+		uint32_t depth;
+		uint64_t handle; /* handle of the allocated jfc obj in kernel */
+		} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_deactive_jfc {
+	struct {
+		uint64_t handle; /* handle of jfc, used to find jfc obj in kernel */
+	} in;
+	struct uburma_cmd_udrv_priv udata;
 };
 
 struct uburma_cmd_create_jfce {
@@ -663,6 +944,66 @@ struct uburma_cmd_delete_jetty_grp {
 	struct {
 		uint32_t async_events_reported;
 	} out;
+};
+
+struct uburma_cmd_alloc_jetty {
+	struct uburma_cmd_create_jetty create_jetty;
+};
+
+struct uburma_cmd_free_jetty {
+	struct {
+		uint64_t handle; /* handle of jetty, used to find jetty obj in kernel */
+	} in;
+	struct {
+		uint32_t async_events_reported;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_set_jetty_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_get_jetty_opt {
+	struct {
+		uint64_t handle;
+		uint64_t opt;
+		uint64_t buf;
+		uint32_t len;
+	} in;
+	struct {
+		uint64_t buf;
+		uint32_t len;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_active_jetty {
+	struct {
+		uint32_t flag;
+		uint64_t handle;
+		uint64_t send_jfc_handle; /* handle of the related send jfc */
+		uint64_t recv_jfc_handle; /* handle of the related recv jfc */
+		uint64_t urma_jetty; /* urma jetty pointer */
+		uint64_t jetty_opt;
+	} in;
+	struct {
+		uint32_t jetty_id;
+	} out;
+	struct uburma_cmd_udrv_priv udata;
+};
+
+struct uburma_cmd_deactive_jetty {
+	struct {
+		uint64_t handle;          /* handle of jetty, used to find jetty obj in kernel */
+	} in;
+	struct uburma_cmd_udrv_priv udata;
 };
 
 struct uburma_cmd_get_eid_list {
@@ -978,6 +1319,39 @@ struct uburma_cmd_exchange_tp_info {
 	} out;
 }; /* this struct should be consistent [urma_cmd_exchange_tp_info_t] */
 
+struct uburma_cmd_get_eid_by_ip {
+	struct {
+		struct uburma_cmd_net_addr net_addr;
+	} in;
+	struct {
+		union ubcore_eid eid;
+	} out;
+};
+
+struct uburma_cmd_get_ip_by_eid {
+	struct {
+		union ubcore_eid eid;
+	} in;
+	struct {
+		struct uburma_cmd_net_addr net_addr;
+	} out;
+};
+
+struct uburma_cmd_get_smac {
+	struct {
+		uint8_t mac[UBCORE_MAC_BYTES];
+	} out;
+};
+
+struct uburma_cmd_get_dmac {
+	struct {
+		struct uburma_cmd_net_addr net_addr;
+	} in;
+	struct {
+		uint8_t mac[UBCORE_MAC_BYTES];
+	} out;
+};
+
 /* only for event ioctl */
 #define MAX_JFCE_EVENT_CNT 16
 #define MAX_NOTIFY_CNT 16
@@ -1043,7 +1417,7 @@ struct uburma_cmd_wait_notify {
 
 /* copy from user_space addr to kernel args */
 static inline int uburma_copy_from_user(void *args, const void *args_addr,
-					unsigned long args_size)
+	unsigned long args_size)
 {
 	int ret;
 
@@ -1057,7 +1431,7 @@ static inline int uburma_copy_from_user(void *args, const void *args_addr,
 
 /* copy kernel args to user_space addr */
 static inline int uburma_copy_to_user(void *args_addr, const void *args,
-				      unsigned long args_size)
+	unsigned long args_size)
 {
 	int ret;
 
