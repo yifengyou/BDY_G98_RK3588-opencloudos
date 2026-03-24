@@ -3262,7 +3262,7 @@ long uburma_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	srcu_idx = srcu_read_lock(&ubu_dev->ubc_dev_srcu);
 	ubc_dev = srcu_dereference(ubu_dev->ubc_dev, &ubu_dev->ubc_dev_srcu);
 	if (!ubc_dev) {
-		uburma_log_err("can not find ubcore device.\n");
+		uburma_log_debug("can not find ubcore device.\n");
 		ret = -EIO;
 		goto srcu_unlock;
 	}

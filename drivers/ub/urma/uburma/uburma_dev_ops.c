@@ -104,7 +104,7 @@ int uburma_mmap(struct file *filp, struct vm_area_struct *vma)
 	int ret;
 
 	if (!file || !file->ucontext || !file->ubu_dev) {
-		uburma_log_err("can not find ucontext.\n");
+		uburma_log_debug("can not find ucontext.\n");
 		return -EINVAL;
 	}
 
@@ -114,7 +114,7 @@ int uburma_mmap(struct file *filp, struct vm_area_struct *vma)
 	srcu_idx = srcu_read_lock(&ubu_dev->ubc_dev_srcu);
 	ubc_dev = srcu_dereference(ubu_dev->ubc_dev, &ubu_dev->ubc_dev_srcu);
 	if (!ubc_dev || !ubc_dev->ops || !ubc_dev->ops->mmap) {
-		uburma_log_err("can not find ubcore device.\n");
+		uburma_log_debug("can not find ubcore device.\n");
 		ret = -ENODEV;
 		goto out;
 	}
