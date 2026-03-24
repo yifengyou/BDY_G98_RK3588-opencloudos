@@ -204,11 +204,11 @@ static int send_seg_info_req(struct ubcore_device *dev, uint32_t session_id,
 	if (ret != 0)
 		return ret;
 
-	ubcore_log_info("Send seg info req to " EID_FMT "\n",
-			EID_ARGS(dest_eid));
+	ubcore_log_info("Send seg info req to " EID_FMT ", Send cm messagem: " MSG_FMT "\n",
+		EID_ARGS(dest_eid), MSG_ARG(&msg));
 	ret = ubcore_net_send_to(dev, &msg, dest_eid);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send msg");
+		ubcore_log_err("Failed to send msg.\n");
 		return ret;
 	}
 	return 0;
@@ -251,11 +251,10 @@ static int send_jetty_info_req(struct ubcore_device *dev, uint32_t session_id,
 	if (ret != 0)
 		return ret;
 
-	ubcore_log_info("Send jetty info req to " EID_FMT "\n",
-			EID_ARGS(dest_eid));
+	ubcore_log_info("Send jetty info req to " EID_FMT "\n", EID_ARGS(dest_eid));
 	ret = ubcore_net_send_to(dev, &msg, dest_eid);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send msg");
+		ubcore_log_err("Failed to send msg to " EID_FMT"\n", EID_ARGS(dest_eid));
 		return ret;
 	}
 	return 0;
@@ -308,7 +307,6 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 	ret = send_seg_info_req(physical_dev, ubcore_session_get_id(session),
 				&req);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send create req message");
 		ubcore_session_complete(session);
 		goto release_session;
 	}
@@ -365,7 +363,6 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 	ret = send_jetty_info_req(physical_dev, ubcore_session_get_id(session),
 				  &req);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send create req message");
 		ubcore_session_complete(session);
 		goto release_session;
 	}

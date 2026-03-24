@@ -21,20 +21,16 @@ int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
 
 	if (dev == NULL || dev->ops == NULL || dev->ops->get_tp_list == NULL ||
 	    cfg == NULL || tp_cnt == NULL || tp_list == NULL || *tp_cnt == 0) {
-		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
 	if (ubcore_check_trans_mode_valid(cfg->trans_mode) != true) {
-		ubcore_log_err("Invalid parameter, trans_mode: %d.\n",
-			       (int)cfg->trans_mode);
 		return -EINVAL;
 	}
 
 	ret = dev->ops->get_tp_list(dev, cfg, tp_cnt, tp_list, udata);
 	if (ret != 0)
 		ubcore_log_err("Failed to get to list, ret: %d.\n", ret);
-
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_get_tp_list);

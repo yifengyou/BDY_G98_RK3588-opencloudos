@@ -126,7 +126,8 @@ static int send_create_req(struct ubcore_device *dev, uint32_t session_id,
 
 	ret = ubcore_net_send_to(dev, &msg, req->get_tp_cfg.peer_eid);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send msg");
+		ubcore_log_err("Failed to send msg, dev_name is %s, peer_eid is "EID_FMT"\n",
+			dev->dev_name, EID_ARGS(req->get_tp_cfg.peer_eid));
 		return ret;
 	}
 	return 0;
@@ -273,7 +274,6 @@ int ubcore_exchange_tp_info(struct ubcore_device *dev,
 	int ret;
 
 	if (!dev || !cfg || !peer_tp_handle || !rx_psn) {
-		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
@@ -295,7 +295,6 @@ int ubcore_exchange_tp_info(struct ubcore_device *dev,
 	req.tx_psn = tx_psn;
 	ret = send_create_req(dev, ubcore_session_get_id(session), &req);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send create req message");
 		ubcore_session_complete(session);
 		ubcore_session_ref_release(session);
 		ubcore_free_local_tpid(dev, tp_handle, tx_psn, udata);
@@ -319,11 +318,12 @@ int ubcore_exchange_tp_info(struct ubcore_device *dev,
 	ubcore_session_ref_release(session);
 
 	ret = ubcore_add_ex_tp_info(dev, tp_handle);
-	ubcore_log_info("exchange tp_handle is %llu\n", (unsigned long long)tp_handle);
+	ubcore_log_info("[EXCHANGE_TP_INFO] dev:%s tp_handle:%llu peer_tp:%llu",
+		dev->dev_name, tp_handle, *peer_tp_handle);
+	ubcore_log_info("  local_eid " EID_FMT " peer_eid " EID_FMT,
+		EID_ARGS(cfg->local_eid), EID_ARGS(cfg->peer_eid));
 	/* ubcore_add_ex_tp_info result will not have effect on excange_tp_info result */
-	if (ret != 0)
-		ubcore_log_err("Failed to add ex tp info, ret: %d.\n", ret);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(ubcore_exchange_tp_info);
 
@@ -346,9 +346,9 @@ static void handle_create_req(struct ubcore_device *dev,
 	ret = ubcore_get_tp_list(dev, &get_tp_cfg, &tp_cnt, &tp_info, NULL);
 	if (ret != 0 || tp_cnt != 1) {
 		ubcore_log_err("Failed to get tp list, local eid " EID_FMT
-			       ", peer eid " EID_FMT ".\n",
+			       ", peer eid " EID_FMT ", ret %d.\n",
 			       EID_ARGS(get_tp_cfg.local_eid),
-			       EID_ARGS(get_tp_cfg.peer_eid));
+			       EID_ARGS(get_tp_cfg.peer_eid), ret);
 		ret = GET_TP_LIST_ERROR;
 		goto send_resp;
 	}
@@ -561,19 +561,16 @@ struct ubcore_tjetty *ubcore_import_jfr_compat(struct ubcore_device *dev,
 			&active_tp_cfg.peer_tp_handle.value,
 			&active_tp_cfg.tp_attr.rx_psn, udata);
 		if (ret != 0) {
-			ubcore_log_err("Failed to exchange tp info, ret: %d.\n",
-				       ret);
-			return NULL;
-		}
-		ubcore_log_info("Finish to exchange tp info, local eid " EID_FMT
-				", peer eid " EID_FMT ".\n",
+			ubcore_log_err("Exchange_tp_info Failed: dev_name is %s,local_tp_handle is %llu",
+				dev->dev_name, tp_list.tp_handle.value);
+			ubcore_log_err("  local eid " EID_FMT ", peer eid " EID_FMT,
 				EID_ARGS(get_tp_cfg.local_eid),
 				EID_ARGS(get_tp_cfg.peer_eid));
+			return NULL;
+		}
 	}
 
 	tjfr = ubcore_import_jfr_ex(dev, cfg, &active_tp_cfg, udata);
-	if (IS_ERR_OR_NULL(tjfr))
-		ubcore_log_err("Failed to import jfr ex.\n");
 
 	return tjfr;
 }
@@ -614,16 +611,13 @@ struct ubcore_tjetty *ubcore_import_jetty_compat(struct ubcore_device *dev,
 				&active_tp_cfg.peer_tp_handle.value,
 				&active_tp_cfg.tp_attr.rx_psn, udata);
 			if (ret != 0) {
-				ubcore_log_err(
-					"Failed to exchange tp info, ret: %d.\n",
-					ret);
+				ubcore_log_err("Exchange_tp_info Failed: dev_name is %s, local_tp_handle is %llu",
+					dev->dev_name, tp_list.tp_handle.value);
+				ubcore_log_err("localeid " EID_FMT ", peereid " EID_FMT,
+					EID_ARGS(get_tp_cfg.local_eid),
+					EID_ARGS(get_tp_cfg.peer_eid));
 				return NULL;
 			}
-			ubcore_log_info(
-				"Finish to exchange tp info, local eid " EID_FMT
-				", peer eid " EID_FMT ".\n",
-				EID_ARGS(get_tp_cfg.local_eid),
-				EID_ARGS(get_tp_cfg.peer_eid));
 		}
 	}
 
@@ -666,13 +660,13 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 					&active_tp_cfg.peer_tp_handle.value,
 					&active_tp_cfg.tp_attr.rx_psn, udata);
 		if (ret != 0) {
-			ubcore_log_err("Failed to exchange tp info, ret: %d.\n", ret);
+			ubcore_log_err("Exchange_tp_info Failed: dev_name is %s, local_tp_handle is %llu",
+				dev->dev_name, tp_list.tp_handle.value);
+			ubcore_log_err("local eid " EID_FMT ", peer eid " EID_FMT,
+				EID_ARGS(get_tp_cfg.local_eid),
+				EID_ARGS(get_tp_cfg.peer_eid));
 			return ret;
 		}
-		ubcore_log_info("Finish to exchange tp info, local eid " EID_FMT
-			", peer eid " EID_FMT ".\n",
-			EID_ARGS(get_tp_cfg.local_eid),
-			EID_ARGS(get_tp_cfg.peer_eid));
 	}
 
 	ret = ubcore_bind_jetty_ex(jetty, tjetty, &active_tp_cfg, udata);

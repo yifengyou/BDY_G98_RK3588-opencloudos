@@ -151,7 +151,6 @@ static int uburma_cmd_alloc_token_id(struct ubcore_device *ubc_dev,
 
 	token_id = ubcore_alloc_token_id(ubc_dev, flag, &udata);
 	if (IS_ERR_OR_NULL(token_id)) {
-		uburma_log_err("ubcore alloc token_id id failed.\n");
 		ret = PTR_ERR(token_id);
 		goto err_free_uobj;
 	}
@@ -193,11 +192,9 @@ static int uburma_cmd_free_token_id(struct ubcore_device *ubc_dev,
 	}
 
 	token = (struct ubcore_token_id *)uobj->object;
-	if (arg.in.token_id != token->token_id) {
-		uburma_log_err(
-			"ubcore remove token_id failed: non-consistent.\n");
+	if (arg.in.token_id != token->token_id)
 		return -EPERM;
-	}
+
 	ret = uobj_remove_commit(uobj);
 	if (ret != 0)
 		uburma_log_err("ubcore remove commit token_id failed.\n");
@@ -240,7 +237,6 @@ static int uburma_cmd_register_seg(struct ubcore_device *ubc_dev,
 
 	seg = ubcore_register_seg(ubc_dev, &cfg, &udata);
 	if (IS_ERR_OR_NULL(seg)) {
-		uburma_log_err_rl("ubcore_register_seg failed.\n");
 		ret = PTR_ERR(seg);
 		goto err_free_uobj;
 	}
@@ -436,7 +432,6 @@ static int uburma_cmd_create_jfs(struct ubcore_device *ubc_dev,
 
 	jfs = ubcore_create_jfs(ubc_dev, &cfg, uburma_jfs_event_cb, &udata);
 	if (IS_ERR_OR_NULL(jfs)) {
-		uburma_log_err("create jfs or get jfs_id failed.\n");
 		ret = PTR_ERR(jfs);
 		goto err_put_jfc;
 	}
@@ -685,7 +680,7 @@ static int uburma_cmd_import_seg(struct ubcore_device *ubc_dev,
 
 	uobj = uobj_alloc(UOBJ_CLASS_TARGET_SEG, file);
 	if (IS_ERR_OR_NULL(uobj)) {
-		uburma_log_err("UOBJ_CLASS_TARGET_JFR alloc fail!\n");
+		uburma_log_err("UOBJ_CLASS_TARGET_SEG alloc fail!\n");
 		return -ENOMEM;
 	}
 
@@ -698,7 +693,6 @@ static int uburma_cmd_import_seg(struct ubcore_device *ubc_dev,
 
 	tseg = ubcore_import_seg(ubc_dev, &cfg, &udata);
 	if (IS_ERR_OR_NULL(tseg)) {
-		uburma_log_err("import seg failed.\n");
 		uobj_alloc_abort(uobj);
 		return PTR_ERR(tseg);
 	}
@@ -787,7 +781,6 @@ static int uburma_cmd_create_jfr(struct ubcore_device *ubc_dev,
 
 	jfr = ubcore_create_jfr(ubc_dev, &cfg, uburma_jfr_event_cb, &udata);
 	if (IS_ERR_OR_NULL(jfr)) {
-		uburma_log_err("create jfr or get jfr_id failed.\n");
 		ret = PTR_ERR(jfr);
 		goto err_put_jfc;
 	}
@@ -1062,7 +1055,6 @@ static int uburma_cmd_create_jfc(struct ubcore_device *ubc_dev,
 	jfc = ubcore_create_jfc(ubc_dev, &cfg, uburma_jfce_handler,
 				uburma_jfc_event_cb, &udata);
 	if (IS_ERR_OR_NULL(jfc)) {
-		uburma_log_err("create jfc or get jfc_id failed.\n");
 		ret = PTR_ERR(jfc);
 		goto err_alloc_abort;
 	}
@@ -1379,7 +1371,6 @@ static int uburma_cmd_create_jetty(struct ubcore_device *ubc_dev,
 	jetty = ubcore_create_jetty(ubc_dev, &cfg, uburma_jetty_event_cb,
 				    &udata);
 	if (IS_ERR_OR_NULL(jetty)) {
-		uburma_log_err("create jetty or get jetty_id failed.\n");
 		ret = PTR_ERR(jetty);
 		goto err_put;
 	}
@@ -1686,7 +1677,6 @@ static int uburma_cmd_import_jfr(struct ubcore_device *ubc_dev,
 
 	tjfr = ubcore_import_jfr(ubc_dev, &cfg, &udata);
 	if (IS_ERR_OR_NULL(tjfr)) {
-		uburma_log_err("ubcore_import_jfr failed.\n");
 		uobj_alloc_abort(uobj);
 		return PTR_ERR(tjfr);
 	}
@@ -1749,7 +1739,6 @@ static int uburma_cmd_import_jfr_ex(struct ubcore_device *ubc_dev,
 
 	tjfr = ubcore_import_jfr_ex(ubc_dev, &cfg, &active_tp_cfg, &udata);
 	if (IS_ERR_OR_NULL(tjfr)) {
-		uburma_log_err("ubcore_import_jfr failed.\n");
 		uobj_alloc_abort(uobj);
 		return PTR_ERR(tjfr);
 	}
@@ -1792,7 +1781,7 @@ static int uburma_cmd_unimport_jfr(struct ubcore_device *ubc_dev,
 	}
 	ret = uobj_remove_commit(uobj);
 	if (ret != 0)
-		uburma_log_err("ubcore_unimport_jfr failed.\n");
+		uburma_log_err("Remove tjfr uobj failed.\n");
 
 	uobj_put_del(uobj);
 	return ret;
@@ -1832,7 +1821,6 @@ static int uburma_cmd_import_jetty(struct ubcore_device *ubc_dev,
 
 	tjetty = ubcore_import_jetty(ubc_dev, &cfg, &udata);
 	if (IS_ERR_OR_NULL(tjetty)) {
-		uburma_log_err("ubcore_import_jetty failed.\n");
 		uobj_alloc_abort(uobj);
 		return PTR_ERR(tjetty);
 	}

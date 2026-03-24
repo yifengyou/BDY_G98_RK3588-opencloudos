@@ -828,7 +828,6 @@ static int uburma_free_jfc(struct uburma_uobj *uobj,
 	struct uburma_jfc_uobj *jfc_uobj =
 		container_of(uobj, struct uburma_jfc_uobj, uobj);
 	struct ubcore_jfc *jfc = (struct ubcore_jfc *)uobj->object;
-	uint32_t jfc_id = jfc->id;
 	int ret;
 
 	ret = ubcore_delete_jfc(jfc);
@@ -838,7 +837,6 @@ static int uburma_free_jfc(struct uburma_uobj *uobj,
 	}
 	uburma_release_async_event(uobj->ufile, &jfc_uobj->async_event_list);
 	uburma_release_jfce_event(jfc_uobj);
-	uburma_log_info("Finish to delete jfc: %u.\n", jfc_id);
 	return ret;
 }
 
