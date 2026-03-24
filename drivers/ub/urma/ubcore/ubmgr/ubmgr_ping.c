@@ -58,10 +58,11 @@ static inline uint32_t __ping_tjetty_hash_fn(union ubcore_eid *dst_eid)
 
 static struct ubmgr_ping_tjetty_entry *
 __ping_tjetty_new_entry(struct ubcore_device *dev, union ubcore_eid *dst_eid,
-			uint32_t eid_index)
+			uint32_t eid_index, uint32_t remote_jetty_id)
 {
 	struct ubcore_tjetty_cfg cfg = {
 		.id.eid = *dst_eid,
+		.id.id = remote_jetty_id,
 		.trans_mode = UBCORE_TP_RM,
 		.type = UBCORE_JETTY,
 		.eid_index = eid_index,
@@ -89,17 +90,18 @@ void __ping_tjetty_free_entry(struct kref *kref)
 		container_of(kref, struct ubmgr_ping_tjetty_entry, kref);
 
 	ubcore_unimport_jetty(entry->tjetty);
-	kfree(entry);
 }
 
 static struct ubmgr_ping_tjetty_entry *
-__ping_tjetty_find(struct hlist_head *bucket, union ubcore_eid *dst_eid)
+__ping_tjetty_find(struct hlist_head *bucket, union ubcore_eid *dst_eid,
+			uint32_t remote_id)
 {
 	struct ubmgr_ping_tjetty_entry *entry = NULL;
 
 	hlist_for_each_entry(entry, bucket, node) {
 		if (memcmp(&entry->tjetty->cfg.id.eid, dst_eid,
-			   sizeof(union ubcore_eid)) == 0) {
+			   sizeof(union ubcore_eid)) == 0 &&
+			   entry->tjetty->cfg.id.id == remote_id) {
 			kref_get(&entry->kref);
 			return entry;
 		}
@@ -109,15 +111,14 @@ __ping_tjetty_find(struct hlist_head *bucket, union ubcore_eid *dst_eid)
 
 static struct ubmgr_ping_tjetty_entry *
 __ping_tjetty_add(struct hlist_head *bucket, union ubcore_eid *dst_eid,
-		  struct ubmgr_ping_tjetty_entry *entry)
+		  struct ubmgr_ping_tjetty_entry *entry, uint32_t remote_id)
 {
 	struct ubmgr_ping_tjetty_entry *entry_exist;
 
-	entry_exist = __ping_tjetty_find(bucket, dst_eid);
-	if (!IS_ERR_OR_NULL(entry_exist))
+	entry_exist = __ping_tjetty_find(bucket, dst_eid, remote_id);
+	if (entry_exist)
 		return entry_exist;
 
-	kref_get(&entry->kref);
 	hlist_add_head(&entry->node, bucket);
 	return entry;
 }
@@ -130,11 +131,13 @@ void __ping_tjetty_clear(struct hlist_head *bucket)
 	hlist_for_each_entry_safe(entry, tmp, bucket, node) {
 		hlist_del(&entry->node);
 		__ping_tjetty_free_entry(&entry->kref);
+		kfree(entry);
 	}
 }
 
 static struct ubmgr_ping_tjetty_entry *
-ping_tjetty_get(struct ubmgr_ping_ctx *ctx, union ubcore_eid *dst_eid)
+ping_tjetty_find_or_create(struct ubmgr_ping_ctx *ctx,
+			   union ubcore_eid *dst_eid, uint32_t remote_id)
 {
 	uint32_t hash = __ping_tjetty_hash_fn(dst_eid);
 	struct hlist_head *bucket = &ctx->tjetty_hlist[hash];
@@ -142,7 +145,7 @@ ping_tjetty_get(struct ubmgr_ping_ctx *ctx, union ubcore_eid *dst_eid)
 	unsigned long flag;
 
 	spin_lock_irqsave(&ctx->tjetty_lock, flag);
-	entry = __ping_tjetty_find(bucket, dst_eid);
+	entry = __ping_tjetty_find(bucket, dst_eid, remote_id);
 	spin_unlock_irqrestore(&ctx->tjetty_lock, flag);
 
 	if (!IS_ERR_OR_NULL(entry)) {
@@ -152,7 +155,7 @@ ping_tjetty_get(struct ubmgr_ping_ctx *ctx, union ubcore_eid *dst_eid)
 	}
 
 	entry = __ping_tjetty_new_entry(ctx->jetty->ub_dev, dst_eid,
-					ctx->jetty->jetty_cfg.eid_index);
+					ctx->jetty->jetty_cfg.eid_index, remote_id);
 	if (IS_ERR_OR_NULL(entry)) {
 		ubcore_log_err("Failed to import tjetty. eid " EID_FMT "\n",
 			       EID_ARGS(*dst_eid));
@@ -160,13 +163,14 @@ ping_tjetty_get(struct ubmgr_ping_ctx *ctx, union ubcore_eid *dst_eid)
 	}
 
 	spin_lock_irqsave(&ctx->tjetty_lock, flag);
-	entry_added = __ping_tjetty_add(bucket, dst_eid, entry);
+	entry_added = __ping_tjetty_add(bucket, dst_eid, entry, remote_id);
 	spin_unlock_irqrestore(&ctx->tjetty_lock, flag);
 
 	if (entry_added != entry) {
 		ubcore_log_info("Tjetty already imported. deid:" EID_FMT ".\n",
 				EID_ARGS(*dst_eid));
 		__ping_tjetty_free_entry(&entry->kref);
+		kfree(entry);
 		return entry_added;
 	}
 
@@ -174,20 +178,17 @@ ping_tjetty_get(struct ubmgr_ping_ctx *ctx, union ubcore_eid *dst_eid)
 }
 
 static void ping_tjetty_put(struct ubmgr_ping_ctx *ctx,
-			    union ubcore_eid *dst_eid)
+			    struct ubmgr_ping_tjetty_entry *entry)
 {
-	uint32_t hash = __ping_tjetty_hash_fn(dst_eid);
-	struct hlist_head *bucket = &ctx->tjetty_hlist[hash];
-	struct ubmgr_ping_tjetty_entry *entry;
 	unsigned long flag;
 
 	spin_lock_irqsave(&ctx->tjetty_lock, flag);
-	entry = __ping_tjetty_find(bucket, dst_eid);
-	spin_unlock_irqrestore(&ctx->tjetty_lock, flag);
-	if (IS_ERR_OR_NULL(entry))
-		return;
-
-	kref_put(&entry->kref, __ping_tjetty_free_entry);
+	if (kref_put(&entry->kref, __ping_tjetty_free_entry)) {
+		hlist_del(&entry->node);
+		spin_unlock_irqrestore(&ctx->tjetty_lock, flag);
+		kfree(entry);
+	} else
+		spin_unlock_irqrestore(&ctx->tjetty_lock, flag);
 }
 
 static void ping_tjetty_clear(struct ubmgr_ping_ctx *ctx)
@@ -207,6 +208,11 @@ struct ubmgr_ping_work {
 	struct work_struct work;
 	struct ubcore_jfc *jfc;
 	struct ubmgr_ping_ctx *ctx;
+};
+
+struct ubmgr_ping_resp_ctx {
+	struct ubmgr_ping_tjetty_entry *entry;
+	uint64_t sge_addr;
 };
 
 static void ping_refill_recv_wr(struct ubmgr_ping_ctx *ctx, uint64_t addr)
@@ -242,12 +248,21 @@ static void ping_wq_on_recved(struct ubmgr_ping_ctx *ctx, struct ubcore_cr *cr)
 
 	struct ubmgr_ping_tjetty_entry *entry;
 
-	entry = ping_tjetty_get(ctx, &cr->remote_id.eid);
+	entry = ping_tjetty_find_or_create(ctx, &cr->remote_id.eid, cr->remote_id.id);
 	if (IS_ERR_OR_NULL(entry)) {
 		ubcore_log_err("Failed to get tjetty for remote_id\n");
 		goto refill;
 	}
-	entry->tjetty->cfg.id.id = cr->remote_id.id;
+
+	struct ubmgr_ping_resp_ctx *resp_ctx =
+		kzalloc(sizeof(struct ubmgr_ping_resp_ctx), GFP_KERNEL);
+
+	if (resp_ctx == NULL) {
+		ping_tjetty_put(ctx, entry);
+		goto refill;
+	}
+	resp_ctx->entry = entry;
+	resp_ctx->sge_addr = cr->user_ctx;
 
 	struct ubcore_sge sge = {
 		.addr = cr->user_ctx,
@@ -257,7 +272,7 @@ static void ping_wq_on_recved(struct ubmgr_ping_ctx *ctx, struct ubcore_cr *cr)
 	struct ubcore_jfs_wr wr = {
 		.opcode = UBCORE_OPC_SEND_IMM,
 		.flag.bs.complete_enable = 1,
-		.user_ctx = sge.addr,
+		.user_ctx = (uint64_t)resp_ctx,
 		.tjetty = entry->tjetty,
 		.send.src.sge = &sge,
 		.send.src.num_sge = 1,
@@ -268,12 +283,10 @@ static void ping_wq_on_recved(struct ubmgr_ping_ctx *ctx, struct ubcore_cr *cr)
 
 	ret = ubcore_post_jetty_send_wr(ctx->jetty, &wr, &bad_wr);
 	if (ret != 0) {
-		ping_tjetty_put(ctx, &cr->remote_id.eid);
+		ping_tjetty_put(ctx, entry);
 		ubcore_log_err("Fail to post send wr, ret:%d\n", ret);
 		goto refill;
 	}
-
-	ping_tjetty_put(ctx, &cr->remote_id.eid);
 	return;
 
 refill:
@@ -286,8 +299,11 @@ static void ping_wq_on_sended(struct ubmgr_ping_ctx *ctx, struct ubcore_cr *cr)
 		ubcore_log_err("Tx status error. status %d, comp_len %u.\n",
 			       cr->status, cr->completion_len);
 
-	ping_tjetty_put(ctx, &cr->remote_id.eid);
-	ping_refill_recv_wr(ctx, cr->user_ctx);
+	struct ubmgr_ping_resp_ctx *resp_ctx = (struct ubmgr_ping_resp_ctx *)cr->user_ctx;
+
+	ping_tjetty_put(ctx, resp_ctx->entry);
+	ping_refill_recv_wr(ctx, resp_ctx->sge_addr);
+	kfree(resp_ctx);
 }
 
 static void ping_recv_work_handler(struct work_struct *w)
