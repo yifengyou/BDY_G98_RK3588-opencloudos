@@ -331,9 +331,154 @@ uburma_delete_jfs_batch_fill_spec_out(void *arg_addr,
 	     arg->out.bad_jfs_index);
 }
 
-static void
-uburma_create_jfr_fill_spec_in(void *arg_addr,
-			       struct uburma_cmd_spec *spec)
+static void uburma_alloc_jfs_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_alloc_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFS_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ALLOC_JFS_IN_FLAG, arg->in.flag);
+	SPEC(s++, ALLOC_JFS_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, ALLOC_JFS_IN_PRIORITY, arg->in.priority);
+	SPEC(s++, ALLOC_JFS_IN_MAX_SGE, arg->in.max_sge);
+	SPEC(s++, ALLOC_JFS_IN_MAX_RSGE, arg->in.max_rsge);
+	SPEC(s++, ALLOC_JFS_IN_MAX_INLINE_DATA, arg->in.max_inline_data);
+	SPEC(s++, ALLOC_JFS_IN_RNR_RETRY, arg->in.rnr_retry);
+	SPEC(s++, ALLOC_JFS_IN_ERR_TIMEOUT, arg->in.err_timeout);
+	SPEC(s++, ALLOC_JFS_IN_JFC_ID, arg->in.jfc_id);
+	SPEC(s++, ALLOC_JFS_IN_JFC_HANDLE, arg->in.jfc_handle);
+	SPEC(s++, ALLOC_JFS_IN_URMA_JFS, arg->in.urma_jfs);
+	SPEC(s++, ALLOC_JFS_IN_UDATA, arg->udata);
+}
+
+static void uburma_alloc_jfs_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+
+	struct uburma_cmd_alloc_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFS_OUT_ID, arg->out.id);
+	SPEC(s++, ALLOC_JFS_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ALLOC_JFS_OUT_MAX_SGE, arg->out.max_sge);
+	SPEC(s++, ALLOC_JFS_OUT_MAX_RSGE, arg->out.max_rsge);
+	SPEC(s++, ALLOC_JFS_OUT_MAX_INLINE_DATA, arg->out.max_inline_data);
+	SPEC(s++, ALLOC_JFS_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ALLOC_JFS_OUT_UDATA, arg->udata);
+}
+
+static void uburma_free_jfs_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFS_IN_HANDLE, arg->in.handle);
+	SPEC(s++, FREE_JFS_IN_UDATA, arg->udata);
+}
+
+static void uburma_free_jfs_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFS_OUT_ASYNC_EVENTS_REPORTED, arg->out.async_events_reported);
+	SPEC(s++, FREE_JFS_OUT_UDATA, arg->udata);
+}
+
+static void uburma_set_jfs_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfs_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFS_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, SET_JFS_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, SET_JFS_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, SET_JFS_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, SET_JFS_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_set_jfs_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfs_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFS_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_get_jfs_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfs_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFS_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, GET_JFS_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, GET_JFS_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, GET_JFS_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, GET_JFS_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_get_jfs_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfs_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFS_OPT_OUT_BUF, arg->out.buf);
+	SPEC(s++, GET_JFS_OPT_OUT_LEN, arg->out.len);
+	SPEC(s++, GET_JFS_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_active_jfs_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFS_IN_HANDLE, arg->in.handle);
+	SPEC(s++, ACTIVE_JFS_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ACTIVE_JFS_IN_FLAG, arg->in.flag);
+	SPEC(s++, ACTIVE_JFS_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, ACTIVE_JFS_IN_PRIORITY, arg->in.priority);
+	SPEC(s++, ACTIVE_JFS_IN_MAX_SGE, arg->in.max_sge);
+	SPEC(s++, ACTIVE_JFS_IN_MAX_RSGE, arg->in.max_rsge);
+	SPEC(s++, ACTIVE_JFS_IN_MAX_INLINE_DATA, arg->in.max_inline_data);
+	SPEC(s++, ACTIVE_JFS_IN_RNR_RETRY, arg->in.rnr_retry);
+	SPEC(s++, ACTIVE_JFS_IN_ERR_TIMEOUT, arg->in.err_timeout);
+	SPEC(s++, ACTIVE_JFS_IN_JFC_ID, arg->in.jfc_id);
+	SPEC(s++, ACTIVE_JFS_IN_JFC_HANDLE, arg->in.jfc_handle);
+	SPEC(s++, ACTIVE_JFS_IN_JFS_OPT, arg->in.jfs_opt);
+	SPEC(s++, ACTIVE_JFS_IN_UDATA, arg->udata);
+}
+
+static void uburma_active_jfs_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFS_OUT_ID, arg->out.id);
+	SPEC(s++, ACTIVE_JFS_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ACTIVE_JFS_OUT_MAX_SGE, arg->out.max_sge);
+	SPEC(s++, ACTIVE_JFS_OUT_MAX_RSGE, arg->out.max_rsge);
+	SPEC(s++, ACTIVE_JFS_OUT_MAX_INLINE_DATA, arg->out.max_inline_data);
+	SPEC(s++, ACTIVE_JFS_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ACTIVE_JFS_OUT_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfs_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFS_IN_HANDLE, arg->in.handle);
+	SPEC(s++, DEACTIVE_JFS_IN_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfs_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfs *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFS_OUT_UDATA, arg->udata);
+}
+
+static void uburma_create_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
 {
 	struct uburma_cmd_create_jfr *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
@@ -463,9 +608,145 @@ uburma_delete_jfr_batch_fill_spec_out(void *arg_addr,
 	     arg->out.bad_jfr_index);
 }
 
-static void
-uburma_create_jfc_fill_spec_in(void *arg_addr,
-			       struct uburma_cmd_spec *spec)
+static void uburma_alloc_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_alloc_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFR_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ALLOC_JFR_IN_FLAG, arg->in.flag);
+	SPEC(s++, ALLOC_JFR_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, ALLOC_JFR_IN_MAX_SGE, arg->in.max_sge);
+	SPEC(s++, ALLOC_JFR_IN_MIN_RNR_TIMER, arg->in.min_rnr_timer);
+	SPEC(s++, ALLOC_JFR_IN_JFC_ID, arg->in.jfc_id);
+	SPEC(s++, ALLOC_JFR_IN_JFC_HANDLE, arg->in.jfc_handle);
+	SPEC(s++, ALLOC_JFR_IN_TOKEN, arg->in.token);
+	SPEC(s++, ALLOC_JFR_IN_ID, arg->in.id);
+	SPEC(s++, ALLOC_JFR_IN_URMA_JFR, arg->in.urma_jfr);
+	SPEC(s++, ALLOC_JFR_IN_UDATA, arg->udata);
+}
+
+static void uburma_alloc_jfr_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+
+	struct uburma_cmd_alloc_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFR_OUT_ID, arg->out.id);
+	SPEC(s++, ALLOC_JFR_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ALLOC_JFR_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ALLOC_JFR_OUT_MAX_SGE, arg->out.max_sge);
+	SPEC(s++, ALLOC_JFR_OUT_UDATA, arg->udata);
+}
+
+static void uburma_free_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFR_IN_HANDLE, arg->in.handle);
+	SPEC(s++, FREE_JFR_IN_UDATA, arg->udata);
+}
+
+static void uburma_free_jfr_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFR_OUT_ASYNC_EVENTS_REPORTED, arg->out.async_events_reported);
+	SPEC(s++, FREE_JFR_OUT_UDATA, arg->udata);
+}
+
+static void uburma_set_jfr_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfr_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFR_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, SET_JFR_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, SET_JFR_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, SET_JFR_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, SET_JFR_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_set_jfr_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfr_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFR_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_get_jfr_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfr_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFR_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, GET_JFR_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, GET_JFR_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, GET_JFR_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, GET_JFR_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_get_jfr_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfr_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFR_OPT_OUT_BUF, arg->out.buf);
+	SPEC(s++, GET_JFR_OPT_OUT_LEN, arg->out.len);
+	SPEC(s++, GET_JFR_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_active_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFR_IN_HANDLE, arg->in.handle);
+	SPEC(s++, ACTIVE_JFR_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ACTIVE_JFR_IN_FLAG, arg->in.flag);
+	SPEC(s++, ACTIVE_JFR_IN_TRANS_MODE, arg->in.trans_mode);
+	SPEC(s++, ACTIVE_JFR_IN_MAX_SGE, arg->in.max_sge);
+	SPEC(s++, ACTIVE_JFR_IN_MIN_RNR_TIMER, arg->in.min_rnr_timer);
+	SPEC(s++, ACTIVE_JFR_IN_JFC_ID, arg->in.jfc_id);
+	SPEC(s++, ACTIVE_JFR_IN_JFC_HANDLE, arg->in.jfc_handle);
+	SPEC(s++, ACTIVE_JFR_IN_TOKEN, arg->in.token_value);
+	SPEC(s++, ACTIVE_JFR_IN_JFR_OPT, arg->in.urma_jfr_opt);
+	SPEC(s++, ACTIVE_JFR_IN_UDATA, arg->udata);
+}
+
+static void uburma_active_jfr_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFR_OUT_ID, arg->out.id);
+	SPEC(s++, ACTIVE_JFR_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ACTIVE_JFR_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ACTIVE_JFR_OUT_MAX_SGE, arg->out.max_sge);
+	SPEC(s++, ACTIVE_JFR_OUT_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFR_IN_HANDLE, arg->in.handle);
+	SPEC(s++, DEACTIVE_JFR_IN_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfr_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfr *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFR_OUT_UDATA, arg->udata);
+}
+
+static void uburma_create_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
 {
 	struct uburma_cmd_create_jfc *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
@@ -540,9 +821,92 @@ uburma_delete_jfc_fill_spec_out(void *arg_addr,
 	     arg->out.async_events_reported);
 }
 
-static void
-uburma_delete_jfc_batch_fill_spec_in(void *arg_addr,
-				     struct uburma_cmd_spec *spec)
+static void uburma_alloc_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_alloc_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFC_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ALLOC_JFC_IN_FLAG, arg->in.flag);
+	SPEC(s++, ALLOC_JFC_IN_JFCE_FD, arg->in.jfce_fd);
+	SPEC(s++, ALLOC_JFC_IN_URMA_JFC, arg->in.urma_jfc);
+	SPEC(s++, ALLOC_JFC_IN_CEQN, arg->in.ceqn);
+	SPEC(s++, ALLOC_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_alloc_jfc_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+
+	struct uburma_cmd_alloc_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JFC_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ALLOC_JFC_OUT_ID, arg->out.id);
+	SPEC(s++, ALLOC_JFC_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ALLOC_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_free_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFC_IN_HANDLE, arg->in.handle);
+	SPEC(s++, FREE_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_free_jfc_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JFC_OUT_COMP_EVENTS_REPORTED, arg->out.comp_events_reported);
+	SPEC(s++, FREE_JFC_OUT_ASYNC_EVENTS_REPORTED, arg->out.async_events_reported);
+	SPEC(s++, FREE_JFC_OUT_UDATA, arg->udata);
+}
+static void uburma_set_jfc_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfc_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFC_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, SET_JFC_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, SET_JFC_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, SET_JFC_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, SET_JFC_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_set_jfc_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jfc_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JFC_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_get_jfc_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfc_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFC_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, GET_JFC_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, GET_JFC_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, GET_JFC_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, GET_JFC_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_get_jfc_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfc_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFC_OPT_OUT_BUF, arg->out.buf);
+	SPEC(s++, GET_JFC_OPT_OUT_LEN, arg->out.len);
+	SPEC(s++, GET_JFC_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_delete_jfc_batch_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
 {
 	struct uburma_cmd_delete_jfc_batch *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
@@ -566,9 +930,48 @@ uburma_delete_jfc_batch_fill_spec_out(void *arg_addr,
 	     arg->out.bad_jfc_index);
 }
 
-static void
-uburma_create_jfce_fill_spec_out(void *arg_addr,
-				 struct uburma_cmd_spec *spec)
+static void uburma_active_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFC_IN_HANDLE, arg->in.handle);
+	SPEC(s++, ACTIVE_JFC_IN_DEPTH, arg->in.depth);
+	SPEC(s++, ACTIVE_JFC_IN_FLAG, arg->in.flag);
+	SPEC(s++, ACTIVE_JFC_IN_CEQN, arg->in.ceqn);
+	SPEC(s++, ACTIVE_JFC_IN_JFC_OPT, arg->in.urma_jfc_opt);
+	SPEC(s++, ACTIVE_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_active_jfc_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JFC_OUT_ID, arg->out.id);
+	SPEC(s++, ACTIVE_JFC_OUT_DEPTH, arg->out.depth);
+	SPEC(s++, ACTIVE_JFC_OUT_HANDLE, arg->out.handle);
+	SPEC(s++, ACTIVE_JFC_OUT_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFC_IN_HANDLE, arg->in.handle);
+	SPEC(s++, DEACTIVE_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jfc_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jfc *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JFC_IN_UDATA, arg->udata);
+}
+
+static void uburma_create_jfce_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
 {
 	struct uburma_cmd_create_jfce *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
@@ -1415,9 +1818,123 @@ uburma_set_tp_attr_fill_spec_out(void *arg_addr,
 	SPEC(s++, SET_TP_ATTR_OUT_UDATA, arg->udata);
 }
 
-static void
-uburma_get_tp_attr_fill_spec_in(void *arg_addr,
-				struct uburma_cmd_spec *spec)
+static void uburma_alloc_jetty_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_alloc_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JETTY_IN_CFG, arg->create_jetty);
+}
+
+static void uburma_alloc_jetty_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_alloc_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ALLOC_JETTY_OUT_CFG, arg->create_jetty);
+}
+
+static void uburma_free_jetty_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JETTY_IN_HANDLE, arg->in.handle);
+	SPEC(s++, FREE_JETTY_IN_UDATA, arg->udata);
+}
+
+static void uburma_free_jetty_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_free_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, FREE_JETTY_OUT_ASYNC_EVENTS_REPORTED, arg->out.async_events_reported);
+	SPEC(s++, FREE_JETTY_OUT_UDATA, arg->udata);
+}
+
+static void uburma_set_jetty_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jetty_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JETTY_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, SET_JETTY_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, SET_JETTY_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, SET_JETTY_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, SET_JETTY_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_set_jetty_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_set_jetty_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, SET_JETTY_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_get_jetty_opt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jetty_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JETTY_OPT_IN_HANDLE, arg->in.handle);
+	SPEC(s++, GET_JETTY_OPT_IN_OPT, arg->in.opt);
+	SPEC(s++, GET_JETTY_OPT_IN_BUF, arg->in.buf);
+	SPEC(s++, GET_JETTY_OPT_IN_LEN, arg->in.len);
+	SPEC(s++, GET_JETTY_OPT_IN_UDATA, arg->udata);
+}
+
+static void uburma_get_jetty_opt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jetty_opt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JETTY_OPT_OUT_BUF, arg->out.buf);
+	SPEC(s++, GET_JETTY_OPT_OUT_LEN, arg->out.len);
+	SPEC(s++, GET_JETTY_OPT_OUT_UDATA, arg->udata);
+}
+
+static void uburma_active_jetty_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JETTY_IN_FLAG, arg->in.flag);
+	SPEC(s++, ACTIVE_JETTY_IN_HANDLE, arg->in.handle);
+	SPEC(s++, ACTIVE_JETTY_IN_SEND_JFC_HANDLE, arg->in.send_jfc_handle);
+	SPEC(s++, ACTIVE_JETTY_IN_RECV_JFC_HANDLE, arg->in.recv_jfc_handle);
+	SPEC(s++, ACTIVE_JETTY_IN_URMA_JETTY, arg->in.urma_jetty);
+	SPEC(s++, ACTIVE_JETTY_IN_JETTY_OPT, arg->in.jetty_opt);
+	SPEC(s++, ACTIVE_JETTY_IN_UDATA, arg->udata);
+}
+
+static void uburma_active_jetty_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_active_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, ACTIVE_JETTY_OUT_JETTY_ID, arg->out.jetty_id);
+	SPEC(s++, ACTIVE_JETTY_OUT_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jetty_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JETTY_IN_HANDLE, arg->in.handle);
+	SPEC(s++, DEACTIVE_JETTY_IN_UDATA, arg->udata);
+}
+
+static void uburma_deactive_jetty_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_deactive_jetty *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, DEACTIVE_JETTY_OUT_UDATA, arg->udata);
+}
+
+static void uburma_get_tp_attr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
 {
 	struct uburma_cmd_get_tp_attr *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
@@ -1801,6 +2318,105 @@ static struct uburma_tlv_handler g_tlv_handler[] = {
 	[UBURMA_CMD_GET_DMAC] = {
 		uburma_get_dmac_fill_spec_in, GET_DMAC_IN_NUM,
 		uburma_get_dmac_fill_spec_out, GET_DMAC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ALLOC_JFC] = {
+		uburma_alloc_jfc_fill_spec_in, ALLOC_JFC_IN_NUM,
+		uburma_alloc_jfc_fill_spec_out, ALLOC_JFC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_FREE_JFC] = {
+		uburma_free_jfc_fill_spec_in, FREE_JFC_IN_NUM,
+		uburma_free_jfc_fill_spec_out, FREE_JFC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_SET_JFC_OPT] = {
+		uburma_set_jfc_opt_fill_spec_in, SET_JFC_OPT_IN_NUM,
+		uburma_set_jfc_opt_fill_spec_out, SET_JFC_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_JFC_OPT] = {
+		uburma_get_jfc_opt_fill_spec_in, GET_JFC_OPT_IN_NUM,
+		uburma_get_jfc_opt_fill_spec_out, GET_JFC_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ACTIVE_JFC] = {
+		uburma_active_jfc_fill_spec_in, ACTIVE_JFC_IN_NUM,
+		uburma_active_jfc_fill_spec_out, ACTIVE_JFC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_DEACTIVE_JFC] = {
+		uburma_deactive_jfc_fill_spec_in, DEACTIVE_JFC_IN_NUM,
+		uburma_deactive_jfc_fill_spec_out, DEACTIVE_JFC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ALLOC_JFR] = {
+		uburma_alloc_jfr_fill_spec_in, ALLOC_JFR_IN_NUM,
+		uburma_alloc_jfr_fill_spec_out, ALLOC_JFR_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_FREE_JFR] = {
+		uburma_free_jfr_fill_spec_in, FREE_JFR_IN_NUM,
+		uburma_free_jfr_fill_spec_out, FREE_JFR_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_SET_JFR_OPT] = {
+		uburma_set_jfr_opt_fill_spec_in, SET_JFR_OPT_IN_NUM,
+		uburma_set_jfr_opt_fill_spec_out, SET_JFR_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_JFR_OPT] = {
+		uburma_get_jfr_opt_fill_spec_in, GET_JFR_OPT_IN_NUM,
+		uburma_get_jfr_opt_fill_spec_out, GET_JFR_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ACTIVE_JFR] = {
+		uburma_active_jfr_fill_spec_in, ACTIVE_JFR_IN_NUM,
+		uburma_active_jfr_fill_spec_out, ACTIVE_JFR_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_DEACTIVE_JFR] = {
+		uburma_deactive_jfr_fill_spec_in, DEACTIVE_JFR_IN_NUM,
+		uburma_deactive_jfr_fill_spec_out, DEACTIVE_JFR_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ALLOC_JFS] = {
+		uburma_alloc_jfs_fill_spec_in, ALLOC_JFS_IN_NUM,
+		uburma_alloc_jfs_fill_spec_out, ALLOC_JFS_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_FREE_JFS] = {
+		uburma_free_jfs_fill_spec_in, FREE_JFS_IN_NUM,
+		uburma_free_jfs_fill_spec_out, FREE_JFS_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_SET_JFS_OPT] = {
+		uburma_set_jfs_opt_fill_spec_in, SET_JFS_OPT_IN_NUM,
+		uburma_set_jfs_opt_fill_spec_out, SET_JFS_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_JFS_OPT] = {
+		uburma_get_jfs_opt_fill_spec_in, GET_JFS_OPT_IN_NUM,
+		uburma_get_jfs_opt_fill_spec_out, GET_JFS_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ACTIVE_JFS] = {
+		uburma_active_jfs_fill_spec_in, ACTIVE_JFS_IN_NUM,
+		uburma_active_jfs_fill_spec_out, ACTIVE_JFS_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_DEACTIVE_JFS] = {
+		uburma_deactive_jfs_fill_spec_in, DEACTIVE_JFS_IN_NUM,
+		uburma_deactive_jfs_fill_spec_out, DEACTIVE_JFS_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ALLOC_JETTY] = {
+		uburma_alloc_jetty_fill_spec_in, ALLOC_JETTY_IN_NUM,
+		uburma_alloc_jetty_fill_spec_out, ALLOC_JETTY_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_FREE_JETTY] = {
+		uburma_free_jetty_fill_spec_in, FREE_JETTY_IN_NUM,
+		uburma_free_jetty_fill_spec_out, FREE_JETTY_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_SET_JETTY_OPT] = {
+		uburma_set_jetty_opt_fill_spec_in, SET_JETTY_OPT_IN_NUM,
+		uburma_set_jetty_opt_fill_spec_out,
+		SET_JETTY_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_JETTY_OPT] = {
+		uburma_get_jetty_opt_fill_spec_in, GET_JETTY_OPT_IN_NUM,
+		uburma_get_jetty_opt_fill_spec_out,
+		GET_JETTY_OPT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_ACTIVE_JETTY] = {
+		uburma_active_jetty_fill_spec_in, ACTIVE_JETTY_IN_NUM,
+		uburma_active_jetty_fill_spec_out, ACTIVE_JETTY_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_DEACTIVE_JETTY] = {
+		uburma_deactive_jetty_fill_spec_in, DEACTIVE_JETTY_IN_NUM,
+		uburma_deactive_jetty_fill_spec_out,
+		DEACTIVE_JETTY_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
 	},
 };
 

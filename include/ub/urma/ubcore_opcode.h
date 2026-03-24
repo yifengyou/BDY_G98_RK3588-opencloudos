@@ -115,4 +115,66 @@ enum ubcore_slice {
 	UBCORE_SLICE_256K = 1 << 18
 };
 
+/* JFS Options */
+#define UBCORE_JFS_OPT            (0x0000)
+#define UBCORE_JFS_DEPTH          (0x0001)
+#define UBCORE_JFS_FLAG           (0x0002)
+#define UBCORE_JFS_TRANS_MODE     (0x0003)
+#define UBCORE_JFS_PRIORITY       (0x0004)
+#define UBCORE_JFS_MAX_SGE        (0x0005)
+#define UBCORE_JFS_MAX_RSGE       (0x0006)
+#define UBCORE_JFS_MAX_INLINE_DATA (0x0007)
+#define UBCORE_JFS_RNR_RETRY      (0x0008)
+#define UBCORE_JFS_ERR_TIMEOUT    (0x0009)
+#define UBCORE_JFS_BIND_JFC       (0x000a)
+#define UBCORE_JFS_USER_CTX       (0x000b)
+#define UBCORE_JFS_SQE_BASE_ADDR  (0x000c)
+#define UBCORE_JFS_ID             (0x000d)
+#define UBCORE_JFS_DB_ADDR        (0x000e)
+#define UBCORE_JFS_DB_STATUS      (0x000f)
+#define UBCORE_JFS_PI             (0x0010)
+#define UBCORE_JFS_PI_TYPE        (0x0011)
+#define UBCORE_JFS_CI             (0x0012)
+
+/* JFR Options */
+#define UBCORE_JFR_OPT            (0x1000)
+#define UBCORE_JFR_DEPTH          (0x1001)
+#define UBCORE_JFR_FLAG           (0x1002)
+#define UBCORE_JFR_TRANS_MODE     (0x1003)
+#define UBCORE_JFR_MAX_SGE        (0x1004)
+#define UBCORE_JFR_MIN_RNR_TIMER  (0x1005)
+#define UBCORE_JFR_BIND_JFC       (0x1006)
+#define UBCORE_JFR_TOKEN_VALUE    (0x1007)
+#define UBCORE_JFR_USER_CTX       (0x1008)
+#define UBCORE_JFR_RQE_BASE_ADDR  (0x1009)
+#define UBCORE_JFR_ID             (0x100a)
+#define UBCORE_JFR_DB_ADDR        (0x100b)
+#define UBCORE_JFR_DB_STATUS      (0x100c)
+#define UBCORE_JFR_PI             (0x100d)
+#define UBCORE_JFR_PI_TYPE        (0x100e)
+#define UBCORE_JFR_CI             (0x100f)
+
+/* JFC Options */
+#define UBCORE_JFC_OPT            (0x2000)
+#define UBCORE_JFC_DEPTH          (0x2001)
+#define UBCORE_JFC_CEQN           (0x2002)
+#define UBCORE_JFC_FLAG           (0x2003)
+#define UBCORE_JFC_BIND_JFCE      (0x2004)
+#define UBCORE_JFC_USER_CTX       (0x2005)
+#define UBCORE_JFC_CQE_BASE_ADDR  (0x2006)
+#define UBCORE_JFC_ID             (0x2007)
+#define UBCORE_JFC_DB_ADDR        (0x2008)
+#define UBCORE_JFC_DB_STATUS      (0x2009)
+#define UBCORE_JFC_PI             (0x200a)
+#define UBCORE_JFC_PI_TYPE        (0x200b)
+#define UBCORE_JFC_CI             (0x200c)
+
+/* JETTY Options */
+#define UBCORE_JETTY_OPT          (0x3000)
+#define UBCORE_JETTY_ID           (0x3001)
+#define UBCORE_JETTY_FLAG         (0x3002)
+#define UBCORE_JETTY_BIND_JFR     (0x3003)
+#define UBCORE_JETTY_BIND_RX_JFC  (0x3004)
+#define UBCORE_JETTY_BIND_JTG     (0x3005)
+
 #endif

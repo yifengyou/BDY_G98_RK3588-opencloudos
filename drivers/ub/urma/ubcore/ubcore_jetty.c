@@ -28,6 +28,202 @@
 #include "ubcore_tp_table.h"
 #include "ubcore_vtp.h"
 #include "ubcore_device.h"
+#include "ubcore_opt.h"
+
+const struct ubcore_opt_map_t g_ubcore_jfc_opt_table[] = {
+	/* opt, mask, target, offset, size */
+	/* ---- CFG ---- */
+	{ UBCORE_JFC_DEPTH,         UBCORE_CFG_MASK,     TARGET_CFG,
+		offsetof(struct ubcore_jfc_cfg, depth),        4 },
+
+	{ UBCORE_JFC_CEQN,          UBCORE_CFG_MASK,      TARGET_CFG,
+		offsetof(struct ubcore_jfc_cfg, ceqn),         4 },
+
+	{ UBCORE_JFC_FLAG,          UBCORE_CFG_MASK,      TARGET_CFG,
+		offsetof(struct ubcore_jfc_cfg, flag),         4 },
+
+	{ UBCORE_JFC_BIND_JFCE,     UBCORE_CFG_MASK,      TARGET_CFG,
+		offsetof(struct ubcore_jfc_cfg, jfc_context),   8 },
+
+	{ UBCORE_JFC_USER_CTX,      UBCORE_CFG_MASK,      TARGET_NO_STORE, 0, 8},
+	/* ---- OPT ---- */
+	{ UBCORE_JFC_CQE_BASE_ADDR, UBCORE_JFC_CQE_BASE_ADDR_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_cqe_base_addr), 8 },
+
+	{ UBCORE_JFC_ID,            UBCORE_JFC_ID_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_id),   4 },
+
+	{ UBCORE_JFC_DB_ADDR,       UBCORE_JFC_DB_ADDR_MASK,   TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_db_addr), 8 },
+
+	{ UBCORE_JFC_DB_STATUS,     UBCORE_JFC_DB_STATUS_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_db_status), 1 },
+
+	{ UBCORE_JFC_PI,            UBCORE_JFC_PI_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_pi),   2 },
+
+	{ UBCORE_JFC_PI_TYPE,       UBCORE_JFC_PI_TYPE_MASK,   TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_pi_type), 2 },
+
+	{ UBCORE_JFC_CI,            UBCORE_JFC_CI_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfc_opt, urma_jfc_ci),   2 },
+};
+
+const size_t g_ubcore_jfc_opt_map_count = ARRAY_SIZE(g_ubcore_jfc_opt_table);
+
+const struct ubcore_opt_map_t g_ubcore_jfr_opt_table[] = {
+	/* opt, mask, target, offset, size */
+
+	{ UBCORE_JFR_DEPTH,         UBCORE_CFG_MASK,     TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, depth),        4 },
+
+	{ UBCORE_JFR_FLAG,          UBCORE_CFG_MASK,      TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, flag),         4 },
+
+	{ UBCORE_JFR_TRANS_MODE,    UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, trans_mode),         4 },
+
+	{ UBCORE_JFR_MAX_SGE,       UBCORE_CFG_MASK,  TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, max_sge),     1 },
+
+	{ UBCORE_JFR_MIN_RNR_TIMER, UBCORE_CFG_MASK,  TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, min_rnr_timer),     1 },
+
+	{ UBCORE_JFR_BIND_JFC,      UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, jfc), 8 },
+
+	{ UBCORE_JFR_TOKEN_VALUE,   UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jfr_cfg, token_value), 4 },
+
+	{ UBCORE_JFR_USER_CTX,      UBCORE_CFG_MASK, TARGET_NO_STORE, 0, 8},
+	/* ---- OPT ---- */
+
+	{ UBCORE_JFR_RQE_BASE_ADDR, UBCORE_JFR_RQE_BASE_ADDR_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_rqe_base_addr), 8 },
+
+	{ UBCORE_JFR_ID,            UBCORE_JFR_ID_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_id),   4 },
+
+	{ UBCORE_JFR_DB_ADDR,       UBCORE_JFR_DB_ADDR_MASK,   TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_db_addr), 8 },
+
+	{ UBCORE_JFR_DB_STATUS,     UBCORE_JFR_DB_STATUS_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_db_status), 1 },
+
+	{ UBCORE_JFR_PI,            UBCORE_JFR_PI_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_pi),   2 },
+
+	{ UBCORE_JFR_PI_TYPE,       UBCORE_JFR_PI_TYPE_MASK,   TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_pi_type), 2 },
+
+	{ UBCORE_JFR_CI,            UBCORE_JFR_CI_MASK,        TARGET_OPT,
+		offsetof(struct ubcore_jfr_opt, urma_jfr_ci),   2 },
+};
+const size_t g_ubcore_jfr_opt_map_count = ARRAY_SIZE(g_ubcore_jfr_opt_table);
+
+const struct ubcore_opt_map_t g_ubcore_jfs_opt_table[] = {
+	/* opt, mask, target, offset, size */
+	{ UBCORE_JFS_DEPTH,         UBCORE_CFG_MASK,     TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, depth),        4 },
+
+	{ UBCORE_JFS_FLAG,          UBCORE_CFG_MASK,      TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, flag),         4 },
+
+	{ UBCORE_JFS_TRANS_MODE,    UBCORE_CFG_MASK, TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, trans_mode),         4 },
+
+	{ UBCORE_JFS_PRIORITY,    UBCORE_CFG_MASK, TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, priority),         1 },
+
+	{ UBCORE_JFS_MAX_SGE,       UBCORE_CFG_MASK,  TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, max_sge),     1 },
+
+	{ UBCORE_JFS_MAX_RSGE,       UBCORE_CFG_MASK,  TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, max_rsge),     1 },
+
+	{ UBCORE_JFS_MAX_INLINE_DATA,       UBCORE_CFG_MASK,  TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, max_inline_data),     4 },
+
+	{ UBCORE_JFS_RNR_RETRY,       UBCORE_CFG_MASK,  TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, rnr_retry),     1 },
+
+	{ UBCORE_JFS_ERR_TIMEOUT,       UBCORE_CFG_MASK,  TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, err_timeout),     1 },
+
+	{ UBCORE_JFS_BIND_JFC,      UBCORE_CFG_MASK, TARGET_CFG,
+	  offsetof(struct ubcore_jfs_cfg, jfc), 8 },
+
+	{ UBCORE_JFS_USER_CTX,      UBCORE_CFG_MASK, TARGET_NO_STORE, 0, 0},
+	/* ---- OPT ---- */
+	{ UBCORE_JFS_SQE_BASE_ADDR, UBCORE_JFS_SQE_BASE_ADDR_MASK, TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_sqe_base_addr), 8 },
+
+	{ UBCORE_JFS_ID,            UBCORE_JFS_ID_MASK,        TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_id),   4 },
+
+	{ UBCORE_JFS_DB_ADDR,       UBCORE_JFS_DB_ADDR_MASK,   TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_db_addr), 8 },
+
+	{ UBCORE_JFS_DB_STATUS,     UBCORE_JFS_DB_STATUS_MASK, TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_db_status), 1 },
+
+	{ UBCORE_JFS_PI,            UBCORE_JFS_PI_MASK,        TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_pi),   2 },
+
+	{ UBCORE_JFS_PI_TYPE,       UBCORE_JFS_PI_TYPE_MASK,   TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_pi_type), 2 },
+
+	{ UBCORE_JFS_CI,            UBCORE_JFS_CI_MASK,        TARGET_OPT,
+	  offsetof(struct ubcore_jfs_opt, urma_jfs_ci),   2 },
+};
+const size_t g_ubcore_jfs_opt_map_count = ARRAY_SIZE(g_ubcore_jfs_opt_table);
+
+const struct ubcore_opt_map_t g_ubcore_jetty_opt_table[] = {
+	/* opt, mask, target, offset, size */
+	{ UBCORE_JETTY_ID,       UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, id), 4 },
+	{ UBCORE_JETTY_FLAG,     UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, flag), 4 },
+	{ UBCORE_JETTY_BIND_RX_JFC, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, recv_jfc), 8 },
+	{ UBCORE_JETTY_BIND_JFR, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, jfr), 8 },
+	{ UBCORE_JETTY_BIND_JTG, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, jetty_grp), 8 },
+	{ UBCORE_JFS_DEPTH,      UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, jfs_depth), 4 },
+	{ UBCORE_JFS_TRANS_MODE, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, trans_mode), 4 },
+	{ UBCORE_JFS_PRIORITY,   UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, priority), 1 },
+	{ UBCORE_JFS_MAX_SGE,    UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, max_send_sge), 1 },
+	{ UBCORE_JFS_MAX_RSGE,   UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, max_send_rsge), 1 },
+	{ UBCORE_JFS_MAX_INLINE_DATA, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, max_inline_data), 4 },
+	{ UBCORE_JFS_RNR_RETRY, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, rnr_retry), 1 },
+	{ UBCORE_JFS_ERR_TIMEOUT, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, err_timeout), 1 },
+	{ UBCORE_JFS_BIND_JFC, UBCORE_CFG_MASK, TARGET_CFG,
+		offsetof(struct ubcore_jetty_cfg, send_jfc), 8 },
+	{ UBCORE_JFS_USER_CTX, UBCORE_CFG_MASK, TARGET_NO_STORE, 0, 0},
+	{ UBCORE_JFS_SQE_BASE_ADDR, UBCORE_JFS_SQE_BASE_ADDR_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_sqe_base_addr), 8 },
+	{ UBCORE_JFS_DB_ADDR, UBCORE_JFS_DB_ADDR_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_db_addr), 8 },
+	{ UBCORE_JFS_DB_STATUS, UBCORE_JFS_DB_STATUS_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_db_status), 1 },
+	{ UBCORE_JFS_PI, UBCORE_JFS_PI_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_pi), 2 },
+	{ UBCORE_JFS_PI_TYPE, UBCORE_JFS_PI_TYPE_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_pi_type), 2 },
+	{ UBCORE_JFS_CI, UBCORE_JFS_CI_MASK, TARGET_OPT,
+		offsetof(struct ubcore_jfs_opt, urma_jfs_ci), 2 },
+};
+
+const size_t g_ubcore_jetty_opt_map_count = ARRAY_SIZE(g_ubcore_jetty_opt_table);
 
 static void ubcore_jfs_kref_release(struct kref *ref_cnt)
 {
@@ -137,6 +333,52 @@ static int check_and_fill_jfc_attr(struct ubcore_jfc_cfg *cfg,
 	return 0;
 }
 
+int ubcore_check_opt_valid(void *opt_mask_addr, const struct ubcore_opt_map_t *table,
+	size_t table_cnt, uint64_t opt, uint32_t len)
+{
+	size_t i;
+
+	for (i = 0; i < table_cnt; i++) {
+		if (table[i].opt == opt) {
+			if (table[i].size != len) {
+				ubcore_log_err("invalid opt len, opt is %llu", opt);
+				return -EINVAL;
+			}
+			if (table[i].tgt == TARGET_OPT && opt_mask_addr != NULL) {
+				uint64_t *mask_ptr = (uint64_t *)opt_mask_addr;
+				*mask_ptr |= table[i].mask;
+			}
+			return 0;
+		}
+	}
+	return 0;
+}
+
+int ubcore_set_options_common(const struct ubcore_opt_map_t *table,
+	size_t table_cnt, uint64_t opt, void *buf, uint32_t len,
+	void *cfg_base, void *opt_base)
+{
+	size_t i;
+	void *target_base;
+	void *field;
+
+	for (i = 0; i < table_cnt; i++) {
+		if (table[i].opt == opt) {
+			if (table[i].tgt == TARGET_OPT)
+				target_base = opt_base;
+			else if (table[i].tgt == TARGET_CFG)
+				target_base = cfg_base;
+			else
+				return 0;
+
+			field = (char *)target_base + table[i].offset;
+			memcpy(field, buf, len);
+			return 0;
+		}
+	}
+	return -EINVAL;
+}
+
 struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 				     struct ubcore_jfc_cfg *cfg,
 				     ubcore_comp_callback_t jfce_handler,
@@ -147,7 +389,7 @@ struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 	int ret;
 
 	if (!dev || !cfg || !dev->ops ||
-	    !dev->ops->create_jfc || !dev->ops->destroy_jfc)
+		!dev->ops->create_jfc || !dev->ops->destroy_jfc)
 		return ERR_PTR(-EINVAL);
 
 	jfc = dev->ops->create_jfc(dev, cfg, udata);
@@ -173,6 +415,7 @@ struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 		(void)dev->ops->destroy_jfc(jfc);
 		return ERR_PTR(ret);
 	}
+	jfc->jfc_opt.is_actived = true;
 	ubcore_log_info("[JFC CREATE] Created JFC: id: %u, dev_name: %s.",
 		jfc->id, dev->dev_name);
 	return jfc;
@@ -180,14 +423,14 @@ struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 EXPORT_SYMBOL(ubcore_create_jfc);
 
 int ubcore_modify_jfc(struct ubcore_jfc *jfc, struct ubcore_jfc_attr *attr,
-		      struct ubcore_udata *udata)
+	struct ubcore_udata *udata)
 {
 	struct ubcore_device *dev;
 	uint32_t jfc_id;
 	int ret;
 
 	if (!jfc || !attr || !jfc->ub_dev ||
-	    !jfc->ub_dev->ops || !jfc->ub_dev->ops->modify_jfc)
+		!jfc->ub_dev->ops || !jfc->ub_dev->ops->modify_jfc)
 		return -EINVAL;
 
 	jfc_id = jfc->id;
@@ -211,6 +454,11 @@ int ubcore_delete_jfc(struct ubcore_jfc *jfc)
 	if (!jfc || !jfc->ub_dev || !jfc->ub_dev->ops ||
 	    !jfc->ub_dev->ops->destroy_jfc)
 		return -EINVAL;
+
+	if (jfc->jfc_opt.is_actived == false) {
+		ubcore_log_err("Failed to delete jfc, because status is still activated.\n");
+		return -EINVAL;
+	}
 
 	if (atomic_read(&jfc->use_cnt)) {
 		ubcore_log_err("The jfc is still being used, use_cnt is %d",
@@ -283,6 +531,196 @@ int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_delete_jfc_batch);
+
+int ubcore_alloc_jfc(struct ubcore_device *dev, struct ubcore_jfc_cfg *cfg,
+	ubcore_comp_callback_t jfce_handler, ubcore_event_callback_t jfae_handler,
+	struct ubcore_jfc **jfc, struct ubcore_udata *udata)
+{
+	int ret;
+	int free_ret = 0;
+
+	if (dev == NULL || cfg == NULL || dev->ops == NULL || dev->ops->alloc_jfc == NULL ||
+		dev->ops->free_jfc == NULL || jfc == NULL)
+		return -EINVAL;
+
+	ret = dev->ops->alloc_jfc(dev, cfg, jfc, udata);
+	if (ret != 0) {
+		ubcore_log_err("failed to alloc jfc, ret is %d.\n", ret);
+		return ret;
+	}
+
+	if (check_and_fill_jfc_attr(&(*jfc)->jfc_cfg, cfg) != 0) {
+		free_ret = dev->ops->free_jfc(*jfc, udata);
+		ubcore_log_err("jfc cfg is not qualified,ret is %d.\n", free_ret);
+		return -EINVAL;
+	}
+	(*jfc)->jfce_handler = jfce_handler;
+	(*jfc)->jfae_handler = jfae_handler;
+	(*jfc)->ub_dev = dev;
+	(*jfc)->uctx = ubcore_get_uctx(udata);
+	atomic_set(&(*jfc)->use_cnt, 0);
+
+	ret = ubcore_hash_table_find_add(&dev->ht[UBCORE_HT_JFC], &(*jfc)->hnode, (*jfc)->id);
+	if (ret != 0) {
+		free_ret = dev->ops->free_jfc(*jfc, udata);
+		ubcore_log_err("Failed to add jfc to hash_table,ret is %d.\n", free_ret);
+		return ret;
+	}
+	(*jfc)->jfc_opt.is_actived = false;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_alloc_jfc);
+
+
+int ubcore_free_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	uint32_t jfc_id;
+	int ret;
+
+	if (jfc == NULL || jfc->ub_dev == NULL || jfc->ub_dev->ops == NULL ||
+		jfc->ub_dev->ops->free_jfc == NULL)
+		return -EINVAL;
+
+	if (jfc->jfc_opt.is_actived == true) {
+		ubcore_log_err("The jfc is still activated, please deactivate first.");
+		return -EINVAL;
+	}
+
+	if (atomic_read(&jfc->use_cnt)) {
+		ubcore_log_err("The jfc is still being used, use_cnt is %d",
+			atomic_read(&jfc->use_cnt));
+		return -EBUSY;
+	}
+
+	jfc_id = jfc->id;
+	dev = jfc->ub_dev;
+	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFC], &jfc->hnode);
+	ret = dev->ops->free_jfc(jfc, udata);
+	if (ret != 0)
+		ubcore_log_err("failed to free jfc, ret: %d, jfc_id:%u.\n",
+		    ret, jfc_id);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_free_jfc);
+
+int ubcore_set_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	uint32_t jfc_id;
+	int ret;
+
+	if (jfc == NULL || opt == 0 || jfc->ub_dev == NULL || jfc->ub_dev->ops == NULL ||
+		jfc->ub_dev->ops->set_jfc_opt == NULL || buf == NULL)
+		return -EINVAL;
+	jfc_id = jfc->id;
+	dev = jfc->ub_dev;
+	ret = ubcore_check_opt_valid(&jfc->jfc_opt.jfc_opt_mask.value, g_ubcore_jfc_opt_table,
+		g_ubcore_jfc_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+	ret = dev->ops->set_jfc_opt(jfc, opt, buf, len, udata); /*no need copy_from_user */
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to set_jfc_opt, jfc_id:%u, ret is %d.\n", jfc_id, ret);
+		return ret;
+	}
+
+	ret = ubcore_set_options_common(g_ubcore_jfc_opt_table,
+		g_ubcore_jfc_opt_map_count, opt, buf, len,
+		&jfc->jfc_cfg, &jfc->jfc_opt);
+	if (ret != 0)
+		ubcore_log_err("failed to set opt, jfc_id:%u, ret is %d.\n", jfc_id, ret);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_set_jfc_opt);
+
+int ubcore_get_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	uint32_t jfc_id;
+	int ret;
+
+	if (jfc == NULL || opt == 0 || jfc->ub_dev == NULL || jfc->ub_dev->ops == NULL ||
+		jfc->ub_dev->ops->get_jfc_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	ret = ubcore_check_opt_valid(&jfc->jfc_opt.jfc_opt_mask.value, g_ubcore_jfc_opt_table,
+		g_ubcore_jfc_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+
+	jfc_id = jfc->id;
+	dev = jfc->ub_dev;
+	ret = dev->ops->get_jfc_opt(jfc, opt, buf, len, udata);
+	if (ret != 0)
+		ubcore_log_err("UBEP failed to get_jfc_opt, jfc_id:%u.\n", jfc_id);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_get_jfc_opt);
+
+
+int ubcore_active_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	uint32_t jfc_id;
+	int ret;
+
+	if (jfc == NULL || jfc->ub_dev == NULL || jfc->ub_dev->ops == NULL ||
+		jfc->ub_dev->ops->active_jfc == NULL)
+		return -EINVAL;
+
+	if (jfc->jfc_opt.is_actived) {
+		ubcore_log_err("jfc has activated.\n");
+		return -EINVAL;
+	}
+
+	jfc_id = jfc->id;
+	dev = jfc->ub_dev;
+
+	ret = dev->ops->active_jfc(jfc, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to active jfc, jfc_id:%u.\n", jfc_id);
+		return ret;
+	}
+	jfc->jfc_opt.is_actived = true;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_active_jfc);
+
+int ubcore_deactive_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	uint32_t jfc_id;
+	int ret;
+
+	if (jfc == NULL || jfc->ub_dev == NULL || jfc->ub_dev->ops == NULL ||
+		jfc->ub_dev->ops->deactive_jfc == NULL)
+		return -EINVAL;
+
+	if (!jfc->jfc_opt.is_actived) {
+		ubcore_log_err("jfc has deactived.\n");
+		return -EINVAL;
+	}
+
+	jfc_id = jfc->id;
+	dev = jfc->ub_dev;
+
+	ret = dev->ops->deactive_jfc(jfc, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to deactivate jfc, jfc_id:%u.\n", jfc_id);
+		return ret;
+	}
+	jfc->jfc_opt.is_actived = false;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_deactive_jfc);
 
 static int check_jfs_cfg(struct ubcore_device *dev, struct ubcore_jfs_cfg *cfg)
 {
@@ -388,6 +826,7 @@ struct ubcore_jfs *ubcore_create_jfs(struct ubcore_device *dev,
 	}
 	ubcore_log_info("[JFS CREATE] Created JFS: id: %u, dev_name: %s, eid_idx: %u.\n",
 		jfs->jfs_id.id, dev->dev_name, jfs->jfs_cfg.eid_index);
+	jfs->jfs_opt.is_actived = true;
 	atomic_inc(&cfg->jfc->use_cnt);
 	return jfs;
 }
@@ -401,7 +840,7 @@ int ubcore_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	int ret;
 
 	if (!jfs || !attr || !jfs->ub_dev ||
-	    !jfs->ub_dev->ops || !jfs->ub_dev->ops->modify_jfs)
+		!jfs->ub_dev->ops || !jfs->ub_dev->ops->modify_jfs)
 		return -EINVAL;
 
 	jfs_id = jfs->jfs_id.id;
@@ -409,7 +848,7 @@ int ubcore_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	ret = dev->ops->modify_jfs(jfs, attr, udata);
 	if (ret != 0)
 		ubcore_log_err("UBEP failed to modify jfs, jfs_id:%u.\n",
-			       jfs_id);
+				   jfs_id);
 
 	return ret;
 }
@@ -423,7 +862,7 @@ int ubcore_query_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_cfg *cfg,
 	int ret;
 
 	if (!jfs || !cfg || !attr || !jfs->ub_dev ||
-	    !jfs->ub_dev->ops || !jfs->ub_dev->ops->query_jfs)
+		!jfs->ub_dev->ops || !jfs->ub_dev->ops->query_jfs)
 		return -EINVAL;
 
 	jfs_id = jfs->jfs_id.id;
@@ -431,7 +870,7 @@ int ubcore_query_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_cfg *cfg,
 	ret = dev->ops->query_jfs(jfs, cfg, attr);
 	if (ret != 0)
 		ubcore_log_err("UBEP failed to query jfs, jfs_id:%u.\n",
-			       jfs_id);
+				   jfs_id);
 
 	return ret;
 }
@@ -447,6 +886,11 @@ int ubcore_delete_jfs(struct ubcore_jfs *jfs)
 	if (!jfs || !jfs->ub_dev || !jfs->ub_dev->ops ||
 	    !jfs->ub_dev->ops->destroy_jfs)
 		return -EINVAL;
+
+	if (jfs->jfs_opt.is_actived == false) {
+		ubcore_log_err("Failed to delete jfs, because status is still activated");
+		return -EINVAL;
+	}
 
 	jfc = jfs->jfs_cfg.jfc;
 	jfs_id = jfs->jfs_id.id;
@@ -492,8 +936,8 @@ int ubcore_delete_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num,
 	for (i = 0; i < jfs_num; ++i) {
 		jfs = jfs_arr[i];
 		if (!jfs || !jfs->ub_dev ||
-		    !jfs->ub_dev->ops ||
-		    !jfs->ub_dev->ops->destroy_jfs_batch) {
+			!jfs->ub_dev->ops ||
+			!jfs->ub_dev->ops->destroy_jfs_batch) {
 			*bad_jfs_index = 0;
 			ubcore_log_err("Invalid parameter, index is %d", i);
 			return -EINVAL;
@@ -584,11 +1028,223 @@ static int check_and_fill_jfr_attr(struct ubcore_jfr_cfg *cfg,
 	return 0;
 }
 
+int ubcore_alloc_jfs(struct ubcore_device *dev, struct ubcore_jfs_cfg *cfg,
+	ubcore_event_callback_t jfae_handler, struct ubcore_jfs **jfs, struct ubcore_udata *udata)
+{
+	int ret;
+	int free_ret = 0;
+
+	if (dev == NULL || cfg == NULL || dev->ops == NULL || dev->ops->alloc_jfs == NULL ||
+		dev->ops->free_jfs == NULL || jfs == NULL || cfg->jfc == NULL ||
+		!ubcore_eid_valid(dev, cfg->eid_index, udata))
+		return -EINVAL;
+
+	if (((uint16_t)cfg->trans_mode & dev->attr.dev_cap.trans_mode) == 0) {
+		ubcore_log_err("jfs cfg is not supported.\n");
+		return -EINVAL;
+	}
+	if (check_jfs_cfg(dev, cfg) != 0)
+		return -EINVAL;
+
+	ret = dev->ops->alloc_jfs(dev, cfg, jfs, udata);
+	if (ret != 0) {
+		ubcore_log_err("failed to alloc jfs, ret is %d.\n", ret);
+		return ret;
+	}
+
+	if (check_and_fill_jfs_attr(&(*jfs)->jfs_cfg, cfg) != 0) {
+		free_ret = dev->ops->free_jfs(*jfs, udata);
+		ubcore_log_err("jfs cfg is not qualified, ret is %d.\n", free_ret);
+		return -EINVAL;
+	}
+	(*jfs)->ub_dev = dev;
+	(*jfs)->uctx = ubcore_get_uctx(udata);
+	(*jfs)->jfae_handler = jfae_handler;
+	(*jfs)->jfs_id.eid = dev->eid_table.eid_entries[cfg->eid_index].eid;
+
+	atomic_set(&(*jfs)->use_cnt, 0);
+	kref_init(&(*jfs)->ref_cnt);
+	init_completion(&(*jfs)->comp);
+
+	ret = ubcore_hash_table_find_add(&dev->ht[UBCORE_HT_JFS],
+			&(*jfs)->hnode, (*jfs)->jfs_id.id);
+	if (ret != 0) {
+		ubcore_destroy_tptable(&(*jfs)->tptable);
+		(void)dev->ops->free_jfs(*jfs, udata);
+		ubcore_log_err("Failed to add jfs.\n");
+		return ret;
+	}
+	(*jfs)->jfs_opt.is_actived = false;
+	atomic_inc(&cfg->jfc->use_cnt);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_alloc_jfs);
+
+int ubcore_free_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	struct ubcore_jfc *jfc;
+	uint32_t jfs_id;
+	int ret;
+
+	if (jfs == NULL || jfs->ub_dev == NULL || jfs->ub_dev->ops == NULL ||
+		jfs->ub_dev->ops->free_jfs == NULL)
+		return -EINVAL;
+
+	if (jfs->jfs_opt.is_actived == true) {
+		ubcore_log_err("The jfs is still activated , please deactivate first.");
+		return -EINVAL;
+	}
+	if (atomic_read(&jfs->use_cnt)) {
+		ubcore_log_err("The jfs is still being used, use_cnt is %d",
+			atomic_read(&jfs->use_cnt));
+		return -EBUSY;
+	}
+
+	dev = jfs->ub_dev;
+	jfs_id = jfs->jfs_opt.urma_jfs_id;
+	jfc = jfs->jfs_cfg.jfc;
+	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFS], &jfs->hnode);
+	ret = dev->ops->free_jfs(jfs, udata);
+	if (ret != 0)
+		ubcore_log_err("failed to free jfs, ret: %d, jfs_id: %u.\n", ret, jfs_id);
+
+	atomic_dec(&jfc->use_cnt);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_free_jfs);
+
+int ubcore_set_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	struct ubcore_jfc *old_jfc;
+	struct ubcore_jfc *new_jfc;
+	int ret;
+
+	if (jfs == NULL || opt == 0 || jfs->ub_dev == NULL || jfs->ub_dev->ops == NULL ||
+		jfs->ub_dev->ops->set_jfs_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	ret = ubcore_check_opt_valid(&jfs->jfs_opt.jfs_opt_mask.value, g_ubcore_jfs_opt_table,
+		g_ubcore_jfs_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+
+	dev = jfs->ub_dev;
+	ret = dev->ops->set_jfs_opt(jfs, opt, buf, len, udata); /* need copy_from_user */
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to set_jfs_opt, jfs_id:%u, ret is %d.\n",
+			jfs->jfs_opt.urma_jfs_id, ret);
+		return ret;
+	}
+	if (opt == UBCORE_JFS_BIND_JFC) {
+		old_jfc = jfs->jfs_cfg.jfc;
+		if (old_jfc)
+			atomic_dec(&old_jfc->use_cnt);
+	}
+
+	ret = ubcore_set_options_common(g_ubcore_jfs_opt_table, g_ubcore_jfs_opt_map_count,
+		opt, buf, len, &jfs->jfs_cfg, &jfs->jfs_opt);
+	if (ret != 0) {
+		if (opt == UBCORE_JFS_BIND_JFC && old_jfc)
+			atomic_inc(&old_jfc->use_cnt);
+
+		ubcore_log_err("failed to set opt of ubcore_jfs, jfs_id:%u, ret is %d.\n",
+			jfs->jfs_opt.urma_jfs_id, ret);
+		return ret;
+	}
+
+	if (opt == UBCORE_JFS_BIND_JFC) {
+		new_jfc = jfs->jfs_cfg.jfc;
+		if (new_jfc)
+			atomic_inc(&new_jfc->use_cnt);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_set_jfs_opt);
+
+int ubcore_get_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfs == NULL || opt == 0 || jfs->ub_dev == NULL || jfs->ub_dev->ops == NULL ||
+		jfs->ub_dev->ops->get_jfs_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	dev = jfs->ub_dev;
+	ret = dev->ops->get_jfs_opt(jfs, opt, buf, len, udata);
+	if (ret != 0)
+		ubcore_log_err("UBEP failed to get_jfs_opt, jfs_id:%u.\n",
+			jfs->jfs_opt.urma_jfs_id);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_get_jfs_opt);
+
+int ubcore_active_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfs == NULL || jfs->ub_dev == NULL || jfs->ub_dev->ops == NULL ||
+		jfs->ub_dev->ops->active_jfs == NULL)
+		return -EINVAL;
+
+	if (jfs->jfs_opt.is_actived) {
+		ubcore_log_err("jfs has activated.\n");
+		return -EINVAL;
+	}
+
+	dev = jfs->ub_dev;
+	ret = dev->ops->active_jfs(jfs, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to active jfs, ret: %d, jfs_id: %u.\n",
+			ret, jfs->jfs_opt.urma_jfs_id);
+		return ret;
+	}
+	jfs->jfs_opt.is_actived = true;
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_active_jfs);
+
+int ubcore_deactive_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfs == NULL || jfs->ub_dev == NULL || jfs->ub_dev->ops == NULL ||
+		jfs->ub_dev->ops->deactive_jfs == NULL)
+		return -EINVAL;
+
+	if (!jfs->jfs_opt.is_actived) {
+		ubcore_log_err("jfs has deactived.\n");
+		return -EINVAL;
+	}
+
+	dev = jfs->ub_dev;
+	ret = dev->ops->deactive_jfs(jfs, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to deactivate jfs, jfs_id:%u.\n",
+			jfs->jfs_opt.urma_jfs_id);
+		return ret;
+	}
+	jfs->jfs_opt.is_actived = false;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_deactive_jfs);
+
 static int ubcore_check_jfr_cfg(struct ubcore_jfr_cfg *cfg)
 {
 	if (ubcore_check_trans_mode_valid(cfg->trans_mode) != true) {
 		ubcore_log_err("Invalid parameter, trans_mode: %d.\n",
-			       (int)cfg->trans_mode);
+				   (int)cfg->trans_mode);
 		return -EINVAL;
 	}
 
@@ -596,9 +1252,9 @@ static int ubcore_check_jfr_cfg(struct ubcore_jfr_cfg *cfg)
 }
 
 struct ubcore_jfr *ubcore_create_jfr(struct ubcore_device *dev,
-				     struct ubcore_jfr_cfg *cfg,
-				     ubcore_event_callback_t jfae_handler,
-				     struct ubcore_udata *udata)
+					 struct ubcore_jfr_cfg *cfg,
+					 ubcore_event_callback_t jfae_handler,
+					 struct ubcore_udata *udata)
 {
 	struct ubcore_jfr *jfr;
 	int ret;
@@ -637,8 +1293,9 @@ struct ubcore_jfr *ubcore_create_jfr(struct ubcore_device *dev,
 		(void)dev->ops->destroy_jfr(jfr);
 		return ERR_PTR(ret);
 	}
-	ubcore_log_info("[JFR CREATE] Created JFC: id: %u,device: %s,eid_idx: %u.\n",
+	ubcore_log_info("[JFR CREATE] Created JFR: id: %u,device: %s,eid_idx: %u.\n",
 		jfr->jfr_id.id, dev->dev_name, jfr->jfr_cfg.eid_index);
+	jfr->jfr_opt.is_actived = true;
 	atomic_inc(&cfg->jfc->use_cnt);
 	return jfr;
 }
@@ -652,7 +1309,7 @@ int ubcore_modify_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_attr *attr,
 	int ret;
 
 	if (!jfr || !attr || !jfr->ub_dev ||
-	    !jfr->ub_dev->ops || !jfr->ub_dev->ops->modify_jfr)
+		!jfr->ub_dev->ops || !jfr->ub_dev->ops->modify_jfr)
 		return -EINVAL;
 
 	jfr_id = jfr->jfr_id.id;
@@ -660,14 +1317,14 @@ int ubcore_modify_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_attr *attr,
 	ret = dev->ops->modify_jfr(jfr, attr, udata);
 	if (ret != 0)
 		ubcore_log_err("UBEP failed to modify jfr, jfr_id:%u.\n",
-			       jfr_id);
+				   jfr_id);
 
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_modify_jfr);
 
 int ubcore_query_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_cfg *cfg,
-		     struct ubcore_jfr_attr *attr)
+			 struct ubcore_jfr_attr *attr)
 {
 	struct ubcore_device *dev;
 	uint32_t jfr_id;
@@ -696,8 +1353,13 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr)
 	int ret;
 
 	if (!jfr || !jfr->ub_dev || !jfr->ub_dev->ops ||
-	    !jfr->ub_dev->ops->destroy_jfr)
+		!jfr->ub_dev->ops->destroy_jfr)
 		return -EINVAL;
+
+	if (jfr->jfr_opt.is_actived == false) {
+		ubcore_log_err("Failed to delete jfr, because status is still activated");
+		return -EINVAL;
+	}
 
 	if (atomic_read(&jfr->use_cnt)) {
 		ubcore_log_err("The jfr is still being used");
@@ -755,8 +1417,8 @@ int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
 		jfr = jfr_arr[i];
 		jfc[i] = jfr->jfr_cfg.jfc;
 		if (!jfr || !jfr->ub_dev ||
-		    !jfr->ub_dev->ops ||
-		    !jfr->ub_dev->ops->destroy_jfr_batch) {
+			!jfr->ub_dev->ops ||
+			!jfr->ub_dev->ops->destroy_jfr_batch) {
 			*bad_jfr_index = 0;
 			ubcore_log_err("Invalid parameter, index is %d", i);
 			return -EINVAL;
@@ -1041,6 +1703,224 @@ static int check_jetty_cfg(struct ubcore_device *dev,
 	return 0;
 }
 
+int ubcore_alloc_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg,
+	ubcore_event_callback_t jfae_handler, struct ubcore_jfr **jfr, struct ubcore_udata *udata)
+{
+	int ret;
+	int free_ret = 0;
+
+	if (dev == NULL || cfg == NULL || dev->ops == NULL || dev->ops->alloc_jfr == NULL ||
+		dev->ops->free_jfr == NULL || jfr == NULL || cfg->jfc == NULL ||
+		!ubcore_eid_valid(dev, cfg->eid_index, udata))
+		return -EINVAL;
+
+	if (ubcore_check_jfr_cfg(cfg) != 0)
+		return -EINVAL;
+
+	ret = dev->ops->alloc_jfr(dev, cfg, jfr, udata);
+	if (ret != 0) {
+		ubcore_log_err("failed to alloc jfr, ret is %d.\n", ret);
+		return ret;
+	}
+
+	if (check_and_fill_jfr_attr(&(*jfr)->jfr_cfg, cfg) != 0) {
+		free_ret = dev->ops->free_jfr(*jfr, udata);
+		ubcore_log_err("jfr cfg is not qualified,ret is %d.\n", free_ret);
+		return -EINVAL;
+	}
+	(*jfr)->ub_dev = dev;
+	(*jfr)->uctx = ubcore_get_uctx(udata);
+	(*jfr)->jfae_handler = jfae_handler;
+	(*jfr)->jfr_id.eid = dev->eid_table.eid_entries[cfg->eid_index].eid;
+
+	atomic_set(&(*jfr)->use_cnt, 0);
+	kref_init(&(*jfr)->ref_cnt);
+	init_completion(&(*jfr)->comp);
+
+	ret = ubcore_hash_table_find_add(&dev->ht[UBCORE_HT_JFR],
+			&(*jfr)->hnode, (*jfr)->jfr_id.id);
+	if (ret != 0) {
+		ubcore_destroy_tptable(&(*jfr)->tptable);
+		(void)dev->ops->free_jfr(*jfr, udata);
+		ubcore_log_err("Failed to add jfr.\n");
+		return ret;
+	}
+
+	(*jfr)->jfr_opt.is_actived = false;
+	atomic_inc(&cfg->jfc->use_cnt);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_alloc_jfr);
+
+int ubcore_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	struct ubcore_jfc *jfc;
+	uint32_t jfr_id;
+	int ret;
+
+	if (jfr == NULL || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
+		jfr->ub_dev->ops->free_jfr == NULL)
+		return -EINVAL;
+
+	if (jfr->jfr_opt.is_actived == true) {
+		ubcore_log_err("The jfc is still activated.");
+		return -EINVAL;
+	}
+
+	if (atomic_read(&jfr->use_cnt)) {
+		ubcore_log_err("The jfr is still being used, use_cnt is %d",
+			atomic_read(&jfr->use_cnt));
+		return -EBUSY;
+	}
+
+	dev = jfr->ub_dev;
+	jfr_id = jfr->jfr_opt.urma_jfr_id;
+	jfc = jfr->jfr_cfg.jfc;
+	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFR], &jfr->hnode);
+	ret = dev->ops->free_jfr(jfr, udata);
+	if (ret != 0)
+		ubcore_log_err("failed to free jfr, ret: %d.\n", ret);
+
+	atomic_dec(&jfc->use_cnt);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_free_jfr);
+
+int ubcore_set_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	struct ubcore_jfc *old_jfc;
+	struct ubcore_jfc *new_jfc;
+	int ret;
+
+	if (jfr == NULL || opt == 0 || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
+		jfr->ub_dev->ops->set_jfr_opt == NULL || buf == NULL)
+		return -EINVAL;
+	ret = ubcore_check_opt_valid(&jfr->jfr_opt.jfr_opt_mask.value,
+		g_ubcore_jfr_opt_table,
+		g_ubcore_jfr_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+	dev = jfr->ub_dev;
+	ret = dev->ops->set_jfr_opt(jfr, opt, buf, len, udata); /*no need copy_from_user */
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to set_jfr_opt, jfr_id:%u, ret is %d.\n",
+			jfr->jfr_opt.urma_jfr_id, ret);
+		return ret;
+	}
+
+	if (opt == UBCORE_JFS_BIND_JFC) {
+		old_jfc = jfr->jfr_cfg.jfc;
+		if (old_jfc)
+			atomic_dec(&old_jfc->use_cnt);
+	}
+	ret = ubcore_set_options_common(g_ubcore_jfr_opt_table,
+		g_ubcore_jfr_opt_map_count, opt, buf, len, &jfr->jfr_cfg,
+		&jfr->jfr_opt);
+	if (ret != 0) {
+		if (opt == UBCORE_JFS_BIND_JFC && old_jfc)
+			atomic_inc(&old_jfc->use_cnt);
+
+		ubcore_log_err("failed to set opt of ubcore_jfr, jfr_id:%u, ret is %d.\n",
+			jfr->jfr_opt.urma_jfr_id, ret);
+		return ret;
+	}
+
+	if (opt == UBCORE_JFS_BIND_JFC) {
+		new_jfc = jfr->jfr_cfg.jfc;
+		if (new_jfc)
+			atomic_inc(&new_jfc->use_cnt);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_set_jfr_opt);
+
+int ubcore_get_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfr == NULL || opt == 0 || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
+		jfr->ub_dev->ops->get_jfr_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	ret = ubcore_check_opt_valid(&jfr->jfr_opt.jfr_opt_mask.value, g_ubcore_jfr_opt_table,
+		g_ubcore_jfr_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+
+	dev = jfr->ub_dev;
+	ret = dev->ops->get_jfr_opt(jfr, opt, buf, len, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to get_jfr_opt, jfr_id:%u, ret %d.\n",
+			jfr->jfr_opt.urma_jfr_id, ret);
+		return ret;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_get_jfr_opt);
+
+int ubcore_active_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfr == NULL || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
+		jfr->ub_dev->ops->active_jfr == NULL)
+		return -EINVAL;
+
+	if (jfr->jfr_opt.is_actived) {
+		ubcore_log_err("jfr has activated.\n");
+		return -EINVAL;
+	}
+
+	dev = jfr->ub_dev;
+	ret = dev->ops->active_jfr(jfr, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to active jfr, jfr_id:%u.\n",
+			jfr->jfr_opt.urma_jfr_id);
+		return ret;
+	}
+	jfr->jfr_opt.is_actived = true;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_active_jfr);
+
+int ubcore_deactive_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jfr == NULL || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
+		jfr->ub_dev->ops->deactive_jfr == NULL)
+		return -EINVAL;
+
+	if (!jfr->jfr_opt.is_actived) {
+		ubcore_log_err("jfr has deactivated.\n");
+		return -EINVAL;
+	}
+
+	dev = jfr->ub_dev;
+	ret = dev->ops->deactive_jfr(jfr, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to deactivate jfr, jfr_id:%u.\n",
+			jfr->jfr_opt.urma_jfr_id);
+		return ret;
+	}
+	jfr->jfr_opt.is_actived = false;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_deactive_jfr);
+
+
 static int check_jetty_cfg_with_jetty_grp(struct ubcore_jetty_cfg *cfg)
 {
 	if (!cfg->jetty_grp)
@@ -1250,7 +2130,7 @@ struct ubcore_jetty *ubcore_create_jetty(struct ubcore_device *dev,
 	init_completion(&jetty->comp);
 
 	ret = ubcore_hash_table_find_add(&dev->ht[UBCORE_HT_JETTY],
-					 &jetty->hnode, jetty->jetty_id.id);
+		&jetty->hnode, jetty->jetty_id.id);
 	if (ret != 0) {
 		ubcore_log_err("Failed to add jetty.\n");
 		goto destroy_tptable;
@@ -1264,6 +2144,7 @@ struct ubcore_jetty *ubcore_create_jetty(struct ubcore_device *dev,
 
 	ubcore_log_info("[JETTY CREATE] Created JETTY: id: %u, dev_name: %s, eid_idx: %u.\n",
 		jetty->jetty_cfg.id, dev->dev_name, jetty->jetty_cfg.eid_index);
+	jetty->jetty_opt.is_actived = true;
 	return jetty;
 destroy_tptable:
 	ubcore_destroy_tptable(&jetty->tptable);
@@ -1353,6 +2234,11 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 
 	if (ubcore_check_jetty_attr(jetty) != 0)
 		return -EINVAL;
+
+	if (jetty->jetty_opt.is_actived == false) {
+		ubcore_log_err("Failed to delete deactivated jetty.");
+		return -EINVAL;
+	}
 
 	jetty_grp = jetty->jetty_cfg.jetty_grp;
 	send_jfc = jetty->jetty_cfg.send_jfc;
@@ -2518,3 +3404,377 @@ int ubcore_unbind_jetty_async(struct ubcore_jetty *jetty, int timeout,
 }
 EXPORT_SYMBOL(ubcore_unbind_jetty_async);
 
+int ubcore_alloc_jetty(struct ubcore_device *dev, struct ubcore_jetty_cfg *cfg,
+	ubcore_event_callback_t jfae_handler,
+	struct ubcore_jetty **jetty, struct ubcore_udata *udata)
+{
+	int ret;
+
+	if (dev == NULL || cfg == NULL || dev->ops == NULL || dev->ops->alloc_jetty == NULL ||
+		dev->ops->free_jetty == NULL || !ubcore_eid_valid(dev, cfg->eid_index, udata))
+		return -EINVAL;
+
+	if (ubcore_jetty_pre_check(dev, cfg) != 0)
+		return -EINVAL;
+
+	ret = dev->ops->alloc_jetty(dev, cfg, jetty, udata);
+	if (ret != 0) {
+		ubcore_log_err("failed to alloc jetty, ret is %d.\n", ret);
+		return ret;
+	}
+
+	if (jetty == NULL || *jetty == NULL) {
+		ubcore_log_err("alloc_jetty returns success but jetty is NULL.\n");
+		return -EFAULT;
+	}
+
+	(*jetty)->ub_dev = dev;
+	if (cfg->jetty_grp != NULL &&
+		ubcore_add_jetty_to_jetty_grp((*jetty),
+			(struct ubcore_jetty_group *)cfg->jetty_grp) != 0) {
+		ubcore_log_err("jetty cfg is not qualified.\n");
+		ret = -EPERM;
+		goto destroy_jetty;
+	}
+
+	if (check_and_fill_jetty_attr(&(*jetty)->jetty_cfg, cfg) != 0) {
+		ubcore_log_err("jetty cfg is not qualified.\n");
+		ret = -EINVAL;
+		goto delete_jetty_to_grp;
+	}
+
+	(*jetty)->uctx = ubcore_get_uctx(udata);
+	(*jetty)->jfae_handler = jfae_handler;
+	(*jetty)->jetty_id.eid = dev->eid_table.eid_entries[cfg->eid_index].eid;
+	if ((*jetty)->jetty_cfg.trans_mode == UBCORE_TP_RC) {
+		(*jetty)->tptable = ubcore_create_tptable();
+		if ((*jetty)->tptable == NULL) {
+			ubcore_log_err("Failed to create tp table in the jetty.\n");
+			ret = -ENOMEM;
+			goto delete_jetty_to_grp;
+		}
+	} else {
+		(*jetty)->tptable = NULL; /* To prevent kernel-mode drivers, malloc is not empty */
+	}
+	atomic_set(&(*jetty)->use_cnt, 0);
+	kref_init(&(*jetty)->ref_cnt);
+	init_completion(&(*jetty)->comp);
+
+	ret = ubcore_hash_table_find_add(&dev->ht[UBCORE_HT_JETTY],
+		&(*jetty)->hnode, (*jetty)->jetty_id.id);
+	if (ret != 0) {
+		ubcore_log_err("Failed to add jetty.\n");
+		goto destroy_tptable;
+	}
+
+	atomic_inc(&cfg->send_jfc->use_cnt);
+	atomic_inc(&cfg->recv_jfc->use_cnt);
+
+	if (cfg->jfr)
+		atomic_inc(&cfg->jfr->use_cnt);
+
+	(*jetty)->jetty_opt.is_actived = false;
+	return ret;
+destroy_tptable:
+	ubcore_destroy_tptable(&(*jetty)->tptable);
+delete_jetty_to_grp:
+	(void)ubcore_remove_jetty_from_jetty_grp(
+		(*jetty), (struct ubcore_jetty_group *)cfg->jetty_grp);
+destroy_jetty:
+	(void)dev->ops->free_jetty(*jetty, udata);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_alloc_jetty);
+
+int ubcore_free_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata)
+{
+	struct ubcore_jetty_group *jetty_grp;
+	struct ubcore_jfc *send_jfc;
+	struct ubcore_jfc *recv_jfc;
+	struct ubcore_device *dev;
+	struct ubcore_jfr *jfr;
+	uint32_t jetty_id;
+	int ret;
+
+	if (ubcore_check_jetty_attr(jetty) != 0)
+		return -EINVAL;
+
+	if (jetty->jetty_opt.is_actived == true) {
+		ubcore_log_err("The jetty is still activated, please deactivate first.");
+		return -EINVAL;
+	}
+
+	jetty_grp = jetty->jetty_cfg.jetty_grp;
+	send_jfc = jetty->jetty_cfg.send_jfc;
+	recv_jfc = jetty->jetty_cfg.recv_jfc;
+	jfr = jetty->jetty_cfg.jfr;
+	jetty_id = jetty->jetty_id.id;
+	dev = jetty->ub_dev;
+
+	(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JETTY], &jetty->hnode);
+	ubcore_destroy_tptable(&jetty->tptable);
+
+	if (jetty->ub_dev->transport_type == UBCORE_TRANSPORT_UB && jetty->remote_jetty != NULL) {
+		mutex_lock(&jetty->remote_jetty->lock);
+		(void)ubcore_disconnect_vtp(jetty->remote_jetty->vtpn);
+		jetty->remote_jetty->vtpn = NULL;
+		mutex_unlock(&jetty->remote_jetty->lock);
+		atomic_dec(&jetty->remote_jetty->use_cnt);
+		/* The tjetty object will release remote jetty resources */
+		jetty->remote_jetty = NULL;
+		ubcore_log_warn("jetty->remote_jetty != NULL and it has been handled");
+	}
+
+	ubcore_put_jetty(jetty);
+	wait_for_completion(&jetty->comp);
+
+	if (jetty_grp != NULL) {
+		(void)ubcore_remove_jetty_from_jetty_grp(jetty, jetty_grp);
+		jetty->jetty_cfg.jetty_grp = NULL;
+	}
+	ret = dev->ops->free_jetty(jetty, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to destroy jetty, ret: %d, jetty_id:%u.\n",
+			ret, jetty_id);
+		kref_init(&jetty->ref_cnt);
+		return ret;
+	}
+
+	if (send_jfc)
+		atomic_dec(&send_jfc->use_cnt);
+	if (recv_jfc)
+		atomic_dec(&recv_jfc->use_cnt);
+	if (jfr)
+		atomic_dec(&jfr->use_cnt);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_free_jetty);
+
+static void ubcore_jetty_opt_put_old(struct ubcore_jetty *jetty, uint64_t opt)
+{
+	switch (opt) {
+	case UBCORE_JETTY_BIND_RX_JFC: {
+		struct ubcore_jfc *recv_jfc = jetty->jetty_cfg.recv_jfc;
+
+		if (recv_jfc)
+			atomic_dec(&recv_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JFR: {
+		struct ubcore_jfr *jfr = jetty->jetty_cfg.jfr;
+
+		if (jfr)
+			atomic_dec(&jfr->use_cnt);
+		break;
+	}
+	case UBCORE_JFS_BIND_JFC: {
+		struct ubcore_jfc *send_jfc = jetty->jetty_cfg.send_jfc;
+
+		if (send_jfc)
+			atomic_dec(&send_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JTG: {
+		struct ubcore_jetty_group *jetty_grp = jetty->jetty_cfg.jetty_grp;
+
+		if (jetty_grp)
+			(void)ubcore_remove_jetty_from_jetty_grp(jetty, jetty_grp);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+static void ubcore_jetty_opt_rollback_old(struct ubcore_jetty *jetty, uint64_t opt)
+{
+	switch (opt) {
+	case UBCORE_JETTY_BIND_RX_JFC: {
+		struct ubcore_jfc *recv_jfc = jetty->jetty_cfg.recv_jfc;
+
+		if (recv_jfc)
+			atomic_inc(&recv_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JFR: {
+		struct ubcore_jfr *jfr = jetty->jetty_cfg.jfr;
+
+		if (jfr)
+			atomic_inc(&jfr->use_cnt);
+		break;
+	}
+	case UBCORE_JFS_BIND_JFC: {
+		struct ubcore_jfc *send_jfc = jetty->jetty_cfg.send_jfc;
+
+		if (send_jfc)
+			atomic_inc(&send_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JTG: {
+		struct ubcore_jetty_group *jetty_grp = jetty->jetty_cfg.jetty_grp;
+
+		if (jetty_grp)
+			(void)ubcore_add_jetty_to_jetty_grp(jetty, jetty_grp);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+static void ubcore_jetty_opt_get_new(struct ubcore_jetty *jetty, uint64_t opt)
+{
+	switch (opt) {
+	case UBCORE_JETTY_BIND_RX_JFC: {
+		struct ubcore_jfc *recv_jfc = jetty->jetty_cfg.recv_jfc;
+
+		if (recv_jfc)
+			atomic_inc(&recv_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JFR: {
+		struct ubcore_jfr *jfr = jetty->jetty_cfg.jfr;
+
+		if (jfr)
+			atomic_inc(&jfr->use_cnt);
+		break;
+	}
+	case UBCORE_JFS_BIND_JFC: {
+		struct ubcore_jfc *send_jfc = jetty->jetty_cfg.send_jfc;
+
+		if (send_jfc)
+			atomic_inc(&send_jfc->use_cnt);
+		break;
+	}
+	case UBCORE_JETTY_BIND_JTG: {
+		struct ubcore_jetty_group *jetty_grp = jetty->jetty_cfg.jetty_grp;
+
+		if (jetty_grp)
+			(void)ubcore_add_jetty_to_jetty_grp(jetty, jetty_grp);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+int ubcore_set_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jetty == NULL || opt == 0 || jetty->ub_dev == NULL || jetty->ub_dev->ops == NULL ||
+		jetty->ub_dev->ops->set_jetty_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	ret = ubcore_check_opt_valid(NULL, g_ubcore_jetty_opt_table,
+		g_ubcore_jetty_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+
+	ubcore_jetty_opt_put_old(jetty, opt);
+	dev = jetty->ub_dev;
+	ret = dev->ops->set_jetty_opt(jetty, opt, buf, len, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to set_jetty_opt, jetty_id:%u, ret %d, opt %llu.\n",
+			jetty->jetty_id.id, ret, opt);
+		return ret;
+	}
+	ret = ubcore_set_options_common(g_ubcore_jetty_opt_table,
+		g_ubcore_jetty_opt_map_count, opt, buf, len,
+		&jetty->jetty_cfg, &jetty->jetty_opt.jfs_opt);
+	if (ret != 0) {
+		ubcore_log_err("ubcore_set_options_common failed, jetty_id:%u, ret %d, opt %llu.\n",
+			jetty->jetty_id.id, ret, opt);
+		ubcore_jetty_opt_rollback_old(jetty, opt);
+		return ret;
+	}
+	ubcore_jetty_opt_get_new(jetty, opt);
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_set_jetty_opt);
+
+int ubcore_get_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf, uint32_t len,
+	struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jetty == NULL || opt == 0 || jetty->ub_dev == NULL || jetty->ub_dev->ops == NULL ||
+		jetty->ub_dev->ops->get_jetty_opt == NULL || buf == NULL)
+		return -EINVAL;
+
+	ret = ubcore_check_opt_valid(NULL, g_ubcore_jetty_opt_table,
+		g_ubcore_jetty_opt_map_count, opt, len);
+	if (ret != 0) {
+		ubcore_log_err("invalid opt.\n");
+		return ret;
+	}
+
+	dev = jetty->ub_dev;
+	ret = dev->ops->get_jetty_opt(jetty, opt, buf, len, udata);
+	if (ret != 0)
+		ubcore_log_err("UBEP failed to get_jetty_opt, jetty_id:%u, ret is %d.\n",
+			jetty->jetty_id.id, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_get_jetty_opt);
+
+int ubcore_active_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jetty == NULL || jetty->ub_dev == NULL || jetty->ub_dev->ops == NULL ||
+		jetty->ub_dev->ops->active_jetty == NULL ||
+		jetty->ub_dev->ops->deactive_jetty == NULL)
+		return -EINVAL;
+
+	if (jetty->jetty_opt.is_actived) {
+		ubcore_log_err("jetty has activated.\n");
+		return -EINVAL;
+	}
+
+	dev = jetty->ub_dev;
+	ret = dev->ops->active_jetty(jetty, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to activate jetty, jetty_id:%u.\n",
+			jetty->jetty_id.id);
+		return ret;
+	}
+	jetty->jetty_opt.is_actived = true;
+
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_active_jetty);
+
+int ubcore_deactive_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata)
+{
+	struct ubcore_device *dev;
+	int ret;
+
+	if (jetty == NULL || jetty->ub_dev == NULL || jetty->ub_dev->ops == NULL ||
+		jetty->ub_dev->ops->deactive_jetty == NULL)
+		return -EINVAL;
+
+	if (!jetty->jetty_opt.is_actived) {
+		ubcore_log_err("jetty has deactived.\n");
+		return -EINVAL;
+	}
+
+	dev = jetty->ub_dev;
+	ret = dev->ops->deactive_jetty(jetty, udata);
+	if (ret != 0) {
+		ubcore_log_err("UBEP failed to deactivate jetty, jetty_id:%u.\n",
+			jetty->jetty_id.id);
+		return ret;
+	}
+	jetty->jetty_opt.is_actived = false;
+	return ret;
+}
+EXPORT_SYMBOL(ubcore_deactive_jetty);

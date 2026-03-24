@@ -1291,16 +1291,44 @@ struct ubcore_jfc_cfg {
 	void *jfc_context;
 };
 
+union ubcore_jfc_opt_mask {
+	struct {
+		uint64_t urma_jfc_cqe_base_addr : 1;
+		uint64_t urma_jfc_id : 1;
+		uint64_t urma_jfc_db_addr : 1;
+		uint64_t urma_jfc_db_status : 1;
+		uint64_t urma_jfc_pi : 1;
+		uint64_t urma_jfc_pi_type : 1;
+		uint64_t urma_jfc_ci : 1;
+		uint64_t reserved : 57;
+	} bs;
+	uint64_t value;
+};
+
+struct ubcore_jfc_opt {
+	union ubcore_jfc_opt_mask jfc_opt_mask;
+	bool is_actived;
+	uint64_t urma_jfc_cqe_base_addr; /* [Optional] CQ Queue Address (VA) */
+	uint32_t urma_jfc_id;      /* [Optional] the id of jfc */
+	uint64_t urma_jfc_db_addr; /* [Optional] CQ Queue Doorbell Address (VA) */
+	uint8_t urma_jfc_db_status; /* [Optional] JFC Doorbell status, (0 invalid, 1 valid) */
+	uint16_t urma_jfc_pi;     /* [Optional] PI value of the JFC */
+	uint16_t urma_jfc_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+	uint16_t urma_jfc_ci;     /* [Optional] CI value of the JFC */
+	uint64_t reserved[UBCORE_OPT_REVERVED_SIZE];
+};
+
 struct ubcore_jfc {
 	struct ubcore_device *ub_dev;
 	struct ubcore_ucontext *uctx;
 	struct ubcore_jfc_cfg jfc_cfg;
-	uint32_t id; /* allocated by driver */
+	uint32_t id;    /* allocated by driver */
 	ubcore_comp_callback_t jfce_handler;
 	ubcore_event_callback_t jfae_handler;
 	uint64_t urma_jfc; /* user space jfc pointer */
 	struct hlist_node hnode;
 	atomic_t use_cnt;
+	struct ubcore_jfc_opt jfc_opt;
 };
 
 struct ubcore_jfs_cfg {
@@ -1318,6 +1346,34 @@ struct ubcore_jfs_cfg {
 	struct ubcore_jfc *jfc;
 };
 
+union ubcore_jfs_opt_mask {
+	struct {
+		uint64_t urma_jfs_sqe_base_addr : 1;
+		uint64_t urma_jfs_id : 1;
+		uint64_t urma_jfs_db_addr : 1;
+		uint64_t urma_jfs_db_status : 1;
+		uint64_t urma_jfs_pi : 1;
+		uint64_t urma_jfs_pi_type : 1;
+		uint64_t urma_jfs_ci : 1;
+		uint64_t reserved : 57;
+	} bs;
+	uint64_t value;
+};
+
+struct ubcore_jfs_opt {
+	union ubcore_jfs_opt_mask jfs_opt_mask;
+	bool is_actived;
+	uint64_t urma_jfs_sqe_base_addr; /* [Optional] RQ Queue Address (VA) */
+	uint32_t urma_jfs_id;     /* [Optional] the id of jfs */
+	uint64_t urma_jfs_db_addr; /* [Optional] RQ Queue Doorbell Address (VA) */
+	uint8_t urma_jfs_db_status; /* [Optional] JFS Doorbell status,
+						used for live migration (0 invalid, 1 valid) */
+	uint16_t urma_jfs_pi;     /* [Optional] PI value of the JFS */
+	uint16_t urma_jfs_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+	uint16_t urma_jfs_ci;     /* [Optional] CI value of the JFS */
+	uint64_t reserved[UBCORE_OPT_REVERVED_SIZE];
+};
+
 struct ubcore_jfs {
 	struct ubcore_device *ub_dev;
 	struct ubcore_ucontext *uctx;
@@ -1331,6 +1387,7 @@ struct ubcore_jfs {
 	struct completion comp;
 	struct ubcore_hash_table
 		 *tptable; /* Only for devices not natively supporting RM mode */
+	struct ubcore_jfs_opt jfs_opt;
 };
 
 struct ubcore_jfr_cfg {
@@ -1346,19 +1403,47 @@ struct ubcore_jfr_cfg {
 	void *jfr_context;
 };
 
+union ubcore_jfr_opt_mask {
+	struct {
+		uint64_t urma_jfr_rqe_base_addr : 1;
+		uint64_t urma_jfr_id : 1;
+		uint64_t urma_jfr_db_addr : 1;
+		uint64_t urma_jfr_db_status : 1;
+		uint64_t urma_jfr_pi : 1;
+		uint64_t urma_jfr_pi_type : 1;
+		uint64_t urma_jfr_ci : 1;
+		uint64_t reserved : 57;
+	} bs;
+	uint64_t value;
+};
+
+struct ubcore_jfr_opt {
+	union ubcore_jfr_opt_mask jfr_opt_mask;
+	bool is_actived;
+	uint64_t urma_jfr_rqe_base_addr; /* [Optional] RQ Queue Address (VA) */
+	uint32_t urma_jfr_id;     /* [Optional] the id of jfr */
+	uint64_t urma_jfr_db_addr; /* [Optional] RQ Queue Doorbell Address (VA) */
+	uint8_t urma_jfr_db_status; /* [Optional] JFR Doorbell status,
+						used for live migration (0 invalid, 1 valid) */
+	uint16_t urma_jfr_pi;     /* [Optional] PI value of the JFR */
+	uint16_t urma_jfr_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+	uint16_t urma_jfr_ci;     /* [Optional] CI value of the JFR */
+	uint64_t reserved[UBCORE_OPT_REVERVED_SIZE];
+};
+
 struct ubcore_jfr {
 	struct ubcore_device *ub_dev;
 	struct ubcore_ucontext *uctx;
 	struct ubcore_jfr_cfg jfr_cfg;
-	struct ubcore_jetty_id jfr_id; /* driver fill jfr_id->id */
+	struct ubcore_jetty_id jfr_id;  /* driver fill jfr_id->id */
 	ubcore_event_callback_t jfae_handler;
 	uint64_t urma_jfr; /* user space jfr pointer */
 	struct hlist_node hnode;
 	atomic_t use_cnt;
 	struct kref ref_cnt;
 	struct completion comp;
-	struct ubcore_hash_table
-		 *tptable; /* Only for devices not natively supporting RM mode */
+	struct ubcore_hash_table *tptable; /* Only for devices not natively supporting RM mode */
+	struct ubcore_jfr_opt jfr_opt;
 };
 
 union ubcore_jetty_flag {
@@ -1442,6 +1527,12 @@ struct ubcore_tjetty {
 	struct mutex lock;
 };
 
+struct ubcore_jetty_opt {
+	bool is_actived;
+	struct ubcore_jfs_opt jfs_opt;
+	uint64_t reserved[UBCORE_OPT_REVERVED_SIZE];
+};
+
 struct ubcore_jetty {
 	struct ubcore_device *ub_dev;
 	struct ubcore_ucontext *uctx;
@@ -1456,6 +1547,7 @@ struct ubcore_jetty {
 	struct completion comp;
 	struct ubcore_hash_table
 		 *tptable; /* Only for devices not natively supporting RM mode */
+	struct ubcore_jetty_opt jetty_opt;
 };
 
 union ubcore_jetty_grp_flag {
