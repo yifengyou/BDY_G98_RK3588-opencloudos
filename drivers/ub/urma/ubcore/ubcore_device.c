@@ -2395,8 +2395,7 @@ void ubcore_dispatch_mgmt_event(struct ubcore_mgmt_event *event)
 			"Failed to update eid table, index: %u, type: %d.\n",
 			eid_info->eid_index, event->event_type);
 
-	if (eid_info->eid_index == 0 &&
-	    ubcore_call_cm_eid_ops(event->ub_dev, event->element.eid_info,
+	if (ubcore_call_cm_eid_ops(event->ub_dev, event->element.eid_info,
 				   event->event_type) != 0)
 		ubcore_log_err("cast eid to ubcm failed.\n");
 }

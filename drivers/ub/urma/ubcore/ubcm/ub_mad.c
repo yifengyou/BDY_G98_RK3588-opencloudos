@@ -17,6 +17,7 @@
 #include "ubcore_log.h"
 #include "ub_mad_priv.h"
 #include "ubcore_log.h"
+#include "ubcore_topo_info.h"
 
 // udma jetty id starts from 1 currently
 #define WK_JETTY_ID_INITIALIZER                  \
@@ -257,6 +258,7 @@ static int ubmad_ubc_eid_ops(struct ubcore_device *dev,
 			     struct ubcore_eid_info *eid_info,
 			     enum ubcore_mgmt_event_type event_type)
 {
+	union ubcore_eid main_primary_eid = {0};
 	int ret;
 
 	mutex_lock(&g_ubc_eid_lock);
@@ -267,6 +269,21 @@ static int ubmad_ubc_eid_ops(struct ubcore_device *dev,
 			     dev->dev_name, EID_ARGS(eid_info->eid),
 			     eid_info->eid_index);
 		return -1;
+	}
+
+	ret = ubcore_get_main_primary_eid(&eid_info->eid, &main_primary_eid);
+	if (ret != 0) {
+		mutex_unlock(&g_ubc_eid_lock);
+		ubcore_log_err("Invalid eid "EID_FMT".\n", EID_ARGS(eid_info->eid));
+		return -1;
+	}
+
+	if (memcmp(&eid_info->eid, &main_primary_eid,
+		sizeof(union ubcore_eid)) != 0) {
+		mutex_unlock(&g_ubc_eid_lock);
+		ubcore_log_warn("No need to operate current eid "EID_FMT".\n",
+			EID_ARGS(eid_info->eid));
+		return 0;
 	}
 
 	ret = ubmad_ubc_eid_ops_inner(dev, eid_info, event_type);

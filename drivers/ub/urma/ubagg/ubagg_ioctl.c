@@ -1783,6 +1783,9 @@ static void print_topo_map(struct ubagg_topo_map *topo_map)
 				ubagg_log_info("------ chip_id[%d]: %u\n", iodie_idx,
 					node->agg_devs[dev_idx].ues[iodie_idx].chip_id);
 
+				ubagg_log_info("------ entity_id[%d]: %u\n", iodie_idx,
+					node->agg_devs[dev_idx].ues[iodie_idx].entity_id);
+
 				ubagg_log_info("------ primary_eid[%d]: " EID_FMT "\n", iodie_idx,
 					EID_RAW_ARGS(
 					node->agg_devs[dev_idx].ues[iodie_idx].primary_eid));

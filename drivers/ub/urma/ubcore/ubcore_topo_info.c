@@ -276,6 +276,9 @@ void ubcore_show_topo_map(struct ubcore_topo_map *topo_map)
 				ubcore_log_info("------ chip_id[%d]: %u\n", die_idx,
 					node->agg_devs[dev_idx].ues[die_idx].chip_id);
 
+				ubcore_log_info("------ entity_id[%d]: %u\n", die_idx,
+					node->agg_devs[dev_idx].ues[die_idx].entity_id);
+
 				ubcore_log_info("------ primary_eid[%d]: " EID_FMT "\n", die_idx,
 					EID_RAW_ARGS(
 						node->agg_devs[dev_idx].ues[die_idx].primary_eid));
@@ -300,7 +303,9 @@ void ubcore_show_topo_map(struct ubcore_topo_map *topo_map)
 
 static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 								const char *eid_raw,
-								union ubcore_eid *primary_eid)
+								union ubcore_eid *primary_eid,
+								uint32_t *entity_id,
+								uint32_t *chip_id)
 {
 	int iodie_id, port_id;
 
@@ -311,9 +316,11 @@ static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 				primary_eid,
 				agg_dev->ues[iodie_id].primary_eid,
 				EID_LEN);
+			*entity_id = agg_dev->ues[iodie_id].entity_id;
+			*chip_id = agg_dev->ues[iodie_id].chip_id;
 			ubcore_log_warn(
-				"find primary eid, primary eid: "EID_FMT".\n",
-				EID_ARGS(*primary_eid));
+				"find primary eid: "EID_FMT", entity_id: %u, chip_id: %u.\n",
+				EID_ARGS(*primary_eid), *entity_id, *chip_id);
 			return 0;
 		}
 
@@ -325,12 +332,14 @@ static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 					primary_eid,
 					agg_dev->ues[iodie_id].primary_eid,
 					EID_LEN);
+				*entity_id = agg_dev->ues[iodie_id].entity_id;
+				*chip_id = agg_dev->ues[iodie_id].chip_id;
 				ubcore_log_warn(
 					"find primary eid by port eid, port_eid: "EID_FMT
 					", ", EID_ARGS(*(union ubcore_eid *)eid_raw));
 				ubcore_log_warn(
-					"primary eid: "EID_FMT".\n",
-					EID_ARGS(*primary_eid));
+					"primary eid: "EID_FMT", entity_id: %u, chip_id: %u.\n",
+					EID_ARGS(*primary_eid), *entity_id, *chip_id);
 				return 0;
 			}
 		}
@@ -339,7 +348,8 @@ static int find_primary_eid_in_ues(struct ubcore_topo_agg_dev *agg_dev,
 	return -EINVAL;
 }
 
-int ubcore_get_primary_eid(union ubcore_eid *eid, union ubcore_eid *primary_eid)
+int ubcore_get_primary_eid(union ubcore_eid *eid, union ubcore_eid *primary_eid,
+	uint32_t *entity_id, uint32_t *chip_id, uint32_t *nd_id)
 {
 	int node_id, dev_id;
 	struct ubcore_topo_node *cur_node_info;
@@ -362,13 +372,108 @@ int ubcore_get_primary_eid(union ubcore_eid *eid, union ubcore_eid *primary_eid)
 			if (find_primary_eid_in_ues(
 				&cur_node_info->agg_devs[dev_id],
 				(char *)eid->raw,
-				primary_eid) == 0)
+				primary_eid, entity_id, chip_id) == 0) {
+				*nd_id = (uint32_t)node_id;
 				return 0;
+			}
 		}
 	}
 
 	ubcore_log_err("can't find primary eid\n");
 	return -EINVAL;
+}
+
+static int ubcore_get_primary_eid_array(uint32_t entity_id,
+	uint32_t chip_id, uint32_t nd_id, union ubcore_eid *eid_array)
+{
+	struct ubcore_topo_node *cur_node_info;
+	int node_id, dev_id, iodie_id;
+	struct ubcore_topo_ue *ue;
+	int eid_num = 0;
+
+	if (!g_ubcore_topo_map) {
+		ubcore_log_warn("ubcore topo map doesn't exist.\n");
+		return -1;
+	}
+
+	for (node_id = 0; node_id < g_ubcore_topo_map->node_num; node_id++) {
+		if (node_id != nd_id)
+			continue;
+		cur_node_info = g_ubcore_topo_map->topo_infos + node_id;
+		for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
+			for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
+				ue = &(cur_node_info->agg_devs[dev_id].ues[iodie_id]);
+				if (ue->entity_id == entity_id &&
+					ue->chip_id == chip_id &&
+					eid_num < ENTITY_AGG_DEV_NUM) {
+					(void)memcpy(&eid_array[eid_num],
+						ue->primary_eid,
+						sizeof(union ubcore_eid));
+					ubcore_log_info(
+						"Eid "EID_FMT", num %d, entity %u, chip %u.\n",
+						EID_ARGS(eid_array[eid_num]), eid_num,
+						entity_id, chip_id);
+					eid_num++;
+				}
+				if (eid_num >= ENTITY_AGG_DEV_NUM) {
+					ubcore_log_info("Finish to find primary eid array.\n");
+					return 0;
+				}
+			}
+		}
+	}
+
+	if (eid_num == 0) {
+		ubcore_log_err("Failed to find primary eid array.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void ubcore_get_min_eid(union ubcore_eid *eid_arr,
+	union ubcore_eid *main_primary_eid)
+{
+	union ubcore_eid empty = {0};
+	int index;
+
+	(void)memcpy(main_primary_eid, &eid_arr[0], sizeof(union ubcore_eid));
+	for (index = 1; index < ENTITY_AGG_DEV_NUM; index++) {
+		if (memcmp(&eid_arr[index], &empty, sizeof(union ubcore_eid)) == 0)
+			continue;
+		if (memcmp(main_primary_eid, &eid_arr[index], sizeof(union ubcore_eid)) > 0)
+			(void)memcpy(main_primary_eid, &eid_arr[index],
+				sizeof(union ubcore_eid));
+	}
+}
+
+int ubcore_get_main_primary_eid(union ubcore_eid *eid,
+	union ubcore_eid *main_primary_eid)
+{
+	union ubcore_eid eid_arr[ENTITY_AGG_DEV_NUM] = {0};
+	uint32_t entity_id, chip_id, node_id;
+	union ubcore_eid primary_eid = {0};
+	int ret;
+
+	ret = ubcore_get_primary_eid(eid, &primary_eid, &entity_id,
+		&chip_id, &node_id);
+	if (ret != 0) {
+		ubcore_log_err("Failed to get primary eid, ret: %d.\n", ret);
+		return ret;
+	}
+
+	ret = ubcore_get_primary_eid_array(entity_id, chip_id, node_id,
+		eid_arr);
+	if (ret != 0) {
+		ubcore_log_err("Failed to get primary eid array, ret: %d.\n", ret);
+		return ret;
+	}
+
+	ubcore_get_min_eid(eid_arr, main_primary_eid);
+
+	ubcore_log_info("Finish to get main primary eid "EID_FMT".\n",
+		EID_ARGS(*main_primary_eid));
+	return 0;
 }
 
 static struct ubcore_topo_node *

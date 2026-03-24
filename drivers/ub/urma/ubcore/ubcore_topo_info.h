@@ -21,9 +21,11 @@
 #define PORT_NUM (9)
 #define DEV_NUM (128)
 #define MAX_NODE_NUM (16)
+#define ENTITY_AGG_DEV_NUM (3) // bonding device number per entity
 
 struct ubcore_topo_ue {
 	uint32_t chip_id;
+	uint32_t entity_id;
 	char primary_eid[EID_LEN];
 	char port_eid[PORT_NUM][EID_LEN];
 };
@@ -67,8 +69,10 @@ ubcore_get_cur_topo_info(struct ubcore_topo_map *topo_map);
 int ubcore_update_topo_map(struct ubcore_topo_map *new_topo_map,
 			   struct ubcore_topo_map *old_topo_map);
 void ubcore_show_topo_map(struct ubcore_topo_map *topo_map);
-int ubcore_get_primary_eid(union ubcore_eid *eid,
-			   union ubcore_eid *primary_eid);
+int ubcore_get_primary_eid(union ubcore_eid *eid, union ubcore_eid *primary_eid,
+	uint32_t *entity_id, uint32_t *chip_id, uint32_t *nd_id);
+int ubcore_get_main_primary_eid(union ubcore_eid *eid,
+	union ubcore_eid *main_primary_eid);
 
 int ubcore_get_primary_eid_by_agg_eid(union ubcore_eid *agg_eid,
 	union ubcore_eid *primary_eid);
