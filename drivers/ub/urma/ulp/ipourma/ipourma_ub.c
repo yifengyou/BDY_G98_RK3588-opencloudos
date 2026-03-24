@@ -30,7 +30,7 @@ void ipourma_build_seg_cfg(struct ubcore_seg_cfg *cfg,
 	cfg->flag = flag;
 }
 
-STATIC int ipourma_prepare_tx_data(struct ubcore_device *urma_dev,
+static int ipourma_prepare_tx_data(struct ubcore_device *urma_dev,
 					struct ipourma_dev_priv *priv,
 					struct ipourma_tx_buf *tx_req)
 {
@@ -70,7 +70,7 @@ partial_reg_out:
 	return IPOURMA_REGISTER_SEG_FAILED;
 }
 
-STATIC int ipourma_setup_sges(struct ipourma_dev_priv *priv,
+static int ipourma_setup_sges(struct ipourma_dev_priv *priv,
 	struct ipourma_tx_buf *tx_req)
 {
 	int i, offset = 0;
@@ -91,7 +91,7 @@ STATIC int ipourma_setup_sges(struct ipourma_dev_priv *priv,
 	return (nr_frags + offset);
 }
 
-STATIC inline uint32_t hash_eids(union ubcore_eid *src_eid,
+static inline uint32_t hash_eids(union ubcore_eid *src_eid,
 				 union ubcore_eid *dst_eid,
 				 uint32_t hash_seed)
 {
@@ -105,7 +105,7 @@ STATIC inline uint32_t hash_eids(union ubcore_eid *src_eid,
 	return jhash2((const u32 *)key, num_u32, hash_seed);
 }
 
-STATIC inline void ipourma_build_tjetty_cfg(struct ubcore_tjetty_cfg *tjetty_cfg,
+static inline void ipourma_build_tjetty_cfg(struct ubcore_tjetty_cfg *tjetty_cfg,
 	union ubcore_eid *dst_eid, uint32_t jetty_id, uint32_t eid_idx, uint32_t ctp_en)
 {
 	tjetty_cfg->id.eid = *dst_eid;
@@ -117,7 +117,7 @@ STATIC inline void ipourma_build_tjetty_cfg(struct ubcore_tjetty_cfg *tjetty_cfg
 	tjetty_cfg->eid_index = eid_idx;
 }
 
-STATIC struct ubcore_tjetty *ipourma_import_jetty(struct net_device *dev,
+static struct ubcore_tjetty *ipourma_import_jetty(struct net_device *dev,
 	union ubcore_eid *dst_eid, uint32_t jetty_id)
 {
 	u32 eid_index = jetty_id - IPOURMA_WELL_KNOWN_JETTY_ID;
@@ -142,7 +142,7 @@ STATIC struct ubcore_tjetty *ipourma_import_jetty(struct net_device *dev,
 	return tjetty;
 }
 
-STATIC inline void ipourma_renew_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
+static inline void ipourma_renew_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
 					  struct ipourma_tjetty_hash_node *tjetty_node)
 {
 	list_del(&tjetty_node->lru_list);
@@ -150,7 +150,7 @@ STATIC inline void ipourma_renew_tjetty_node(struct ipourma_tjetty_lru *tjetty_l
 	tjetty_node->last_jiffies = get_jiffies_64();
 }
 
-STATIC struct ipourma_tjetty_hash_node *ipourma_locate_tjetty_node(
+static struct ipourma_tjetty_hash_node *ipourma_locate_tjetty_node(
 					struct ipourma_tjetty_lru *tjetty_lru,
 					union ubcore_eid *src_eid,
 					union ubcore_eid *dst_eid,
@@ -177,7 +177,7 @@ STATIC struct ipourma_tjetty_hash_node *ipourma_locate_tjetty_node(
 	return tjetty_node;
 }
 
-STATIC void ipourma_insert_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
+static void ipourma_insert_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
 					struct ipourma_tjetty_hash_node *tjetty_node)
 {
 	struct ipourma_tjetty_hmap *tjetty_hmap = &tjetty_lru->tjetty_hmap;
@@ -194,14 +194,13 @@ STATIC void ipourma_insert_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
 	spin_unlock(&tjetty_lru->lock);
 }
 
-STATIC inline void ipourma_delete_tjetty_node(struct ipourma_tjetty_hash_node *tjetty_node)
+static inline void ipourma_delete_tjetty_node(struct ipourma_tjetty_hash_node *tjetty_node)
 {
 	hlist_del(&tjetty_node->hlist);
-	ubcore_unimport_jetty(tjetty_node->tjetty);
-	kfree(tjetty_node);
+	queue_work(tjetty_node->tjetty_lru->tjetty_wq, &tjetty_node->unimport_work);
 }
 
-STATIC void ipourma_lru_del_tail(struct ipourma_tjetty_lru *tjetty_lru, bool lock_free)
+static void ipourma_lru_del_tail(struct ipourma_tjetty_lru *tjetty_lru, bool lock_free)
 {
 	struct ipourma_tjetty_hash_node *tjetty_node = NULL;
 
@@ -229,7 +228,7 @@ void ipourma_lru_clear(struct ipourma_tjetty_lru *tjetty_lru)
 	spin_unlock(&tjetty_lru->lock);
 }
 
-STATIC void ipourma_lru_update(struct ipourma_tjetty_lru *tjetty_lru,
+static void ipourma_lru_update(struct ipourma_tjetty_lru *tjetty_lru,
 				struct ipourma_tjetty_hash_node *tjetty_node)
 {
 	spin_lock(&tjetty_lru->lock);
@@ -238,7 +237,7 @@ STATIC void ipourma_lru_update(struct ipourma_tjetty_lru *tjetty_lru,
 	spin_unlock(&tjetty_lru->lock);
 }
 
-STATIC void tjetty_aging_callback(struct work_struct *work)
+static void tjetty_aging_callback(struct work_struct *work)
 {
 	struct delayed_work *tjetty_aging_work = container_of(work,
 							      struct delayed_work,
@@ -248,12 +247,14 @@ STATIC void tjetty_aging_callback(struct work_struct *work)
 							     tjetty_aging_work);
 	struct ipourma_tjetty_hash_node *tjetty_node = NULL;
 	u64 now_jiffies = 0;
+	u32 delay_s = 0;
 
 	if (!spin_trylock(&tjetty_lru->lock)) {
 		schedule_delayed_work(tjetty_aging_work,
 			msecs_to_jiffies(IPOURMA_TJETTY_CB_S * MSEC_PER_SEC));
 		return;
 	}
+	delay_s = tjetty_lru->tjetty_aging_interval_s;
 	now_jiffies = get_jiffies_64();
 	while (tjetty_lru->count > 0) {
 		tjetty_node = list_last_entry(&tjetty_lru->list,
@@ -266,9 +267,8 @@ STATIC void tjetty_aging_callback(struct work_struct *work)
 		ipourma_delete_tjetty_node(tjetty_node);
 		tjetty_lru->count--;
 	}
-	schedule_delayed_work(tjetty_aging_work,
-		msecs_to_jiffies((u32)tjetty_lru->tjetty_aging_interval_s * MSEC_PER_SEC));
 	spin_unlock(&tjetty_lru->lock);
+	schedule_delayed_work(tjetty_aging_work, msecs_to_jiffies(delay_s * MSEC_PER_SEC));
 }
 
 void ipourma_init_tjetty_aging_work(struct ipourma_tjetty_lru *tjetty_lru)
@@ -285,7 +285,7 @@ void ipourma_init_tjetty_aging_work(struct ipourma_tjetty_lru *tjetty_lru)
 	spin_unlock_irqrestore(&tjetty_lru->lock, flags);
 }
 
-STATIC void ipourma_unimport_tjetty_cb(struct work_struct *work)
+static void ipourma_unimport_tjetty_cb(struct work_struct *work)
 {
 	struct ipourma_tjetty_hash_node *tjetty_node = NULL;
 
@@ -294,7 +294,7 @@ STATIC void ipourma_unimport_tjetty_cb(struct work_struct *work)
 	kfree(tjetty_node);
 }
 
-STATIC struct ubcore_tjetty *ipourma_import_new_tjetty(
+static struct ubcore_tjetty *ipourma_import_new_tjetty(
 	struct ipourma_dev_priv *priv, struct ipourma_tx_buf *tx_req)
 {
 	if (IS_ERR_OR_NULL(priv) || IS_ERR_OR_NULL(tx_req))
@@ -331,7 +331,7 @@ tjetty_node_zalloc_failed:
 	return NULL;
 }
 
-STATIC void ipourma_advance_tx_tail(struct ipourma_dev_priv *priv,
+static void ipourma_advance_tx_tail(struct ipourma_dev_priv *priv,
 	struct ipourma_tx_buf *tx_req)
 {
 	u32 i = 0, eid_idx = tx_req->eid_index;
@@ -356,7 +356,7 @@ STATIC void ipourma_advance_tx_tail(struct ipourma_dev_priv *priv,
 	spin_unlock_irqrestore(&priv->tx_ring_locks[eid_idx], flags);
 }
 
-STATIC inline void ipourma_handle_tx_failed(struct net_device *dev, struct ipourma_tx_buf *tx_req)
+static inline void ipourma_handle_tx_failed(struct net_device *dev, struct ipourma_tx_buf *tx_req)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -365,7 +365,7 @@ STATIC inline void ipourma_handle_tx_failed(struct net_device *dev, struct ipour
 	dev_kfree_skb_any(tx_req->skb);
 }
 
-STATIC int ipourma_update_wr(struct net_device *dev, struct ipourma_tx_buf *tx_req)
+static int ipourma_update_wr(struct net_device *dev, struct ipourma_tx_buf *tx_req)
 {
 	struct ipourma_tjetty_hash_node *tjetty_node = NULL;
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
@@ -426,11 +426,12 @@ void ipourma_post_send(struct work_struct *work)
 	pr_debug("post_send finish, idx %u, jetty %u\n", tx_req->idx, tx_req->eid_index);
 	return;
 free_skb_out:
-	dev_kfree_skb_any(tx_req->skb);
+	if (!IS_ERR_OR_NULL(tx_req->skb))
+		dev_kfree_skb_any(tx_req->skb);
 	tx_req->skb = NULL;
 }
 
-STATIC inline int ipourma_get_eid_index(struct net_device *dev, union ubcore_eid *eid)
+static inline int ipourma_get_eid_index(struct net_device *dev, union ubcore_eid *eid)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -510,7 +511,7 @@ int ipourma_register_rx_segments(struct net_device *dev,
 	return IPOURMA_OK;
 }
 
-STATIC inline int ipourma_add_header(struct sk_buff *skb)
+static inline int ipourma_add_header(struct sk_buff *skb)
 {
 	struct ipourma_header *header;
 	size_t header_size = sizeof(struct ipourma_header);
@@ -591,7 +592,7 @@ int ipourma_xmit(struct net_device *dev, struct sk_buff *skb,
 	return ret;
 }
 
-STATIC struct sk_buff *ipourma_alloc_rx_skb(struct net_device *dev)
+static struct sk_buff *ipourma_alloc_rx_skb(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 	struct sk_buff *skb;
@@ -609,7 +610,7 @@ STATIC struct sk_buff *ipourma_alloc_rx_skb(struct net_device *dev)
 	return skb;
 }
 
-STATIC int ipourma_alloc_rx_buffer(struct net_device *dev, u32 eid_idx, u32 idx)
+static int ipourma_alloc_rx_buffer(struct net_device *dev, u32 eid_idx, u32 idx)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 	struct ubcore_seg_cfg cfg = { 0 };
@@ -728,7 +729,7 @@ init_rings_by_eid_failed:
 	return ret;
 }
 
-STATIC void ipourma_do_handle_tx_wc(struct net_device *dev,
+static void ipourma_do_handle_tx_wc(struct net_device *dev,
 	struct ipourma_dev_priv *priv, u32 eid_idx, u32 idx, struct ubcore_cr *cr)
 {
 	struct ipourma_tx_buf *tx_req = &priv->tx_ring[eid_idx][idx];
@@ -794,7 +795,7 @@ void ipourma_handle_tx_wc(struct net_device *dev,
 	ipourma_do_handle_tx_wc(dev, priv, eid_idx, idx, cr);
 }
 
-STATIC void ipourma_do_handle_rx_wc(struct net_device *dev,
+static void ipourma_do_handle_rx_wc(struct net_device *dev,
 					struct ipourma_dev_priv *priv,
 					u32 eid_idx, u32 idx,
 					struct ubcore_cr *cr)
@@ -806,7 +807,8 @@ STATIC void ipourma_do_handle_rx_wc(struct net_device *dev,
 	/* hold the skb & segments */
 	skb = rx_req->skb_pass_up;
 	rx_req->skb_pass_up = NULL;
-	if (cr->completion_len > priv->tx_buf_size) {
+	if (cr->completion_len > priv->tx_buf_size ||
+		cr->completion_len <= (u32)sizeof(struct ipourma_header)) {
 		dev_kfree_skb_any(skb);
 		priv->runtime_stats.rx_stats.cr_len_err++;
 		goto rx_wc_out;
@@ -980,7 +982,7 @@ int ipourma_napi_rx_poll(struct napi_struct *napi, int budget)
 	return 0;
 }
 
-STATIC void ipourma_napi_add(struct net_device *dev)
+static void ipourma_napi_add(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -990,7 +992,7 @@ STATIC void ipourma_napi_add(struct net_device *dev)
 						  IPOURMA_NAPI_RX_WEIGHT);
 }
 
-STATIC inline void ipourma_napi_del(struct net_device *dev)
+static inline void ipourma_napi_del(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 

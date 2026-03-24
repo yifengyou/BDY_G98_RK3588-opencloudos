@@ -37,7 +37,7 @@ static const struct ipourma_stats ipourma_gstrings_stats[] = {
 
 #define IPOURMA_GLOBAL_STATS_LEN	ARRAY_SIZE(ipourma_gstrings_stats)
 
-STATIC int ub_speed_enum_to_int(enum ubcore_speed speed)
+static int ub_speed_enum_to_int(enum ubcore_speed speed)
 {
 	switch (speed) {
 	case UBCORE_SP_10M:
@@ -73,7 +73,7 @@ STATIC int ub_speed_enum_to_int(enum ubcore_speed speed)
 	return SPEED_UNKNOWN;
 }
 
-STATIC int ipourma_get_link_ksettings(struct net_device *netdev,
+static int ipourma_get_link_ksettings(struct net_device *netdev,
 					struct ethtool_link_ksettings *cmd)
 {
 	struct ipourma_dev_priv *priv;
@@ -114,7 +114,7 @@ STATIC int ipourma_get_link_ksettings(struct net_device *netdev,
 	return 0;
 }
 
-STATIC void ipourma_get_drvinfo(struct net_device *netdev,
+static void ipourma_get_drvinfo(struct net_device *netdev,
 			      struct ethtool_drvinfo *drvinfo)
 {
 	struct ipourma_dev_priv *priv;
@@ -137,7 +137,7 @@ STATIC void ipourma_get_drvinfo(struct net_device *netdev,
 	strscpy(drvinfo->driver, "ub_ipourma", sizeof(drvinfo->driver));
 }
 
-STATIC void ipourma_get_strings(struct net_device __always_unused *dev,
+static void ipourma_get_strings(struct net_device __always_unused *dev,
 			      u32 stringset, u8 *data)
 {
 	u8 *p = data;
@@ -158,7 +158,7 @@ STATIC void ipourma_get_strings(struct net_device __always_unused *dev,
 	}
 }
 
-STATIC void ipourma_get_ethtool_stats(struct net_device *dev,
+static void ipourma_get_ethtool_stats(struct net_device *dev,
 				    struct ethtool_stats __always_unused *stats,
 				    u64 *data)
 {
@@ -174,7 +174,7 @@ STATIC void ipourma_get_ethtool_stats(struct net_device *dev,
 		data[i] = *(u64 *)(p + ipourma_gstrings_stats[i].stat_offset);
 }
 
-STATIC int ipourma_get_sset_count(struct net_device __always_unused *dev,
+static int ipourma_get_sset_count(struct net_device __always_unused *dev,
 				 int sset)
 {
 	if (IS_ERR_OR_NULL(dev))

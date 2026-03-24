@@ -56,6 +56,7 @@ static char *err_desc[IPOURMA_MAX_ERRNO] = {
 	"IPoURMA modify jetty failed",
 	"IPoURMA modify jfr failed",
 	"IPoURMA init rings table failed",
+	"IPoURMA invalid device name",
 };
 
 char *ipourma_err_desc(int err_num)

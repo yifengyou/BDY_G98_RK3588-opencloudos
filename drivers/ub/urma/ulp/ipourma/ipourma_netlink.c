@@ -26,7 +26,7 @@ static const struct nla_policy ipourma_policy[IFLA_IPOURMA_MAX + 1] = {
 	[IFLA_IPOURMA_XMTU]		= { .type = NLA_U32 },
 };
 
-STATIC size_t ipourma_get_size(const struct net_device *dev)
+static size_t ipourma_get_size(const struct net_device *dev)
 {
 	return nla_total_size(IPOURMA_ATTR_SIZE) + /* IFLA_IPOURMA_OP_MODE */
 		nla_total_size(IPOURMA_ATTR_SIZE) + /* IFLA_IPOURMA_TRANSPORT_MODE */
@@ -34,7 +34,7 @@ STATIC size_t ipourma_get_size(const struct net_device *dev)
 		nla_total_size(IPOURMA_ATTR_SIZE); /* IFLA_IPOURMA_XMTU */
 }
 
-STATIC int ipourma_fill_info(struct sk_buff *skb, const struct net_device *dev)
+static int ipourma_fill_info(struct sk_buff *skb, const struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -54,7 +54,7 @@ STATIC int ipourma_fill_info(struct sk_buff *skb, const struct net_device *dev)
  * Therefore, only the minimum device setup is performed here to comply with the
  * RTnetlink framework.
  */
-STATIC void ipourma_setup_common(struct net_device *dev)
+static void ipourma_setup_common(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -72,7 +72,7 @@ STATIC void ipourma_setup_common(struct net_device *dev)
  * The feedback info will be displayed if you enter command like
  * 'ip link add name ipourma3 type ipourma'.
  */
-STATIC int ipourma_newlink(struct net *src_net, struct net_device *dev,
+static int ipourma_newlink(struct net *src_net, struct net_device *dev,
 				struct nlattr *tb[], struct nlattr *data[],
 				struct netlink_ext_ack *extack)
 {
@@ -88,7 +88,7 @@ STATIC int ipourma_newlink(struct net *src_net, struct net_device *dev,
  * User-defined attributes need to be obtained by the user-mode client through the
  * interface of the RTnetlink framework.
  */
-STATIC int ipourma_changelink(struct net_device *dev, struct nlattr *tb[],
+static int ipourma_changelink(struct net_device *dev, struct nlattr *tb[],
 				struct nlattr *data[], struct netlink_ext_ack *extack)
 {
 	return 0;
@@ -105,6 +105,19 @@ struct rtnl_link_ops ipourma_link_ops __read_mostly = {
 	.get_size   = ipourma_get_size,
 	.fill_info  = ipourma_fill_info,
 };
+
+int ipourma_netlink_init(void)
+{
+	int ret = rtnl_link_register(&ipourma_link_ops);
+
+	pr_info("netlink_init:%s\n", ret ? "failed" : "success");
+	return ret;
+}
+
+void ipourma_netlink_uninit(void)
+{
+	rtnl_link_unregister(&ipourma_link_ops);
+}
 
 void ipourma_set_rtnl_link_ops(struct net_device *dev)
 {

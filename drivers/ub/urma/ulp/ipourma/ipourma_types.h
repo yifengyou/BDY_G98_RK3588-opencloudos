@@ -17,12 +17,6 @@
 #include <linux/timer.h>
 #include "ub/urma/ubcore_types.h"
 
-#if defined(CONFIG_IPOURMA_TEST) || defined(CONFIG_IPOURMA_KFUZZ)
-#define STATIC
-#else
-#define STATIC static
-#endif
-
 static inline int eid_is_empty(union ubcore_eid *eid)
 {
 	return (eid->in6.interface_id == 0 && eid->in6.subnet_prefix == 0);
@@ -127,6 +121,7 @@ enum {
 	IPOURMA_MODIFY_JETTY_FAILED,
 	IPOURMA_MODIFY_JFR_FAILED,
 	IPOURMA_INIT_RINGS_TABLE_FAILED,
+	IPOURMA_INVALID_DEV_NAME,
 	IPOURMA_MAX_ERRNO
 };
 

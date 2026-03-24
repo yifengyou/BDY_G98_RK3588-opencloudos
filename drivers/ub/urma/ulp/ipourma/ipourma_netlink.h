@@ -10,6 +10,8 @@
 
 #include "ipourma_types.h"
 
+int  ipourma_netlink_init(void);
+void ipourma_netlink_uninit(void);
 void ipourma_set_rtnl_link_ops(struct net_device *dev);
 
 #endif

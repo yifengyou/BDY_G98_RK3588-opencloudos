@@ -34,9 +34,9 @@
 
 #define IN6_ADDR_BITS   (sizeof(struct in6_addr) * 8)
 
-STATIC u8 g_route_tbl_idx = 100;
+static u8 g_route_tbl_idx = 100;
 
-STATIC int prepare_route_rule(struct ipourma_dev_priv *priv, struct sk_buff *skb, int type,
+static int prepare_route_rule(struct ipourma_dev_priv *priv, struct sk_buff *skb, int type,
 							  struct in6_addr *src_ipv6)
 {
 	struct fib_rule_hdr *frh;
@@ -71,7 +71,7 @@ STATIC int prepare_route_rule(struct ipourma_dev_priv *priv, struct sk_buff *skb
 	return 0;
 }
 
-STATIC int ipourma_add_route_rule(struct ipourma_dev_priv *priv, union ubcore_eid *eid)
+static int ipourma_add_route_rule(struct ipourma_dev_priv *priv, union ubcore_eid *eid)
 {
 	struct in6_addr addr;
 	struct sk_buff *skb;
@@ -105,7 +105,7 @@ STATIC int ipourma_add_route_rule(struct ipourma_dev_priv *priv, union ubcore_ei
 	return ret;
 }
 
-STATIC int ipourma_del_route_rule(struct ipourma_dev_priv *priv, union ubcore_eid *eid)
+static int ipourma_del_route_rule(struct ipourma_dev_priv *priv, union ubcore_eid *eid)
 {
 	struct in6_addr addr;
 	struct sk_buff *skb;
@@ -134,7 +134,7 @@ STATIC int ipourma_del_route_rule(struct ipourma_dev_priv *priv, union ubcore_ei
 	return ret;
 }
 
-STATIC int prepare_route_entry(struct ipourma_dev_priv *priv, struct sk_buff *skb, int type)
+static int prepare_route_entry(struct ipourma_dev_priv *priv, struct sk_buff *skb, int type)
 {
 	struct nlmsghdr *nlh;
 	struct rtmsg *rtm;
@@ -165,7 +165,7 @@ STATIC int prepare_route_entry(struct ipourma_dev_priv *priv, struct sk_buff *sk
 	return 0;
 }
 
-STATIC void ipourma_add_route_entry(struct work_struct *work)
+static void ipourma_add_route_entry(struct work_struct *work)
 {
 	struct ipourma_dev_priv *priv;
 	struct sk_buff *skb;
@@ -190,7 +190,7 @@ STATIC void ipourma_add_route_entry(struct work_struct *work)
 		netdev_err(priv->dev, "Failed to new route\n");
 }
 
-STATIC int ipourma_del_route_entry(struct ipourma_dev_priv *priv)
+static int ipourma_del_route_entry(struct ipourma_dev_priv *priv)
 {
 	struct sk_buff *skb;
 	int ret;
@@ -240,7 +240,7 @@ ROUTE_ERR:
 		ipourma_del_route_rule(priv, &(priv->eid_info[i].eid));
 }
 
-STATIC void ipourma_del_route(struct work_struct *work)
+static void ipourma_del_route(struct work_struct *work)
 {
 	struct ipourma_dev_priv *priv;
 
@@ -255,8 +255,10 @@ STATIC void ipourma_del_route(struct work_struct *work)
 	}
 }
 
-STATIC int ipourma_ndo_init(struct net_device *dev)
+static int ipourma_ndo_init(struct net_device *dev)
 {
+	int ret = 0;
+
 	if (IS_ERR_OR_NULL(dev))
 		return -EINVAL;
 	/* supports scatter/gather */
@@ -264,17 +266,17 @@ STATIC int ipourma_ndo_init(struct net_device *dev)
 	/* HW DO NOT support TSO */
 	dev->hw_features &= ~NETIF_F_FRAGLIST;
 
-	ipourma_urma_dev_init(dev);
+	ret = ipourma_urma_dev_init(dev);
 
-	return 0;
+	return ret;
 }
 
-STATIC void ipourma_ndo_uninit(struct net_device *dev)
+static void ipourma_ndo_uninit(struct net_device *dev)
 {
 	// do uninit in ipourma_stop
 }
 
-STATIC inline void ipourma_napi_enable(struct net_device *dev)
+static inline void ipourma_napi_enable(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -282,7 +284,7 @@ STATIC inline void ipourma_napi_enable(struct net_device *dev)
 	napi_enable(&priv->napi_recv);
 }
 
-STATIC inline void ipourma_rearm_jfc(struct ipourma_dev_priv *priv)
+static inline void ipourma_rearm_jfc(struct ipourma_dev_priv *priv)
 {
 	if (IS_ERR_OR_NULL(priv->rx_jfc) || ubcore_rearm_jfc(priv->rx_jfc, false) != 0) {
 		netdev_dbg(priv->dev, "%s\n", ipourma_err_desc(IPOURMA_REARM_JFC_FAILED));
@@ -296,21 +298,26 @@ STATIC inline void ipourma_rearm_jfc(struct ipourma_dev_priv *priv)
 		priv->runtime_stats.tx_stats.rearm_success++;
 }
 
-STATIC int ipourma_open(struct net_device *dev)
+static int ipourma_open(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv;
+	int ret = 0;
 
 	if (IS_ERR_OR_NULL(dev))
 		return -EINVAL;
 	priv = netdev_priv(dev);
 
+	ret = ipourma_restart_rings(priv);
+	if (ret != 0) {
+		netdev_err(dev, "Device opened failed. ret = %d\n", ret);
+		return ret;
+	}
 	atomic_set(&(priv->need_set_ip_route), 0);
 	if (IS_ERR_OR_NULL(priv->net_config_wq))
 		return -EINVAL;
 	queue_work(priv->net_config_wq, &(priv->set_ip));
 	queue_work(priv->net_config_wq, &(priv->set_route));
 
-	ipourma_restart_rings(priv);
 	ipourma_napi_enable(dev);
 	netif_start_queue(dev);
 	dev->flags |= IFF_RUNNING;
@@ -322,7 +329,7 @@ STATIC int ipourma_open(struct net_device *dev)
 	return 0;
 }
 
-STATIC inline void ipourma_napi_disable(struct net_device *dev)
+static inline void ipourma_napi_disable(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 
@@ -330,7 +337,7 @@ STATIC inline void ipourma_napi_disable(struct net_device *dev)
 	napi_disable(&priv->napi_recv);
 }
 
-STATIC int ipourma_stop(struct net_device *dev)
+static int ipourma_stop(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv;
 
@@ -354,7 +361,7 @@ STATIC int ipourma_stop(struct net_device *dev)
 	return 0;
 }
 
-STATIC int ipourma_change_mtu(struct net_device *dev, int mtu)
+static int ipourma_change_mtu(struct net_device *dev, int mtu)
 {
 	bool flag;
 
@@ -380,7 +387,7 @@ STATIC int ipourma_change_mtu(struct net_device *dev, int mtu)
 	return 0;
 }
 
-STATIC netdev_features_t ipourma_fix_features(struct net_device *dev,
+static netdev_features_t ipourma_fix_features(struct net_device *dev,
 	netdev_features_t features)
 {
 	if (IS_ERR_OR_NULL(dev))
@@ -390,7 +397,7 @@ STATIC netdev_features_t ipourma_fix_features(struct net_device *dev,
 	return features;
 }
 
-STATIC netdev_tx_t ipourma_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static netdev_tx_t ipourma_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	union ubcore_eid src_eid, dst_eid;
 	struct ipourma_dev_priv *priv;
@@ -435,7 +442,7 @@ err_out:
 	return NETDEV_TX_OK;
 }
 
-STATIC void ipourma_timeout(struct net_device *dev, unsigned int txqueue)
+static void ipourma_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	struct ipourma_dev_priv *priv;
 
@@ -458,12 +465,12 @@ STATIC void ipourma_timeout(struct net_device *dev, unsigned int txqueue)
 /*
  * for real net device, return 0.
  */
-STATIC int ipourma_get_iflink(const struct net_device *dev)
+static int ipourma_get_iflink(const struct net_device *dev)
 {
 	return 0;
 }
 
-STATIC int ipourma_set_mac(struct net_device *dev, void *addr)
+static int ipourma_set_mac(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = addr;
 
@@ -479,7 +486,7 @@ STATIC int ipourma_set_mac(struct net_device *dev, void *addr)
 	return 0;
 }
 
-STATIC void ipourma_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
+static void ipourma_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
 	// fill in stats
 	if (IS_ERR_OR_NULL(dev) || IS_ERR_OR_NULL(stats))
@@ -487,13 +494,13 @@ STATIC void ipourma_get_stats(struct net_device *dev, struct rtnl_link_stats64 *
 	netdev_stats_to_stats64(stats, &dev->stats);
 }
 
-STATIC int ipourma_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+static int ipourma_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	/* if ipourma has some private functions in the future, ioctl will call them here. */
 	return 0;
 }
 
-STATIC const struct net_device_ops ipourma_netdev_ops = {
+static const struct net_device_ops ipourma_netdev_ops = {
 	.ndo_init		 = ipourma_ndo_init,
 	.ndo_uninit		 = ipourma_ndo_uninit,
 	.ndo_open		 = ipourma_open,
@@ -508,7 +515,7 @@ STATIC const struct net_device_ops ipourma_netdev_ops = {
 	.ndo_eth_ioctl		 = ipourma_ioctl,
 };
 
-STATIC void ipourma_netdev_setup(struct net_device *dev)
+static void ipourma_netdev_setup(struct net_device *dev)
 {
 	dev->netdev_ops        = &ipourma_netdev_ops;
 
@@ -533,7 +540,7 @@ STATIC void ipourma_netdev_setup(struct net_device *dev)
 	netif_keep_dst(dev);
 }
 
-STATIC inline void ipourma_open_dev(struct work_struct *work)
+static inline void ipourma_open_dev(struct work_struct *work)
 {
 	struct ipourma_dev_priv *priv = container_of(work, struct ipourma_dev_priv, set_dev_up);
 	struct net_device *dev = priv->dev;
@@ -543,14 +550,14 @@ STATIC inline void ipourma_open_dev(struct work_struct *work)
 	rtnl_unlock();
 }
 
-STATIC inline void ipourma_init_stats(struct ipourma_dev_priv *priv)
+static inline void ipourma_init_stats(struct ipourma_dev_priv *priv)
 {
 	memset(&(priv->runtime_stats.tx_stats), 0, sizeof(priv->runtime_stats.tx_stats));
 	memset(&(priv->runtime_stats.rx_stats), 0, sizeof(priv->runtime_stats.rx_stats));
 	spin_lock_init(&(priv->runtime_stats.lock));
 }
 
-STATIC int ipourma_priv_base_init(struct net_device *dev,
+static int ipourma_priv_base_init(struct net_device *dev,
 	struct ubcore_device *urma_dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
@@ -613,7 +620,7 @@ struct net_device *ipourma_alloc_netdev(struct ubcore_device *urma_dev)
 	return dev;
 }
 
-STATIC inline void ipourma_priv_eid_uninit(struct ipourma_dev_priv *priv)
+static inline void ipourma_priv_eid_uninit(struct ipourma_dev_priv *priv)
 {
 	kfree(priv->eid_info);
 	priv->eid_info = NULL;

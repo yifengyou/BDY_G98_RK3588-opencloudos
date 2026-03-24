@@ -10,7 +10,7 @@
 #include "ipourma_err.h"
 #include "ipourma_addr_res.h"
 
-STATIC void ipourma_resolve_eids_from_ipv6(struct net_device *dev,
+static void ipourma_resolve_eids_from_ipv6(struct net_device *dev,
 	struct in6_addr *src, struct in6_addr *dst,
 	union ubcore_eid *src_eid, union ubcore_eid *dst_eid)
 {
@@ -35,7 +35,7 @@ void ipourma_resolve_eids(struct net_device *dev, struct sk_buff *skb, u16 proto
 	}
 }
 
-STATIC int ipourma_resolve_ipv6_from_eids(struct net_device *dev,
+static int ipourma_resolve_ipv6_from_eids(struct net_device *dev,
 	union ubcore_eid *eid, struct in6_addr *addr)
 {
 	memcpy(addr, eid, UBCORE_EID_SIZE);

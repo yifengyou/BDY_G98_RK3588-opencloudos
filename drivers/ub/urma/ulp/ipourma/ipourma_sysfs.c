@@ -12,7 +12,7 @@
 #include "ipourma_sysfs.h"
 
 // sysfs support for hard_header_len
-STATIC ssize_t hard_header_len_show(struct device *dev,
+static ssize_t hard_header_len_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -20,10 +20,10 @@ STATIC ssize_t hard_header_len_show(struct device *dev,
 	return sysfs_emit(buf, "%u\n", ndev->hard_header_len);
 }
 
-STATIC DEVICE_ATTR_RO(hard_header_len);
+static DEVICE_ATTR_RO(hard_header_len);
 
 // sysfs support for urma_mtu
-STATIC ssize_t urma_mtu_show(struct device *dev,
+static ssize_t urma_mtu_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -32,32 +32,32 @@ STATIC ssize_t urma_mtu_show(struct device *dev,
 	return sysfs_emit(buf, "%u\n", priv->urma_mtu);
 }
 
-STATIC DEVICE_ATTR_RO(urma_mtu);
+static DEVICE_ATTR_RO(urma_mtu);
 
 // sysfs support for ipourma_tx_ring_size
-STATIC ssize_t ipourma_tx_ring_size_show(struct device *dev,
+static ssize_t ipourma_tx_ring_size_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%d\n", ipourma_tx_ring_size);
 }
 
-STATIC DEVICE_ATTR_RO(ipourma_tx_ring_size);
+static DEVICE_ATTR_RO(ipourma_tx_ring_size);
 
 // sysfs support for ipourma_rx_ring_size
-STATIC ssize_t ipourma_rx_ring_size_show(struct device *dev,
+static ssize_t ipourma_rx_ring_size_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%d\n", ipourma_rx_ring_size);
 }
 
-STATIC DEVICE_ATTR_RO(ipourma_rx_ring_size);
+static DEVICE_ATTR_RO(ipourma_rx_ring_size);
 
 /*
  * Description of status_name:
  * The size of this array must be equal to IPOURMA_MAX_CR_STATUS
  * The order of strings must be consistent with the members of ubcore_cr_status in ubcore_opcode.h
  */
-STATIC const char * const status_names[] = {
+static const char * const status_names[] = {
 	"SUCCESS",
 	"UNSUPPORTED_OPCODE_ERR",
 	"LOC_LEN_ERR",
@@ -86,7 +86,7 @@ _Static_assert(ARRAY_SIZE(status_names) == IPOURMA_MAX_CR_STATUS,
  * Here, dozens of attributes are output to one buffer, which may exceed the
  * value of PAGE_SIZE.Therefore, the return value ret needs to be determined.
  */
-STATIC ssize_t format_stats(char *buf, struct ipourma_dev_priv *priv, ssize_t buf_size)
+static ssize_t format_stats(char *buf, struct ipourma_dev_priv *priv, ssize_t buf_size)
 {
 	ssize_t len = 0;
 	ssize_t ret;
@@ -243,7 +243,7 @@ FORMAT_ERR:
 	return 0;
 }
 
-STATIC ssize_t query_ipourma_stats_show(struct device *dev,
+static ssize_t query_ipourma_stats_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -257,12 +257,12 @@ STATIC ssize_t query_ipourma_stats_show(struct device *dev,
 	return len;
 }
 
-STATIC DEVICE_ATTR_RO(query_ipourma_stats);
+static DEVICE_ATTR_RO(query_ipourma_stats);
 
 
 #define INPUT_BUF_SIZE (sizeof(RESET_CMD) + 1)
 
-STATIC ssize_t reset_ipourma_stats_store(struct device *dev,
+static ssize_t reset_ipourma_stats_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	char input_buf[INPUT_BUF_SIZE] = {0};
@@ -289,9 +289,9 @@ STATIC ssize_t reset_ipourma_stats_store(struct device *dev,
 	}
 	return -EINVAL;
 }
-STATIC DEVICE_ATTR_WO(reset_ipourma_stats);
+static DEVICE_ATTR_WO(reset_ipourma_stats);
 
-STATIC ssize_t max_concurrent_conn_show(struct device *dev,
+static ssize_t max_concurrent_conn_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -307,7 +307,7 @@ STATIC ssize_t max_concurrent_conn_show(struct device *dev,
 	return ret;
 }
 
-STATIC ssize_t max_concurrent_conn_store(struct device *dev,
+static ssize_t max_concurrent_conn_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -332,9 +332,9 @@ STATIC ssize_t max_concurrent_conn_store(struct device *dev,
 
 	return count;
 }
-STATIC DEVICE_ATTR_RW(max_concurrent_conn);
+static DEVICE_ATTR_RW(max_concurrent_conn);
 
-STATIC ssize_t tjetty_aging_timeout_s_show(struct device *dev,
+static ssize_t tjetty_aging_timeout_s_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -351,7 +351,7 @@ STATIC ssize_t tjetty_aging_timeout_s_show(struct device *dev,
 	return ret;
 }
 
-STATIC ssize_t tjetty_aging_timeout_s_store(struct device *dev,
+static ssize_t tjetty_aging_timeout_s_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -380,9 +380,9 @@ STATIC ssize_t tjetty_aging_timeout_s_store(struct device *dev,
 
 	return count;
 }
-STATIC DEVICE_ATTR_RW(tjetty_aging_timeout_s);
+static DEVICE_ATTR_RW(tjetty_aging_timeout_s);
 
-STATIC ssize_t tjetty_aging_interval_s_show(struct device *dev,
+static ssize_t tjetty_aging_interval_s_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -399,7 +399,7 @@ STATIC ssize_t tjetty_aging_interval_s_show(struct device *dev,
 	return ret;
 }
 
-STATIC ssize_t tjetty_aging_interval_s_store(struct device *dev,
+static ssize_t tjetty_aging_interval_s_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct net_device *ndev = to_net_dev(dev);
@@ -432,9 +432,9 @@ STATIC ssize_t tjetty_aging_interval_s_store(struct device *dev,
 
 	return count;
 }
-STATIC DEVICE_ATTR_RW(tjetty_aging_interval_s);
+static DEVICE_ATTR_RW(tjetty_aging_interval_s);
 
-STATIC struct device_attribute *ipourma_attrs[] = {
+static struct device_attribute *ipourma_attrs[] = {
 	&dev_attr_hard_header_len,
 	&dev_attr_urma_mtu,
 	&dev_attr_ipourma_tx_ring_size,

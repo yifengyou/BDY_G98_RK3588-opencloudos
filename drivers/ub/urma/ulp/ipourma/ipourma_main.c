@@ -17,6 +17,8 @@
 #include "ipourma_netdev.h"
 #include "ipourma_res.h"
 #include "ipourma_ub.h"
+#include "ipourma_fs.h"
+#include "ipourma_netlink.h"
 #include "ipourma_sysfs.h"
 #include "ub/urma/ubcore_api.h"
 #include "ub/urma/ubcore_uapi.h"
@@ -37,7 +39,7 @@ struct ubcore_client g_ipourma_ubcore_client = {
 
 // alloc netdev for the first legal eid on ubcore_device
 // set client ctx data in ubcore
-STATIC int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev)
+static int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev)
 {
 	struct net_device *ipou_ndev = NULL;
 	struct ipourma_dev_priv *priv = NULL;
@@ -59,7 +61,7 @@ STATIC int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev)
 	return 0;
 }
 
-STATIC void ipourma_ubcore_remove_device(struct ubcore_device *ubc_dev, void *client_ctx)
+static void ipourma_ubcore_remove_device(struct ubcore_device *ubc_dev, void *client_ctx)
 {
 	struct ipourma_dev_priv *priv = client_ctx;
 	struct net_device *dev;
@@ -143,7 +145,7 @@ void ipourma_address_iter_read(struct ipourma_address_iter *iter, union ubcore_e
 	spin_unlock(&eid_table->lock);
 }
 
-STATIC int ipourma_netdev_event(struct notifier_block *nb, unsigned long event, void *ptr)
+static int ipourma_netdev_event(struct notifier_block *nb, unsigned long event, void *ptr)
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct ipourma_dev_priv *priv = NULL;
@@ -154,20 +156,20 @@ STATIC int ipourma_netdev_event(struct notifier_block *nb, unsigned long event, 
 
 	switch (event) {
 	case NETDEV_REGISTER:
-		/* create debugfs files here */
+		ipourma_create_debug_files(priv);
 		break;
 	case NETDEV_UNREGISTER:
-		/* create debugfs files here */
+		ipourma_delete_debug_files(priv);
 		break;
 	}
 	return NOTIFY_DONE;
 }
 
-STATIC struct notifier_block ipourma_netdev_nb = {
+static struct notifier_block ipourma_netdev_nb = {
 	.notifier_call = ipourma_netdev_event,
 };
 
-STATIC int ipourma_priv_eid_init(struct net_device *dev)
+static int ipourma_priv_eid_init(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 	struct ubcore_device *urma_dev = priv->urma_dev;
@@ -195,7 +197,8 @@ STATIC int ipourma_priv_eid_init(struct net_device *dev)
 	spin_lock(&urma_dev->eid_table.lock);
 	if (IS_ERR_OR_NULL(urma_dev->eid_table.eid_entries))
 		goto eid_table_unlock;
-	eid_cnt = urma_dev->eid_table.eid_cnt;
+	eid_cnt = (urma_dev->eid_table.eid_cnt < IPOURMA_MAX_EID_CNT) ?
+		urma_dev->eid_table.eid_cnt : IPOURMA_MAX_EID_CNT;
 	for (i = 0; i < eid_cnt; i++) {
 		if (eid_is_empty(&urma_dev->eid_table.eid_entries[i].eid))
 			continue;
@@ -222,14 +225,14 @@ eid_table_unlock:
 	return IPOURMA_OK;
 }
 
-STATIC void ipourma_cleanup_res(struct net_device *dev)
+static void ipourma_cleanup_res(struct net_device *dev)
 {
 	if (IS_ERR_OR_NULL(dev))
 		return;
 	ipourma_urma_dev_uninit(dev);
 }
 
-STATIC void ipourma_proc_eid_exist(struct ipourma_dev_priv *priv)
+static void ipourma_proc_eid_exist(struct ipourma_dev_priv *priv)
 {
 	for (uint32_t i = 0; i < priv->eid_count; i++)
 		ipourma_create_new_eid(priv, priv->eid_info_exist[i].eid_index);
@@ -269,7 +272,7 @@ REG_ERR:
 	return;
 }
 
-STATIC inline void ipourma_flush_register_wq(struct ipourma_dev_priv *priv)
+static inline void ipourma_flush_register_wq(struct ipourma_dev_priv *priv)
 {
 	if (!IS_ERR_OR_NULL(priv->register_wq)) {
 		flush_workqueue(priv->register_wq);
@@ -277,7 +280,7 @@ STATIC inline void ipourma_flush_register_wq(struct ipourma_dev_priv *priv)
 	}
 }
 
-STATIC void ipourma_unregister_netdev(struct ipourma_dev_priv *priv)
+static void ipourma_unregister_netdev(struct ipourma_dev_priv *priv)
 {
 	ubcore_unregister_event_handler(priv->urma_dev, &priv->eid_change_handler);
 	ipourma_flush_register_wq(priv);
@@ -288,7 +291,7 @@ STATIC void ipourma_unregister_netdev(struct ipourma_dev_priv *priv)
 	ipourma_unalloc_netdev(priv->dev);
 }
 
-STATIC void ipourma_do_eid_change_handler(struct ubcore_event *event,
+static void ipourma_do_eid_change_handler(struct ubcore_event *event,
 					struct ubcore_event_handler *handler)
 {
 	if (event->event_type != UBCORE_EVENT_EID_CHANGE)
@@ -334,7 +337,7 @@ unlock_table_out:
 	spin_unlock(&ub_dev->eid_table.lock);
 }
 
-STATIC int __init ipourma_init(void)
+static int __init ipourma_init(void)
 {
 	int ret = 0;
 
@@ -345,13 +348,29 @@ STATIC int __init ipourma_init(void)
 	}
 	pr_info("Register ubcore client success.\n");
 
+	ret = ipourma_register_debugfs();
+	if (!ret) {
+		pr_info("Register debugfs success.\n");
+	} else {
+		pr_err("Register debugfs failed.\n");
+		return ret;
+	}
+
 	register_netdevice_notifier(&ipourma_netdev_nb);
+
+	ret = ipourma_netlink_init();
+	if (!ret) {
+		pr_info("[ipourma] Register netlink success.\n");
+	} else {
+		pr_err("[ipourma] Register netlink failed.\n");
+		return ret;
+	}
 
 	return 0;
 }
 
 
-STATIC void __exit ipourma_exit(void)
+static void __exit ipourma_exit(void)
 {
 	ubcore_unregister_client(&g_ipourma_ubcore_client);
 	unregister_netdevice_notifier(&ipourma_netdev_nb);
