@@ -76,3 +76,31 @@ int ipourma_send_ipv6_netlink(struct net_device *dev, union ubcore_eid *eid, int
 	pr_debug("send_ipv6_netlink success\n");
 	return 0;
 }
+
+void ipourma_init_ipv6_addr(struct work_struct *work)
+{
+	struct ipourma_dev_priv *priv;
+	struct net_device *dev;
+	int ret = 0;
+	int i;
+
+	priv = container_of(work, struct ipourma_dev_priv, set_ip);
+	dev = priv->dev;
+
+	for (i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
+		if (eid_is_empty(&priv->eid_info[i].eid))
+			continue;
+		ret = ipourma_send_ipv6_netlink(dev, &(priv->eid_info[i].eid), RTM_NEWADDR);
+		if (ret != 0)
+			goto ipv6_uninit;
+	}
+
+	pr_debug("init_ipv6_addr success\n");
+	return;
+
+ipv6_uninit:
+	for (i--; i >= 0; i--)
+		ipourma_send_ipv6_netlink(dev, &(priv->eid_info[i].eid), RTM_DELADDR);
+
+	pr_err("init_ipv6_addr failed\n");
+}

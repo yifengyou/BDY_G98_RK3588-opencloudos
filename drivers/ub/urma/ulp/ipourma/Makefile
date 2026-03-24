@@ -14,5 +14,6 @@ ipourma_ip.o \
 ipourma_ethtool.o \
 ipourma_netlink.o \
 ipourma_utils.o \
+ipourma_sysfs.o \
 
 obj-$(CONFIG_UB_URMA) += ipourma.o

@@ -306,6 +306,7 @@ struct ipourma_dev_priv {
 	spinlock_t *tx_ring_locks;
 	struct dentry *address_dentry;
 	atomic_t need_set_ip_route;
+	bool need_restart_ring;
 	struct workqueue_struct *net_config_wq;
 	struct work_struct set_dev_up;
 	struct work_struct set_ip;

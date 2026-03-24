@@ -27,6 +27,7 @@ int ipourma_register_rx_segments(struct net_device *dev,
 	struct ubcore_seg_cfg *cfg, struct ipourma_rx_buf *rx_req);
 int ipourma_urma_post_recv(struct net_device *dev, u32 eid_idx, u32 idx);
 void ipourma_replenish_segments(struct work_struct *work);
+void ipourma_rx_cr_event(struct work_struct *work);
 void ipourma_handle_tx_wc(struct net_device *dev,
 			  struct ipourma_dev_priv *priv,
 			  struct ubcore_cr *cr);

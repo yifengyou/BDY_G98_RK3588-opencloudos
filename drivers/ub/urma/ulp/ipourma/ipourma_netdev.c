@@ -105,6 +105,35 @@ STATIC int ipourma_add_route_rule(struct ipourma_dev_priv *priv, union ubcore_ei
 	return ret;
 }
 
+STATIC int ipourma_del_route_rule(struct ipourma_dev_priv *priv, union ubcore_eid *eid)
+{
+	struct in6_addr addr;
+	struct sk_buff *skb;
+	int ret;
+
+	if (IS_ERR_OR_NULL(priv) || IS_ERR_OR_NULL(eid))
+		return -EINVAL;
+
+	ret = ipourma_resolve_ipaddr(priv->dev, ETH_P_IPV6, eid, &addr);
+	if (ret != 0)
+		return ret;
+
+	skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(skb))
+		return -ENOMEM;
+
+	if (prepare_route_rule(priv, skb, RTM_DELRULE, &addr)) {
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	ret = rtnl_unicast(skb, dev_net(priv->dev), 0);
+	if (ret)
+		netdev_err(priv->dev, "Failed to new route\n");
+
+	return ret;
+}
+
 STATIC int prepare_route_entry(struct ipourma_dev_priv *priv, struct sk_buff *skb, int type)
 {
 	struct nlmsghdr *nlh;
@@ -159,6 +188,71 @@ STATIC void ipourma_add_route_entry(struct work_struct *work)
 	ret = rtnl_unicast(skb, dev_net(priv->dev), 0);
 	if (ret)
 		netdev_err(priv->dev, "Failed to new route\n");
+}
+
+STATIC int ipourma_del_route_entry(struct ipourma_dev_priv *priv)
+{
+	struct sk_buff *skb;
+	int ret;
+
+	if (IS_ERR_OR_NULL(priv))
+		return -EINVAL;
+
+	skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(skb))
+		return -ENOMEM;
+
+	if (prepare_route_entry(priv, skb, RTM_DELROUTE)) {
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	ret = rtnl_unicast(skb, dev_net(priv->dev), 0);
+	if (ret)
+		netdev_err(priv->dev, "Failed to new route\n");
+
+	return ret;
+}
+
+void ipourma_add_route(struct work_struct *work)
+{
+	struct ipourma_dev_priv *priv;
+	int i;
+	int ret = -1;
+	bool flag = false;
+
+	priv = container_of(work, struct ipourma_dev_priv, set_route);
+
+	for (i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
+		if (eid_is_empty(&priv->eid_info[i].eid))
+			continue;
+		ret = ipourma_add_route_rule(priv, &(priv->eid_info[i].eid));
+		flag = true;
+		if (ret != 0)
+			goto ROUTE_ERR;
+	}
+	if (flag)
+		queue_work(priv->net_config_wq, &(priv->set_route_entry));
+	return;
+
+ROUTE_ERR:
+	for (i--; i >= 0; i--)
+		ipourma_del_route_rule(priv, &(priv->eid_info[i].eid));
+}
+
+STATIC void ipourma_del_route(struct work_struct *work)
+{
+	struct ipourma_dev_priv *priv;
+
+	priv = container_of(work, struct ipourma_dev_priv, unset_route);
+	ipourma_del_route_entry(priv);
+	if (!IS_ERR_OR_NULL(priv->eid_info)) {
+		for (int i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
+			if (eid_is_empty(&priv->eid_info[i].eid))
+				continue;
+			ipourma_del_route_rule(priv, &priv->eid_info[i].eid);
+		}
+	}
 }
 
 STATIC int ipourma_ndo_init(struct net_device *dev)
@@ -439,9 +533,55 @@ STATIC void ipourma_netdev_setup(struct net_device *dev)
 	netif_keep_dst(dev);
 }
 
+STATIC inline void ipourma_open_dev(struct work_struct *work)
+{
+	struct ipourma_dev_priv *priv = container_of(work, struct ipourma_dev_priv, set_dev_up);
+	struct net_device *dev = priv->dev;
+
+	rtnl_lock();
+	dev_change_flags(dev, dev->flags | IFF_UP, NULL);
+	rtnl_unlock();
+}
+
+STATIC inline void ipourma_init_stats(struct ipourma_dev_priv *priv)
+{
+	memset(&(priv->runtime_stats.tx_stats), 0, sizeof(priv->runtime_stats.tx_stats));
+	memset(&(priv->runtime_stats.rx_stats), 0, sizeof(priv->runtime_stats.rx_stats));
+	spin_lock_init(&(priv->runtime_stats.lock));
+}
+
 STATIC int ipourma_priv_base_init(struct net_device *dev,
 	struct ubcore_device *urma_dev)
 {
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	spin_lock_init(&priv->lock);
+	priv->urma_dev = urma_dev;
+	priv->dev = dev;
+	priv->parent = NULL;
+	priv->eid_info = NULL;
+	priv->eid_count = 0;
+	priv->tjetty_lru.count = 0;
+	priv->need_restart_ring = false;
+	priv->tjetty_lru.tjetty_capacity = IPOURMA_DEFAULT_TJETTY_CAP;
+
+	atomic_set(&priv->need_set_ip_route, 1);
+	ipourma_init_stats(priv);
+	INIT_WORK(&(priv->set_dev_up), ipourma_open_dev);
+	INIT_WORK(&(priv->set_ip), ipourma_init_ipv6_addr);
+	INIT_WORK(&(priv->set_route), ipourma_add_route);
+	INIT_WORK(&(priv->unset_route), ipourma_del_route);
+	INIT_WORK(&(priv->set_route_entry), ipourma_add_route_entry);
+	INIT_WORK(&(priv->rx_cr_event), ipourma_rx_cr_event);
+	INIT_WORK(&(priv->register_netdev), ipourma_register_netdev);
+	atomic_set(&priv->rx_jfr_ref, 0);
+	atomic_set(&priv->tx_ring_blocked, 0);
+	spin_lock_init(&priv->tjetty_lru.lock);
+	INIT_LIST_HEAD(&priv->tjetty_lru.list);
+
+	priv->register_wq = alloc_workqueue("ipourma_register_wq", WQ_MEM_RECLAIM, 0);
+	if (IS_ERR_OR_NULL(priv->register_wq))
+		return -1;
 	return IPOURMA_OK;
 }
 

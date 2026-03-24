@@ -194,7 +194,7 @@ static const struct ethtool_ops ipourma_ethtool_ops = {
 	.get_strings		= ipourma_get_strings,
 	.get_ethtool_stats	= ipourma_get_ethtool_stats,
 	.get_sset_count		= ipourma_get_sset_count,
-	.get_link			= ethtool_op_get_link,
+	.get_link		= ethtool_op_get_link,
 };
 
 void ipourma_set_ethtool_ops(struct net_device *dev)

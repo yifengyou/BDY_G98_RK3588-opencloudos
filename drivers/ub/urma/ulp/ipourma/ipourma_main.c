@@ -17,6 +17,7 @@
 #include "ipourma_netdev.h"
 #include "ipourma_res.h"
 #include "ipourma_ub.h"
+#include "ipourma_sysfs.h"
 #include "ub/urma/ubcore_api.h"
 #include "ub/urma/ubcore_uapi.h"
 #include "ipourma_main.h"
@@ -258,7 +259,7 @@ void ipourma_register_netdev(struct work_struct *work)
 	ipourma_proc_eid_exist(priv);
 	queue_work(priv->net_config_wq, &(priv->set_dev_up));
 
-	// ipourma_register_sysfs(priv);
+	ipourma_register_sysfs(priv);
 	return;
 
 ALLOC_RESOURCE_ERR:
@@ -280,7 +281,7 @@ STATIC void ipourma_unregister_netdev(struct ipourma_dev_priv *priv)
 {
 	ubcore_unregister_event_handler(priv->urma_dev, &priv->eid_change_handler);
 	ipourma_flush_register_wq(priv);
-	// ipourma_unregister_sysfs(priv);
+	ipourma_unregister_sysfs(priv);
 	unregister_netdev(priv->dev);
 	ipourma_reset_rings(priv);
 	ipourma_cleanup_res(priv->dev);

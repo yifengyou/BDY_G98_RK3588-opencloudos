@@ -95,21 +95,59 @@ STATIC inline uint32_t hash_eids(union ubcore_eid *src_eid,
 				 union ubcore_eid *dst_eid,
 				 uint32_t hash_seed)
 {
-	// this function will be filled in the next commit
-	return 0;
+	/* 2 * UBCORE_EID_SIZE / sizeof(uint32_t) */
+	u32 num_u32 = UBCORE_EID_SIZE >> 1;
+	u32 key[UBCORE_EID_SIZE >> 1];
+
+	memcpy(key, src_eid, UBCORE_EID_SIZE);
+	memcpy(key + (num_u32 >> 1), dst_eid, UBCORE_EID_SIZE);
+
+	return jhash2((const u32 *)key, num_u32, hash_seed);
+}
+
+STATIC inline void ipourma_build_tjetty_cfg(struct ubcore_tjetty_cfg *tjetty_cfg,
+	union ubcore_eid *dst_eid, uint32_t jetty_id, uint32_t eid_idx, uint32_t ctp_en)
+{
+	tjetty_cfg->id.eid = *dst_eid;
+	tjetty_cfg->id.id = jetty_id;
+	tjetty_cfg->flag.bs.token_policy = UBCORE_TOKEN_NONE;
+	tjetty_cfg->tp_type = ctp_en ? UBCORE_CTP : UBCORE_UTP;
+	tjetty_cfg->trans_mode = ctp_en ? UBCORE_TP_RM : UBCORE_TP_UM;
+	tjetty_cfg->type = UBCORE_JETTY;
+	tjetty_cfg->eid_index = eid_idx;
 }
 
 STATIC struct ubcore_tjetty *ipourma_import_jetty(struct net_device *dev,
 	union ubcore_eid *dst_eid, uint32_t jetty_id)
 {
-	// this function will be filled in the next commit
-	return NULL;
+	u32 eid_index = jetty_id - IPOURMA_WELL_KNOWN_JETTY_ID;
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+	struct ubcore_device *urma_dev = priv->urma_dev;
+	struct ubcore_tjetty_cfg tjetty_cfg = { 0 };
+	struct ubcore_tjetty *tjetty;
+	uint32_t ctp_en;
+
+	ctp_en = urma_dev->attr.dev_cap.feature.bs.ctp_en;
+
+	ipourma_build_tjetty_cfg(&tjetty_cfg, dst_eid, jetty_id, eid_index, ctp_en);
+	tjetty = ubcore_import_jetty(urma_dev, &tjetty_cfg, NULL);
+	if (IS_ERR_OR_NULL(tjetty)) {
+		netdev_dbg(dev, "%s: dst EID = 0x%llx-0x%llx\n",
+					ipourma_err_desc(IPOURMA_IMPORT_JETTY_FAILED),
+					dst_eid->in6.subnet_prefix,
+					dst_eid->in6.interface_id);
+		return NULL;
+	}
+
+	return tjetty;
 }
 
 STATIC inline void ipourma_renew_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
 					  struct ipourma_tjetty_hash_node *tjetty_node)
 {
-	// this function will be filled in the next commit
+	list_del(&tjetty_node->lru_list);
+	list_add(&tjetty_node->lru_list, &tjetty_lru->list);
+	tjetty_node->last_jiffies = get_jiffies_64();
 }
 
 STATIC struct ipourma_tjetty_hash_node *ipourma_locate_tjetty_node(
@@ -142,7 +180,18 @@ STATIC struct ipourma_tjetty_hash_node *ipourma_locate_tjetty_node(
 STATIC void ipourma_insert_tjetty_node(struct ipourma_tjetty_lru *tjetty_lru,
 					struct ipourma_tjetty_hash_node *tjetty_node)
 {
-	// this function will be filled in the next commit
+	struct ipourma_tjetty_hmap *tjetty_hmap = &tjetty_lru->tjetty_hmap;
+	uint32_t hash_seed = tjetty_hmap->hash_seed;
+	/* newly imported jetty has been checked before the calling of insert function */
+	uint32_t hash_key = hash_eids(&tjetty_node->key[0], &tjetty_node->key[1], hash_seed);
+
+	hash_key = hash_key & (IPOURMA_TJETTY_HMAP_SIZE - 1);
+	spin_lock(&tjetty_lru->lock);
+	hlist_add_head(&tjetty_node->hlist, &tjetty_hmap->buckets[hash_key]);
+	list_add(&tjetty_node->lru_list, &tjetty_lru->list);
+	tjetty_lru->count++;
+	tjetty_node->last_jiffies = get_jiffies_64();
+	spin_unlock(&tjetty_lru->lock);
 }
 
 STATIC inline void ipourma_delete_tjetty_node(struct ipourma_tjetty_hash_node *tjetty_node)
@@ -183,7 +232,10 @@ void ipourma_lru_clear(struct ipourma_tjetty_lru *tjetty_lru)
 STATIC void ipourma_lru_update(struct ipourma_tjetty_lru *tjetty_lru,
 				struct ipourma_tjetty_hash_node *tjetty_node)
 {
-	// this function will be filled in the next commit
+	spin_lock(&tjetty_lru->lock);
+	while (tjetty_lru->count > tjetty_lru->tjetty_capacity)
+		ipourma_lru_del_tail(tjetty_lru, true);
+	spin_unlock(&tjetty_lru->lock);
 }
 
 STATIC void tjetty_aging_callback(struct work_struct *work)
@@ -235,7 +287,11 @@ void ipourma_init_tjetty_aging_work(struct ipourma_tjetty_lru *tjetty_lru)
 
 STATIC void ipourma_unimport_tjetty_cb(struct work_struct *work)
 {
-	// this function will be filled in the next commit
+	struct ipourma_tjetty_hash_node *tjetty_node = NULL;
+
+	tjetty_node = container_of(work, struct ipourma_tjetty_hash_node, unimport_work);
+	ubcore_unimport_jetty(tjetty_node->tjetty);
+	kfree(tjetty_node);
 }
 
 STATIC struct ubcore_tjetty *ipourma_import_new_tjetty(
@@ -647,36 +703,6 @@ void ipourma_replenish_segments(struct work_struct *work)
 		ipourma_urma_post_recv(priv->dev, rx_buf->eid_index, rx_buf->idx);
 }
 
-int ipourma_napi_tx_poll(struct napi_struct *napi, int budget)
-{
-	// this function will be filled in the next commit
-	return 0;
-}
-
-int ipourma_napi_rx_poll(struct napi_struct *napi, int budget)
-{
-	// this function will be filled in the next commit
-	return 0;
-}
-
-STATIC void ipourma_napi_add(struct net_device *dev)
-{
-	struct ipourma_dev_priv *priv = netdev_priv(dev);
-
-	netif_napi_add_weight(dev, &priv->napi_send, ipourma_napi_tx_poll,
-						  IPOURMA_NAPI_TX_WEIGHT);
-	netif_napi_add_weight(dev, &priv->napi_recv, ipourma_napi_rx_poll,
-						  IPOURMA_NAPI_RX_WEIGHT);
-}
-
-STATIC inline void ipourma_napi_del(struct net_device *dev)
-{
-	struct ipourma_dev_priv *priv = netdev_priv(dev);
-
-	netif_napi_del(&priv->napi_send);
-	netif_napi_del(&priv->napi_recv);
-}
-
 int ipourma_urma_init_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx)
 {
 	int ret;
@@ -700,45 +726,6 @@ init_urma_res_by_eid_failed:
 	ipourma_uninit_rings_by_eid(priv, eid_idx);
 init_rings_by_eid_failed:
 	return ret;
-}
-
-void ipourma_handle_rx_cqe(struct ubcore_jfc *jfc)
-{
-	// this function will be filled in the next commit
-}
-
-void ipourma_handle_tx_cqe(struct ubcore_jfc *jfc)
-{
-	// this function will be filled in the next commit
-}
-
-int ipourma_urma_dev_init(struct net_device *dev)
-{
-	int ret;
-
-	ipourma_napi_add(dev);
-	ret = ipourma_init_rings(dev);
-	if (ret != IPOURMA_OK)
-		goto init_rings_failed;
-
-	ret = ipourma_init_urma_resources(dev);
-	if (ret != IPOURMA_OK)
-		goto init_urma_res_failed;
-
-	return ret;
-init_urma_res_failed:
-	ipourma_uninit_rings(dev);
-init_rings_failed:
-	ipourma_napi_del(dev);
-	return ret;
-}
-
-void ipourma_urma_dev_uninit(struct net_device *dev)
-{
-	ipourma_uninit_tjetty_hmap(dev);
-	ipourma_uninit_urma_resources(dev);
-	ipourma_uninit_rings(dev);
-	ipourma_napi_del(dev);
 }
 
 STATIC void ipourma_do_handle_tx_wc(struct net_device *dev,
@@ -880,4 +867,162 @@ void ipourma_handle_rx_wc(struct net_device *dev,
 		return;
 	}
 	ipourma_do_handle_rx_wc(dev, priv, eid_idx, idx, cr);
+}
+
+void ipourma_rx_cr_event(struct work_struct *work)
+{
+	struct ipourma_dev_priv *priv = container_of(work, struct ipourma_dev_priv, rx_cr_event);
+	int done = 0, budget = IPOURMA_NAPI_RX_WEIGHT;
+	int left, max_num, actual_num, i, ret;
+	struct net_device *dev = priv->dev;
+
+	priv->runtime_stats.rx_stats.rx_deque++;
+	while (done < budget) {
+		left = budget - done;
+		/* DO NOT exceed the weight */
+		max_num = min(IPOURMA_NAPI_RX_WEIGHT, left);
+		actual_num = ubcore_poll_jfc(priv->rx_jfc, max_num, priv->rx_cr);
+		/* actual_num may be < 0, but it's OK to break the loop a little later */
+		if (unlikely(actual_num < 0)) {
+			priv->runtime_stats.rx_stats.poll_jfc_failed++;
+			netdev_dbg(dev, "%s:%d\n", ipourma_err_desc(IPOURMA_POLL_JFC_FAILED),
+					actual_num);
+			break;
+		}
+		priv->runtime_stats.rx_stats.poll_jfc_success++;
+		for (i = 0; i < actual_num; i++) {
+			ipourma_handle_rx_wc(dev, priv, &priv->rx_cr[i]);
+			done++;
+			priv->runtime_stats.rx_stats.cqe_recved++;
+		}
+		if (actual_num != max_num) {
+			/* actual_num < 0 or no more crs to poll */
+			break;
+		}
+	}
+	ret = ubcore_rearm_jfc(priv->rx_jfc, false);
+	if (unlikely(ret != 0)) {
+		priv->runtime_stats.rx_stats.rearm_failed++;
+		netdev_dbg(dev, "%s:%d\n",
+					ipourma_err_desc(IPOURMA_REARM_JFC_FAILED), ret);
+	} else
+		priv->runtime_stats.rx_stats.rearm_success++;
+}
+
+void ipourma_handle_tx_cqe(struct ubcore_jfc *jfc)
+{
+	struct ipourma_dev_priv *priv = ubcore_get_client_ctx_data(
+		jfc->ub_dev, &g_ipourma_ubcore_client);
+
+	if (IS_ERR_OR_NULL(priv))
+		return;
+	priv->runtime_stats.tx_stats.cqe_notify++;
+	napi_schedule(&priv->napi_send);
+}
+
+void ipourma_handle_rx_cqe(struct ubcore_jfc *jfc)
+{
+	struct ipourma_dev_priv *priv = ubcore_get_client_ctx_data(
+		jfc->ub_dev, &g_ipourma_ubcore_client);
+
+	if (IS_ERR_OR_NULL(priv))
+		return;
+	priv->runtime_stats.rx_stats.cqe_notify++;
+	napi_schedule(&priv->napi_recv);
+}
+
+int ipourma_napi_tx_poll(struct napi_struct *napi, int budget)
+{
+	struct ipourma_dev_priv *priv =
+		container_of(napi, struct ipourma_dev_priv, napi_send);
+	struct net_device *dev = priv->dev;
+	int actual_num, i, ret;
+
+	priv->runtime_stats.tx_stats.num_napi_tx++;
+	actual_num = ubcore_poll_jfc(priv->tx_jfc, IPOURMA_NAPI_TX_WEIGHT, priv->tx_cr);
+	if (unlikely(actual_num < 0)) {
+		priv->runtime_stats.tx_stats.poll_jfc_failed++;
+		netdev_dbg(dev, "%s:%d\n", ipourma_err_desc(IPOURMA_POLL_JFC_FAILED),
+					actual_num);
+	} else
+		priv->runtime_stats.tx_stats.poll_jfc_success++;
+	for (i = 0; i < actual_num; i++) {
+		priv->runtime_stats.tx_stats.cqe_recved++;
+		ipourma_handle_tx_wc(dev, priv, &priv->tx_cr[i]);
+	}
+
+	if (actual_num < budget) {
+		/* no more crs to poll */
+		napi_complete(napi);
+	}
+	ret = ubcore_rearm_jfc(priv->tx_jfc, false);
+	if (unlikely(ret != 0)) {
+		priv->runtime_stats.tx_stats.rearm_failed++;
+		netdev_dbg(dev, "%s:%d\n",
+					ipourma_err_desc(IPOURMA_REARM_JFC_FAILED), ret);
+	} else
+		priv->runtime_stats.tx_stats.rearm_success++;
+
+	/* used up the budget, return w/o calling napi_complete */
+	return actual_num;
+}
+
+int ipourma_napi_rx_poll(struct napi_struct *napi, int budget)
+{
+	struct ipourma_dev_priv *priv =
+		container_of(napi, struct ipourma_dev_priv, napi_recv);
+
+	priv->runtime_stats.rx_stats.num_napi_rx++;
+	priv->runtime_stats.rx_stats.rx_enque++;
+	queue_work(priv->rx_wq, &(priv->rx_cr_event));
+	napi_complete(napi);
+
+	return 0;
+}
+
+STATIC void ipourma_napi_add(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	netif_napi_add_weight(dev, &priv->napi_send, ipourma_napi_tx_poll,
+						  IPOURMA_NAPI_TX_WEIGHT);
+	netif_napi_add_weight(dev, &priv->napi_recv, ipourma_napi_rx_poll,
+						  IPOURMA_NAPI_RX_WEIGHT);
+}
+
+STATIC inline void ipourma_napi_del(struct net_device *dev)
+{
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	netif_napi_del(&priv->napi_send);
+	netif_napi_del(&priv->napi_recv);
+}
+
+int ipourma_urma_dev_init(struct net_device *dev)
+{
+	int ret;
+
+	ipourma_napi_add(dev);
+	ret = ipourma_init_rings(dev);
+	if (ret != IPOURMA_OK)
+		goto init_rings_failed;
+
+	ret = ipourma_init_urma_resources(dev);
+	if (ret != IPOURMA_OK)
+		goto init_urma_res_failed;
+
+	return ret;
+init_urma_res_failed:
+	ipourma_uninit_rings(dev);
+init_rings_failed:
+	ipourma_napi_del(dev);
+	return ret;
+}
+
+void ipourma_urma_dev_uninit(struct net_device *dev)
+{
+	ipourma_uninit_tjetty_hmap(dev);
+	ipourma_uninit_urma_resources(dev);
+	ipourma_uninit_rings(dev);
+	ipourma_napi_del(dev);
 }

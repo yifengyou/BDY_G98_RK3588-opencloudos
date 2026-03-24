@@ -671,8 +671,20 @@ STATIC struct ubcore_jfc *ipourma_create_jfc(struct net_device *dev,
 					     ubcore_comp_callback_t jfce_handler,
 					     u32 depth)
 {
-	// this function will be filled in the next commit
-	return NULL;
+	struct ubcore_jfc_cfg jfc_cfg = { 0 };
+	struct ubcore_jfc *jfc = NULL;
+	struct ipourma_dev_priv *priv = netdev_priv(dev);
+
+	jfc_cfg.depth = depth;
+	jfc = ubcore_create_jfc(priv->urma_dev, &jfc_cfg, jfce_handler, NULL, NULL);
+	if (IS_ERR_OR_NULL(jfc)) {
+		netdev_warn(dev, "%s\n", ipourma_err_desc(IPOURMA_CREATE_JFC_FAILED));
+		return NULL;
+	}
+	if (ubcore_rearm_jfc(jfc, false) != 0)
+		netdev_warn(dev, "%s\n", ipourma_err_desc(IPOURMA_REARM_JFC_FAILED));
+
+	return jfc;
 }
 
 STATIC void ipourma_uninit_misc(struct ipourma_dev_priv *priv)
