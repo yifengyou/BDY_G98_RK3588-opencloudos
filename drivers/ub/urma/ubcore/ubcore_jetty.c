@@ -395,7 +395,7 @@ struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 	jfc = dev->ops->create_jfc(dev, cfg, udata);
 	if (IS_ERR_OR_NULL(jfc)) {
 		ubcore_log_err("failed to create jfc, dev_name: %s.\n", dev->dev_name);
-		return UBCORE_CHECK_RETURN_ERR_PTR(jfc, ENOSPC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(jfc, UBCORE_DRV_ERRNO);
 	}
 
 	if (check_and_fill_jfc_attr(&jfc->jfc_cfg, cfg) != 0) {
@@ -437,9 +437,11 @@ int ubcore_modify_jfc(struct ubcore_jfc *jfc, struct ubcore_jfc_attr *attr,
 	dev = jfc->ub_dev;
 
 	ret = dev->ops->modify_jfc(jfc, attr, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to modify jfc, jfc_id:%u.\n",
-			       jfc_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to modify jfc, jfc_id:%u, ret: %d.\n",
+			       jfc_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -474,7 +476,7 @@ int ubcore_delete_jfc(struct ubcore_jfc *jfc)
 		ubcore_log_err(
 			"[DRV] failed to destroy jfc, dev_name: %s, jfc_id: %u, ret: %d\n",
 			dev->dev_name, jfc_id, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	ubcore_log_info("[JFC DELETE] Deleted JFC: id: %u, dev_name: %s.",
 			jfc->id, dev->dev_name);
@@ -524,10 +526,13 @@ int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
 	}
 
 	ret = dev->ops->destroy_jfc_batch(jfc_arr, jfc_num, bad_jfc_index);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err(
-			"driver failed to destroy jfc batch, index: %d.\n",
-			*bad_jfc_index);
+			"driver failed to destroy jfc batch, index: %d, ret: %d.\n",
+			*bad_jfc_index, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_delete_jfc_batch);
@@ -546,7 +551,7 @@ int ubcore_alloc_jfc(struct ubcore_device *dev, struct ubcore_jfc_cfg *cfg,
 	ret = dev->ops->alloc_jfc(dev, cfg, jfc, udata);
 	if (ret != 0) {
 		ubcore_log_err("failed to alloc jfc, ret is %d.\n", ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (check_and_fill_jfc_attr(&(*jfc)->jfc_cfg, cfg) != 0) {
@@ -597,9 +602,12 @@ int ubcore_free_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
 	dev = jfc->ub_dev;
 	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFC], &jfc->hnode);
 	ret = dev->ops->free_jfc(jfc, udata);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err("failed to free jfc, ret: %d, jfc_id:%u.\n",
 		    ret, jfc_id);
+		return -UBCORE_DRV_ERRNO;
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_free_jfc);
@@ -624,8 +632,9 @@ int ubcore_set_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t
 	}
 	ret = dev->ops->set_jfc_opt(jfc, opt, buf, len, udata); /*no need copy_from_user */
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to set_jfc_opt, jfc_id:%u, ret is %d.\n", jfc_id, ret);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to set_jfc_opt, jfc_id:%u, ret %d.\n",
+			jfc_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	ret = ubcore_set_options_common(g_ubcore_jfc_opt_table,
@@ -658,8 +667,11 @@ int ubcore_get_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t
 	jfc_id = jfc->id;
 	dev = jfc->ub_dev;
 	ret = dev->ops->get_jfc_opt(jfc, opt, buf, len, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to get_jfc_opt, jfc_id:%u.\n", jfc_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to get_jfc_opt, jfc_id:%u, ret: %d.\n",
+			jfc_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -686,8 +698,9 @@ int ubcore_active_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
 
 	ret = dev->ops->active_jfc(jfc, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to active jfc, jfc_id:%u.\n", jfc_id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to active jfc, jfc_id:%u, ret: %d.\n",
+			jfc_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfc->jfc_opt.is_actived = true;
 	return ret;
@@ -714,8 +727,9 @@ int ubcore_deactive_jfc(struct ubcore_jfc *jfc, struct ubcore_udata *udata)
 
 	ret = dev->ops->deactive_jfc(jfc, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to deactivate jfc, jfc_id:%u.\n", jfc_id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to deactivate jfc, jfc_id:%u, ret: %d.\n",
+			jfc_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfc->jfc_opt.is_actived = false;
 	return ret;
@@ -800,7 +814,7 @@ struct ubcore_jfs *ubcore_create_jfs(struct ubcore_device *dev,
 	jfs = dev->ops->create_jfs(dev, cfg, udata);
 	if (IS_ERR_OR_NULL(jfs)) {
 		ubcore_log_err("[Drv]failed to create jfs, device: %s.\n", dev->dev_name);
-		return UBCORE_CHECK_RETURN_ERR_PTR(jfs, ENOSPC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(jfs, UBCORE_DRV_ERRNO);
 	}
 
 	/* Prevent ubcore private data from being modified */
@@ -846,9 +860,11 @@ int ubcore_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	jfs_id = jfs->jfs_id.id;
 	dev = jfs->ub_dev;
 	ret = dev->ops->modify_jfs(jfs, attr, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to modify jfs, jfs_id:%u.\n",
-				   jfs_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to modify jfs, jfs_id:%u, ret: %d.\n",
+				   jfs_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -868,9 +884,11 @@ int ubcore_query_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_cfg *cfg,
 	jfs_id = jfs->jfs_id.id;
 	dev = jfs->ub_dev;
 	ret = dev->ops->query_jfs(jfs, cfg, attr);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to query jfs, jfs_id:%u.\n",
-				   jfs_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to query jfs, jfs_id:%u, ret: %d.\n",
+				   jfs_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -908,7 +926,7 @@ int ubcore_delete_jfs(struct ubcore_jfs *jfs)
 		ubcore_log_err("[DRV] Failed to destroy jfs, dev_name: %s, eid_idx: %u, jfs_id: %u.\n",
 			dev->dev_name, jfs->jfs_cfg.eid_index, jfs_id);
 		kref_init(&jfs->ref_cnt);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	ubcore_log_info("[JFS DELETE] Delete jfs: dev_name: %s, eid_idx: %u, jfs_id: %u.\n",
 		dev->dev_name, jfs->jfs_cfg.eid_index, jfs_id);
@@ -983,6 +1001,7 @@ int ubcore_delete_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num,
 		}
 		for (i = bad_index; i < jfs_num; ++i)
 			kref_init(&jfs_arr[i]->ref_cnt);
+		ret = -UBCORE_DRV_ERRNO;
 	}
 
 	for (i = 0; i < bad_index; ++i) {
@@ -1048,8 +1067,8 @@ int ubcore_alloc_jfs(struct ubcore_device *dev, struct ubcore_jfs_cfg *cfg,
 
 	ret = dev->ops->alloc_jfs(dev, cfg, jfs, udata);
 	if (ret != 0) {
-		ubcore_log_err("failed to alloc jfs, ret is %d.\n", ret);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]failed to alloc jfs, ret is %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (check_and_fill_jfs_attr(&(*jfs)->jfs_cfg, cfg) != 0) {
@@ -1106,8 +1125,11 @@ int ubcore_free_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
 	jfc = jfs->jfs_cfg.jfc;
 	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFS], &jfs->hnode);
 	ret = dev->ops->free_jfs(jfs, udata);
-	if (ret != 0)
-		ubcore_log_err("failed to free jfs, ret: %d, jfs_id: %u.\n", ret, jfs_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to free jfs, ret: %d, jfs_id: %u.\n",
+			ret, jfs_id);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	atomic_dec(&jfc->use_cnt);
 	return ret;
@@ -1136,9 +1158,9 @@ int ubcore_set_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf, uint32_t
 	dev = jfs->ub_dev;
 	ret = dev->ops->set_jfs_opt(jfs, opt, buf, len, udata); /* need copy_from_user */
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to set_jfs_opt, jfs_id:%u, ret is %d.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to set_jfs_opt, jfs_id:%u, ret %d.\n",
 			jfs->jfs_opt.urma_jfs_id, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	if (opt == UBCORE_JFS_BIND_JFC) {
 		old_jfc = jfs->jfs_cfg.jfc;
@@ -1179,9 +1201,11 @@ int ubcore_get_jfs_opt(struct ubcore_jfs *jfs, uint64_t opt, void *buf, uint32_t
 
 	dev = jfs->ub_dev;
 	ret = dev->ops->get_jfs_opt(jfs, opt, buf, len, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to get_jfs_opt, jfs_id:%u.\n",
-			jfs->jfs_opt.urma_jfs_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to get_jfs_opt, jfs_id:%u, ret: %d.\n",
+			jfs->jfs_opt.urma_jfs_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -1204,9 +1228,9 @@ int ubcore_active_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
 	dev = jfs->ub_dev;
 	ret = dev->ops->active_jfs(jfs, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to active jfs, ret: %d, jfs_id: %u.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to active jfs, ret: %d, jfs_id: %u.\n",
 			ret, jfs->jfs_opt.urma_jfs_id);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfs->jfs_opt.is_actived = true;
 
@@ -1231,9 +1255,9 @@ int ubcore_deactive_jfs(struct ubcore_jfs *jfs, struct ubcore_udata *udata)
 	dev = jfs->ub_dev;
 	ret = dev->ops->deactive_jfs(jfs, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to deactivate jfs, jfs_id:%u.\n",
-			jfs->jfs_opt.urma_jfs_id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to deactivate jfs, jfs_id:%u, ret: %d.\n",
+			jfs->jfs_opt.urma_jfs_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfs->jfs_opt.is_actived = false;
 	return ret;
@@ -1270,7 +1294,7 @@ struct ubcore_jfr *ubcore_create_jfr(struct ubcore_device *dev,
 	jfr = dev->ops->create_jfr(dev, cfg, udata);
 	if (IS_ERR_OR_NULL(jfr)) {
 		ubcore_log_err("[DRV]failed to create jfr,device: %s.\n", dev->dev_name);
-		return UBCORE_CHECK_RETURN_ERR_PTR(jfr, ENOSPC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(jfr, UBCORE_DRV_ERRNO);
 	}
 
 	if (check_and_fill_jfr_attr(&jfr->jfr_cfg, cfg) != 0) {
@@ -1315,9 +1339,11 @@ int ubcore_modify_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_attr *attr,
 	jfr_id = jfr->jfr_id.id;
 	dev = jfr->ub_dev;
 	ret = dev->ops->modify_jfr(jfr, attr, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to modify jfr, jfr_id:%u.\n",
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to modify jfr, jfr_id:%u.\n",
 				   jfr_id);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -1337,9 +1363,11 @@ int ubcore_query_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_cfg *cfg,
 	jfr_id = jfr->jfr_id.id;
 	dev = jfr->ub_dev;
 	ret = dev->ops->query_jfr(jfr, cfg, attr);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to query jfr, jfr_id:%u.\n",
-			       jfr_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to query jfr, jfr_id: %u, ret: %d.\n",
+			       jfr_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -1383,7 +1411,7 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr)
 			"[DRV] failed to destroy jfr, dev_name: %s, eid_idx: %u, jfr_id: %u, ret:%u\n",
 			dev->dev_name, jfr->jfr_cfg.eid_index, jfr_id, ret);
 		kref_init(&jfr->ref_cnt);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	atomic_dec(&jfc->use_cnt);
@@ -1466,6 +1494,7 @@ int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
 		}
 		for (i = bad_index; i < jfr_num; ++i)
 			kref_init(&jfr_arr[i]->ref_cnt);
+		ret = -UBCORE_DRV_ERRNO;
 	}
 
 	for (i = 0; i < bad_index; ++i) {
@@ -1505,9 +1534,7 @@ struct ubcore_tjetty *ubcore_import_jfr(struct ubcore_device *dev,
 	if (IS_ERR_OR_NULL(tjfr)) {
 		ubcore_log_err("Failed to import jfr, dev_name is %s,jfr_id:%u.\n",
 			dev->dev_name, cfg->id.id);
-		if (!tjfr)
-			return ERR_PTR(-ENOEXEC);
-		return tjfr;
+		return ERR_PTR(-UBCORE_DRV_ERRNO);
 	}
 	tjfr->cfg = *cfg;
 	tjfr->ub_dev = dev;
@@ -1563,9 +1590,7 @@ ubcore_import_jfr_ex(struct ubcore_device *dev, struct ubcore_tjetty_cfg *cfg,
 	if (IS_ERR_OR_NULL(tjfr)) {
 		ubcore_log_err("[DRV] failed to import jfr ex, dev_name: %s, jfr_id:%u.\n",
 			dev->dev_name, cfg->id.id);
-		if (!tjfr)
-			return ERR_PTR(-ENOEXEC);
-		return tjfr;
+		return ERR_PTR(-UBCORE_DRV_ERRNO);
 	}
 	tjfr->cfg = *cfg;
 	tjfr->ub_dev = dev;
@@ -1719,8 +1744,8 @@ int ubcore_alloc_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg,
 
 	ret = dev->ops->alloc_jfr(dev, cfg, jfr, udata);
 	if (ret != 0) {
-		ubcore_log_err("failed to alloc jfr, ret is %d.\n", ret);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to alloc jfr, ret is %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (check_and_fill_jfr_attr(&(*jfr)->jfr_cfg, cfg) != 0) {
@@ -1779,8 +1804,10 @@ int ubcore_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
 	jfc = jfr->jfr_cfg.jfc;
 	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFR], &jfr->hnode);
 	ret = dev->ops->free_jfr(jfr, udata);
-	if (ret != 0)
-		ubcore_log_err("failed to free jfr, ret: %d.\n", ret);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to free jfr, ret: %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	atomic_dec(&jfc->use_cnt);
 	return ret;
@@ -1808,9 +1835,9 @@ int ubcore_set_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t
 	dev = jfr->ub_dev;
 	ret = dev->ops->set_jfr_opt(jfr, opt, buf, len, udata); /*no need copy_from_user */
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to set_jfr_opt, jfr_id:%u, ret is %d.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to set_jfr_opt, jfr_id:%u, ret %d.\n",
 			jfr->jfr_opt.urma_jfr_id, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (opt == UBCORE_JFS_BIND_JFC) {
@@ -1859,9 +1886,9 @@ int ubcore_get_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t
 	dev = jfr->ub_dev;
 	ret = dev->ops->get_jfr_opt(jfr, opt, buf, len, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to get_jfr_opt, jfr_id:%u, ret %d.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to get_jfr_opt, jfr_id:%u, ret %d.\n",
 			jfr->jfr_opt.urma_jfr_id, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	return ret;
@@ -1885,9 +1912,9 @@ int ubcore_active_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
 	dev = jfr->ub_dev;
 	ret = dev->ops->active_jfr(jfr, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to active jfr, jfr_id:%u.\n",
-			jfr->jfr_opt.urma_jfr_id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to active jfr, jfr_id:%u, ret: %d.\n",
+			jfr->jfr_opt.urma_jfr_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfr->jfr_opt.is_actived = true;
 	return ret;
@@ -1911,9 +1938,9 @@ int ubcore_deactive_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
 	dev = jfr->ub_dev;
 	ret = dev->ops->deactive_jfr(jfr, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to deactivate jfr, jfr_id:%u.\n",
-			jfr->jfr_opt.urma_jfr_id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to deactivate jfr, jfr_id:%u, ret: %d.\n",
+			jfr->jfr_opt.urma_jfr_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jfr->jfr_opt.is_actived = false;
 	return ret;
@@ -2094,7 +2121,7 @@ struct ubcore_jetty *ubcore_create_jetty(struct ubcore_device *dev,
 	jetty = dev->ops->create_jetty(dev, cfg, udata);
 	if (IS_ERR_OR_NULL(jetty)) {
 		ubcore_log_err("[DRV]failed to create jetty.\n");
-		return UBCORE_CHECK_RETURN_ERR_PTR(jetty, ENOSPC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(jetty, UBCORE_DRV_ERRNO);
 	}
 
 	jetty->ub_dev = dev;
@@ -2172,9 +2199,11 @@ int ubcore_modify_jetty(struct ubcore_jetty *jetty,
 	jetty_id = jetty->jetty_id.id;
 
 	ret = jetty->ub_dev->ops->modify_jetty(jetty, attr, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to modify jetty, jetty_id:%u.\n",
-			       jetty_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to modify jetty, id:%u, ret: %d.\n",
+			       jetty_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -2195,9 +2224,11 @@ int ubcore_query_jetty(struct ubcore_jetty *jetty, struct ubcore_jetty_cfg *cfg,
 	jetty_id = jetty->jetty_id.id;
 	dev = jetty->ub_dev;
 	ret = dev->ops->query_jetty(jetty, cfg, attr);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to query jetty, jetty_id:%u.\n",
-			       jetty_id);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to query jetty, id:%u, ret: %d.\n",
+			       jetty_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -2276,7 +2307,7 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 		ubcore_log_err("[DRV]failed to destroy jetty, id: %u, dev_name: %s, eid_idx: %u, ret: %d.\n",
 			jetty_id, dev->dev_name, jetty->jetty_cfg.eid_index, ret);
 		kref_init(&jetty->ref_cnt);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (send_jfc)
@@ -2395,6 +2426,7 @@ int ubcore_delete_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num,
 		}
 		for (i = bad_index; i < jetty_num; ++i)
 			kref_init(&jetty_arr[i]->ref_cnt);
+		ret = -UBCORE_DRV_ERRNO;
 	}
 
 	/* Do not dereference jetty in jetty_arr, as it might be released */
@@ -2455,7 +2487,7 @@ struct ubcore_tjetty *ubcore_import_jetty(struct ubcore_device *dev,
 	if (IS_ERR_OR_NULL(tjetty)) {
 		ubcore_log_err("[DRV] failed to import jetty,dev_name: %s, eid_idx: %u, jetty_id: %u.\n",
 			       dev->dev_name, cfg->eid_index, cfg->id.id);
-		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, UBCORE_DRV_ERRNO);
 	}
 	tjetty->cfg = *cfg;
 	tjetty->ub_dev = dev;
@@ -2513,7 +2545,7 @@ ubcore_import_jetty_ex(struct ubcore_device *dev, struct ubcore_tjetty_cfg *cfg,
 	if (IS_ERR_OR_NULL(tjetty)) {
 		ubcore_log_err("[DRV] failed to import jetty, dev_name: %s, eid_idx: %u, jetty_id:%u.\n",
 			dev->dev_name, cfg->eid_index, cfg->id.id);
-		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, UBCORE_DRV_ERRNO);
 	}
 	tjetty->cfg = *cfg;
 	tjetty->ub_dev = dev;
@@ -2593,9 +2625,9 @@ int ubcore_unimport_jetty(struct ubcore_tjetty *tjetty)
 
 	ret = dev->ops->unimport_jetty(tjetty);
 	if (ret != 0) {
-		ubcore_log_err("[DRV] Failed to unimport_jetty, dev_name:%s, eid_idx:%u, jetty_id:%u.",
-			dev->dev_name, eid_idx, jetty_id);
-		return ret;
+		ubcore_log_err("[DRV] Failed to unimport_jetty, dev_name:%s, eid_idx:%u, id:%u, ret: %d.",
+			dev->dev_name, eid_idx, jetty_id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	ubcore_log_info("[JETTY UNIMPORT] Unimport JETTY Ex: id: %u, dev_name: %s, eid_idx: %u.\n",
 			jetty_id, dev->dev_name, eid_idx);
@@ -2776,8 +2808,8 @@ static int ubcore_inner_bind_ub_jetty_ctrlplane(
 
 	ret = dev->ops->bind_jetty_ex(jetty, tjetty, active_tp_cfg, udata);
 	if (ret != 0) {
-		ubcore_log_err("Failed to bind jetty.\n");
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to bind jetty, ret: %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	atomic_inc(&jetty->use_cnt);
 
@@ -2948,8 +2980,8 @@ int ubcore_unbind_jetty(struct ubcore_jetty *jetty)
 		}
 		ret = dev->ops->unbind_jetty(jetty);
 		if (ret != 0) {
-			ubcore_log_err("Failed to unbind jetty");
-			return ret;
+			ubcore_log_err("[DRV_ERROR]Failed to unbind jetty, ret: %d.\n", ret);
+			return -UBCORE_DRV_ERRNO;
 		}
 	}
 
@@ -3000,7 +3032,7 @@ struct ubcore_jetty_group *ubcore_create_jetty_grp(
 		dev, (struct ubcore_jetty_grp_cfg *)cfg, udata);
 	if (IS_ERR_OR_NULL(jetty_grp)) {
 		ubcore_log_err("failed to create jetty_grp.\n");
-		return UBCORE_CHECK_RETURN_ERR_PTR(jetty_grp, ENOSPC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(jetty_grp, UBCORE_DRV_ERRNO);
 	}
 
 	jetty_grp->jetty =
@@ -3054,10 +3086,12 @@ int ubcore_delete_jetty_grp(struct ubcore_jetty_group *jetty_grp)
 	mutex_destroy(&jetty_grp->lock);
 
 	ret = dev->ops->delete_jetty_grp(jetty_grp);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err(
-			"UBEP failed to destroy jetty_grp, jetty_grp_id:%u.\n",
-			jetty_grp_id);
+			"[DRV_ERROR]Failed to destroy jetty_grp, id:%ul, ret: %d.\n",
+			jetty_grp_id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -3084,7 +3118,7 @@ struct ubcore_tjetty *ubcore_import_jetty_async(struct ubcore_device *dev,
 		ubcore_log_err(
 			"UBEP failed to import jetty async, jetty_id:%u.\n",
 			cfg->id.id);
-		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(tjetty, UBCORE_DRV_ERRNO);
 	}
 	tjetty->cfg = *cfg;
 	tjetty->ub_dev = dev;
@@ -3198,8 +3232,9 @@ static int ubcore_inner_bind_ub_jetty_async(struct ubcore_jetty *jetty,
 
 	ret = dev->ops->bind_jetty(jetty, tjetty, udata);
 	if (ret != 0) {
-		ubcore_log_err("Failed to bind jetty async");
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to bind jetty async, ret: %d.\n",
+			ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	atomic_inc(&jetty->use_cnt);
 
@@ -3392,8 +3427,9 @@ int ubcore_unbind_jetty_async(struct ubcore_jetty *jetty, int timeout,
 		}
 		ret = dev->ops->unbind_jetty(jetty);
 		if (ret != 0) {
-			ubcore_log_err("Failed to unbind jetty");
-			return ret;
+			ubcore_log_err("[DRV_ERROR]Failed to unbind jetty, ret: %d.\n",
+				ret);
+			return -UBCORE_DRV_ERRNO;
 		}
 	}
 
@@ -3419,8 +3455,8 @@ int ubcore_alloc_jetty(struct ubcore_device *dev, struct ubcore_jetty_cfg *cfg,
 
 	ret = dev->ops->alloc_jetty(dev, cfg, jetty, udata);
 	if (ret != 0) {
-		ubcore_log_err("failed to alloc jetty, ret is %d.\n", ret);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to alloc jetty, ret %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (jetty == NULL || *jetty == NULL) {
@@ -3534,10 +3570,10 @@ int ubcore_free_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata)
 	}
 	ret = dev->ops->free_jetty(jetty, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to destroy jetty, ret: %d, jetty_id:%u.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to destroy jetty, ret: %d, jetty_id:%u.\n",
 			ret, jetty_id);
 		kref_init(&jetty->ref_cnt);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (send_jfc)
@@ -3680,9 +3716,9 @@ int ubcore_set_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf, ui
 	dev = jetty->ub_dev;
 	ret = dev->ops->set_jetty_opt(jetty, opt, buf, len, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to set_jetty_opt, jetty_id:%u, ret %d, opt %llu.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to set_jetty_opt, id:%u, ret %d, opt %llu.\n",
 			jetty->jetty_id.id, ret, opt);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	ret = ubcore_set_options_common(g_ubcore_jetty_opt_table,
 		g_ubcore_jetty_opt_map_count, opt, buf, len,
@@ -3717,9 +3753,11 @@ int ubcore_get_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf, ui
 
 	dev = jetty->ub_dev;
 	ret = dev->ops->get_jetty_opt(jetty, opt, buf, len, udata);
-	if (ret != 0)
-		ubcore_log_err("UBEP failed to get_jetty_opt, jetty_id:%u, ret is %d.\n",
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to get_jetty_opt, id:%u, ret is %d.\n",
 			jetty->jetty_id.id, ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -3743,9 +3781,9 @@ int ubcore_active_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata)
 	dev = jetty->ub_dev;
 	ret = dev->ops->active_jetty(jetty, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to activate jetty, jetty_id:%u.\n",
-			jetty->jetty_id.id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to activate jetty, id:%u, ret: %d.\n",
+			jetty->jetty_id.id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jetty->jetty_opt.is_actived = true;
 
@@ -3770,9 +3808,9 @@ int ubcore_deactive_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata
 	dev = jetty->ub_dev;
 	ret = dev->ops->deactive_jetty(jetty, udata);
 	if (ret != 0) {
-		ubcore_log_err("UBEP failed to deactivate jetty, jetty_id:%u.\n",
-			jetty->jetty_id.id);
-		return ret;
+		ubcore_log_err("[DRV_ERROR]Failed to deactivate jetty, id:%u, ret: %d.\n",
+			jetty->jetty_id.id, ret);
+		return -UBCORE_DRV_ERRNO;
 	}
 	jetty->jetty_opt.is_actived = false;
 	return ret;

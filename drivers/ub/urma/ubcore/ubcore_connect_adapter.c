@@ -82,8 +82,10 @@ static int ubcore_deactive_tp(struct ubcore_device *dev,
 	}
 
 	ret = dev->ops->deactive_tp(dev, tp_handle, udata);
-	if (ret != 0)
-		ubcore_log_err("Failed to deactivate tp, ret: %d.\n", ret);
+	if (ret != 0) {
+		ubcore_log_err("[DRV_ERROR]Failed to deactivate tp, ret: %d.\n", ret);
+		return -UBCORE_DRV_ERRNO;
+	}
 
 	return ret;
 }
@@ -547,6 +549,8 @@ struct ubcore_tjetty *ubcore_import_jfr_compat(struct ubcore_device *dev,
 	if (ret != 0 || tp_cnt != 1) {
 		ubcore_log_err("Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 			       ret, tp_cnt);
+		if (ret == -UBCORE_DRV_ERRNO)
+			return ERR_PTR(ret);
 		return NULL;
 	}
 
@@ -597,6 +601,8 @@ struct ubcore_tjetty *ubcore_import_jetty_compat(struct ubcore_device *dev,
 			ubcore_log_err(
 				"Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 				ret, tp_cnt);
+			if (ret == -UBCORE_DRV_ERRNO)
+				return ERR_PTR(ret);
 			return NULL;
 		}
 
@@ -647,6 +653,8 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 	if (ret != 0 || tp_cnt != 1) {
 		ubcore_log_err("Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 			       ret, tp_cnt);
+		if (tp_cnt != 1)
+			return -UBCORE_DRV_ERRNO;
 		return ret;
 	}
 

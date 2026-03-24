@@ -806,7 +806,7 @@ static struct ubcore_vtpn *ubcore_alloc_vtpn(struct ubcore_device *dev,
 	if (IS_ERR_OR_NULL(vtpn)) {
 		ubcore_log_err("failed to alloc vtpn!, dev_name:%s",
 			       dev->dev_name);
-		return UBCORE_CHECK_RETURN_ERR_PTR(vtpn, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(vtpn, UBCORE_DRV_ERRNO);
 	}
 
 	vtpn->ub_dev = dev;
@@ -1140,9 +1140,9 @@ static int ubcore_active_tp(struct ubcore_device *dev,
 
 	ret = dev->ops->active_tp(dev, active_tp_cfg);
 	if (ret != 0) {
-		ubcore_log_err("Failed to active tp, ret: %d, dev_name: %s.\n",
+		ubcore_log_err("[DRV_ERROR]Failed to active tp, ret: %d, dev_name: %s.\n",
 			       ret, dev->dev_name);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	vtpn->vtpn = (uint32_t)active_tp_cfg->tp_handle.bs.tpid;

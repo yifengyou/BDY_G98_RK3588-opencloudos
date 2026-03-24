@@ -28,6 +28,7 @@
 #include "ubcore_vtp.h"
 #include "ubcore_connect_adapter.h"
 #include "ubcore_topo_info.h"
+#include "ubcore_priv.h"
 #include "net/ubcore_session.h"
 #include "net/ubcore_cm.h"
 #include "ubmgr/ubmgr_topo.h"
@@ -1593,7 +1594,7 @@ ubcore_alloc_ucontext(struct ubcore_device *dev, uint32_t eid_index,
 		ubcore_log_err("failed to alloc ucontext.\n");
 		ubcore_cgroup_uncharge(&cg_obj, dev,
 				       UBCORE_RESOURCE_HCA_HANDLE);
-		return UBCORE_CHECK_RETURN_ERR_PTR(ucontext, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(ucontext, UBCORE_DRV_ERRNO);
 	}
 
 	ucontext->eid_index = eid_index;
@@ -1708,7 +1709,7 @@ int ubcore_query_device_attr(struct ubcore_device *dev,
 	ret = dev->ops->query_device_attr(dev, attr);
 	if (ret != 0) {
 		ubcore_log_err("failed to query device attr, ret: %d.\n", ret);
-		return -EPERM;
+		return -UBCORE_DRV_ERRNO;
 	}
 	return 0;
 }
@@ -1791,7 +1792,8 @@ int ubcore_user_control(struct ubcore_device *dev,
 
 	ret = dev->ops->user_ctl(dev, k_user_ctl);
 	if (ret != 0) {
-		ubcore_log_err("failed to exec kdrv_user_ctl.\n");
+		/* Do not change ret into -UBCORE_DRV_ERRNO, different from other ops */
+		ubcore_log_err("[DRV_ERROR]Failed to exec user_ctl, ret: %d.\n", ret);
 		return ret;
 	}
 

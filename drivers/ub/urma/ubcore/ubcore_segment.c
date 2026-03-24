@@ -37,7 +37,7 @@ struct ubcore_token_id *ubcore_alloc_token_id(struct ubcore_device *dev,
 	if (IS_ERR_OR_NULL(token_id)) {
 		ubcore_log_err("[DRV]:failed to alloc token_id id,dev_name is %s.\n",
 			dev->dev_name);
-		return UBCORE_CHECK_RETURN_ERR_PTR(token_id, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(token_id, UBCORE_DRV_ERRNO);
 	}
 	token_id->flag = flag;
 	token_id->ub_dev = dev;
@@ -71,7 +71,7 @@ int ubcore_free_token_id(struct ubcore_token_id *token_id)
 	ret = dev->ops->free_token_id(token_id);
 	if (ret != 0) {
 		ubcore_log_err("[DRV]Failed to free_token_id, ret is %d", ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	ubcore_log_info("[FREE_TOKEN_ID] Free_token_id is %u.",
 			token_id->token_id);
@@ -184,7 +184,7 @@ struct ubcore_target_seg *ubcore_register_seg(struct ubcore_device *dev,
 			       dev->dev_name);
 		if (alloc_token_id == true)
 			(void)ubcore_free_token_id(tmp_cfg.token_id);
-		return UBCORE_CHECK_RETURN_ERR_PTR(tseg, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(tseg, UBCORE_DRV_ERRNO);
 	}
 
 	tseg->ub_dev = dev;
@@ -238,7 +238,7 @@ int ubcore_unregister_seg(struct ubcore_target_seg *tseg)
 	if (ret != 0) {
 		ubcore_log_err("[DRV]failed to unregister segment,dev name is %s, ret is %d.\n",
 			dev->dev_name, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 
 	if (free_token_id == true && token_id != NULL)
@@ -275,7 +275,7 @@ struct ubcore_target_seg *ubcore_import_seg(struct ubcore_device *dev,
 	tseg = dev->ops->import_seg(dev, cfg, udata);
 	if (IS_ERR_OR_NULL(tseg)) {
 		ubcore_log_err("[DRV] failed to import segment with va\n");
-		return UBCORE_CHECK_RETURN_ERR_PTR(tseg, ENOEXEC);
+		return UBCORE_CHECK_RETURN_ERR_PTR(tseg, UBCORE_DRV_ERRNO);
 	}
 	tseg->ub_dev = dev;
 	tseg->uctx = ubcore_get_uctx(udata);
@@ -301,7 +301,7 @@ int ubcore_unimport_seg(struct ubcore_target_seg *tseg)
 	if (ret != 0) {
 		ubcore_log_err("[DRV] Failed to unimport seg, dev_name is %s, ret is %d.",
 			       dev->dev_name, ret);
-		return ret;
+		return -UBCORE_DRV_ERRNO;
 	}
 	ubcore_log_info("[UNIMPORT SEG] Unimport seg, dev_name is %s.",
 			dev->dev_name);

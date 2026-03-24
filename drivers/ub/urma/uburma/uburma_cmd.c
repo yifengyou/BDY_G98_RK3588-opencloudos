@@ -4104,7 +4104,7 @@ static int uburma_cmd_query_device_attr(struct ubcore_device *ubc_dev,
 	if (ret != 0) {
 		uburma_log_err("Failed to query device attr, dev_name: %s.\n",
 		ubc_dev->dev_name);
-		return -EINVAL;
+		return ret;
 	}
 
 	uburma_fill_device_attr(ubc_dev, &arg.out.attr);
