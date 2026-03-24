@@ -31,6 +31,7 @@ struct ubcore_route {
 	union ubcore_eid dst;
 	union ubcore_route_flag flag;
 	uint32_t hops;	// Only supports direct routes, currently 0.
+	uint32_t chip_id;
 };
 
 struct ubcore_route_list {

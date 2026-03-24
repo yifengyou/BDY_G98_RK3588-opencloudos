@@ -1754,8 +1754,8 @@ static void print_topo_map(struct ubagg_topo_map *topo_map)
 				EID_RAW_ARGS(node->agg_devs[dev_idx].agg_eid));
 
 			for (iodie_idx = 0; iodie_idx < IODIE_NUM; iodie_idx++) {
-				ubagg_log_info("------ socket_id[%d]: %u\n", iodie_idx,
-					node->agg_devs[dev_idx].ues[iodie_idx].socket_id);
+				ubagg_log_info("------ chip_id[%d]: %u\n", iodie_idx,
+					node->agg_devs[dev_idx].ues[iodie_idx].chip_id);
 
 				ubagg_log_info("------ primary_eid[%d]: " EID_FMT "\n", iodie_idx,
 					EID_RAW_ARGS(

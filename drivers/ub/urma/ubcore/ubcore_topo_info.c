@@ -247,8 +247,8 @@ void ubcore_show_topo_map(struct ubcore_topo_map *topo_map)
 				EID_RAW_ARGS(node->agg_devs[dev_idx].agg_eid));
 
 			for (die_idx = 0; die_idx < IODIE_NUM; die_idx++) {
-				ubcore_log_info("------ socket_id[%d]: %u\n", die_idx,
-					node->agg_devs[dev_idx].ues[die_idx].socket_id);
+				ubcore_log_info("------ chip_id[%d]: %u\n", die_idx,
+					node->agg_devs[dev_idx].ues[die_idx].chip_id);
 
 				ubcore_log_info("------ primary_eid[%d]: " EID_FMT "\n", die_idx,
 					EID_RAW_ARGS(
@@ -411,6 +411,7 @@ static int ubcore_get_route_port_eid(union ubcore_eid *src_v_eid,
 			(void)memcpy(&route_list->buf[num].dst,
 				dst_agg_dev->ues[iodie_id].port_eid[remote_port_id],
 				sizeof(union ubcore_eid));
+			route_list->buf[num].chip_id = src_agg_dev->ues[iodie_id].chip_id;
 			route_list->buf[num].flag.bs.rtp = 1;
 			route_list->buf[num].flag.bs.ctp = 1;
 			route_list->buf[num].flag.bs.utp = 1;
@@ -508,6 +509,7 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 		(void)memcpy(&route_list->buf[num + iodie_id].dst,
 			dst_agg_dev->ues[iodie_id].primary_eid,
 			sizeof(union ubcore_eid));
+		route_list->buf[num + iodie_id].chip_id = src_agg_dev->ues[iodie_id].chip_id;
 	}
 
 	route_list->route_num += IODIE_NUM;

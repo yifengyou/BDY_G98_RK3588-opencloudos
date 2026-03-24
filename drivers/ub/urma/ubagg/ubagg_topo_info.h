@@ -20,7 +20,7 @@
 #define DEV_NUM (128)
 
 struct ubagg_topo_ue {
-	uint32_t socket_id;
+	uint32_t chip_id;
 	char primary_eid[EID_LEN];
 	char port_eid[MAX_PORT_NUM][EID_LEN];
 };

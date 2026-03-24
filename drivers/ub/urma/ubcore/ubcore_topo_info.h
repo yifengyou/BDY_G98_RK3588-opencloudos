@@ -23,7 +23,7 @@
 #define MAX_NODE_NUM (16)
 
 struct ubcore_topo_ue {
-	uint32_t socket_id;
+	uint32_t chip_id;
 	char primary_eid[EID_LEN];
 	char port_eid[PORT_NUM][EID_LEN];
 };
