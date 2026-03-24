@@ -8,5 +8,8 @@ ipourma_main.o \
 ipourma_netdev.o \
 ipourma_res.o \
 ipourma_ub.o \
+ipourma_err.o \
+ipourma_addr_res.o \
+ipourma_ip.o \
 
 obj-$(CONFIG_UB_URMA) += ipourma.o

@@ -10,6 +10,12 @@
 
 #include "ipourma_types.h"
 
+void ipourma_uninit_rings_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
+void ipourma_uninit_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx);
+int ipourma_init_tjetty_hmap(struct net_device *dev);
 int ipourma_reset_rings(struct ipourma_dev_priv *priv);
+int ipourma_init_rings_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
+void ipourma_uninit_urma_resources_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
+int ipourma_init_urma_resources_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
 
 #endif

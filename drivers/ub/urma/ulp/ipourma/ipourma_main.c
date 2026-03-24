@@ -21,10 +21,6 @@
 #include "ub/urma/ubcore_uapi.h"
 #include "ipourma_main.h"
 
-STATIC int enable_test;
-module_param(enable_test, int, 0644);
-MODULE_PARM_DESC(enable_test, "Manually configure the enable bit.");
-
 static int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev);
 static void ipourma_ubcore_remove_device(struct ubcore_device *ubc_dev, void *client_ctx);
 static void ipourma_unregister_netdev(struct ipourma_dev_priv *priv);
