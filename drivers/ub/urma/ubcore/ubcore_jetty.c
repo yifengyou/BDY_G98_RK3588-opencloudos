@@ -173,8 +173,8 @@ struct ubcore_jfc *ubcore_create_jfc(struct ubcore_device *dev,
 		(void)dev->ops->destroy_jfc(jfc);
 		return ERR_PTR(ret);
 	}
-	ubcore_log_info("[JFC CREATE] Created JFC: id: %u, dev_name: %s, eid_idx: %u.",
-		jfc->id, dev->dev_name, jfc->uctx->eid_index);
+	ubcore_log_info("[JFC CREATE] Created JFC: id: %u, dev_name: %s.",
+		jfc->id, dev->dev_name);
 	return jfc;
 }
 EXPORT_SYMBOL(ubcore_create_jfc);
@@ -207,7 +207,6 @@ int ubcore_delete_jfc(struct ubcore_jfc *jfc)
 	struct ubcore_device *dev;
 	uint32_t jfc_id;
 	int ret;
-	uint32_t eid_idx = jfc->uctx->eid_index;
 
 	if (!jfc || !jfc->ub_dev || !jfc->ub_dev->ops ||
 	    !jfc->ub_dev->ops->destroy_jfc)
@@ -224,12 +223,13 @@ int ubcore_delete_jfc(struct ubcore_jfc *jfc)
 	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFC], &jfc->hnode);
 	ret = dev->ops->destroy_jfc(jfc);
 	if (ret != 0) {
-		ubcore_log_err("[DRV] failed to destroy jfc, dev_name: %s, jfc_id: %u, eid_idx: %u ret: %d\n",
-			dev->dev_name, jfc_id, eid_idx, ret);
+		ubcore_log_err(
+			"[DRV] failed to destroy jfc, dev_name: %s, jfc_id: %u, ret: %d\n",
+			dev->dev_name, jfc_id, ret);
 		return ret;
 	}
-	ubcore_log_info("[JFC DELETE] Deleted JFC: id: %u, dev_name: %s, eid_idx: %u.",
-		jfc->id, dev->dev_name, eid_idx);
+	ubcore_log_info("[JFC DELETE] Deleted JFC: id: %u, dev_name: %s.",
+			jfc->id, dev->dev_name);
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_delete_jfc);
@@ -387,7 +387,7 @@ struct ubcore_jfs *ubcore_create_jfs(struct ubcore_device *dev,
 		return ERR_PTR(ret);
 	}
 	ubcore_log_info("[JFS CREATE] Created JFS: id: %u, dev_name: %s, eid_idx: %u.\n",
-		jfs->jfs_id.id, dev->dev_name, jfs->uctx->eid_index);
+		jfs->jfs_id.id, dev->dev_name, jfs->jfs_cfg.eid_index);
 	atomic_inc(&cfg->jfc->use_cnt);
 	return jfs;
 }
@@ -441,7 +441,6 @@ int ubcore_delete_jfs(struct ubcore_jfs *jfs)
 {
 	struct ubcore_device *dev;
 	struct ubcore_jfc *jfc;
-	uint32_t eid_idx = jfs->uctx->eid_index;
 	uint32_t jfs_id;
 	int ret;
 
@@ -463,12 +462,12 @@ int ubcore_delete_jfs(struct ubcore_jfs *jfs)
 	ret = dev->ops->destroy_jfs(jfs);
 	if (ret != 0) {
 		ubcore_log_err("[DRV] Failed to destroy jfs, dev_name: %s, eid_idx: %u, jfs_id: %u.\n",
-			dev->dev_name, eid_idx, jfs_id);
+			dev->dev_name, jfs->jfs_cfg.eid_index, jfs_id);
 		kref_init(&jfs->ref_cnt);
 		return ret;
 	}
 	ubcore_log_info("[JFS DELETE] Delete jfs: dev_name: %s, eid_idx: %u, jfs_id: %u.\n",
-		dev->dev_name, eid_idx, jfs_id);
+		dev->dev_name, jfs->jfs_cfg.eid_index, jfs_id);
 	atomic_dec(&jfc->use_cnt);
 	return ret;
 }
@@ -639,7 +638,7 @@ struct ubcore_jfr *ubcore_create_jfr(struct ubcore_device *dev,
 		return ERR_PTR(ret);
 	}
 	ubcore_log_info("[JFR CREATE] Created JFC: id: %u,device: %s,eid_idx: %u.\n",
-		jfr->jfr_id.id, dev->dev_name, jfr->uctx->eid_index);
+		jfr->jfr_id.id, dev->dev_name, jfr->jfr_cfg.eid_index);
 	atomic_inc(&cfg->jfc->use_cnt);
 	return jfr;
 }
@@ -693,7 +692,6 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr)
 {
 	struct ubcore_device *dev;
 	struct ubcore_jfc *jfc;
-	uint32_t eid_idx;
 	uint32_t jfr_id;
 	int ret;
 
@@ -709,7 +707,6 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr)
 	jfc = jfr->jfr_cfg.jfc;
 	jfr_id = jfr->jfr_id.id;
 	dev = jfr->ub_dev;
-	eid_idx = jfr->uctx->eid_index;
 
 	(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JFR],
 					     &jfr->hnode);
@@ -722,7 +719,7 @@ int ubcore_delete_jfr(struct ubcore_jfr *jfr)
 	if (ret != 0) {
 		ubcore_log_err(
 			"[DRV] failed to destroy jfr, dev_name: %s, eid_idx: %u, jfr_id: %u, ret:%u\n",
-			dev->dev_name, eid_idx, jfr_id, ret);
+			dev->dev_name, jfr->jfr_cfg.eid_index, jfr_id, ret);
 		kref_init(&jfr->ref_cnt);
 		return ret;
 	}
@@ -880,7 +877,7 @@ struct ubcore_tjetty *ubcore_import_jfr(struct ubcore_device *dev,
 	}
 	tjfr->tp = NULL;
 	ubcore_log_info("[JFR IMPORT] Import TJFR: id: %u,device: %s,eid_idx: %u.\n",
-		cfg->id.id, dev->dev_name, tjfr->uctx->eid_index);
+		cfg->id.id, dev->dev_name, tjfr->cfg.eid_index);
 	return tjfr;
 }
 EXPORT_SYMBOL(ubcore_import_jfr);
@@ -938,14 +935,13 @@ ubcore_import_jfr_ex(struct ubcore_device *dev, struct ubcore_tjetty_cfg *cfg,
 	}
 	tjfr->tp = NULL;
 	ubcore_log_info("[JFR IMPORT EX] Import TJFR EX: id: %u,device: %s,eid_idx: %u.\n",
-		cfg->id.id, dev->dev_name, tjfr->uctx->eid_index);
+		cfg->id.id, dev->dev_name, tjfr->cfg.eid_index);
 	return tjfr;
 }
 EXPORT_SYMBOL(ubcore_import_jfr_ex);
 
 int ubcore_unimport_jfr(struct ubcore_tjetty *tjfr)
 {
-	uint32_t eid_idx = tjfr->uctx->eid_index;
 	uint32_t tjfr_id = tjfr->cfg.id.id;
 	struct ubcore_device *dev;
 	int ret;
@@ -975,11 +971,11 @@ int ubcore_unimport_jfr(struct ubcore_tjetty *tjfr)
 	ret = dev->ops->unimport_jfr(tjfr);
 	if (ret != 0) {
 		ubcore_log_err("[DRV] Failed to unimport jfr, dev_name: %s, eid_idx: %u, tjfr_id: %u.\n",
-			dev->dev_name, eid_idx, tjfr_id);
+			dev->dev_name, tjfr->cfg.eid_index, tjfr_id);
 		return ret;
 	}
 	ubcore_log_info("[JFR UNIMPORT] Unimport TJFR EX: id: %u, dev_name: %s, eid_idx: %u.\n",
-		tjfr_id, dev->dev_name, eid_idx);
+		tjfr_id, dev->dev_name, tjfr->cfg.eid_index);
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_unimport_jfr);
@@ -1267,7 +1263,7 @@ struct ubcore_jetty *ubcore_create_jetty(struct ubcore_device *dev,
 		atomic_inc(&cfg->jfr->use_cnt);
 
 	ubcore_log_info("[JETTY CREATE] Created JETTY: id: %u, dev_name: %s, eid_idx: %u.\n",
-		jetty->jetty_cfg.id, dev->dev_name, jetty->uctx->eid_index);
+		jetty->jetty_cfg.id, dev->dev_name, jetty->jetty_cfg.eid_index);
 	return jetty;
 destroy_tptable:
 	ubcore_destroy_tptable(&jetty->tptable);
@@ -1353,7 +1349,6 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 	struct ubcore_device *dev;
 	struct ubcore_jfr *jfr;
 	uint32_t jetty_id;
-	uint32_t eid_idx;
 	int ret;
 
 	if (ubcore_check_jetty_attr(jetty) != 0)
@@ -1365,7 +1360,6 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 	jfr = jetty->jetty_cfg.jfr;
 	jetty_id = jetty->jetty_id.id;
 	dev = jetty->ub_dev;
-	eid_idx = jetty->uctx->eid_index;
 
 	(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JETTY],
 					     &jetty->hnode);
@@ -1394,7 +1388,7 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 	ret = dev->ops->destroy_jetty(jetty);
 	if (ret != 0) {
 		ubcore_log_err("[DRV]failed to destroy jetty, id: %u, dev_name: %s, eid_idx: %u, ret: %d.\n",
-			jetty_id, dev->dev_name, eid_idx, ret);
+			jetty_id, dev->dev_name, jetty->jetty_cfg.eid_index, ret);
 		kref_init(&jetty->ref_cnt);
 		return ret;
 	}
@@ -1407,7 +1401,7 @@ int ubcore_delete_jetty(struct ubcore_jetty *jetty)
 		atomic_dec(&jfr->use_cnt);
 
 	ubcore_log_info("[JETTY DELETE] Delete JETTY: id: %u, dev_name: %s, eid_idx: %u.\n",
-		jetty_id, dev->dev_name, eid_idx);
+		jetty_id, dev->dev_name, jetty->jetty_cfg.eid_index);
 
 	return ret;
 }
