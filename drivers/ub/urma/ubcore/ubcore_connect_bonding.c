@@ -412,12 +412,19 @@ static void handle_seg_info_req(struct ubcore_device *dev,
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err("Failed to get seg info by user ctl");
+		goto put_device;
+	}
 
 	resp.result = ret;
-	if (send_seg_info_resp(dev, conn, msg->session_id, &resp) != 0)
+	if (send_seg_info_resp(dev, conn, msg->session_id, &resp) != 0) {
 		ubcore_log_err("Failed to send create resp message.\n");
+		goto put_device;
+	}
+
+put_device:
+	ubcore_put_device(bonding_dev);
 }
 
 static void handle_jetty_info_req(struct ubcore_device *dev,
@@ -437,12 +444,19 @@ static void handle_jetty_info_req(struct ubcore_device *dev,
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err("Failed to get jetty info by user ctl");
+		goto put_device;
+	}
 
 	resp.result = ret;
-	if (send_jetty_info_resp(dev, conn, msg->session_id, &resp) != 0)
+	if (send_jetty_info_resp(dev, conn, msg->session_id, &resp) != 0) {
 		ubcore_log_err("Failed to send create resp message.\n");
+		goto put_device;
+	}
+
+put_device:
+	ubcore_put_device(bonding_dev);
 }
 
 static void handle_exchange_udata_resp(struct ubcore_device *dev, void *conn,
