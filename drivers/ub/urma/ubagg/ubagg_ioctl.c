@@ -684,7 +684,6 @@ struct ubcore_jfr *ubagg_create_jfr(struct ubcore_device *ub_dev,
 		ubagg_log_err("ubagg fail to copy from user, ret:%d.\n", ret);
 		goto FREE_JFR;
 	}
-	jfr->ex_info.base.id = id;
 
 	ubagg_jfr_ht = &ubagg_dev->ubagg_ht[UBAGG_HT_JFR_HT];
 	spin_lock(&ubagg_jfr_ht->lock);
@@ -794,7 +793,6 @@ struct ubcore_jetty *ubagg_create_jetty(struct ubcore_device *dev,
 		ubagg_log_err("ubagg fail to copy from user, ret:%d.\n", ret);
 		goto FREE_JETTY;
 	}
-	jetty->ex_info.base.id = id;
 
 	ubagg_jetty_ht = &ubagg_dev->ubagg_ht[UBAGG_HT_JETTY_HT];
 	spin_lock(&ubagg_jetty_ht->lock);

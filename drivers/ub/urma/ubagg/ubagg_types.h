@@ -79,10 +79,8 @@ struct ubagg_jetty_id {
 };
 
 struct ubagg_jetty_exchange_info {
-	struct ubagg_jetty_id base;
 	struct ubagg_jetty_id slaves[UBAGG_DEV_MAX_NUM];
 	int dev_num;
-	bool is_in_matrix_server;
 	bool is_multipath;
 };
 

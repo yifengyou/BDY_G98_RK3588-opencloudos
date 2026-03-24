@@ -36,6 +36,64 @@ struct ubagg_topo_map *get_global_ubagg_map(void)
 	return g_topo_map;
 }
 
+static struct ubagg_topo_node *get_current_topo_node(void)
+{
+	if (g_topo_map == NULL)
+		return NULL;
+
+	for (uint32_t i = 0; i < g_topo_map->node_num; i++)
+		if (g_topo_map->topo_infos[i].is_current)
+			return &g_topo_map->topo_infos[i];
+	return NULL;
+}
+
+static struct ubagg_topo_node *get_topo_node(union ubcore_eid *eid)
+{
+	if (g_topo_map == NULL)
+		return NULL;
+
+	for (uint32_t i = 0; i < g_topo_map->node_num; i++) {
+		struct ubagg_topo_node *node = &g_topo_map->topo_infos[i];
+
+		for (uint32_t j = 0; j < DEV_NUM; j++) {
+			if (memcmp(&node->agg_devs[j].agg_eid, eid->raw,
+				   EID_LEN) == 0) {
+				return node;
+			}
+		}
+	}
+	return NULL;
+}
+
+int find_linked_port(union ubcore_eid *dst_eid,
+		     uint32_t ports[IODIE_NUM][MAX_PORT_NUM])
+{
+	struct ubagg_topo_node *src_node = get_current_topo_node();
+	struct ubagg_topo_node *dst_node = get_topo_node(dst_eid);
+
+	if (src_node == NULL) {
+		ubagg_log_err("Failed to get current topo node\n");
+		return -EINVAL;
+	}
+	if (dst_node == NULL) {
+		ubagg_log_err("Failed to get target topo node\n");
+		return -EINVAL;
+	}
+
+	for (uint32_t i = 0; i < IODIE_NUM; i++) {
+		for (uint32_t j = 0; j < MAX_PORT_NUM; j++) {
+			struct ubagg_topo_link *link = &src_node->links[i][j];
+
+			// Ignore iodie id, since it is not relevant for port mapping
+			if (src_node->id == dst_node->id)
+				ports[i][j] = j;
+			else if (link->peer_node == dst_node->id)
+				ports[i][j] = link->peer_port;
+		}
+	}
+	return 0;
+}
+
 struct ubagg_topo_map *
 create_ubagg_topo_map_from_user(struct ubagg_topo_node *user_topo_infos,
 				uint32_t node_num)

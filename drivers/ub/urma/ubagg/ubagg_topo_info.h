@@ -12,6 +12,7 @@
 #define ubagg_topo_info_H
 
 #include <linux/types.h>
+#include <ub/urma/ubcore_types.h>
 
 #define EID_LEN (16)
 #define MAX_PORT_NUM (9)
@@ -56,6 +57,8 @@ create_global_ubagg_topo_map(struct ubagg_topo_node *topo_infos,
 void delete_global_ubagg_topo_map(void);
 
 struct ubagg_topo_map *get_global_ubagg_map(void);
+int find_linked_port(union ubcore_eid *dst_eid,
+		     uint32_t ports[IODIE_NUM][MAX_PORT_NUM]);
 
 struct ubagg_topo_map *
 create_ubagg_topo_map_from_user(struct ubagg_topo_node *topo_infos,
