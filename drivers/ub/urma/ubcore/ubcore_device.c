@@ -1295,6 +1295,11 @@ void ubcore_stop_requests(struct ubcore_device *dev)
 }
 EXPORT_SYMBOL(ubcore_stop_requests);
 
+static inline bool list_is_uninitialized(const struct list_head *head)
+{
+	return (READ_ONCE(head->next) == NULL) || (READ_ONCE(head->prev) == NULL);
+}
+
 void ubcore_register_event_handler(struct ubcore_device *dev,
 				   struct ubcore_event_handler *handler)
 {
@@ -1304,6 +1309,11 @@ void ubcore_register_event_handler(struct ubcore_device *dev,
 	}
 
 	down_write(&dev->event_handler_rwsem);
+	if (list_is_uninitialized(&dev->event_handler_list)) {
+		up_write(&dev->event_handler_rwsem);
+		ubcore_log_err("Linked list is not initialized.\n");
+		return;
+	}
 	list_add_tail(&handler->node, &dev->event_handler_list);
 	up_write(&dev->event_handler_rwsem);
 }

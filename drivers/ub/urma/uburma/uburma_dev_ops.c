@@ -28,6 +28,7 @@ static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
 	struct uburma_file *file =
 		container_of(ub_mn, struct uburma_file, ub_mn);
 	struct uburma_device *ubu_dev = file->ubu_dev;
+	struct ubcore_ucontext *ucontext = NULL;
 	struct ubcore_device *ubc_dev;
 	int srcu_idx;
 
@@ -47,13 +48,13 @@ static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
 	ubc_dev = srcu_dereference(ubu_dev->ubc_dev, &ubu_dev->ubc_dev_srcu);
 
 	down_write(&file->ucontext_rwsem);
-
+	ucontext = file->ucontext;
 	uburma_cleanup_uobjs(file, UBURMA_REMOVE_CLOSE);
-	if (file->ucontext) {
+	if (ucontext) {
 		uburma_log_info("Start ubcore free ucontext.\n");
 		if (ubc_dev) {
-			ubcore_free_ucontext(ubc_dev, file->ucontext);
 			file->ucontext = NULL;
+			ubcore_free_ucontext(ubc_dev, ucontext);
 		}
 	}
 	up_write(&file->ucontext_rwsem);
@@ -233,6 +234,7 @@ int uburma_close(struct inode *inode, struct file *filp)
 {
 	struct uburma_file *file = filp->private_data;
 	struct uburma_device *ubu_dev = file->ubu_dev;
+	struct ubcore_ucontext *ucontext = NULL;
 	struct ubcore_device *ubc_dev;
 	int srcu_idx;
 
@@ -255,11 +257,12 @@ int uburma_close(struct inode *inode, struct file *filp)
 	mutex_unlock(&ubu_dev->uburma_file_list_mutex);
 
 	down_write(&file->ucontext_rwsem);
+	ucontext = file->ucontext;
 	uburma_cleanup_uobjs(file, UBURMA_REMOVE_CLOSE);
-	if (file->ucontext) {
+	if (ucontext) {
 		uburma_log_info("Start ubcore free ucontext.\n");
-		ubcore_free_ucontext(ubc_dev, file->ucontext);
 		file->ucontext = NULL;
+		ubcore_free_ucontext(ubc_dev, ucontext);
 	}
 	up_write(&file->ucontext_rwsem);
 

@@ -1070,6 +1070,7 @@ static int uburma_cmd_create_jfc(struct ubcore_device *ubc_dev,
 	jfc_uobj->jfce = (struct uburma_uobj *)jfce;
 	jfc_uobj->uobj.object = jfc;
 	jfc->urma_jfc = arg.in.urma_jfc;
+	spin_lock_init(&jfc_uobj->jfc_lock);
 
 	/* Do not release jfae fd until jfc is destroyed */
 	ret = uburma_get_jfae(file);
@@ -1137,6 +1138,15 @@ static int uburma_cmd_modify_jfc(struct ubcore_device *ubc_dev,
 	return ret;
 }
 
+static void uburma_cleanup_jfce_references(struct uburma_jfc_uobj *jfc_uobj)
+{
+	unsigned long flag;
+
+	spin_lock_irqsave(&jfc_uobj->jfc_lock, flag);
+	jfc_uobj->jfce = NULL;
+	spin_unlock_irqrestore(&jfc_uobj->jfc_lock, flag);
+}
+
 static int uburma_cmd_delete_jfc(struct ubcore_device *ubc_dev,
 				 struct uburma_file *file,
 				 struct uburma_cmd_hdr *hdr)
@@ -1163,6 +1173,7 @@ static int uburma_cmd_delete_jfc(struct ubcore_device *ubc_dev,
 	ret = uobj_remove_commit(uobj);
 	if (ret != 0) {
 		uburma_log_err("delete jfc failed, ret:%d.\n", ret);
+		uburma_cleanup_jfce_references(jfc_uobj);
 		uobj_put(uobj);
 		uobj_put_del(uobj);
 		return ret;
@@ -1170,6 +1181,7 @@ static int uburma_cmd_delete_jfc(struct ubcore_device *ubc_dev,
 
 	arg.out.comp_events_reported = jfc_uobj->comp_events_reported;
 	arg.out.async_events_reported = jfc_uobj->async_events_reported;
+	uburma_cleanup_jfce_references(jfc_uobj);
 	uobj_put(uobj);
 	uobj_put_del(uobj);
 	return uburma_tlv_append(hdr, (void *)&arg);

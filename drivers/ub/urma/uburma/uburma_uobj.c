@@ -809,19 +809,9 @@ static int uburma_free_seg(struct uburma_uobj *uobj,
 	return ubcore_unregister_seg((struct ubcore_target_seg *)uobj->object);
 }
 
-static int uburma_free_jfc(struct uburma_uobj *uobj,
-			   enum uburma_remove_reason why)
+static void uburma_release_jfce_event(struct uburma_jfc_uobj *jfc_uobj)
 {
-	struct uburma_jfc_uobj *jfc_uobj =
-		container_of(uobj, struct uburma_jfc_uobj, uobj);
-	struct ubcore_jfc *jfc = (struct ubcore_jfc *)uobj->object;
 	struct uburma_jfce_uobj *jfce_uobj;
-	uint32_t jfc_id = jfc->id;
-	int ret;
-
-	ret = ubcore_delete_jfc(jfc);
-	if (ret)
-		return ret;
 
 	if (!IS_ERR(jfc_uobj->jfce)) {
 		jfce_uobj = container_of(jfc_uobj->jfce,
@@ -830,8 +820,24 @@ static int uburma_free_jfc(struct uburma_uobj *uobj,
 					  &jfc_uobj->comp_event_list);
 		uobj_put(jfc_uobj->jfce);
 	}
+}
 
+static int uburma_free_jfc(struct uburma_uobj *uobj,
+			   enum uburma_remove_reason why)
+{
+	struct uburma_jfc_uobj *jfc_uobj =
+		container_of(uobj, struct uburma_jfc_uobj, uobj);
+	struct ubcore_jfc *jfc = (struct ubcore_jfc *)uobj->object;
+	uint32_t jfc_id = jfc->id;
+	int ret;
+
+	ret = ubcore_delete_jfc(jfc);
+	if (ret) {
+		uburma_release_jfce_event(jfc_uobj);
+		return ret;
+	}
 	uburma_release_async_event(uobj->ufile, &jfc_uobj->async_event_list);
+	uburma_release_jfce_event(jfc_uobj);
 	uburma_log_info("Finish to delete jfc: %u.\n", jfc_id);
 	return ret;
 }
@@ -841,7 +847,6 @@ static int uburma_free_jfc_batch(struct uburma_uobj **uobj_arr, int arr_num,
 				 enum uburma_remove_reason why)
 {
 	struct uburma_jfc_uobj **jfc_uobj_arr = NULL;
-	struct uburma_jfce_uobj *jfce_uobj = NULL;
 	struct uburma_jfc_uobj *jfc_uobj = NULL;
 	struct ubcore_jfc **jfc_arr = NULL;
 	struct uburma_uobj *uobj = NULL;
@@ -878,16 +883,9 @@ static int uburma_free_jfc_batch(struct uburma_uobj **uobj_arr, int arr_num,
 		for (i = 0; i < end_index; ++i) {
 			jfc_uobj = jfc_uobj_arr[i];
 			uobj = uobj_arr[i];
-			if (!IS_ERR(jfc_uobj->jfce)) {
-				jfce_uobj = container_of(
-					jfc_uobj->jfce, struct uburma_jfce_uobj,
-					uobj);
-				uburma_release_comp_event(
-					jfce_uobj, &jfc_uobj->comp_event_list);
-				uobj_put(jfc_uobj->jfce);
-			}
 			uburma_release_async_event(uobj->ufile,
 						   &jfc_uobj->async_event_list);
+			uburma_release_jfce_event(jfc_uobj);
 		}
 	}
 
