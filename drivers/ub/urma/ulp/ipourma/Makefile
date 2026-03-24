@@ -11,5 +11,8 @@ ipourma_ub.o \
 ipourma_err.o \
 ipourma_addr_res.o \
 ipourma_ip.o \
+ipourma_ethtool.o \
+ipourma_netlink.o \
+ipourma_utils.o \
 
 obj-$(CONFIG_UB_URMA) += ipourma.o

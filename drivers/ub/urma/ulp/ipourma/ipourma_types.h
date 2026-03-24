@@ -276,6 +276,7 @@ struct ipourma_tjetty_lru {
 	uint16_t count;
 	uint16_t tjetty_capacity;
 	struct delayed_work tjetty_aging_work;
+	struct workqueue_struct *tjetty_wq;
 	uint16_t tjetty_aging_interval_s;
 	uint16_t tjetty_aging_timeout_s;
 };

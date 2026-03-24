@@ -12,6 +12,7 @@
 
 void ipourma_build_seg_cfg(struct ubcore_seg_cfg *cfg,
 			   uint64_t va, uint64_t len);
+void ipourma_lru_clear(struct ipourma_tjetty_lru *tjetty_lru);
 void ipourma_init_tjetty_aging_work(struct ipourma_tjetty_lru *tjetty_lru);
 int ipourma_urma_init_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
 void ipourma_urma_dev_uninit(struct net_device *dev);

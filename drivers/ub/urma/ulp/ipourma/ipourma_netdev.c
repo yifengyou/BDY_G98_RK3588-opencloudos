@@ -25,6 +25,8 @@
 #include "ipourma_main.h"
 #include "ipourma_ip.h"
 #include "ipourma_addr_res.h"
+#include "ipourma_ethtool.h"
+#include "ipourma_netlink.h"
 #include "ub/urma/ubcore_uapi.h"
 #include "ipourma_netdev.h"
 
@@ -157,13 +159,108 @@ STATIC void ipourma_add_route_entry(struct work_struct *work)
 		netdev_err(priv->dev, "Failed to new route\n");
 }
 
+STATIC int ipourma_ndo_init(struct net_device *dev)
+{
+	// this function will be filled in the next commit
+	return 0;
+}
+
+STATIC void ipourma_ndo_uninit(struct net_device *dev)
+{
+	// do uninit in ipourma_stop
+}
+
+STATIC int ipourma_open(struct net_device *dev)
+{
+	// this function will be filled in the next commit
+	return 0;
+}
+
+STATIC inline void ipourma_napi_disable(struct net_device *dev)
+{
+	// this function will be filled in the next commit
+}
+
+STATIC int ipourma_stop(struct net_device *dev)
+{
+	// this function will be filled in the next commit
+	return 0;
+}
+
+STATIC int ipourma_change_mtu(struct net_device *dev, int mtu)
+{
+	// this function will be filled in the next commit
+	return 0;
+}
+
+STATIC netdev_features_t ipourma_fix_features(struct net_device *dev,
+	netdev_features_t features)
+{
+	// this function will be filled in the next commit
+	return features;
+}
+
+STATIC netdev_tx_t ipourma_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	// this function will be filled in the next commit
+	return NETDEV_TX_OK;
+}
+
+STATIC void ipourma_timeout(struct net_device *dev, unsigned int txqueue)
+{
+	// this function will be filled in the next commit
+}
+
+/*
+ * for real net device, return 0.
+ */
+STATIC int ipourma_get_iflink(const struct net_device *dev)
+{
+	return 0;
+}
+
+STATIC int ipourma_set_mac(struct net_device *dev, void *addr)
+{
+	// this function will be filled in the next commit
+	return 0;
+}
+
+STATIC void ipourma_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
+{
+	// fill in stats
+	if (IS_ERR_OR_NULL(dev) || IS_ERR_OR_NULL(stats))
+		return;
+	netdev_stats_to_stats64(stats, &dev->stats);
+}
+
+STATIC int ipourma_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+{
+	/* if ipourma has some private functions in the future, ioctl will call them here. */
+	return 0;
+}
+
+STATIC const struct net_device_ops ipourma_netdev_ops = {
+	.ndo_init		 = ipourma_ndo_init,
+	.ndo_uninit		 = ipourma_ndo_uninit,
+	.ndo_open		 = ipourma_open,
+	.ndo_stop		 = ipourma_stop,
+	.ndo_change_mtu		 = ipourma_change_mtu,
+	.ndo_fix_features	 = ipourma_fix_features,
+	.ndo_start_xmit		 = ipourma_start_xmit,
+	.ndo_tx_timeout		 = ipourma_timeout,
+	.ndo_get_iflink		 = ipourma_get_iflink,
+	.ndo_set_mac_address	 = ipourma_set_mac,
+	.ndo_get_stats64	 = ipourma_get_stats,
+	.ndo_eth_ioctl		 = ipourma_ioctl,
+};
+
 STATIC void ipourma_netdev_setup(struct net_device *dev)
 {
-	// dev->netdev_ops        = &ipourma_netdev_ops;
+	dev->netdev_ops        = &ipourma_netdev_ops;
 
-	/* ipourma_set_ethtool_ops(dev);
-	 * ipourma_set_rtnl_link_ops(dev);
-	 */
+	ipourma_set_ethtool_ops(dev);
+	ipourma_set_rtnl_link_ops(dev);
+
 	dev->type              = ARPHRD_ETHER;
 	dev->hard_header_len   = IPOURMA_HARD_LEN;
 	dev->addr_len          = IPOURMA_ALEN;
