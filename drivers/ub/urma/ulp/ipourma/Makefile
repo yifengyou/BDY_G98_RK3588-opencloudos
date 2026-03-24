@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Makefile for the Linux kernel UB device drivers.
+#
+
+ipourma-objs := \
+ipourma_main.o \
+ipourma_netdev.o \
+ipourma_res.o \
+ipourma_ub.o \
+
+obj-$(CONFIG_UB_URMA) += ipourma.o
