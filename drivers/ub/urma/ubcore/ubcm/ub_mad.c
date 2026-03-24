@@ -343,12 +343,43 @@ static struct ubcore_jfr *ubmad_create_jfr(struct ubmad_device_priv *dev_priv,
 	return ubcore_create_jfr(dev_priv->device, &jfr_cfg, NULL, NULL);
 }
 
+static int ubmad_jetty_set_priority(struct ubmad_device_priv *dev_priv,
+		  struct ubcore_jetty_cfg *jetty_cfg)
+{
+	struct ubcore_device_attr attr = {0};
+	int set_priority_ret = 0;
+	int ret = 0;
+	int i;
+
+	ret = ubcore_query_device_attr(dev_priv->device, &attr);
+	if (ret == 0) {
+		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
+			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
+				jetty_cfg->priority = i;
+				ubcore_log_info("ubmad create jetty set priority : %d, tp_type : ctp\n"
+					, i);
+				set_priority_ret = 1;
+				break;
+			}
+		}
+		if (set_priority_ret == 0) {
+			ubcore_log_err("set priority default value : 0\n");
+			return -EINVAL;
+		}
+	} else {
+		ubcore_log_err("Failed to ubcore get dev_attr!\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static struct ubcore_jetty *
 ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 		   struct ubcore_jfc *jfc_r, struct ubcore_jfr *jfr,
 		   uint32_t jetty_id)
 {
 	struct ubcore_jetty_cfg jetty_cfg = { 0 };
+	int ret = 0;
 
 	jetty_cfg.id = jetty_id;
 	jetty_cfg.flag.bs.share_jfr = 1;
@@ -356,6 +387,9 @@ ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 	jetty_cfg.eid_index = dev_priv->eid_info.eid_index;
 	jetty_cfg.jfs_depth = UBMAD_JFS_DEPTH;
 	jetty_cfg.priority = 0; /* Highest priority */
+	ret = ubmad_jetty_set_priority(dev_priv, &jetty_cfg);
+	if (ret)
+		ubcore_log_info("ubmad create jetty set priority : 0\n");
 	jetty_cfg.max_send_sge = UBMAD_JFS_MAX_SGE_NUM;
 	jetty_cfg.max_send_rsge = UBMAD_JFS_MAX_SGE_NUM;
 	jetty_cfg.jfr_depth = UBMAD_JFR_DEPTH;

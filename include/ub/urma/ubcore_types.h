@@ -37,6 +37,7 @@
 
 #define UBCORE_MAX_JETTY_IN_JETTY_GRP 32U
 #define UBCORE_MAX_PORT_CNT 16
+#define UBCORE_MAX_PRIORITY_CNT 16
 #define UBCORE_MAX_UE_CNT 1024
 #define UBCORE_MAX_DEV_NAME 64
 #define UBCORE_MAX_DRIVER_NAME 64
@@ -56,6 +57,7 @@
 #define UBCORE_MAX_TPG_CNT_PER_MUE \
 	(16 * 1024) // Temporarily specify the upper limit
 #define UBCORE_EID_GROUP_NAME_LEN 10
+#define UBCORE_PRIORITY_GROUP_NAME_LEN 64
 #define UBCORE_MAX_MIG_ENTRY_CNT 64
 #define UBCORE_RESERVED_JETTY_ID_MIN 0
 #define UBCORE_RESERVED_JETTY_ID_MAX 1023
@@ -624,6 +626,21 @@ union urma_tp_feature {
 	uint32_t value;
 };
 
+union urma_tp_type_en {
+	struct {
+		uint32_t rtp : 1;
+		uint32_t ctp : 1;
+		uint32_t utp : 1;
+		uint32_t reserved : 29;
+	} bs;
+	uint32_t value;
+};
+
+struct ubcore_sl_info {
+	uint32_t SL;
+	union urma_tp_type_en tp_type;
+};
+
 struct ubcore_device_cap {
 	union ubcore_device_feat feature;
 	uint32_t max_jfc;
@@ -682,6 +699,7 @@ struct ubcore_device_cap {
 	union urma_tp_type_cap rc_tp_cap;
 	union urma_tp_type_cap um_tp_cap;
 	union urma_tp_feature tp_feature;
+	struct ubcore_sl_info priority_info[UBCORE_MAX_PRIORITY_CNT];
 };
 
 struct ubcore_guid {
@@ -2864,6 +2882,8 @@ struct ubcore_ops {
 	 * @param[in] uctx: the ubcore_ucontext
 	 */
 	void (*disassociate_ucontext)(struct ubcore_ucontext *uctx);
+
+	int (*set_sl)(struct ubcore_device *dev, uint32_t priority, uint32_t SL);
 };
 
 struct ubcore_bitmap {
@@ -2947,9 +2967,22 @@ struct ubcore_eid_attr {
 	struct device_attribute attr;
 };
 
+struct ubcore_priority_kobj {
+	struct kobject kobj;
+	struct ubcore_device *dev;
+	uint8_t priority_id;
+};
+
+struct ubcore_prioritys_kobj {
+	struct kobject kobj;
+	struct ubcore_device *dev;
+	struct ubcore_priority_kobj priority[UBCORE_MAX_PRIORITY_CNT];
+};
+
 struct ubcore_logic_device {
 	struct device *dev;
 	struct ubcore_port_kobj port[UBCORE_MAX_PORT_CNT];
+	struct ubcore_prioritys_kobj prioritys;
 	struct list_head node; /* add to ldev list */
 	possible_net_t net;
 	struct ubcore_device *ub_dev;

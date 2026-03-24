@@ -32,6 +32,7 @@ int ubcore_add_eid_done(struct netlink_callback *cb);
 int ubcore_delete_eid_start(struct netlink_callback *cb);
 int ubcore_delete_eid_done(struct netlink_callback *cb);
 int ubcore_delete_eid_dump(struct sk_buff *skb, struct netlink_callback *cb);
+int ubcore_set_sl(struct sk_buff *skb, struct genl_info *info);
 
 extern struct genl_family ubcore_genl_family;
 

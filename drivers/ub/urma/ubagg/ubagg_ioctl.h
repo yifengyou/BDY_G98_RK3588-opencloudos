@@ -69,6 +69,11 @@ union ubagg_tp_feature {
 	uint32_t value;
 };
 
+struct ubagg_sl_info {
+	uint32_t SL;
+	union ubagg_tp_type_cap tp_type;
+};
+
 struct ubagg_device_cap {
 	union ubcore_device_feat feature;
 	uint32_t max_jfc;
@@ -111,6 +116,7 @@ struct ubagg_device_cap {
 	union ubagg_tp_type_cap rc_tp_cap;
 	union ubagg_tp_type_cap um_tp_cap;
 	union ubagg_tp_feature tp_feature;
+	struct ubagg_sl_info priority_info[UBCORE_MAX_PRIORITY_CNT];
 };
 /** A structure mimicking `urma_device_attr`.
  * The field `dev_cap` is the same of that in `urma_device_attr`.

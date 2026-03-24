@@ -354,6 +354,47 @@ int ubcore_get_topo_info(struct sk_buff *skb, struct genl_info *info)
 	return ret;
 }
 
+int ubcore_set_sl(struct sk_buff *skb, struct genl_info *info)
+{
+	struct ubcore_cmd_set_sl arg = {0};
+	struct ubcore_device *dev;
+	uint64_t args_addr;
+	int ret = -EINVAL;
+
+	if (!info->attrs[UBCORE_HDR_ARGS_LEN] || !info->attrs[UBCORE_HDR_ARGS_ADDR]) {
+		ubcore_log_err("info attr invalid!\n");
+		return ret;
+	}
+	args_addr = nla_get_u64(info->attrs[UBCORE_HDR_ARGS_ADDR]);
+	ret = ubcore_copy_from_user(&arg, (void __user *)(uintptr_t)args_addr,
+		sizeof(struct ubcore_cmd_set_sl));
+	if (ret != 0) {
+		ubcore_log_err("ubcore copy data from user failed, ret = %d\n", ret);
+		return ret;
+	}
+	arg.in.dev_name[UBCORE_MAX_DEV_NAME - 1] = '\0';
+	dev = ubcore_find_device_with_name(arg.in.dev_name);
+	if (dev == NULL) {
+		ubcore_log_err("find dev_name: %s failed.\n", arg.in.dev_name);
+		return -ENODEV;
+	}
+	if (dev->ops == NULL || dev->ops->set_sl == NULL) {
+		ubcore_log_err("Invalid parameter.\n");
+		ubcore_put_device(dev);
+		return -EINVAL;
+	}
+	if (arg.in.priority >= UBCORE_MAX_PRIORITY_CNT) {
+		ubcore_log_err("Invalid parameter.\n");
+		ubcore_put_device(dev);
+		return -EINVAL;
+	}
+	ubcore_put_device(dev);
+	ret = dev->ops->set_sl(dev, arg.in.priority, arg.in.SL);
+	if (ret != 0)
+		ubcore_log_err("ops ubcore->set_sl failed!\n");
+	return ret;
+}
+
 static void ubcore_fill_res_binary(void *res_buf, struct sk_buff *msg,
 				   struct netlink_callback *cb, int attrtype)
 {

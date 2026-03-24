@@ -28,6 +28,8 @@ typedef ssize_t (*ubcore_store_attr_cb)(struct ubcore_device *dev,
 					const char *buf, size_t len);
 typedef ssize_t (*ubcore_show_port_attr_cb)(struct ubcore_device *dev,
 					    char *buf, uint8_t port_id);
+typedef ssize_t (*ubcore_show_priority_attr_cb)(struct ubcore_device *dev,
+	char *buf, uint8_t priority_id);
 
 static inline struct ubcore_device *
 get_ubcore_device(struct ubcore_logic_device *ldev)
@@ -1224,6 +1226,157 @@ void ubcore_remove_dev_attr_files(struct ubcore_logic_device *ldev)
 	ubcore_free_eids_group(ldev);
 }
 
+static ssize_t ubcore_show_priority_attr(struct ubcore_priority_kobj *p,
+					 struct ubcore_priority_attribute *attr,
+					 char *buf, ubcore_show_priority_attr_cb show_cb)
+{
+	struct ubcore_device *dev = p->dev;
+
+	if (!dev || !buf) {
+		ubcore_log_err("Invalid argument.\n");
+		return -EINVAL;
+	}
+
+	return show_cb(dev, buf, p->priority_id);
+}
+
+static ssize_t sl_show_cb(struct ubcore_device *dev, char *buf, uint8_t priority_id)
+{
+	int ret = 0;
+
+	ret = ubcore_query_device_attr(dev, &dev->attr);
+
+	if (ret != 0) {
+		ubcore_log_err("failed query device attr.\n");
+		return ret;
+	}
+	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u",
+		dev->attr.dev_cap.priority_info[priority_id].SL);
+}
+
+static ssize_t sl_show(struct ubcore_priority_kobj *p, struct ubcore_priority_attribute *attr,
+					char *buf)
+{
+	return ubcore_show_priority_attr(p, attr, buf, sl_show_cb);
+}
+
+static PRIORITY_ATTR_RO(sl);
+
+static ssize_t tp_type_show_cb(struct ubcore_device *dev, char *buf, uint8_t priority_id)
+{
+	int ret = 0;
+
+	ret = ubcore_query_device_attr(dev, &dev->attr);
+	if (ret != 0) {
+		ubcore_log_err("failed query device attr.\n");
+		return ret;
+	}
+	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u",
+		dev->attr.dev_cap.priority_info[priority_id].tp_type.value);
+}
+
+static ssize_t tp_type_show(struct ubcore_priority_kobj *p, struct ubcore_priority_attribute *attr,
+					char *buf)
+{
+	return ubcore_show_priority_attr(p, attr, buf, tp_type_show_cb);
+}
+
+static PRIORITY_ATTR_RO(tp_type);
+
+static struct attribute *ubcore_priority_attrs[] = {
+	&priority_attr_sl.attr,      &priority_attr_tp_type.attr, NULL,
+};
+
+static ssize_t ubcore_priority_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
+{
+	struct ubcore_priority_attribute *port_attr =
+		container_of(attr, struct ubcore_priority_attribute, attr);
+	struct ubcore_priority_kobj *p = container_of(kobj, struct ubcore_priority_kobj, kobj);
+
+	if (!port_attr->show)
+		return -EIO;
+
+	return port_attr->show(p, port_attr, buf);
+}
+
+static ssize_t ubcore_priority_attr_store(struct kobject *kobj, struct attribute *attr,
+	const char *buf, size_t count)
+{
+	struct ubcore_priority_attribute *port_attr =
+		container_of(attr, struct ubcore_priority_attribute, attr);
+	struct ubcore_priority_kobj *p = container_of(kobj, struct ubcore_priority_kobj, kobj);
+
+	if (!port_attr->store)
+		return -EIO;
+
+	return port_attr->store(p, port_attr, buf, count);
+}
+
+static const struct sysfs_ops ubcore_priority_sysfs_ops = { .show = ubcore_priority_attr_show,
+							.store = ubcore_priority_attr_store };
+
+static void ubcore_priority_release(struct kobject *kobj)
+{
+}
+
+// ATTRIBUTE_GROUPS defined in 3.11, but must be consistent with kobj_type->default_groups
+
+ATTRIBUTE_GROUPS(ubcore_priority);
+
+static const struct kobj_type ubcore_priority_type = { .release = ubcore_priority_release,
+	.sysfs_ops = &ubcore_priority_sysfs_ops,
+	.default_groups = ubcore_priority_groups
+};
+
+static const struct kobj_type ubcore_priority_grp_type = { .release = ubcore_priority_release,
+						 .sysfs_ops = &ubcore_priority_sysfs_ops};
+
+int ubcore_create_priority_attr_files(struct ubcore_logic_device *ldev,
+	struct ubcore_device *dev, uint8_t priority_id)
+{
+	struct ubcore_priority_kobj *p;
+
+	p = &ldev->prioritys.priority[priority_id];
+	p->dev = dev;
+	p->priority_id = priority_id;
+
+	return kobject_init_and_add(&p->kobj, &ubcore_priority_type, &ldev->prioritys.kobj,
+		"priority%hhu", priority_id);
+}
+
+void ubcore_remove_priority_attr_files(struct ubcore_logic_device *ldev, uint8_t priority_id)
+{
+	kobject_put(&ldev->prioritys.priority[priority_id].kobj);
+}
+
+int ubcore_create_priority_grp_attr_files(struct ubcore_logic_device *ldev,
+	struct ubcore_device *dev)
+{
+	struct ubcore_prioritys_kobj *p;
+	int ret;
+	uint8_t p1, p2;
+
+	p = &ldev->prioritys;
+	p->dev = dev;
+
+	ret = kobject_init_and_add(&p->kobj, &ubcore_priority_grp_type, &ldev->dev->kobj,
+		"priority");
+	if (ret != 0)
+		return ret;
+
+	for (p1 = 0; p1 < UBCORE_MAX_PRIORITY_CNT; p1++) {
+		ret = ubcore_create_priority_attr_files(ldev, dev, p1);
+		if (ret != 0)
+			goto err_attr;
+	}
+	return 0;
+err_attr:
+	for (p2 = 0; p2 < p1; p2++)
+		ubcore_remove_priority_attr_files(ldev, p2);
+	kobject_put(&ldev->prioritys.kobj);
+	return ret;
+}
+
 int ubcore_fill_logic_device_attr(struct ubcore_logic_device *ldev,
 				  struct ubcore_device *dev)
 {
@@ -1240,6 +1393,9 @@ int ubcore_fill_logic_device_attr(struct ubcore_logic_device *ldev,
 		if (ubcore_create_port_attr_files(ldev, dev, p1) != 0)
 			goto err_port_attr;
 	}
+
+	if (ubcore_create_priority_grp_attr_files(ldev, dev) != 0)
+		return -EPERM;
 
 	return 0;
 

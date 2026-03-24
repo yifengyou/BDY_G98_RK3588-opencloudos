@@ -41,6 +41,7 @@ enum ubcore_cmd {
 	UBCORE_CMD_UNEXPOSE_DEV_NS,
 	UBCORE_CMD_SET_DEV_EID_NS,
 	UBCORE_CMD_GET_TOPO_INFO,
+	UBCORE_CMD_SET_SL,
 	UBCORE_CMD_SET_GENL_PID,
 	UBCORE_CMD_UVS_INIT_RES,
 	/* alpha netlink ops begin: */
@@ -132,6 +133,15 @@ struct ubcore_cmd_topo_info {
 		uint32_t node_num;
 		struct ubcore_topo_node topo_info;
 	} out;
+};
+
+struct ubcore_cmd_set_sl {
+	struct {
+		char dev_name[UBCORE_MAX_DEV_NAME];
+		uint32_t SL;
+
+		uint32_t priority;
+	} in;
 };
 
 /* copy from user_space addr to kernel args */

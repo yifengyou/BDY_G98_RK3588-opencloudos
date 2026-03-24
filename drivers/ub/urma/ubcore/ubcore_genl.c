@@ -115,6 +115,13 @@ static const struct genl_ops ubcore_genl_ops[] = {
 	  .flags = GENL_ADMIN_PERM,
 	  .doit = ubcore_get_topo_info
 	},
+	{
+		.cmd = UBCORE_CMD_SET_SL,
+		.policy = ubcore_policy,
+		.maxattr = ARRAY_SIZE(ubcore_policy) - 1,
+		.flags = GENL_ADMIN_PERM,
+		.doit = ubcore_set_sl
+	},
 };
 
 /* ubcore family definition */
