@@ -1607,27 +1607,30 @@ void ubase_activate_unregister(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_activate_unregister);
 
-static int ubase_wait_activate_done(struct ubase_dev *udev, u16 bus_ue_id)
+static bool ubase_fast_shutdown(struct ubase_dev *udev,
+				struct ubase_act_info *info)
+{
+	return ((ubase_shutting_down(udev) || info->shutdown) &&
+		 ubase_is_ctrl_node(udev));
+}
+
+static int ubase_wait_activate_done(struct ubase_dev *udev, u16 bus_ue_id,
+				    struct ubase_act_info *info)
 {
 #define UBASE_ACTIVE_DEV_TIMEOUT_SHUTDOWN 1000
 #define UBASE_ACTIVE_DEV_TIMEOUT 10000
 
-	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
-	struct ubase_act_info *info;
+	bool shutdown = ubase_fast_shutdown(udev, info);
 	u32 timeout;
 
-	info = (ue->entity_idx == bus_ue_id) ? &udev->act_ctx.self :
-		&udev->act_ctx.other;
-
-	timeout = ((ubase_shutting_down(udev) || info->shutdown) &&
-		   ubase_is_ctrl_node(udev)) ?
-		   UBASE_ACTIVE_DEV_TIMEOUT_SHUTDOWN : UBASE_ACTIVE_DEV_TIMEOUT;
+	timeout = shutdown ? UBASE_ACTIVE_DEV_TIMEOUT_SHUTDOWN :
+			     UBASE_ACTIVE_DEV_TIMEOUT;
 	if (!wait_for_completion_timeout(&info->activate_done,
 					 msecs_to_jiffies(timeout))) {
 		ubase_err(udev,
 			  "wait activate dev resp timeout(%u ms), bus_ue_id = %u, msn = %u.\n",
 			  timeout, bus_ue_id, info->wait_msn);
-		return -ETIMEDOUT;
+		return shutdown ? 0 : -ETIMEDOUT;
 	}
 
 	return info->result;
@@ -1663,10 +1666,24 @@ static void ubase_alloc_msn(struct ubase_dev *udev, u16 *msn)
 static int ubase_send_activate_dev_req(struct ubase_dev *udev, bool activate,
 				       u16 bus_ue_id)
 {
+	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
 	struct ubase_activate_req req = {0};
+	struct ubase_act_info *info;
 	struct ubase_cmd_buf in;
 	u16 msn;
 	int ret;
+
+	info = (ue->entity_idx == bus_ue_id) ? &udev->act_ctx.self :
+	       &udev->act_ctx.other;
+
+	/* During the shutdown process, the activation message does not need to
+	 * be sent, and a failure message is directly returned to the ubus.
+	 * In this way, the UE state machine can remain in the disabled state,
+	 * and subsequent disable messages will not be sent. This speeds up the
+	 * shutdown process.
+	 */
+	if (ubase_fast_shutdown(udev, info) && activate)
+		return -EPERM;
 
 	req.activate = activate ? 1 : 0;
 	req.bus_ue_id = cpu_to_le16(bus_ue_id);
@@ -1685,7 +1702,7 @@ static int ubase_send_activate_dev_req(struct ubase_dev *udev, bool activate,
 		return ret;
 	}
 
-	return ubase_wait_activate_done(udev, bus_ue_id);
+	return ubase_wait_activate_done(udev, bus_ue_id, info);
 }
 
 int ubase_activate_handler(struct ubase_dev *udev, u32 bus_ue_id)

@@ -752,6 +752,9 @@ static void ubase_free_aeq_irq(struct ubase_dev *udev)
 	if (!aeq->ae_task)
 		return;
 
+	if (ubase_shutting_down(udev))
+		complete(&aeq->poll);
+
 	ret = kthread_stop(aeq->ae_task);
 	if (ret)
 		ubase_err(udev, "failed to stop ae task thread, ret = %d\n",

@@ -293,6 +293,8 @@ static void ubase_ubus_shutdown(struct ub_entity *ue)
 	ubase_info(udev, "ubase shutdown start.\n");
 
 	__ubase_ubus_remove(ue);
+
+	ubase_info(udev, "ubase shutdown end.\n");
 }
 
 int ubase_ubus_irq_vectors_alloc(struct device *dev)
