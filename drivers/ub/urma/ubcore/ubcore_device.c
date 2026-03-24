@@ -598,6 +598,11 @@ static struct ubcore_ht_param g_ht_params[] = {
 			      offsetof(struct ubcore_ex_tp_info, tp_handle),
 			      sizeof(uint64_t), NULL, ubcore_free_driver_obj,
 			      NULL },
+	[UBCORE_HT_RC_TP_ID] = { UBCORE_HASH_TABLE_SIZE,
+			      offsetof(struct ubcore_tpid_ctx, hnode),
+			      offsetof(struct ubcore_tpid_ctx, key),
+			      sizeof(struct ubcore_tpid_key), NULL,
+			      ubcore_free_driver_obj, ubcore_tpid_get },
 };
 
 static inline void ubcore_set_vtpn_hash_table_size(uint32_t vtpn_size)

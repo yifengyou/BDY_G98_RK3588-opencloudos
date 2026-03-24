@@ -3500,6 +3500,7 @@ static int uburma_cmd_bind_jetty_ex(struct ubcore_device *ubc_dev,
 {
 	struct ubcore_active_tp_cfg active_tp_cfg = { 0 };
 	struct uburma_cmd_bind_jetty_ex arg = { 0 };
+	struct ubcore_active_tp_cfg empty_cfg = { 0 };
 	struct uburma_tjetty_uobj *uburma_tjetty;
 	struct ubcore_udata udata = { 0 };
 	struct uburma_uobj *tjetty_uobj;
@@ -3524,6 +3525,14 @@ static int uburma_cmd_bind_jetty_ex(struct ubcore_device *ubc_dev,
 	fill_udata(&udata, file->ucontext, &arg.udata);
 
 	tjetty = (struct ubcore_tjetty *)tjetty_uobj->object;
+	if (memcmp(&active_tp_cfg, &empty_cfg, sizeof(active_tp_cfg)) == 0) {
+		uburma_log_info("tp_handle is null, exec ubcore_bind_jetty");
+		ret = ubcore_bind_jetty(jetty_uobj->object, tjetty, &udata);
+	} else {
+		uburma_log_info("tp_handle is null, exec ubcore_bind_jetty_ex");
+		ret = ubcore_bind_jetty_ex(jetty_uobj->object, tjetty, &active_tp_cfg,
+			   &udata);
+	}
 	ret = ubcore_bind_jetty_ex(jetty_uobj->object, tjetty, &active_tp_cfg,
 				   &udata);
 	if (ret != 0) {
