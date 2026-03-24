@@ -1456,6 +1456,76 @@ uburma_exchange_tp_info_fill_spec_out(void *arg_addr,
 	SPEC(s++, EXCHANGE_TP_INFO_OUT_RX_PSN, arg->out.rx_psn);
 }
 
+static void
+uburma_get_eid_by_ip_fill_spec_in(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_eid_by_ip *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_EID_BY_IP_INFO_IN_NET_ADDR, arg->in.net_addr);
+}
+
+static void
+uburma_get_eid_by_ip_fill_spec_out(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_eid_by_ip *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_EID_BY_IP_INFO_OUT_EID, arg->out.eid);
+}
+
+static void
+uburma_get_ip_by_eid_fill_spec_in(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_ip_by_eid *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_IP_BY_EID_INFO_IN_EID, arg->in.eid);
+}
+
+static void
+uburma_get_ip_by_eid_fill_spec_out(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_ip_by_eid *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_IP_BY_EID_INFO_OUT_NET_ADDR, arg->out.net_addr);
+}
+
+static void
+uburma_get_smac_fill_spec_out(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_smac *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_SMAC_OUT_MAC, arg->out.mac);
+}
+
+static void
+uburma_get_dmac_fill_spec_in(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_dmac *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_DMAC_IN_NET_ADDR, arg->in.net_addr);
+}
+
+static void
+uburma_get_dmac_fill_spec_out(void *arg_addr,
+					 struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_dmac *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_DMAC_OUT_MAC, arg->out.mac);
+}
+
 static struct uburma_tlv_handler g_tlv_handler[] = {
 	[0] = {0},
 	[UBURMA_CMD_CREATE_CTX] = {
@@ -1699,6 +1769,24 @@ static struct uburma_tlv_handler g_tlv_handler[] = {
 		uburma_exchange_tp_info_fill_spec_in, EXCHANGE_TP_INFO_IN_NUM,
 		uburma_exchange_tp_info_fill_spec_out, EXCHANGE_TP_INFO_OUT_NUM -
 		UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_EID_BY_IP] = {
+		uburma_get_eid_by_ip_fill_spec_in, GET_EID_BY_IP_INFO_IN_NUM,
+		uburma_get_eid_by_ip_fill_spec_out, GET_EID_BY_IP_INFO_OUT_NUM -
+		UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_IP_BY_EID] = {
+		uburma_get_ip_by_eid_fill_spec_in, GET_IP_BY_EID_INFO_IN_NUM,
+		uburma_get_ip_by_eid_fill_spec_out, GET_IP_BY_EID_INFO_OUT_NUM -
+		UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_SMAC] = {
+		NULL, 0,
+		uburma_get_smac_fill_spec_out, GET_SMAC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_DMAC] = {
+		uburma_get_dmac_fill_spec_in, GET_DMAC_IN_NUM,
+		uburma_get_dmac_fill_spec_out, GET_DMAC_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
 	},
 };
 

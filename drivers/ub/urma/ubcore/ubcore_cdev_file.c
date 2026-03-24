@@ -1250,7 +1250,7 @@ static ssize_t sl_show_cb(struct ubcore_device *dev, char *buf, uint8_t priority
 		ubcore_log_err("failed query device attr.\n");
 		return ret;
 	}
-	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u",
+	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u\n",
 		dev->attr.dev_cap.priority_info[priority_id].SL);
 }
 
@@ -1271,7 +1271,7 @@ static ssize_t tp_type_show_cb(struct ubcore_device *dev, char *buf, uint8_t pri
 		ubcore_log_err("failed query device attr.\n");
 		return ret;
 	}
-	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u",
+	return snprintf(buf, UBCORE_MAX_VALUE_LEN, "%u\n",
 		dev->attr.dev_cap.priority_info[priority_id].tp_type.value);
 }
 

@@ -3080,6 +3080,121 @@ static int uburma_cmd_exchange_tp_info(struct ubcore_device *ubc_dev,
 	return ret;
 }
 
+static int uburma_cmd_get_eid_by_ip(struct ubcore_device *ubc_dev,
+	struct uburma_file *file, struct uburma_cmd_hdr *hdr)
+{
+	struct uburma_cmd_get_eid_by_ip arg = {0};
+	struct ubcore_net_addr net_addr = {0};
+	union ubcore_eid eid = {0};
+	int ret;
+
+	ret = uburma_tlv_parse(hdr, &arg);
+
+	if (ret != 0)
+		return ret;
+	if (arg.in.net_addr.sin_family == AF_INET6) {
+		net_addr.type = UBCORE_NET_ADDR_TYPE_IPV6;
+		(void)memcpy(net_addr.net_addr.raw, arg.in.net_addr.in6.s6_addr,
+			 UBCORE_NET_ADDR_BYTES);
+	} else if (arg.in.net_addr.sin_family == AF_INET) {
+		net_addr.type = UBCORE_NET_ADDR_TYPE_IPV4;
+		net_addr.net_addr.in4.addr = arg.in.net_addr.in4.s_addr;
+	}
+
+	ret = ubcore_get_eid_by_ip(ubc_dev, &net_addr, &eid);
+	if (ret != 0) {
+		uburma_log_err("Failed to get eid by ip, ret: %d.\n", ret);
+		return ret;
+	}
+	arg.out.eid = eid;
+
+	ret = uburma_tlv_append(hdr, &arg);
+	return ret;
+}
+
+static int uburma_cmd_get_ip_by_eid(struct ubcore_device *ubc_dev,
+	struct uburma_file *file, struct uburma_cmd_hdr *hdr)
+{
+	struct uburma_cmd_get_ip_by_eid arg = {0};
+	struct ubcore_net_addr net_addr = {0};
+	union ubcore_eid eid = {0};
+	int ret;
+
+	ret = uburma_tlv_parse(hdr, &arg);
+	if (ret != 0)
+		return ret;
+	eid = arg.in.eid;
+	ret = ubcore_get_ip_by_eid(ubc_dev, &eid, &net_addr);
+	if (ret != 0) {
+		uburma_log_err("Failed to get eid by ip, ret: %d.\n", ret);
+		return ret;
+	}
+	if (net_addr.type == UBCORE_NET_ADDR_TYPE_IPV6) {
+		arg.out.net_addr.sin_family = AF_INET6;
+		(void)memcpy(arg.out.net_addr.in6.s6_addr,  net_addr.net_addr.raw,
+			 UBCORE_NET_ADDR_BYTES);
+	} else if (net_addr.type == UBCORE_NET_ADDR_TYPE_IPV4) {
+		arg.out.net_addr.sin_family = AF_INET;
+		arg.out.net_addr.in4.s_addr = net_addr.net_addr.in4.addr;
+	}
+
+	ret = uburma_tlv_append(hdr, &arg);
+	return ret;
+}
+
+static int uburma_cmd_get_smac(struct ubcore_device *ubc_dev,
+	struct uburma_file *file, struct uburma_cmd_hdr *hdr)
+{
+	struct uburma_cmd_get_smac arg = {0};
+	uint8_t mac[UBCORE_MAC_BYTES] = {0};
+	int ret;
+
+	ret = ubcore_get_smac(ubc_dev, mac);
+	if (ret != 0) {
+		uburma_log_err("Failed to get smac, ret: %d.\n", ret);
+		return ret;
+	}
+	(void)memcpy(arg.out.mac, mac, UBCORE_MAC_BYTES);
+
+	ret = uburma_tlv_append(hdr, &arg);
+	return ret;
+}
+
+static int uburma_cmd_get_dmac(struct ubcore_device *ubc_dev,
+	struct uburma_file *file, struct uburma_cmd_hdr *hdr)
+{
+	struct ubcore_net_addr net_addr = {0};
+	struct uburma_cmd_get_dmac arg = {0};
+	uint8_t mac[UBCORE_MAC_BYTES] = {0};
+	int ret;
+
+	ret = uburma_tlv_parse(hdr, &arg);
+	if (ret != 0)
+		return ret;
+	if (arg.in.net_addr.sin_family == AF_INET6) {
+		net_addr.type = UBCORE_NET_ADDR_TYPE_IPV6;
+		(void)memcpy(net_addr.net_addr.raw,  arg.in.net_addr.in6.s6_addr,
+			 UBCORE_NET_ADDR_BYTES);
+	} else if (arg.in.net_addr.sin_family == AF_INET) {
+		net_addr.type = UBCORE_NET_ADDR_TYPE_IPV4;
+		net_addr.net_addr.in4.addr = arg.in.net_addr.in4.s_addr;
+	} else {
+		uburma_log_err
+			("ip_type is invalid, sin_family : %d.\n", arg.in.net_addr.sin_family);
+		return -EINVAL;
+	}
+
+	ret = ubcore_get_dmac(ubc_dev, &net_addr, mac);
+	if (ret != 0) {
+		uburma_log_err("Failed to get dmac, ret: %d.\n", ret);
+		return ret;
+	}
+	(void)memcpy(arg.out.mac, mac, UBCORE_MAC_BYTES);
+
+	ret = uburma_tlv_append(hdr, &arg);
+	return ret;
+}
+
 static int uburma_cmd_import_jetty_ex(struct ubcore_device *ubc_dev,
 				      struct uburma_file *file,
 				      struct uburma_cmd_hdr *hdr)
@@ -3204,6 +3319,10 @@ static uburma_cmd_handler g_uburma_cmd_handlers[] = {
 	[UBURMA_CMD_SET_TP_ATTR] = uburma_cmd_set_tp_attr,
 	[UBURMA_CMD_GET_TP_ATTR] = uburma_cmd_get_tp_attr,
 	[UBURMA_CMD_EXCHANGE_TP_INFO] = uburma_cmd_exchange_tp_info,
+	[UBURMA_CMD_GET_EID_BY_IP] = uburma_cmd_get_eid_by_ip,
+	[UBURMA_CMD_GET_IP_BY_EID] = uburma_cmd_get_ip_by_eid,
+	[UBURMA_CMD_GET_SMAC] = uburma_cmd_get_smac,
+	[UBURMA_CMD_GET_DMAC] = uburma_cmd_get_dmac,
 };
 
 static int uburma_cmd_parse(struct ubcore_device *ubc_dev,

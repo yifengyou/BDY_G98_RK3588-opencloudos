@@ -3104,6 +3104,47 @@ struct ubcore_ops {
 	void (*disassociate_ucontext)(struct ubcore_ucontext *uctx);
 
 	int (*set_sl)(struct ubcore_device *dev, uint32_t priority, uint32_t SL);
+
+	/**
+	 * query eid by ip info.
+	 * @param[in] dev: the ub device handle;
+	 * @param[in] net_addr: the ip info (type and net_addr are valid, vlan, mac,
+	 * prefix_len will not be used);
+	 * @param[out] eid: device's eid;
+	 * @return: 0 on success, other value on error
+	 */
+	int (*get_eid_by_ip)(struct ubcore_device *dev,
+		 const struct ubcore_net_addr *net_addr, union ubcore_eid *eid);
+
+	/**
+	 * query ip info by eid.
+	 * @param[in] dev: the ub device handle;
+	 * @param[in] eid: device's eid;
+	 * @param[out] net_addr: the ip info (type and net_addr are valid,
+	 * vlan, mac, prefix_len will not be used);
+	 * @return: 0 on success, other value on error
+	 */
+	int (*get_ip_by_eid)(struct ubcore_device *dev,
+		 const union ubcore_eid *eid, struct ubcore_net_addr *net_addr);
+
+	/**
+	 * query source mac address.
+	 * @param[in] dev: the ub device handle;
+	 * @param[out] mac: the source mac address;
+	 * @return: 0 on success, other value on error
+	 */
+	int (*get_smac)(struct ubcore_device *dev, uint8_t *mac);
+
+	/**
+	 * query dest mac address.
+	 * @param[in] dev: the ub device handle;
+	 * @param[in] net_addr: the ip info (type and net_addr are valid,
+	 * vlan, mac, prefix_len will not be used);
+	 * @param[out] mac: the dest mac address;
+	 * @return: 0 on success, other value on error
+	 */
+	int (*get_dmac)(struct ubcore_device *dev,
+		const struct ubcore_net_addr *net_addr, uint8_t *mac);
 };
 
 struct ubcore_bitmap {

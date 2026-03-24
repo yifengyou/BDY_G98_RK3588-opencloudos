@@ -857,6 +857,47 @@ int ubcore_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 				struct ubcore_udata *udata);
 
 /**
+ * get eid by ip.
+ * @param[in] dev: ubcore device pointer created before;
+ * @param[in] net_addr: the ip info (type and net_addr are valid, vlan, mac,
+ * prefix_len will not be used);
+ * @param[out] eid: device's eid;
+ * @return: 0 on success, other value on error
+ */
+int ubcore_get_eid_by_ip(struct ubcore_device *dev,
+	const struct ubcore_net_addr *net_addr, union ubcore_eid *eid);
+
+/**
+ * get ip by eid.
+ * @param[in] dev: ubcore device pointer created before;
+ * @param[in] eid: device's eid;
+ * @param[out] net_addr: the ip info (type and net_addr are valid,
+ * vlan, mac, prefix_len will not be used);
+ * @return: 0 on success, other value on error
+ */
+int ubcore_get_ip_by_eid(struct ubcore_device *dev,
+	const union ubcore_eid *eid, struct ubcore_net_addr *net_addr);
+
+/**
+ * get source mac address.
+ * @param[in] dev: ubcore device pointer created before;
+ * @param[out] mac: the mac address of source;
+ * @return: 0 on success, other value on error
+ */
+int ubcore_get_smac(struct ubcore_device *dev, uint8_t *mac);
+
+/**
+ * get dest mac address.
+ * @param[in] dev: ubcore device pointer created before;
+ * @param[in] net_addr: the ip info (type and net_addr are valid, vlan, mac,
+ * prefix_len will not be used);
+ * @param[out] mac: the mac address of dest;
+ * @return: 0 on success, other value on error
+ */
+int ubcore_get_dmac(struct ubcore_device *dev,
+	const struct ubcore_net_addr *net_addr, uint8_t *mac);
+
+/**
  * exchange tp info from ubep.
  * @param[in] dev: ubcore device pointer created before;
  * @param[in] cfg: configuration to be matched;
