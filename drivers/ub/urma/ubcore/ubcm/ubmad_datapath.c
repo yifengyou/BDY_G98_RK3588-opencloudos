@@ -1033,8 +1033,8 @@ static void ubmad_send_work_handler(struct ubmad_device_priv *dev_priv,
 				rsrc->send_seg_bitmap,
 				sge_idx); // get in ubmad_do_post_send()
 		}
-		if (cr.status != UBCORE_CR_SUCCESS) {
-			ubcm_log_err(
+		if (cr.status != UBCORE_CR_SUCCESS && cr.status != UBCORE_CR_ACK_TIMEOUT_ERR) {
+			ubcm_log_err_rl(
 				"Tx status error. cr_cnt %d, status %d, comp_len %u, user_ctx: 0x%llx.\n",
 				cr_cnt, cr.status, cr.completion_len,
 				cr.user_ctx);
