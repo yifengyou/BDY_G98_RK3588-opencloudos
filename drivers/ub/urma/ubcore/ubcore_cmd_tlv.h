@@ -907,6 +907,12 @@ enum ubcore_cmd_set_topo_type {
 	SET_TOPO_IN_NUM /* Only for calculating number of types */
 };
 
+enum ubcore_cmd_get_topo_type {
+	/* Out type */
+	GET_TOPO_OUT_TOPO_MAP,
+	GET_TOPO_OUT_NUM /* Only for calculating number of types */
+};
+
 enum ubcore_get_route_list_type {
 	GET_ROUTE_LIST_IN_ROUTE_PAIR,
 	GET_ROUTE_LIST_IN_NUM,

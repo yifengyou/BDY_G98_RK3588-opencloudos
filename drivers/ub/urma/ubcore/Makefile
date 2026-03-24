@@ -35,6 +35,9 @@ ubcm/ub_mad.o \
 ubcm/ubcm_genl.o \
 ubcm/ub_cm.o \
 ubcm/ubmad_datapath.o \
-ubcore_umem.o
+ubcore_umem.o \
+ubmgr/ubmgr.o \
+ubmgr/ubmgr_ping.o \
+ubmgr/ubmgr_topo.o
 
 obj-$(CONFIG_UB_URMA) += ubcore.o

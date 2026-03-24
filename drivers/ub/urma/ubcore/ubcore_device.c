@@ -30,6 +30,7 @@
 #include "ubcore_topo_info.h"
 #include "net/ubcore_session.h"
 #include "net/ubcore_cm.h"
+#include "ubmgr/ubmgr_topo.h"
 
 #define UBCORE_MAX_MUE_NUM 16
 #define UBCORE_DEVICE_NAME "ubcore"
@@ -2394,6 +2395,8 @@ void ubcore_dispatch_mgmt_event(struct ubcore_mgmt_event *event)
 		ubcore_log_err(
 			"Failed to update eid table, index: %u, type: %d.\n",
 			eid_info->eid_index, event->event_type);
+
+	ubmgr_notify_mgmt_event(event);
 
 	if (ubcore_call_cm_eid_ops(event->ub_dev, event->element.eid_info,
 				   event->event_type) != 0)
