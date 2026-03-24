@@ -31,7 +31,6 @@ ubcore_msg.o \
 ubcore_netlink.o \
 ubcore_dp.o \
 ubcore_segment.o \
-ubcm/ubcm_log.o \
 ubcm/ub_mad.o \
 ubcm/ubcm_genl.o \
 ubcm/ub_cm.o \

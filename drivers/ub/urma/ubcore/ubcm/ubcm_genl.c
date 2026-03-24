@@ -13,9 +13,11 @@
 #include <net/genetlink.h>
 #include <linux/version.h>
 #include <linux/jhash.h>
+
+#include "ubcore_log.h"
+
 #include "ub_mad.h"
 #include "ub_cm.h"
-#include "ubcm_log.h"
 #include "ubcm_genl.h"
 
 struct ubcm_uvs_list {
@@ -117,13 +119,13 @@ static int ubcm_check_uvs_para(struct genl_info *info, uint32_t *length)
 	uint32_t payload_len;
 
 	if (!info->attrs[UBCM_PAYLOAD_DATA]) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
 	payload_len = (uint32_t)nla_len(info->attrs[UBCM_PAYLOAD_DATA]);
 	if (payload_len == 0 || payload_len > UBCM_MAX_UVS_NAME_LEN) {
-		ubcm_log_err("Invalid payload length: %u.\n", payload_len);
+		ubcore_log_err("Invalid payload length: %u.\n", payload_len);
 		return -EINVAL;
 	}
 
@@ -171,7 +173,7 @@ static int ubcm_genl_uvs_add(const char *uvs_name, uint32_t genl_port,
 	node = ubcm_lookup_genl_node_lockless(uvs_name, uvs_list);
 	if (node != NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_warn("Uvs: %s already exist.\n", uvs_name);
+		ubcore_log_warn("Uvs: %s already exist.\n", uvs_name);
 		kfree(new_node);
 		return -EEXIST;
 	}
@@ -192,7 +194,7 @@ static int ubcm_genl_uvs_add(const char *uvs_name, uint32_t genl_port,
 	uvs_list->next_id++;
 	spin_unlock(&uvs_list->lock);
 
-	ubcm_log_info("Finish to add uvs node: %s, id: %u.\n", uvs_name,
+	ubcore_log_info("Finish to add uvs node: %s, id: %u.\n", uvs_name,
 		      new_node->id);
 	return 0;
 }
@@ -206,19 +208,19 @@ static int ubcm_genl_uvs_add_handler(struct sk_buff *skb,
 
 	ret = ubcm_check_uvs_para(info, &payload_len);
 	if (ret != 0) {
-		ubcm_log_err("Invalid add parameter.\n");
+		ubcore_log_err("Invalid add parameter.\n");
 		return ret;
 	}
 
 	ret = ubcm_copy_uvs_name(info, uvs_name, payload_len);
 	if (ret != 0) {
-		ubcm_log_err("Failed to copy uvs name.\n");
+		ubcore_log_err("Failed to copy uvs name.\n");
 		return ret;
 	}
 	ret = ubcm_genl_uvs_add(uvs_name, info->snd_portid,
 				genl_info_net(info)->genl_sock);
 	if (ret != 0) {
-		ubcm_log_err("Failed to add uvs genl node: %s.\n", uvs_name);
+		ubcore_log_err("Failed to add uvs genl node: %s.\n", uvs_name);
 		return ret;
 	}
 
@@ -249,7 +251,7 @@ static void ubcm_uvs_kref_release(struct kref *ref)
 	}
 	spin_unlock(&uvs_list->lock);
 
-	ubcm_log_info("Release uvs: %s, uvs_id: %u.\n", node->name, node->id);
+	ubcore_log_info("Release uvs: %s, uvs_id: %u.\n", node->name, node->id);
 	kfree(node);
 }
 
@@ -258,7 +260,7 @@ void ubcm_uvs_kref_put(struct ubcm_uvs_genl_node *node)
 	uint32_t refcnt;
 
 	refcnt = kref_read(&node->ref);
-	ubcm_log_info("kref_put: uvs %s, id %u, old refcnt %u, new refcnt %u\n",
+	ubcore_log_info("kref_put: uvs %s, id %u, old refcnt %u, new refcnt %u\n",
 		      node->name, node->id, refcnt,
 		      refcnt > 0 ? refcnt - 1 : 0);
 
@@ -274,20 +276,20 @@ static int ubcm_genl_uvs_remove(const char *uvs_name)
 	node = ubcm_lookup_genl_node_lockless(uvs_name, uvs_list);
 	if (node == NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_err("Failed to lookup uvs node: %s.\n", uvs_name);
+		ubcore_log_err("Failed to lookup uvs node: %s.\n", uvs_name);
 		return -ENOENT;
 	}
 
 	if (node->state == UBCM_UVS_STATE_DEAD) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_warn("Uvs: %s already set dead.\n", uvs_name);
+		ubcore_log_warn("Uvs: %s already set dead.\n", uvs_name);
 		return -EPERM;
 	}
 
 	if (atomic_read(&node->map2ue) != 0) {
 		node->state = UBCM_UVS_STATE_DEAD;
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_info(
+		ubcore_log_info(
 			"Uvs %s was referenced by ue, set dead and keep it.\n",
 			uvs_name);
 		return 0;
@@ -299,7 +301,7 @@ static int ubcm_genl_uvs_remove(const char *uvs_name)
 	spin_unlock(&uvs_list->lock);
 	ubcm_uvs_kref_put(node);
 
-	ubcm_log_info("Uvs: %s removed.\n", uvs_name);
+	ubcore_log_info("Uvs: %s removed.\n", uvs_name);
 	return 0;
 }
 
@@ -312,7 +314,7 @@ static int ubcm_genl_uvs_remove_handler(struct sk_buff *skb,
 
 	ret = ubcm_check_uvs_para(info, &payload_len);
 	if (ret != 0) {
-		ubcm_log_err("Invalid remove parameter.\n");
+		ubcore_log_err("Invalid remove parameter.\n");
 		return ret;
 	}
 
@@ -322,7 +324,7 @@ static int ubcm_genl_uvs_remove_handler(struct sk_buff *skb,
 
 	ret = ubcm_genl_uvs_remove(uvs_name);
 	if (ret != 0) {
-		ubcm_log_err("Failed to remove uvs genl node: %s.\n", uvs_name);
+		ubcore_log_err("Failed to remove uvs genl node: %s.\n", uvs_name);
 		return ret;
 	}
 
@@ -337,19 +339,19 @@ static int ubcm_parse_uvs_eid_para(struct genl_info *info,
 	uint32_t msg_type;
 
 	if (!info->attrs[UBCM_PAYLOAD_DATA]) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
 	payload_len = (uint32_t)nla_len(info->attrs[UBCM_PAYLOAD_DATA]);
 	if (payload_len != sizeof(struct ubcm_nlmsg_op_eid)) {
-		ubcm_log_err("Invalid payload length: %u.\n", payload_len);
+		ubcore_log_err("Invalid payload length: %u.\n", payload_len);
 		return -EINVAL;
 	}
 
 	msg_type = nla_get_u32(info->attrs[UBCM_MSG_TYPE]);
 	if (msg_type != (uint32_t)type) {
-		ubcm_log_err("Invalid msg_type: %u, type: %u.\n", msg_type,
+		ubcore_log_err("Invalid msg_type: %u, type: %u.\n", msg_type,
 			     (uint32_t)type);
 		return -EINVAL;
 	}
@@ -373,7 +375,7 @@ ubcm_find_eid_node_lockless(struct ubcm_uvs_genl_node *uvs, uint32_t hash,
 			return eid_node;
 	}
 
-	ubcm_log_info("Failed to lookup eid node: " EID_FMT ", hash: %u.\n",
+	ubcore_log_info("Failed to lookup eid node: " EID_FMT ", hash: %u.\n",
 		      EID_ARGS(*eid), hash);
 	return NULL;
 }
@@ -391,20 +393,20 @@ static int ubcm_add_uvs_eid(struct ubcm_nlmsg_op_eid *para)
 	uvs = ubcm_lookup_genl_node_lockless(para->uvs_name, uvs_list);
 	if (uvs == NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_err("Failed to find uvs: %s.\n", para->uvs_name);
+		ubcore_log_err("Failed to find uvs: %s.\n", para->uvs_name);
 		return -EINVAL;
 	}
 
 	if (uvs->eid_cnt >= UBCM_EID_TABLE_SIZE) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_err("Invalid operation, eid_cnt: %u.\n", uvs->eid_cnt);
+		ubcore_log_err("Invalid operation, eid_cnt: %u.\n", uvs->eid_cnt);
 		return -EINVAL;
 	}
 
 	node = ubcm_find_eid_node_lockless(uvs, hash, &para->eid);
 	if (node != NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_warn("Eid: " EID_FMT " already added in uvs: %s.\n",
+		ubcore_log_warn("Eid: " EID_FMT " already added in uvs: %s.\n",
 			      EID_ARGS(para->eid), para->uvs_name);
 		return -1;
 	}
@@ -423,7 +425,7 @@ static int ubcm_add_uvs_eid(struct ubcm_nlmsg_op_eid *para)
 	node = ubcm_find_eid_node_lockless(uvs, hash, &para->eid);
 	if (node != NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_warn("Eid: " EID_FMT " added in uvs: %s.\n",
+		ubcore_log_warn("Eid: " EID_FMT " added in uvs: %s.\n",
 			      EID_ARGS(para->eid), para->uvs_name);
 		kfree(new);
 		return -1;
@@ -431,7 +433,7 @@ static int ubcm_add_uvs_eid(struct ubcm_nlmsg_op_eid *para)
 	hlist_add_head(&new->node, &uvs->eid_hlist[hash]);
 	uvs->eid_cnt++;
 	spin_unlock(&uvs_list->lock);
-	ubcm_log_info("Finish to add uvs eid: " EID_FMT ", uvs_name: %s.\n",
+	ubcore_log_info("Finish to add uvs eid: " EID_FMT ", uvs_name: %s.\n",
 		      EID_ARGS(para->eid), para->uvs_name);
 
 	return 0;
@@ -468,7 +470,7 @@ static int ubcm_find_del_eid_node_lockless(struct ubcm_uvs_genl_node *uvs,
 		}
 	}
 
-	ubcm_log_err("Failed to lookup eid node: " EID_FMT ", hash: %u.\n",
+	ubcore_log_err("Failed to lookup eid node: " EID_FMT ", hash: %u.\n",
 		     EID_ARGS(*eid), hash);
 	return -1;
 }
@@ -483,12 +485,12 @@ static int ubcm_del_uvs_eid(struct ubcm_nlmsg_op_eid *para)
 	uvs = ubcm_lookup_genl_node_lockless(para->uvs_name, uvs_list);
 	if (uvs == NULL) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_err("Failed find uvs: %s.\n", para->uvs_name);
+		ubcore_log_err("Failed find uvs: %s.\n", para->uvs_name);
 		return -EINVAL;
 	}
 	if (uvs->eid_cnt == 0) {
 		spin_unlock(&uvs_list->lock);
-		ubcm_log_err("Invalid operation, there is no valid eid.\n");
+		ubcore_log_err("Invalid operation, there is no valid eid.\n");
 		return -EINVAL;
 	}
 
@@ -496,11 +498,11 @@ static int ubcm_del_uvs_eid(struct ubcm_nlmsg_op_eid *para)
 	spin_unlock(&uvs_list->lock);
 
 	if (ret != 0) {
-		ubcm_log_err("Failed to delete uvs eid: " EID_FMT
+		ubcore_log_err("Failed to delete uvs eid: " EID_FMT
 			     ", uvs_name: %s.\n",
 			     EID_ARGS(para->eid), para->uvs_name);
 	} else {
-		ubcm_log_info("Finish to delete uvs eid: " EID_FMT
+		ubcore_log_info("Finish to delete uvs eid: " EID_FMT
 			      ", uvs_name: %s.\n",
 			      EID_ARGS(para->eid), para->uvs_name);
 	}
@@ -526,13 +528,13 @@ static struct ubmad_send_buf *ubcm_get_nlmsg_send_buf(struct genl_info *info)
 	uint32_t payload_len;
 
 	if (!info->attrs[UBCM_PAYLOAD_DATA]) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return NULL;
 	}
 
 	payload_len = (uint32_t)nla_len(info->attrs[UBCM_PAYLOAD_DATA]);
 	if (payload_len > UBCM_MAX_NL_MSG_BUF_LEN) {
-		ubcm_log_err("Invalid payload_len: %u.\n", payload_len);
+		ubcore_log_err("Invalid payload_len: %u.\n", payload_len);
 		return NULL;
 	}
 
@@ -573,7 +575,7 @@ static int ubcm_genl_uvs_msg_handler(struct sk_buff *skb,
 
 	send_buf = ubcm_get_nlmsg_send_buf(info);
 	if (send_buf == NULL) {
-		ubcm_log_err("Failed to get nlmsg send buffer.\n");
+		ubcore_log_err("Failed to get nlmsg send buffer.\n");
 		return -1;
 	}
 
@@ -590,7 +592,7 @@ static int ubcm_genl_uvs_msg_handler(struct sk_buff *skb,
 	if (!ret) {
 		kfree(cm_work);
 		kfree(send_buf);
-		ubcm_log_err("Cm work already in workqueue, ret: %u.\n", ret);
+		ubcore_log_err("Cm work already in workqueue, ret: %u.\n", ret);
 		return -1;
 	}
 
@@ -630,7 +632,7 @@ static int ubcm_genl_uvs_authn_handler(struct sk_buff *skb,
 
 	send_buf = ubcm_get_nlmsg_authn_buf(info);
 	if (send_buf == NULL) {
-		ubcm_log_err("Failed to get nlmsg authentication buffer.\n");
+		ubcore_log_err("Failed to get nlmsg authentication buffer.\n");
 		return -1;
 	}
 
@@ -647,7 +649,7 @@ static int ubcm_genl_uvs_authn_handler(struct sk_buff *skb,
 	if (!ret) {
 		kfree(cm_work);
 		kfree(send_buf);
-		ubcm_log_err("Cm work already in workqueue, ret: %u.\n", ret);
+		ubcore_log_err("Cm work already in workqueue, ret: %u.\n", ret);
 		return -1;
 	}
 
@@ -686,7 +688,7 @@ static void ubcm_unset_genl_pid(uint32_t portid)
 	list_del(&node->list_node);
 	spin_unlock(&uvs_list->lock);
 
-	ubcm_log_err("Finish to unset port: %u for uvs: %s, id: %u.\n", portid,
+	ubcore_log_err("Finish to unset port: %u for uvs: %s, id: %u.\n", portid,
 		     node->name, node->id);
 	node->genl_port = UBCM_GENL_INVALID_PORT;
 	node->genl_sock = NULL;
@@ -739,15 +741,15 @@ int ubcm_genl_init(void)
 	ubcm_uvs_list_init();
 	ret = genl_register_family(&g_ubcm_genl_family);
 	if (ret != 0)
-		ubcm_log_err(
+		ubcore_log_err(
 			"Failed to init ubcm generic netlink family, ret: %d.\n",
 			ret);
 
 	ret = netlink_register_notifier(&g_ubcm_nl_notifier);
 	if (ret != 0)
-		ubcm_log_err("Failed to register notifier, ret: %d.\n", ret);
+		ubcore_log_err("Failed to register notifier, ret: %d.\n", ret);
 
-	ubcm_log_info("Finish to init ubcm generic netlink.\n");
+	ubcore_log_info("Finish to init ubcm generic netlink.\n");
 	return ret;
 }
 
@@ -784,7 +786,7 @@ struct ubcm_nlmsg *ubcm_alloc_genl_authn_msg(struct ubmad_recv_cr *recv_cr)
 	struct ubcm_nlmsg *nlmsg;
 
 	if (payload_len != 0) {
-		ubcm_log_err("Invalid payload length: %u.\n", payload_len);
+		ubcore_log_err("Invalid payload length: %u.\n", payload_len);
 		return ERR_PTR(-EINVAL);
 	}
 	nlmsg = kzalloc(sizeof(struct ubcm_nlmsg), GFP_KERNEL);
@@ -819,7 +821,7 @@ struct ubcm_uvs_genl_node *ubcm_find_get_uvs_by_eid(union ubcore_eid *eid)
 			    0) {
 				ubcm_uvs_kref_get(uvs);
 				spin_unlock(&uvs_list->lock);
-				ubcm_log_info("Find uvs: %s by eid: " EID_FMT
+				ubcore_log_info("Find uvs: %s by eid: " EID_FMT
 					      ".\n",
 					      uvs->name, EID_ARGS(*eid));
 				return uvs;
@@ -827,7 +829,7 @@ struct ubcm_uvs_genl_node *ubcm_find_get_uvs_by_eid(union ubcore_eid *eid)
 		}
 	}
 	spin_unlock(&uvs_list->lock);
-	ubcm_log_err("Failed to find uvs by eid: " EID_FMT ".\n",
+	ubcore_log_err("Failed to find uvs by eid: " EID_FMT ".\n",
 		     EID_ARGS(*eid));
 
 	return NULL;
@@ -842,14 +844,14 @@ int ubcm_genl_unicast(struct ubcm_nlmsg *msg, uint32_t len,
 
 	if (msg == NULL || uvs->genl_sock == NULL ||
 	    uvs->genl_port == UBCM_GENL_INVALID_PORT) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
 	/* create sk_buff */
 	nl_skb = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (nl_skb == NULL) {
-		ubcm_log_err("Failed to creatge nl_skb.\n");
+		ubcore_log_err("Failed to creatge nl_skb.\n");
 		return -1;
 	}
 
@@ -858,7 +860,7 @@ int ubcm_genl_unicast(struct ubcm_nlmsg *msg, uint32_t len,
 			  &g_ubcm_genl_family, NLM_F_ACK,
 			  (uint8_t)msg->msg_type);
 	if (nlh == NULL) {
-		ubcm_log_err("Failed to nlmsg put.\n");
+		ubcore_log_err("Failed to nlmsg put.\n");
 		nlmsg_free(nl_skb);
 		return -1;
 	}
@@ -870,18 +872,18 @@ int ubcm_genl_unicast(struct ubcm_nlmsg *msg, uint32_t len,
 		    &msg->dst_eid) ||
 	    nla_put(nl_skb, UBCM_PAYLOAD_DATA, (int)msg->payload_len,
 		    msg->payload)) {
-		ubcm_log_err("Failed in nla_put operations.\n");
+		ubcore_log_err("Failed in nla_put operations.\n");
 		nlmsg_free(nl_skb);
 		return -1;
 	}
 
 	genlmsg_end(nl_skb, nlh);
-	ubcm_log_info("Finish to send genl msg, seq: %u, payload_len: %u.\n",
+	ubcore_log_info("Finish to send genl msg, seq: %u, payload_len: %u.\n",
 		      msg->nlmsg_seq, msg->payload_len);
 
 	ret = nlmsg_unicast(uvs->genl_sock, nl_skb, uvs->genl_port);
 	if (ret != 0) {
-		ubcm_log_err("Failed to send genl msg, ret: %d.\n", ret);
+		ubcore_log_err("Failed to send genl msg, ret: %d.\n", ret);
 		nlmsg_free(nl_skb);
 		return ret;
 	}
