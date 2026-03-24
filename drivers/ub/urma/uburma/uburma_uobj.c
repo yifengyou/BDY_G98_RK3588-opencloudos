@@ -43,9 +43,11 @@ struct uburma_uobj *uobj_alloc_begin(const struct uobj_type *type,
 		return ERR_PTR(-EIO);
 	}
 	uobj = type->type_class->alloc_begin(type, ufile);
-	uobj->class_id = class_id;
-	if (IS_ERR(uobj))
+	if (IS_ERR_OR_NULL(uobj))
+		/* up_read will be executed in alloc_commit for normal uobj */
 		up_read(&ufile->cleanup_rwsem);
+	else
+		uobj->class_id = class_id;
 	return uobj;
 }
 
