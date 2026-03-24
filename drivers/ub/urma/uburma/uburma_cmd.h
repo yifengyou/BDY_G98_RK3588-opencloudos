@@ -1179,6 +1179,13 @@ struct uburma_cmd_device_cap {
 	uint32_t max_oor_cnt;
 	uint32_t mn;
 	uint32_t max_netaddr_cnt;
+	union ubcore_order_type_cap rm_order_cap;
+	union ubcore_order_type_cap rc_order_cap;
+	union urma_tp_type_cap rm_tp_cap;
+	union urma_tp_type_cap rc_tp_cap;
+	union urma_tp_type_cap um_tp_cap;
+	union urma_tp_feature tp_feature;
+	struct ubcore_sl_info priority_info[UBCORE_MAX_PRIORITY_CNT];
 }; /* this struct should be consistent [urma_device_cap_t] */
 
 struct uburma_cmd_port_attr {

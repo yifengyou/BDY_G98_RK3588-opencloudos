@@ -1147,6 +1147,20 @@ uburma_query_device_fill_spec_out(void *arg_addr,
 		   arg->out.attr.port_attr, active_speed);
 	SPEC_ARRAY(s++, QUERY_DEVICE_OUT_PORT_ATTR_ACTIVE_MTU,
 		   arg->out.attr.port_attr, active_mtu);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_RM_ORDER_CAP,
+			arg->out.attr.dev_cap.rm_order_cap.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_RC_ORDER_CAP,
+			arg->out.attr.dev_cap.rc_order_cap.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_RM_TP_CAP,
+			arg->out.attr.dev_cap.rm_tp_cap.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_RC_TP_CAP,
+		arg->out.attr.dev_cap.rc_tp_cap.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_UM_TP_CAP,
+		arg->out.attr.dev_cap.um_tp_cap.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_TP_FEATURE,
+		arg->out.attr.dev_cap.tp_feature.value);
+	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_PRIORITY_INFO,
+		arg->out.attr.dev_cap.priority_info);
 }
 
 static void

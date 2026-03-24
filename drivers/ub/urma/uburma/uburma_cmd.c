@@ -2521,6 +2521,14 @@ static void uburma_fill_device_attr(struct ubcore_device *ubc_dev,
 
 	attr->reserved_jetty_id_min = ubc_dev->attr.reserved_jetty_id_min;
 	attr->reserved_jetty_id_max = ubc_dev->attr.reserved_jetty_id_max;
+	attr->dev_cap.rm_order_cap.value = ubc_dev->attr.dev_cap.rm_order_cap.value;
+	attr->dev_cap.rc_order_cap.value = ubc_dev->attr.dev_cap.rc_order_cap.value;
+	attr->dev_cap.rm_tp_cap.value = ubc_dev->attr.dev_cap.rm_tp_cap.value;
+	attr->dev_cap.rc_tp_cap.value = ubc_dev->attr.dev_cap.rc_tp_cap.value;
+	attr->dev_cap.um_tp_cap.value = ubc_dev->attr.dev_cap.um_tp_cap.value;
+	attr->dev_cap.tp_feature.value = ubc_dev->attr.dev_cap.tp_feature.value;
+	(void)memcpy(attr->dev_cap.priority_info, ubc_dev->attr.dev_cap.priority_info,
+		UBCORE_MAX_PRIORITY_CNT * sizeof(struct ubcore_sl_info));
 }
 
 static int uburma_fill_device_status(struct ubcore_device *ubc_dev,
@@ -2567,6 +2575,14 @@ static int uburma_cmd_query_device_attr(struct ubcore_device *ubc_dev,
 		uburma_log_err("Invalid parameter with error dev_name.\n");
 		return -EINVAL;
 	}
+
+	ret = ubcore_query_device_attr(ubc_dev, &ubc_dev->attr);
+	if (ret != 0) {
+		uburma_log_err("Failed to query device attr, dev_name: %s.\n",
+		ubc_dev->dev_name);
+		return -EINVAL;
+	}
+
 	uburma_fill_device_attr(ubc_dev, &arg.out.attr);
 	ret = uburma_fill_device_status(ubc_dev, &arg.out.attr);
 	if (ret != 0)
