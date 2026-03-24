@@ -280,6 +280,41 @@ int ubcore_set_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
 		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
 }
 
+int ubcore_expose_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD])
+		return -EINVAL;
+
+	return ubcore_expose_dev_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
+int ubcore_unexpose_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD])
+		return -EINVAL;
+
+	return ubcore_unexpose_dev_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
+int ubcore_set_dev_eid_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD] ||
+		!info->attrs[UBCORE_ATTR_EID_IDX])
+		return -EINVAL;
+
+	return ubcore_set_dev_eid_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u16(info->attrs[UBCORE_ATTR_EID_IDX]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
 int ubcore_get_topo_info(struct sk_buff *skb, struct genl_info *info)
 {
 	struct ubcore_cmd_topo_info *arg = NULL;

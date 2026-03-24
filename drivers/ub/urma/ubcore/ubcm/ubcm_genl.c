@@ -57,6 +57,7 @@ static const struct nla_policy g_ubcm_policy[NUM_UBCM_ATTR] = {
 	[UBCM_ATTR_DEV_NAME] = { .type = NLA_STRING,
 				 .len = UBCORE_MAX_DEV_NAME - 1 },
 	[UBCM_ATTR_NS_FD] = { .type = NLA_U32 },
+	[UBCM_ATTR_EID_IDX] = { .type = NLA_U16},
 	[UBCM_MSG_SEQ] = { .type = NLA_U32 },
 	[UBCM_MSG_TYPE] = { .type = NLA_U32 },
 	[UBCM_SRC_ID] = { .len = UBCORE_EID_SIZE },

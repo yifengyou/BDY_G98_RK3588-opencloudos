@@ -33,6 +33,7 @@ static const struct nla_policy ubcore_policy[NUM_UBCORE_ATTR] = {
 	[UBCORE_ATTR_DEV_NAME] = { .type = NLA_STRING,
 				   .len = UBCORE_MAX_DEV_NAME - 1 },
 	[UBCORE_ATTR_NS_FD] = { .type = NLA_U32 },
+	[UBCORE_ATTR_EID_IDX] = { .type = NLA_U16},
 	[UBCORE_MSG_SEQ] = { .type = NLA_U32 },
 	[UBCORE_MSG_TYPE] = { .type = NLA_U32 },
 	[UBCORE_TRANSPORT_TYPE] = { .type = NLA_U32 },
@@ -89,6 +90,24 @@ static const struct genl_ops ubcore_genl_ops[] = {
 
 	  .flags = GENL_ADMIN_PERM,
 	  .doit = ubcore_set_dev_ns_ops },
+	{ .cmd = UBCORE_CMD_EXPOSE_DEV_NS,
+	  .policy = ubcore_policy,
+	  .maxattr = ARRAY_SIZE(ubcore_policy) - 1,
+
+	  .flags = GENL_ADMIN_PERM,
+	  .doit = ubcore_expose_dev_ns_ops },
+	{ .cmd = UBCORE_CMD_UNEXPOSE_DEV_NS,
+	  .policy = ubcore_policy,
+	  .maxattr = ARRAY_SIZE(ubcore_policy) - 1,
+
+	  .flags = GENL_ADMIN_PERM,
+	  .doit = ubcore_unexpose_dev_ns_ops },
+	{ .cmd = UBCORE_CMD_SET_DEV_EID_NS,
+	  .policy = ubcore_policy,
+	  .maxattr = ARRAY_SIZE(ubcore_policy) - 1,
+
+	  .flags = GENL_ADMIN_PERM,
+	  .doit = ubcore_set_dev_eid_ns_ops },
 	{ .cmd = UBCORE_CMD_GET_TOPO_INFO,
 	  .policy = ubcore_policy,
 	  .maxattr = ARRAY_SIZE(ubcore_policy) - 1,
