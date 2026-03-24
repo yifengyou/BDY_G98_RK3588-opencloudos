@@ -276,7 +276,6 @@ static int ubcore_cmd_set_topo(struct ubcore_global_file *file,
 	ret = ubcore_create_jetty_rsrc(topo_map);
 	if (ret != 0) {
 		ubcore_log_err("Failed to create jetty rsrc\n");
-		ubcore_delete_global_topo_map();
 		return ret;
 	}
 	return 0;

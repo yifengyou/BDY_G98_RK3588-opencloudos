@@ -128,38 +128,58 @@ ubcore_get_cur_topo_info(struct ubcore_topo_map *topo_map)
 	return &(topo_map->topo_infos[cur_node_index]);
 }
 
-static void update_dev_info(struct ubcore_topo_node *new_topo_info,
+static int update_dev_info(struct ubcore_topo_node *new_topo_info,
 				struct ubcore_topo_node *old_topo_info)
 {
 	int dev_id;
+	bool new_valid, old_valid;
 
 	for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
-		if (!is_agg_dev_valid(&old_topo_info->agg_devs[dev_id]) &&
-			is_agg_dev_valid(&new_topo_info->agg_devs[dev_id])) {
+		new_valid = is_agg_dev_valid(&new_topo_info->agg_devs[dev_id]);
+		old_valid = is_agg_dev_valid(&old_topo_info->agg_devs[dev_id]);
+		if (old_valid && new_valid) {
+			/* if both dev are valid, return error */
+			if (memcmp(&old_topo_info->agg_devs[dev_id],
+				&new_topo_info->agg_devs[dev_id],
+				sizeof(struct ubcore_topo_agg_dev)) != 0) {
+				ubcore_log_err("dev %d is not the same\n", dev_id);
+				return -1;
+			}
+		}
+		if (!old_valid && new_valid) {
+			/* if old dev is not valid, update it */
 			(void)memcpy(&old_topo_info->agg_devs[dev_id],
 				&new_topo_info->agg_devs[dev_id],
 				sizeof(struct ubcore_topo_agg_dev));
 		}
 	}
+
+	return 0;
 }
 
 static int update_link_info(struct ubcore_topo_node *new_topo_info,
 				struct ubcore_topo_node *old_topo_info)
 {
-	int iodie_id, port_id, old_remote_port_id;
+	int iodie_id, port_id, new_remote_port_id, old_remote_port_id;
 
 	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
 		for (port_id = 0; port_id < PORT_NUM; ++port_id) {
-			// add new connection if no connection exists
+			new_remote_port_id = new_topo_info->links[iodie_id][port_id].peer_port;
 			old_remote_port_id = old_topo_info->links[iodie_id][port_id].peer_port;
-			if (old_remote_port_id == UINT32_MAX) {
+			if (new_remote_port_id == UINT32_MAX) {
+				// if new link is not connected, skip it
+				continue;
+			} else if (old_remote_port_id == UINT32_MAX) {
+				// if old link is not connected, update it
 				(void)memcpy(&old_topo_info->links[iodie_id][port_id],
 					&new_topo_info->links[iodie_id][port_id],
 					sizeof(struct ubcore_topo_link));
 			} else {
+				/* if old link is connected and new link is connected,
+				   check if they are the same */
 				if (memcmp(&old_topo_info->links[iodie_id][port_id],
-					&new_topo_info->links[iodie_id][port_id],
-					sizeof(struct ubcore_topo_link)) != 0) {
+						&new_topo_info->links[iodie_id][port_id],
+						sizeof(struct ubcore_topo_link)) != 0) {
 					ubcore_log_err("link is not the same, ");
 					ubcore_log_err(
 						"new: peer_node[%u]/peer_iodie[%u]/peer_port[%u], ",
@@ -171,7 +191,7 @@ static int update_link_info(struct ubcore_topo_node *new_topo_info,
 						old_topo_info->links[iodie_id][port_id].peer_node,
 						old_topo_info->links[iodie_id][port_id].peer_iodie,
 						old_topo_info->links[iodie_id][port_id].peer_port);
-					return -EINVAL;
+					return -1;
 				}
 			}
 		}
@@ -195,8 +215,14 @@ int ubcore_update_topo_map(struct ubcore_topo_map *new_topo_map,
 		for (j = 0; j < old_topo_map->node_num; j++) {
 			old_node = &old_topo_map->topo_infos[j];
 			if (new_node->id == old_node->id) {
-				update_link_info(new_node, old_node);
-				update_dev_info(new_node, old_node);
+				if (update_link_info(new_node, old_node)) {
+					ubcore_log_err("update link info failed\n");
+					return -EINVAL;
+				}
+				if (update_dev_info(new_node, old_node)) {
+					ubcore_log_err("update dev info failed\n");
+					return -EINVAL;
+				}
 			}
 		}
 	}
