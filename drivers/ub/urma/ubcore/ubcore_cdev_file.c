@@ -1245,7 +1245,6 @@ static ssize_t sl_show_cb(struct ubcore_device *dev, char *buf, uint8_t priority
 	int ret = 0;
 
 	ret = ubcore_query_device_attr(dev, &dev->attr);
-
 	if (ret != 0) {
 		ubcore_log_err("failed query device attr.\n");
 		return ret;

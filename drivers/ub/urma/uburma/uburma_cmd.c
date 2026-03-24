@@ -4629,7 +4629,6 @@ static int uburma_cmd_get_eid_by_ip(struct ubcore_device *ubc_dev,
 	int ret;
 
 	ret = uburma_tlv_parse(hdr, &arg);
-
 	if (ret != 0)
 		return ret;
 	if (arg.in.net_addr.sin_family == AF_INET6) {

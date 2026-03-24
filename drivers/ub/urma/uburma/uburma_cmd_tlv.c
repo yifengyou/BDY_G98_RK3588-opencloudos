@@ -353,7 +353,6 @@ static void uburma_alloc_jfs_fill_spec_in(void *arg_addr, struct uburma_cmd_spec
 
 static void uburma_alloc_jfs_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
 {
-
 	struct uburma_cmd_alloc_jfs *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
 
@@ -628,7 +627,6 @@ static void uburma_alloc_jfr_fill_spec_in(void *arg_addr, struct uburma_cmd_spec
 
 static void uburma_alloc_jfr_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
 {
-
 	struct uburma_cmd_alloc_jfr *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
 
@@ -836,7 +834,6 @@ static void uburma_alloc_jfc_fill_spec_in(void *arg_addr, struct uburma_cmd_spec
 
 static void uburma_alloc_jfc_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
 {
-
 	struct uburma_cmd_alloc_jfc *arg = arg_addr;
 	struct uburma_cmd_spec *s = spec;
 

@@ -373,8 +373,8 @@ static int ubmad_jetty_set_priority(struct ubmad_device_priv *dev_priv,
 		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
 			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
 				jetty_cfg->priority = i;
-				ubcore_log_info("ubmad create jetty set priority : %d, tp_type : ctp\n"
-					, i);
+				ubcore_log_info(
+					"ubmad create jetty set priority : %d, tp_type : ctp\n", i);
 				set_priority_ret = 1;
 				break;
 			}
