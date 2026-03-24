@@ -16,9 +16,12 @@
 #include "ubagg_types.h"
 
 enum ubagg_cmd {
-	UBAGG_ADD_DEV = 1,
-	UBAGG_RMV_DEV,
-	UBAGG_SET_TOPO_INFO,
+	UBAGG_CMD_ADD_DEV = 1,
+	UBAGG_CMD_RMV_DEV,
+	UBAGG_CMD_SET_TOPO_INFO,
+	UBAGG_CMD_CREATE_DEV,
+	UBAGG_CMD_DELETE_DEV,
+	UBAGG_CMD_GET_DEV_NAME,
 };
 
 struct ubagg_cmd_hdr {
@@ -137,6 +140,27 @@ struct ubagg_set_topo_info {
 		void *topo;
 		uint32_t topo_num;
 	} in;
+};
+
+struct ubagg_create_dev_arg {
+	struct {
+		union ubcore_eid agg_eid;
+	} in;
+};
+
+struct ubagg_delete_dev_arg {
+	struct {
+		union ubcore_eid agg_eid;
+	} in;
+};
+
+struct ubagg_get_dev_name_arg {
+	struct {
+		union ubcore_eid eid;
+	} in;
+	struct {
+		char dev_name[UBAGG_MAX_DEV_NAME_LEN];
+	} out;
 };
 
 enum ubagg_userctl_opcode {
