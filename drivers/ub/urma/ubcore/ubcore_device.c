@@ -1963,6 +1963,7 @@ static int ubcore_modify_dev_ns(struct ubcore_device *dev, struct net *net,
 		goto out;
 	}
 
+	ubcore_remove_logic_devices(dev);
 	ubcore_modify_eid_ns(dev, net);
 
 out:
