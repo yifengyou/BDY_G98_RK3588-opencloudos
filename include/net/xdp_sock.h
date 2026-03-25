@@ -63,8 +63,12 @@ struct xdp_sock {
 
 	struct xsk_queue *tx ____cacheline_aligned_in_smp;
 	struct list_head tx_list;
-	/* Protects generic receive. */
-	spinlock_t rx_lock;
+	/* record the number of tx descriptors sent by this xsk and
+	 * when it exceeds MAX_PER_SOCKET_BUDGET, an opportunity needs
+	 * to be given to other xsks for sending tx descriptors, thereby
+	 * preventing other XSKs from being starved.
+	 */
+	u32 tx_budget_spent;
 
 	/* Statistics */
 	u64 rx_dropped;
@@ -79,6 +83,7 @@ struct xdp_sock {
 	struct list_head map_list;
 	/* Protects map_list */
 	spinlock_t map_list_lock;
+	u32 max_tx_budget;
 	/* Protects multiple processes in the control path */
 	struct mutex mutex;
 	struct xsk_queue *fq_tmp; /* Only as tmp storage before bind */
