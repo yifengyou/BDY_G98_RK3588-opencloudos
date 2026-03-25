@@ -538,6 +538,7 @@ static ssize_t proc_panic_enable_file_write(struct file *file, const char __user
 		return -EINVAL;
 	}
 
+	pr_info("%s panic event report\n", sentry_client_ctx.panic_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -580,6 +581,8 @@ static ssize_t proc_kernel_reboot_enable_file_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s kernel reboot event report\n",
+		    sentry_client_ctx.kernel_reboot_enable ? "enable" : "disable");
 	return cnt;
 }
 

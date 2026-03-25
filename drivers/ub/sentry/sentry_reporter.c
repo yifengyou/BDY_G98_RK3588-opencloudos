@@ -229,6 +229,7 @@ static ssize_t proc_oom_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s oom event report\n", g_oom_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -295,6 +296,7 @@ static ssize_t proc_power_off_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s powef off event report\n", g_power_off_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -361,6 +363,7 @@ static ssize_t proc_ub_mem_fault_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s UB memory fault event report\n", g_ub_mem_fault_enable ? "enable" : "disable");
 	return cnt;
 }
 
