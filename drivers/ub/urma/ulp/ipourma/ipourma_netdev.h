@@ -10,6 +10,12 @@
 
 #include "ipourma_types.h"
 
+struct ipourma_set_ip_work {
+	struct delayed_work d_work;
+	struct ipourma_dev_priv *priv;
+	int eid_idx;
+};
+
 int ipourma_unalloc_netdev(struct net_device *dev);
 struct net_device *ipourma_alloc_netdev(struct ubcore_device *urma_dev);
 void ipourma_create_new_eid(struct ipourma_dev_priv *priv, u32 eid_idx);

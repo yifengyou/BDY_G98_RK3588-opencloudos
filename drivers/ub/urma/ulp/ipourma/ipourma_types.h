@@ -59,11 +59,11 @@ enum {
 	IPOURMA_MAX_TX_SGES         = MAX_SKB_FRAGS + 1,
 	IPOURMA_NAPI_RX_WEIGHT      = 4,
 	IPOURMA_NAPI_TX_WEIGHT      = 16,
-	IPOURMA_TX_RING_SIZE        = 128,
-	IPOURMA_RX_RING_SIZE        = 256,
-	IPOURMA_MIN_TX_RING_SIZE    = 32,
+	IPOURMA_TX_RING_SIZE        = 16,
+	IPOURMA_RX_RING_SIZE        = 32,
+	IPOURMA_MIN_TX_RING_SIZE    = 16,
 	IPOURMA_MAX_TX_RING_SIZE    = 2048,
-	IPOURMA_MIN_RX_RING_SIZE    = 32,
+	IPOURMA_MIN_RX_RING_SIZE    = 16,
 	IPOURMA_MAX_RX_RING_SIZE    = 4096,
 	IPOURMA_URMA_MAX_MTU        = 4096,
 	IPOURMA_MAX_MTU             = (IPOURMA_URMA_MAX_MTU -
@@ -77,6 +77,8 @@ enum {
 	IPOURMA_TJETTY_TIMEOUT_S    = 60,
 	IPOURMA_TJETTY_TIMEOUT_MAX  = 65535,
 	IPOURMA_MAX_DEV_NAME        = 50,
+	IPOURMA_DEFAULT_CTP_SL      = 3,
+	IPOURMA_DEFAULT_UTP_SL      = 0,
 };
 
 enum {
@@ -310,7 +312,6 @@ struct ipourma_dev_priv {
 	spinlock_t lock;
 	spinlock_t *tx_ring_locks;
 	struct dentry *address_dentry;
-	atomic_t need_set_ip_route;
 	bool need_restart_ring;
 	struct workqueue_struct *net_config_wq;
 	struct work_struct set_dev_up;

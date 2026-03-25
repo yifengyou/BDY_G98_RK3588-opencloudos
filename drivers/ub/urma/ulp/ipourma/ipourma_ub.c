@@ -338,8 +338,9 @@ static void ipourma_advance_tx_tail(struct ipourma_dev_priv *priv,
 	unsigned long flags;
 
 	spin_lock_irqsave(&priv->tx_ring_locks[eid_idx], flags);
+	tx_req->tx_buf_in_use = 0;
 	for (i = priv->tx_tail[eid_idx] % ipourma_tx_ring_size;
-		i != (tx_req->idx + 1) % ipourma_tx_ring_size;
+		priv->tx_tail[eid_idx] != priv->tx_head[eid_idx];
 		i = (i + 1) % ipourma_tx_ring_size) {
 		if (priv->tx_ring[eid_idx][i].tx_buf_in_use == 1)
 			break;
@@ -354,15 +355,6 @@ static void ipourma_advance_tx_tail(struct ipourma_dev_priv *priv,
 			netif_wake_queue(priv->dev);
 	}
 	spin_unlock_irqrestore(&priv->tx_ring_locks[eid_idx], flags);
-}
-
-static inline void ipourma_handle_tx_failed(struct net_device *dev, struct ipourma_tx_buf *tx_req)
-{
-	struct ipourma_dev_priv *priv = netdev_priv(dev);
-
-	tx_req->tx_buf_in_use = 0;
-	ipourma_advance_tx_tail(priv, tx_req);
-	dev_kfree_skb_any(tx_req->skb);
 }
 
 static int ipourma_update_wr(struct net_device *dev, struct ipourma_tx_buf *tx_req)
@@ -381,7 +373,7 @@ static int ipourma_update_wr(struct net_device *dev, struct ipourma_tx_buf *tx_r
 			priv->runtime_stats.tx_stats.num_import_jetty_real++;
 			tjetty_new = ipourma_import_new_tjetty(priv, tx_req);
 			if (IS_ERR_OR_NULL(tjetty_new)) {
-				ipourma_handle_tx_failed(dev, tx_req);
+				ipourma_advance_tx_tail(priv, tx_req);
 				priv->runtime_stats.tx_stats.import_jetty_failed++;
 				return IPOURMA_TJETTY_NODE_ALLOC_FAILED;
 			}
@@ -429,6 +421,7 @@ free_skb_out:
 	if (!IS_ERR_OR_NULL(tx_req->skb))
 		dev_kfree_skb_any(tx_req->skb);
 	tx_req->skb = NULL;
+	ipourma_advance_tx_tail(priv, tx_req);
 }
 
 static inline int ipourma_get_eid_index(struct net_device *dev, union ubcore_eid *eid)
@@ -530,7 +523,6 @@ int ipourma_xmit(struct net_device *dev, struct sk_buff *skb,
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
 	struct ipourma_tx_buf *tx_req;
 	int ret = IPOURMA_OK;
-	unsigned long flags;
 	u32 eid_idx;
 	u32 tx_idx;
 
@@ -552,9 +544,9 @@ int ipourma_xmit(struct net_device *dev, struct sk_buff *skb,
 	}
 
 	// enqueue the skb
-	spin_lock_irqsave(&priv->tx_ring_locks[eid_idx], flags);
+	spin_lock(&priv->tx_ring_locks[eid_idx]);
 	if (priv->tx_ring_is_full[eid_idx]) {
-		spin_unlock_irqrestore(&priv->tx_ring_locks[eid_idx], flags);
+		spin_unlock(&priv->tx_ring_locks[eid_idx]);
 		priv->runtime_stats.tx_stats.tx_ring_full++;
 		return IPOURMA_TX_RING_FULL;
 	}
@@ -571,7 +563,7 @@ int ipourma_xmit(struct net_device *dev, struct sk_buff *skb,
 					priv->tx_head[eid_idx], priv->tx_tail[eid_idx]);
 	}
 	priv->tx_head[eid_idx]++;
-	spin_unlock_irqrestore(&priv->tx_ring_locks[eid_idx], flags);
+	spin_unlock(&priv->tx_ring_locks[eid_idx]);
 	tx_req->skb = skb;
 	tx_req->dst_eid = *dst_eid;
 	tx_req->eid_index = eid_idx;
@@ -736,26 +728,21 @@ static void ipourma_do_handle_tx_wc(struct net_device *dev,
 
 	if (unlikely(tx_req->tx_buf_in_use == 0))
 		return;
-	tx_req->tx_buf_in_use = 0;
-	ipourma_advance_tx_tail(priv, tx_req);
-	if (unlikely(cr->status != UBCORE_CR_SUCCESS)) {
-		netdev_dbg(dev, "%s: status = %d\n",
-					ipourma_err_desc(IPOURMA_TX_CQE_ERR), cr->status);
-		goto free_tx_skb;
+	if (unlikely(cr->status == UBCORE_CR_SUCCESS)) {
+		dev->stats.tx_packets++;
+		dev->stats.tx_bytes += tx_req->skb->len;
+		netif_trans_update(dev);
 	}
-	dev->stats.tx_packets++;
-	dev->stats.tx_bytes += tx_req->skb->len;
-	netif_trans_update(dev);
-free_tx_skb:
 	dev_kfree_skb_any(tx_req->skb);
 	tx_req->skb = NULL;
+	ipourma_advance_tx_tail(priv, tx_req);
 }
 
 void ipourma_handle_tx_wc(struct net_device *dev,
 			  struct ipourma_dev_priv *priv,
 			  struct ubcore_cr *cr)
 {
-	u32 eid_idx, idx;
+	u32 eid_idx = 0, idx = 0;
 
 	if (cr->status >= IPOURMA_MAX_CR_STATUS) {
 		priv->runtime_stats.tx_stats.cqe_err++;
@@ -783,12 +770,13 @@ void ipourma_handle_tx_wc(struct net_device *dev,
 				   ipourma_err_desc(IPOURMA_INCORRECT_WQE_JETTY_IDX), eid_idx);
 		return;
 	}
-	eid_idx = cr->local_id - IPOURMA_WELL_KNOWN_JETTY_ID;
 
+	eid_idx = cr->local_id - IPOURMA_WELL_KNOWN_JETTY_ID;
 	idx = cr->user_ctx;
-	if (unlikely(idx >= ipourma_tx_ring_size)) {
-		netdev_dbg(dev, "%s:%u\n",
-				   ipourma_err_desc(IPOURMA_INCORRECT_WQE_IDX), idx);
+	if (IS_ERR_OR_NULL(priv->tx_ring[eid_idx]) ||
+		unlikely(idx >= ipourma_tx_ring_size)) {
+		netdev_dbg(dev, "%s:eid_idx:%u idx:%u\n",
+				   ipourma_err_desc(IPOURMA_INCORRECT_WQE_IDX), eid_idx, idx);
 		return;
 	}
 	pr_debug("now cr status:%d\n", cr->status);
@@ -829,9 +817,10 @@ static void ipourma_do_handle_rx_wc(struct net_device *dev,
 	pr_debug("IPoURMA received packet's proto: 0x%x\n",
 			 ntohs(skb->protocol));
 	pr_skb_head_plus_linear(skb, "Skb passed to kernel stack");
-	netif_rx(skb);
-	priv->runtime_stats.rx_stats.pass_to_kernel++;
-
+	if (atomic_read(&skb->users.refs) == 1) {
+		netif_rx(skb);
+		priv->runtime_stats.rx_stats.pass_to_kernel++;
+	}
 rx_wc_out:
 	priv->runtime_stats.rx_stats.replenish_enque++;
 	queue_work(priv->rx_wq, &(rx_req->work));
@@ -863,9 +852,10 @@ void ipourma_handle_rx_wc(struct net_device *dev,
 	}
 	eid_idx = cr->local_id - IPOURMA_WELL_KNOWN_JETTY_ID;
 	idx = cr->user_ctx;
-	if (unlikely(idx >= ipourma_rx_ring_size)) {
-		netdev_dbg(dev, "%s:%u\n",
-				   ipourma_err_desc(IPOURMA_INCORRECT_WQE_IDX), idx);
+	if (IS_ERR_OR_NULL(priv->rx_ring[eid_idx]) ||
+		unlikely(idx >= ipourma_rx_ring_size)) {
+		netdev_dbg(dev, "%s:eid_idx:%u idx:%u\n",
+				   ipourma_err_desc(IPOURMA_INCORRECT_WQE_IDX), eid_idx, idx);
 		return;
 	}
 	ipourma_do_handle_rx_wc(dev, priv, eid_idx, idx, cr);

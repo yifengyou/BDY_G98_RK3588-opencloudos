@@ -233,7 +233,7 @@ alloc_tx_bufs_failed:
 static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 {
 	struct ubcore_seg_cfg cfg = { 0 };
-	size_t i;
+	int i;
 
 	priv->rx_buf_aligned[eid_idx] = kcalloc(priv->rx_buf_num, sizeof(u8 *), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx]))
@@ -275,8 +275,6 @@ reg_rx_seg_err:
 			continue;
 		ubcore_unregister_seg(priv->ipourma_ub_rx_seg[eid_idx][i]);
 		priv->ipourma_ub_rx_seg[eid_idx][i] = NULL;
-		if (i == 0)
-			break;
 	}
 	kfree(priv->ipourma_ub_rx_seg[eid_idx]);
 	priv->ipourma_ub_rx_seg[eid_idx] = NULL;
@@ -288,8 +286,6 @@ alloc_rx_buf_aligned_err:
 			continue;
 		kfree(priv->rx_buf_aligned[eid_idx][i]);
 		priv->rx_buf_aligned[eid_idx][i] = NULL;
-		if (i == 0)
-			break;
 	}
 	kfree(priv->rx_buf_aligned[eid_idx]);
 	priv->rx_buf_aligned[eid_idx] = NULL;
@@ -495,11 +491,43 @@ static inline void ipourma_restart_rx_segments(struct ipourma_dev_priv *priv,
 	ipourma_register_rx_segments(priv->dev, &cfg, rx_req);
 }
 
+static void ipourma_restart_rings_by_eid(struct ipourma_dev_priv *priv, int eid_idx)
+{
+	struct ubcore_seg_cfg cfg = {0};
+	int ret = IPOURMA_OK;
+
+	if (eid_is_empty(&priv->eid_info[eid_idx].eid) ||
+		!IS_ERR_OR_NULL(priv->jetty[eid_idx]) ||
+		!IS_ERR_OR_NULL(priv->jfr[eid_idx]))
+		return;
+	ret = ipourma_init_urma_resources_by_eid(priv, eid_idx);
+	if (ret != IPOURMA_OK)
+		return;
+	ret = ipourma_init_tx_bufs(priv, eid_idx);
+	if (ret != IPOURMA_OK)
+		goto init_tx_bufs_err;
+
+	for (int j = 0; j < priv->rx_buf_num; j++) {
+		ipourma_build_seg_cfg(&cfg, (u64)priv->rx_buf_aligned[eid_idx][j],
+						ipourma_register_seg_size);
+		priv->ipourma_ub_rx_seg[eid_idx][j] = ubcore_register_seg(priv->urma_dev,
+										&cfg, NULL);
+		if (!IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx][j]))
+			continue;
+		goto register_tx_seg_err;
+	}
+	for (int j = 0; j < ipourma_rx_ring_size; j++) {
+		ipourma_restart_rx_segments(priv, &priv->rx_ring[eid_idx][j]);
+		ipourma_urma_post_recv(priv->dev, eid_idx, j);
+	}
+register_tx_seg_err:
+	ipourma_uninit_tx_bufs(priv, eid_idx);
+init_tx_bufs_err:
+	ipourma_uninit_urma_resources_by_eid(priv, eid_idx);
+}
+
 int ipourma_restart_rings(struct ipourma_dev_priv *priv)
 {
-	struct ubcore_seg_cfg cfg = { 0 };
-	int ret;
-
 	if (!priv->need_restart_ring) {
 		priv->need_restart_ring = true;
 		return IPOURMA_OK;
@@ -507,31 +535,14 @@ int ipourma_restart_rings(struct ipourma_dev_priv *priv)
 
 	if (IS_ERR_OR_NULL(priv->jetty) || IS_ERR_OR_NULL(priv->jfr))
 		return -EINVAL;
-	for (int i = 0; i < IPOURMA_MAX_EID_CNT; i++) {
-		if (eid_is_empty(&priv->eid_info[i].eid))
-			continue;
-		if (!IS_ERR_OR_NULL(priv->jetty[i]) || !IS_ERR_OR_NULL(priv->jfr[i]))
-			continue;
-		ret = ipourma_init_urma_resources_by_eid(priv, i);
-		if (ret != IPOURMA_OK)
-			continue;
-		ret = ipourma_init_tx_bufs(priv, i);
-		if (ret != IPOURMA_OK) {
-			ipourma_uninit_urma_resources_by_eid(priv, i);
-			continue;
-		}
+	for (int i = 0; i < IPOURMA_MAX_EID_CNT; i++)
+		ipourma_restart_rings_by_eid(priv, i);
 
-		for (u32 j = 0; j < priv->rx_buf_num; j++) {
-			ipourma_build_seg_cfg(&cfg, (u64)priv->rx_buf_aligned[i][j],
-							ipourma_register_seg_size);
-			priv->ipourma_ub_rx_seg[i][j] = ubcore_register_seg(priv->urma_dev,
-											&cfg, NULL);
-		}
-		for (u32 j = 0; j < ipourma_rx_ring_size; j++) {
-			ipourma_restart_rx_segments(priv, &priv->rx_ring[i][j]);
-			ipourma_urma_post_recv(priv->dev, i, j);
-		}
-	}
+	if (IS_ERR_OR_NULL(priv->net_config_wq))
+		return -EINVAL;
+	queue_work(priv->net_config_wq, &(priv->set_ip));
+	queue_work(priv->net_config_wq, &(priv->set_route));
+
 	return IPOURMA_OK;
 }
 
@@ -639,29 +650,18 @@ int ipourma_init_tjetty_hmap(struct net_device *dev)
 static int ipourma_jetty_set_priority(struct ipourma_dev_priv *priv,
 					struct ubcore_jetty_cfg *jetty_cfg)
 {
-	struct ubcore_device_attr attr = {0};
-	int set_priority_ret = 0;
-	int ret = 0;
-	int i;
-
-	ret = ubcore_query_device_attr(priv->urma_dev, &attr);
-	if (ret == 0) {
-		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
-			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
-				jetty_cfg->priority = i;
-				netdev_info(priv->dev, "ipourma set ctp priority : %d\n", i);
-				set_priority_ret = 1;
-				break;
-			}
-		}
-		if (set_priority_ret == 0) {
-			netdev_err(priv->dev, "set priority default value : 0\n");
-			return -EINVAL;
-		}
-	} else {
-		netdev_err(priv->dev, "Failed to ubcore get dev_attr!\n");
+	if (jetty_cfg->trans_mode == UBCORE_TP_RM) {
+		jetty_cfg->priority = ipourma_ctp_sl;
+		netdev_info(priv->dev,
+					"ipourma create jetty set priority : %d, ty_type : ctp\n",
+					ipourma_ctp_sl);
+	} else if (jetty_cfg->trans_mode == UBCORE_TP_UM) {
+		jetty_cfg->priority = ipourma_utp_sl;
+		netdev_info(priv->dev,
+					"ipourma create jetty set priority : %d, ty_type : utp\n",
+					ipourma_utp_sl);
+	} else
 		return -EINVAL;
-	}
 	return IPOURMA_OK;
 }
 
@@ -673,7 +673,7 @@ static struct ubcore_jfr *ipourma_create_jfr(
 
 	jfr_cfg.depth = depth;
 	jfr_cfg.flag.bs.token_policy = UBCORE_TOKEN_NONE;
-	jfr_cfg.trans_mode = UBCORE_TP_RM;
+	jfr_cfg.trans_mode = priv->urma_transport_mode;
 	jfr_cfg.eid_index = priv->eid_info[eid_index].eid_index;
 	jfr_cfg.max_sge = IPOURMA_MAX_URMA_RECV_SGES;
 	jfr_cfg.jfc = priv->rx_jfc;
@@ -697,7 +697,7 @@ static struct ubcore_jetty *ipourma_create_jetty(struct net_device *dev,
 	/* some values should dynamically get from the device */
 	jetty_cfg.id = jetty_id;
 	jetty_cfg.flag.bs.share_jfr = 1;
-	jetty_cfg.trans_mode = UBCORE_TP_RM;
+	jetty_cfg.trans_mode = priv->urma_transport_mode;
 	jetty_cfg.eid_index = priv->eid_info[eid_index].eid_index;
 	jetty_cfg.jfs_depth = IPOURMA_JFS_DEPTH;
 	jetty_cfg.priority = 0;
@@ -805,10 +805,12 @@ void ipourma_uninit_urma_resources(struct net_device *dev)
 
 static int ipourma_init_misc(struct ipourma_dev_priv *priv)
 {
+	int ctp_en = priv->urma_dev->attr.dev_cap.feature.bs.ctp_en;
+
 	priv->max_send_sge = IPOURMA_MAX_URMA_SEND_SGES;
 	priv->urma_mtu = IPOURMA_URMA_MAX_MTU;
 	priv->urma_op_mode = UBCORE_OPC_SEND;
-	priv->urma_transport_mode = UBCORE_TP_RM;
+	priv->urma_transport_mode = ctp_en ? UBCORE_TP_RM : UBCORE_TP_UM;
 
 	priv->tjetty_lru.tjetty_wq = alloc_workqueue("ipourma_tjetty_wq", WQ_MEM_RECLAIM, 0);
 	if (IS_ERR_OR_NULL(priv->tjetty_lru.tjetty_wq))
