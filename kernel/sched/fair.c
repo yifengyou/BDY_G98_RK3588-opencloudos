@@ -1023,6 +1023,9 @@ found:
 	if (!best || (curr && entity_before(curr, best)))
 		best = curr;
 
+	if (unlikely(!best))
+		best = __pick_first_entity(cfs_rq);
+
 	return best;
 }
 
@@ -5644,6 +5647,9 @@ pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
 	}
 
 	se = pick_eevdf(cfs_rq);
+	if (unlikely(!se))
+		return NULL;
+
 	if (se->sched_delayed) {
 		dequeue_entities(rq, se, DEQUEUE_SLEEP | DEQUEUE_DELAYED);
 		/*
