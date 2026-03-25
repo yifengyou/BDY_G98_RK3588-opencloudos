@@ -1518,6 +1518,8 @@ static int parse_assignment(struct trace_array *tr,
 
 		if (strcmp(policy_str, "ring") == 0)
 			attrs->overflow_policy = TRACING_MAP_OVERFLOW_RING;
+		else if (strcmp(policy_str, "replace") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_REPLACE;
 		else if (strcmp(policy_str, "drop") == 0)
 			attrs->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
 		else {
@@ -5710,6 +5712,9 @@ static void hist_trigger_show(struct seq_file *m,
 		seq_printf(m, "    Replaced: %llu\n    Overflow policy: ring (size=%u)\n",
 			   (u64)atomic64_read(&hist_data->map->replaces),
 			   hist_data->map->max_elts);
+	else if (hist_data->map->overflow_policy == TRACING_MAP_OVERFLOW_REPLACE)
+		seq_printf(m, "    Replaced: %llu\n    Overflow policy: replace\n",
+			   (u64)atomic64_read(&hist_data->map->replaces));
 }
 
 struct hist_file_data {

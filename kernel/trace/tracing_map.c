@@ -411,6 +411,7 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 		return ERR_PTR(-ENOMEM);
 
 	elt->map = map;
+	elt->hash_idx = UINT_MAX;
 
 	elt->key = kzalloc(map->key_size, GFP_KERNEL);
 	if (!elt->key) {
@@ -450,6 +451,53 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 	return ERR_PTR(err);
 }
 
+/*
+ * O(1) invalidation of an elt's hash entry via its back-pointer.
+ * Each elt records which hash slot it occupies (hash_idx), allowing
+ * direct access instead of scanning the entire table.
+ */
+static void invalidate_elt_hash_entry(struct tracing_map *map,
+				      struct tracing_map_elt *elt)
+{
+	unsigned int idx;
+	struct tracing_map_entry *entry;
+
+	idx = READ_ONCE(elt->hash_idx);
+	if (idx >= map->map_size)
+		return;
+
+	entry = TRACING_MAP_ENTRY(map->map, idx);
+
+	if (READ_ONCE(entry->val) != elt)
+		return;
+
+	WRITE_ONCE(entry->val, NULL);
+	smp_wmb();
+	WRITE_ONCE(entry->key, 0);
+}
+
+static struct tracing_map_elt *get_recycled_elt(struct tracing_map *map)
+{
+	struct tracing_map_elt *elt;
+	unsigned int idx;
+
+	idx = (unsigned int)atomic_fetch_add(1, &map->recycle_idx) &
+		(map->max_elts - 1);
+	elt = *(TRACING_MAP_ELT(map->elts, idx));
+	if (!elt)
+		return NULL;
+
+	invalidate_elt_hash_entry(map, elt);
+	tracing_map_elt_clear(elt);
+
+	if (map->ops && map->ops->elt_init)
+		map->ops->elt_init(elt);
+
+	atomic64_inc(&map->replaces);
+
+	return elt;
+}
+
 static struct tracing_map_elt *get_free_elt(struct tracing_map *map)
 {
 	struct tracing_map_elt *elt = NULL;
@@ -460,9 +508,13 @@ static struct tracing_map_elt *get_free_elt(struct tracing_map *map)
 		elt = *(TRACING_MAP_ELT(map->elts, idx));
 		if (map->ops && map->ops->elt_init)
 			map->ops->elt_init(elt);
+		return elt;
 	}
 
-	return elt;
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_REPLACE)
+		return get_recycled_elt(map);
+
+	return NULL;
 }
 
 static void tracing_map_free_elts(struct tracing_map *map)
@@ -575,6 +627,7 @@ __tracing_map_insert(struct tracing_map *map, void *key, bool lookup_only)
 				}
 
 				memcpy(elt->key, key, map->key_size);
+				elt->hash_idx = idx;
 				/*
 				 * Ensure the initialization is visible and
 				 * publish the elt.
@@ -751,6 +804,7 @@ void tracing_map_clear(struct tracing_map *map)
 	atomic64_set(&map->hits, 0);
 	atomic64_set(&map->drops, 0);
 	atomic64_set(&map->replaces, 0);
+	atomic_set(&map->recycle_idx, 0);
 
 	tracing_map_array_clear(map->map);
 
@@ -840,6 +894,7 @@ struct tracing_map *tracing_map_create(unsigned int map_bits,
 	map->max_elts = (1 << map_bits);
 	atomic_set(&map->next_elt, 0);
 	atomic64_set(&map->replaces, 0);
+	atomic_set(&map->recycle_idx, 0);
 	map->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
 
 	map->map_size = (1 << (map_bits + 1));

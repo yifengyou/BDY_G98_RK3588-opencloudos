@@ -9,6 +9,7 @@
 enum tracing_map_overflow_policy {
 	TRACING_MAP_OVERFLOW_DROP = 0,
 	TRACING_MAP_OVERFLOW_RING = 1,
+	TRACING_MAP_OVERFLOW_REPLACE = 2,
 };
 
 #define TRACING_MAP_KEYS_MAX		3
@@ -147,6 +148,7 @@ struct tracing_map_elt {
 	bool				*var_set;
 	void				*key;
 	void				*private_data;
+	unsigned int			hash_idx;
 };
 
 struct tracing_map_entry {
@@ -205,6 +207,7 @@ struct tracing_map {
 	atomic64_t			drops;
 	atomic64_t			replaces;
 	enum tracing_map_overflow_policy overflow_policy;
+	atomic_t			recycle_idx;
 };
 
 /**
