@@ -526,6 +526,7 @@ struct hist_trigger_attrs {
 	bool		ts_in_usecs;
 	bool		no_hitcount;
 	unsigned int	map_bits;
+	enum tracing_map_overflow_policy overflow_policy;
 
 	char		*assignment_str[TRACING_MAP_VARS_MAX];
 	unsigned int	n_assignments;
@@ -1512,6 +1513,17 @@ static int parse_assignment(struct trace_array *tr,
 			goto out;
 		}
 		attrs->map_bits = map_bits;
+	} else if ((len = str_has_prefix(str, "overflow="))) {
+		char *policy_str = str + len;
+
+		if (strcmp(policy_str, "ring") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_RING;
+		else if (strcmp(policy_str, "drop") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
+		else {
+			ret = -EINVAL;
+			goto out;
+		}
 	} else {
 		char *assignment;
 
@@ -5136,6 +5148,9 @@ create_hist_data(unsigned int map_bits,
 		goto free;
 	}
 
+	tracing_map_set_overflow_policy(hist_data->map,
+					hist_data->attrs->overflow_policy);
+
 	ret = create_tracing_map_fields(hist_data);
 	if (ret)
 		goto free;
@@ -5691,6 +5706,10 @@ static void hist_trigger_show(struct seq_file *m,
 	seq_printf(m, "\nTotals:\n    Hits: %llu\n    Entries: %u\n    Dropped: %llu\n",
 		   (u64)atomic64_read(&hist_data->map->hits),
 		   n_entries, (u64)atomic64_read(&hist_data->map->drops));
+	if (hist_data->map->overflow_policy == TRACING_MAP_OVERFLOW_RING)
+		seq_printf(m, "    Replaced: %llu\n    Overflow policy: ring (size=%u)\n",
+			   (u64)atomic64_read(&hist_data->map->replaces),
+			   hist_data->map->max_elts);
 }
 
 struct hist_file_data {

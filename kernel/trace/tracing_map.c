@@ -15,6 +15,7 @@
 #include <linux/jhash.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/string.h>
 #include <linux/kmemleak.h>
 
 #include "tracing_map.h"
@@ -636,8 +637,55 @@ __tracing_map_insert(struct tracing_map *map, void *key, bool lookup_only)
  * found and the pool of tracing_map_elts has been exhausted, NULL is
  * returned and no further insertions will succeed.
  */
+
+/*
+ * Ring buffer insert: O(1) direct-indexed circular array.
+ * Slot = key_as_u64 % max_elts. Same key aggregates; different key replaces.
+ * No hash table involved — purely positional by key value.
+ */
+static struct tracing_map_elt *
+__tracing_map_ring_insert(struct tracing_map *map, void *key)
+{
+	u64 key_val = 0;
+	unsigned int idx;
+	struct tracing_map_elt *elt;
+	bool is_empty;
+
+	if (map->key_size <= sizeof(u64))
+		memcpy(&key_val, key, map->key_size);
+	else
+		key_val = jhash(key, map->key_size, 0);
+
+	idx = (unsigned int)(key_val % map->max_elts);
+	elt = *(TRACING_MAP_ELT(map->elts, idx));
+	if (!elt)
+		return NULL;
+
+	if (keys_match(key, elt->key, map->key_size)) {
+		atomic64_inc(&map->hits);
+		return elt;
+	}
+
+	is_empty = !memchr_inv(elt->key, 0, map->key_size);
+
+	tracing_map_elt_clear(elt);
+	if (map->ops && map->ops->elt_init)
+		map->ops->elt_init(elt);
+
+	memcpy(elt->key, key, map->key_size);
+	smp_wmb();
+
+	atomic64_inc(&map->hits);
+	if (!is_empty)
+		atomic64_inc(&map->replaces);
+
+	return elt;
+}
+
 struct tracing_map_elt *tracing_map_insert(struct tracing_map *map, void *key)
 {
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_RING)
+		return __tracing_map_ring_insert(map, key);
 	return __tracing_map_insert(map, key, false);
 }
 
@@ -702,11 +750,18 @@ void tracing_map_clear(struct tracing_map *map)
 	atomic_set(&map->next_elt, 0);
 	atomic64_set(&map->hits, 0);
 	atomic64_set(&map->drops, 0);
+	atomic64_set(&map->replaces, 0);
 
 	tracing_map_array_clear(map->map);
 
 	for (i = 0; i < map->max_elts; i++)
 		tracing_map_elt_clear(*(TRACING_MAP_ELT(map->elts, i)));
+}
+
+void tracing_map_set_overflow_policy(struct tracing_map *map,
+				     enum tracing_map_overflow_policy policy)
+{
+	map->overflow_policy = policy;
 }
 
 static void set_sort_key(struct tracing_map *map,
@@ -784,6 +839,8 @@ struct tracing_map *tracing_map_create(unsigned int map_bits,
 	map->map_bits = map_bits;
 	map->max_elts = (1 << map_bits);
 	atomic_set(&map->next_elt, 0);
+	atomic64_set(&map->replaces, 0);
+	map->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
 
 	map->map_size = (1 << (map_bits + 1));
 	map->ops = ops;
@@ -1080,19 +1137,35 @@ int tracing_map_sort_entries(struct tracing_map *map,
 	if (!entries)
 		return -ENOMEM;
 
-	for (i = 0, n_entries = 0; i < map->map_size; i++) {
-		struct tracing_map_entry *entry;
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_RING) {
+		for (i = 0, n_entries = 0; i < map->max_elts; i++) {
+			struct tracing_map_elt *elt;
 
-		entry = TRACING_MAP_ENTRY(map->map, i);
+			elt = *(TRACING_MAP_ELT(map->elts, i));
+			if (!elt || !memchr_inv(elt->key, 0, map->key_size))
+				continue;
 
-		if (!entry->key || !entry->val)
-			continue;
+			entries[n_entries] = create_sort_entry(elt->key, elt);
+			if (!entries[n_entries++]) {
+				ret = -ENOMEM;
+				goto free;
+			}
+		}
+	} else {
+		for (i = 0, n_entries = 0; i < map->map_size; i++) {
+			struct tracing_map_entry *entry;
 
-		entries[n_entries] = create_sort_entry(entry->val->key,
-						       entry->val);
-		if (!entries[n_entries++]) {
-			ret = -ENOMEM;
-			goto free;
+			entry = TRACING_MAP_ENTRY(map->map, i);
+
+			if (!entry->key || !entry->val)
+				continue;
+
+			entries[n_entries] = create_sort_entry(entry->val->key,
+							       entry->val);
+			if (!entries[n_entries++]) {
+				ret = -ENOMEM;
+				goto free;
+			}
 		}
 	}
 

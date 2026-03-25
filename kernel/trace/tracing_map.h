@@ -6,6 +6,11 @@
 #define TRACING_MAP_BITS_MAX		17
 #define TRACING_MAP_BITS_MIN		7
 
+enum tracing_map_overflow_policy {
+	TRACING_MAP_OVERFLOW_DROP = 0,
+	TRACING_MAP_OVERFLOW_RING = 1,
+};
+
 #define TRACING_MAP_KEYS_MAX		3
 #define TRACING_MAP_VALS_MAX		3
 #define TRACING_MAP_FIELDS_MAX		(TRACING_MAP_KEYS_MAX + \
@@ -198,6 +203,8 @@ struct tracing_map {
 	unsigned int			n_vars;
 	atomic64_t			hits;
 	atomic64_t			drops;
+	atomic64_t			replaces;
+	enum tracing_map_overflow_policy overflow_policy;
 };
 
 /**
@@ -252,6 +259,8 @@ extern int tracing_map_add_key_field(struct tracing_map *map,
 
 extern void tracing_map_destroy(struct tracing_map *map);
 extern void tracing_map_clear(struct tracing_map *map);
+extern void tracing_map_set_overflow_policy(struct tracing_map *map,
+					    enum tracing_map_overflow_policy p);
 
 extern struct tracing_map_elt *
 tracing_map_insert(struct tracing_map *map, void *key);
