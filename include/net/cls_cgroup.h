@@ -58,6 +58,10 @@ struct cls_cgroup_stats {
 	spinlock_t lock;
 	atomic64_t dropped;
 	atomic64_t throttle_count;
+	atomic64_t ipv4_packets[MAX_NIC_SUPPORT];
+	atomic64_t ipv4_bytes[MAX_NIC_SUPPORT];
+	atomic64_t ipv6_packets[MAX_NIC_SUPPORT];
+	atomic64_t ipv6_bytes[MAX_NIC_SUPPORT];
 };
 
 struct cgroup_cls_state {
@@ -86,6 +90,8 @@ struct rue_net_ops {
 			struct seq_file *sf);
 	int (*read_tx_stat)(struct cgroup_subsys_state *css,
 			struct seq_file *sf);
+	int (*read_perdev_stat)(struct cgroup_subsys_state *css,
+				struct seq_file *sf);
 	void (*dump_rx_tb)(struct seq_file *m);
 	void (*dump_tx_tb)(struct seq_file *m);
 	void (*dump_rx_limit_tb)(struct cgroup_subsys_state *css,
