@@ -2920,6 +2920,9 @@ typedef enum {
 #ifdef CONFIG_QOS_SCHED_DYNAMIC_AFFINITY
 	FILE_DYNAMIC_CPULIST,
 #endif
+#ifdef CONFIG_SCHED_CLASS_EXT
+	FILE_CPUSET_SCX_STAT
+#endif
 } cpuset_filetype_t;
 
 static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
@@ -3216,6 +3219,10 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	struct timespec64 boottime;
 	bool is_top_cgrp;
 	int show_realinfo = cpuset_cpuinfo_show_realinfo;
+#ifdef CONFIG_SCHED_CLASS_EXT
+	u64 scx = 0;
+	bool show_scx = seq_cft(sf)->private == FILE_CPUSET_SCX_STAT;
+#endif
 
 	user = nice = system = idle = iowait =
 		irq = softirq = steal = 0;
@@ -3240,6 +3247,10 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 		steal += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
 		guest += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
 		guest_nice += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
+#ifdef CONFIG_SCHED_CLASS_EXT
+		if (show_scx)
+			scx += kcpustat_cpu(i).cpustat[CPUTIME_SCX];
+#endif
 		sum += kstat_cpu_irqs_sum(i);
 		sum += arch_irq_stat_cpu(i);
 
@@ -3262,6 +3273,10 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	seq_put_decimal_ull(sf, " ", nsec_to_clock_t(steal));
 	seq_put_decimal_ull(sf, " ", nsec_to_clock_t(guest));
 	seq_put_decimal_ull(sf, " ", nsec_to_clock_t(guest_nice));
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (show_scx)
+		seq_put_decimal_ull(sf, " ", nsec_to_clock_t(scx));
+#endif
 	seq_putc(sf, '\n');
 
 	j = 0;
@@ -3283,6 +3298,10 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 		steal = kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
 		guest = kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
 		guest_nice = kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
+#ifdef CONFIG_SCHED_CLASS_EXT
+		if (show_scx)
+			scx = kcpustat_cpu(i).cpustat[CPUTIME_SCX];
+#endif
 		if (is_top_cgrp || show_realinfo)
 			seq_printf(sf, "cpu%d", i);
 		else
@@ -3297,6 +3316,10 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 		seq_put_decimal_ull(sf, " ", nsec_to_clock_t(steal));
 		seq_put_decimal_ull(sf, " ", nsec_to_clock_t(guest));
 		seq_put_decimal_ull(sf, " ", nsec_to_clock_t(guest_nice));
+#ifdef CONFIG_SCHED_CLASS_EXT
+		if (show_scx)
+			seq_put_decimal_ull(sf, " ", nsec_to_clock_t(scx));
+#endif
 		seq_putc(sf, '\n');
 	}
 	seq_put_decimal_ull(sf, "intr ", (unsigned long long)sum);
@@ -3802,6 +3825,15 @@ static int cpuset_cgroup_cpuinfo_show(struct seq_file *sf, void *v)
 
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+static int cpuset_cgroup_scx_stat_show(struct seq_file *sf, void *v)
+{
+	struct cpuset *cs = css_cs(seq_css(sf));
+
+	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX);
+}
+#endif
+
 static int cpuset_cgroup_stat_show(struct seq_file *sf, void *v)
 {
 	struct cpuset *cs = css_cs(seq_css(sf));
@@ -3982,6 +4014,13 @@ static struct cftype legacy_files[] = {
 		.name = "stat",
 		.seq_show = cpuset_cgroup_stat_show,
 	},
+#ifdef CONFIG_SCHED_CLASS_EXT
+	{
+		.name = "scx_stat",
+		.seq_show = cpuset_cgroup_scx_stat_show,
+		.private = FILE_CPUSET_SCX_STAT,
+	},
+#endif
 
 #ifdef CONFIG_X86
 	{
