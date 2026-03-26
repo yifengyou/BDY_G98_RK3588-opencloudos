@@ -1,3 +1,8 @@
+* Thu Mar 26 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.3
+- rue/scx: add cpuset.scx_stat for SCX usage reporting
+- rue/mm: use victim after rcu_read_unlock()
+- rue/mm: fix reclaim in RCU critical section in high-priority memory reserve
+
 * Thu Mar 26 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.2
 - sched: IDLE_REVERT: keep consistency with legacy interfaces and paths
 - rue/net: use READ_ONCE when reading cgroup cs for copying
