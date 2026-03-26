@@ -11255,7 +11255,7 @@ scan_again:
 			memcg_reclaim_goal, GFP_KERNEL, true);
 		cursor_id = victim->css.id;
 		if (!RUE_CALL_TYPE(MEM, mem_cgroup_notify_reclaim, bool,
-					   memcg, nr_reclaimed)) {
+					   victim, nr_reclaimed)) {
 			css_put(&victim->css);
 			break;
 		}
