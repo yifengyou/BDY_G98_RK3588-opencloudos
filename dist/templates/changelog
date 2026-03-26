@@ -1,3 +1,11 @@
+* Thu Mar 26 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.2
+- sched: IDLE_REVERT: keep consistency with legacy interfaces and paths
+- rue/net: use READ_ONCE when reading cgroup cs for copying
+- rue/net: fix RCU lock type for task_cls_state() caller
+- rue/net: percgrp perdev stats support ipv6
+- rue/net: add percgrp perdev stats
+- rue/net: fix sock cs inheritance for accept sockets
+
 * Mon Mar 23 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-48.3
 
 
