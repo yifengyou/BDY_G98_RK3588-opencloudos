@@ -167,17 +167,17 @@ static void update_sock_cgroup_cs(struct sock *sk, struct task_struct *task)
 	struct request_sock_queue *queue;
 	struct request_sock *req;
 
-	rcu_read_lock();
+	rcu_read_lock_bh();
 	cs = task_cls_state(task);
 	WRITE_ONCE(sk->sk_cgrp_data.cs, cs);
 
 	if (!sk_is_tcp(sk) || sk->sk_state != TCP_LISTEN) {
-		rcu_read_unlock();
+		rcu_read_unlock_bh();
 		return;
 	}
 
 	queue = &inet_csk(sk)->icsk_accept_queue;
-	spin_lock_bh(&queue->rskq_lock);
+	spin_lock(&queue->rskq_lock);
 	for (req = queue->rskq_accept_head; req; req = req->dl_next) {
 		struct sock *child = req->sk;
 
@@ -186,8 +186,8 @@ static void update_sock_cgroup_cs(struct sock *sk, struct task_struct *task)
 
 		WRITE_ONCE(child->sk_cgrp_data.cs, cs);
 	}
-	spin_unlock_bh(&queue->rskq_lock);
-	rcu_read_unlock();
+	spin_unlock(&queue->rskq_lock);
+	rcu_read_unlock_bh();
 }
 
 static int update_classid_sock(const void *v, struct file *file, unsigned int n)
