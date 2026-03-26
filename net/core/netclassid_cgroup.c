@@ -12,6 +12,7 @@
 
 #include <net/cls_cgroup.h>
 #include <net/sock.h>
+#include <net/inet_connection_sock.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 
@@ -160,6 +161,35 @@ struct update_classid_context {
 
 #define UPDATE_CLASSID_BATCH 1000
 
+static void update_sock_cgroup_cs(struct sock *sk, struct task_struct *task)
+{
+	struct cgroup_cls_state *cs;
+	struct request_sock_queue *queue;
+	struct request_sock *req;
+
+	rcu_read_lock();
+	cs = task_cls_state(task);
+	WRITE_ONCE(sk->sk_cgrp_data.cs, cs);
+
+	if (!sk_is_tcp(sk) || sk->sk_state != TCP_LISTEN) {
+		rcu_read_unlock();
+		return;
+	}
+
+	queue = &inet_csk(sk)->icsk_accept_queue;
+	spin_lock_bh(&queue->rskq_lock);
+	for (req = queue->rskq_accept_head; req; req = req->dl_next) {
+		struct sock *child = req->sk;
+
+		if (!child)
+			continue;
+
+		WRITE_ONCE(child->sk_cgrp_data.cs, cs);
+	}
+	spin_unlock_bh(&queue->rskq_lock);
+	rcu_read_unlock();
+}
+
 static int update_classid_sock(const void *v, struct file *file, unsigned int n)
 {
 	struct update_classid_context *ctx = (void *)v;
@@ -167,9 +197,7 @@ static int update_classid_sock(const void *v, struct file *file, unsigned int n)
 
 	if (sock) {
 		sock_cgroup_set_classid(&sock->sk->sk_cgrp_data, ctx->classid);
-		rcu_read_lock();
-		WRITE_ONCE(sock->sk->sk_cgrp_data.cs, task_cls_state(ctx->task));
-		rcu_read_unlock();
+		update_sock_cgroup_cs(sock->sk, ctx->task);
 	}
 	if (--ctx->batch == 0) {
 		ctx->batch = UPDATE_CLASSID_BATCH;
