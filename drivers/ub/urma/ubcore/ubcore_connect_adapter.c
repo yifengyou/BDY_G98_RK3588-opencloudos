@@ -49,6 +49,12 @@ struct msg_create_conn_resp {
 
 struct msg_destroy_conn_req {
 	union ubcore_tp_handle tp_handle;
+	union ubcore_tp_handle peer_tp_handle;
+	union ubcore_eid local_eid;
+	union ubcore_eid peer_eid;
+	uint32_t src_jetty_id;
+	uint32_t dst_jetty_id;
+	enum ubcore_transport_mode trans_mode;
 };
 
 static int ubcore_active_tp(struct ubcore_device *dev,
@@ -406,7 +412,7 @@ static inline uint32_t ubcore_get_tpid_hash(struct ubcore_tpid_key *key)
 	return jhash(key, sizeof(struct ubcore_tpid_key), 0);
 }
 
-static struct ubcore_tpid_ctx *ubcore_fget_tpid_ctx(
+struct ubcore_tpid_ctx *ubcore_fget_tpid_ctx(
 	struct ubcore_device *dev, struct ubcore_tpid_key *key)
 {
 	struct ubcore_tpid_ctx *ctx = NULL;
@@ -523,6 +529,7 @@ static void ubcore_fadd_target_tpid_ctx(struct ubcore_device *dev,
 	fill_tpid_ctx(add_ctx, key, cfg, false);
 	ubcore_log_info("add_ctx tp_handle is %llu, peer_tp_handle is %llu.",
 		add_ctx->tp_handle, add_ctx->peer_tp_handle);
+	add_ctx->tp_state = UBCORE_TP_ACTIVE;
 	ubcore_hash_table_add_nolock(ht, &add_ctx->hnode, hash);
 	spin_unlock(&ht->lock);
 }
@@ -551,6 +558,7 @@ static void handle_create_req(struct ubcore_device *dev, struct ubcore_net_msg *
 	ctx = ubcore_fget_tpid_ctx(dev, &key);
 	if (ctx) {
 		ubcore_reuse_target_rtp_tpid(dev, ctx, &get_tp_cfg, msg, conn);
+		ubcore_tpid_get(ctx);
 		return;
 	}
 	ret = ubcore_get_tp_list(dev, &get_tp_cfg, &tp_cnt, &tp_info, NULL);
@@ -619,21 +627,27 @@ static void handle_create_resp(struct ubcore_device *dev, struct ubcore_net_msg 
 	ubcore_session_ref_release(session);
 }
 
-static int send_destroy_req(struct ubcore_device *dev, union ubcore_eid addr,
-			    union ubcore_tp_handle tp_handle)
+static int send_destroy_req(struct ubcore_device *dev, union ubcore_eid peer_addr,
+	union ubcore_tp_handle peer_tp_handle, uint32_t s_jetty_id, uint32_t d_jetty_id,
+	union ubcore_eid local_addr, enum ubcore_transport_mode trans_mode)
 {
 	struct ubcore_net_msg msg = { 0 };
 	struct msg_destroy_conn_req req = { 0 };
 	int ret;
 
-	req.tp_handle = tp_handle;
+	req.tp_handle = peer_tp_handle;
+	req.src_jetty_id = s_jetty_id;
+	req.dst_jetty_id = d_jetty_id;
+	req.local_eid = local_addr;
+	req.peer_eid = peer_addr;
+	req.trans_mode = trans_mode;
 
 	msg.type = UBCORE_NET_DESTROY_REQ;
 	msg.len = (uint16_t)sizeof(struct msg_destroy_conn_req);
 	msg.session_id = 0;
 	msg.data = &req;
 
-	ret = ubcore_net_send_to(dev, &msg, addr);
+	ret = ubcore_net_send_to(dev, &msg, peer_addr);
 	if (ret != 0) {
 		ubcore_log_err("Failed to send msg");
 		return ret;
@@ -650,8 +664,26 @@ int ubcore_adapter_layer_disconnect(struct ubcore_vtpn *vtpn)
 	union ubcore_eid peer_eid = vtpn->peer_eid;
 	struct ubcore_device *dev = vtpn->ub_dev;
 	struct ubcore_udata udata = {0};
+	struct ubcore_tpid_key key = {0};
 	bool ctp = tp_handle.bs.ctp;
 	int ret;
+
+	key.local_eid = vtpn->local_eid;
+	key.peer_eid = peer_eid;
+	key.local_jetty_id = vtpn->local_jetty;
+	key.peer_jetty_id = vtpn->peer_jetty;
+	uint32_t hash = ubcore_get_tpid_hash(&key);
+	struct ubcore_tpid_ctx *ctx = ubcore_hash_table_lookup_get(&dev->ht[UBCORE_HT_RC_TP_ID],
+		hash, &key);
+
+	if (ctx && kref_read(&ctx->ref) == 1) {
+		ubcore_log_err("TP reference count has been released completely");
+		ret = send_destroy_req(dev, peer_eid, peer_tp_handle, vtpn->local_jetty,
+			vtpn->peer_jetty, vtpn->local_eid, vtpn->trans_mode);
+		if (ret != 0)
+			ubcore_log_err("failed to send_msg");
+		return ret;
+	}
 
 	if (vtpn->uspace)
 		ret = ubcore_deactive_tp(dev, tp_handle, &udata);
@@ -661,6 +693,9 @@ int ubcore_adapter_layer_disconnect(struct ubcore_vtpn *vtpn)
 		ubcore_log_err("Failed to deactivate tp\n");
 		return ret;
 	}
+	if (ctx)
+		ubcore_tpid_put(ctx);
+
 	if (ubcore_is_loopback(dev, &peer_eid)) {
 		ubcore_log_info(
 			"Loop-back, tp_handle: %llu,peer_tp_handle: %llu.\n",
@@ -675,12 +710,18 @@ int ubcore_adapter_layer_disconnect(struct ubcore_vtpn *vtpn)
 	}
 
 	/* Only send destroy request for RM/RC TP */
-	if ((vtpn->trans_mode == UBCORE_TP_RM) &&
-	    !ctp && ubcore_check_ctrlplane_compat(dev->ops->import_jetty)) {
-		ret = send_destroy_req(dev, peer_eid, peer_tp_handle);
-		if (ret != 0)
-			ubcore_log_err("Failed to send destroy req message");
+	if ((vtpn->trans_mode == UBCORE_TP_RM || vtpn->trans_mode == UBCORE_TP_RC) && !ctp &&
+		ubcore_check_ctrlplane_compat(dev->ops->import_jetty)) {
+		if (vtpn->trans_mode == UBCORE_TP_RC) {
+			ret = send_destroy_req(dev, peer_eid, peer_tp_handle, vtpn->local_jetty,
+				vtpn->peer_jetty, vtpn->local_eid, vtpn->trans_mode);
+		} else
+			ret = send_destroy_req(dev, peer_eid, peer_tp_handle, 0, 0, vtpn->local_eid,
+				vtpn->trans_mode);
 	}
+	if (ret != 0)
+		ubcore_log_err("Failed to send destroy req message");
+
 
 	return 0;
 }
@@ -691,11 +732,30 @@ static void handle_destroy_req(struct ubcore_device *dev,
 	struct msg_destroy_conn_req *req =
 		(struct msg_destroy_conn_req *)msg->data;
 	int ret;
+	struct ubcore_tpid_key key = { 0 };
+	struct ubcore_tpid_ctx *ctx = NULL;
 
+	key.local_eid = req->peer_eid;
+	key.peer_eid = req->local_eid;
+	key.local_jetty_id = req->dst_jetty_id;
+	key.peer_jetty_id = req->src_jetty_id;
+
+	if (req->trans_mode == UBCORE_TP_RC) {
+		uint32_t hash = ubcore_get_tpid_hash(&key);
+
+		ctx = ubcore_hash_table_lookup_get(&dev->ht[UBCORE_HT_RC_TP_ID], hash, &key);
+		if (ctx && kref_read(&ctx->ref) == 1) {
+			ubcore_log_info("TP reference count has been released completely");
+			return;
+		}
+	}
 	/* Target tp_handle get from kernel space */
 	ret = ubcore_deactive_tp(dev, req->tp_handle, NULL);
 	if (ret != 0)
 		ubcore_log_err("Failed to deactivate tp");
+
+	if (ctx)
+		ubcore_tpid_put(ctx);
 }
 
 /* Only for impoprt_jetty/jfr, thus only for RM/UM */
@@ -887,6 +947,7 @@ static void ubcore_fadd_init_tpid_ctx(struct ubcore_device *dev,
 	fill_tpid_ctx(add_ctx, key, cfg, true);
 	ubcore_log_info("add_ctx has tp_handle:%llu, peer_tp_handle:%llu.\n",
 		add_ctx->tp_handle, add_ctx->peer_tp_handle);
+	add_ctx->tp_state = UBCORE_TP_ENABLE;
 	ubcore_hash_table_add_nolock(ht, &add_ctx->hnode, hash);
 	spin_unlock(&ht->lock);
 }
@@ -921,6 +982,7 @@ static int ubcore_reuse_init_rtp_tpid(struct ubcore_jetty *jetty,
 		ubcore_log_err("Failed to bind jetty in target, ret: %d.\n", ret);
 		ubcore_tpid_put(ctx);
 	}
+	ubcore_tpid_get(ctx);
 	return ret;
 }
 
@@ -934,6 +996,7 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 	struct ubcore_tp_info tp_list = { 0 };
 	struct ubcore_tpid_key key = { 0 };
 	struct ubcore_tpid_ctx *ctx;
+	struct ubcore_hash_table *ht = &dev->ht[UBCORE_HT_RC_TP_ID];
 	uint32_t tp_cnt = 1;
 	int ret;
 
@@ -978,6 +1041,8 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 				EID_ARGS(get_tp_cfg.peer_eid));
 			return ret;
 		}
+		active_tp_cfg.peer_tp_handle.value = info.peer_tp_handle;
+		active_tp_cfg.tp_attr.rx_psn = info.rx_psn;
 	}
 
 	ret = ubcore_bind_jetty_ex(jetty, tjetty, &active_tp_cfg, udata);
@@ -985,6 +1050,14 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 		ubcore_log_err("Failed to bind jetty ex, ret: %d.\n", ret);
 		return ret;
 	}
+	spin_lock(&ht->lock);
+	uint32_t hash = ubcore_get_tpid_hash(&key);
+
+	ctx = ubcore_hash_table_lookup_nolock(ht, hash, &key);
+	if (ctx)
+		ctx->peer_tp_handle = active_tp_cfg.peer_tp_handle.value;
+
+	spin_unlock(&ht->lock);
 
 	return ret;
 }

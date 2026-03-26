@@ -20,6 +20,12 @@ struct ubcore_ex_tp_info {
 	struct kref ref_cnt;
 };
 
+enum tp_status {
+	UBCORE_TP_ENABLE,
+	UBCORE_TP_ACTIVE,
+	UBCORE_TP_DEACTIVE
+};
+
 struct ubcore_tpid_key {
 	union ubcore_eid local_eid;
 	union ubcore_eid peer_eid;
@@ -42,6 +48,7 @@ struct ubcore_tpid_ctx {
 	bool is_init;
 	uint32_t tx_psn; /* optional */
 	uint32_t rx_psn; /* optional */
+	enum tp_status tp_state;
 };
 
 struct ubcore_ex_tpid_info {
@@ -75,5 +82,8 @@ static inline bool ubcore_check_ctrlplane_compat(void *op_ptr)
 }
 
 void ubcore_tpid_get(void *obj);
+
+struct ubcore_tpid_ctx *ubcore_fget_tpid_ctx(
+	struct ubcore_device *dev, struct ubcore_tpid_key *key);
 
 #endif
