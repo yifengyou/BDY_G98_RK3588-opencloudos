@@ -3050,13 +3050,42 @@ static struct ctl_table kern_table[] = {
 #endif
 #ifdef CONFIG_SMP
 	{
-		.procname       = "smt_util_ratio",
+		.procname       = "sched_util_ratio",
 		.data           = &sysctl_smt_util_ratio,
 		.maxlen         = sizeof(sysctl_smt_util_ratio),
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec_minmax,
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = &max_util_ratio_val,
+	},
+#endif
+#ifdef CONFIG_IDLE_REVERT
+	{
+		.procname	= "sched_idle_revert_min_ns",
+		.data		= &sysctl_sched_idle_revert_min,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &min_sched_idle_revert_ns,
+		.extra2		= &max_sched_idle_revert_ns,
+	},
+	{
+		.procname	= "sched_task_group_idle_revert_enabled",
+		.data		= &sysctl_tg_idle_revert_enabled,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "sched_task_group_idle_revert_scan_count",
+		.data		= &sysctl_tg_idle_revert_scan_count,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= &max_tg_idle_revert_scan_count,
 	},
 #endif
 	{ }
@@ -3550,35 +3579,6 @@ static struct ctl_table vm_table[] = {
 		.extra1			= SYSCTL_ZERO,
 		.extra2			= SYSCTL_ONE,
 	},
-#ifdef CONFIG_IDLE_REVERT
-	{
-		.procname	= "sched_idle_revert_min_ns",
-		.data		= &sysctl_sched_idle_revert_min,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &min_sched_idle_revert_ns,
-		.extra2		= &max_sched_idle_revert_ns,
-	},
-	{
-		.procname	= "sched_task_group_idle_revert_enabled",
-		.data		= &sysctl_tg_idle_revert_enabled,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE,
-	},
-	{
-		.procname	= "sched_task_group_idle_revert_scan_count",
-		.data		= &sysctl_tg_idle_revert_scan_count,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
-		.extra1		= SYSCTL_ONE,
-		.extra2		= &max_tg_idle_revert_scan_count,
-	},
-#endif
 #endif
 #endif
 #ifdef CONFIG_MEMCG
