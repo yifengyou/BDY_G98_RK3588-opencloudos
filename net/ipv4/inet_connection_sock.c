@@ -1464,6 +1464,7 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 			queue->rskq_accept_tail->dl_next = req;
 		queue->rskq_accept_tail = req;
 		sk_acceptq_added(sk);
+		WRITE_ONCE(child->sk_cgrp_data.cs, sk->sk_cgrp_data.cs);
 	}
 	spin_unlock(&queue->rskq_lock);
 	return child;
