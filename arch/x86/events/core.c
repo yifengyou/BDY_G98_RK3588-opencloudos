@@ -2213,7 +2213,9 @@ out_bad_pmu:
 	memset(&x86_pmu, 0, sizeof(x86_pmu));
 	return err;
 }
+#ifndef CONFIG_KATA_SUPPORT
 early_initcall(init_hw_perf_events);
+#endif
 
 static void x86_pmu_read(struct perf_event *event)
 {

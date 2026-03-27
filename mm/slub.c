@@ -7012,7 +7012,9 @@ static int __init slab_sysfs_init(void)
 	mutex_unlock(&slab_mutex);
 	return 0;
 }
+#ifndef CONFIG_KATA_SUPPORT
 late_initcall(slab_sysfs_init);
+#endif
 #endif /* SLAB_SUPPORTS_SYSFS */
 
 #if defined(CONFIG_SLUB_DEBUG) && defined(CONFIG_DEBUG_FS)

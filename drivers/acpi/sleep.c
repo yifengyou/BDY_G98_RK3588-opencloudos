@@ -1084,6 +1084,7 @@ int __init acpi_sleep_init(void)
 	acpi_sleep_suspend_setup();
 	acpi_sleep_hibernate_setup();
 
+#ifndef CONFIG_KATA_SUPPORT
 	if (acpi_sleep_state_supported(ACPI_STATE_S5)) {
 		sleep_states[ACPI_STATE_S5] = 1;
 
@@ -1102,7 +1103,9 @@ int __init acpi_sleep_init(void)
 		register_sys_off_handler(SYS_OFF_MODE_RESTART_PREPARE,
 					 SYS_OFF_PRIO_FIRMWARE,
 					 acpi_power_off_prepare, NULL);
-	} else {
+	} else
+#endif
+	{
 		acpi_no_s5 = true;
 	}
 

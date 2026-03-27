@@ -219,8 +219,9 @@ static int __init init_acpi_pm_clocksource(void)
 /* We use fs_initcall because we want the PCI fixups to have run
  * but we still need to load before device_initcall
  */
+#ifndef CONFIG_KATA_SUPPORT
 fs_initcall(init_acpi_pm_clocksource);
-
+#endif
 /*
  * Allow an override of the IOPort. Stupid BIOSes do not tell us about
  * the PMTimer, but we might know where it is.

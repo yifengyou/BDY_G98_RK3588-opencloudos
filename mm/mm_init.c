@@ -564,6 +564,9 @@ out:
 static void __meminit __init_single_page(struct page *page, unsigned long pfn,
 				unsigned long zone, int nid)
 {
+
+	/* KATA_SUPPORT todo:
+	mask this function is ok?*/
 	mm_zero_struct_page(page);
 	set_page_links(page, zone, nid, pfn);
 	init_page_count(page);
