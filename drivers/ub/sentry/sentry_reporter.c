@@ -468,6 +468,7 @@ static int ub_mem_ras_handler(uint64_t phys_addr, enum ras_err_type err_type)
 {
 	struct sentry_msg_helper_msg msg = {0};
 	struct page *page;
+	unsigned long pfn;
 	int ret;
 
 	if (!g_ub_mem_fault_enable)
@@ -501,10 +502,15 @@ static int ub_mem_ras_handler(uint64_t phys_addr, enum ras_err_type err_type)
 		pr_info("ub mem error: mem mode is fd mode\n");
 	} else {
 		/* NUMA mode */
+		pfn = PHYS_PFN(phys_addr);
 		msg.helper_msg_info.ub_mem_info.mem_type = NUMA_MODE;
 		pr_info("ub mem error: mem mode is numa mode\n");
-		if (msg.helper_msg_info.ub_mem_info.fault_with_kill)
-			memory_failure_queue(PHYS_PFN(phys_addr), 0);
+		if (pfn != 0) {
+			if (msg.helper_msg_info.ub_mem_info.fault_with_kill)
+				memory_failure_queue(pfn, 0);
+		} else {
+			pr_warn("pfn is 0x0, skip memory_failure processing\n");
+		}
 	}
 
 	ret = smh_message_send(&msg, false);
