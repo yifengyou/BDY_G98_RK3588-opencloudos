@@ -345,7 +345,8 @@ static int ubagg_get_seg_info(struct ubcore_device *dev,
 		return -1;
 	}
 
-	if (user_ctl->in.addr != 0 &&
+	if (user_ctl->uctx != NULL ||
+	    user_ctl->in.addr == 0 ||
 	    user_ctl->in.len != sizeof(struct seg_info_req)) {
 		ubagg_log_err("Invalid user in");
 		return -1;
@@ -384,7 +385,8 @@ static int ubagg_get_jetty_info(struct ubcore_device *dev,
 		return -1;
 	}
 
-	if (user_ctl->in.addr != 0 &&
+	if (user_ctl->uctx != NULL ||
+	    user_ctl->in.addr == 0 ||
 	    user_ctl->in.len != sizeof(struct jetty_info_req)) {
 		ubagg_log_err("Invalid user in");
 		return -1;
