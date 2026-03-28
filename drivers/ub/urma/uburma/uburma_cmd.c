@@ -4294,7 +4294,6 @@ static int uburma_cmd_import_jetty_async(struct ubcore_device *ubc_dev,
 	ret = uburma_tlv_append(hdr, &arg);
 	if (ret != 0) {
 		ubcore_unimport_jetty_async(tjetty, 0, NULL);
-		uburma_delete_import_callback(cb);
 		uobj_alloc_abort(uobj);
 		return ret;
 	}
