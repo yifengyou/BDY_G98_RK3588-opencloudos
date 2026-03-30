@@ -5900,6 +5900,14 @@ static struct cftype cgroup_base_files[] = {
 		.release = cgroup_mbuf_release,
 	},
 #endif
+#ifdef CONFIG_CGROUPFS
+	{
+		.name = "cgroup.role",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_role_show,
+		.write = cgroup_role_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 
