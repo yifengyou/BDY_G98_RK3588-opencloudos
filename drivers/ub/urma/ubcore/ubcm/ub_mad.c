@@ -1061,7 +1061,7 @@ static int ubmad_open_device(struct ubcore_device *device)
 	}
 
 	/* reliable communication */
-	dev_priv->rt_wq = create_workqueue("ubmad rt_wq");
+	dev_priv->rt_wq = alloc_workqueue("%s", 0, 0, "ubmad rt_wq");
 	if (IS_ERR_OR_NULL(dev_priv->rt_wq)) {
 		ubcore_log_err("create rt_wq failed. dev_name: %s\n",
 			     device->dev_name);
@@ -1240,8 +1240,10 @@ static void ubmad_release_agent_priv(struct kref *kref)
 	struct ubmad_agent_priv *agent_priv =
 		container_of(kref, struct ubmad_agent_priv, kref);
 
-	drain_workqueue(agent_priv->jfce_wq);
-	destroy_workqueue(agent_priv->jfce_wq);
+	drain_workqueue(agent_priv->jfce_wq_s);
+	destroy_workqueue(agent_priv->jfce_wq_s);
+	drain_workqueue(agent_priv->jfce_wq_r);
+	destroy_workqueue(agent_priv->jfce_wq_r);
 
 	kfree(agent_priv);
 }
@@ -1276,11 +1278,15 @@ struct ubmad_agent *ubmad_register_agent(struct ubcore_device *device,
 		return ERR_PTR(-ENOMEM);
 	kref_init(&agent_priv->kref);
 
-	agent_priv->jfce_wq = create_workqueue("ubmad jfce_wq");
-	if (IS_ERR_OR_NULL(agent_priv->jfce_wq)) {
-		ubcore_log_err("create agent_priv workqueue failed.\n");
-		kfree(agent_priv);
-		return NULL;
+	agent_priv->jfce_wq_s = alloc_workqueue("%s", 0, 0, "ubmad jfce_wq_s");
+	if (IS_ERR_OR_NULL(agent_priv->jfce_wq_s)) {
+		ubcore_log_err("alloc agent_priv workqueue_s failed.\n");
+		goto err_alloc_wq_s;
+	}
+	agent_priv->jfce_wq_r = alloc_workqueue("%s", 0, 0, "ubmad jfce_wq_r");
+	if (IS_ERR_OR_NULL(agent_priv->jfce_wq_r)) {
+		ubcore_log_err("alloc agent_priv workqueue_r failed.\n");
+		goto err_alloc_wq_r;
 	}
 
 	/* init agent */
@@ -1297,6 +1303,14 @@ struct ubmad_agent *ubmad_register_agent(struct ubcore_device *device,
 	spin_unlock_irqrestore(&g_ubmad_agent_list_lock, flag);
 
 	return agent;
+
+err_alloc_wq_r:
+	if (agent_priv->jfce_wq_s && !IS_ERR(agent_priv->jfce_wq_s))
+		destroy_workqueue(agent_priv->jfce_wq_s);
+
+err_alloc_wq_s:
+	kfree(agent_priv);
+	return ERR_PTR(-ENOMEM);
 }
 
 int ubmad_unregister_agent(struct ubmad_agent *agent)
