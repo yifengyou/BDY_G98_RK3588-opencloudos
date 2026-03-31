@@ -496,7 +496,8 @@ static inline void fill_tpid_ctx(struct ubcore_tpid_ctx *ctx,
 }
 
 static void ubcore_fadd_target_tpid_ctx(struct ubcore_device *dev,
-	struct ubcore_tpid_key *key, struct ubcore_active_tp_cfg *cfg)
+	struct ubcore_tpid_key *key, struct ubcore_active_tp_cfg *cfg,
+	struct msg_create_conn_resp *resp)
 {
 	struct ubcore_tpid_ctx *add_ctx = NULL;
 	struct ubcore_tpid_ctx *ctx = NULL;
@@ -513,6 +514,7 @@ static void ubcore_fadd_target_tpid_ctx(struct ubcore_device *dev,
 	spin_lock(&ht->lock);
 	ctx = ubcore_hash_table_lookup_nolock(ht, hash, key);
 	if (ctx && ctx->is_init) {
+		resp->tp_handle = ctx->tp_handle;
 		spin_unlock(&ht->lock);
 		ubcore_log_info("Find tpid in initiator, hash: %u.\n", hash);
 		(void)ubcore_deactive_tp(dev, cfg->tp_handle, NULL);
@@ -591,12 +593,12 @@ static void handle_create_req(struct ubcore_device *dev, struct ubcore_net_msg *
 		goto send_resp;
 	}
 
-	if (get_tp_cfg.trans_mode == UBCORE_TP_RC)
-		ubcore_fadd_target_tpid_ctx(dev, &key, &active_cfg);
-
 	resp.tp_handle = tp_handle;
 	resp.tx_psn = tx_psn;
 	ret = CREATE_CONN_SUCCESS;
+
+	if (get_tp_cfg.trans_mode == UBCORE_TP_RC)
+		ubcore_fadd_target_tpid_ctx(dev, &key, &active_cfg, &resp);
 
 send_resp:
 	resp.result = ret;
@@ -1058,6 +1060,8 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 		ctx->peer_tp_handle = active_tp_cfg.peer_tp_handle.value;
 
 	spin_unlock(&ht->lock);
+
+	atomic_dec(&tjetty->use_cnt);
 
 	return ret;
 }
