@@ -1801,7 +1801,7 @@ static int ubagg_get_dev_name(struct ubagg_get_dev_name_arg *arg)
 
 	dev = ubcore_get_device_by_eid(&arg->in.eid, UBCORE_TRANSPORT_UB);
 	if (dev == NULL) {
-		ubagg_log_err("no ubcore dev for bonding eid: " EID_FMT "\n",
+		ubagg_log_info("no ubcore dev for bonding eid: " EID_FMT "\n",
 					  EID_RAW_ARGS(arg->in.eid.raw));
 		return -ENODEV;
 	}
@@ -1830,7 +1830,7 @@ static int ubagg_cmd_get_dev_name(struct ubagg_cmd_hdr *hdr)
 
 	ret = ubagg_get_dev_name(&arg);
 	if (ret != 0) {
-		ubagg_log_err("ubagg_get_dev_name failed: %d\n", ret);
+		ubagg_log_info("ubagg_get_dev_name failed: %d\n", ret);
 		return ret;
 	}
 
