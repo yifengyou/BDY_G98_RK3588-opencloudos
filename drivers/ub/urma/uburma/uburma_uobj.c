@@ -832,12 +832,22 @@ static int uburma_free_jfc(struct uburma_uobj *uobj,
 	uint32_t jfc_id = jfc->id;
 	int ret;
 
-	ret = ubcore_delete_jfc(jfc);
-	if (ret) {
-		uburma_log_err("Failed to delete jfc, id: %u, ret: %d, why: %d",
-			jfc_id, ret, why);
-		uburma_release_jfce_event(jfc_uobj);
-		return ret;
+	if (jfc->jfc_opt.is_actived == true) {
+		ret = ubcore_delete_jfc(jfc);
+		if (ret) {
+			uburma_log_err("Failed to delete jfc, id: %u, ret: %d, why: %d.\n",
+				jfc_id, ret, why);
+			uburma_release_jfce_event(jfc_uobj);
+			return ret;
+		}
+	} else {
+		ret = ubcore_free_jfc(jfc, NULL);
+		if (ret) {
+			uburma_log_err("Failed to free jfc, id: %u, ret: %d, why: %d.\n",
+				jfc_id, ret, why);
+			uburma_release_jfce_event(jfc_uobj);
+			return ret;
+		}
 	}
 	uburma_release_async_event(uobj->ufile, &jfc_uobj->async_event_list);
 	uburma_release_jfce_event(jfc_uobj);
@@ -902,14 +912,24 @@ static int uburma_free_jfs(struct uburma_uobj *uobj,
 {
 	struct uburma_jfs_uobj *jfs_uobj =
 		container_of(uobj, struct uburma_jfs_uobj, uobj);
+	struct ubcore_jfs *jfs = (struct ubcore_jfs *)uobj->object;
 	uint32_t jfs_id = ((struct ubcore_jfs *)uobj->object)->jfs_id.id;
 	int ret;
 
-	ret = ubcore_delete_jfs((struct ubcore_jfs *)uobj->object);
-	if (ret) {
-		uburma_log_err("Failed to delete jfs, id: %u, ret: %d, why: %d.\n",
+	if (jfs->jfs_opt.is_actived == true) {
+		ret = ubcore_delete_jfs((struct ubcore_jfs *)uobj->object);
+		if (ret) {
+			uburma_log_err("Failed to delete jfs, id: %u, ret: %d, why: %d.\n",
 			jfs_id, ret, why);
-		return ret;
+			return ret;
+		}
+	} else {
+		ret = ubcore_free_jfs(jfs, NULL);
+		if (ret) {
+			uburma_log_err("Failed to free jfs, id: %u, ret: %d, why: %d.\n",
+				jfs_id, ret, why);
+			return ret;
+		}
 	}
 
 	uburma_release_async_event(uobj->ufile, &jfs_uobj->async_event_list);
@@ -975,14 +995,23 @@ static int uburma_free_jfr(struct uburma_uobj *uobj,
 	struct uburma_jfr_uobj *jfr_uobj =
 		container_of(uobj, struct uburma_jfr_uobj, uobj);
 	uint32_t jfr_id = ((struct ubcore_jfr *)uobj->object)->jfr_id.id;
+	struct ubcore_jfr *jfr = (struct ubcore_jfr *)uobj->object;
 	int ret;
 
-	ret = ubcore_delete_jfr((struct ubcore_jfr *)uobj->object);
-	if (ret) {
-		uburma_log_err(
-			"Failed to delete jfr, id: %u, ret: %d, why: %d.\n",
+	if (jfr->jfr_opt.is_actived == true) {
+		ret = ubcore_delete_jfr((struct ubcore_jfr *)uobj->object);
+		if (ret) {
+			uburma_log_err("Failed to delete jfr, id: %u, ret: %d, why: %d.\n",
 			jfr_id, ret, why);
-		return ret;
+			return ret;
+		}
+	} else {
+		ret = ubcore_free_jfr((struct ubcore_jfr *)uobj->object, NULL);
+		if (ret) {
+			uburma_log_err("Failed to free jfr, id: %u, ret: %d, why: %d.\n",
+				jfr_id, ret, why);
+			return ret;
+		}
 	}
 
 	uburma_release_async_event(uobj->ufile, &jfr_uobj->async_event_list);
@@ -1049,14 +1078,23 @@ static int uburma_free_jetty(struct uburma_uobj *uobj,
 		container_of(uobj, struct uburma_jetty_uobj, uobj);
 	uint32_t jetty_id =
 		((struct ubcore_jetty *)uobj->object)->jetty_id.id;
+	struct ubcore_jetty *jetty = (struct ubcore_jetty *)uobj->object;
 	int ret;
 
-	ret = ubcore_delete_jetty((struct ubcore_jetty *)uobj->object);
-	if (ret) {
-		uburma_log_err(
-			"Failed to delete jetty, id: %u, ret: %d, why: %d.\n",
-			jetty_id, ret, why);
-		return ret;
+	if (jetty->jetty_opt.is_actived == true) {
+		ret = ubcore_delete_jetty(jetty);
+		if (ret) {
+			uburma_log_err("Failed to delete jetty, id: %u, ret: %d, why: %d.\n",
+				jetty_id, ret, why);
+			return ret;
+		}
+	} else {
+		ret = ubcore_free_jetty(jetty, NULL);
+		if (ret) {
+			uburma_log_err("Failed to free jetty_id, id: %u, ret: %d, why: %d.\n",
+				jetty_id, ret, why);
+			return ret;
+		}
 	}
 
 	uburma_release_async_event(uobj->ufile, &jetty_uobj->async_event_list);

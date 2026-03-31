@@ -342,7 +342,7 @@ static void uburma_jfr_event_cb(struct ubcore_event *event,
 {
 	struct uburma_jfr_uobj *jfr_uobj;
 
-	if (!event->element.jfr)
+	if (event->element.jfr == NULL)
 		return;
 
 	jfr_uobj = (struct uburma_jfr_uobj *)
@@ -4052,16 +4052,6 @@ static void uburma_fill_device_attr(struct ubcore_device *ubc_dev,
 	attr->dev_cap.max_oor_cnt = ubc_dev->attr.dev_cap.max_oor_cnt;
 	attr->dev_cap.mn = ubc_dev->attr.dev_cap.mn;
 	attr->dev_cap.max_netaddr_cnt = ubc_dev->attr.dev_cap.max_netaddr_cnt;
-
-	attr->port_cnt = ubc_dev->attr.port_cnt;
-	port_cnt = (attr->port_cnt < UBURMA_CMD_MAX_PORT_CNT) ?
-				 attr->port_cnt :
-				 UBURMA_CMD_MAX_PORT_CNT;
-	for (i = 0; i < port_cnt; i++)
-		attr->port_attr[i].max_mtu = ubc_dev->attr.port_attr[i].max_mtu;
-
-	attr->reserved_jetty_id_min = ubc_dev->attr.reserved_jetty_id_min;
-	attr->reserved_jetty_id_max = ubc_dev->attr.reserved_jetty_id_max;
 	attr->dev_cap.rm_order_cap.value = ubc_dev->attr.dev_cap.rm_order_cap.value;
 	attr->dev_cap.rc_order_cap.value = ubc_dev->attr.dev_cap.rc_order_cap.value;
 	attr->dev_cap.rm_tp_cap.value = ubc_dev->attr.dev_cap.rm_tp_cap.value;
@@ -4070,6 +4060,15 @@ static void uburma_fill_device_attr(struct ubcore_device *ubc_dev,
 	attr->dev_cap.tp_feature.value = ubc_dev->attr.dev_cap.tp_feature.value;
 	(void)memcpy(attr->dev_cap.priority_info, ubc_dev->attr.dev_cap.priority_info,
 		UBCORE_MAX_PRIORITY_CNT * sizeof(struct ubcore_sl_info));
+
+	attr->port_cnt = ubc_dev->attr.port_cnt;
+	port_cnt = (attr->port_cnt < UBURMA_CMD_MAX_PORT_CNT) ? attr->port_cnt :
+		UBURMA_CMD_MAX_PORT_CNT;
+	for (i = 0; i < port_cnt; i++)
+		attr->port_attr[i].max_mtu = ubc_dev->attr.port_attr[i].max_mtu;
+
+	attr->reserved_jetty_id_min = ubc_dev->attr.reserved_jetty_id_min;
+	attr->reserved_jetty_id_max = ubc_dev->attr.reserved_jetty_id_max;
 }
 
 static int uburma_fill_device_status(struct ubcore_device *ubc_dev,
@@ -4105,31 +4104,39 @@ static int uburma_cmd_query_device_attr(struct ubcore_device *ubc_dev,
 					struct uburma_file *file,
 					struct uburma_cmd_hdr *hdr)
 {
-	struct uburma_cmd_query_device_attr arg = { 0 };
+	struct uburma_cmd_query_device_attr *arg;
 	int ret;
 
-	ret = uburma_tlv_parse(hdr, &arg);
-	if (ret != 0)
-		return -EINVAL;
+	arg = kzalloc(sizeof(struct uburma_cmd_query_device_attr), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(arg))
+		return -ENOMEM;
 
-	if (strcmp(arg.in.dev_name, ubc_dev->dev_name) != 0) {
+	ret = uburma_tlv_parse(hdr, arg);
+	if (ret != 0)
+		goto free_arg;
+
+	if (strnlen(arg->in.dev_name, UBCORE_MAX_DEV_NAME) >= UBCORE_MAX_DEV_NAME) {
+		uburma_log_err("Invalid dev_name length.\n");
+		ret = -EINVAL;
+		goto free_arg;
+	}
+
+	if (strcmp(arg->in.dev_name, ubc_dev->dev_name) != 0) {
 		uburma_log_err("Invalid parameter with error dev_name.\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_arg;
 	}
-
-	ret = ubcore_query_device_attr(ubc_dev, &ubc_dev->attr);
-	if (ret != 0) {
-		uburma_log_err("Failed to query device attr, dev_name: %s.\n",
-		ubc_dev->dev_name);
-		return ret;
-	}
-
-	uburma_fill_device_attr(ubc_dev, &arg.out.attr);
-	ret = uburma_fill_device_status(ubc_dev, &arg.out.attr);
+	uburma_fill_device_attr(ubc_dev, &arg->out.attr);
+	ret = uburma_fill_device_status(ubc_dev, &arg->out.attr);
 	if (ret != 0)
-		return ret;
+		goto free_arg;
 
-	return uburma_tlv_append(hdr, &arg);
+	ret = uburma_tlv_append(hdr, arg);
+	if (ret != 0)
+		uburma_log_err("Failed to append, ret: %d.\n", ret);
+free_arg:
+	kfree(arg);
+	return ret;
 }
 
 struct uburma_import_jetty_async_user_arg {

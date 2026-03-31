@@ -1112,7 +1112,7 @@ struct ubcore_vtpn *ubcore_connect_vtp(struct ubcore_device *dev,
 	}
 	mutex_unlock(&vtpn->state_lock);
 
-	// 4. failed roll back
+	// 5. failed roll back
 	if (ret != 0) {
 		ubcore_log_err("failed to send create vtp req, vtpn:%u",
 			       vtpn->vtpn);
