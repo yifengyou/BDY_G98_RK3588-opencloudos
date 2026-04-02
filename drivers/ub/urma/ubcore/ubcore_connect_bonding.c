@@ -10,6 +10,7 @@
  */
 
 #include <ub/urma/ubcore_uapi.h>
+#include <linux/slab.h>
 #include "ubcore_connect_bonding.h"
 #include "net/ubcore_protocol.h"
 #include "net/ubcore_comm.h"
@@ -18,7 +19,7 @@
 #include "ubcore_topo_info.h"
 #include "ubcore_log.h"
 
-#define BONDING_UDATA_BUF_LEN 1032
+#define BONDING_UDATA_BUF_LEN 1800
 
 struct session_data_exchange_udata {
 	int *result;
@@ -288,8 +289,12 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 	struct ubcore_device *physical_dev = ubcore_find_physical_device(dev);
 	struct msg_seg_info_req req = { 0 };
 	struct ubcore_session *session;
-	char buf[BONDING_UDATA_BUF_LEN];
+	char *buf;
 	int ret, result = -1;
+
+	buf = kmalloc(BONDING_UDATA_BUF_LEN, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
 	if (!physical_dev) {
 		ubcore_log_err("Failed find physical device");
@@ -297,7 +302,7 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 	}
 
 	session = create_session_for_exchange_udata(physical_dev, &result, buf,
-						    sizeof(buf));
+						    BONDING_UDATA_BUF_LEN);
 	if (!session) {
 		ret = -ENOMEM;
 		goto put_device;
@@ -329,6 +334,7 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 
 	ubcore_session_ref_release(session);
 	ubcore_put_device(physical_dev);
+	kfree(buf);
 	return 0;
 
 release_session:
@@ -345,8 +351,12 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 	struct ubcore_device *physical_dev = ubcore_find_physical_device(dev);
 	struct msg_jetty_info_req req = { 0 };
 	struct ubcore_session *session;
-	char buf[BONDING_UDATA_BUF_LEN];
+	char *buf;
 	int ret, result = -1;
+
+	buf = kmalloc(BONDING_UDATA_BUF_LEN, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
 	if (!physical_dev) {
 		ubcore_log_err("Failed find physical device");
@@ -354,7 +364,7 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 	}
 
 	session = create_session_for_exchange_udata(physical_dev, &result, buf,
-						    sizeof(buf));
+						    BONDING_UDATA_BUF_LEN);
 	if (!session) {
 		ret = -ENOMEM;
 		goto put_device;
@@ -385,6 +395,7 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 
 	ubcore_session_ref_release(session);
 	ubcore_put_device(physical_dev);
+	kfree(buf);
 	return 0;
 
 release_session:
@@ -399,15 +410,25 @@ static void handle_seg_info_req(struct ubcore_device *dev,
 {
 	struct msg_seg_info_req *req = (struct msg_seg_info_req *)msg->data;
 	struct ubcore_device *bonding_dev = ubcore_find_bonding_device(&req->ubva.eid);
+	struct msg_seg_info_resp *resp;
+	struct ubcore_user_ctl k_user_ctl;
 	int ret = 0;
 
-	struct msg_seg_info_resp resp = { 0 };
-	struct ubcore_user_ctl k_user_ctl = {
+	if (!bonding_dev)
+		return;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		ubcore_put_device(bonding_dev);
+		return;
+	}
+
+	k_user_ctl = (struct ubcore_user_ctl){
 		.in.opcode = 5,
 		.in.addr = (uint64_t)req,
 		.in.len = sizeof(*req),
-		.out.addr = (uint64_t)(&resp.seg_info),
-		.out.len = sizeof(resp.seg_info),
+		.out.addr = (uint64_t)(&resp->seg_info),
+		.out.len = sizeof(resp->seg_info),
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
@@ -415,14 +436,12 @@ static void handle_seg_info_req(struct ubcore_device *dev,
 		ubcore_log_err("Failed to get seg info by user ctl");
 		goto put_device;
 	}
-
-	resp.result = ret;
-	if (send_seg_info_resp(dev, conn, msg->session_id, &resp) != 0) {
+	resp->result = ret;
+	if (send_seg_info_resp(dev, conn, msg->session_id, resp) != 0)
 		ubcore_log_err("Failed to send create resp message.\n");
-		goto put_device;
-	}
 
 put_device:
+	kfree(resp);
 	ubcore_put_device(bonding_dev);
 }
 
@@ -430,16 +449,26 @@ static void handle_jetty_info_req(struct ubcore_device *dev,
 				  struct ubcore_net_msg *msg, void *conn)
 {
 	struct msg_jetty_info_req *req = (struct msg_jetty_info_req *)msg->data;
-	struct ubcore_device *bonding_dev = ubcore_find_bonding_device(&req->jetty_id.eid);
+	struct ubcore_device *bonding_dev =
+		ubcore_find_bonding_device(&req->jetty_id.eid);
+	struct msg_jetty_info_resp *resp;
+	struct ubcore_user_ctl k_user_ctl;
 	int ret = 0;
 
-	struct msg_jetty_info_resp resp = { 0 };
-	struct ubcore_user_ctl k_user_ctl = {
+	if (!bonding_dev)
+		return;
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		ubcore_put_device(bonding_dev);
+		return;
+	}
+
+	k_user_ctl = (struct ubcore_user_ctl){
 		.in.opcode = 6,
 		.in.addr = (uint64_t)req,
 		.in.len = sizeof(*req),
-		.out.addr = (uint64_t)(&resp.jetty_info),
-		.out.len = sizeof(resp.jetty_info),
+		.out.addr = (uint64_t)(&resp->jetty_info),
+		.out.len = sizeof(resp->jetty_info),
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
@@ -447,14 +476,12 @@ static void handle_jetty_info_req(struct ubcore_device *dev,
 		ubcore_log_err("Failed to get jetty info by user ctl");
 		goto put_device;
 	}
-
-	resp.result = ret;
-	if (send_jetty_info_resp(dev, conn, msg->session_id, &resp) != 0) {
+	resp->result = ret;
+	if (send_jetty_info_resp(dev, conn, msg->session_id, resp) != 0)
 		ubcore_log_err("Failed to send create resp message.\n");
-		goto put_device;
-	}
 
 put_device:
+	kfree(resp);
 	ubcore_put_device(bonding_dev);
 }
 
