@@ -775,39 +775,6 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	return 0;
 }
 
-static int ubcore_get_route_loopback_primary_eid(union ubcore_eid *local_eid,
-						  struct ubcore_route_list *route_list)
-{
-	int dev_id, iodie_id, num;
-	struct ubcore_topo_agg_dev *agg_dev = NULL;
-	struct ubcore_topo_node *topo_info = NULL;
-
-	topo_info = ubcore_get_topo_info_by_agg_eid(local_eid, &dev_id);
-	if (IS_ERR_OR_NULL(topo_info)) {
-		ubcore_log_err("Failed to get topo_info, local_eid=" EID_FMT ".\n",
-			EID_ARGS(*local_eid));
-		return -EINVAL;
-	}
-	agg_dev = &topo_info->agg_devs[dev_id];
-
-	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
-		num = route_list->route_num;
-		if (num >= UBCORE_MAX_ROUTE_NUM) {
-			ubcore_log_warn("Invalid route num, num = %d.\n", num);
-			return 0;
-		}
-		append_route_list_ctp(route_list, agg_dev->ues[iodie_id].primary_eid,
-			agg_dev->ues[iodie_id].primary_eid, (uint32_t)(iodie_id + 1));
-	}
-
-	return 0;
-}
-
-static bool ubcore_eid_equals(union ubcore_eid *src, union ubcore_eid *dst)
-{
-	return memcmp(src, dst, sizeof(union ubcore_eid)) == 0;
-}
-
 int ubcore_get_route_list(struct ubcore_route *route,
 	struct ubcore_route_list *route_list)
 {
@@ -828,15 +795,6 @@ int ubcore_get_route_list(struct ubcore_route *route,
 	}
 
 	(void)memset(route_list, 0, sizeof(struct ubcore_route_list));
-
-	if (ubcore_eid_equals(src_v_eid, dst_v_eid)) {
-		ret = ubcore_get_route_loopback_primary_eid(src_v_eid, route_list);
-		if (ret != 0) {
-			ubcore_log_err(
-				"Failed to query primary id in loopback mode, ret: %d.\n", ret);
-		}
-		return ret;
-	}
 
 	ret = ubcore_get_route_primary_eid(src_v_eid, dst_v_eid, route_list);
 	if (ret != 0) {
