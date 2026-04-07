@@ -763,6 +763,10 @@ BuildKernel() {
 	# testing so just delete
 	find . -name *.h.s -delete
 
+	%if %{with_modsign}
+	cp -a scripts/sign-file scripts/sign-file-ori || true
+	%endif
+
 	popd
 }
 
@@ -1408,6 +1412,8 @@ rm -rf %{buildroot}%{debuginfo_dir}/usr/src
 %if %{with_modsign} && %{with_core}
 ### Sign after debuginfo extration, extraction breaks signature
 %{_module_signer} "$KernUnameR" "$_KernBuild" "%{buildroot}" || exit $?
+cp -a "$_KernBuild/scripts/sign-file" "$_KernBuild/scripts/sign-file-tk" || true
+cp -a "$_KernBuild/scripts/sign-file-ori" "$_KernBuild/scripts/sign-file" || true
 %endif
 
 ### Compression after signing, compressed module can't be signed
