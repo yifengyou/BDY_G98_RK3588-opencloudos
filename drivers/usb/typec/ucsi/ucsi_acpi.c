@@ -200,7 +200,8 @@ static void ucsi_acpi_notify(acpi_handle handle, u32 event, void *data)
 		return;
 
 	if (UCSI_CCI_CONNECTOR(cci)) {
-		if (UCSI_CCI_CONNECTOR(cci) <= ua->ucsi->cap.num_connectors) {
+		if (!ua->ucsi->cap.num_connectors ||
+		    UCSI_CCI_CONNECTOR(cci) <= ua->ucsi->cap.num_connectors) {
 			if (!test_bit(UCSI_ACPI_SUPPRESS_EVENT, &ua->flags))
 				ucsi_connector_change(ua->ucsi, UCSI_CCI_CONNECTOR(cci));
 		} else {

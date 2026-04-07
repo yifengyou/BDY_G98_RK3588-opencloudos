@@ -634,7 +634,8 @@ static irqreturn_t ccg_irq_handler(int irq, void *data)
 		goto err_clear_irq;
 
 	if (UCSI_CCI_CONNECTOR(cci)) {
-		if (UCSI_CCI_CONNECTOR(cci) <= uc->ucsi->cap.num_connectors)
+		if (!uc->ucsi->cap.num_connectors ||
+		    UCSI_CCI_CONNECTOR(cci) <= uc->ucsi->cap.num_connectors)
 			ucsi_connector_change(uc->ucsi, UCSI_CCI_CONNECTOR(cci));
 		else
 			dev_err(uc->ucsi->dev,

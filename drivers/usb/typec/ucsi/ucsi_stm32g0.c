@@ -436,7 +436,8 @@ static irqreturn_t ucsi_stm32g0_irq_handler(int irq, void *data)
 		return IRQ_NONE;
 
 	if (UCSI_CCI_CONNECTOR(cci)) {
-		if (UCSI_CCI_CONNECTOR(cci) <= g0->ucsi->cap.num_connectors)
+		if (!g0->ucsi->cap.num_connectors ||
+		    UCSI_CCI_CONNECTOR(cci) <= g0->ucsi->cap.num_connectors)
 			ucsi_connector_change(g0->ucsi, UCSI_CCI_CONNECTOR(cci));
 		else
 			dev_err(g0->ucsi->dev,

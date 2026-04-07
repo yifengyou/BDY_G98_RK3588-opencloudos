@@ -259,7 +259,8 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 
 	con_num = UCSI_CCI_CONNECTOR(cci);
 	if (con_num) {
-		if (con_num <= ucsi->ucsi->cap.num_connectors)
+		if (!ucsi->ucsi->cap.num_connectors ||
+		    con_num <= ucsi->ucsi->cap.num_connectors)
 			ucsi_connector_change(ucsi->ucsi, con_num);
 		else
 			dev_err(ucsi->dev,
