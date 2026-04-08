@@ -1412,8 +1412,6 @@ rm -rf %{buildroot}%{debuginfo_dir}/usr/src
 %if %{with_modsign} && %{with_core}
 ### Sign after debuginfo extration, extraction breaks signature
 %{_module_signer} "$KernUnameR" "$_KernBuild" "%{buildroot}" || exit $?
-cp -a "$_KernBuild/scripts/sign-file" "$_KernBuild/scripts/sign-file-tk" || true
-cp -a "$_KernBuild/scripts/sign-file-ori" "$_KernBuild/scripts/sign-file" || true
 %endif
 
 ### Compression after signing, compressed module can't be signed
@@ -1627,6 +1625,8 @@ if [ "$HARDLINK" != "no" -a -x /usr/bin/hardlink -a ! -e /run/ostree-booted ]; t
 		hardlink /usr/src/kernels/*/$f $f > /dev/null
 	done)
 fi
+mv /usr/src/kernels/%{kernel_unamer}/scripts/sign-file /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-tk 1>/dev/null 2>&1 || true
+cp -a /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori /usr/src/kernels/%{kernel_unamer}/scripts/sign-file 1>/dev/null 2>&1 || true
 %endif
 
 ### kernel-tools package
