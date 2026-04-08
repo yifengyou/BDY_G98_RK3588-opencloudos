@@ -1695,6 +1695,7 @@ out_unlock:
 out:
 	return ret;
 }
+EXPORT_SYMBOL_GPL(copy_huge_pmd);
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
 static void touch_pud(struct vm_area_struct *vma, unsigned long addr,
@@ -1787,6 +1788,7 @@ out_unlock:
 	spin_unlock(dst_ptl);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(copy_huge_pud);
 
 void huge_pud_set_accessed(struct vm_fault *vmf, pud_t orig_pud)
 {
