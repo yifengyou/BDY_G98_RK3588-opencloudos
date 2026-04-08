@@ -13,6 +13,8 @@
 #include <linux/stacktrace.h>
 #include <linux/rculist.h>
 #include <linux/tracefs.h>
+#include <linux/timekeeping.h>
+#include <linux/time.h>
 
 /* for gfp flag names */
 #include <linux/trace_events.h>
@@ -533,6 +535,7 @@ struct hist_trigger_attrs {
 	bool		clear;
 	bool		ts_in_usecs;
 	bool		no_hitcount;
+	bool		wallclock;
 	unsigned int	map_bits;
 	enum tracing_map_overflow_policy overflow_policy;
 	enum hist_time_unit key_unit;
@@ -1627,6 +1630,8 @@ parse_hist_trigger_attrs(struct trace_array *tr, char *trigger_str)
 			attrs->cont = true;
 		else if (strcmp(str, "clear") == 0)
 			attrs->clear = true;
+		else if (strcmp(str, "wallclock") == 0)
+			attrs->wallclock = true;
 		else {
 			ret = parse_action(str, attrs);
 			if (ret)
@@ -5589,10 +5594,28 @@ static void hist_trigger_print_key(struct seq_file *m,
 
 			if (hist_data->attrs->key_unit != HIST_TIME_UNIT_NONE) {
 				u64 display_val = div_u64(uval, buckets);
+				const char *unit = hist_time_unit_str(
+							hist_data->attrs->key_unit);
 
-				seq_printf(m, "%s: %llu %s", field_name,
-					   display_val, hist_time_unit_str(
-						hist_data->attrs->key_unit));
+				if (hist_data->attrs->wallclock) {
+					s64 mono_to_wall = ktime_get_real_seconds()
+							 - ktime_get_seconds();
+					time64_t wt = (time64_t)display_val
+						    + mono_to_wall;
+					struct tm tm;
+
+					time64_to_tm(wt, 0, &tm);
+					seq_printf(m, "%s: %llu %s (%04ld-%02d-%02d %02d:%02d:%02d UTC)",
+						   field_name, display_val,
+						   unit, tm.tm_year + 1900,
+						   tm.tm_mon + 1, tm.tm_mday,
+						   tm.tm_hour, tm.tm_min,
+						   tm.tm_sec);
+				} else {
+					seq_printf(m, "%s: %llu %s",
+						   field_name, display_val,
+						   unit);
+				}
 			} else {
 				seq_printf(m, "%s: ~ %llu-%llu", field_name,
 					   uval, uval + buckets - 1);
@@ -6368,6 +6391,8 @@ static int event_hist_trigger_print(struct seq_file *m,
 	if (hist_data->attrs->val_unit != HIST_TIME_UNIT_NONE)
 		seq_printf(m, ":val_unit=%s",
 			   hist_time_unit_str(hist_data->attrs->val_unit));
+	if (hist_data->attrs->wallclock)
+		seq_puts(m, ":wallclock");
 
 	print_actions_spec(m, hist_data);
 
