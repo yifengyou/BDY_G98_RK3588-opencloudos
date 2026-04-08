@@ -514,6 +514,14 @@ struct var_defs {
 	char		*expr[TRACING_MAP_VARS_MAX];
 };
 
+enum hist_time_unit {
+	HIST_TIME_UNIT_NONE = 0,
+	HIST_TIME_UNIT_NS,
+	HIST_TIME_UNIT_US,
+	HIST_TIME_UNIT_MS,
+	HIST_TIME_UNIT_S,
+};
+
 struct hist_trigger_attrs {
 	char		*keys_str;
 	char		*vals_str;
@@ -527,6 +535,8 @@ struct hist_trigger_attrs {
 	bool		no_hitcount;
 	unsigned int	map_bits;
 	enum tracing_map_overflow_policy overflow_policy;
+	enum hist_time_unit key_unit;
+	enum hist_time_unit val_unit;
 
 	char		*assignment_str[TRACING_MAP_VARS_MAX];
 	unsigned int	n_assignments;
@@ -1464,6 +1474,30 @@ static int parse_action(char *str, struct hist_trigger_attrs *attrs)
 	return ret;
 }
 
+static const char *hist_time_unit_str(enum hist_time_unit u)
+{
+	switch (u) {
+	case HIST_TIME_UNIT_NS:		return "ns";
+	case HIST_TIME_UNIT_US:		return "us";
+	case HIST_TIME_UNIT_MS:		return "ms";
+	case HIST_TIME_UNIT_S:		return "s";
+	default:			return "";
+	}
+}
+
+static enum hist_time_unit parse_time_unit(const char *str)
+{
+	if (strcmp(str, "ns") == 0)
+		return HIST_TIME_UNIT_NS;
+	if (strcmp(str, "us") == 0)
+		return HIST_TIME_UNIT_US;
+	if (strcmp(str, "ms") == 0)
+		return HIST_TIME_UNIT_MS;
+	if (strcmp(str, "s") == 0)
+		return HIST_TIME_UNIT_S;
+	return HIST_TIME_UNIT_NONE;
+}
+
 static int parse_assignment(struct trace_array *tr,
 			    char *str, struct hist_trigger_attrs *attrs)
 {
@@ -1523,6 +1557,18 @@ static int parse_assignment(struct trace_array *tr,
 		else if (strcmp(policy_str, "drop") == 0)
 			attrs->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
 		else {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else if ((len = str_has_prefix(str, "key_unit="))) {
+		attrs->key_unit = parse_time_unit(str + len);
+		if (attrs->key_unit == HIST_TIME_UNIT_NONE) {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else if ((len = str_has_prefix(str, "val_unit="))) {
+		attrs->val_unit = parse_time_unit(str + len);
+		if (attrs->val_unit == HIST_TIME_UNIT_NONE) {
 			ret = -EINVAL;
 			goto out;
 		}
@@ -4724,8 +4770,25 @@ static int create_sort_keys(struct hist_trigger_data *hist_data)
 
 	hist_data->n_sort_keys = 1; /* we always have at least one, hitcount */
 
-	if (!fields_str)
+	if (!fields_str) {
+		if (hist_data->attrs->overflow_policy != TRACING_MAP_OVERFLOW_DROP) {
+			unsigned int j2, k2;
+
+			for (j2 = 1, k2 = 1; j2 < hist_data->n_fields; j2++) {
+				if (hist_data->fields[j2]->flags &
+				    HIST_FIELD_FL_VAR)
+					continue;
+				if (hist_data->fields[j2]->flags &
+				    HIST_FIELD_FL_KEY) {
+					hist_data->sort_keys[0].field_idx = k2;
+					hist_data->sort_keys[0].descending = false;
+					break;
+				}
+				k2++;
+			}
+		}
 		goto out;
+	}
 
 	for (i = 0; i < TRACING_MAP_SORT_KEYS_MAX; i++) {
 		struct hist_field *hist_field;
@@ -5222,7 +5285,8 @@ static void hist_trigger_elt_update(struct hist_trigger_data *hist_data,
 			continue;
 		}
 		tracing_map_update_sum(elt, i, hist_val);
-		if (hist_data->map->overflow_policy != TRACING_MAP_OVERFLOW_DROP) {
+		if (hist_data->map->overflow_policy != TRACING_MAP_OVERFLOW_DROP ||
+		    hist_data->attrs->val_unit != HIST_TIME_UNIT_NONE) {
 			tracing_map_update_min(elt, i, hist_val);
 			tracing_map_update_max(elt, i, hist_val);
 		}
@@ -5522,8 +5586,17 @@ static void hist_trigger_print_key(struct seq_file *m,
 		} else if (key_field->flags & HIST_FIELD_FL_BUCKET) {
 			unsigned long buckets = key_field->buckets;
 			uval = *(u64 *)(key + key_field->offset);
-			seq_printf(m, "%s: ~ %llu-%llu", field_name,
-				   uval, uval + buckets -1);
+
+			if (hist_data->attrs->key_unit != HIST_TIME_UNIT_NONE) {
+				u64 display_val = div_u64(uval, buckets);
+
+				seq_printf(m, "%s: %llu %s", field_name,
+					   display_val, hist_time_unit_str(
+						hist_data->attrs->key_unit));
+			} else {
+				seq_printf(m, "%s: ~ %llu-%llu", field_name,
+					   uval, uval + buckets - 1);
+			}
 		} else if (key_field->flags & HIST_FIELD_FL_STRING) {
 			seq_printf(m, "%s: %-50s", field_name,
 				   (char *)(key + key_field->offset));
@@ -5618,6 +5691,7 @@ static void hist_trigger_entry_print(struct seq_file *m,
 {
 	const char *field_name;
 	unsigned int i = HITCOUNT_IDX;
+	enum hist_time_unit val_unit = hist_data->attrs->val_unit;
 	bool show_minmaxavg = hist_data->map->overflow_policy !=
 				TRACING_MAP_OVERFLOW_DROP;
 	unsigned long flags;
@@ -5640,11 +5714,17 @@ static void hist_trigger_entry_print(struct seq_file *m,
 			u64 max_val = tracing_map_read_max(elt, i);
 			u64 hitcount = tracing_map_read_sum(elt, HITCOUNT_IDX);
 			u64 avg = hitcount ? div_u64(sum, hitcount) : 0;
+			const char *unit = hist_time_unit_str(val_unit);
 
 			if (min_val == U64_MAX)
 				min_val = 0;
-			seq_printf(m, " %s: avg:%10llu  min:%10llu  max:%10llu",
-				   field_name, avg, min_val, max_val);
+			if (val_unit != HIST_TIME_UNIT_NONE)
+				seq_printf(m, " %s: avg:%10llu %s  min:%10llu %s  max:%10llu %s",
+					   field_name, avg, unit,
+					   min_val, unit, max_val, unit);
+			else
+				seq_printf(m, " %s: avg:%10llu  min:%10llu  max:%10llu",
+					   field_name, avg, min_val, max_val);
 		} else {
 			seq_puts(m, " ");
 			hist_trigger_print_val(m, i, field_name, flags,
@@ -6282,6 +6362,12 @@ static int event_hist_trigger_print(struct seq_file *m,
 		seq_printf(m, ":clock=%s", hist_data->attrs->clock);
 	if (hist_data->attrs->no_hitcount)
 		seq_puts(m, ":nohitcount");
+	if (hist_data->attrs->key_unit != HIST_TIME_UNIT_NONE)
+		seq_printf(m, ":key_unit=%s",
+			   hist_time_unit_str(hist_data->attrs->key_unit));
+	if (hist_data->attrs->val_unit != HIST_TIME_UNIT_NONE)
+		seq_printf(m, ":val_unit=%s",
+			   hist_time_unit_str(hist_data->attrs->val_unit));
 
 	print_actions_spec(m, hist_data);
 
