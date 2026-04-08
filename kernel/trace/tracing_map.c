@@ -43,6 +43,40 @@ void tracing_map_update_sum(struct tracing_map_elt *elt, unsigned int i, u64 n)
 }
 
 /**
+ * tracing_map_update_min - Atomically update a field's minimum value
+ * @elt: The tracing_map_elt
+ * @i: The index of the given field
+ * @n: The new value to compare against the current minimum
+ */
+void tracing_map_update_min(struct tracing_map_elt *elt, unsigned int i, u64 n)
+{
+	u64 old;
+
+	do {
+		old = (u64)atomic64_read(&elt->fields[i].min);
+		if (n >= old)
+			return;
+	} while (atomic64_cmpxchg(&elt->fields[i].min, old, n) != (s64)old);
+}
+
+/**
+ * tracing_map_update_max - Atomically update a field's maximum value
+ * @elt: The tracing_map_elt
+ * @i: The index of the given field
+ * @n: The new value to compare against the current maximum
+ */
+void tracing_map_update_max(struct tracing_map_elt *elt, unsigned int i, u64 n)
+{
+	u64 old;
+
+	do {
+		old = (u64)atomic64_read(&elt->fields[i].max);
+		if (n <= old)
+			return;
+	} while (atomic64_cmpxchg(&elt->fields[i].max, old, n) != (s64)old);
+}
+
+/**
  * tracing_map_read_sum - Return the value of a tracing_map_elt's sum field
  * @elt: The tracing_map_elt
  * @i: The index of the given sum associated with the tracing_map_elt
@@ -57,6 +91,16 @@ void tracing_map_update_sum(struct tracing_map_elt *elt, unsigned int i, u64 n)
 u64 tracing_map_read_sum(struct tracing_map_elt *elt, unsigned int i)
 {
 	return (u64)atomic64_read(&elt->fields[i].sum);
+}
+
+u64 tracing_map_read_min(struct tracing_map_elt *elt, unsigned int i)
+{
+	return (u64)atomic64_read(&elt->fields[i].min);
+}
+
+u64 tracing_map_read_max(struct tracing_map_elt *elt, unsigned int i)
+{
+	return (u64)atomic64_read(&elt->fields[i].max);
 }
 
 /**
@@ -360,9 +404,13 @@ static void tracing_map_elt_clear(struct tracing_map_elt *elt)
 {
 	unsigned i;
 
-	for (i = 0; i < elt->map->n_fields; i++)
-		if (elt->fields[i].cmp_fn == tracing_map_cmp_atomic64)
+	for (i = 0; i < elt->map->n_fields; i++) {
+		if (elt->fields[i].cmp_fn == tracing_map_cmp_atomic64) {
 			atomic64_set(&elt->fields[i].sum, 0);
+			atomic64_set(&elt->fields[i].min, (s64)U64_MAX);
+			atomic64_set(&elt->fields[i].max, 0);
+		}
+	}
 
 	for (i = 0; i < elt->map->n_vars; i++) {
 		atomic64_set(&elt->vars[i], 0);

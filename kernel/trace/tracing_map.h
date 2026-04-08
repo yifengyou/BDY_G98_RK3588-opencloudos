@@ -139,6 +139,8 @@ struct tracing_map_field {
 		atomic64_t			sum;
 		unsigned int			offset;
 	};
+	atomic64_t			min;
+	atomic64_t			max;
 };
 
 struct tracing_map_elt {
@@ -277,10 +279,16 @@ extern int tracing_map_cmp_none(void *val_a, void *val_b);
 
 extern void tracing_map_update_sum(struct tracing_map_elt *elt,
 				   unsigned int i, u64 n);
+extern void tracing_map_update_min(struct tracing_map_elt *elt,
+				   unsigned int i, u64 n);
+extern void tracing_map_update_max(struct tracing_map_elt *elt,
+				   unsigned int i, u64 n);
 extern void tracing_map_set_var(struct tracing_map_elt *elt,
 				unsigned int i, u64 n);
 extern bool tracing_map_var_set(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_sum(struct tracing_map_elt *elt, unsigned int i);
+extern u64 tracing_map_read_min(struct tracing_map_elt *elt, unsigned int i);
+extern u64 tracing_map_read_max(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_var(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_var_once(struct tracing_map_elt *elt, unsigned int i);
 

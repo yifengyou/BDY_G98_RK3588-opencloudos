@@ -5222,6 +5222,10 @@ static void hist_trigger_elt_update(struct hist_trigger_data *hist_data,
 			continue;
 		}
 		tracing_map_update_sum(elt, i, hist_val);
+		if (hist_data->map->overflow_policy != TRACING_MAP_OVERFLOW_DROP) {
+			tracing_map_update_min(elt, i, hist_val);
+			tracing_map_update_max(elt, i, hist_val);
+		}
 	}
 
 	for_each_hist_key_field(i, hist_data) {
@@ -5614,6 +5618,8 @@ static void hist_trigger_entry_print(struct seq_file *m,
 {
 	const char *field_name;
 	unsigned int i = HITCOUNT_IDX;
+	bool show_minmaxavg = hist_data->map->overflow_policy !=
+				TRACING_MAP_OVERFLOW_DROP;
 	unsigned long flags;
 
 	hist_trigger_print_key(m, hist_data, key, elt);
@@ -5628,8 +5634,22 @@ static void hist_trigger_entry_print(struct seq_file *m,
 		if (flags & HIST_FIELD_FL_VAR || flags & HIST_FIELD_FL_EXPR)
 			continue;
 
-		seq_puts(m, " ");
-		hist_trigger_print_val(m, i, field_name, flags, stats, elt);
+		if (show_minmaxavg) {
+			u64 sum = tracing_map_read_sum(elt, i);
+			u64 min_val = tracing_map_read_min(elt, i);
+			u64 max_val = tracing_map_read_max(elt, i);
+			u64 hitcount = tracing_map_read_sum(elt, HITCOUNT_IDX);
+			u64 avg = hitcount ? div_u64(sum, hitcount) : 0;
+
+			if (min_val == U64_MAX)
+				min_val = 0;
+			seq_printf(m, " %s: avg:%10llu  min:%10llu  max:%10llu",
+				   field_name, avg, min_val, max_val);
+		} else {
+			seq_puts(m, " ");
+			hist_trigger_print_val(m, i, field_name, flags,
+					       stats, elt);
+		}
 	}
 
 	print_actions(m, hist_data, elt);
