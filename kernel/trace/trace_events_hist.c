@@ -5234,6 +5234,21 @@ create_hist_data(unsigned int map_bits,
 	tracing_map_set_overflow_policy(hist_data->map,
 					hist_data->attrs->overflow_policy);
 
+	if (attrs->overflow_policy == TRACING_MAP_OVERFLOW_RING) {
+		unsigned int i;
+
+		for_each_hist_key_field(i, hist_data) {
+			struct hist_field *key_field = hist_data->fields[i];
+
+			if (key_field->flags & HIST_FIELD_FL_BUCKET &&
+			    key_field->buckets) {
+				hist_data->map->ring_key_divisor =
+					key_field->buckets;
+				break;
+			}
+		}
+	}
+
 	ret = create_tracing_map_fields(hist_data);
 	if (ret)
 		goto free;

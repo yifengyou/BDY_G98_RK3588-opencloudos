@@ -210,6 +210,7 @@ struct tracing_map {
 	atomic64_t			replaces;
 	enum tracing_map_overflow_policy overflow_policy;
 	atomic_t			recycle_idx;
+	u64				ring_key_divisor;
 };
 
 /**

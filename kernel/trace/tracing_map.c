@@ -17,6 +17,7 @@
 #include <linux/sort.h>
 #include <linux/string.h>
 #include <linux/kmemleak.h>
+#include <linux/math64.h>
 
 #include "tracing_map.h"
 #include "trace.h"
@@ -752,10 +753,13 @@ __tracing_map_ring_insert(struct tracing_map *map, void *key)
 	struct tracing_map_elt *elt;
 	bool is_empty;
 
-	if (map->key_size <= sizeof(u64))
+	if (map->key_size <= sizeof(u64)) {
 		memcpy(&key_val, key, map->key_size);
-	else
+		if (map->ring_key_divisor)
+			key_val = div64_u64(key_val, map->ring_key_divisor);
+	} else {
 		key_val = jhash(key, map->key_size, 0);
+	}
 
 	idx = (unsigned int)(key_val % map->max_elts);
 	elt = *(TRACING_MAP_ELT(map->elts, idx));
