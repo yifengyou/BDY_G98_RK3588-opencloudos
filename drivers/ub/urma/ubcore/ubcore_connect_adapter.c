@@ -102,7 +102,7 @@ static int ubcore_deactive_tp(struct ubcore_device *dev,
 	ret = dev->ops->deactive_tp(dev, tp_handle, udata);
 	if (ret != 0) {
 		ubcore_log_err("[DRV_ERROR]Failed to deactivate tp, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 
 	return ret;
@@ -692,7 +692,7 @@ int ubcore_adapter_layer_disconnect(struct ubcore_vtpn *vtpn)
 		ret = send_destroy_req(dev, peer_eid, peer_tp_handle, vtpn->local_jetty,
 			vtpn->peer_jetty, vtpn->local_eid, vtpn->trans_mode);
 		if (ret != 0)
-			ubcore_log_err("failed to send_msg");
+			ubcore_log_err("failed to send_msg, ret: %d.\n", ret);
 		return ret;
 	}
 
@@ -705,7 +705,7 @@ int ubcore_adapter_layer_disconnect(struct ubcore_vtpn *vtpn)
 			ret = ubcore_deactive_tp(dev, tp_handle, NULL);
 	}
 	if (ret != 0) {
-		ubcore_log_err("Failed to deactivate tp\n");
+		ubcore_log_err("Failed to deactivate tp, ret: %d\n", ret);
 		return ret;
 	}
 	if (ctx)
@@ -829,9 +829,7 @@ struct ubcore_tjetty *ubcore_import_jfr_compat(struct ubcore_device *dev,
 	if (ret != 0 || tp_cnt != 1) {
 		ubcore_log_err("Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 			       ret, tp_cnt);
-		if (ret == -UBCORE_DRV_ERRNO)
-			return ERR_PTR(ret);
-		return NULL;
+		return ret == 0 ? ERR_PTR(-UBCORE_DRV_ERRNO) : ERR_PTR(ret);
 	}
 
 	active_tp_cfg.tp_handle = tp_list.tp_handle;
@@ -881,9 +879,7 @@ struct ubcore_tjetty *ubcore_import_jetty_compat(struct ubcore_device *dev,
 			ubcore_log_err(
 				"Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 				ret, tp_cnt);
-			if (ret == -UBCORE_DRV_ERRNO)
-				return ERR_PTR(ret);
-			return NULL;
+			return ret == 0 ? ERR_PTR(-UBCORE_DRV_ERRNO) : ERR_PTR(ret);
 		}
 
 		active_tp_cfg.tp_handle = tp_list.tp_handle;
@@ -1008,7 +1004,6 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 	if (ctx)
 		return ubcore_reuse_init_rtp_tpid(jetty, tjetty, ctx, udata);
 
-
 	ret = ubcore_fill_get_tp_cfg(dev, &get_tp_cfg, &tjetty->cfg);
 	if (ret != 0)
 		return ret;
@@ -1017,9 +1012,7 @@ int ubcore_bind_jetty_compat(struct ubcore_jetty *jetty,
 	if (ret != 0 || tp_cnt != 1) {
 		ubcore_log_err("Failed to get tp list, ret: %d, tp_cnt: %u.\n",
 			       ret, tp_cnt);
-		if (tp_cnt != 1)
-			return -UBCORE_DRV_ERRNO;
-		return ret;
+		return ret == 0 ? -UBCORE_DRV_ERRNO : ret;
 	}
 
 	active_tp_cfg.tp_handle = tp_list.tp_handle;

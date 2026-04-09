@@ -41,10 +41,8 @@ int ubcore_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *cfg,
 	}
 
 	ret = dev->ops->get_tp_list(dev, cfg, tp_cnt, tp_list, udata);
-	if (ret != 0) {
+	if (ret != 0)
 		ubcore_log_err("[DRV_ERROR]Failed to get to list, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
-	}
 
 	return ret;
 }
@@ -68,7 +66,7 @@ int ubcore_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	if (ret != 0) {
 		ubcore_log_err("[DRV_ERROR]Failed to set tp attr, ret: %d.\n",
 					ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 
 	return ret;
@@ -93,7 +91,7 @@ int ubcore_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 	if (ret != 0) {
 		ubcore_log_err("[DRV_ERROR]Failed to get tp attr, ret: %d.\n",
 					ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 
 	return ret;
@@ -114,7 +112,7 @@ int ubcore_get_eid_by_ip(struct ubcore_device *dev, const struct ubcore_net_addr
 	ret = dev->ops->get_eid_by_ip(dev, net_addr, eid);
 	if (ret != 0) {
 		ubcore_log_err("[DRV_ERROR]Failed to get_eid_by_ip, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 
 	return ret;
@@ -135,7 +133,7 @@ int ubcore_get_ip_by_eid(struct ubcore_device *dev, const union ubcore_eid *eid,
 	ret = dev->ops->get_ip_by_eid(dev, eid, net_addr);
 	if (ret != 0) {
 		ubcore_log_err("[DRV_ERROR]Failed to get_ip_by_eid, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 
 	return ret;
@@ -154,7 +152,7 @@ int ubcore_get_smac(struct ubcore_device *dev, uint8_t *mac)
 	ret = dev->ops->get_smac(dev, mac);
 	if (ret != 0) {
 		ubcore_log_err("Failed to get smac, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 	ubcore_log_info("Successfully got smac.\n");
 
@@ -179,7 +177,7 @@ int ubcore_get_dmac(struct ubcore_device *dev, const struct ubcore_net_addr *net
 	if (ret != 0) {
 		ubcore_log_err("Failed to get dmac, ret: %d.\n", ret);
 		if (dev->ops->get_dmac)
-			return -UBCORE_DRV_ERRNO;
+			return ret;
 	} else {
 		ubcore_log_info("Successfully got dmac.\n");
 	}
