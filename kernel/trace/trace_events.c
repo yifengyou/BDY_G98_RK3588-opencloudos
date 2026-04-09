@@ -2654,6 +2654,11 @@ static int event_callback(const char *name, umode_t *mode, void **data,
 		*fops = &event_hist_fops;
 		return 1;
 	}
+	if (strcmp(name, "hist_pipe") == 0) {
+		*mode = TRACE_MODE_READ;
+		*fops = &event_hist_pipe_fops;
+		return 1;
+	}
 #endif
 #ifdef CONFIG_HIST_TRIGGERS_DEBUG
 	if (strcmp(name, "hist_debug") == 0) {
@@ -2718,6 +2723,10 @@ event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 #ifdef CONFIG_HIST_TRIGGERS
 		{
 			.name		= "hist",
+			.callback	= event_callback,
+		},
+		{
+			.name		= "hist_pipe",
 			.callback	= event_callback,
 		},
 #endif

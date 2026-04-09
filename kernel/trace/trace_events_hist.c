@@ -5872,6 +5872,7 @@ struct hist_file_data {
 	struct file *file;
 	u64 last_read;
 	u64 last_act;
+	bool pipe;
 };
 
 static u64 get_hist_hit_count(struct trace_event_file *event_file)
@@ -5906,6 +5907,18 @@ static int hist_show(struct seq_file *m, void *v)
 		if (data->cmd_ops->trigger_type == ETT_EVENT_HIST)
 			hist_trigger_show(m, data, n++);
 	}
+
+	if (hist_file->pipe) {
+		tracepoint_synchronize_unregister();
+		list_for_each_entry(data, &event_file->triggers, list) {
+			if (data->cmd_ops->trigger_type == ETT_EVENT_HIST) {
+				struct hist_trigger_data *hist_data =
+					data->private_data;
+				tracing_map_clear(hist_data->map);
+			}
+		}
+	}
+
 	hist_file->last_read = get_hist_hit_count(event_file);
 	/*
 	 * Update last_act too so that poll()/POLLPRI can wait for the next
@@ -5995,6 +6008,55 @@ err:
 
 const struct file_operations event_hist_fops = {
 	.open = event_hist_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = event_hist_release,
+	.poll = event_hist_poll,
+};
+
+static int event_hist_pipe_open(struct inode *inode, struct file *file)
+{
+	struct trace_event_file *event_file;
+	struct hist_file_data *hist_file;
+	int ret;
+
+	ret = tracing_open_file_tr(inode, file);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&event_mutex);
+
+	event_file = event_file_data(file);
+	if (!event_file) {
+		ret = -ENODEV;
+		goto err;
+	}
+
+	hist_file = kzalloc(sizeof(*hist_file), GFP_KERNEL);
+	if (!hist_file) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	hist_file->file = file;
+	hist_file->last_act = get_hist_hit_count(event_file);
+	hist_file->pipe = true;
+
+	file->private_data = NULL;
+	ret = single_open(file, hist_show, hist_file);
+	if (ret) {
+		kfree(hist_file);
+		goto err;
+	}
+
+	return 0;
+err:
+	tracing_release_file_tr(inode, file);
+	return ret;
+}
+
+const struct file_operations event_hist_pipe_fops = {
+	.open = event_hist_pipe_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = event_hist_release,
