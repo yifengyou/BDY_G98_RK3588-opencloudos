@@ -478,8 +478,6 @@ struct lru_gen_mm_state {
 	unsigned long *filters[NR_BLOOM_FILTERS];
 	/* the mm stats for debugging */
 	unsigned long stats[NR_HIST_GENS][NR_MM_STATS];
-	/* the number of concurrent page table walkers */
-	atomic_long_t nr_walkers;
 };
 
 struct lru_gen_mm_walk {
@@ -539,8 +537,7 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw);
  *    threshold, which triggers MEMCG_LRU_YOUNG;
  * 5. Attempting to reclaim a memcg below min, which triggers MEMCG_LRU_YOUNG;
  * 6. Finishing the aging on the eviction path, which triggers MEMCG_LRU_YOUNG;
- * 7. Run out of cold page on the eviction path, which triggers MEMCG_LRU_YOUNG;
- * 8. Offlining a memcg, which triggers MEMCG_LRU_OLD.
+ * 7. Offlining a memcg, which triggers MEMCG_LRU_OLD.
  *
  * Notes:
  * 1. Memcg LRU only applies to global reclaim, and the round-robin incrementing
