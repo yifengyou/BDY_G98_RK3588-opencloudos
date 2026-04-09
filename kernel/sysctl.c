@@ -225,13 +225,12 @@ static int max_wakeup_granularity_ns = NSEC_PER_SEC;    /* 1 second */
 static int min_sched_granularity_ns = 100000;       /* 100 usecs */
 static int max_sched_granularity_ns = NSEC_PER_SEC; /* 1 second */
 #endif
+#endif
 
 #ifdef CONFIG_IDLE_REVERT
 static int min_sched_idle_revert_ns = 10000;			/* 10 usecs */
 static int max_sched_idle_revert_ns = NSEC_PER_SEC;		/* 1 second */
 static int max_tg_idle_revert_scan_count = 256;		/* AMD zen4 16 * 16 = 256 */
-#endif
-
 #endif
 
 #ifdef CONFIG_NVIDIA_SMI_TRAP
