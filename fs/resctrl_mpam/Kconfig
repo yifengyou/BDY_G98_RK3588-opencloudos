@@ -1,4 +1,4 @@
-config RESCTRL_FS
+config RESCTRL_FS_MPAM
 	bool "CPU Resource Control Filesystem (resctrl)"
 	depends on ARCH_HAS_CPU_RESCTRL
 	depends on ARM_CPU_RESCTRL
