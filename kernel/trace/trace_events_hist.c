@@ -2375,53 +2375,54 @@ parse_field(struct hist_trigger_data *hist_data, struct trace_event_file *file,
 		return ERR_PTR(-ENOMEM);
 
 	field_name = strsep(&modifier, ".");
-	if (modifier) {
-		if (strcmp(modifier, "hex") == 0)
+	while (modifier) {
+		char *cur_mod = strsep(&modifier, ".");
+
+		if (strcmp(cur_mod, "hex") == 0)
 			*flags |= HIST_FIELD_FL_HEX;
-		else if (strcmp(modifier, "sym") == 0)
+		else if (strcmp(cur_mod, "sym") == 0)
 			*flags |= HIST_FIELD_FL_SYM;
 		/*
 		 * 'sym-offset' occurrences in the trigger string are modified
 		 * to 'symXoffset' to simplify arithmetic expression parsing.
 		 */
-		else if (strcmp(modifier, "symXoffset") == 0)
+		else if (strcmp(cur_mod, "symXoffset") == 0)
 			*flags |= HIST_FIELD_FL_SYM_OFFSET;
-		else if ((strcmp(modifier, "execname") == 0) &&
+		else if ((strcmp(cur_mod, "execname") == 0) &&
 			 (strcmp(field_name, "common_pid") == 0))
 			*flags |= HIST_FIELD_FL_EXECNAME;
-		else if (strcmp(modifier, "syscall") == 0)
+		else if (strcmp(cur_mod, "syscall") == 0)
 			*flags |= HIST_FIELD_FL_SYSCALL;
-		else if (strcmp(modifier, "stacktrace") == 0)
+		else if (strcmp(cur_mod, "stacktrace") == 0)
 			*flags |= HIST_FIELD_FL_STACKTRACE;
-		else if (strcmp(modifier, "log2") == 0)
+		else if (strcmp(cur_mod, "log2") == 0)
 			*flags |= HIST_FIELD_FL_LOG2;
-		else if (strcmp(modifier, "usecs") == 0)
+		else if (strcmp(cur_mod, "usecs") == 0)
 			*flags |= HIST_FIELD_FL_TIMESTAMP_USECS;
-		else if (strncmp(modifier, "bucket", 6) == 0) {
+		else if (strncmp(cur_mod, "bucket", 6) == 0) {
 			int ret;
+			char *bstr = cur_mod + 6;
 
-			modifier += 6;
-
-			if (*modifier == 's')
-				modifier++;
-			if (*modifier != '=')
+			if (*bstr == 's')
+				bstr++;
+			if (*bstr != '=')
 				goto error;
-			modifier++;
-			ret = kstrtoul(modifier, 0, buckets);
+			bstr++;
+			ret = kstrtoul(bstr, 0, buckets);
 			if (ret || !(*buckets))
 				goto error;
 			*flags |= HIST_FIELD_FL_BUCKET;
-		} else if (strncmp(modifier, "percent", 7) == 0) {
+		} else if (strncmp(cur_mod, "percent", 7) == 0) {
 			if (*flags & (HIST_FIELD_FL_VAR | HIST_FIELD_FL_KEY))
 				goto error;
 			*flags |= HIST_FIELD_FL_PERCENT;
-		} else if (strncmp(modifier, "graph", 5) == 0) {
+		} else if (strncmp(cur_mod, "graph", 5) == 0) {
 			if (*flags & (HIST_FIELD_FL_VAR | HIST_FIELD_FL_KEY))
 				goto error;
 			*flags |= HIST_FIELD_FL_GRAPH;
 		} else {
  error:
-			hist_err(tr, HIST_ERR_BAD_FIELD_MODIFIER, errpos(modifier));
+			hist_err(tr, HIST_ERR_BAD_FIELD_MODIFIER, errpos(cur_mod));
 			field = ERR_PTR(-EINVAL);
 			goto out;
 		}
@@ -2566,6 +2567,18 @@ static struct hist_field *parse_atom(struct hist_trigger_data *hist_data,
 		}
 	} else
 		str = s;
+
+	/*
+	 * Restore str if the system.event.var_ref interpretation failed.
+	 * strsep() above replaced '.' with '\0'; put them back so that
+	 * parse_field() sees the full chained-modifier string, e.g.
+	 * "common_timestamp.usecs.bucket=1000000".
+	 */
+	if (!s && ref_system) {
+		*(ref_event - 1) = '.';
+		*(ref_var - 1) = '.';
+		str = ref_system;
+	}
 
 	field = parse_field(hist_data, file, str, flags, &buckets);
 	if (IS_ERR(field)) {
