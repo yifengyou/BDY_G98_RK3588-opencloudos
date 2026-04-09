@@ -964,7 +964,15 @@ static int amd_pmu_v2_handle_irq(struct pt_regs *regs)
 	pmu_enabled = cpuc->enabled;
 	cpuc->enabled = 0;
 
-	/* Stop counting but do not disable LBR */
+	/*
+	 * Stop counting and disable LBR.
+	 *
+	 * If the CPU supports X86_FEATURE_AMD_LBR_PMC_FREEZE, LBR is
+	 * automatically frozen on PMI by hardware (FREEZE_LBRS_ON_PMI).
+	 * Otherwise, we must manually disable LBR here to prevent NMI
+	 * handler branches from overwriting the recorded branch data.
+	 */
+	amd_pmu_lbr_disable_all();
 	amd_pmu_core_disable_all();
 
 	status = amd_pmu_get_global_status();
@@ -1039,8 +1047,10 @@ done:
 	cpuc->enabled = pmu_enabled;
 
 	/* Resume counting only if PMU is active */
-	if (pmu_enabled)
+	if (pmu_enabled) {
+		amd_pmu_lbr_enable_all();
 		amd_pmu_core_enable_all();
+	}
 
 	return amd_pmu_adjust_nmi_window(handled);
 }
