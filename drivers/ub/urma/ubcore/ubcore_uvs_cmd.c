@@ -214,6 +214,7 @@ static int ubcore_create_jetty_rsrc(struct ubcore_topo_map *topo_map)
 						&eid_info.eid_index);
 			if (ret != 0) {
 				ubcore_log_err("Failed to get eid index\n");
+				ubcore_put_device(dev);
 				return ret;
 			}
 
@@ -221,6 +222,7 @@ static int ubcore_create_jetty_rsrc(struct ubcore_topo_map *topo_map)
 						UBCORE_MGMT_EVENT_EID_ADD);
 			if (ret != 0) {
 				ubcore_log_err("Failed to call cm eid ops\n");
+				ubcore_put_device(dev);
 				return ret;
 			}
 
@@ -231,6 +233,7 @@ static int ubcore_create_jetty_rsrc(struct ubcore_topo_map *topo_map)
 				EID_RAW_ARGS(
 				cur_node_info->agg_devs[dev_idx].ues[die_idx].primary_eid),
 				eid_info.eid_index);
+			ubcore_put_device(dev);
 		}
 	}
 
