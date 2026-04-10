@@ -341,9 +341,9 @@ static void add_mem_pool(struct p_io_tlb_mem *mem, struct p_io_tlb_pool *pool)
 	spin_lock_irqsave(&mem->lock, flags);
 	if (mem->capacity != mem->whole_size) {
 		mem->pool_addr[mem->whole_size] = mem->pool_addr[mem->capacity];
-		mem->pool_addr[mem->capacity] = pool;
+		rcu_assign_pointer(mem->pool_addr[mem->capacity], pool);
 	} else {
-		mem->pool_addr[mem->capacity] = pool;
+		rcu_assign_pointer(mem->pool_addr[mem->capacity], pool);
 	}
 	/* prevent any other writes prior to this time */
 	smp_wmb();
@@ -552,10 +552,6 @@ static struct p_io_tlb_pool *pswiotlb_alloc_pool(struct device *dev,
 		goto error;
 	pool->areas = (void *)pool + sizeof(*pool);
 
-	if (!transient) {
-		nslabs = ALIGN(nslabs >> 1, P_IO_TLB_SEGSIZE);
-		nareas = limit_nareas(nareas, nslabs);
-	}
 	tlb_size = nslabs << P_IO_TLB_SHIFT;
 	while (!(tlb = pswiotlb_alloc_tlb(dev, nid, tlb_size, phys_limit, gfp))) {
 		if (nslabs <= minslabs)
@@ -665,7 +661,7 @@ static struct p_io_tlb_pool *pswiotlb_formal_alloc(struct device *dev,
 
 	pool = pswiotlb_alloc_pool(dev, mem->numa_node_id,
 				P_IO_TLB_MIN_SLABS, dynamic_inc_thr_npslabs,
-				dynamic_inc_thr_npslabs, mem->phys_limit,
+				default_npareas, mem->phys_limit,
 				0, GFP_ATOMIC | GFP_NOWAIT | __GFP_NOWARN);
 	if (!pool) {
 		pr_warn_once("Failed to allocate new formal pool");
@@ -675,6 +671,10 @@ static struct p_io_tlb_pool *pswiotlb_formal_alloc(struct device *dev,
 	pool->busy_record = bitmap_zalloc(pool->nareas, GFP_ATOMIC);
 	if (!pool->busy_record) {
 		pr_warn_ratelimited("%s: Failed to allocate pool busy record.\n", __func__);
+		free_pages((unsigned long)pool->slots,
+					get_order(array_size(sizeof(*pool->slots), pool->nslabs)));
+		pswiotlb_free_tlb(pool->vaddr, pool->nslabs << P_IO_TLB_SHIFT);
+		kfree(pool);
 		return NULL;
 	}
 
@@ -693,6 +693,7 @@ static void pswiotlb_dyn_free(struct rcu_head *rcu)
 	size_t slots_size = array_size(sizeof(*pool->slots), pool->nslabs);
 	size_t tlb_size = pool->end - pool->start;
 
+	bitmap_free(pool->busy_record);
 	free_pages((unsigned long)pool->slots, get_order(slots_size));
 	pswiotlb_free_tlb(pool->vaddr, tlb_size);
 	kfree(pool);
@@ -1178,16 +1179,16 @@ static int pswiotlb_find_slots(struct device *dev, int nid, phys_addr_t orig_add
 #ifndef CONFIG_ARM64_4K_PAGES
 	for (i = 0; i < 15; i++) {
 		if (i == 0) {
-			pool = mem->pool_addr[0];
+			pool = rcu_dereference(mem->pool_addr[0]);
 			index = pswiotlb_pool_find_slots(dev, nid, pool, orig_addr,
 						alloc_size, alloc_align_mask);
 		} else if (i == 1 && mem->capacity > (cpuid + 1)) {
-			pool = mem->pool_addr[cpuid + 1];
+			pool = rcu_dereference(mem->pool_addr[cpuid + 1]);
 			index = pswiotlb_pool_find_slots(dev, nid, pool, orig_addr,
 						alloc_size, alloc_align_mask);
 		} else {
 			try_pool_idx = get_random_u32() % mem->capacity;
-			pool = mem->pool_addr[try_pool_idx];
+			pool = rcu_dereference(mem->pool_addr[try_pool_idx]);
 			index = pswiotlb_pool_find_slots(dev, nid, pool, orig_addr,
 							alloc_size, alloc_align_mask);
 		}
@@ -1200,7 +1201,7 @@ static int pswiotlb_find_slots(struct device *dev, int nid, phys_addr_t orig_add
 #else
 	for (i = 0; i < 15; i++) {
 		try_pool_idx = get_random_u32() % mem->capacity;
-		pool = mem->pool_addr[try_pool_idx];
+		pool = rcu_dereference(mem->pool_addr[try_pool_idx]);
 		index = pswiotlb_pool_find_slots(dev, nid, pool, orig_addr,
 						alloc_size, alloc_align_mask);
 
