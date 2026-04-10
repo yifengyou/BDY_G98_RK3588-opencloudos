@@ -2200,6 +2200,17 @@ static void __sk_destruct(struct rcu_head *head)
 	struct net *net = sock_net(sk);
 	struct sk_filter *filter;
 
+	/*
+	 * Safety check: if sock is still hashed, unhash it to prevent
+	 * dangling pointers in hash tables. This should not happen in
+	 * normal code paths but protects against refcount bugs.
+	 */
+	if (unlikely(sk_hashed(sk))) {
+		pr_warn_once("sock %p still hashed in __sk_destruct\n", sk);
+		if (sk->sk_prot->unhash)
+			sk->sk_prot->unhash(sk);
+	}
+
 	if (sk->sk_destruct)
 		sk->sk_destruct(sk);
 
