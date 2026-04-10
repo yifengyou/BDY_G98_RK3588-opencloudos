@@ -1625,8 +1625,10 @@ if [ "$HARDLINK" != "no" -a -x /usr/bin/hardlink -a ! -e /run/ostree-booted ]; t
 		hardlink /usr/src/kernels/*/$f $f > /dev/null
 	done)
 fi
+%if %{with_modsign}
 mv /usr/src/kernels/%{kernel_unamer}/scripts/sign-file /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-tk 1>/dev/null 2>&1 || true
 cp -a /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori /usr/src/kernels/%{kernel_unamer}/scripts/sign-file 1>/dev/null 2>&1 || true
+%endif
 %endif
 
 ### kernel-tools package
