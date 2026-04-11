@@ -1,3 +1,6 @@
+* Sat Apr 11 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.8
+- rue/net: add sysctl for udp
+
 * Fri Apr 10 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.7
 - net: sock: defensively unhash lingering sockets in __sk_destruct()
 - perf/x86/amd: Reject branch stack for IBS events
