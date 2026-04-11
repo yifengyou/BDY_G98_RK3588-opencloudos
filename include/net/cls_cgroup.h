@@ -121,6 +121,7 @@ struct rue_net_ops {
 };
 
 extern int sysctl_net_qos_enable;
+extern int sysctl_net_qos_udp_enable;
 extern int rx_throttle_all_enabled;
 extern int tx_throttle_all_enabled;
 extern struct dev_bw_config bw_config[];

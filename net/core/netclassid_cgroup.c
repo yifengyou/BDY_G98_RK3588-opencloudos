@@ -19,6 +19,9 @@
 int sysctl_net_qos_enable __read_mostly;
 EXPORT_SYMBOL_GPL(sysctl_net_qos_enable);
 
+int sysctl_net_qos_udp_enable __read_mostly;
+EXPORT_SYMBOL_GPL(sysctl_net_qos_udp_enable);
+
 int rx_throttle_all_enabled;
 EXPORT_SYMBOL_GPL(rx_throttle_all_enabled);
 
