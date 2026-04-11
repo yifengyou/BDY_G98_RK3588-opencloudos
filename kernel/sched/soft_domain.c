@@ -17,6 +17,8 @@
 
 #include <linux/sort.h>
 
+#define NR_MAX_CLUSTER 32
+
 static DEFINE_STATIC_KEY_TRUE(__soft_domain_switch);
 
 static int __init soft_domain_switch_setup(char *str)
@@ -50,6 +52,7 @@ static int build_soft_sub_domain(int nid, struct cpumask *cpus)
 	const struct cpumask *span = cpumask_of_node(nid);
 	struct soft_domain *sf_d = NULL;
 	int i;
+	int cls_cnt = 0;
 
 	sf_d = kzalloc_node(sizeof(struct soft_domain) + cpumask_size(),
 			    GFP_KERNEL, nid);
@@ -62,6 +65,12 @@ static int build_soft_sub_domain(int nid, struct cpumask *cpus)
 
 	for_each_cpu_and(i, span, cpus) {
 		struct soft_subdomain *sub_d = NULL;
+
+		cls_cnt++;
+		if (cls_cnt > NR_MAX_CLUSTER) {
+			pr_info("clsuter number > %d, unsupport soft domain.\n", NR_MAX_CLUSTER);
+			return -EINVAL;
+		}
 
 		sub_d = kzalloc_node(sizeof(struct soft_subdomain) + cpumask_size(),
 				     GFP_KERNEL, nid);
@@ -137,8 +146,6 @@ out:
 }
 
 static DEFINE_MUTEX(soft_domain_mutex);
-
-#define NR_MAX_CLUSTER 16
 
 struct domain_node {
 	struct soft_subdomain *sud_d;
