@@ -307,7 +307,7 @@ static void uburma_write_async_event(struct ubcore_ucontext *ctx,
 	rcu_read_unlock();
 }
 
-void uburma_jfc_event_cb(struct ubcore_event *event,
+static void uburma_jfc_event_cb(struct ubcore_event *event,
 			 struct ubcore_ucontext *ctx)
 {
 	struct uburma_jfc_uobj *jfc_uobj;
@@ -322,7 +322,7 @@ void uburma_jfc_event_cb(struct ubcore_event *event,
 				 &jfc_uobj->async_events_reported);
 }
 
-void uburma_jfs_event_cb(struct ubcore_event *event,
+static void uburma_jfs_event_cb(struct ubcore_event *event,
 			 struct ubcore_ucontext *ctx)
 {
 	struct uburma_jfs_uobj *jfs_uobj;
@@ -337,7 +337,7 @@ void uburma_jfs_event_cb(struct ubcore_event *event,
 				 &jfs_uobj->async_events_reported);
 }
 
-void uburma_jfr_event_cb(struct ubcore_event *event,
+static void uburma_jfr_event_cb(struct ubcore_event *event,
 			 struct ubcore_ucontext *ctx)
 {
 	struct uburma_jfr_uobj *jfr_uobj;
@@ -352,7 +352,7 @@ void uburma_jfr_event_cb(struct ubcore_event *event,
 				 &jfr_uobj->async_events_reported);
 }
 
-void uburma_jetty_event_cb(struct ubcore_event *event,
+static void uburma_jetty_event_cb(struct ubcore_event *event,
 			   struct ubcore_ucontext *ctx)
 {
 	struct uburma_jetty_uobj *jetty_uobj;
@@ -368,7 +368,7 @@ void uburma_jetty_event_cb(struct ubcore_event *event,
 				 &jetty_uobj->async_events_reported);
 }
 
-void uburma_jetty_grp_event_cb(struct ubcore_event *event,
+static void uburma_jetty_grp_event_cb(struct ubcore_event *event,
 			       struct ubcore_ucontext *ctx)
 {
 	struct uburma_jetty_grp_uobj *jetty_grp_uobj;

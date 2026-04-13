@@ -199,10 +199,10 @@ static int ubcore_msg_discover_eid_cb(struct ubcore_device *dev,
 	return 0;
 }
 
-/**
+/*
  *	If you do not need to wait for the response of a message, use ubcore_asyn_send_ue2mue_msg.
  */
-struct ubcore_msg_session *
+static struct ubcore_msg_session *
 ubcore_asyn_send_ue2mue_msg(struct ubcore_device *dev, struct ubcore_req *req)
 {
 	struct ubcore_msg_session *s;
@@ -262,7 +262,7 @@ int ubcore_msg_discover_eid(struct ubcore_device *dev, uint32_t eid_index,
 	return 0;
 }
 
-/**
+/*
  *	if the operation times out or is successful, 0 is returned and reply done  to urma_admin.
  *	if the operation is waiting for the result, 1 is returned  and reply dump to urma_admin.
  */

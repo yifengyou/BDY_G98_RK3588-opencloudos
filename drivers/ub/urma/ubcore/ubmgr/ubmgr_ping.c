@@ -84,7 +84,7 @@ __ping_tjetty_new_entry(struct ubcore_device *dev, union ubcore_eid *dst_eid,
 	return entry;
 }
 
-void __ping_tjetty_free_entry(struct kref *kref)
+static void __ping_tjetty_free_entry(struct kref *kref)
 {
 	struct ubmgr_ping_tjetty_entry *entry =
 		container_of(kref, struct ubmgr_ping_tjetty_entry, kref);
@@ -123,7 +123,7 @@ __ping_tjetty_add(struct hlist_head *bucket, union ubcore_eid *dst_eid,
 	return entry;
 }
 
-void __ping_tjetty_clear(struct hlist_head *bucket)
+static void __ping_tjetty_clear(struct hlist_head *bucket)
 {
 	struct ubmgr_ping_tjetty_entry *entry;
 	struct hlist_node *tmp;
@@ -713,8 +713,3 @@ int ubmgr_ping_init(void)
 	return 0;
 }
 
-void ubmgr_ping_uninit(void)
-{
-	ubcore_unregister_client(&g_ping_client);
-	ubmgr_unregister_event_notifier(&notifier);
-}

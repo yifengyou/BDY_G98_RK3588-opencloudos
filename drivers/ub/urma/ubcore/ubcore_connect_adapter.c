@@ -179,7 +179,7 @@ static int ubcore_add_ex_tp_info(struct ubcore_device *dev, uint64_t tp_handle)
 	return ret;
 }
 
-struct ubcore_ex_tp_info *
+static struct ubcore_ex_tp_info *
 ubcore_find_remove_ex_tp_info(struct ubcore_device *dev, uint64_t tp_handle)
 {
 	struct ubcore_ex_tp_info *ex_tp_info = NULL;

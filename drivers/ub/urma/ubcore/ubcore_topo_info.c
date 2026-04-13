@@ -686,8 +686,8 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	return 0;
 }
 
-int ubcore_get_route_loopback_primary_eid(union ubcore_eid *local_eid,
-	struct ubcore_route_list *route_list)
+static int ubcore_get_route_loopback_primary_eid(union ubcore_eid *local_eid,
+						  struct ubcore_route_list *route_list)
 {
 	int dev_id, iodie_id, num;
 	struct ubcore_topo_agg_dev *agg_dev = NULL;

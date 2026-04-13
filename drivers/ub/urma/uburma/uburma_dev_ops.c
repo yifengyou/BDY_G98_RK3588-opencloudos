@@ -20,6 +20,7 @@
 #include "uburma_types.h"
 #include "uburma_uobj.h"
 #include "uburma_cmd.h"
+#include "uburma_file_ops.h"
 #include "uburma_mmap.h"
 
 static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
@@ -66,7 +67,7 @@ static const struct mmu_notifier_ops uburma_mm_notifier_ops = {
 	.release = uburma_mmu_release,
 };
 
-void uburma_unregister_mmu(struct uburma_file *file)
+static void uburma_unregister_mmu(struct uburma_file *file)
 {
 	struct uburma_mn *ub_mn = &file->ub_mn;
 	struct mm_struct *mm = ub_mn->mm;
@@ -78,7 +79,7 @@ void uburma_unregister_mmu(struct uburma_file *file)
 	mmu_notifier_unregister(&file->ub_mn.mn, mm);
 }
 
-int uburma_register_mmu(struct uburma_file *file)
+static int uburma_register_mmu(struct uburma_file *file)
 {
 	struct uburma_mn *ub_mn = &file->ub_mn;
 	int ret = 0;

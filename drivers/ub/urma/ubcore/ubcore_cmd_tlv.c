@@ -41,14 +41,14 @@ static inline void fill_spec(struct ubcore_cmd_spec *spec, uint16_t type,
 	};
 }
 
-/**
+/*
  * Fill spec with a field, which is a value or an array taken as a whole.
  * @param v Full path of field, e.g. `arg->out.attr.dev_cap.feature`
  */
 #define SPEC(spec, type, v) \
 	fill_spec(spec, type, sizeof(v), 1, 0, (uintptr_t)(&(v)))
 
-/**
+/*
  * Fill spec with a field, which belongs to an array of structs.
  * @param v1 Full path of struct array, e.g. `arg->out.attr.port_attr`
  * @param v2 Path relative to struct in array, e.g. `active_speed`
@@ -263,7 +263,7 @@ static int ubcore_cmd_tlv_append(struct ubcore_cmd_spec *spec,
 	return 0;
 }
 
-int ubcore_tlv_parse(ubcore_fill_spec_func fill_spec, size_t spec_size,
+static int ubcore_tlv_parse(ubcore_fill_spec_func fill_spec, size_t spec_size,
 		     struct ubcore_cmd_hdr *hdr, void *arg)
 {
 	struct ubcore_cmd_spec *spec = NULL;
@@ -297,7 +297,7 @@ free_spec:
 	return ret;
 }
 
-int ubcore_tlv_append(ubcore_fill_spec_func fill_spec, size_t spec_size,
+static int ubcore_tlv_append(ubcore_fill_spec_func fill_spec, size_t spec_size,
 		      struct ubcore_cmd_hdr *hdr, void *arg)
 {
 	struct ubcore_cmd_spec *spec = NULL;

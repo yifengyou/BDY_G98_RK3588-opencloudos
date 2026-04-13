@@ -214,7 +214,7 @@ static int ipourma_del_route_entry(struct ipourma_dev_priv *priv)
 	return ret;
 }
 
-void ipourma_add_route(struct work_struct *work)
+static void ipourma_add_route(struct work_struct *work)
 {
 	struct ipourma_dev_priv *priv;
 	int i;

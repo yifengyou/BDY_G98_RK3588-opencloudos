@@ -167,14 +167,14 @@ ubcore_flush_dev_async_disconnect_vtp_work(struct ubcore_device *dev)
 	spin_unlock(&g_async_disconnect_vtp_work_lock);
 }
 
-void ubcore_add_vtp_work_list(struct ubcore_vtp_work *vtp_work)
+static void ubcore_add_vtp_work_list(struct ubcore_vtp_work *vtp_work)
 {
 	spin_lock(&g_vtp_work_lock);
 	list_add_tail(&vtp_work->node, &g_vtp_work_list);
 	spin_unlock(&g_vtp_work_lock);
 }
 
-void ubcore_del_vtp_work_list(struct ubcore_vtp_work *vtp_work)
+static void ubcore_del_vtp_work_list(struct ubcore_vtp_work *vtp_work)
 {
 	spin_lock(&g_vtp_work_lock);
 	list_del(&vtp_work->node);

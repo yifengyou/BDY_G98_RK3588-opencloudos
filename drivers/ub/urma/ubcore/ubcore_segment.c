@@ -9,6 +9,7 @@
  * History: 2022-07-28: Yan Fangfang move segment implementation here
  */
 
+#include <ub/urma/ubcore_uapi.h>
 #include "ubcore_connect_bonding.h"
 #include "ubcore_log.h"
 #include "ubcore_priv.h"

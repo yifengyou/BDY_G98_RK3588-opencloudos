@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include <net/netns/generic.h>
+#include <ub/urma/ubcore_api.h>
 #include <ub/urma/ubcore_uapi.h>
 #include <ub/urma/ubcore_jetty.h>
 #include "ubcore_log.h"
@@ -468,7 +469,7 @@ void ubcore_put_device(struct ubcore_device *dev)
 		complete(&dev->comp);
 }
 
-struct ubcore_device *
+static struct ubcore_device *
 ubcore_find_mue_device_legacy(enum ubcore_transport_type type)
 {
 	if (g_ub_mue == NULL) {
@@ -1341,7 +1342,7 @@ static void ubcore_dispatch_event_task(struct work_struct *work)
 	kfree(l_ubcore_event);
 }
 
-int ubcore_dispatch_event(struct ubcore_event *event)
+static int ubcore_dispatch_event(struct ubcore_event *event)
 {
 	struct ubcore_event_work *l_ubcore_event;
 
@@ -2233,7 +2234,7 @@ put_device:
 	return ret;
 }
 
-void ubcore_net_exit(struct net *net)
+static void ubcore_net_exit(struct net *net)
 {
 	struct ubcore_net *unet = net_generic(net, g_ubcore_net_id);
 	struct ubcore_device *dev;

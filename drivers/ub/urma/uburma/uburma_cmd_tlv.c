@@ -41,14 +41,14 @@ static inline void fill_spec(struct uburma_cmd_spec *spec,
 	};
 }
 
-/**
+/*
  * Fill spec with a field, which is a value or an array taken as a whole.
  * @param v Full path of field, e.g. `arg->out.attr.dev_cap.feature`
  */
 #define SPEC(spec, type, v) \
 	fill_spec(spec, type, sizeof(v), 1, 0, (uintptr_t)(&(v)))
 
-/**
+/*
  * Fill spec with a field, which belongs to an array of structs.
  * @param v1 Full path of struct array, e.g. `arg->out.attr.port_attr`
  * @param v2 Path relative to struct in array, e.g. `active_speed`

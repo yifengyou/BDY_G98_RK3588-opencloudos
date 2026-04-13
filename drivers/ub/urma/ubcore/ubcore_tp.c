@@ -19,6 +19,8 @@
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/list.h>
+
+#include <ub/urma/ubcore_uapi.h>
 #include "ubcore_priv.h"
 #include "ubcore_log.h"
 #include "ubcore_dmac.h"

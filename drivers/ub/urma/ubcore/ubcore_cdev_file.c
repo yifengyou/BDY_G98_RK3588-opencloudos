@@ -1103,7 +1103,7 @@ static const struct kobj_type ubcore_port_type = {
 
 };
 
-int ubcore_create_port_attr_files(struct ubcore_logic_device *ldev,
+static int ubcore_create_port_attr_files(struct ubcore_logic_device *ldev,
 				  struct ubcore_device *dev, uint8_t port_id)
 {
 	struct ubcore_port_kobj *p;
@@ -1194,7 +1194,7 @@ static void ubcore_free_eids_group(struct ubcore_logic_device *ldev)
 	}
 }
 
-int ubcore_create_dev_attr_files(struct ubcore_logic_device *ldev)
+static int ubcore_create_dev_attr_files(struct ubcore_logic_device *ldev)
 {
 	int ret;
 	const struct attribute_group *eid_grp;
@@ -1214,13 +1214,13 @@ int ubcore_create_dev_attr_files(struct ubcore_logic_device *ldev)
 	return 0;
 }
 
-void ubcore_remove_port_attr_files(struct ubcore_logic_device *ldev,
+static void ubcore_remove_port_attr_files(struct ubcore_logic_device *ldev,
 				   uint8_t port_id)
 {
 	kobject_put(&ldev->port[port_id].kobj);
 }
 
-void ubcore_remove_dev_attr_files(struct ubcore_logic_device *ldev)
+static void ubcore_remove_dev_attr_files(struct ubcore_logic_device *ldev)
 {
 	sysfs_remove_groups(&ldev->dev->kobj, ldev->dev_group);
 	ubcore_free_eids_group(ldev);
@@ -1330,7 +1330,7 @@ static const struct kobj_type ubcore_priority_type = { .release = ubcore_priorit
 static const struct kobj_type ubcore_priority_grp_type = { .release = ubcore_priority_release,
 						 .sysfs_ops = &ubcore_priority_sysfs_ops};
 
-int ubcore_create_priority_attr_files(struct ubcore_logic_device *ldev,
+static int ubcore_create_priority_attr_files(struct ubcore_logic_device *ldev,
 	struct ubcore_device *dev, uint8_t priority_id)
 {
 	struct ubcore_priority_kobj *p;
@@ -1343,12 +1343,12 @@ int ubcore_create_priority_attr_files(struct ubcore_logic_device *ldev,
 		"priority%hhu", priority_id);
 }
 
-void ubcore_remove_priority_attr_files(struct ubcore_logic_device *ldev, uint8_t priority_id)
+static void ubcore_remove_priority_attr_files(struct ubcore_logic_device *ldev, uint8_t priority_id)
 {
 	kobject_put(&ldev->prioritys.priority[priority_id].kobj);
 }
 
-int ubcore_create_priority_grp_attr_files(struct ubcore_logic_device *ldev,
+static int ubcore_create_priority_grp_attr_files(struct ubcore_logic_device *ldev,
 	struct ubcore_device *dev)
 {
 	struct ubcore_prioritys_kobj *p;

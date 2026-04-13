@@ -933,7 +933,7 @@ void ipourma_handle_rx_cqe(struct ubcore_jfc *jfc)
 	napi_schedule(&priv->napi_recv);
 }
 
-int ipourma_napi_tx_poll(struct napi_struct *napi, int budget)
+static int ipourma_napi_tx_poll(struct napi_struct *napi, int budget)
 {
 	struct ipourma_dev_priv *priv =
 		container_of(napi, struct ipourma_dev_priv, napi_send);
@@ -969,7 +969,7 @@ int ipourma_napi_tx_poll(struct napi_struct *napi, int budget)
 	return actual_num;
 }
 
-int ipourma_napi_rx_poll(struct napi_struct *napi, int budget)
+static int ipourma_napi_rx_poll(struct napi_struct *napi, int budget)
 {
 	struct ipourma_dev_priv *priv =
 		container_of(napi, struct ipourma_dev_priv, napi_recv);

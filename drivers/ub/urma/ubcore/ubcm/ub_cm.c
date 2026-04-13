@@ -37,27 +37,6 @@ struct ubcm_context *get_ubcm_ctx(void)
 	return &g_ubcm_ctx;
 }
 
-static int ubcm_open(struct inode *i_node, struct file *filp)
-{
-	if (!try_module_get(THIS_MODULE))
-		return -ENODEV;
-	return 0;
-}
-
-static int ubcm_close(struct inode *i_node, struct file *filp)
-{
-	module_put(THIS_MODULE);
-	return 0;
-}
-
-static const struct file_operations g_ubcm_ops = {
-	.owner = THIS_MODULE,
-	.open = ubcm_open,
-	.release = ubcm_close,
-	.unlocked_ioctl = NULL, /* ubcm does not support ioctl currently */
-	.compat_ioctl = NULL,
-};
-
 static int ubcm_add_device(struct ubcore_device *device);
 static void ubcm_remove_device(struct ubcore_device *device, void *client_ctx);
 
@@ -122,10 +101,6 @@ static void ubcm_kref_release(struct kref *kref)
 
 static void ubcm_put_device(struct ubcm_device *cm_dev)
 {
-	uint32_t refcnt;
-
-	refcnt = kref_read(&cm_dev->kref);
-
 	kref_put(&cm_dev->kref, ubcm_kref_release);
 }
 

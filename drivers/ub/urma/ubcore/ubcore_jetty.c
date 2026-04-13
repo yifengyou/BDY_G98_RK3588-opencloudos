@@ -333,7 +333,7 @@ static int check_and_fill_jfc_attr(struct ubcore_jfc_cfg *cfg,
 	return 0;
 }
 
-int ubcore_check_opt_valid(void *opt_mask_addr, const struct ubcore_opt_map_t *table,
+static int ubcore_check_opt_valid(void *opt_mask_addr, const struct ubcore_opt_map_t *table,
 	size_t table_cnt, uint64_t opt, uint32_t len)
 {
 	size_t i;
@@ -354,7 +354,7 @@ int ubcore_check_opt_valid(void *opt_mask_addr, const struct ubcore_opt_map_t *t
 	return 0;
 }
 
-int ubcore_set_options_common(const struct ubcore_opt_map_t *table,
+static int ubcore_set_options_common(const struct ubcore_opt_map_t *table,
 	size_t table_cnt, uint64_t opt, void *buf, uint32_t len,
 	void *cfg_base, void *opt_base)
 {
@@ -489,7 +489,6 @@ int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
 {
 	struct ubcore_device *dev = NULL;
 	struct ubcore_jfc *jfc = NULL;
-	uint32_t jfc_id;
 	uint32_t i;
 	int ret;
 
@@ -520,7 +519,6 @@ int ubcore_delete_jfc_batch(struct ubcore_jfc **jfc_arr, int jfc_num,
 
 	for (i = 0; i < jfc_num; ++i) {
 		jfc = jfc_arr[i];
-		jfc_id = jfc->id;
 		dev = jfc->ub_dev;
 		ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFC], &jfc->hnode);
 	}
@@ -942,7 +940,6 @@ int ubcore_delete_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num,
 	struct ubcore_jfc **jfc = NULL;
 	struct ubcore_jfs *jfs = NULL;
 	int bad_index = 0;
-	uint32_t jfs_id;
 	uint32_t i;
 	int ret;
 
@@ -971,7 +968,6 @@ int ubcore_delete_jfs_batch(struct ubcore_jfs **jfs_arr, int jfs_num,
 	for (i = 0; i < jfs_num; ++i) {
 		jfs = jfs_arr[i];
 		jfc[i] = jfs->jfs_cfg.jfc;
-		jfs_id = jfs->jfs_id.id;
 		dev = jfs->ub_dev;
 		(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JFS],
 						     &jfs->hnode);
@@ -1426,7 +1422,6 @@ int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
 	struct ubcore_jfc **jfc = NULL;
 	struct ubcore_jfr *jfr = NULL;
 	int bad_index = 0;
-	uint32_t jfr_id;
 	uint32_t i;
 	int ret;
 
@@ -1464,7 +1459,6 @@ int ubcore_delete_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num,
 
 	for (i = 0; i < jfr_num; ++i) {
 		jfr = jfr_arr[i];
-		jfr_id = jfr->jfr_id.id;
 		dev = jfr->ub_dev;
 		(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JFR],
 						     &jfr->hnode);
@@ -1781,7 +1775,6 @@ int ubcore_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
 {
 	struct ubcore_device *dev;
 	struct ubcore_jfc *jfc;
-	uint32_t jfr_id;
 	int ret;
 
 	if (jfr == NULL || jfr->ub_dev == NULL || jfr->ub_dev->ops == NULL ||
@@ -1800,7 +1793,6 @@ int ubcore_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
 	}
 
 	dev = jfr->ub_dev;
-	jfr_id = jfr->jfr_opt.urma_jfr_id;
 	jfc = jfr->jfr_cfg.jfc;
 	ubcore_hash_table_remove(&dev->ht[UBCORE_HT_JFR], &jfr->hnode);
 	ret = dev->ops->free_jfr(jfr, udata);
@@ -2334,7 +2326,6 @@ int ubcore_delete_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num,
 	struct ubcore_jfr **jfr = NULL;
 	struct ubcore_device *dev;
 	int bad_index = 0;
-	uint32_t jetty_id;
 	int ret;
 	int i;
 
@@ -2375,7 +2366,6 @@ int ubcore_delete_jetty_batch(struct ubcore_jetty **jetty_arr, int jetty_num,
 		send_jfc[i] = jetty->jetty_cfg.send_jfc;
 		recv_jfc[i] = jetty->jetty_cfg.recv_jfc;
 		jfr[i] = jetty->jetty_cfg.jfr;
-		jetty_id = jetty->jetty_id.id;
 		dev = jetty->ub_dev;
 
 		(void)ubcore_hash_table_check_remove(&dev->ht[UBCORE_HT_JETTY],

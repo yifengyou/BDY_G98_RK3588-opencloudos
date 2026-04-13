@@ -81,94 +81,6 @@ static void ubmad_destroy_msn_node(struct ubmad_msn_node *msn_node,
 	spin_unlock_irqrestore(&msn_mgr->msn_hlist_lock, flag);
 }
 
-/* retransmission work */
-static void ubmad_rt_work_handler(struct work_struct *work)
-{
-	struct delayed_work *delay_work =
-		container_of(work, struct delayed_work, work);
-	struct ubmad_rt_work *rt_work =
-		container_of(delay_work, struct ubmad_rt_work, delay_work);
-
-	struct ubmad_msn_mgr *msn_mgr = rt_work->msn_mgr;
-	unsigned long flag;
-	struct ubmad_msn_node *cur;
-	struct hlist_node *next;
-	uint32_t hash = jhash(&rt_work->msn, sizeof(uint64_t), 0) %
-			UBMAD_MSN_HLIST_SIZE;
-	bool found = false;
-
-	struct ubmad_msg *msg = rt_work->msg;
-	uint64_t sge_addr = (uint64_t)msg;
-	uint32_t sge_idx;
-	struct ubmad_jetty_resource *rsrc = rt_work->rsrc;
-
-	// try to find msn_node
-	spin_lock_irqsave(&msn_mgr->msn_hlist_lock, flag);
-	hlist_for_each_entry_safe(cur, next, &msn_mgr->msn_hlist[hash], node) {
-		if (cur->msn == rt_work->msn) {
-			found = true;
-			break;
-		}
-	}
-	spin_unlock_irqrestore(&msn_mgr->msn_hlist_lock, flag);
-
-	// found indicates not ack. Need to repost
-	if (found && rt_work->rt_cnt <= UBMAD_MAX_RETRY_CNT) {
-		rt_work->rt_cnt++;
-		if (ubmad_repost_send(msg, rt_work->tjetty, rsrc->send_seg,
-				      rt_work->rt_wq, rsrc) == 0)
-			return;
-		ubcore_log_err("repost send failed. msg type %d msn %llu\n",
-			     msg->msg_type, msg->msn);
-	}
-	ubcore_log_info_rl("Do not repost, found: %u, rt_work->rt_cnt: %u.\n",
-		      (uint32_t)found, rt_work->rt_cnt);
-
-	/* not found OR repost failed
-	 * put data msg sge id
-	 */
-	if (sge_addr < rsrc->send_seg->seg.ubva.va) {
-		ubcore_log_err("sge addr should not < seg addr\n");
-	} else {
-		sge_idx = (sge_addr - rsrc->send_seg->seg.ubva.va) /
-			  UBMAD_SGE_MAX_LEN;
-		ubmad_bitmap_put_id(rsrc->send_seg_bitmap,
-				    sge_idx); // get in ubmad_do_post_send()
-	}
-	kfree(rt_work);
-}
-
-struct ubmad_rt_work *ubmad_create_rt_work(struct workqueue_struct *rt_wq,
-					   struct ubmad_msn_mgr *msn_mgr,
-					   struct ubmad_msg *msg,
-					   struct ubmad_tjetty *tjetty,
-					   struct ubmad_jetty_resource *rsrc)
-{
-	struct ubmad_rt_work *rt_work;
-
-	rt_work = kzalloc(sizeof(struct ubmad_rt_work),
-			  GFP_KERNEL); // free in ubmad_rt_work_handler()
-	if (IS_ERR_OR_NULL(rt_work))
-		return ERR_PTR(-ENOMEM);
-	rt_work->msn = msg->msn;
-	rt_work->msn_mgr = msn_mgr;
-	rt_work->msg = msg;
-	rt_work->tjetty = tjetty;
-	rt_work->rsrc = rsrc;
-	rt_work->rt_wq = rt_wq;
-	rt_work->rt_cnt = 0;
-
-	INIT_DELAYED_WORK(&rt_work->delay_work, ubmad_rt_work_handler);
-	if (queue_delayed_work(rt_wq, &rt_work->delay_work,
-			       UBMAD_RETRANSMIT_PERIOD) != true) {
-		ubcore_log_err("queue rt work failed\n");
-		kfree(rt_work);
-		return NULL;
-	}
-
-	return rt_work;
-}
-
 /* seid_node */
 static struct ubmad_seid_node *
 ubmad_get_seid_node(union ubcore_eid *seid, struct ubmad_jetty_resource *rsrc)
@@ -465,7 +377,6 @@ int ubmad_post_send(struct ubcore_device *device,
 {
 	struct ubmad_device_priv *dev_priv = NULL;
 	struct ubmad_jetty_resource *rsrc;
-	struct ubcore_jetty *wk_jetty; // well-known jetty
 	struct ubmad_tjetty *wk_tjetty;
 	union ubcore_eid dst_primary_eid = { 0 };
 	int ret;
@@ -497,7 +408,6 @@ int ubmad_post_send(struct ubcore_device *device,
 		ret = -EINVAL;
 		goto put_device_priv;
 	}
-	wk_jetty = rsrc->jetty;
 
 	/* import well-known jetty */
 	// unimport in ubmad_uninit_jetty_rsrc()
@@ -524,72 +434,6 @@ int ubmad_post_send(struct ubcore_device *device,
 put_device_priv:
 	ubmad_put_device_priv(dev_priv); // get above
 	return ret;
-}
-
-// post send UBMAD_CONN_ACK when recv conn data
-int ubmad_post_send_conn_ack(struct ubmad_jetty_resource *rsrc,
-			     struct ubmad_tjetty *tjetty, uint64_t msn)
-{
-	struct ubmad_send_buf send_buf = { 0 };
-
-	send_buf.src_eid = rsrc->jetty->jetty_id.eid;
-	send_buf.dst_eid = tjetty->tjetty->cfg.id.eid;
-	send_buf.msg_type = UBMAD_CONN_ACK;
-
-	if (ubmad_do_post_send(rsrc, tjetty, &send_buf, msn, NULL) != 0) {
-		ubcore_log_err("post send conn ack failed. dst_eid " EID_FMT
-			     ", msn %llu\n",
-			     EID_ARGS(send_buf.dst_eid), msn);
-		return -1;
-	}
-
-	return 0;
-}
-
-/* repost send for retransmission of UBMAD_CONN_DATA / UBMAD_UBC_CONN_DATA */
-int ubmad_repost_send_conn_data(struct ubcore_jetty *jetty,
-				struct ubmad_tjetty *tjetty,
-				struct ubcore_jfs_wr *jfs_wr,
-				struct workqueue_struct *rt_wq,
-				struct ubmad_jetty_resource *rsrc)
-{
-	uint64_t sge_addr = jfs_wr->send.src.sge->addr;
-	struct ubmad_msg *msg = (struct ubmad_msg *)sge_addr;
-	uint64_t msn = msg->msn;
-	union ubcore_eid *dst_eid = &tjetty->tjetty->cfg.id.eid;
-
-	struct ubcore_jfs_wr *jfs_bad_wr = NULL;
-	struct ubmad_rt_work *rt_work;
-
-	int ret = -1;
-
-	if (atomic_fetch_add(1, &rsrc->tx_in_queue) >= UBMAD_TX_THREDSHOLD) {
-		atomic_fetch_sub(1, &rsrc->tx_in_queue);
-		ubcore_log_err("Invalid threshold.\n");
-		return -1;
-	}
-	ret = ubcore_post_jetty_send_wr(jetty, jfs_wr, &jfs_bad_wr);
-	if (ret != 0) {
-		ubcore_log_err("ubcore post send failed. msn %llu eid " EID_FMT
-			     "\n",
-			     msn, EID_ARGS(*dst_eid));
-		atomic_fetch_sub(1, &rsrc->tx_in_queue);
-		return ret;
-	}
-
-	// create rt_work after post to avoid rt_work handled before first post.
-	rt_work = ubmad_create_rt_work(rt_wq, &tjetty->msn_mgr, msg, tjetty,
-				       rsrc);
-	if (IS_ERR_OR_NULL(rt_work)) {
-		ubcore_log_err("create rt_work failed. msn %llu eid " EID_FMT
-			     "\n",
-			     msn, EID_ARGS(*dst_eid));
-		return -1;
-	}
-
-	ubcore_log_info_rl("send conn data successfully. msn %llu eid " EID_FMT "\n",
-		      msn, EID_ARGS(*dst_eid));
-	return 0;
 }
 
 int ubmad_repost_send(struct ubmad_msg *msg, struct ubmad_tjetty *tjetty,
@@ -750,32 +594,6 @@ static int ubmad_cm_process_msg(struct ubcore_cr *cr,
 	}
 
 	return 0;
-}
-
-/* Return value: true - msn is valid and message processed; */
-/*               false - msn is invalid and message dropped */
-bool ubmad_process_rx_msn(struct ubmad_bitmap *rx_bitmap, uint64_t msn)
-{
-	bool result;
-	uint32_t i;
-
-	if (rx_bitmap->right_end >= UBMAD_RX_BITMAP_SIZE &&
-	    msn <= rx_bitmap->right_end - UBMAD_RX_BITMAP_SIZE)
-		return false;
-
-	if (msn <= rx_bitmap->right_end) {
-		result = ubmad_bitmap_test_id(
-			rx_bitmap, (uint32_t)(msn % UBMAD_RX_BITMAP_SIZE));
-	} else {
-		for (i = rx_bitmap->right_end + 1; i < msn; i++)
-			(void)ubmad_bitmap_put_id(rx_bitmap,
-						  i % UBMAD_RX_BITMAP_SIZE);
-		rx_bitmap->right_end = msn;
-		ubmad_bitmap_set_id(rx_bitmap, msn);
-		result = true;
-	}
-
-	return result;
 }
 
 static int ubmad_process_conn_data(struct ubcore_cr *cr,
@@ -984,7 +802,6 @@ static void ubmad_send_work_handler(struct ubmad_device_priv *dev_priv,
 				    struct ubmad_jfce_work *jfce_work)
 {
 	struct ubmad_jetty_resource *rsrc;
-	struct ubmad_msg *msg;
 	uint32_t sge_idx;
 	int ret;
 	int cr_cnt;
@@ -1026,7 +843,6 @@ static void ubmad_send_work_handler(struct ubmad_device_priv *dev_priv,
 			ubcore_log_err(
 				"invalid cr.user_ctx. sge addr should not < seg addr\n");
 		} else {
-			msg = (struct ubmad_msg *)cr.user_ctx;
 			sge_idx = (cr.user_ctx - rsrc->send_seg->seg.ubva.va) /
 				  UBMAD_SGE_MAX_LEN;
 			ubmad_bitmap_put_id(

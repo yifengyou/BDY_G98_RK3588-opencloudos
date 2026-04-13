@@ -67,12 +67,12 @@ static void ubagg_dev_release(struct kref *kref)
 	kfree(dev);
 }
 
-void ubagg_dev_ref_get(struct ubagg_device *dev)
+static void ubagg_dev_ref_get(struct ubagg_device *dev)
 {
 	kref_get(&dev->ref);
 }
 
-void ubagg_dev_ref_put(struct ubagg_device *dev)
+static void ubagg_dev_ref_put(struct ubagg_device *dev)
 {
 	kref_put(&dev->ref, ubagg_dev_release);
 }
@@ -442,7 +442,8 @@ static int ubagg_get_jetty_info(struct ubcore_device *dev,
 	return 0;
 }
 
-int ubagg_user_ctl(struct ubcore_device *dev, struct ubcore_user_ctl *user_ctl)
+static int ubagg_user_ctl(struct ubcore_device *dev,
+			   struct ubcore_user_ctl *user_ctl)
 {
 	int ret = 0;
 
@@ -479,8 +480,8 @@ int ubagg_user_ctl(struct ubcore_device *dev, struct ubcore_user_ctl *user_ctl)
 	return ret;
 }
 
-int ubagg_config_device(struct ubcore_device *dev,
-			struct ubcore_device_cfg *cfg)
+static int ubagg_config_device(struct ubcore_device *dev,
+				struct ubcore_device_cfg *cfg)
 {
 	(void)dev;
 	(void)cfg;
@@ -510,9 +511,9 @@ static int ubagg_query_device_attr(struct ubcore_device *dev,
 	return 0;
 }
 
-struct ubcore_jfc *ubagg_create_jfc(struct ubcore_device *ub_dev,
-				    struct ubcore_jfc_cfg *cfg,
-				    struct ubcore_udata *udata)
+static struct ubcore_jfc *ubagg_create_jfc(struct ubcore_device *ub_dev,
+					     struct ubcore_jfc_cfg *cfg,
+					     struct ubcore_udata *udata)
 {
 	struct ubagg_device *ubagg_dev =
 		ubagg_container_of(ub_dev, struct ubagg_device, ub_dev);
@@ -546,7 +547,7 @@ struct ubcore_jfc *ubagg_create_jfc(struct ubcore_device *ub_dev,
 	return &jfc->base;
 }
 
-int ubagg_destroy_jfc(struct ubcore_jfc *jfc)
+static int ubagg_destroy_jfc(struct ubcore_jfc *jfc)
 {
 	struct ubagg_device *ubagg_dev;
 	struct ubagg_jfc *ubagg_jfc;
@@ -564,9 +565,9 @@ int ubagg_destroy_jfc(struct ubcore_jfc *jfc)
 	return 0;
 }
 
-struct ubcore_jfs *ubagg_create_jfs(struct ubcore_device *ub_dev,
-				    struct ubcore_jfs_cfg *cfg,
-				    struct ubcore_udata *udata)
+static struct ubcore_jfs *ubagg_create_jfs(struct ubcore_device *ub_dev,
+					     struct ubcore_jfs_cfg *cfg,
+					     struct ubcore_udata *udata)
 {
 	struct ubagg_device *ubagg_dev =
 		ubagg_container_of(ub_dev, struct ubagg_device, ub_dev);
@@ -605,7 +606,7 @@ struct ubcore_jfs *ubagg_create_jfs(struct ubcore_device *ub_dev,
 	return &jfs->base;
 }
 
-int ubagg_destroy_jfs(struct ubcore_jfs *jfs)
+static int ubagg_destroy_jfs(struct ubcore_jfs *jfs)
 {
 	struct ubagg_device *ubagg_dev;
 	struct ubagg_jfs *ubagg_jfs;
@@ -622,9 +623,9 @@ int ubagg_destroy_jfs(struct ubcore_jfs *jfs)
 	return 0;
 }
 
-struct ubcore_jfr *ubagg_create_jfr(struct ubcore_device *ub_dev,
-				    struct ubcore_jfr_cfg *cfg,
-				    struct ubcore_udata *udata)
+static struct ubcore_jfr *ubagg_create_jfr(struct ubcore_device *ub_dev,
+					     struct ubcore_jfr_cfg *cfg,
+					     struct ubcore_udata *udata)
 {
 	struct ubagg_device *ubagg_dev =
 		ubagg_container_of(ub_dev, struct ubagg_device, ub_dev);
@@ -713,7 +714,7 @@ FREE_ID:
 	return NULL;
 }
 
-int ubagg_destroy_jfr(struct ubcore_jfr *jfr)
+static int ubagg_destroy_jfr(struct ubcore_jfr *jfr)
 {
 	struct ubagg_device *ubagg_dev;
 	struct ubagg_jfr_hash_node *ubagg_jfr;
@@ -732,9 +733,9 @@ int ubagg_destroy_jfr(struct ubcore_jfr *jfr)
 	return 0;
 }
 
-struct ubcore_jetty *ubagg_create_jetty(struct ubcore_device *dev,
-					struct ubcore_jetty_cfg *cfg,
-					struct ubcore_udata *udata)
+static struct ubcore_jetty *ubagg_create_jetty(struct ubcore_device *dev,
+						 struct ubcore_jetty_cfg *cfg,
+						 struct ubcore_udata *udata)
 {
 	struct ubagg_device *ubagg_dev =
 		ubagg_container_of(dev, struct ubagg_device, ub_dev);
@@ -823,7 +824,7 @@ FREE_ID:
 	return NULL;
 }
 
-int ubagg_destroy_jetty(struct ubcore_jetty *jetty)
+static int ubagg_destroy_jetty(struct ubcore_jetty *jetty)
 {
 	struct ubagg_jetty_hash_node *ubagg_jetty;
 	struct ubagg_device *ubagg_dev;
@@ -843,8 +844,8 @@ int ubagg_destroy_jetty(struct ubcore_jetty *jetty)
 	return 0;
 }
 
-int ubagg_query_device_status(struct ubcore_device *dev,
-			      struct ubcore_device_status *status)
+static int ubagg_query_device_status(struct ubcore_device *dev,
+				       struct ubcore_device_status *status)
 {
 	int i;
 
@@ -1683,57 +1684,6 @@ static void find_add_master_dev(const char *agg_eid, const char *name)
 	(void)snprintf(g_name_eid_arr[empty_index].master_dev_name,
 		       UBAGG_MAX_DEV_NAME_LEN, "%s", name);
 	mutex_unlock(&g_name_eid_arr_lock);
-}
-
-static int ubagg_add_dev_by_uvs(struct ubagg_topo_map *topo_map)
-{
-	struct ubagg_topo_node *cur_node_info;
-	struct ubagg_add_dev_by_uvs arg = { 0 };
-	char *master_dev_name = NULL;
-	uint32_t cur_node_index = 0;
-	const char *agg_eid = NULL;
-	int dev_id;
-
-	if (find_cur_node_index(topo_map, &cur_node_index) != 0) {
-		ubagg_log_err("find cur node index failed\n");
-		return -1;
-	}
-	cur_node_info = &(topo_map->topo_infos[cur_node_index]);
-
-	// add DEV_NUM devs for every node
-	for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
-		if (!is_agg_dev_valid(&cur_node_info->agg_devs[dev_id]))
-			continue;
-
-		agg_eid = cur_node_info->agg_devs[dev_id].agg_eid;
-		if (has_add_dev_by_agg_eid(agg_eid)) {
-			ubagg_log_info("has add dev by aggr eid: " EID_FMT "\n",
-					EID_RAW_ARGS(agg_eid));
-			continue;
-		}
-
-		master_dev_name = generate_master_dev_name();
-		if (master_dev_name == NULL) {
-			ubagg_log_err("generate master dev name failed\n");
-			return -1;
-		}
-
-		(void)snprintf(arg.master_dev_name, UBAGG_MAX_DEV_NAME_LEN, "%s",
-				master_dev_name);
-		fill_add_dev_cfg(&cur_node_info->agg_devs[dev_id], &arg);
-
-		if (add_dev_by_uvs(&arg) != 0) {
-			release_bond_device_id_with_name(master_dev_name);
-			kfree(master_dev_name);
-			ubagg_log_warn("add ubagg dev by uvs failed\n");
-			continue;
-		}
-		find_add_master_dev(cur_node_info->agg_devs[dev_id].agg_eid, master_dev_name);
-		kfree(master_dev_name);
-		master_dev_name = NULL;
-	}
-
-	return 0;
 }
 
 static void print_topo_map(struct ubagg_topo_map *topo_map)

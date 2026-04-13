@@ -16,6 +16,7 @@
 
 #include "uburma_log.h"
 #include "uburma_types.h"
+#include "uburma_mmap.h"
 
 void uburma_umap_priv_init(struct uburma_umap_priv *priv,
 			   struct vm_area_struct *vma)

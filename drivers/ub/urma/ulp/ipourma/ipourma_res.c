@@ -234,9 +234,7 @@ static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 {
 	struct ubcore_seg_cfg cfg = { 0 };
 	size_t i;
-	int ret;
 
-	ret = IPOURMA_OK;
 	priv->rx_buf_aligned[eid_idx] = kcalloc(priv->rx_buf_num, sizeof(u8 *), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx]))
 		return IPOURMA_ADDRESS_NOT_ALIGNED;
@@ -244,14 +242,12 @@ static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 		priv->rx_buf_aligned[eid_idx][i] = kzalloc(ipourma_register_seg_size,
 							   GFP_KERNEL);
 		if (IS_ERR_OR_NULL(priv->rx_buf_aligned[eid_idx][i])) {
-			ret = IPOURMA_ADDRESS_NOT_ALIGNED;
 			goto alloc_rx_buf_aligned_err;
 		}
 	}
 	priv->ipourma_ub_rx_seg[eid_idx] = kcalloc(priv->rx_buf_num,
 				sizeof(struct ubcore_target_seg *), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx])) {
-		ret = IPOURMA_ADDRESS_NOT_ALIGNED;
 		goto alloc_rx_seg_err;
 	}
 	for (i = 0; i < priv->rx_buf_num; i++) {
@@ -260,7 +256,6 @@ static int ipourma_init_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx)
 		priv->ipourma_ub_rx_seg[eid_idx][i] = ubcore_register_seg(priv->urma_dev,
 										&cfg, NULL);
 		if (IS_ERR_OR_NULL(priv->ipourma_ub_rx_seg[eid_idx][i])) {
-			ret = IPOURMA_ADDRESS_NOT_ALIGNED;
 			goto reg_rx_seg_err;
 		}
 	}
@@ -581,9 +576,7 @@ tx_head_failed:
 	return IPOURMA_INIT_RINGS_TABLE_FAILED;
 }
 
-/**
- * @note: tx_buf & rx_buf are initialized dynamically
- */
+/* Note: tx_buf & rx_buf are initialized dynamically */
 int ipourma_init_rings(struct net_device *dev)
 {
 	struct ipourma_dev_priv *priv = netdev_priv(dev);
