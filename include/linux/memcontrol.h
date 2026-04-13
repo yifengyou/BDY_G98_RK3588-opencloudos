@@ -363,6 +363,17 @@ struct mem_cgroup {
 	struct obj_cgroup	*orig_objcg;
 	/* list of inherited objcgs, protected by objcg_lock */
 	struct list_head objcg_list;
+
+	/*
+	 * sw_objcg is used for charging compressed swap backing memory.
+	 * Unlike regular objcg, charges through sw_objcg only contribute
+	 * to the memory counter, not memsw, since the uncompressed swap
+	 * size is already accounted in memsw separately.
+	 */
+	struct obj_cgroup __rcu	*sw_objcg;
+	struct obj_cgroup	*orig_sw_objcg;
+	/* list of inherited sw_objcgs, protected by objcg_lock */
+	struct list_head sw_objcg_list;
 #endif
 
 	CACHELINE_PADDING(_pad2_);
@@ -484,15 +495,67 @@ enum page_memcg_data_flags {
 static inline bool folio_memcg_kmem(struct folio *folio);
 
 /*
+ * obj_cgroup->memcg encodes an "sw" tag in bit 0 of the pointer.
+ *
+ * Rationale for bit 0 stealing instead of a separate flag field:
+ *   - Avoids enlarging struct obj_cgroup (which is allocated per-memcg
+ *     and sits on a hot cacheline).
+ *   - Reads of the memcg pointer and reads of the "is this an sw objcg"
+ *     predicate share the same word, so a single READ_ONCE observes a
+ *     consistent (pointer, tag) pair. Splitting them into two fields
+ *     would require extra ordering to keep them in lockstep across
+ *     memcg_reparent_sw_objcgs().
+ *
+ * Correctness requirements (enforced by __sw_objcg_build_checks):
+ *   - struct mem_cgroup must be at least 2-byte aligned so bit 0 is free.
+ *
+ * All reads of objcg->memcg MUST go through __objcg_memcg_raw()
+ * or obj_cgroup_memcg(); all writes MUST go through __objcg_set_memcg().
+ * Grepping for a bare "objcg->memcg =" or "->memcg & 1" outside this
+ * file is a review red flag.
+ */
+static inline void __maybe_unused __sw_objcg_build_checks(void)
+{
+	BUILD_BUG_ON(__alignof__(struct mem_cgroup) < 2);
+}
+
+/* Raw tagged value; only the helpers below should use this. */
+static inline unsigned long __objcg_memcg_raw(struct obj_cgroup *objcg)
+{
+	return (unsigned long)READ_ONCE(objcg->memcg);
+}
+
+/*
+ * Atomically publish (memcg, is_sw) into objcg->memcg as a single word.
+ * Callers providing locking (objcg_lock) still need WRITE_ONCE semantics
+ * for concurrent lockless readers using obj_cgroup_memcg()/obj_cgroup_is_sw().
+ */
+static inline void __objcg_set_memcg(struct obj_cgroup *objcg,
+				     struct mem_cgroup *memcg, bool is_sw)
+{
+	unsigned long val = (unsigned long)memcg | (is_sw ? 1UL : 0UL);
+
+	WRITE_ONCE(objcg->memcg, (struct mem_cgroup *)val);
+}
+
+static inline bool obj_cgroup_is_sw(struct obj_cgroup *objcg)
+{
+	return __objcg_memcg_raw(objcg) & 1UL;
+}
+
+/*
  * After the initialization objcg->memcg is always pointing at
  * a valid memcg, but can be atomically swapped to the parent memcg.
  *
  * The caller must ensure that the returned memcg won't be released:
  * e.g. acquire the rcu_read_lock or css_set_lock.
+ *
+ * The tag bit (see __objcg_set_memcg) is masked off so callers never
+ * observe an odd-valued mem_cgroup pointer.
  */
 static inline struct mem_cgroup *obj_cgroup_memcg(struct obj_cgroup *objcg)
 {
-	return READ_ONCE(objcg->memcg);
+	return (struct mem_cgroup *)(__objcg_memcg_raw(objcg) & ~1UL);
 }
 
 /*

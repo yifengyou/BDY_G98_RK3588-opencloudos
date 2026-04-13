@@ -345,8 +345,12 @@ static void obj_cgroup_release(struct percpu_ref *ref)
 		memcg = get_mem_cgroup_from_objcg(objcg);
 		mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
 		memcg1_account_kmem(memcg, -nr_pages);
-		if (!mem_cgroup_is_root(memcg))
-			memcg_uncharge(memcg, nr_pages);
+		if (!mem_cgroup_is_root(memcg)) {
+			if (obj_cgroup_is_sw(objcg))
+				page_counter_uncharge(&memcg->memory, nr_pages);
+			else
+				memcg_uncharge(memcg, nr_pages);
+		}
 		mem_cgroup_put(memcg);
 	}
 
@@ -375,6 +379,38 @@ static struct obj_cgroup *obj_cgroup_alloc(void)
 	}
 	INIT_LIST_HEAD(&objcg->list);
 	return objcg;
+}
+
+
+static void memcg_reparent_sw_objcgs(struct mem_cgroup *memcg,
+				     struct mem_cgroup *parent)
+{
+	struct obj_cgroup *objcg, *iter;
+
+	objcg = rcu_replace_pointer(memcg->sw_objcg, NULL, true);
+	if (!objcg)
+		return;
+
+	spin_lock_irq(&objcg_lock);
+
+	/* 1) Ready to reparent active sw_objcg. */
+	list_add(&objcg->list, &memcg->sw_objcg_list);
+	/*
+	 * 2) Reparent active sw_objcg and already reparented sw_objcgs to
+	 *    parent. Use __objcg_set_memcg() so the (memcg, is_sw=true)
+	 *    pair is published atomically as a single WRITE_ONCE word;
+	 *    lockless readers going through obj_cgroup_memcg() /
+	 *    obj_cgroup_is_sw() always observe a consistent view and can
+	 *    never see a parent pointer that has temporarily lost its tag.
+	 */
+	list_for_each_entry(iter, &memcg->sw_objcg_list, list)
+		__objcg_set_memcg(iter, parent, true);
+	/* 3) Move already reparented sw_objcgs to the parent's list */
+	list_splice(&memcg->sw_objcg_list, &parent->sw_objcg_list);
+
+	spin_unlock_irq(&objcg_lock);
+
+	percpu_ref_kill(&objcg->refcnt);
 }
 
 static void memcg_reparent_objcgs(struct mem_cgroup *memcg,
@@ -3450,7 +3486,7 @@ static int mem_cgroup_notify_prio_change(struct cgroup_subsys_state *css,
 }
 
 static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
-			unsigned int nr_pages)
+			unsigned int nr_pages, bool skip_memsw)
 {
 	unsigned int batch = max(MEMCG_CHARGE_BATCH, nr_pages);
 	int nr_retries = MAX_RECLAIM_RETRIES;
@@ -3469,18 +3505,23 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 #endif
 
 retry:
-	if (consume_stock(memcg, nr_pages))
+	/*
+	 * Skip the stock layer when skip_memsw is set. The stock assumes
+	 * memory and memsw are always charged/uncharged in lockstep.
+	 */
+	if (!skip_memsw && consume_stock(memcg, nr_pages))
 		return 0;
 
-	if (!gfpflags_allow_spinning(gfp_mask))
+	/* No stock batching for skip_memsw; avoid stale stock flush */
+	if (skip_memsw || !gfpflags_allow_spinning(gfp_mask))
 		/* Avoid the refill and flush of the older stock */
 		batch = nr_pages;
 
-	if (!do_memsw_account() ||
+	if (skip_memsw || !do_memsw_account() ||
 	    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
 		if (page_counter_try_charge(&memcg->memory, batch, &counter))
 			goto done_restock;
-		if (do_memsw_account())
+		if (!skip_memsw && do_memsw_account())
 			page_counter_uncharge(&memcg->memsw, batch);
 		mem_over_limit = mem_cgroup_from_counter(counter, memory);
 	} else {
@@ -3612,7 +3653,7 @@ force:
 	 * temporarily by force charging it.
 	 */
 	page_counter_charge(&memcg->memory, nr_pages);
-	if (do_memsw_account())
+	if (!skip_memsw && do_memsw_account())
 		page_counter_charge(&memcg->memsw, nr_pages);
 
 	if (sysctl_vm_memory_qos && memcg_reclaim_prio_exist())
@@ -3626,7 +3667,7 @@ done_restock:
 		if (need_reclaim) {
 			mem_over_limit = memcg;
 			page_counter_uncharge(&memcg->memory, batch);
-			if (do_memsw_account())
+			if (!skip_memsw && do_memsw_account())
 				page_counter_uncharge(&memcg->memsw, batch);
 			goto retry_failed_reclaim;
 		}
@@ -3700,7 +3741,7 @@ static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	if (mem_cgroup_is_root(memcg))
 		return 0;
 
-	return try_charge_memcg(memcg, gfp_mask, nr_pages);
+	return try_charge_memcg(memcg, gfp_mask, nr_pages, false);
 }
 
 /**
@@ -3993,8 +4034,12 @@ static void obj_cgroup_uncharge_pages(struct obj_cgroup *objcg,
 
 	mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
 	memcg1_account_kmem(memcg, -nr_pages);
-	if (!mem_cgroup_is_root(memcg))
-		refill_stock(memcg, nr_pages);
+	if (!mem_cgroup_is_root(memcg)) {
+		if (obj_cgroup_is_sw(objcg))
+			page_counter_uncharge(&memcg->memory, nr_pages);
+		else
+			refill_stock(memcg, nr_pages);
+	}
 
 	css_put(&memcg->css);
 }
@@ -4015,7 +4060,7 @@ static int obj_cgroup_charge_pages(struct obj_cgroup *objcg, gfp_t gfp,
 
 	memcg = get_mem_cgroup_from_objcg(objcg);
 
-	ret = try_charge_memcg(memcg, gfp, nr_pages);
+	ret = try_charge_memcg(memcg, gfp, nr_pages, obj_cgroup_is_sw(objcg));
 	if (ret)
 		goto out;
 
@@ -4163,8 +4208,12 @@ static void drain_obj_stock(struct obj_stock_pcp *stock)
 
 			mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
 			memcg1_account_kmem(memcg, -nr_pages);
-			if (!mem_cgroup_is_root(memcg))
-				memcg_uncharge(memcg, nr_pages);
+			if (!mem_cgroup_is_root(memcg)) {
+				if (obj_cgroup_is_sw(old))
+					page_counter_uncharge(&memcg->memory, nr_pages);
+				else
+					memcg_uncharge(memcg, nr_pages);
+			}
 
 			css_put(&memcg->css);
 		}
@@ -5110,10 +5159,34 @@ static int memcg_online_kmem(struct mem_cgroup *memcg)
 	if (!objcg)
 		return -ENOMEM;
 
-	objcg->memcg = memcg;
+	__objcg_set_memcg(objcg, memcg, false);
 	rcu_assign_pointer(memcg->objcg, objcg);
 	obj_cgroup_get(objcg);
 	memcg->orig_objcg = objcg;
+
+	objcg = obj_cgroup_alloc();
+	if (!objcg) {
+		struct obj_cgroup *first_objcg = memcg->orig_objcg;
+
+		/*
+		 * Roll back the regular objcg we just published. It has never
+		 * been used (kmem online key is not enabled yet), so
+		 * nr_charged_bytes == 0 and no list linkage exists beyond
+		 * the self-init one.
+		 */
+		rcu_assign_pointer(memcg->objcg, NULL);
+		memcg->orig_objcg = NULL;
+
+		obj_cgroup_put(first_objcg);          /* drop orig_objcg's ref  */
+		percpu_ref_kill(&first_objcg->refcnt); /* drop the bias, triggers release via RCU */
+
+		return -ENOMEM;
+	}
+
+	__objcg_set_memcg(objcg, memcg, true);
+	rcu_assign_pointer(memcg->sw_objcg, objcg);
+	obj_cgroup_get(objcg);
+	memcg->orig_sw_objcg = objcg;
 
 	static_branch_enable(&memcg_kmem_online_key);
 
@@ -5137,6 +5210,7 @@ static void memcg_offline_kmem(struct mem_cgroup *memcg)
 		parent = root_mem_cgroup;
 
 	memcg_reparent_objcgs(memcg, parent);
+	memcg_reparent_sw_objcgs(memcg, parent);
 
 	/*
 	 * After we have finished memcg_reparent_objcgs(), all list_lrus
@@ -7690,6 +7764,9 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 	if (memcg->orig_objcg)
 		obj_cgroup_put(memcg->orig_objcg);
 
+	if (memcg->orig_sw_objcg)
+		obj_cgroup_put(memcg->orig_sw_objcg);
+
 	for_each_node(node)
 		free_mem_cgroup_per_node_info(memcg, node);
 	kfree(memcg->vmstats);
@@ -7763,6 +7840,7 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 #ifdef CONFIG_MEMCG_KMEM
 	memcg->kmemcg_id = -1;
 	INIT_LIST_HEAD(&memcg->objcg_list);
+	INIT_LIST_HEAD(&memcg->sw_objcg_list);
 #endif
 #ifdef CONFIG_CGROUP_WRITEBACK
 	INIT_LIST_HEAD(&memcg->cgwb_list);
