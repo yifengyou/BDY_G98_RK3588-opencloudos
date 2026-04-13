@@ -660,7 +660,7 @@ static void handle_jetty_info_req(struct ubcore_device *dev,
 	}
 	resp->result = ret;
 	if (send_jetty_info_resp(dev, conn, msg->session_id, resp) != 0)
-		ubcore_log_err("Failed to send create resp message.\n");
+		ubcore_log_err("Failed to send jetty info resp message.\n");
 
 put_device:
 	kfree(resp);
