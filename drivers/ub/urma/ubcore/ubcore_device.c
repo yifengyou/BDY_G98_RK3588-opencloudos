@@ -2458,7 +2458,7 @@ void ubcore_dispatch_mgmt_event(struct ubcore_mgmt_event *event)
 
 	if (ubcore_call_cm_eid_ops(event->ub_dev, event->element.eid_info,
 				   event->event_type) != 0)
-		ubcore_log_err("cast eid to ubcm failed.\n");
+		ubcore_log_err_rl("cast eid to ubcm failed.\n");
 }
 EXPORT_SYMBOL(ubcore_dispatch_mgmt_event);
 

@@ -466,13 +466,13 @@ int ubcore_get_main_primary_eid(union ubcore_eid *eid,
 	ret = ubcore_get_primary_eid_array(entity_id, chip_id, node_id,
 		eid_arr);
 	if (ret != 0) {
-		ubcore_log_err("Failed to get primary eid array, ret: %d.\n", ret);
+		ubcore_log_err_rl("Failed to get primary eid array, ret: %d.\n", ret);
 		return ret;
 	}
 
 	ubcore_get_min_eid(eid_arr, main_primary_eid);
 
-	ubcore_log_info("Finish to get main primary eid "EID_FMT".\n",
+	ubcore_log_info_rl("Finish to get main primary eid "EID_FMT".\n",
 		EID_ARGS(*main_primary_eid));
 	return 0;
 }
