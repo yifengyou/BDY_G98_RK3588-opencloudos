@@ -690,8 +690,6 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 			return ERR_PTR(err);
 
 		skb_reserve(skb, hr);
-
-		xsk_skb_init_misc(skb, xs, desc->addr);
 	} else {
 		struct xsk_addrs *xsk_addr;
 
@@ -782,8 +780,6 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 				kfree_skb(skb);
 				goto free_err;
 			}
-
-			xsk_skb_init_misc(skb, xs, desc->addr);
 		} else {
 			int nr_frags = skb_shinfo(skb)->nr_frags;
 			struct xsk_addrs *xsk_addr;
@@ -827,6 +823,8 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 		}
 	}
 
+	if (!xs->skb)
+		xsk_skb_init_misc(skb, xs, desc->addr);
 	xsk_inc_num_desc(skb);
 
 	return skb;
