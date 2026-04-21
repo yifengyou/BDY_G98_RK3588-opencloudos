@@ -210,16 +210,19 @@ static int acpi_prepare_root_resources(struct acpi_pci_root_info *ci)
 	int status;
 	struct resource_entry *entry, *tmp;
 	struct acpi_device *device = ci->bridge;
+	unsigned long long pci_h = 0;
 
 	status = arch_pci_probe_root_resources(ci);
 	if (status > 0) {
+		acpi_evaluate_integer(device->handle, "PCIH", NULL, &pci_h);
+		if (pci_h)
+			return status;
+
 		resource_list_for_each_entry_safe(entry, tmp, &ci->resources) {
 			if (entry->res->flags & IORESOURCE_MEM) {
-				if (!entry->offset) {
-					entry->offset = ci->root->mcfg_addr & GENMASK_ULL(63, 40);
-					entry->res->start |= entry->offset;
-					entry->res->end   |= entry->offset;
-				}
+				entry->offset = ci->root->mcfg_addr & GENMASK_ULL(63, 40);
+				entry->res->start |= entry->offset;
+				entry->res->end   |= entry->offset;
 			}
 		}
 		return status;
