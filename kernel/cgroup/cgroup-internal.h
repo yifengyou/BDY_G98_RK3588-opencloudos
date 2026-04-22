@@ -304,4 +304,10 @@ ssize_t cgroup_role_write(struct kernfs_open_file *of,
 				char *buf, size_t nbytes, loff_t off);
 #endif
 
+#ifdef CONFIG_PSI
+int cgroup_pressure_show(struct seq_file *seq, void *v);
+ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
+				     char *buf, size_t nbytes, loff_t off);
+#endif
+
 #endif /* __CGROUP_INTERNAL_H */

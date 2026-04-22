@@ -678,6 +678,13 @@ struct cftype cgroup1_base_files[] = {
 		.write = cgroup_role_write,
 	},
 #endif
+#ifdef CONFIG_PSI
+{
+		.name = "cgroup.pressure",
+		.seq_show = cgroup_pressure_show,
+		.write = cgroup_pressure_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 

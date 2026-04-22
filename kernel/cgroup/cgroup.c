@@ -3947,7 +3947,7 @@ static ssize_t cgroup_irq_pressure_write(struct kernfs_open_file *of,
 }
 #endif
 
-static int cgroup_pressure_show(struct seq_file *seq, void *v)
+int cgroup_pressure_show(struct seq_file *seq, void *v)
 {
 	struct cgroup *cgrp = seq_css(seq)->cgroup;
 	struct psi_group *psi = cgroup_psi(cgrp);
@@ -3957,7 +3957,7 @@ static int cgroup_pressure_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
+ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
 				     char *buf, size_t nbytes,
 				     loff_t off)
 {
