@@ -307,6 +307,7 @@ bool mem_cgroup_kmem_disabled(void)
 }
 
 static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages);
+static void refill_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages);
 
 static void obj_cgroup_release(struct percpu_ref *ref)
 {
@@ -2774,6 +2775,37 @@ struct obj_sw_stock_pcp {
 static DEFINE_PER_CPU_ALIGNED(struct obj_sw_stock_pcp, obj_sw_stock) = {
 	.lock = INIT_LOCAL_TRYLOCK(lock),
 };
+
+/*
+ * memcg_sw_stock caches page-granular charges against memcg->memory only
+ * (never memsw) for the sw_objcg path. It is the page-level peer of
+ * obj_sw_stock and forms the second stage of the sw two-level batching
+ * pipeline:
+ *
+ *     obj_sw_stock (bytes) -> memcg_sw_stock (pages) -> page_counter(memory)
+ *
+ * The regular memcg_stock cannot be reused because its drain path
+ * (memcg_uncharge) updates both memory and memsw in lockstep, which would
+ * break the sw invariant of leaving memsw untouched (the uncompressed
+ * swap size is already accounted in memsw elsewhere).
+ *
+ * Slot count is deliberately small: the sw path is driven by a narrow set
+ * of backends (zswap/zram style), typically touching one or two memcgs
+ * per CPU at a time.
+ */
+#define NR_SW_STOCK 2
+struct memcg_sw_stock_pcp {
+	local_trylock_t lock;
+	uint8_t nr_pages[NR_SW_STOCK];
+	struct mem_cgroup *cached[NR_SW_STOCK];
+
+	struct work_struct work;
+	unsigned long flags;
+};
+
+static DEFINE_PER_CPU_ALIGNED(struct memcg_sw_stock_pcp, memcg_sw_stock) = {
+	.lock = INIT_LOCAL_TRYLOCK(lock),
+};
 #endif /* CONFIG_MEMCG_KMEM */
 
 static DEFINE_MUTEX(percpu_charge_mutex);
@@ -2786,6 +2818,10 @@ static void drain_sw_obj_stock(struct obj_sw_stock_pcp *stock);
 static void drain_local_sw_obj_stock(struct work_struct *dummy);
 static bool sw_obj_stock_flush_required(struct obj_sw_stock_pcp *stock,
 					struct mem_cgroup *root_memcg);
+static void drain_sw_stock_fully(struct memcg_sw_stock_pcp *stock);
+static void drain_local_sw_stock(struct work_struct *dummy);
+static bool is_sw_drain_needed(struct memcg_sw_stock_pcp *stock,
+			       struct mem_cgroup *root_memcg);
 #else
 static inline struct obj_cgroup *drain_obj_stock(struct memcg_stock_pcp *stock)
 {
@@ -2795,6 +2831,44 @@ static bool obj_stock_flush_required(struct memcg_stock_pcp *stock,
 				     struct mem_cgroup *root_memcg)
 {
 	return false;
+}
+#endif
+
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * consume_sw_stock - try to consume cached sw page charge on this cpu.
+ *
+ * Mirrors consume_stock() but only looks at the sw slot cache. sw_stock
+ * never batches against memsw.
+ */
+static bool consume_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	struct memcg_sw_stock_pcp *stock;
+	uint8_t stock_pages;
+	bool ret = false;
+	int i;
+
+	if (nr_pages > MEMCG_CHARGE_BATCH ||
+	    !local_trylock(&memcg_sw_stock.lock))
+		return ret;
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		if (memcg != READ_ONCE(stock->cached[i]))
+			continue;
+
+		stock_pages = READ_ONCE(stock->nr_pages[i]);
+		if (stock_pages >= nr_pages) {
+			WRITE_ONCE(stock->nr_pages[i], stock_pages - nr_pages);
+			ret = true;
+		}
+		break;
+	}
+
+	local_unlock(&memcg_sw_stock.lock);
+
+	return ret;
 }
 #endif
 
@@ -2846,6 +2920,32 @@ static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages)
 		page_counter_uncharge(&memcg->memsw, nr_pages);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * drain_sw_stock - flush a single sw_stock slot back to memcg->memory.
+ *
+ * Unlike drain_stock(), memsw is never touched here: this is the whole
+ * point of having a separate sw stock.
+ */
+static void drain_sw_stock(struct memcg_sw_stock_pcp *stock, int i)
+{
+	struct mem_cgroup *old = READ_ONCE(stock->cached[i]);
+	uint8_t stock_pages;
+
+	if (!old)
+		return;
+
+	stock_pages = READ_ONCE(stock->nr_pages[i]);
+	if (stock_pages) {
+		page_counter_uncharge(&old->memory, stock_pages);
+		WRITE_ONCE(stock->nr_pages[i], 0);
+	}
+
+	css_put(&old->css);
+	WRITE_ONCE(stock->cached[i], NULL);
+}
+#endif
+
 /*
  * Returns stocks cached in percpu and reset cached information.
  */
@@ -2867,6 +2967,16 @@ static void drain_stock(struct memcg_stock_pcp *stock, int i)
 	WRITE_ONCE(stock->cached[i], NULL);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+static void drain_sw_stock_fully(struct memcg_sw_stock_pcp *stock)
+{
+	int i;
+
+	for (i = 0; i < NR_SW_STOCK; ++i)
+		drain_sw_stock(stock, i);
+}
+#endif
+
 static void drain_stock_fully(struct memcg_stock_pcp *stock)
 {
 	int i;
@@ -2874,6 +2984,24 @@ static void drain_stock_fully(struct memcg_stock_pcp *stock)
 	for (i = 0; i < NR_MEMCG_STOCK; ++i)
 		drain_stock(stock, i);
 }
+
+#ifdef CONFIG_MEMCG_KMEM
+static void drain_local_sw_stock(struct work_struct *dummy)
+{
+	struct memcg_sw_stock_pcp *stock;
+
+	if (WARN_ONCE(!in_task(), "drain in non-task context"))
+		return;
+
+	local_lock(&memcg_sw_stock.lock);
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+	drain_sw_stock_fully(stock);
+	clear_bit(FLUSHING_CACHED_CHARGE, &stock->flags);
+
+	local_unlock(&memcg_sw_stock.lock);
+}
+#endif
 
 static void drain_local_memcg_stock(struct work_struct *dummy)
 {
@@ -2922,6 +3050,63 @@ static void drain_local_obj_stock(struct work_struct *dummy)
 
 	local_unlock(&obj_stock.lock);
 }
+
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * refill_sw_stock - credit @nr_pages back into the sw page stock.
+ *
+ * Mirrors refill_stock() but falls back to a direct
+ * page_counter_uncharge(&memory) on trylock failure or oversized refill,
+ * rather than memcg_uncharge() (which would double-uncharge memsw).
+ */
+static void refill_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	struct memcg_sw_stock_pcp *stock;
+	struct mem_cgroup *cached;
+	uint8_t stock_pages;
+	bool success = false;
+	int empty_slot = -1;
+	int i;
+
+	BUILD_BUG_ON(MEMCG_CHARGE_BATCH > S8_MAX);
+
+	VM_WARN_ON_ONCE(mem_cgroup_is_root(memcg));
+
+	if (nr_pages > MEMCG_CHARGE_BATCH ||
+	    !local_trylock(&memcg_sw_stock.lock)) {
+		page_counter_uncharge(&memcg->memory, nr_pages);
+		return;
+	}
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		cached = READ_ONCE(stock->cached[i]);
+		if (!cached && empty_slot == -1)
+			empty_slot = i;
+		if (memcg == READ_ONCE(stock->cached[i])) {
+			stock_pages = READ_ONCE(stock->nr_pages[i]) + nr_pages;
+			WRITE_ONCE(stock->nr_pages[i], stock_pages);
+			if (stock_pages > MEMCG_CHARGE_BATCH)
+				drain_sw_stock(stock, i);
+			success = true;
+			break;
+		}
+	}
+
+	if (!success) {
+		i = empty_slot;
+		if (i == -1) {
+			i = get_random_u32_below(NR_SW_STOCK);
+			drain_sw_stock(stock, i);
+		}
+		css_get(&memcg->css);
+		WRITE_ONCE(stock->cached[i], memcg);
+		WRITE_ONCE(stock->nr_pages[i], nr_pages);
+	}
+
+	local_unlock(&memcg_sw_stock.lock);
+}
+#endif
 
 static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
@@ -2980,6 +3165,31 @@ static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 	local_unlock(&memcg_stock.lock);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+static bool is_sw_drain_needed(struct memcg_sw_stock_pcp *stock,
+			       struct mem_cgroup *root_memcg)
+{
+	struct mem_cgroup *memcg;
+	bool flush = false;
+	int i;
+
+	rcu_read_lock();
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		memcg = READ_ONCE(stock->cached[i]);
+		if (!memcg)
+			continue;
+
+		if (READ_ONCE(stock->nr_pages[i]) &&
+		    mem_cgroup_is_descendant(memcg, root_memcg)) {
+			flush = true;
+			break;
+		}
+	}
+	rcu_read_unlock();
+	return flush;
+}
+#endif
+
 static bool is_memcg_drain_needed(struct memcg_stock_pcp *stock,
 				  struct mem_cgroup *root_memcg)
 {
@@ -3027,6 +3237,7 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 		struct obj_stock_pcp *obj_st = &per_cpu(obj_stock, cpu);
 #ifdef CONFIG_MEMCG_KMEM
 		struct obj_sw_stock_pcp *sw_obj_st = &per_cpu(obj_sw_stock, cpu);
+		struct memcg_sw_stock_pcp *sw_st = &per_cpu(memcg_sw_stock, cpu);
 #endif
 
 		if (!test_bit(FLUSHING_CACHED_CHARGE, &memcg_st->flags) &&
@@ -3050,6 +3261,16 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 		}
 
 #ifdef CONFIG_MEMCG_KMEM
+		if (!test_bit(FLUSHING_CACHED_CHARGE, &sw_st->flags) &&
+		    is_sw_drain_needed(sw_st, root_memcg) &&
+		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
+				      &sw_st->flags)) {
+			if (cpu == curcpu)
+				drain_local_sw_stock(&sw_st->work);
+			else if (!cpu_is_isolated(cpu))
+				schedule_work_on(cpu, &sw_st->work);
+		}
+
 		if (!test_bit(FLUSHING_CACHED_CHARGE, &sw_obj_st->flags) &&
 		    sw_obj_stock_flush_required(sw_obj_st, root_memcg) &&
 		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
@@ -3073,6 +3294,9 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 	drain_sw_obj_stock(&per_cpu(obj_sw_stock, cpu));
 #endif
 	drain_stock_fully(&per_cpu(memcg_stock, cpu));
+#ifdef CONFIG_MEMCG_KMEM
+	drain_sw_stock_fully(&per_cpu(memcg_sw_stock, cpu));
+#endif
 
 	return 0;
 }
@@ -3569,14 +3793,23 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 
 retry:
 	/*
-	 * Skip the stock layer when skip_memsw is set. The stock assumes
-	 * memory and memsw are always charged/uncharged in lockstep.
+	 * Dispatch to the correct per-cpu charge stock.
+	 *
+	 * The regular memcg_stock batches memory and memsw together via
+	 * memcg_uncharge() and cannot be reused for the sw path (which must
+	 * never update memsw). The dedicated memcg_sw_stock provides the
+	 * same batching semantics but only for memory.
 	 */
-	if (!skip_memsw && consume_stock(memcg, nr_pages))
-		return 0;
+	if (skip_memsw) {
+		if (consume_sw_stock(memcg, nr_pages))
+			return 0;
+	} else {
+		if (consume_stock(memcg, nr_pages))
+			return 0;
+	}
 
 	/* No stock batching for skip_memsw; avoid stale stock flush */
-	if (skip_memsw || !gfpflags_allow_spinning(gfp_mask))
+	if (!gfpflags_allow_spinning(gfp_mask))
 		/* Avoid the refill and flush of the older stock */
 		batch = nr_pages;
 
@@ -3736,8 +3969,12 @@ done_restock:
 		}
 	}
 
-	if (batch > nr_pages)
-		refill_stock(memcg, batch - nr_pages);
+	if (batch > nr_pages) {
+		if (skip_memsw)
+			refill_sw_stock(memcg, batch - nr_pages);
+		else
+			refill_stock(memcg, batch - nr_pages);
+	}
 
 	if (sysctl_vm_memory_qos && memcg_reclaim_prio_exist())
 		RUE_CALL_VOID(MEM, mem_cgroup_notify_alloc, memcg, batch);
@@ -4099,7 +4336,7 @@ static void obj_cgroup_uncharge_pages(struct obj_cgroup *objcg,
 	memcg1_account_kmem(memcg, -nr_pages);
 	if (!mem_cgroup_is_root(memcg)) {
 		if (obj_cgroup_is_sw(objcg))
-			page_counter_uncharge(&memcg->memory, nr_pages);
+			refill_sw_stock(memcg, nr_pages);
 		else
 			refill_stock(memcg, nr_pages);
 	}
@@ -10770,6 +11007,8 @@ static int __init mem_cgroup_init(void)
 #ifdef CONFIG_MEMCG_KMEM
 		INIT_WORK(&per_cpu_ptr(&obj_sw_stock, cpu)->work,
 			  drain_local_sw_obj_stock);
+		INIT_WORK(&per_cpu_ptr(&memcg_sw_stock, cpu)->work,
+			  drain_local_sw_stock);
 #endif
 	}
 
