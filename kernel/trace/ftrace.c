@@ -5995,10 +5995,12 @@ static DEFINE_MUTEX(graph_lock);
 
 struct ftrace_hash __rcu *ftrace_graph_hash = EMPTY_HASH;
 struct ftrace_hash __rcu *ftrace_graph_notrace_hash = EMPTY_HASH;
+struct ftrace_hash __rcu *ftrace_graph_stack_hash = EMPTY_HASH;
 
 enum graph_filter_type {
 	GRAPH_FILTER_NOTRACE	= 0,
 	GRAPH_FILTER_FUNCTION,
+	GRAPH_FILTER_STACK,
 };
 
 #define FTRACE_GRAPH_EMPTY	((void *)1)
@@ -6060,6 +6062,9 @@ static void *g_start(struct seq_file *m, loff_t *pos)
 	if (fgd->type == GRAPH_FILTER_FUNCTION)
 		fgd->hash = rcu_dereference_protected(ftrace_graph_hash,
 					lockdep_is_held(&graph_lock));
+	else if (fgd->type == GRAPH_FILTER_STACK)
+		fgd->hash = rcu_dereference_protected(ftrace_graph_stack_hash,
+					lockdep_is_held(&graph_lock));
 	else
 		fgd->hash = rcu_dereference_protected(ftrace_graph_notrace_hash,
 					lockdep_is_held(&graph_lock));
@@ -6090,6 +6095,8 @@ static int g_show(struct seq_file *m, void *v)
 
 		if (fgd->type == GRAPH_FILTER_FUNCTION)
 			seq_puts(m, "#### all functions enabled ####\n");
+		else if (fgd->type == GRAPH_FILTER_STACK)
+			seq_puts(m, "#### no stack filter functions ####\n");
 		else
 			seq_puts(m, "#### no functions disabled ####\n");
 		return 0;
@@ -6221,6 +6228,34 @@ ftrace_graph_notrace_open(struct inode *inode, struct file *file)
 }
 
 static int
+ftrace_graph_stack_open(struct inode *inode, struct file *file)
+{
+	struct ftrace_graph_data *fgd;
+	int ret;
+
+	if (unlikely(ftrace_disabled))
+		return -ENODEV;
+
+	fgd = kmalloc(sizeof(*fgd), GFP_KERNEL);
+	if (fgd == NULL)
+		return -ENOMEM;
+
+	mutex_lock(&graph_lock);
+
+	fgd->hash = rcu_dereference_protected(ftrace_graph_stack_hash,
+					lockdep_is_held(&graph_lock));
+	fgd->type = GRAPH_FILTER_STACK;
+	fgd->seq_ops = &ftrace_graph_seq_ops;
+
+	ret = __ftrace_graph_open(inode, file, fgd);
+	if (ret < 0)
+		kfree(fgd);
+
+	mutex_unlock(&graph_lock);
+	return ret;
+}
+
+static int
 ftrace_graph_release(struct inode *inode, struct file *file)
 {
 	struct ftrace_graph_data *fgd;
@@ -6261,6 +6296,11 @@ ftrace_graph_release(struct inode *inode, struct file *file)
 			old_hash = rcu_dereference_protected(ftrace_graph_hash,
 					lockdep_is_held(&graph_lock));
 			rcu_assign_pointer(ftrace_graph_hash, new_hash);
+		} else if (fgd->type == GRAPH_FILTER_STACK) {
+			old_hash = rcu_dereference_protected(ftrace_graph_stack_hash,
+					lockdep_is_held(&graph_lock));
+			rcu_assign_pointer(ftrace_graph_stack_hash, new_hash);
+			ftrace_graph_set_stack_enabled(!ftrace_hash_empty(new_hash));
 		} else {
 			old_hash = rcu_dereference_protected(ftrace_graph_notrace_hash,
 					lockdep_is_held(&graph_lock));
@@ -6396,6 +6436,14 @@ static const struct file_operations ftrace_graph_notrace_fops = {
 	.llseek		= tracing_lseek,
 	.release	= ftrace_graph_release,
 };
+
+static const struct file_operations ftrace_graph_stack_fops = {
+	.open		= ftrace_graph_stack_open,
+	.read		= seq_read,
+	.write		= ftrace_graph_write,
+	.llseek		= tracing_lseek,
+	.release	= ftrace_graph_release,
+};
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
 
 void ftrace_create_filter_files(struct ftrace_ops *ops,
@@ -6453,6 +6501,9 @@ static __init int ftrace_init_dyn_tracefs(struct dentry *d_tracer)
 	trace_create_file("set_graph_notrace", TRACE_MODE_WRITE, d_tracer,
 				    NULL,
 				    &ftrace_graph_notrace_fops);
+	trace_create_file("set_graph_stack_filter", TRACE_MODE_WRITE, d_tracer,
+				    NULL,
+				    &ftrace_graph_stack_fops);
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
 
 	return 0;
