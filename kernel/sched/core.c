@@ -7414,6 +7414,9 @@ const struct sched_class *__setscheduler_class(int policy, int prio)
 	if (dl_prio(prio))
 		return &dl_sched_class;
 
+	if (rt_prio(prio))
+		return &rt_sched_class;
+
 #ifdef CONFIG_BT_SCHED
 	if (bt_prio(prio))
 		return &bt_sched_class;
@@ -8304,7 +8307,7 @@ change:
 	}
 
 	prev_class = p->sched_class;
-	next_class = __setscheduler_class(p->policy, newprio);
+	next_class = __setscheduler_class(policy, newprio);
 
 	if (prev_class != next_class && p->se.sched_delayed)
 		dequeue_task(rq, p, DEQUEUE_SLEEP | DEQUEUE_DELAYED | DEQUEUE_NOCLOCK);
