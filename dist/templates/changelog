@@ -1,3 +1,7 @@
+* Thu Apr 23 2026 Jianping Liu <frankljpliu@gmail.com> - 6.6.119-49.12
+- Reapply "sched/eevdf: Skip eligibility check for current entity during wakeup preemption"
+- x86,config: disable CONFIG_SERIAL_8250_DMA
+
 * Wed Apr 22 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-49.11
 - sched: scx: Fix ext.enabled status wrong in /proc/pid/sched
 
