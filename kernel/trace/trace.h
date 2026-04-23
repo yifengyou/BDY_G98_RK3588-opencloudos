@@ -732,9 +732,16 @@ static inline void latency_fsnotify(struct trace_array *tr) { }
 
 #ifdef CONFIG_STACKTRACE
 void __trace_stack(struct trace_array *tr, unsigned int trace_ctx, int skip);
+void __trace_stack_regs(struct trace_array *tr, unsigned int trace_ctx,
+			struct pt_regs *regs);
 #else
 static inline void __trace_stack(struct trace_array *tr, unsigned int trace_ctx,
 				 int skip)
+{
+}
+static inline void __trace_stack_regs(struct trace_array *tr,
+				      unsigned int trace_ctx,
+				      struct pt_regs *regs)
 {
 }
 #endif /* CONFIG_STACKTRACE */

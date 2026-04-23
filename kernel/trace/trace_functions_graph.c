@@ -304,11 +304,6 @@ static void trace_graph_thresh_return(struct ftrace_graph_ret *trace)
 	    (trace->rettime - trace->calltime < tracing_thresh))
 		return;
 
-	/*
-	 * In thresh mode, entry path skips recording (including stack trace).
-	 * So we output the stack trace here on the return path for functions
-	 * that exceeded the threshold and match the stack filter.
-	 */
 	local_irq_save(flags);
 	cpu = raw_smp_processor_id();
 	data = per_cpu_ptr(tr->array_buffer.data, cpu);
@@ -316,9 +311,39 @@ static void trace_graph_thresh_return(struct ftrace_graph_ret *trace)
 	if (likely(disabled == 1)) {
 		trace_ctx = tracing_gen_ctx_flags(flags);
 		__trace_graph_return(tr, trace, trace_ctx);
+
+		/*
+		 * In thresh mode, we need to output the stack trace on the
+		 * return path. However, the return_to_handler trampoline has
+		 * UNWIND_HINT_UNDEFINED which prevents the ORC unwinder from
+		 * walking past it. To work around this, we construct a
+		 * pt_regs from the ret_stack entry saved during function
+		 * entry, and start the stack trace from the caller's frame,
+		 * completely bypassing the return trampoline.
+		 */
 		if (ftrace_graph_stack_enabled &&
-		    ftrace_graph_stack_addr(trace->func))
+		    ftrace_graph_stack_addr(trace->func)) {
+#ifdef CONFIG_X86
+			int index = current->curr_ret_stack;
+			struct ftrace_ret_stack *ret_stack =
+				&current->ret_stack[index];
+			if (ret_stack->retp) {
+				struct pt_regs regs;
+
+				memset(&regs, 0, sizeof(regs));
+				regs.ip = ret_stack->ret;
+				/*
+				 * The retp points to the location on the stack
+				 * where the return address was stored. The
+				 * caller's SP is right above it (retp + 1).
+				 */
+				regs.sp = (unsigned long)(ret_stack->retp + 1);
+				__trace_stack_regs(tr, trace_ctx, &regs);
+			}
+#else
 			__trace_stack(tr, trace_ctx, 0);
+#endif
+		}
 	}
 	atomic_dec(&data->disabled);
 	local_irq_restore(flags);
