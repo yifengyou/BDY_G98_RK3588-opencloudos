@@ -93,7 +93,7 @@
 #include <linux/rue.h>
 
 #ifdef CONFIG_MEMCG_ZRAM
-bool zram_memcg_nocharge = true;
+bool zram_memcg_nocharge = false;
 EXPORT_SYMBOL(zram_memcg_nocharge);
 #endif
 
@@ -5595,9 +5595,26 @@ static int mem_cgroup_dummy_seq_show(__always_unused struct seq_file *m,
 }
 
 #ifdef CONFIG_MEMCG_KMEM
+static int memcg_online_sw_objcg(struct mem_cgroup *memcg)
+{
+	struct obj_cgroup *objcg;
+
+	objcg = obj_cgroup_alloc();
+	if (!objcg)
+		return -ENOMEM;
+
+	__objcg_set_memcg(objcg, memcg, true);
+	rcu_assign_pointer(memcg->sw_objcg, objcg);
+	obj_cgroup_get(objcg);
+	memcg->orig_sw_objcg = objcg;
+
+	return 0;
+}
+
 static int memcg_online_kmem(struct mem_cgroup *memcg)
 {
 	struct obj_cgroup *objcg;
+	int ret;
 
 	if (mem_cgroup_kmem_disabled())
 		return 0;
@@ -5614,29 +5631,26 @@ static int memcg_online_kmem(struct mem_cgroup *memcg)
 	obj_cgroup_get(objcg);
 	memcg->orig_objcg = objcg;
 
-	objcg = obj_cgroup_alloc();
-	if (!objcg) {
-		struct obj_cgroup *first_objcg = memcg->orig_objcg;
+	if (!zram_memcg_nocharge) {
+		ret = memcg_online_sw_objcg(memcg);
+		if (ret) {
+			struct obj_cgroup *first_objcg = memcg->orig_objcg;
 
-		/*
-		 * Roll back the regular objcg we just published. It has never
-		 * been used (kmem online key is not enabled yet), so
-		 * nr_charged_bytes == 0 and no list linkage exists beyond
-		 * the self-init one.
-		 */
-		rcu_assign_pointer(memcg->objcg, NULL);
-		memcg->orig_objcg = NULL;
+			/*
+			 * Roll back the regular objcg we just published. It
+			 * has never been used (kmem online key is not enabled
+			 * yet), so nr_charged_bytes == 0 and no list linkage
+			 * exists beyond the self-init one.
+			 */
+			rcu_assign_pointer(memcg->objcg, NULL);
+			memcg->orig_objcg = NULL;
 
-		obj_cgroup_put(first_objcg);          /* drop orig_objcg's ref  */
-		percpu_ref_kill(&first_objcg->refcnt); /* drop the bias, triggers release via RCU */
+			obj_cgroup_put(first_objcg);          /* drop orig_objcg's ref  */
+			percpu_ref_kill(&first_objcg->refcnt); /* drop the bias, triggers release via RCU */
 
-		return -ENOMEM;
+			return ret;
+		}
 	}
-
-	__objcg_set_memcg(objcg, memcg, true);
-	rcu_assign_pointer(memcg->sw_objcg, objcg);
-	obj_cgroup_get(objcg);
-	memcg->orig_sw_objcg = objcg;
 
 	static_branch_enable(&memcg_kmem_online_key);
 
