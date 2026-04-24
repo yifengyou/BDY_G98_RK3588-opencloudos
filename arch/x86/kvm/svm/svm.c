@@ -1233,6 +1233,25 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu,
 		else
 			svm_set_intercept(svm, INTERCEPT_RDTSCP);
 	}
+
+	/*
+	 * X86_FEATURE_INVLPGB for Host ins support
+	 * X86_FEATURE_INVLPGB_H for Host Hyper-V ins support
+	 * According to AMD APM Vol3: "Guest usage of INVLPGB is supported
+	 * only when the instruction has been explicitly enabled by the hypervisor in the VMCB"
+	 */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+	    boot_cpu_has(X86_FEATURE_INVLPGB_H)) {
+		if (guest_cpuid_has(&svm->vcpu, X86_FEATURE_INVLPGB)) {
+			svm_clr_intercept(svm, INTERCEPT_INVLPGB);
+			svm_clr_intercept(svm, INTERCEPT_INVLPGB_ILLEGAL);
+			svm_clr_intercept(svm, INTERCEPT_TLBSYNC);
+		} else {
+			svm_set_intercept(svm, INTERCEPT_INVLPGB);
+			svm_set_intercept(svm, INTERCEPT_INVLPGB_ILLEGAL);
+			svm_set_intercept(svm, INTERCEPT_TLBSYNC);
+		}
+	}
 }
 
 static inline void init_vmcb_after_set_cpuid(struct kvm_vcpu *vcpu)
@@ -1396,6 +1415,11 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	} else {
 		svm_clr_intercept(svm, INTERCEPT_PAUSE);
 	}
+
+	/* Enable guest INVLPGB in VMCB */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+		boot_cpu_has(X86_FEATURE_INVLPGB_H))
+		control->nested_ctl |= SVM_NESTED_CTL_INVLPGB_ENABLE;
 
 	svm_recalc_instruction_intercepts(vcpu, svm);
 
@@ -3432,6 +3456,9 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_CR4_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_CR8_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_INVPCID]                      = invpcid_interception,
+	[SVM_EXIT_INVLPGB]			= kvm_handle_invalid_op,
+	[SVM_EXIT_INVLPGB_ILLEGAL]	= kvm_handle_invalid_op,
+	[SVM_EXIT_TLBSYNC]			= kvm_handle_invalid_op,
 	[SVM_EXIT_NPF]				= npf_interception,
 	[SVM_EXIT_RSM]                          = rsm_interception,
 	[SVM_EXIT_AVIC_INCOMPLETE_IPI]		= avic_incomplete_ipi_interception,
@@ -4633,6 +4660,9 @@ static const struct __x86_intercept {
 	[x86_intercept_out]		= POST_EX(SVM_EXIT_IOIO),
 	[x86_intercept_outs]		= POST_EX(SVM_EXIT_IOIO),
 	[x86_intercept_xsetbv]		= PRE_EX(SVM_EXIT_XSETBV),
+	[x86_intercept_invlpgb]		= POST_EX(SVM_EXIT_INVLPGB),
+	[x86_intercept_invlpgb_illegal]	= POST_EX(SVM_EXIT_INVLPGB_ILLEGAL),
+	[x86_intercept_tlbsync]		= POST_EX(SVM_EXIT_TLBSYNC),
 };
 
 #undef PRE_EX
@@ -5362,6 +5392,13 @@ static __init void svm_set_cpu_caps(void)
 	if (boot_cpu_has(X86_FEATURE_LS_CFG_SSBD) ||
 	    boot_cpu_has(X86_FEATURE_AMD_SSBD))
 		kvm_cpu_cap_set(X86_FEATURE_VIRT_SSBD);
+
+	/* Pass invlpgb bit to vcpu */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+	    boot_cpu_has(X86_FEATURE_INVLPGB_H)) {
+		pr_info("INVLPGB support detected and enabled\n");
+		kvm_cpu_cap_set(X86_FEATURE_INVLPGB);
+	}
 
 	if (enable_pmu) {
 		/*

@@ -263,6 +263,12 @@ static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 	if (CC((control->nested_ctl & SVM_NESTED_CTL_NP_ENABLE) && !npt_enabled))
 		return false;
 
+	/*
+	 * INVLPGB/TLBSYNC passthrough is supported only for L0 guests.
+	 * Filter the VMCB bit out of vmcb12 so L1 cannot request it for L2.
+	 */
+	control->nested_ctl &= ~SVM_NESTED_CTL_INVLPGB_ENABLE;
+
 	if (CC(!nested_svm_check_bitmap_pa(vcpu, control->msrpm_base_pa,
 					   MSRPM_SIZE)))
 		return false;
@@ -673,6 +679,12 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 
 	/* Copied from vmcb01.  msrpm_base can be overwritten later.  */
 	vmcb02->control.nested_ctl = vmcb01->control.nested_ctl;
+	/*
+	 * Keep INVLPGB/TLBSYNC disabled for L2 as a final safety net.
+	 * Passthrough is supported only for L0 guests.
+	 */
+	vmcb02->control.nested_ctl = vmcb01->control.nested_ctl &
+							~SVM_NESTED_CTL_INVLPGB_ENABLE;
 	vmcb02->control.iopm_base_pa = vmcb01->control.iopm_base_pa;
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 
