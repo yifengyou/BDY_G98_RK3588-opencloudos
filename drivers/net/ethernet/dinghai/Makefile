@@ -1,4 +1,4 @@
-subdir-ccflags-y += -I$(src)
+subdir-ccflags-y += -I$(srctree)/$(src)
 subdir-ccflags-y += -I$(srctree)/include/linux/dinghai/
 ccflags-y += -Werror
 
