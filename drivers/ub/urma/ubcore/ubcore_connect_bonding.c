@@ -428,11 +428,13 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 	struct ubcore_session *session;
 	char *buf;
 	uint32_t ue_idx;
+	uint64_t start, duration;
 	int ret, result = -1;
 
 	buf = kmalloc(BONDING_UDATA_BUF_LEN, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
+	start = ktime_get_ns();
 
 	ret = ubcore_get_bonding_ue_idx_from_udata(udata, &ue_idx);
 	if (ret != 0)
@@ -482,6 +484,11 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 		goto release_session;
 	}
 
+	duration = (ktime_get_ns() - start) / UBCORE_NS_TO_MS;
+	if (duration > UBCORE_EXC_THRESHOLD_MS)
+		ubcore_log_info_rl("[EXC_INFO]exchange_seg_info consumes: %llu.\n",
+			duration);
+
 	ubcore_session_ref_release(session);
 	ubcore_put_device(physical_dev);
 	kfree(buf);
@@ -504,12 +511,15 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 	struct msg_jetty_info_req req = { 0 };
 	struct ubcore_session *session;
 	char *buf;
+	uint64_t start, duration;
 	uint32_t ue_idx;
 	int ret, result = -1;
 
 	buf = kmalloc(BONDING_UDATA_BUF_LEN, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
+
+	start = ktime_get_ns();
 
 	ret = ubcore_get_bonding_ue_idx_from_udata(udata, &ue_idx);
 	if (ret != 0)
@@ -557,6 +567,11 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 		ubcore_log_err("Failed to copy to user, ret: %d.\n", ret);
 		goto release_session;
 	}
+
+	duration = (ktime_get_ns() - start) / UBCORE_NS_TO_MS;
+	if (duration > UBCORE_EXC_THRESHOLD_MS)
+		ubcore_log_info_rl("[EXC_INFO]exchange_jetty_info consumes: %llu.\n",
+			duration);
 
 	ubcore_session_ref_release(session);
 	ubcore_put_device(physical_dev);
