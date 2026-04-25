@@ -13,6 +13,9 @@
 #include "zxdh_ptp_regs.h"
 #include "zxdh_ptp_common.h"
 
+__weak int debug_print;
+module_param(debug_print, int, 0644);
+
 #define ZXDH_PF_BAR0 0
 
 char pps[3][15] = { "pp1s_out", "pp1s_1588", "pp1s_external" };

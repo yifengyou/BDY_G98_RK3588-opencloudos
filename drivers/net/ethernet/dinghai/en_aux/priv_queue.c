@@ -85,7 +85,7 @@ static int32_t msgq_add_recvbuf_mergeable(struct receive_queue *rq, gfp_t gfp)
 
 	sg_init_one(rq->sg, buf, len);
 	ctx = (void *)(unsigned long)len;
-	err = virtqueue_add_inbuf_ctx(rq->vq, rq->sg, 1, buf, ctx, gfp);
+	err = zxdh_virtqueue_add_inbuf_ctx(rq->vq, rq->sg, 1, buf, ctx, gfp);
 	if (err < 0) {
 		put_page(virt_to_head_page(buf));
 	}
@@ -107,7 +107,7 @@ static bool msgq_try_fill_recv(struct receive_queue *rq, gfp_t gfp)
 		}
 	} while (rq->vq->num_free);
 
-	if (virtqueue_kick_prepare_packed(rq->vq) && virtqueue_notify(rq->vq)) {
+	if (virtqueue_kick_prepare_packed(rq->vq) && zxdh_virtqueue_notify(rq->vq)) {
 		flags = u64_stats_update_begin_irqsave(&rq->stats.syncp);
 		rq->stats.kicks++;
 		u64_stats_update_end_irqrestore(&rq->stats.syncp, flags);
@@ -119,7 +119,7 @@ static bool msgq_try_fill_recv(struct receive_queue *rq, gfp_t gfp)
 uint32_t msgq_mergeable_min_buf_len(struct virtqueue *vq)
 {
 	const uint32_t hdr_len = PRIV_HEADER_LEN;
-	uint32_t rq_size = virtqueue_get_vring_size(vq);
+	uint32_t rq_size = zxdh_virtqueue_get_vring_size(vq);
 	uint32_t min_buf_len = DIV_ROUND_UP(BUFF_LEN, rq_size);
 
 	return max(max(min_buf_len, hdr_len) - hdr_len,
@@ -330,11 +330,11 @@ static int32_t page_send_cmd(struct send_queue *sq, uint8_t *buf,
 		}
 	}
 
-	err = virtqueue_add_outbuf(sq->vq, sq->sg, total_sg, buf, GFP_ATOMIC);
+	err = zxdh_virtqueue_add_outbuf(sq->vq, sq->sg, total_sg, buf, GFP_ATOMIC);
 	ZXDH_CHECK_RET_GOTO_ERR(err, free_addr,
-				"virtqueue_add_outbuf failed: %d\n", err);
+				"zxdh_virtqueue_add_outbuf failed: %d\n", err);
 
-	if (virtqueue_kick_prepare_packed(sq->vq) && virtqueue_notify(sq->vq)) {
+	if (virtqueue_kick_prepare_packed(sq->vq) && zxdh_virtqueue_notify(sq->vq)) {
 		u64_stats_update_begin(&sq->stats.syncp);
 		sq->stats.kicks++;
 		u64_stats_update_end(&sq->stats.syncp);
@@ -354,7 +354,7 @@ static int32_t zxdh_msgq_pkt_send(struct msgq_dev *msgq_dev,
 	uint32_t len = 0;
 
 	if (spin_trylock(&msgq_dev->tx_lock)) {
-		while ((buf = virtqueue_get_buf(msgq_dev->sq_priv->vq, &len)) !=
+		while ((buf = zxdh_virtqueue_get_buf(msgq_dev->sq_priv->vq, &len)) !=
 		       NULL) {
 			ZXDH_FREE_PTR(buf);
 		};
@@ -550,7 +550,7 @@ static int32_t zxdh_response_msg_handle(struct msgq_dev *msgq_dev,
 	memcpy(*tmp_buff->data, (uint8_t *)buf + PRIV_HEADER_LEN, pkt_len);
 	while (--num_buf != 0) {
 		rx_free_pages(msgq_dev, buf, len);
-		buf = virtqueue_get_buf(msgq_dev->rq_priv->vq, &len);
+		buf = zxdh_virtqueue_get_buf(msgq_dev->rq_priv->vq, &len);
 		if (unlikely(buf == NULL)) {
 			LOG_ERR("msgq rx error: %dth buffers missing\n",
 				num_buf);
@@ -707,7 +707,7 @@ static int32_t zxdh_msgq_receive(struct receive_queue *rq, int32_t budget)
 	}
 
 	if (rq->vq->num_free >
-	    min((uint32_t)budget, virtqueue_get_vring_size(rq->vq)) / 2) {
+	    min((uint32_t)budget, zxdh_virtqueue_get_vring_size(rq->vq)) / 2) {
 		if (!msgq_try_fill_recv(rq, GFP_ATOMIC)) {
 			LOG_ERR("msgq_try_fill_recv failed\n");
 		}
@@ -732,7 +732,7 @@ static void free_old_xmit_bufs(struct send_queue *sq)
     uint32_t bytes = 0;
     void *buf = NULL;
 
-    while ((buf = virtqueue_get_buf(sq->vq, &len)) != NULL)
+    while ((buf = zxdh_virtqueue_get_buf(sq->vq, &len)) != NULL)
     {
 	bytes += len;
 	packets++;
@@ -761,7 +761,7 @@ static void msgq_poll_cleantx(struct receive_queue *rq)
 	}
 
 	if (spin_trylock(&msgq_dev->tx_lock)) {
-		virtqueue_disable_cb(sq->vq);
+		zxdh_virtqueue_disable_cb(sq->vq);
 		//free_old_xmit_bufs(sq);
 		spin_unlock(&msgq_dev->tx_lock);
 	}

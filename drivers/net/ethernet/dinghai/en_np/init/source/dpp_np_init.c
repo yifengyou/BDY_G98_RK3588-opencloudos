@@ -16,6 +16,11 @@
 #include "dpp_tbl_pkt_cap.h"
 #include "dpp_drv_sdt.h"
 #include "dpp_tbl_api.h"
+#include <linux/module.h>
+
+__weak int debug_print;
+module_param(debug_print, int, 0644);
+
 extern DPP_DEV_MGR_T *dpp_dev_mgr_get(ZXIC_VOID);
 
 ZXIC_UINT32 dpp_vport_register(DPP_PF_INFO_T *pf_info, struct pci_dev *p_dev)

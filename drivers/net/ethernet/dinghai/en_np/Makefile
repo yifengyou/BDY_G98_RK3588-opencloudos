@@ -20,5 +20,4 @@ obj_files := $(src_files:.c=.o)
 
 obj-$(CONFIG_DINGHAI_NP)  += dinghai10e_np.o
 dinghai10e_np-y := $(obj_files)
-dinghai10e_np-y += log.o
 # dinghai10e_np-$(CONFIG_DINGHAI_DH_CMD) += dh_cmd.o  cmd/msg_chan_netlink.o cmd/msg_chan_lock.o

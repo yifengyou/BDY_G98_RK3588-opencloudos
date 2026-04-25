@@ -870,14 +870,14 @@ void vring_free_queue(struct zxdh_en_device *en_dev, size_t size, void *queue,
 netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *netdev);
 bool try_fill_recv(struct receive_queue *rq, gfp_t gfp);
 inline struct zxdh_net_hdr_rx *skb_vnet_hdr(struct sk_buff *skb);
-int32_t virtqueue_add_outbuf(struct virtqueue *vq, struct scatterlist *sg,
+int32_t zxdh_virtqueue_add_outbuf(struct virtqueue *vq, struct scatterlist *sg,
 			     uint32_t num, void *data, gfp_t gfp);
-void virtqueue_disable_cb(struct virtqueue *_vq);
+void zxdh_virtqueue_disable_cb(struct virtqueue *_vq);
 void free_old_xmit_skbs(struct net_device *netdev, struct send_queue *sq,
 			bool in_napi);
-bool virtqueue_enable_cb_delayed(struct virtqueue *_vq);
+bool zxdh_virtqueue_enable_cb_delayed(struct virtqueue *_vq);
 bool virtqueue_kick_prepare_packed(struct virtqueue *_vq);
-bool virtqueue_notify(struct virtqueue *_vq);
+bool zxdh_virtqueue_notify(struct virtqueue *_vq);
 void zxdh_pf_features_init(struct net_device *netdev);
 bool zxdh_has_feature(struct zxdh_en_device *en_dev, uint32_t fbit);
 bool zxdh_has_status(struct net_device *netdev, uint32_t sbit);
@@ -890,13 +890,13 @@ int32_t zxdh_vqs_init(struct net_device *netdev);
 int32_t dh_eq_vqs_vring_int(struct notifier_block *nb, unsigned long action,
 			    void *data);
 int32_t vq2rxq(struct virtqueue *vq);
-void *virtqueue_get_buf(struct virtqueue *_vq, uint32_t *len);
+void *zxdh_virtqueue_get_buf(struct virtqueue *_vq, uint32_t *len);
 void *virtqueue_get_buf_ctx_packed(struct virtqueue *_vq, uint32_t *len,
 				   void **ctx);
-uint32_t virtqueue_get_vring_size(struct virtqueue *_vq);
+uint32_t zxdh_virtqueue_get_vring_size(struct virtqueue *_vq);
 void virtqueue_napi_complete(struct napi_struct *napi, struct virtqueue *vq,
 			     int32_t processed);
-int32_t virtqueue_add_inbuf_ctx(struct virtqueue *vq, struct scatterlist *sg,
+int32_t zxdh_virtqueue_add_inbuf_ctx(struct virtqueue *vq, struct scatterlist *sg,
 				uint32_t num, void *data, void *ctx, gfp_t gfp);
 bool dh_skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag,
 			     gfp_t gfp);

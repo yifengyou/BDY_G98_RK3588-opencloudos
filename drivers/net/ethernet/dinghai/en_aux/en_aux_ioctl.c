@@ -300,8 +300,8 @@ int32_t zxdh_tx_file_pkts(struct zxdh_en_priv *en_priv, struct zxdh_en_reg *reg)
 	uint32_t pktLen = reg->num;
 	uint32_t buffLen = 4096;
 
-	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
-		LOG_ERR("virtqueue_get_buf() != NULL, ptr=0x%llx, len=0x%x\n",
+	while ((ptr = zxdh_virtqueue_get_buf(sq->vq, &len)) != NULL) {
+		LOG_ERR("zxdh_virtqueue_get_buf() != NULL, ptr=0x%llx, len=0x%x\n",
 			(uint64_t)ptr, len);
 	};
 
@@ -342,13 +342,13 @@ int32_t zxdh_tx_file_pkts(struct zxdh_en_priv *en_priv, struct zxdh_en_reg *reg)
 		}
 	}
 
-	if (unlikely(virtqueue_add_outbuf(sq->vq, sg, total_sg, data_pkt,
+	if (unlikely(zxdh_virtqueue_add_outbuf(sq->vq, sg, total_sg, data_pkt,
 					  GFP_ATOMIC) != 0)) {
-		LOG_ERR("virtqueue_add_outbuf failure!\n");
+		LOG_ERR("zxdh_virtqueue_add_outbuf failure!\n");
 		goto err1;
 	}
 
-	if (virtqueue_kick_prepare_packed(sq->vq) && virtqueue_notify(sq->vq)) {
+	if (virtqueue_kick_prepare_packed(sq->vq) && zxdh_virtqueue_notify(sq->vq)) {
 		u64_stats_update_begin(&sq->stats.syncp);
 		sq->stats.kicks++;
 		u64_stats_update_end(&sq->stats.syncp);
