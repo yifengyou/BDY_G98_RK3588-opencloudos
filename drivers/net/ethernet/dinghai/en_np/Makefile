@@ -11,7 +11,7 @@ subdirs += en_np/fc/
 subdirs += en_np/flow/
 
 #dinghai_root := $(CWD)/drivers/net/ethernet/dinghai
-dinghai_root := $(src)
+dinghai_root := $(srctree)/$(src)
 include $(dinghai_root)/en_np/Makefile.include
 
 src_files :=
