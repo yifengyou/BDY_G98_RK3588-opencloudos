@@ -6,6 +6,12 @@
 #define TRACING_MAP_BITS_MAX		17
 #define TRACING_MAP_BITS_MIN		7
 
+enum tracing_map_overflow_policy {
+	TRACING_MAP_OVERFLOW_DROP = 0,
+	TRACING_MAP_OVERFLOW_RING = 1,
+	TRACING_MAP_OVERFLOW_REPLACE = 2,
+};
+
 #define TRACING_MAP_KEYS_MAX		3
 #define TRACING_MAP_VALS_MAX		3
 #define TRACING_MAP_FIELDS_MAX		(TRACING_MAP_KEYS_MAX + \
@@ -133,6 +139,8 @@ struct tracing_map_field {
 		atomic64_t			sum;
 		unsigned int			offset;
 	};
+	atomic64_t			min;
+	atomic64_t			max;
 };
 
 struct tracing_map_elt {
@@ -142,6 +150,7 @@ struct tracing_map_elt {
 	bool				*var_set;
 	void				*key;
 	void				*private_data;
+	unsigned int			hash_idx;
 };
 
 struct tracing_map_entry {
@@ -198,6 +207,10 @@ struct tracing_map {
 	unsigned int			n_vars;
 	atomic64_t			hits;
 	atomic64_t			drops;
+	atomic64_t			replaces;
+	enum tracing_map_overflow_policy overflow_policy;
+	atomic_t			recycle_idx;
+	u64				ring_key_divisor;
 };
 
 /**
@@ -252,6 +265,8 @@ extern int tracing_map_add_key_field(struct tracing_map *map,
 
 extern void tracing_map_destroy(struct tracing_map *map);
 extern void tracing_map_clear(struct tracing_map *map);
+extern void tracing_map_set_overflow_policy(struct tracing_map *map,
+					    enum tracing_map_overflow_policy p);
 
 extern struct tracing_map_elt *
 tracing_map_insert(struct tracing_map *map, void *key);
@@ -265,10 +280,16 @@ extern int tracing_map_cmp_none(void *val_a, void *val_b);
 
 extern void tracing_map_update_sum(struct tracing_map_elt *elt,
 				   unsigned int i, u64 n);
+extern void tracing_map_update_min(struct tracing_map_elt *elt,
+				   unsigned int i, u64 n);
+extern void tracing_map_update_max(struct tracing_map_elt *elt,
+				   unsigned int i, u64 n);
 extern void tracing_map_set_var(struct tracing_map_elt *elt,
 				unsigned int i, u64 n);
 extern bool tracing_map_var_set(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_sum(struct tracing_map_elt *elt, unsigned int i);
+extern u64 tracing_map_read_min(struct tracing_map_elt *elt, unsigned int i);
+extern u64 tracing_map_read_max(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_var(struct tracing_map_elt *elt, unsigned int i);
 extern u64 tracing_map_read_var_once(struct tracing_map_elt *elt, unsigned int i);
 

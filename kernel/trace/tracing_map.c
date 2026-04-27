@@ -15,7 +15,9 @@
 #include <linux/jhash.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/string.h>
 #include <linux/kmemleak.h>
+#include <linux/math64.h>
 
 #include "tracing_map.h"
 #include "trace.h"
@@ -42,6 +44,40 @@ void tracing_map_update_sum(struct tracing_map_elt *elt, unsigned int i, u64 n)
 }
 
 /**
+ * tracing_map_update_min - Atomically update a field's minimum value
+ * @elt: The tracing_map_elt
+ * @i: The index of the given field
+ * @n: The new value to compare against the current minimum
+ */
+void tracing_map_update_min(struct tracing_map_elt *elt, unsigned int i, u64 n)
+{
+	u64 old;
+
+	do {
+		old = (u64)atomic64_read(&elt->fields[i].min);
+		if (n >= old)
+			return;
+	} while (atomic64_cmpxchg(&elt->fields[i].min, old, n) != (s64)old);
+}
+
+/**
+ * tracing_map_update_max - Atomically update a field's maximum value
+ * @elt: The tracing_map_elt
+ * @i: The index of the given field
+ * @n: The new value to compare against the current maximum
+ */
+void tracing_map_update_max(struct tracing_map_elt *elt, unsigned int i, u64 n)
+{
+	u64 old;
+
+	do {
+		old = (u64)atomic64_read(&elt->fields[i].max);
+		if (n <= old)
+			return;
+	} while (atomic64_cmpxchg(&elt->fields[i].max, old, n) != (s64)old);
+}
+
+/**
  * tracing_map_read_sum - Return the value of a tracing_map_elt's sum field
  * @elt: The tracing_map_elt
  * @i: The index of the given sum associated with the tracing_map_elt
@@ -56,6 +92,16 @@ void tracing_map_update_sum(struct tracing_map_elt *elt, unsigned int i, u64 n)
 u64 tracing_map_read_sum(struct tracing_map_elt *elt, unsigned int i)
 {
 	return (u64)atomic64_read(&elt->fields[i].sum);
+}
+
+u64 tracing_map_read_min(struct tracing_map_elt *elt, unsigned int i)
+{
+	return (u64)atomic64_read(&elt->fields[i].min);
+}
+
+u64 tracing_map_read_max(struct tracing_map_elt *elt, unsigned int i)
+{
+	return (u64)atomic64_read(&elt->fields[i].max);
 }
 
 /**
@@ -359,9 +405,13 @@ static void tracing_map_elt_clear(struct tracing_map_elt *elt)
 {
 	unsigned i;
 
-	for (i = 0; i < elt->map->n_fields; i++)
-		if (elt->fields[i].cmp_fn == tracing_map_cmp_atomic64)
+	for (i = 0; i < elt->map->n_fields; i++) {
+		if (elt->fields[i].cmp_fn == tracing_map_cmp_atomic64) {
 			atomic64_set(&elt->fields[i].sum, 0);
+			atomic64_set(&elt->fields[i].min, (s64)U64_MAX);
+			atomic64_set(&elt->fields[i].max, 0);
+		}
+	}
 
 	for (i = 0; i < elt->map->n_vars; i++) {
 		atomic64_set(&elt->vars[i], 0);
@@ -410,6 +460,7 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 		return ERR_PTR(-ENOMEM);
 
 	elt->map = map;
+	elt->hash_idx = UINT_MAX;
 
 	elt->key = kzalloc(map->key_size, GFP_KERNEL);
 	if (!elt->key) {
@@ -449,6 +500,53 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 	return ERR_PTR(err);
 }
 
+/*
+ * O(1) invalidation of an elt's hash entry via its back-pointer.
+ * Each elt records which hash slot it occupies (hash_idx), allowing
+ * direct access instead of scanning the entire table.
+ */
+static void invalidate_elt_hash_entry(struct tracing_map *map,
+				      struct tracing_map_elt *elt)
+{
+	unsigned int idx;
+	struct tracing_map_entry *entry;
+
+	idx = READ_ONCE(elt->hash_idx);
+	if (idx >= map->map_size)
+		return;
+
+	entry = TRACING_MAP_ENTRY(map->map, idx);
+
+	if (READ_ONCE(entry->val) != elt)
+		return;
+
+	WRITE_ONCE(entry->val, NULL);
+	smp_wmb();
+	WRITE_ONCE(entry->key, 0);
+}
+
+static struct tracing_map_elt *get_recycled_elt(struct tracing_map *map)
+{
+	struct tracing_map_elt *elt;
+	unsigned int idx;
+
+	idx = (unsigned int)atomic_fetch_add(1, &map->recycle_idx) &
+		(map->max_elts - 1);
+	elt = *(TRACING_MAP_ELT(map->elts, idx));
+	if (!elt)
+		return NULL;
+
+	invalidate_elt_hash_entry(map, elt);
+	tracing_map_elt_clear(elt);
+
+	if (map->ops && map->ops->elt_init)
+		map->ops->elt_init(elt);
+
+	atomic64_inc(&map->replaces);
+
+	return elt;
+}
+
 static struct tracing_map_elt *get_free_elt(struct tracing_map *map)
 {
 	struct tracing_map_elt *elt = NULL;
@@ -459,9 +557,13 @@ static struct tracing_map_elt *get_free_elt(struct tracing_map *map)
 		elt = *(TRACING_MAP_ELT(map->elts, idx));
 		if (map->ops && map->ops->elt_init)
 			map->ops->elt_init(elt);
+		return elt;
 	}
 
-	return elt;
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_REPLACE)
+		return get_recycled_elt(map);
+
+	return NULL;
 }
 
 static void tracing_map_free_elts(struct tracing_map *map)
@@ -574,6 +676,7 @@ __tracing_map_insert(struct tracing_map *map, void *key, bool lookup_only)
 				}
 
 				memcpy(elt->key, key, map->key_size);
+				elt->hash_idx = idx;
 				/*
 				 * Ensure the initialization is visible and
 				 * publish the elt.
@@ -636,8 +739,58 @@ __tracing_map_insert(struct tracing_map *map, void *key, bool lookup_only)
  * found and the pool of tracing_map_elts has been exhausted, NULL is
  * returned and no further insertions will succeed.
  */
+
+/*
+ * Ring buffer insert: O(1) direct-indexed circular array.
+ * Slot = key_as_u64 % max_elts. Same key aggregates; different key replaces.
+ * No hash table involved — purely positional by key value.
+ */
+static struct tracing_map_elt *
+__tracing_map_ring_insert(struct tracing_map *map, void *key)
+{
+	u64 key_val = 0;
+	unsigned int idx;
+	struct tracing_map_elt *elt;
+	bool is_empty;
+
+	if (map->key_size <= sizeof(u64)) {
+		memcpy(&key_val, key, map->key_size);
+		if (map->ring_key_divisor)
+			key_val = div64_u64(key_val, map->ring_key_divisor);
+	} else {
+		key_val = jhash(key, map->key_size, 0);
+	}
+
+	idx = (unsigned int)(key_val % map->max_elts);
+	elt = *(TRACING_MAP_ELT(map->elts, idx));
+	if (!elt)
+		return NULL;
+
+	if (keys_match(key, elt->key, map->key_size)) {
+		atomic64_inc(&map->hits);
+		return elt;
+	}
+
+	is_empty = !memchr_inv(elt->key, 0, map->key_size);
+
+	tracing_map_elt_clear(elt);
+	if (map->ops && map->ops->elt_init)
+		map->ops->elt_init(elt);
+
+	memcpy(elt->key, key, map->key_size);
+	smp_wmb();
+
+	atomic64_inc(&map->hits);
+	if (!is_empty)
+		atomic64_inc(&map->replaces);
+
+	return elt;
+}
+
 struct tracing_map_elt *tracing_map_insert(struct tracing_map *map, void *key)
 {
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_RING)
+		return __tracing_map_ring_insert(map, key);
 	return __tracing_map_insert(map, key, false);
 }
 
@@ -702,11 +855,19 @@ void tracing_map_clear(struct tracing_map *map)
 	atomic_set(&map->next_elt, 0);
 	atomic64_set(&map->hits, 0);
 	atomic64_set(&map->drops, 0);
+	atomic64_set(&map->replaces, 0);
+	atomic_set(&map->recycle_idx, 0);
 
 	tracing_map_array_clear(map->map);
 
 	for (i = 0; i < map->max_elts; i++)
 		tracing_map_elt_clear(*(TRACING_MAP_ELT(map->elts, i)));
+}
+
+void tracing_map_set_overflow_policy(struct tracing_map *map,
+				     enum tracing_map_overflow_policy policy)
+{
+	map->overflow_policy = policy;
 }
 
 static void set_sort_key(struct tracing_map *map,
@@ -784,6 +945,9 @@ struct tracing_map *tracing_map_create(unsigned int map_bits,
 	map->map_bits = map_bits;
 	map->max_elts = (1 << map_bits);
 	atomic_set(&map->next_elt, 0);
+	atomic64_set(&map->replaces, 0);
+	atomic_set(&map->recycle_idx, 0);
+	map->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
 
 	map->map_size = (1 << (map_bits + 1));
 	map->ops = ops;
@@ -1080,19 +1244,35 @@ int tracing_map_sort_entries(struct tracing_map *map,
 	if (!entries)
 		return -ENOMEM;
 
-	for (i = 0, n_entries = 0; i < map->map_size; i++) {
-		struct tracing_map_entry *entry;
+	if (map->overflow_policy == TRACING_MAP_OVERFLOW_RING) {
+		for (i = 0, n_entries = 0; i < map->max_elts; i++) {
+			struct tracing_map_elt *elt;
 
-		entry = TRACING_MAP_ENTRY(map->map, i);
+			elt = *(TRACING_MAP_ELT(map->elts, i));
+			if (!elt || !memchr_inv(elt->key, 0, map->key_size))
+				continue;
 
-		if (!entry->key || !entry->val)
-			continue;
+			entries[n_entries] = create_sort_entry(elt->key, elt);
+			if (!entries[n_entries++]) {
+				ret = -ENOMEM;
+				goto free;
+			}
+		}
+	} else {
+		for (i = 0, n_entries = 0; i < map->map_size; i++) {
+			struct tracing_map_entry *entry;
 
-		entries[n_entries] = create_sort_entry(entry->val->key,
-						       entry->val);
-		if (!entries[n_entries++]) {
-			ret = -ENOMEM;
-			goto free;
+			entry = TRACING_MAP_ENTRY(map->map, i);
+
+			if (!entry->key || !entry->val)
+				continue;
+
+			entries[n_entries] = create_sort_entry(entry->val->key,
+							       entry->val);
+			if (!entries[n_entries++]) {
+				ret = -ENOMEM;
+				goto free;
+			}
 		}
 	}
 

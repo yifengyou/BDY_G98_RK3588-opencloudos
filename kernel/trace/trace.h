@@ -1589,6 +1589,7 @@ static inline struct trace_event_file *event_file_file(struct file *filp)
 
 extern const struct file_operations event_trigger_fops;
 extern const struct file_operations event_hist_fops;
+extern const struct file_operations event_hist_pipe_fops;
 extern const struct file_operations event_hist_debug_fops;
 extern const struct file_operations event_inject_fops;
 

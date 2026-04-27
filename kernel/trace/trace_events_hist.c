@@ -13,6 +13,8 @@
 #include <linux/stacktrace.h>
 #include <linux/rculist.h>
 #include <linux/tracefs.h>
+#include <linux/timekeeping.h>
+#include <linux/time.h>
 
 /* for gfp flag names */
 #include <linux/trace_events.h>
@@ -514,6 +516,14 @@ struct var_defs {
 	char		*expr[TRACING_MAP_VARS_MAX];
 };
 
+enum hist_time_unit {
+	HIST_TIME_UNIT_NONE = 0,
+	HIST_TIME_UNIT_NS,
+	HIST_TIME_UNIT_US,
+	HIST_TIME_UNIT_MS,
+	HIST_TIME_UNIT_S,
+};
+
 struct hist_trigger_attrs {
 	char		*keys_str;
 	char		*vals_str;
@@ -525,7 +535,11 @@ struct hist_trigger_attrs {
 	bool		clear;
 	bool		ts_in_usecs;
 	bool		no_hitcount;
+	bool		wallclock;
 	unsigned int	map_bits;
+	enum tracing_map_overflow_policy overflow_policy;
+	enum hist_time_unit key_unit;
+	enum hist_time_unit val_unit;
 
 	char		*assignment_str[TRACING_MAP_VARS_MAX];
 	unsigned int	n_assignments;
@@ -1463,6 +1477,30 @@ static int parse_action(char *str, struct hist_trigger_attrs *attrs)
 	return ret;
 }
 
+static const char *hist_time_unit_str(enum hist_time_unit u)
+{
+	switch (u) {
+	case HIST_TIME_UNIT_NS:		return "ns";
+	case HIST_TIME_UNIT_US:		return "us";
+	case HIST_TIME_UNIT_MS:		return "ms";
+	case HIST_TIME_UNIT_S:		return "s";
+	default:			return "";
+	}
+}
+
+static enum hist_time_unit parse_time_unit(const char *str)
+{
+	if (strcmp(str, "ns") == 0)
+		return HIST_TIME_UNIT_NS;
+	if (strcmp(str, "us") == 0)
+		return HIST_TIME_UNIT_US;
+	if (strcmp(str, "ms") == 0)
+		return HIST_TIME_UNIT_MS;
+	if (strcmp(str, "s") == 0)
+		return HIST_TIME_UNIT_S;
+	return HIST_TIME_UNIT_NONE;
+}
+
 static int parse_assignment(struct trace_array *tr,
 			    char *str, struct hist_trigger_attrs *attrs)
 {
@@ -1512,6 +1550,31 @@ static int parse_assignment(struct trace_array *tr,
 			goto out;
 		}
 		attrs->map_bits = map_bits;
+	} else if ((len = str_has_prefix(str, "overflow="))) {
+		char *policy_str = str + len;
+
+		if (strcmp(policy_str, "ring") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_RING;
+		else if (strcmp(policy_str, "replace") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_REPLACE;
+		else if (strcmp(policy_str, "drop") == 0)
+			attrs->overflow_policy = TRACING_MAP_OVERFLOW_DROP;
+		else {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else if ((len = str_has_prefix(str, "key_unit="))) {
+		attrs->key_unit = parse_time_unit(str + len);
+		if (attrs->key_unit == HIST_TIME_UNIT_NONE) {
+			ret = -EINVAL;
+			goto out;
+		}
+	} else if ((len = str_has_prefix(str, "val_unit="))) {
+		attrs->val_unit = parse_time_unit(str + len);
+		if (attrs->val_unit == HIST_TIME_UNIT_NONE) {
+			ret = -EINVAL;
+			goto out;
+		}
 	} else {
 		char *assignment;
 
@@ -1567,6 +1630,8 @@ parse_hist_trigger_attrs(struct trace_array *tr, char *trigger_str)
 			attrs->cont = true;
 		else if (strcmp(str, "clear") == 0)
 			attrs->clear = true;
+		else if (strcmp(str, "wallclock") == 0)
+			attrs->wallclock = true;
 		else {
 			ret = parse_action(str, attrs);
 			if (ret)
@@ -2310,53 +2375,54 @@ parse_field(struct hist_trigger_data *hist_data, struct trace_event_file *file,
 		return ERR_PTR(-ENOMEM);
 
 	field_name = strsep(&modifier, ".");
-	if (modifier) {
-		if (strcmp(modifier, "hex") == 0)
+	while (modifier) {
+		char *cur_mod = strsep(&modifier, ".");
+
+		if (strcmp(cur_mod, "hex") == 0)
 			*flags |= HIST_FIELD_FL_HEX;
-		else if (strcmp(modifier, "sym") == 0)
+		else if (strcmp(cur_mod, "sym") == 0)
 			*flags |= HIST_FIELD_FL_SYM;
 		/*
 		 * 'sym-offset' occurrences in the trigger string are modified
 		 * to 'symXoffset' to simplify arithmetic expression parsing.
 		 */
-		else if (strcmp(modifier, "symXoffset") == 0)
+		else if (strcmp(cur_mod, "symXoffset") == 0)
 			*flags |= HIST_FIELD_FL_SYM_OFFSET;
-		else if ((strcmp(modifier, "execname") == 0) &&
+		else if ((strcmp(cur_mod, "execname") == 0) &&
 			 (strcmp(field_name, "common_pid") == 0))
 			*flags |= HIST_FIELD_FL_EXECNAME;
-		else if (strcmp(modifier, "syscall") == 0)
+		else if (strcmp(cur_mod, "syscall") == 0)
 			*flags |= HIST_FIELD_FL_SYSCALL;
-		else if (strcmp(modifier, "stacktrace") == 0)
+		else if (strcmp(cur_mod, "stacktrace") == 0)
 			*flags |= HIST_FIELD_FL_STACKTRACE;
-		else if (strcmp(modifier, "log2") == 0)
+		else if (strcmp(cur_mod, "log2") == 0)
 			*flags |= HIST_FIELD_FL_LOG2;
-		else if (strcmp(modifier, "usecs") == 0)
+		else if (strcmp(cur_mod, "usecs") == 0)
 			*flags |= HIST_FIELD_FL_TIMESTAMP_USECS;
-		else if (strncmp(modifier, "bucket", 6) == 0) {
+		else if (strncmp(cur_mod, "bucket", 6) == 0) {
 			int ret;
+			char *bstr = cur_mod + 6;
 
-			modifier += 6;
-
-			if (*modifier == 's')
-				modifier++;
-			if (*modifier != '=')
+			if (*bstr == 's')
+				bstr++;
+			if (*bstr != '=')
 				goto error;
-			modifier++;
-			ret = kstrtoul(modifier, 0, buckets);
+			bstr++;
+			ret = kstrtoul(bstr, 0, buckets);
 			if (ret || !(*buckets))
 				goto error;
 			*flags |= HIST_FIELD_FL_BUCKET;
-		} else if (strncmp(modifier, "percent", 7) == 0) {
+		} else if (strncmp(cur_mod, "percent", 7) == 0) {
 			if (*flags & (HIST_FIELD_FL_VAR | HIST_FIELD_FL_KEY))
 				goto error;
 			*flags |= HIST_FIELD_FL_PERCENT;
-		} else if (strncmp(modifier, "graph", 5) == 0) {
+		} else if (strncmp(cur_mod, "graph", 5) == 0) {
 			if (*flags & (HIST_FIELD_FL_VAR | HIST_FIELD_FL_KEY))
 				goto error;
 			*flags |= HIST_FIELD_FL_GRAPH;
 		} else {
  error:
-			hist_err(tr, HIST_ERR_BAD_FIELD_MODIFIER, errpos(modifier));
+			hist_err(tr, HIST_ERR_BAD_FIELD_MODIFIER, errpos(cur_mod));
 			field = ERR_PTR(-EINVAL);
 			goto out;
 		}
@@ -2501,6 +2567,18 @@ static struct hist_field *parse_atom(struct hist_trigger_data *hist_data,
 		}
 	} else
 		str = s;
+
+	/*
+	 * Restore str if the system.event.var_ref interpretation failed.
+	 * strsep() above replaced '.' with '\0'; put them back so that
+	 * parse_field() sees the full chained-modifier string, e.g.
+	 * "common_timestamp.usecs.bucket=1000000".
+	 */
+	if (!s && ref_system) {
+		*(ref_event - 1) = '.';
+		*(ref_var - 1) = '.';
+		str = ref_system;
+	}
 
 	field = parse_field(hist_data, file, str, flags, &buckets);
 	if (IS_ERR(field)) {
@@ -4710,8 +4788,25 @@ static int create_sort_keys(struct hist_trigger_data *hist_data)
 
 	hist_data->n_sort_keys = 1; /* we always have at least one, hitcount */
 
-	if (!fields_str)
+	if (!fields_str) {
+		if (hist_data->attrs->overflow_policy != TRACING_MAP_OVERFLOW_DROP) {
+			unsigned int j2, k2;
+
+			for (j2 = 1, k2 = 1; j2 < hist_data->n_fields; j2++) {
+				if (hist_data->fields[j2]->flags &
+				    HIST_FIELD_FL_VAR)
+					continue;
+				if (hist_data->fields[j2]->flags &
+				    HIST_FIELD_FL_KEY) {
+					hist_data->sort_keys[0].field_idx = k2;
+					hist_data->sort_keys[0].descending = false;
+					break;
+				}
+				k2++;
+			}
+		}
 		goto out;
+	}
 
 	for (i = 0; i < TRACING_MAP_SORT_KEYS_MAX; i++) {
 		struct hist_field *hist_field;
@@ -5136,6 +5231,24 @@ create_hist_data(unsigned int map_bits,
 		goto free;
 	}
 
+	tracing_map_set_overflow_policy(hist_data->map,
+					hist_data->attrs->overflow_policy);
+
+	if (attrs->overflow_policy == TRACING_MAP_OVERFLOW_RING) {
+		unsigned int i;
+
+		for_each_hist_key_field(i, hist_data) {
+			struct hist_field *key_field = hist_data->fields[i];
+
+			if (key_field->flags & HIST_FIELD_FL_BUCKET &&
+			    key_field->buckets) {
+				hist_data->map->ring_key_divisor =
+					key_field->buckets;
+				break;
+			}
+		}
+	}
+
 	ret = create_tracing_map_fields(hist_data);
 	if (ret)
 		goto free;
@@ -5205,6 +5318,11 @@ static void hist_trigger_elt_update(struct hist_trigger_data *hist_data,
 			continue;
 		}
 		tracing_map_update_sum(elt, i, hist_val);
+		if (hist_data->map->overflow_policy != TRACING_MAP_OVERFLOW_DROP ||
+		    hist_data->attrs->val_unit != HIST_TIME_UNIT_NONE) {
+			tracing_map_update_min(elt, i, hist_val);
+			tracing_map_update_max(elt, i, hist_val);
+		}
 	}
 
 	for_each_hist_key_field(i, hist_data) {
@@ -5501,8 +5619,35 @@ static void hist_trigger_print_key(struct seq_file *m,
 		} else if (key_field->flags & HIST_FIELD_FL_BUCKET) {
 			unsigned long buckets = key_field->buckets;
 			uval = *(u64 *)(key + key_field->offset);
-			seq_printf(m, "%s: ~ %llu-%llu", field_name,
-				   uval, uval + buckets -1);
+
+			if (hist_data->attrs->key_unit != HIST_TIME_UNIT_NONE) {
+				u64 display_val = div_u64(uval, buckets);
+				const char *unit = hist_time_unit_str(
+							hist_data->attrs->key_unit);
+
+				if (hist_data->attrs->wallclock) {
+					s64 mono_to_wall = ktime_get_real_seconds()
+							 - ktime_get_seconds();
+					time64_t wt = (time64_t)display_val
+						    + mono_to_wall;
+					struct tm tm;
+
+					time64_to_tm(wt, 0, &tm);
+					seq_printf(m, "%s: %llu %s (%04ld-%02d-%02d %02d:%02d:%02d UTC)",
+						   field_name, display_val,
+						   unit, tm.tm_year + 1900,
+						   tm.tm_mon + 1, tm.tm_mday,
+						   tm.tm_hour, tm.tm_min,
+						   tm.tm_sec);
+				} else {
+					seq_printf(m, "%s: %llu %s",
+						   field_name, display_val,
+						   unit);
+				}
+			} else {
+				seq_printf(m, "%s: ~ %llu-%llu", field_name,
+					   uval, uval + buckets - 1);
+			}
 		} else if (key_field->flags & HIST_FIELD_FL_STRING) {
 			seq_printf(m, "%s: %-50s", field_name,
 				   (char *)(key + key_field->offset));
@@ -5597,6 +5742,9 @@ static void hist_trigger_entry_print(struct seq_file *m,
 {
 	const char *field_name;
 	unsigned int i = HITCOUNT_IDX;
+	enum hist_time_unit val_unit = hist_data->attrs->val_unit;
+	bool show_minmaxavg = hist_data->map->overflow_policy !=
+				TRACING_MAP_OVERFLOW_DROP;
 	unsigned long flags;
 
 	hist_trigger_print_key(m, hist_data, key, elt);
@@ -5611,8 +5759,28 @@ static void hist_trigger_entry_print(struct seq_file *m,
 		if (flags & HIST_FIELD_FL_VAR || flags & HIST_FIELD_FL_EXPR)
 			continue;
 
-		seq_puts(m, " ");
-		hist_trigger_print_val(m, i, field_name, flags, stats, elt);
+		if (show_minmaxavg) {
+			u64 sum = tracing_map_read_sum(elt, i);
+			u64 min_val = tracing_map_read_min(elt, i);
+			u64 max_val = tracing_map_read_max(elt, i);
+			u64 hitcount = tracing_map_read_sum(elt, HITCOUNT_IDX);
+			u64 avg = hitcount ? div_u64(sum, hitcount) : 0;
+			const char *unit = hist_time_unit_str(val_unit);
+
+			if (min_val == U64_MAX)
+				min_val = 0;
+			if (val_unit != HIST_TIME_UNIT_NONE)
+				seq_printf(m, " %s: avg:%10llu %s  min:%10llu %s  max:%10llu %s",
+					   field_name, avg, unit,
+					   min_val, unit, max_val, unit);
+			else
+				seq_printf(m, " %s: avg:%10llu  min:%10llu  max:%10llu",
+					   field_name, avg, min_val, max_val);
+		} else {
+			seq_puts(m, " ");
+			hist_trigger_print_val(m, i, field_name, flags,
+					       stats, elt);
+		}
 	}
 
 	print_actions(m, hist_data, elt);
@@ -5691,12 +5859,20 @@ static void hist_trigger_show(struct seq_file *m,
 	seq_printf(m, "\nTotals:\n    Hits: %llu\n    Entries: %u\n    Dropped: %llu\n",
 		   (u64)atomic64_read(&hist_data->map->hits),
 		   n_entries, (u64)atomic64_read(&hist_data->map->drops));
+	if (hist_data->map->overflow_policy == TRACING_MAP_OVERFLOW_RING)
+		seq_printf(m, "    Replaced: %llu\n    Overflow policy: ring (size=%u)\n",
+			   (u64)atomic64_read(&hist_data->map->replaces),
+			   hist_data->map->max_elts);
+	else if (hist_data->map->overflow_policy == TRACING_MAP_OVERFLOW_REPLACE)
+		seq_printf(m, "    Replaced: %llu\n    Overflow policy: replace\n",
+			   (u64)atomic64_read(&hist_data->map->replaces));
 }
 
 struct hist_file_data {
 	struct file *file;
 	u64 last_read;
 	u64 last_act;
+	bool pipe;
 };
 
 static u64 get_hist_hit_count(struct trace_event_file *event_file)
@@ -5731,6 +5907,18 @@ static int hist_show(struct seq_file *m, void *v)
 		if (data->cmd_ops->trigger_type == ETT_EVENT_HIST)
 			hist_trigger_show(m, data, n++);
 	}
+
+	if (hist_file->pipe) {
+		tracepoint_synchronize_unregister();
+		list_for_each_entry(data, &event_file->triggers, list) {
+			if (data->cmd_ops->trigger_type == ETT_EVENT_HIST) {
+				struct hist_trigger_data *hist_data =
+					data->private_data;
+				tracing_map_clear(hist_data->map);
+			}
+		}
+	}
+
 	hist_file->last_read = get_hist_hit_count(event_file);
 	/*
 	 * Update last_act too so that poll()/POLLPRI can wait for the next
@@ -5820,6 +6008,55 @@ err:
 
 const struct file_operations event_hist_fops = {
 	.open = event_hist_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = event_hist_release,
+	.poll = event_hist_poll,
+};
+
+static int event_hist_pipe_open(struct inode *inode, struct file *file)
+{
+	struct trace_event_file *event_file;
+	struct hist_file_data *hist_file;
+	int ret;
+
+	ret = tracing_open_file_tr(inode, file);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&event_mutex);
+
+	event_file = event_file_data(file);
+	if (!event_file) {
+		ret = -ENODEV;
+		goto err;
+	}
+
+	hist_file = kzalloc(sizeof(*hist_file), GFP_KERNEL);
+	if (!hist_file) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	hist_file->file = file;
+	hist_file->last_act = get_hist_hit_count(event_file);
+	hist_file->pipe = true;
+
+	file->private_data = NULL;
+	ret = single_open(file, hist_show, hist_file);
+	if (ret) {
+		kfree(hist_file);
+		goto err;
+	}
+
+	return 0;
+err:
+	tracing_release_file_tr(inode, file);
+	return ret;
+}
+
+const struct file_operations event_hist_pipe_fops = {
+	.open = event_hist_pipe_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = event_hist_release,
@@ -6238,6 +6475,14 @@ static int event_hist_trigger_print(struct seq_file *m,
 		seq_printf(m, ":clock=%s", hist_data->attrs->clock);
 	if (hist_data->attrs->no_hitcount)
 		seq_puts(m, ":nohitcount");
+	if (hist_data->attrs->key_unit != HIST_TIME_UNIT_NONE)
+		seq_printf(m, ":key_unit=%s",
+			   hist_time_unit_str(hist_data->attrs->key_unit));
+	if (hist_data->attrs->val_unit != HIST_TIME_UNIT_NONE)
+		seq_printf(m, ":val_unit=%s",
+			   hist_time_unit_str(hist_data->attrs->val_unit));
+	if (hist_data->attrs->wallclock)
+		seq_puts(m, ":wallclock");
 
 	print_actions_spec(m, hist_data);
 
