@@ -560,10 +560,9 @@ struct task_group {
 	u64 idle_revert_enabled;
 #endif
 #ifdef CONFIG_SCHED_SOFT_DOMAIN
-	KABI_USE(1, struct soft_domain_ctx *sf_ctx);
-#else
-	KABI_RESERVE(1);
+	struct soft_domain_ctx *sf_ctx;
 #endif
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);

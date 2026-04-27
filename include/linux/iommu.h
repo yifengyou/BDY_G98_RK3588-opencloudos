@@ -154,8 +154,10 @@ struct iopf_group {
 	/* The device's fault data parameter. */
 	struct iommu_fault_param *fault_param;
 
-	KABI_USE(1, size_t fault_count);
-	KABI_USE(2, u32 cookie);
+	size_t fault_count;
+	u32 cookie;
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
@@ -284,14 +286,13 @@ struct iommu_domain {
 	};
 	struct mutex switch_log_lock;
 
-	KABI_RESERVE(1);
 #ifdef CONFIG_IOMMU_KSVA
-	KABI_USE(2, void *sva_data);
-	KABI_USE(3, const struct iommu_perm_ops *perm_ops);
-#else
+	void *sva_data;
+	const struct iommu_perm_ops *perm_ops;
+#endif
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
-#endif
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
 	KABI_RESERVE(6);
@@ -767,20 +768,24 @@ struct iommu_ops {
 	struct iommu_domain *blocked_domain;
 	struct iommu_domain *default_domain;
 
-	KABI_USE(1, struct iommu_domain *(*domain_alloc_sva)(struct device *dev,
-				struct mm_struct *mm));
-	KABI_USE(2, u8 user_pasid_table:1);
-	KABI_USE(3, struct iommufd_viommu *(*viommu_alloc)(
+	struct iommu_domain *(*domain_alloc_sva)(struct device *dev,
+				struct mm_struct *mm);
+	u8 user_pasid_table:1;
+	struct iommufd_viommu *(*viommu_alloc)(
 			struct device *dev, struct iommu_domain *parent_domain,
-			struct iommufd_ctx *ictx, unsigned int viommu_type));
+			struct iommufd_ctx *ictx, unsigned int viommu_type);
+	struct iommu_domain *(*domain_alloc_user_v2)(
+			struct device *dev, u32 flags, struct iommu_domain *parent,
+			struct kvm *kvm, const struct iommu_user_data *user_data);
+	KABI_RESERVE(1);
+	KABI_RESERVE(2);
+	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 	KABI_RESERVE(5);
 	KABI_RESERVE(6);
 	KABI_RESERVE(7);
 	KABI_RESERVE(8);
-	KABI_USE(9, struct iommu_domain *(*domain_alloc_user_v2)(
-			struct device *dev, u32 flags, struct iommu_domain *parent,
-			struct kvm *kvm, const struct iommu_user_data *user_data));
+	KABI_RESERVE(9);
 };
 
 /**
@@ -877,8 +882,9 @@ struct iommu_domain_ops {
 			       unsigned long bitmap_pgshift);
 	void (*free)(struct iommu_domain *domain);
 
-	KABI_USE(1, struct iommu_domain *
-			(*get_msi_mapping_domain)(struct iommu_domain *domain));
+	struct iommu_domain *
+			(*get_msi_mapping_domain)(struct iommu_domain *domain);
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
@@ -970,7 +976,8 @@ struct dev_iommu {
 	u32				require_direct:1;
 	u32				shadow_on_flush:1;
 
-	KABI_USE(1, u32 min_pasids);
+	u32 min_pasids;
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 };
 
