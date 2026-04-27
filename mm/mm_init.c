@@ -1542,6 +1542,19 @@ void __ref free_area_init_core_hotplug(struct pglist_data *pgdat)
 		zone->present_pages = 0;
 		zone_init_internals(zone, z, nid, 0);
 	}
+#ifdef CONFIG_RQI
+	if (!pgdat->rqi_pcpu_numa_stats)
+		pgdat->rqi_pcpu_numa_stats = alloc_percpu(struct rqi_percpu_numa_stat);
+
+	if (pgdat->rqi_pcpu_numa_stats) {
+		for_each_online_cpu(cpu) {
+			struct rqi_percpu_numa_stat *rp;
+
+			rp = per_cpu_ptr(pgdat->rqi_pcpu_numa_stats, cpu);
+			memset(rp, 0, sizeof(*rp));
+		}
+	}
+#endif
 }
 #endif
 
@@ -1726,6 +1739,9 @@ static void __init free_area_init_node(int nid)
 	pgdat->node_id = nid;
 	pgdat->node_start_pfn = start_pfn;
 	pgdat->per_cpu_nodestats = NULL;
+#ifdef CONFIG_RQI
+	pgdat->rqi_pcpu_numa_stats = NULL;
+#endif
 
 	if (start_pfn != end_pfn) {
 		pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,

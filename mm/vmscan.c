@@ -61,6 +61,9 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -7521,6 +7524,9 @@ retry:
 
 out:
 	current->reclaim_state = old_rs;
+#ifdef CONFIG_RQI
+	rqi_stat(RQI_MEM_SHRINK_PAGES, ret, NULL);
+#endif
 	return sc.nr_reclaimed;
 }
 
@@ -8287,8 +8293,14 @@ kswapd_try_sleep:
 		 */
 		trace_mm_vmscan_kswapd_wake(pgdat->node_id, highest_zoneidx,
 						alloc_order);
+#ifdef CONFIG_RQI
+		u64 start_rqi = rqi_start(RQI_MEM_KSWAPD_RECLAIM);
+#endif
 		reclaim_order = balance_pgdat(pgdat, alloc_order,
 						highest_zoneidx);
+#ifdef CONFIG_RQI
+		rqi_end(RQI_MEM_KSWAPD_RECLAIM, start_rqi);
+#endif
 		if (reclaim_order < alloc_order)
 			goto kswapd_try_sleep;
 	}

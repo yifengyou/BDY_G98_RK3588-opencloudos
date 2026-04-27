@@ -1432,6 +1432,14 @@ config IDLE_REVERT
 
 	  If unsure, say N here.
 
+config RQI
+	bool "Resource Quality Indicator support"
+	depends on CGROUP_SLI
+	default n
+	help
+	  RQI provides a unified statistics interface for system-wide
+	  resource quality monitoring.
+
 config BT_SCHED
 	bool "offline sched class"
 	default n

@@ -5,6 +5,9 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_RQI
+#include <linux/rqi.h>
+#endif
 
 #ifdef CONFIG_SCHEDSTATS
 
@@ -281,6 +284,9 @@ static void sched_info_arrive(struct rq *rq, struct task_struct *t)
 	rq_sched_info_arrive(rq, delta);
 #ifdef CONFIG_CGROUP_SLI
 	sli_schedlat_rundelay(t, prev, delta);
+#endif
+#ifdef CONFIG_RQI
+	rqi_rundelay(prev, delta);
 #endif
 }
 
