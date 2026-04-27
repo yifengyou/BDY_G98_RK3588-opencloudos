@@ -46,7 +46,7 @@ config DEBUG_PAGEALLOC_ENABLE_DEFAULT
 	  can be overridden by debug_pagealloc=off|on.
 
 config SLUB_DEBUG
-	default y
+	default y if !KATA_SUPPORT
 	bool "Enable SLUB debugging support" if EXPERT
 	depends on SYSFS && !SLUB_TINY
 	select STACKDEPOT if STACKTRACE_SUPPORT

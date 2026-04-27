@@ -1306,8 +1306,9 @@ static void __exit aesni_exit(void)
 		simd_unregister_skciphers(&aesni_xctr, 1, &aesni_simd_xctr);
 #endif /* CONFIG_X86_64 */
 }
-
+#ifndef CONFIG_KATA_SUPPORT
 late_initcall(aesni_init);
+#endif
 module_exit(aesni_exit);
 
 MODULE_DESCRIPTION("Rijndael (AES) Cipher Algorithm, Intel AES-NI instructions optimized");

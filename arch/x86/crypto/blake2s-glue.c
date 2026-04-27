@@ -70,5 +70,6 @@ static int __init blake2s_mod_init(void)
 
 	return 0;
 }
-
+#ifndef CONFIG_KATA_SUPPORT
 subsys_initcall(blake2s_mod_init);
+#endif

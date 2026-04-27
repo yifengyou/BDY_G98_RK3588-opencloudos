@@ -235,7 +235,11 @@ static int __init debug_kernel(char *str)
 
 static int __init quiet_kernel(char *str)
 {
-	console_loglevel = CONSOLE_LOGLEVEL_QUIET;
+#ifdef CONFIG_KATA_SUPPORT
+	console_loglevel = CONSOLE_LOGLEVEL_SILENT;
+#else
+    console_loglevel = CONSOLE_LOGLEVEL_QUIET;
+#endif
 	return 0;
 }
 
@@ -1245,25 +1249,6 @@ static inline void do_trace_initcall_finish(initcall_t fn, int ret)
 	trace_initcall_finish_cb(&initcall_calltime, fn, ret);
 }
 #endif /* !TRACEPOINTS_ENABLED */
-#ifdef CONFIG_KATA_SUPPORT
-char functions[][32] =
-{
-	"aesni_init",
-	"blake2s_mod_init",
-	"init_hw_perf_events",
-	"crypto_algapi_init",
-	"brd_init",
-	"init_acpi_pm_clocksource",
-	"init_haltpoll",
-	"init_ladder",
-	"init_menu",
-	"teo_governor_init",
-	"tun_init",
-	"cpu_latency_qos_init",
-	"slab_sysfs_init",
-	"acpi_sleep_init",
-};
-#endif
 int __init_or_module do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
@@ -1278,17 +1263,7 @@ int __init_or_module do_one_initcall(initcall_t fn)
 		return -EPERM;
 
 	do_trace_initcall_start(fn);
-
-#ifdef CONFIG_KATA_SUPPORT
-	sprintf(buf, "%pS", fn);
-	for (i = 0; i < sizeof(functions) /32; i++)
-		if (strstr(buf, functions[i])) {
-			break;
-		}
-	ret = 0;
-	if (i >= sizeof(functions) /32)
-#endif
-		ret = fn();
+	ret = fn();
 	do_trace_initcall_finish(fn, ret);
 
 	msgbuf[0] = 0;
