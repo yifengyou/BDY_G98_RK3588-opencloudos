@@ -61,6 +61,8 @@ enum memcg_stat_item {
 #ifdef CONFIG_MEMCG_ZRAM
 	MEMCG_ZRAM_B,
 	MEMCG_ZRAMED,
+	MEMCG_SHMEM_ZRAM_B,
+	MEMCG_SHMEM_ZRAMED,
 #endif
 	MEMCG_NR_STAT,
 };
@@ -1265,6 +1267,8 @@ static inline void mem_cgroup_unlock_pages(void)
 /* idx can be of type enum memcg_stat_item or node_stat_item */
 void mod_memcg_state(struct mem_cgroup *memcg,
 		     enum memcg_stat_item idx, int val);
+void mod_memcg_lruvec_state(struct lruvec *lruvec,
+			    enum node_stat_item idx, int val);
 
 static inline void mod_memcg_page_state(struct page *page,
 					enum memcg_stat_item idx, int val)
@@ -1783,6 +1787,12 @@ static inline void mem_cgroup_print_oom_group(struct mem_cgroup *memcg)
 static inline void mod_memcg_state(struct mem_cgroup *memcg,
 				   enum memcg_stat_item idx,
 				   int nr)
+{
+}
+
+static inline void mod_memcg_lruvec_state(struct lruvec *lruvec,
+					   enum node_stat_item idx,
+					   int val)
 {
 }
 

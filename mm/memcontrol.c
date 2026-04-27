@@ -715,6 +715,8 @@ static const unsigned int memcg_stat_items[] = {
 #ifdef CONFIG_MEMCG_ZRAM
 	MEMCG_ZRAM_B,
 	MEMCG_ZRAMED,
+	MEMCG_SHMEM_ZRAM_B,
+	MEMCG_SHMEM_ZRAMED,
 #endif
 };
 
@@ -1089,9 +1091,9 @@ static unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 	return x;
 }
 
-static void mod_memcg_lruvec_state(struct lruvec *lruvec,
-				     enum node_stat_item idx,
-				     int val)
+void mod_memcg_lruvec_state(struct lruvec *lruvec,
+			    enum node_stat_item idx,
+			    int val)
 {
 	struct mem_cgroup_per_node *pn;
 	struct mem_cgroup *memcg;
@@ -1123,6 +1125,7 @@ static void mod_memcg_lruvec_state(struct lruvec *lruvec,
 	}
 	put_cpu();
 }
+EXPORT_SYMBOL_GPL(mod_memcg_lruvec_state);
 
 /**
  * __mod_lruvec_state - update lruvec memory statistics
@@ -2034,6 +2037,8 @@ static const struct memory_stat memory_stats[] = {
 #ifdef CONFIG_MEMCG_ZRAM
 	{ "zram",			MEMCG_ZRAM_B },
 	{ "zrammed",			MEMCG_ZRAMED },
+	{ "shmem_zram",			MEMCG_SHMEM_ZRAM_B },
+	{ "shmem_zrammed",		MEMCG_SHMEM_ZRAMED },
 #endif
 	{ "file_mapped",		NR_FILE_MAPPED			},
 	{ "file_dirty",			NR_FILE_DIRTY			},
@@ -2072,6 +2077,7 @@ static int memcg_page_state_unit(int item)
 	case MEMCG_ZSWAP_B:
 #ifdef CONFIG_MEMCG_ZRAM
 	case MEMCG_ZRAM_B:
+	case MEMCG_SHMEM_ZRAM_B:
 #endif
 	case NR_SLAB_RECLAIMABLE_B:
 	case NR_SLAB_UNRECLAIMABLE_B:
