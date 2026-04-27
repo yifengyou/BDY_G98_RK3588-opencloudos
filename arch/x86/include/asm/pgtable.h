@@ -178,6 +178,7 @@ static inline bool pte_decrypted(pte_t pte)
 	return cc_mkdec(pte_val(pte)) == pte_val(pte);
 }
 
+#define pmd_dirty pmd_dirty
 static inline bool pmd_dirty(pmd_t pmd)
 {
 	return pmd_flags(pmd) & _PAGE_DIRTY_BITS;
@@ -1755,12 +1756,6 @@ extern bool pfn_modify_allowed(unsigned long pfn, pgprot_t prot);
 static inline bool arch_has_pfn_modify_check(void)
 {
 	return boot_cpu_has_bug(X86_BUG_L1TF);
-}
-
-#define arch_has_hw_pte_young arch_has_hw_pte_young
-static inline bool arch_has_hw_pte_young(void)
-{
-	return true;
 }
 
 #define arch_check_zapped_pte arch_check_zapped_pte

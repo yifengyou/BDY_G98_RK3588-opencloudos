@@ -133,34 +133,25 @@ static inline int lru_hist_from_seq(unsigned long seq)
 	return seq % NR_HIST_GENS;
 }
 
-static inline int lru_hist_of_min_seq(struct lruvec *lruvec, bool type)
-{
-	if (IS_ENABLED(CONFIG_LRU_GEN_STATS))
-		return lru_gen_from_seq(READ_ONCE(lruvec->lrugen.min_seq[type]));
-	else
-		return 0;
-}
-
-static inline int lru_tier_from_refs(int refs)
+static inline int lru_tier_from_refs(int refs, bool workingset)
 {
 	VM_WARN_ON_ONCE(refs > BIT(LRU_REFS_WIDTH));
 
-	/* see the comment in folio_lru_refs() */
-	return order_base_2(refs + 1);
+	/* see the comment on MAX_NR_TIERS */
+	return workingset ? MAX_NR_TIERS - 1 : order_base_2(refs);
 }
 
 static inline int folio_lru_refs(struct folio *folio)
 {
 	unsigned long flags = READ_ONCE(folio->flags);
-	bool workingset = flags & BIT(PG_workingset);
 
+	if (!(flags & BIT(PG_referenced)))
+		return 0;
 	/*
-	 * Return the number of accesses beyond PG_referenced, i.e., N-1 if the
-	 * total number of accesses is N>1, since N=0,1 both map to the first
-	 * tier. lru_tier_from_refs() will account for this off-by-one. Also see
-	 * the comment on MAX_NR_TIERS.
+	 * Return the total number of accesses including PG_referenced. Also see
+	 * the comment on LRU_REFS_FLAGS.
 	 */
-	return ((flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF) + workingset;
+	return ((flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF) + 1;
 }
 
 static inline int folio_lru_gen(struct folio *folio)
@@ -226,6 +217,39 @@ static inline void lru_gen_update_size(struct lruvec *lruvec, struct folio *foli
 	VM_WARN_ON_ONCE(lru_gen_is_active(lruvec, old_gen) && !lru_gen_is_active(lruvec, new_gen));
 }
 
+static inline unsigned long lru_gen_folio_seq(struct lruvec *lruvec, struct folio *folio,
+					      bool reclaiming)
+{
+	int gen;
+	int type = folio_is_file_lru(folio);
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+
+	/*
+	 * +-----------------------------------+-----------------------------------+
+	 * | Accessed through page tables and  | Accessed through file descriptors |
+	 * | promoted by folio_update_gen()    | and protected by folio_inc_gen()  |
+	 * +-----------------------------------+-----------------------------------+
+	 * | PG_active (set while isolated)    |                                   |
+	 * +-----------------+-----------------+-----------------+-----------------+
+	 * |  PG_workingset  |  PG_referenced  |  PG_workingset  |  LRU_REFS_FLAGS |
+	 * +-----------------------------------+-----------------------------------+
+	 * |<---------- MIN_NR_GENS ---------->|                                   |
+	 * |<---------------------------- MAX_NR_GENS ---------------------------->|
+	 */
+	if (folio_test_active(folio))
+		gen = MIN_NR_GENS - folio_test_workingset(folio);
+	else if (reclaiming)
+		gen = MAX_NR_GENS;
+	else if ((!folio_is_file_lru(folio) && !folio_test_swapcache(folio)) ||
+		 (folio_test_reclaim(folio) &&
+		  (folio_test_dirty(folio) || folio_test_writeback(folio))))
+		gen = MIN_NR_GENS;
+	else
+		gen = MAX_NR_GENS - folio_test_workingset(folio);
+
+	return max(READ_ONCE(lrugen->max_seq) - gen + 1, READ_ONCE(lrugen->min_seq[type]));
+}
+
 static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio, bool reclaiming)
 {
 	unsigned long seq;
@@ -239,24 +263,8 @@ static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio,
 
 	if (folio_test_unevictable(folio) || !lrugen->enabled)
 		return false;
-	/*
-	 * There are three common cases for this page:
-	 * 1. If it's hot, e.g., freshly faulted in or previously hot and
-	 *    migrated, add it to the youngest generation.
-	 * 2. If it's cold but can't be evicted immediately, i.e., an anon page
-	 *    not in swapcache or a dirty page pending writeback, add it to the
-	 *    second oldest generation.
-	 * 3. Everything else (clean, cold) is added to the oldest generation.
-	 */
-	if (folio_test_active(folio))
-		seq = lrugen->max_seq;
-	else if ((type == LRU_GEN_ANON && !folio_test_swapcache(folio)) ||
-		 (folio_test_reclaim(folio) &&
-		  (folio_test_dirty(folio) || folio_test_writeback(folio))))
-		seq = lrugen->min_seq[type] + 1;
-	else
-		seq = lrugen->min_seq[type];
 
+	seq = lru_gen_folio_seq(lruvec, folio, reclaiming);
 	gen = lru_gen_from_seq(seq);
 	flags = (gen + 1UL) << LRU_GEN_PGOFF;
 	/* see the comment on MIN_NR_GENS about PG_active */
@@ -294,6 +302,12 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return true;
 }
 
+static inline void folio_migrate_refs(struct folio *new, struct folio *old)
+{
+	unsigned long refs = READ_ONCE(old->flags) & LRU_REFS_MASK;
+
+	set_mask_bits(&new->flags, LRU_REFS_MASK, refs);
+}
 #else /* !CONFIG_LRU_GEN */
 
 static inline bool lru_gen_enabled(void)
@@ -316,6 +330,10 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return false;
 }
 
+static inline void folio_migrate_refs(struct folio *new, struct folio *old)
+{
+
+}
 #endif /* CONFIG_LRU_GEN */
 
 static __always_inline

@@ -50,6 +50,8 @@
 #define pmd_pgtable(pmd) pmd_page(pmd)
 #endif
 
+#define pmd_folio(pmd) page_folio(pmd_page(pmd))
+
 /*
  * A page table page can be thought of an array like this: pXd_t[PTRS_PER_PxD]
  *
@@ -179,6 +181,13 @@ static inline pte_t *virt_to_kpte(unsigned long vaddr)
 
 #ifndef pmd_young
 static inline int pmd_young(pmd_t pmd)
+{
+	return 0;
+}
+#endif
+
+#ifndef pmd_dirty
+static inline int pmd_dirty(pmd_t pmd)
 {
 	return 0;
 }
@@ -454,7 +463,7 @@ static inline bool arch_has_hw_nonleaf_pmd_young(void)
  */
 static inline bool arch_has_hw_pte_young(void)
 {
-	return false;
+	return IS_ENABLED(CONFIG_ARCH_HAS_HW_PTE_YOUNG);
 }
 #endif
 
