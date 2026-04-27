@@ -732,9 +732,16 @@ static inline void latency_fsnotify(struct trace_array *tr) { }
 
 #ifdef CONFIG_STACKTRACE
 void __trace_stack(struct trace_array *tr, unsigned int trace_ctx, int skip);
+void __trace_stack_regs(struct trace_array *tr, unsigned int trace_ctx,
+			struct pt_regs *regs);
 #else
 static inline void __trace_stack(struct trace_array *tr, unsigned int trace_ctx,
 				 int skip)
+{
+}
+static inline void __trace_stack_regs(struct trace_array *tr,
+				      unsigned int trace_ctx,
+				      struct pt_regs *regs)
 {
 }
 #endif /* CONFIG_STACKTRACE */
@@ -862,10 +869,13 @@ static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
 #define TRACE_GRAPH_GRAPH_TIME          0x400
 #define TRACE_GRAPH_PRINT_RETVAL        0x800
 #define TRACE_GRAPH_PRINT_RETVAL_HEX    0x1000
+#define TRACE_GRAPH_PRINT_STACK         0x2000
 #define TRACE_GRAPH_PRINT_FILL_SHIFT	28
 #define TRACE_GRAPH_PRINT_FILL_MASK	(0x3 << TRACE_GRAPH_PRINT_FILL_SHIFT)
 
 extern void ftrace_graph_sleep_time_control(bool enable);
+extern int ftrace_graph_stack_enabled;
+extern void ftrace_graph_set_stack_enabled(int enabled);
 
 #ifdef CONFIG_FUNCTION_PROFILER
 extern void ftrace_graph_graph_time_control(bool enable);
@@ -890,6 +900,28 @@ extern void __trace_graph_return(struct trace_array *tr,
 #ifdef CONFIG_DYNAMIC_FTRACE
 extern struct ftrace_hash __rcu *ftrace_graph_hash;
 extern struct ftrace_hash __rcu *ftrace_graph_notrace_hash;
+extern struct ftrace_hash __rcu *ftrace_graph_stack_hash;
+
+static inline int ftrace_graph_stack_addr(unsigned long addr)
+{
+	int ret = 0;
+	struct ftrace_hash *hash;
+
+	preempt_disable_notrace();
+
+	hash = rcu_dereference_protected(ftrace_graph_stack_hash,
+					 !preemptible());
+
+	if (ftrace_hash_empty(hash))
+		goto out;
+
+	if (ftrace_lookup_ip(hash, addr))
+		ret = 1;
+
+out:
+	preempt_enable_notrace();
+	return ret;
+}
 
 static inline int ftrace_graph_addr(struct ftrace_graph_ent *trace)
 {
@@ -974,6 +1006,10 @@ static inline int ftrace_graph_addr(struct ftrace_graph_ent *trace)
 }
 
 static inline int ftrace_graph_notrace_addr(unsigned long addr)
+{
+	return 0;
+}
+static inline int ftrace_graph_stack_addr(unsigned long addr)
 {
 	return 0;
 }

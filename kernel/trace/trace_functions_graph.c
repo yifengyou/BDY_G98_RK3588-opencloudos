@@ -19,6 +19,9 @@
 /* When set, irq functions will be ignored */
 static int ftrace_graph_skip_irqs;
 
+/* When set, stack traces are recorded for functions matching stack filter */
+int ftrace_graph_stack_enabled;
+
 struct fgraph_cpu_data {
 	pid_t		last_pid;
 	int		depth;
@@ -66,6 +69,9 @@ static struct tracer_opt trace_opts[] = {
 #endif
 	/* Include sleep time (scheduled out) between entry and return */
 	{ TRACER_OPT(sleep-time, TRACE_GRAPH_SLEEP_TIME) },
+
+	/* Record stack trace for functions matching set_graph_stack_filter */
+	{ TRACER_OPT(funcgraph-stack, TRACE_GRAPH_PRINT_STACK) },
 
 #ifdef CONFIG_FUNCTION_PROFILER
 	/* Include time within nested functions */
@@ -181,6 +187,9 @@ int trace_graph_entry(struct ftrace_graph_ent *trace)
 	if (likely(disabled == 1)) {
 		trace_ctx = tracing_gen_ctx_flags(flags);
 		ret = __trace_graph_entry(tr, trace, trace_ctx);
+		if (ret && ftrace_graph_stack_enabled &&
+		    ftrace_graph_stack_addr(trace->func))
+			__trace_stack(tr, trace_ctx, 0);
 	} else {
 		ret = 0;
 	}
@@ -277,6 +286,13 @@ void set_graph_array(struct trace_array *tr)
 
 static void trace_graph_thresh_return(struct ftrace_graph_ret *trace)
 {
+	struct trace_array *tr = graph_array;
+	struct trace_array_cpu *data;
+	unsigned long flags;
+	unsigned int trace_ctx;
+	long disabled;
+	int cpu;
+
 	ftrace_graph_addr_finish(trace);
 
 	if (trace_recursion_test(TRACE_GRAPH_NOTRACE_BIT)) {
@@ -287,8 +303,50 @@ static void trace_graph_thresh_return(struct ftrace_graph_ret *trace)
 	if (tracing_thresh &&
 	    (trace->rettime - trace->calltime < tracing_thresh))
 		return;
-	else
-		trace_graph_return(trace);
+
+	local_irq_save(flags);
+	cpu = raw_smp_processor_id();
+	data = per_cpu_ptr(tr->array_buffer.data, cpu);
+	disabled = atomic_inc_return(&data->disabled);
+	if (likely(disabled == 1)) {
+		trace_ctx = tracing_gen_ctx_flags(flags);
+		__trace_graph_return(tr, trace, trace_ctx);
+
+		/*
+		 * In thresh mode, we need to output the stack trace on the
+		 * return path. However, the return_to_handler trampoline has
+		 * UNWIND_HINT_UNDEFINED which prevents the ORC unwinder from
+		 * walking past it. To work around this, we construct a
+		 * pt_regs from the ret_stack entry saved during function
+		 * entry, and start the stack trace from the caller's frame,
+		 * completely bypassing the return trampoline.
+		 */
+		if (ftrace_graph_stack_enabled &&
+		    ftrace_graph_stack_addr(trace->func)) {
+#ifdef CONFIG_X86
+			int index = current->curr_ret_stack;
+			struct ftrace_ret_stack *ret_stack =
+				&current->ret_stack[index];
+			if (ret_stack->retp) {
+				struct pt_regs regs;
+
+				memset(&regs, 0, sizeof(regs));
+				regs.ip = ret_stack->ret;
+				/*
+				 * The retp points to the location on the stack
+				 * where the return address was stored. The
+				 * caller's SP is right above it (retp + 1).
+				 */
+				regs.sp = (unsigned long)(ret_stack->retp + 1);
+				__trace_stack_regs(tr, trace_ctx, &regs);
+			}
+#else
+			__trace_stack(tr, trace_ctx, 0);
+#endif
+		}
+	}
+	atomic_dec(&data->disabled);
+	local_irq_restore(flags);
 }
 
 static struct fgraph_ops funcgraph_thresh_ops = {
@@ -1156,8 +1214,10 @@ print_graph_function_flags(struct trace_iterator *iter, u32 flags)
 		return print_graph_return(&field->ret, s, entry, iter, flags);
 	}
 	case TRACE_STACK:
+		/* Display stack traces as comments in function_graph output */
+		return print_graph_comment(s, entry, iter, flags);
 	case TRACE_FN:
-		/* dont trace stack and functions as comments */
+		/* dont trace functions as comments */
 		return TRACE_TYPE_UNHANDLED;
 
 	default:
@@ -1333,7 +1393,19 @@ func_graph_set_flag(struct trace_array *tr, u32 old_flags, u32 bit, int set)
 	if (bit == TRACE_GRAPH_GRAPH_TIME)
 		ftrace_graph_graph_time_control(set);
 
+	if (bit == TRACE_GRAPH_PRINT_STACK)
+		ftrace_graph_stack_enabled = set;
+
 	return 0;
+}
+
+void ftrace_graph_set_stack_enabled(int enabled)
+{
+	ftrace_graph_stack_enabled = enabled;
+	if (enabled)
+		tracer_flags.val |= TRACE_GRAPH_PRINT_STACK;
+	else
+		tracer_flags.val &= ~TRACE_GRAPH_PRINT_STACK;
 }
 
 static struct trace_event_functions graph_functions = {

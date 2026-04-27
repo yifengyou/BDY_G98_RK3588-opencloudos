@@ -3203,6 +3203,38 @@ void __trace_stack(struct trace_array *tr, unsigned int trace_ctx,
 }
 
 /**
+ * __trace_stack_regs - record a stack trace starting from given pt_regs
+ * @tr: The trace array to record to
+ * @trace_ctx: The trace context flags
+ * @regs: The pt_regs to start the stack trace from
+ *
+ * This is used when the current call stack is not suitable for unwinding
+ * (e.g., when called from function_graph return path where the return
+ * trampoline has UNWIND_HINT_UNDEFINED), but we can construct a valid
+ * starting point using saved register state.
+ */
+void __trace_stack_regs(struct trace_array *tr, unsigned int trace_ctx,
+			struct pt_regs *regs)
+{
+	struct trace_buffer *buffer = tr->array_buffer.buffer;
+
+	if (rcu_is_watching()) {
+		__ftrace_trace_stack(buffer, trace_ctx, 0, regs);
+		return;
+	}
+
+	if (WARN_ON_ONCE(IS_ENABLED(CONFIG_GENERIC_ENTRY)))
+		return;
+
+	if (unlikely(in_nmi()))
+		return;
+
+	ct_irq_enter_irqson();
+	__ftrace_trace_stack(buffer, trace_ctx, 0, regs);
+	ct_irq_exit_irqson();
+}
+
+/**
  * trace_dump_stack - record a stack back trace in the trace buffer
  * @skip: Number of functions to skip (helper handlers)
  */
