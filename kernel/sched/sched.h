@@ -2536,7 +2536,7 @@ extern struct static_key sched_feat_keys[__SCHED_FEAT_NR];
  */
 #define SCHED_FEAT(name, enabled)	\
 	(1UL << __SCHED_FEAT_##name) * enabled |
-static const_debug __maybe_unused unsigned int sysctl_sched_features =
+static const_debug __maybe_unused u64 sysctl_sched_features =
 #include "features.h"
 	0;
 #undef SCHED_FEAT
