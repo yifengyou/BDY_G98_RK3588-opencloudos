@@ -583,6 +583,9 @@ static int folio_migrate_mc_copy(struct folio *dst, struct folio *src,
 	if (mode == MIGRATE_SYNC_NO_COPY)
 		return 0;
 
+	if (node_is_critical_err(folio_nid(src)))
+		return -EHWPOISON;
+
 	return folio_mc_copy(dst, src);
 }
 
