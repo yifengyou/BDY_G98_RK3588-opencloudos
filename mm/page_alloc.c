@@ -1102,6 +1102,8 @@ __always_inline bool free_pages_prepare(struct page *page,
 					continue;
 				}
 			}
+			kstaled_set_folio_age(page_pgdat(page + i),
+					     page_to_pfn(page + i), 0);
 			(page + i)->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 		}
 	}
@@ -1118,6 +1120,7 @@ __always_inline bool free_pages_prepare(struct page *page,
 	}
 
 	page_cpupid_reset_last(page);
+	kstaled_set_folio_age(page_pgdat(page), page_to_pfn(page), 0);
 	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 	reset_page_owner(page, order);
 	page_table_check_free(page, order);

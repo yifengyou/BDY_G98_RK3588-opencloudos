@@ -272,6 +272,14 @@ enum res_type {
 	_TCP,
 };
 
+/* for encoding cft->private value on file related with kstaled */
+#ifdef CONFIG_KSTALED
+enum kstaled_stats_type {
+	KSTALED_SELF = 0,
+	KSTALED_HIERARCHY,
+};
+#endif
+
 #define MEMFILE_PRIVATE(x, val)	((x) << 16 | (val))
 #define MEMFILE_TYPE(val)	((val) >> 16 & 0xffff)
 #define MEMFILE_ATTR(val)	((val) & 0xffff)
@@ -5281,6 +5289,269 @@ static ssize_t mem_cgroup_reset(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+#ifdef CONFIG_KSTALED
+static int mem_cgroup_idle_page_stats_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *iter, *memcg = mem_cgroup_from_css(seq_css(m));
+	struct kstaled_scan_control scan_control;
+	struct idle_page_stats *stats, *cache;
+	unsigned long page_scans;
+	bool has_hierarchy = !!seq_cft(m)->private;
+	bool no_buckets = false;
+	int i, j, t;
+
+	stats = kmalloc(sizeof(struct idle_page_stats) * 2, GFP_KERNEL);
+	if (!stats)
+		return -ENOMEM;
+	cache = stats + 1;
+
+	down_read(&memcg->idle_stats_rwsem);
+	*stats = memcg->idle_stats[memcg->idle_stable_idx];
+	page_scans = memcg->idle_page_scans;
+	scan_control = memcg->scan_control;
+	up_read(&memcg->idle_stats_rwsem);
+
+	/* Nothing will be outputed with invalid buckets */
+	if (KSTALED_IS_BUCKET_INVALID(stats->buckets)) {
+		no_buckets = true;
+		page_scans = 0;
+		goto output;
+	}
+
+	/* Zeroes will be output with mismatched scan period */
+	if (!kstaled_is_scan_period_equal(&scan_control)) {
+		memset(&stats->count, 0, sizeof(stats->count));
+		scan_control = kstaled_get_current_scan_control();
+		page_scans = 0;
+		goto output;
+	}
+
+	/* Zeroes will be output with mismatched scan type */
+	if (!kstaled_is_scan_target_equal(&scan_control)) {
+		bool page_disabled = false;
+
+		kstaled_get_reset_type(&scan_control, &page_disabled);
+		if (page_disabled) {
+			int i;
+
+			for (i = 0; i < KSTALE_NR_TYPE - 1; i++) {
+				memset(&stats->count[i], 0, sizeof(stats->count[i]));
+				page_scans = 0;
+			}
+		}
+	}
+
+	if (has_hierarchy) {
+		for_each_mem_cgroup_tree(iter, memcg) {
+			struct kstaled_scan_control iter_scan_control;
+
+			/* The root memcg was just accounted */
+			if (iter == memcg)
+				continue;
+
+			down_read(&iter->idle_stats_rwsem);
+			*cache = iter->idle_stats[iter->idle_stable_idx];
+			iter_scan_control = memcg->scan_control;
+			up_read(&iter->idle_stats_rwsem);
+
+			/*
+			 * Skip to account if the scan period is mismatched
+			 * or buckets are invalid.
+			 */
+			if (!kstaled_is_scan_period_equal(&iter_scan_control) ||
+			     KSTALED_IS_BUCKET_INVALID(cache->buckets))
+				continue;
+
+			/*
+			 * The buckets of current memory cgroup might be
+			 * mismatched with that of root memory cgroup. We
+			 * charge the current statistics to the possibly
+			 * largest bucket. The users need to apply the
+			 * consistent buckets into the memory cgroups in
+			 * the hierarchy tree.
+			 */
+			for (i = 0; i < NUM_KSTALED_BUCKETS; i++) {
+				for (j = 0; j < NUM_KSTALED_BUCKETS - 1; j++) {
+					if (cache->buckets[i] <=
+					    stats->buckets[j])
+						break;
+				}
+
+				for (t = 0; t < KSTALE_NR_TYPE; t++)
+					stats->count[t][j] +=
+						cache->count[t][i];
+			}
+		}
+	}
+
+
+output:
+	seq_printf(m, "# version: %s\n", KSTALED_VERSION);
+	seq_printf(m, "# page_scans: %lu\n", page_scans);
+	seq_printf(m, "# scan_period_in_seconds: %u\n", scan_control.duration);
+	seq_puts(m, "# buckets: ");
+	if (no_buckets) {
+		seq_puts(m, "no valid bucket available\n");
+		goto out;
+	}
+
+	for (i = 0; i < NUM_KSTALED_BUCKETS; i++) {
+		seq_printf(m, "%d", stats->buckets[i]);
+
+		if ((i == NUM_KSTALED_BUCKETS - 1) ||
+		    !stats->buckets[i + 1]) {
+			seq_puts(m, "\n");
+			j = i + 1;
+			break;
+		}
+		seq_puts(m, ",");
+	}
+	seq_puts(m, "#\n");
+
+	seq_puts(m, "#   _-----=> clean/dirty\n");
+	seq_puts(m, "#  / _----=> swap/file\n");
+	seq_puts(m, "# | / _---=> evict/unevict\n");
+	seq_puts(m, "# || / _--=> inactive/active\n");
+	seq_puts(m, "# ||| /\n");
+
+	seq_printf(m, "# %-8s", "||||");
+	for (i = 0; i < j; i++) {
+		char region[20];
+
+		if (i == j - 1) {
+			snprintf(region, sizeof(region), "[%d,+inf)",
+				 stats->buckets[i]);
+		} else {
+			snprintf(region, sizeof(region), "[%d,%d)",
+				 stats->buckets[i],
+				 stats->buckets[i + 1]);
+		}
+
+		seq_printf(m, " %14s", region);
+	}
+	seq_puts(m, "\n");
+
+	for (t = 0; t < KSTALE_NR_TYPE; t++) {
+		char kstaled_type_str[5];
+
+		kstaled_type_str[0] = t & KSTALE_DIRTY   ? 'd' : 'c';
+		kstaled_type_str[1] = t & KSTALE_FILE    ? 'f' : 's';
+		kstaled_type_str[2] = t & KSTALE_UNEVICT ? 'u' : 'e';
+		kstaled_type_str[3] = t & KSTALE_ACTIVE  ? 'a' : 'i';
+		kstaled_type_str[4] = '\0';
+		seq_printf(m, "  %-8s", kstaled_type_str);
+
+		for (i = 0; i < j; i++) {
+			seq_printf(m, " %14lu", stats->count[t][i]);
+		}
+
+		seq_puts(m, "\n");
+	}
+
+out:
+	kfree(stats);
+	return 0;
+}
+
+static ssize_t mem_cgroup_idle_page_stats_write(struct kernfs_open_file *of,
+						char *buf, size_t nbytes,
+						loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	struct idle_page_stats *stable_stats, *unstable_stats;
+	int buckets[NUM_KSTALED_BUCKETS] = { 0 }, i = 0, err;
+	unsigned long prev = 0, curr;
+	char *next;
+
+	buf = strstrip(buf);
+	while (*buf) {
+		if (i >= NUM_KSTALED_BUCKETS)
+			return -E2BIG;
+
+		/* Get next entry */
+		next = buf + 1;
+		while (*next && *next >= '0' && *next <= '9')
+			next++;
+		while (*next && (*next == ' ' || *next == ','))
+			*next++ = '\0';
+
+		/* Should be monotonically increasing */
+		err = kstrtoul(buf, 10, &curr);
+		if (err ||  curr > KSTALED_MAX_IDLE_AGE || curr <= prev)
+			return -EINVAL;
+
+		buckets[i++] = curr;
+		prev = curr;
+		buf = next;
+	}
+
+	/* No buckets set, mark it invalid */
+	if (i == 0)
+		KSTALED_MARK_BUCKET_INVALID(buckets);
+	if (down_write_killable(&memcg->idle_stats_rwsem))
+		return -EINTR;
+	stable_stats = mem_cgroup_get_stable_idle_stats(memcg);
+	unstable_stats = mem_cgroup_get_unstable_idle_stats(memcg);
+	memcpy(stable_stats->buckets, buckets, sizeof(buckets));
+
+	/*
+	 * We will clear the stats without check the buckets whether
+	 * has been changed, it works when user only wants to reset
+	 * stats but not to reset the buckets.
+	 */
+	memset(stable_stats->count, 0, sizeof(stable_stats->count));
+
+	/*
+	 * It's safe that the kstaled reads the unstable buckets without
+	 * holding any read side locks.
+	 */
+	KSTALED_MARK_BUCKET_INVALID(unstable_stats->buckets);
+	memcg->idle_page_scans = 0;
+	up_write(&memcg->idle_stats_rwsem);
+
+	return nbytes;
+}
+
+static void kstaled_memcg_init(struct mem_cgroup *memcg)
+{
+	int type;
+
+	init_rwsem(&memcg->idle_stats_rwsem);
+	for (type = 0; type < KSTALED_STATS_NR_TYPE; type++) {
+		memcpy(memcg->idle_stats[type].buckets,
+		       kstaled_default_buckets,
+		       sizeof(kstaled_default_buckets));
+	}
+}
+
+static void kstaled_memcg_inherit_parent_buckets(struct mem_cgroup *parent,
+						struct mem_cgroup *memcg)
+{
+	int idle_buckets[NUM_KSTALED_BUCKETS], type;
+
+	down_read(&parent->idle_stats_rwsem);
+	memcpy(idle_buckets,
+	       parent->idle_stats[parent->idle_stable_idx].buckets,
+	       sizeof(idle_buckets));
+	up_read(&parent->idle_stats_rwsem);
+
+	for (type = 0; type < KSTALED_STATS_NR_TYPE; type++) {
+		memcpy(memcg->idle_stats[type].buckets,
+		       idle_buckets,
+		       sizeof(idle_buckets));
+	}
+}
+#else
+static void kstaled_memcg_init(struct mem_cgroup *memcg)
+{
+}
+
+static void kstaled_memcg_inherit_parent_buckets(struct mem_cgroup *parent,
+						struct mem_cgroup *memcg)
+{
+}
+#endif /* CONFIG_KSTALED */
+
 static u64 mem_cgroup_move_charge_read(struct cgroup_subsys_state *css,
 					struct cftype *cft)
 {
@@ -7014,6 +7285,29 @@ static int mem_cgroup_unevictable_percent_write(struct cgroup_subsys_state *css,
 }
 #endif
 
+#ifdef CONFIG_KSTALED
+static u64 mem_cgroup_emm_threshold_read(struct cgroup_subsys_state *css,
+					 struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg->emm_threshold;
+}
+
+static int mem_cgroup_emm_threshold_write(struct cgroup_subsys_state *css,
+					  struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	if (val > 255)
+		return -EINVAL;
+
+	memcg->emm_threshold = val;
+
+	return 0;
+}
+#endif /* CONFIG_KSTALED */
+
 static int memory_async_reclaim_wmark_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
@@ -7523,6 +7817,30 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.write_u64 = mem_cgroup_async_fork_write,
 	},
 #endif
+#ifdef CONFIG_KSTALED
+	/*
+	 * This sysfs name was extracted from Michel Lespinasse's
+	 * and kidled patch.
+	 */
+	{
+		.name = "emm.idle_page_stats",
+		.private = KSTALED_HIERARCHY,
+		.seq_show = mem_cgroup_idle_page_stats_show,
+		.write = mem_cgroup_idle_page_stats_write,
+	},
+	{
+		.name = "emm.idle_page_stats.self",
+		.private = KSTALED_SELF,
+		.seq_show = mem_cgroup_idle_page_stats_show,
+		.write = mem_cgroup_idle_page_stats_write,
+	},
+	{
+		.name = "emm.threshold",
+		.flags = CFTYPE_NS_DELEGATABLE,
+		.read_u64 = mem_cgroup_emm_threshold_read,
+		.write_u64 = mem_cgroup_emm_threshold_write,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -7776,6 +8094,7 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	memcg->deferred_split_queue.split_queue_len = 0;
 #endif
 	lru_gen_init_memcg(memcg);
+	kstaled_memcg_init(memcg);
 
 	return memcg;
 fail:
@@ -7866,6 +8185,11 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #ifdef CONFIG_ASYNC_FORK
 		memcg->async_fork = parent->async_fork;
 #endif
+#ifdef CONFIG_KSTALED
+		memcg->emm_threshold = parent->emm_threshold;
+		kstaled_memcg_inherit_parent_buckets(parent, memcg);
+#endif
+
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);
 		page_counter_init(&memcg->kmem, &parent->kmem);
@@ -8449,6 +8773,8 @@ static int mem_cgroup_move_account(struct page *page,
 
 	ret = 0;
 	nid = folio_nid(folio);
+
+	kstaled_mem_cgroup_move_stats(from, to, folio, nr_pages << PAGE_SHIFT);
 
 	local_irq_disable();
 	mem_cgroup_charge_statistics(to, nr_pages);
@@ -9753,6 +10079,30 @@ static struct cftype memory_files[] = {
 		.name = "async_fork",
 		.read_u64 = mem_cgroup_async_fork_read,
 		.write_u64 = mem_cgroup_async_fork_write,
+	},
+#endif
+#ifdef CONFIG_KSTALED
+	/*
+	 * This sysfs name was extracted from Michel Lespinasse's
+	 * and kidled patch.
+	 */
+	{
+		.name = "emm.idle_page_stats",
+		.private = KSTALED_HIERARCHY,
+		.seq_show = mem_cgroup_idle_page_stats_show,
+		.write = mem_cgroup_idle_page_stats_write,
+	},
+	{
+		.name = "emm.idle_page_stats.self",
+		.private = KSTALED_SELF,
+		.seq_show = mem_cgroup_idle_page_stats_show,
+		.write = mem_cgroup_idle_page_stats_write,
+	},
+	{
+		.name = "emm.threshold",
+		.flags = CFTYPE_NS_DELEGATABLE,
+		.read_u64 = mem_cgroup_emm_threshold_read,
+		.write_u64 = mem_cgroup_emm_threshold_write,
 	},
 #endif
 #ifdef CONFIG_TEXT_UNEVICTABLE

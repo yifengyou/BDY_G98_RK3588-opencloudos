@@ -1165,6 +1165,19 @@ config DMAPOOL_TEST
 	  provide a consistent way to measure how changes to the
 	  dma_pool_alloc/free routines affect performance.
 
+config KSTALED
+	bool "Enable kernel thread to scan idle pages"
+	depends on PAGE_IDLE_FLAG && X86_64
+	select ARCH_KEEP_MEMBLOCK
+	help
+	  This introduces kstaled to scan pages in configurable interval
+	  to stat if they are accessed in that interval, to maintain their
+	  access frequency. And the statistics of hot/cold pages are
+	  exported to user space in the memcg level: memory.emm.idle_page_stats
+	  and memory.emm.idle_page_stats.self
+
+	  See mm/kstaled.c comments for more details.
+
 config HUGETEXT
 	bool "THP for text segments"
 	depends on READ_ONLY_THP_FOR_FS

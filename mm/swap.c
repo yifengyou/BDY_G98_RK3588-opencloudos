@@ -1037,6 +1037,7 @@ void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
 	}
 
 	folios->nr = j;
+	kstaled_mem_cgroup_uncharge_list(folios, false);
 	mem_cgroup_uncharge_folios(folios);
 	free_unref_folios(folios);
 }

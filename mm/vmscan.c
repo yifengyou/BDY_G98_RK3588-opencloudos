@@ -194,6 +194,9 @@ struct scan_control {
 	};
 	/* One time swappiness override, NOTE: this could got extended to 201, for anon only reclaim */
 	u8 emm_swappiness;
+#ifdef CONFIG_KSTALED
+	u8 emm_threshold;
+#endif
 	/* Number of pages shrinked/aged/scanned, could be used by different emm reclaim phase */
 	unsigned long emm_nr_taken;
 #endif
@@ -1763,6 +1766,7 @@ next:
 
 	pgactivate = stat->nr_activate[0] + stat->nr_activate[1];
 
+	kstaled_mem_cgroup_uncharge_list(&free_folios, true);
 	mem_cgroup_uncharge_folios(&free_folios);
 	try_to_unmap_flush();
 	free_unref_folios(&free_folios);
@@ -1921,6 +1925,19 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 			folio_put(folio);
 			goto move;
 		}
+
+#if defined(CONFIG_EMM_RECLAIM) && defined(CONFIG_KSTALED)
+		if (!is_active_lru(lru) && sc->emm_reclaiming
+		    && is_kstaled_enabled() && sc->emm_threshold) {
+			int age = kstaled_get_folio_age(lruvec_pgdat(lruvec), folio_pfn(folio));
+
+			if (age >= 0 && age < sc->emm_threshold) {
+				folio_set_lru(folio);
+				folio_put(folio);
+				goto move;
+			}
+		}
+#endif
 
 		nr_taken += nr_pages;
 		nr_zone_taken[folio_zonenum(folio)] += nr_pages;
@@ -8643,6 +8660,9 @@ int memcg_emm_reclaim(struct mem_cgroup *memcg, int mode,
 		.emm_swappiness = swappiness,
 		.emm_reclaiming = mode == EMM_RECLAIM,
 		.emm_aging = mode == EMM_AGE,
+#ifdef CONFIG_KSTALED
+		.emm_threshold = memcg->emm_threshold,
+#endif
 	};
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
