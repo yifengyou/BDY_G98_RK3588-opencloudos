@@ -36,6 +36,7 @@
 #include <linux/rmap.h>
 #include <linux/module.h>
 #include <linux/numa_remote.h>
+#include <linux/kstaled.h>
 
 #include <asm/tlbflush.h>
 
@@ -755,6 +756,13 @@ void __ref move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	int nid = pgdat->node_id;
 
+#ifdef CONFIG_KSTALED
+	/*
+	 * The pgdat's size is changed, need to free and
+	 * reallocate in kstaled.
+	 */
+	kstaled_free_folio_age(pgdat);
+#endif
 	clear_zone_contiguous(zone);
 
 	if (zone_is_empty(zone))
@@ -2173,6 +2181,10 @@ void try_offline_node(int nid)
 
 	if (check_cpu_on_node(nid))
 		return;
+
+#ifdef CONFIG_KSTALED
+	kstaled_free_folio_age(NODE_DATA(nid));
+#endif
 
 	/*
 	 * all memory/cpu of this node are removed, we can offline this
