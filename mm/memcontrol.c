@@ -7285,6 +7285,29 @@ static int mem_cgroup_unevictable_percent_write(struct cgroup_subsys_state *css,
 }
 #endif
 
+#ifdef CONFIG_KSTALED
+static u64 mem_cgroup_emm_threshold_read(struct cgroup_subsys_state *css,
+					 struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg->emm_threshold;
+}
+
+static int mem_cgroup_emm_threshold_write(struct cgroup_subsys_state *css,
+					  struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	if (val > 255)
+		return -EINVAL;
+
+	memcg->emm_threshold = val;
+
+	return 0;
+}
+#endif /* CONFIG_KSTALED */
+
 static int memory_async_reclaim_wmark_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
@@ -7811,6 +7834,12 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.seq_show = mem_cgroup_idle_page_stats_show,
 		.write = mem_cgroup_idle_page_stats_write,
 	},
+	{
+		.name = "emm.threshold",
+		.flags = CFTYPE_NS_DELEGATABLE,
+		.read_u64 = mem_cgroup_emm_threshold_read,
+		.write_u64 = mem_cgroup_emm_threshold_write,
+	},
 #endif
 	{ },	/* terminate */
 };
@@ -8156,7 +8185,10 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #ifdef CONFIG_ASYNC_FORK
 		memcg->async_fork = parent->async_fork;
 #endif
+#ifdef CONFIG_KSTALED
+		memcg->emm_threshold = parent->emm_threshold;
 		kstaled_memcg_inherit_parent_buckets(parent, memcg);
+#endif
 
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);
@@ -10065,6 +10097,12 @@ static struct cftype memory_files[] = {
 		.private = KSTALED_SELF,
 		.seq_show = mem_cgroup_idle_page_stats_show,
 		.write = mem_cgroup_idle_page_stats_write,
+	},
+	{
+		.name = "emm.threshold",
+		.flags = CFTYPE_NS_DELEGATABLE,
+		.read_u64 = mem_cgroup_emm_threshold_read,
+		.write_u64 = mem_cgroup_emm_threshold_write,
 	},
 #endif
 #ifdef CONFIG_TEXT_UNEVICTABLE

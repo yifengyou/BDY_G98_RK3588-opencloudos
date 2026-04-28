@@ -444,6 +444,7 @@ struct mem_cgroup {
 	struct kstaled_scan_control scan_control;
 	int idle_stable_idx;
 	struct idle_page_stats idle_stats[KSTALED_STATS_NR_TYPE];
+	u8 emm_threshold;
 #endif
 
 	KABI_RESERVE(1);
