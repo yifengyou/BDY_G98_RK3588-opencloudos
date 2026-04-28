@@ -23,7 +23,8 @@ struct netdev_rx_queue {
 	struct xsk_buff_pool            *pool;
 #endif
 
-	KABI_USE(1, void *__rcu oecls_ftb);
+	void *__rcu oecls_ftb;
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 } ____cacheline_aligned_in_smp;
 
