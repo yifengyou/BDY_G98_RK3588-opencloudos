@@ -93,7 +93,7 @@
 #include <linux/rue.h>
 
 #ifdef CONFIG_MEMCG_ZRAM
-bool zram_memcg_nocharge = true;
+bool zram_memcg_nocharge = false;
 EXPORT_SYMBOL(zram_memcg_nocharge);
 #endif
 
@@ -315,6 +315,7 @@ bool mem_cgroup_kmem_disabled(void)
 }
 
 static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages);
+static void refill_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages);
 
 static void obj_cgroup_release(struct percpu_ref *ref)
 {
@@ -353,8 +354,12 @@ static void obj_cgroup_release(struct percpu_ref *ref)
 		memcg = get_mem_cgroup_from_objcg(objcg);
 		mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
 		memcg1_account_kmem(memcg, -nr_pages);
-		if (!mem_cgroup_is_root(memcg))
-			memcg_uncharge(memcg, nr_pages);
+		if (!mem_cgroup_is_root(memcg)) {
+			if (obj_cgroup_is_sw(objcg))
+				page_counter_uncharge(&memcg->memory, nr_pages);
+			else
+				memcg_uncharge(memcg, nr_pages);
+		}
 		mem_cgroup_put(memcg);
 	}
 
@@ -383,6 +388,38 @@ static struct obj_cgroup *obj_cgroup_alloc(void)
 	}
 	INIT_LIST_HEAD(&objcg->list);
 	return objcg;
+}
+
+
+static void memcg_reparent_sw_objcgs(struct mem_cgroup *memcg,
+				     struct mem_cgroup *parent)
+{
+	struct obj_cgroup *objcg, *iter;
+
+	objcg = rcu_replace_pointer(memcg->sw_objcg, NULL, true);
+	if (!objcg)
+		return;
+
+	spin_lock_irq(&objcg_lock);
+
+	/* 1) Ready to reparent active sw_objcg. */
+	list_add(&objcg->list, &memcg->sw_objcg_list);
+	/*
+	 * 2) Reparent active sw_objcg and already reparented sw_objcgs to
+	 *    parent. Use __objcg_set_memcg() so the (memcg, is_sw=true)
+	 *    pair is published atomically as a single WRITE_ONCE word;
+	 *    lockless readers going through obj_cgroup_memcg() /
+	 *    obj_cgroup_is_sw() always observe a consistent view and can
+	 *    never see a parent pointer that has temporarily lost its tag.
+	 */
+	list_for_each_entry(iter, &memcg->sw_objcg_list, list)
+		__objcg_set_memcg(iter, parent, true);
+	/* 3) Move already reparented sw_objcgs to the parent's list */
+	list_splice(&memcg->sw_objcg_list, &parent->sw_objcg_list);
+
+	spin_unlock_irq(&objcg_lock);
+
+	percpu_ref_kill(&objcg->refcnt);
 }
 
 static void memcg_reparent_objcgs(struct mem_cgroup *memcg,
@@ -2722,13 +2759,77 @@ static DEFINE_PER_CPU_ALIGNED(struct obj_stock_pcp, obj_stock) = {
 	.lock = INIT_LOCAL_TRYLOCK(lock),
 };
 
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * obj_sw_stock caches byte-granular charges for the sw_objcg path that
+ * backs compressed swap storage. It is deliberately smaller than obj_stock
+ * and does NOT carry slab vmstat fields (cached_pgdat / nr_slab_*_b),
+ * because the sw path does not participate in NR_SLAB_*_B accounting.
+ *
+ * Keeping sw byte charges out of obj_stock also prevents cache-line
+ * ping-pong on cached_objcg when slab allocations (e.g. zpool internals)
+ * and sw charges alternate on the same CPU -- each side has its own
+ * single-slot cache.
+ */
+struct obj_sw_stock_pcp {
+	local_trylock_t lock;
+	unsigned int nr_bytes;
+	struct obj_cgroup *cached_objcg;
+
+	struct work_struct work;
+	unsigned long flags;
+};
+
+static DEFINE_PER_CPU_ALIGNED(struct obj_sw_stock_pcp, obj_sw_stock) = {
+	.lock = INIT_LOCAL_TRYLOCK(lock),
+};
+
+/*
+ * memcg_sw_stock caches page-granular charges against memcg->memory only
+ * (never memsw) for the sw_objcg path. It is the page-level peer of
+ * obj_sw_stock and forms the second stage of the sw two-level batching
+ * pipeline:
+ *
+ *     obj_sw_stock (bytes) -> memcg_sw_stock (pages) -> page_counter(memory)
+ *
+ * The regular memcg_stock cannot be reused because its drain path
+ * (memcg_uncharge) updates both memory and memsw in lockstep, which would
+ * break the sw invariant of leaving memsw untouched (the uncompressed
+ * swap size is already accounted in memsw elsewhere).
+ *
+ * Slot count is deliberately small: the sw path is driven by a narrow set
+ * of backends (zswap/zram style), typically touching one or two memcgs
+ * per CPU at a time.
+ */
+#define NR_SW_STOCK 2
+struct memcg_sw_stock_pcp {
+	local_trylock_t lock;
+	uint8_t nr_pages[NR_SW_STOCK];
+	struct mem_cgroup *cached[NR_SW_STOCK];
+
+	struct work_struct work;
+	unsigned long flags;
+};
+
+static DEFINE_PER_CPU_ALIGNED(struct memcg_sw_stock_pcp, memcg_sw_stock) = {
+	.lock = INIT_LOCAL_TRYLOCK(lock),
+};
+#endif /* CONFIG_MEMCG_KMEM */
+
 static DEFINE_MUTEX(percpu_charge_mutex);
 
 #ifdef CONFIG_MEMCG_KMEM
 static void drain_obj_stock(struct obj_stock_pcp *stock);
 static bool obj_stock_flush_required(struct obj_stock_pcp *stock,
 				     struct mem_cgroup *root_memcg);
-
+static void drain_sw_obj_stock(struct obj_sw_stock_pcp *stock);
+static void drain_local_sw_obj_stock(struct work_struct *dummy);
+static bool sw_obj_stock_flush_required(struct obj_sw_stock_pcp *stock,
+					struct mem_cgroup *root_memcg);
+static void drain_sw_stock_fully(struct memcg_sw_stock_pcp *stock);
+static void drain_local_sw_stock(struct work_struct *dummy);
+static bool is_sw_drain_needed(struct memcg_sw_stock_pcp *stock,
+			       struct mem_cgroup *root_memcg);
 #else
 static inline struct obj_cgroup *drain_obj_stock(struct memcg_stock_pcp *stock)
 {
@@ -2738,6 +2839,44 @@ static bool obj_stock_flush_required(struct memcg_stock_pcp *stock,
 				     struct mem_cgroup *root_memcg)
 {
 	return false;
+}
+#endif
+
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * consume_sw_stock - try to consume cached sw page charge on this cpu.
+ *
+ * Mirrors consume_stock() but only looks at the sw slot cache. sw_stock
+ * never batches against memsw.
+ */
+static bool consume_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	struct memcg_sw_stock_pcp *stock;
+	uint8_t stock_pages;
+	bool ret = false;
+	int i;
+
+	if (nr_pages > MEMCG_CHARGE_BATCH ||
+	    !local_trylock(&memcg_sw_stock.lock))
+		return ret;
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		if (memcg != READ_ONCE(stock->cached[i]))
+			continue;
+
+		stock_pages = READ_ONCE(stock->nr_pages[i]);
+		if (stock_pages >= nr_pages) {
+			WRITE_ONCE(stock->nr_pages[i], stock_pages - nr_pages);
+			ret = true;
+		}
+		break;
+	}
+
+	local_unlock(&memcg_sw_stock.lock);
+
+	return ret;
 }
 #endif
 
@@ -2789,6 +2928,32 @@ static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages)
 		page_counter_uncharge(&memcg->memsw, nr_pages);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * drain_sw_stock - flush a single sw_stock slot back to memcg->memory.
+ *
+ * Unlike drain_stock(), memsw is never touched here: this is the whole
+ * point of having a separate sw stock.
+ */
+static void drain_sw_stock(struct memcg_sw_stock_pcp *stock, int i)
+{
+	struct mem_cgroup *old = READ_ONCE(stock->cached[i]);
+	uint8_t stock_pages;
+
+	if (!old)
+		return;
+
+	stock_pages = READ_ONCE(stock->nr_pages[i]);
+	if (stock_pages) {
+		page_counter_uncharge(&old->memory, stock_pages);
+		WRITE_ONCE(stock->nr_pages[i], 0);
+	}
+
+	css_put(&old->css);
+	WRITE_ONCE(stock->cached[i], NULL);
+}
+#endif
+
 /*
  * Returns stocks cached in percpu and reset cached information.
  */
@@ -2810,6 +2975,16 @@ static void drain_stock(struct memcg_stock_pcp *stock, int i)
 	WRITE_ONCE(stock->cached[i], NULL);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+static void drain_sw_stock_fully(struct memcg_sw_stock_pcp *stock)
+{
+	int i;
+
+	for (i = 0; i < NR_SW_STOCK; ++i)
+		drain_sw_stock(stock, i);
+}
+#endif
+
 static void drain_stock_fully(struct memcg_stock_pcp *stock)
 {
 	int i;
@@ -2817,6 +2992,24 @@ static void drain_stock_fully(struct memcg_stock_pcp *stock)
 	for (i = 0; i < NR_MEMCG_STOCK; ++i)
 		drain_stock(stock, i);
 }
+
+#ifdef CONFIG_MEMCG_KMEM
+static void drain_local_sw_stock(struct work_struct *dummy)
+{
+	struct memcg_sw_stock_pcp *stock;
+
+	if (WARN_ONCE(!in_task(), "drain in non-task context"))
+		return;
+
+	local_lock(&memcg_sw_stock.lock);
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+	drain_sw_stock_fully(stock);
+	clear_bit(FLUSHING_CACHED_CHARGE, &stock->flags);
+
+	local_unlock(&memcg_sw_stock.lock);
+}
+#endif
 
 static void drain_local_memcg_stock(struct work_struct *dummy)
 {
@@ -2834,6 +3027,22 @@ static void drain_local_memcg_stock(struct work_struct *dummy)
 	local_unlock(&memcg_stock.lock);
 }
 
+static void drain_local_sw_obj_stock(struct work_struct *dummy)
+{
+	struct obj_sw_stock_pcp *stock;
+
+	if (WARN_ONCE(!in_task(), "drain in non-task context"))
+		return;
+
+	local_lock(&obj_sw_stock.lock);
+
+	stock = this_cpu_ptr(&obj_sw_stock);
+	drain_sw_obj_stock(stock);
+	clear_bit(FLUSHING_CACHED_CHARGE, &stock->flags);
+
+	local_unlock(&obj_sw_stock.lock);
+}
+
 static void drain_local_obj_stock(struct work_struct *dummy)
 {
 	struct obj_stock_pcp *stock;
@@ -2849,6 +3058,63 @@ static void drain_local_obj_stock(struct work_struct *dummy)
 
 	local_unlock(&obj_stock.lock);
 }
+
+#ifdef CONFIG_MEMCG_KMEM
+/*
+ * refill_sw_stock - credit @nr_pages back into the sw page stock.
+ *
+ * Mirrors refill_stock() but falls back to a direct
+ * page_counter_uncharge(&memory) on trylock failure or oversized refill,
+ * rather than memcg_uncharge() (which would double-uncharge memsw).
+ */
+static void refill_sw_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	struct memcg_sw_stock_pcp *stock;
+	struct mem_cgroup *cached;
+	uint8_t stock_pages;
+	bool success = false;
+	int empty_slot = -1;
+	int i;
+
+	BUILD_BUG_ON(MEMCG_CHARGE_BATCH > S8_MAX);
+
+	VM_WARN_ON_ONCE(mem_cgroup_is_root(memcg));
+
+	if (nr_pages > MEMCG_CHARGE_BATCH ||
+	    !local_trylock(&memcg_sw_stock.lock)) {
+		page_counter_uncharge(&memcg->memory, nr_pages);
+		return;
+	}
+
+	stock = this_cpu_ptr(&memcg_sw_stock);
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		cached = READ_ONCE(stock->cached[i]);
+		if (!cached && empty_slot == -1)
+			empty_slot = i;
+		if (memcg == READ_ONCE(stock->cached[i])) {
+			stock_pages = READ_ONCE(stock->nr_pages[i]) + nr_pages;
+			WRITE_ONCE(stock->nr_pages[i], stock_pages);
+			if (stock_pages > MEMCG_CHARGE_BATCH)
+				drain_sw_stock(stock, i);
+			success = true;
+			break;
+		}
+	}
+
+	if (!success) {
+		i = empty_slot;
+		if (i == -1) {
+			i = get_random_u32_below(NR_SW_STOCK);
+			drain_sw_stock(stock, i);
+		}
+		css_get(&memcg->css);
+		WRITE_ONCE(stock->cached[i], memcg);
+		WRITE_ONCE(stock->nr_pages[i], nr_pages);
+	}
+
+	local_unlock(&memcg_sw_stock.lock);
+}
+#endif
 
 static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
@@ -2907,6 +3173,31 @@ static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 	local_unlock(&memcg_stock.lock);
 }
 
+#ifdef CONFIG_MEMCG_KMEM
+static bool is_sw_drain_needed(struct memcg_sw_stock_pcp *stock,
+			       struct mem_cgroup *root_memcg)
+{
+	struct mem_cgroup *memcg;
+	bool flush = false;
+	int i;
+
+	rcu_read_lock();
+	for (i = 0; i < NR_SW_STOCK; ++i) {
+		memcg = READ_ONCE(stock->cached[i]);
+		if (!memcg)
+			continue;
+
+		if (READ_ONCE(stock->nr_pages[i]) &&
+		    mem_cgroup_is_descendant(memcg, root_memcg)) {
+			flush = true;
+			break;
+		}
+	}
+	rcu_read_unlock();
+	return flush;
+}
+#endif
+
 static bool is_memcg_drain_needed(struct memcg_stock_pcp *stock,
 				  struct mem_cgroup *root_memcg)
 {
@@ -2952,6 +3243,10 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 	for_each_online_cpu(cpu) {
 		struct memcg_stock_pcp *memcg_st = &per_cpu(memcg_stock, cpu);
 		struct obj_stock_pcp *obj_st = &per_cpu(obj_stock, cpu);
+#ifdef CONFIG_MEMCG_KMEM
+		struct obj_sw_stock_pcp *sw_obj_st = &per_cpu(obj_sw_stock, cpu);
+		struct memcg_sw_stock_pcp *sw_st = &per_cpu(memcg_sw_stock, cpu);
+#endif
 
 		if (!test_bit(FLUSHING_CACHED_CHARGE, &memcg_st->flags) &&
 		    is_memcg_drain_needed(memcg_st, root_memcg) &&
@@ -2972,6 +3267,28 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 			else if (!cpu_is_isolated(cpu))
 				schedule_work_on(cpu, &obj_st->work);
 		}
+
+#ifdef CONFIG_MEMCG_KMEM
+		if (!test_bit(FLUSHING_CACHED_CHARGE, &sw_st->flags) &&
+		    is_sw_drain_needed(sw_st, root_memcg) &&
+		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
+				      &sw_st->flags)) {
+			if (cpu == curcpu)
+				drain_local_sw_stock(&sw_st->work);
+			else if (!cpu_is_isolated(cpu))
+				schedule_work_on(cpu, &sw_st->work);
+		}
+
+		if (!test_bit(FLUSHING_CACHED_CHARGE, &sw_obj_st->flags) &&
+		    sw_obj_stock_flush_required(sw_obj_st, root_memcg) &&
+		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
+				      &sw_obj_st->flags)) {
+			if (cpu == curcpu)
+				drain_local_sw_obj_stock(&sw_obj_st->work);
+			else if (!cpu_is_isolated(cpu))
+				schedule_work_on(cpu, &sw_obj_st->work);
+		}
+#endif
 	}
 	migrate_enable();
 	mutex_unlock(&percpu_charge_mutex);
@@ -2981,7 +3298,13 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 {
 	/* no need for the local lock */
 	drain_obj_stock(&per_cpu(obj_stock, cpu));
+#ifdef CONFIG_MEMCG_KMEM
+	drain_sw_obj_stock(&per_cpu(obj_sw_stock, cpu));
+#endif
 	drain_stock_fully(&per_cpu(memcg_stock, cpu));
+#ifdef CONFIG_MEMCG_KMEM
+	drain_sw_stock_fully(&per_cpu(memcg_sw_stock, cpu));
+#endif
 
 	return 0;
 }
@@ -3458,7 +3781,7 @@ static int mem_cgroup_notify_prio_change(struct cgroup_subsys_state *css,
 }
 
 static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
-			unsigned int nr_pages)
+			unsigned int nr_pages, bool skip_memsw)
 {
 	unsigned int batch = max(MEMCG_CHARGE_BATCH, nr_pages);
 	int nr_retries = MAX_RECLAIM_RETRIES;
@@ -3477,18 +3800,32 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 #endif
 
 retry:
-	if (consume_stock(memcg, nr_pages))
-		return 0;
+	/*
+	 * Dispatch to the correct per-cpu charge stock.
+	 *
+	 * The regular memcg_stock batches memory and memsw together via
+	 * memcg_uncharge() and cannot be reused for the sw path (which must
+	 * never update memsw). The dedicated memcg_sw_stock provides the
+	 * same batching semantics but only for memory.
+	 */
+	if (skip_memsw) {
+		if (consume_sw_stock(memcg, nr_pages))
+			return 0;
+	} else {
+		if (consume_stock(memcg, nr_pages))
+			return 0;
+	}
 
+	/* No stock batching for skip_memsw; avoid stale stock flush */
 	if (!gfpflags_allow_spinning(gfp_mask))
 		/* Avoid the refill and flush of the older stock */
 		batch = nr_pages;
 
-	if (!do_memsw_account() ||
+	if (skip_memsw || !do_memsw_account() ||
 	    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
 		if (page_counter_try_charge(&memcg->memory, batch, &counter))
 			goto done_restock;
-		if (do_memsw_account())
+		if (!skip_memsw && do_memsw_account())
 			page_counter_uncharge(&memcg->memsw, batch);
 		mem_over_limit = mem_cgroup_from_counter(counter, memory);
 	} else {
@@ -3620,7 +3957,7 @@ force:
 	 * temporarily by force charging it.
 	 */
 	page_counter_charge(&memcg->memory, nr_pages);
-	if (do_memsw_account())
+	if (!skip_memsw && do_memsw_account())
 		page_counter_charge(&memcg->memsw, nr_pages);
 
 	if (sysctl_vm_memory_qos && memcg_reclaim_prio_exist())
@@ -3634,14 +3971,18 @@ done_restock:
 		if (need_reclaim) {
 			mem_over_limit = memcg;
 			page_counter_uncharge(&memcg->memory, batch);
-			if (do_memsw_account())
+			if (!skip_memsw && do_memsw_account())
 				page_counter_uncharge(&memcg->memsw, batch);
 			goto retry_failed_reclaim;
 		}
 	}
 
-	if (batch > nr_pages)
-		refill_stock(memcg, batch - nr_pages);
+	if (batch > nr_pages) {
+		if (skip_memsw)
+			refill_sw_stock(memcg, batch - nr_pages);
+		else
+			refill_stock(memcg, batch - nr_pages);
+	}
 
 	if (sysctl_vm_memory_qos && memcg_reclaim_prio_exist())
 		RUE_CALL_VOID(MEM, mem_cgroup_notify_alloc, memcg, batch);
@@ -3708,7 +4049,7 @@ static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	if (mem_cgroup_is_root(memcg))
 		return 0;
 
-	return try_charge_memcg(memcg, gfp_mask, nr_pages);
+	return try_charge_memcg(memcg, gfp_mask, nr_pages, false);
 }
 
 /**
@@ -4001,8 +4342,12 @@ static void obj_cgroup_uncharge_pages(struct obj_cgroup *objcg,
 
 	mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
 	memcg1_account_kmem(memcg, -nr_pages);
-	if (!mem_cgroup_is_root(memcg))
-		refill_stock(memcg, nr_pages);
+	if (!mem_cgroup_is_root(memcg)) {
+		if (obj_cgroup_is_sw(objcg))
+			refill_sw_stock(memcg, nr_pages);
+		else
+			refill_stock(memcg, nr_pages);
+	}
 
 	css_put(&memcg->css);
 }
@@ -4023,7 +4368,7 @@ static int obj_cgroup_charge_pages(struct obj_cgroup *objcg, gfp_t gfp,
 
 	memcg = get_mem_cgroup_from_objcg(objcg);
 
-	ret = try_charge_memcg(memcg, gfp, nr_pages);
+	ret = try_charge_memcg(memcg, gfp, nr_pages, obj_cgroup_is_sw(objcg));
 	if (ret)
 		goto out;
 
@@ -4130,6 +4475,33 @@ static void __account_obj_stock(struct obj_cgroup *objcg,
 		mod_objcg_mlstate(objcg, pgdat, idx, nr);
 }
 
+/*
+ * consume_sw_obj_stock - try to satisfy @nr_bytes from the sw byte stock.
+ *
+ * Returns true on success. Unlike consume_obj_stock(), this path has no
+ * slab vmstat side effects: sw charges never contribute to NR_SLAB_*_B.
+ */
+static bool consume_sw_obj_stock(struct obj_cgroup *objcg,
+				 unsigned int nr_bytes)
+{
+	struct obj_sw_stock_pcp *stock;
+	bool ret = false;
+
+	if (!local_trylock(&obj_sw_stock.lock))
+		return ret;
+
+	stock = this_cpu_ptr(&obj_sw_stock);
+	if (objcg == READ_ONCE(stock->cached_objcg) &&
+	    stock->nr_bytes >= nr_bytes) {
+		stock->nr_bytes -= nr_bytes;
+		ret = true;
+	}
+
+	local_unlock(&obj_sw_stock.lock);
+
+	return ret;
+}
+
 static bool consume_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 			      struct pglist_data *pgdat, enum node_stat_item idx)
 {
@@ -4151,6 +4523,57 @@ static bool consume_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	local_unlock(&obj_stock.lock);
 
 	return ret;
+}
+
+/*
+ * drain_sw_obj_stock - flush a cpu's sw byte stock.
+ *
+ * Whole-page part is forwarded to obj_cgroup_uncharge_pages() which, for
+ * sw_objcg, eventually lands on page_counter_uncharge(&memcg->memory)
+ * without touching memsw. Sub-page leftover is published back into
+ * objcg->nr_charged_bytes and drained on the next CPU that reloads it
+ * (or by obj_cgroup_release()).
+ */
+static void drain_sw_obj_stock(struct obj_sw_stock_pcp *stock)
+{
+	struct obj_cgroup *old = READ_ONCE(stock->cached_objcg);
+
+	if (!old)
+		return;
+
+	if (stock->nr_bytes) {
+		unsigned int nr_pages = stock->nr_bytes >> PAGE_SHIFT;
+		unsigned int nr_bytes = stock->nr_bytes & (PAGE_SIZE - 1);
+
+		if (nr_pages) {
+			struct mem_cgroup *memcg;
+
+			memcg = get_mem_cgroup_from_objcg(old);
+
+			mod_memcg_state(memcg, MEMCG_KMEM, -nr_pages);
+			memcg1_account_kmem(memcg, -nr_pages);
+			if (!mem_cgroup_is_root(memcg))
+				page_counter_uncharge(&memcg->memory, nr_pages);
+
+			css_put(&memcg->css);
+		}
+
+		/*
+		 * The leftover is flushed to the centralized per-memcg value.
+		 * On the next attempt to refill obj stock it will be moved
+		 * to a per-cpu stock (probably, on an other CPU), see
+		 * refill_obj_stock().
+		 *
+		 * How often it's flushed is a trade-off between the memory
+		 * limit enforcement accuracy and potential CPU contention,
+		 * so it might be changed in the future.
+		 */
+		atomic_add(nr_bytes, &old->nr_charged_bytes);
+		stock->nr_bytes = 0;
+	}
+
+	WRITE_ONCE(stock->cached_objcg, NULL);
+	obj_cgroup_put(old);
 }
 
 static void drain_obj_stock(struct obj_stock_pcp *stock)
@@ -4214,6 +4637,24 @@ static void drain_obj_stock(struct obj_stock_pcp *stock)
 	obj_cgroup_put(old);
 }
 
+static bool sw_obj_stock_flush_required(struct obj_sw_stock_pcp *stock,
+					struct mem_cgroup *root_memcg)
+{
+	struct obj_cgroup *objcg = READ_ONCE(stock->cached_objcg);
+	struct mem_cgroup *memcg;
+	bool flush = false;
+
+	rcu_read_lock();
+	if (objcg) {
+		memcg = obj_cgroup_memcg(objcg);
+		if (memcg && mem_cgroup_is_descendant(memcg, root_memcg))
+			flush = true;
+	}
+	rcu_read_unlock();
+
+	return flush;
+}
+
 static bool obj_stock_flush_required(struct obj_stock_pcp *stock,
 				     struct mem_cgroup *root_memcg)
 {
@@ -4230,6 +4671,50 @@ static bool obj_stock_flush_required(struct obj_stock_pcp *stock,
 	rcu_read_unlock();
 
 	return flush;
+}
+
+/*
+ * refill_sw_obj_stock - credit @nr_bytes back into the sw byte stock.
+ *
+ * Mirrors refill_obj_stock() but without slab-vmstat plumbing. The
+ * fallback path on trylock failure preserves every byte: whole pages
+ * are routed through obj_cgroup_uncharge_pages() (via out:) and the
+ * sub-page remainder is accumulated into objcg->nr_charged_bytes.
+ */
+static void refill_sw_obj_stock(struct obj_cgroup *objcg,
+				unsigned int nr_bytes, bool allow_uncharge)
+{
+	struct obj_sw_stock_pcp *stock;
+	unsigned int nr_pages = 0;
+
+	if (!local_trylock(&obj_sw_stock.lock)) {
+		nr_pages = nr_bytes >> PAGE_SHIFT;
+		nr_bytes = nr_bytes & (PAGE_SIZE - 1);
+		atomic_add(nr_bytes, &objcg->nr_charged_bytes);
+		goto out;
+	}
+
+	stock = this_cpu_ptr(&obj_sw_stock);
+	if (READ_ONCE(stock->cached_objcg) != objcg) { /* reset if necessary */
+		drain_sw_obj_stock(stock);
+		obj_cgroup_get(objcg);
+		stock->nr_bytes = atomic_read(&objcg->nr_charged_bytes)
+				? atomic_xchg(&objcg->nr_charged_bytes, 0) : 0;
+		WRITE_ONCE(stock->cached_objcg, objcg);
+
+		allow_uncharge = true;	/* Allow uncharge when objcg changes */
+	}
+	stock->nr_bytes += nr_bytes;
+
+	if (allow_uncharge && (stock->nr_bytes > PAGE_SIZE)) {
+		nr_pages = stock->nr_bytes >> PAGE_SHIFT;
+		stock->nr_bytes &= (PAGE_SIZE - 1);
+	}
+
+	local_unlock(&obj_sw_stock.lock);
+out:
+	if (nr_pages)
+		obj_cgroup_uncharge_pages(objcg, nr_pages);
 }
 
 static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
@@ -4279,9 +4764,15 @@ static int obj_cgroup_charge_account(struct obj_cgroup *objcg, gfp_t gfp, size_t
 {
 	unsigned int nr_pages, nr_bytes;
 	int ret;
+	bool is_sw_objcg = obj_cgroup_is_sw(objcg);
 
-	if (likely(consume_obj_stock(objcg, size, pgdat, idx)))
-		return 0;
+	if (is_sw_objcg) {
+		if (likely(consume_sw_obj_stock(objcg, size)))
+			return 0;
+	} else {
+		if (likely(consume_obj_stock(objcg, size, pgdat, idx)))
+			return 0;
+	}
 
 	/*
 	 * In theory, objcg->nr_charged_bytes can have enough
@@ -4313,9 +4804,14 @@ static int obj_cgroup_charge_account(struct obj_cgroup *objcg, gfp_t gfp, size_t
 		nr_pages += 1;
 
 	ret = obj_cgroup_charge_pages(objcg, gfp, nr_pages);
-	if (!ret && (nr_bytes || pgdat))
-		refill_obj_stock(objcg, nr_bytes ? PAGE_SIZE - nr_bytes : 0,
-					 false, size, pgdat, idx);
+	if (!ret && (nr_bytes || pgdat)) {
+		if (is_sw_objcg)
+			refill_sw_obj_stock(objcg,
+						PAGE_SIZE - nr_bytes, false);
+		else
+			refill_obj_stock(objcg, nr_bytes ? PAGE_SIZE - nr_bytes : 0,
+						false, size, pgdat, idx);
+	}
 
 	return ret;
 }
@@ -4328,7 +4824,10 @@ int obj_cgroup_charge(struct obj_cgroup *objcg, gfp_t gfp, size_t size)
 
 void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size)
 {
-	refill_obj_stock(objcg, size, true, 0, NULL, 0);
+	if (obj_cgroup_is_sw(objcg))
+		refill_sw_obj_stock(objcg, size, true);
+	else
+		refill_obj_stock(objcg, size, true, 0, NULL, 0);
 }
 EXPORT_SYMBOL_GPL(obj_cgroup_uncharge);
 
@@ -5104,9 +5603,26 @@ static int mem_cgroup_dummy_seq_show(__always_unused struct seq_file *m,
 }
 
 #ifdef CONFIG_MEMCG_KMEM
+static int memcg_online_sw_objcg(struct mem_cgroup *memcg)
+{
+	struct obj_cgroup *objcg;
+
+	objcg = obj_cgroup_alloc();
+	if (!objcg)
+		return -ENOMEM;
+
+	__objcg_set_memcg(objcg, memcg, true);
+	rcu_assign_pointer(memcg->sw_objcg, objcg);
+	obj_cgroup_get(objcg);
+	memcg->orig_sw_objcg = objcg;
+
+	return 0;
+}
+
 static int memcg_online_kmem(struct mem_cgroup *memcg)
 {
 	struct obj_cgroup *objcg;
+	int ret;
 
 	if (mem_cgroup_kmem_disabled())
 		return 0;
@@ -5118,10 +5634,31 @@ static int memcg_online_kmem(struct mem_cgroup *memcg)
 	if (!objcg)
 		return -ENOMEM;
 
-	objcg->memcg = memcg;
+	__objcg_set_memcg(objcg, memcg, false);
 	rcu_assign_pointer(memcg->objcg, objcg);
 	obj_cgroup_get(objcg);
 	memcg->orig_objcg = objcg;
+
+	if (!zram_memcg_nocharge) {
+		ret = memcg_online_sw_objcg(memcg);
+		if (ret) {
+			struct obj_cgroup *first_objcg = memcg->orig_objcg;
+
+			/*
+			 * Roll back the regular objcg we just published. It
+			 * has never been used (kmem online key is not enabled
+			 * yet), so nr_charged_bytes == 0 and no list linkage
+			 * exists beyond the self-init one.
+			 */
+			rcu_assign_pointer(memcg->objcg, NULL);
+			memcg->orig_objcg = NULL;
+
+			obj_cgroup_put(first_objcg);          /* drop orig_objcg's ref  */
+			percpu_ref_kill(&first_objcg->refcnt); /* drop the bias, triggers release via RCU */
+
+			return ret;
+		}
+	}
 
 	static_branch_enable(&memcg_kmem_online_key);
 
@@ -5145,6 +5682,7 @@ static void memcg_offline_kmem(struct mem_cgroup *memcg)
 		parent = root_mem_cgroup;
 
 	memcg_reparent_objcgs(memcg, parent);
+	memcg_reparent_sw_objcgs(memcg, parent);
 
 	/*
 	 * After we have finished memcg_reparent_objcgs(), all list_lrus
@@ -8008,6 +8546,9 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 	if (memcg->orig_objcg)
 		obj_cgroup_put(memcg->orig_objcg);
 
+	if (memcg->orig_sw_objcg)
+		obj_cgroup_put(memcg->orig_sw_objcg);
+
 	for_each_node(node)
 		free_mem_cgroup_per_node_info(memcg, node);
 	kfree(memcg->vmstats);
@@ -8081,6 +8622,7 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 #ifdef CONFIG_MEMCG_KMEM
 	memcg->kmemcg_id = -1;
 	INIT_LIST_HEAD(&memcg->objcg_list);
+	INIT_LIST_HEAD(&memcg->sw_objcg_list);
 #endif
 #ifdef CONFIG_CGROUP_WRITEBACK
 	INIT_LIST_HEAD(&memcg->cgwb_list);
@@ -10826,6 +11368,12 @@ static int __init mem_cgroup_init(void)
 			  drain_local_memcg_stock);
 		INIT_WORK(&per_cpu_ptr(&obj_stock, cpu)->work,
 			  drain_local_obj_stock);
+#ifdef CONFIG_MEMCG_KMEM
+		INIT_WORK(&per_cpu_ptr(&obj_sw_stock, cpu)->work,
+			  drain_local_sw_obj_stock);
+		INIT_WORK(&per_cpu_ptr(&memcg_sw_stock, cpu)->work,
+			  drain_local_sw_stock);
+#endif
 	}
 
 	for_each_node(node) {
