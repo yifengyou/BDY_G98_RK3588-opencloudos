@@ -26,6 +26,7 @@
 #ifdef CONFIG_RQI
 #include <linux/rqi.h>
 #endif
+#include <linux/kstaled.h>
 
 #define MEM_LATENCY_MAX_SLOTS 64
 
@@ -435,6 +436,14 @@ struct mem_cgroup {
 
 #ifdef CONFIG_ASYNC_FORK
 	unsigned long async_fork;
+#endif
+
+#ifdef CONFIG_KSTALED
+	struct rw_semaphore idle_stats_rwsem;
+	unsigned long idle_page_scans;
+	struct kstaled_scan_control scan_control;
+	int idle_stable_idx;
+	struct idle_page_stats idle_stats[KSTALED_STATS_NR_TYPE];
 #endif
 
 	KABI_RESERVE(1);
@@ -1300,6 +1309,20 @@ void split_page_memcg(struct page *head, int old_order, int new_order);
 unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 						gfp_t gfp_mask,
 						unsigned long *total_scanned);
+
+#ifdef CONFIG_KSTALED
+static inline struct idle_page_stats *
+mem_cgroup_get_stable_idle_stats(struct mem_cgroup *memcg)
+{
+	return &memcg->idle_stats[memcg->idle_stable_idx];
+}
+
+static inline struct idle_page_stats *
+mem_cgroup_get_unstable_idle_stats(struct mem_cgroup *memcg)
+{
+	return &memcg->idle_stats[!memcg->idle_stable_idx];
+}
+#endif /* CONFIG_KSTALED */
 
 #else /* CONFIG_MEMCG */
 
