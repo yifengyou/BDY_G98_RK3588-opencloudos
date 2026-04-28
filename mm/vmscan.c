@@ -1766,6 +1766,7 @@ next:
 
 	pgactivate = stat->nr_activate[0] + stat->nr_activate[1];
 
+	kstaled_mem_cgroup_uncharge_list(&free_folios, true);
 	mem_cgroup_uncharge_folios(&free_folios);
 	try_to_unmap_flush();
 	free_unref_folios(&free_folios);

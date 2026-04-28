@@ -21,7 +21,11 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
+#include <linux/pagevec.h>
 #include "internal.h"
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/kstaled.h>
 
 /*
  * This global scanner named *kstaled* because it's based on the
@@ -196,7 +200,7 @@ void kstaled_mem_cgroup_account(struct folio *folio,
 	stats = mem_cgroup_get_unstable_idle_stats(memcg);
 	bucket = kstaled_get_bucket(stats->buckets, age);
 	if (bucket >= 0)
-		stats->count[type][bucket] += size;
+		kstaled_atomic_add(&stats->count[type][bucket], size);
 
 	folio_memcg_unlock(folio);
 }
@@ -239,16 +243,9 @@ void kstaled_mem_cgroup_move_stats(struct mem_cgroup *from,
 		return;
 
 	/* Remove from the source memory cgroup */
-	if (stats[0]->count[type][bucket] > size)
-		stats[0]->count[type][bucket] -= size;
-	else
-		stats[0]->count[type][bucket] = 0;
-	if (pgdat->node_idle_scan_pfn >= pfn) {
-		if (stats[1]->count[type][bucket] > size)
-			stats[1]->count[type][bucket] -= size;
-		else
-			stats[1]->count[type][bucket] = 0;
-	}
+	kstaled_atomic_sub(&stats[0]->count[type][bucket], size);
+	if (pgdat->node_idle_scan_pfn >= pfn)
+		kstaled_atomic_sub(&stats[1]->count[type][bucket], size);
 
 	/* Charge to the target memory cgroup */
 	if (!to)
@@ -258,11 +255,117 @@ void kstaled_mem_cgroup_move_stats(struct mem_cgroup *from,
 	if (bucket < 0)
 		return;
 
-	stats[2]->count[type][bucket] += size;
+	kstaled_atomic_add(&stats[2]->count[type][bucket], size);
 	if (pgdat->node_idle_scan_pfn >= pfn)
-		stats[3]->count[type][bucket] += size;
+		kstaled_atomic_add(&stats[3]->count[type][bucket], size);
 }
 EXPORT_SYMBOL_GPL(kstaled_mem_cgroup_move_stats);
+
+static void kstaled_mem_cgroup_uncharge(struct folio *folio, struct mem_cgroup *memcg)
+{
+	pg_data_t *pgdat;
+	unsigned long pfn;
+	struct idle_page_stats *stats[2] = { NULL, };
+	int type, bucket, age;
+	unsigned long size;
+
+	if (mem_cgroup_disabled() || !is_kstaled_enabled() || !memcg)
+		return;
+
+	pgdat = folio_pgdat(folio);
+	pfn = folio_pfn(folio);
+	age = kstaled_get_folio_age(pgdat, pfn);
+	if (age <= 0)
+		return;
+
+	type = kstaled_get_idle_type(folio);
+
+	size = folio_nr_pages(folio) << PAGE_SHIFT;
+
+	stats[0] = mem_cgroup_get_stable_idle_stats(memcg);
+	stats[1] = mem_cgroup_get_unstable_idle_stats(memcg);
+
+	bucket = kstaled_get_bucket(stats[1]->buckets, age);
+	if (bucket < 0)
+		return;
+
+	/* Remove from the memory cgroup */
+	kstaled_atomic_sub(&stats[0]->count[type][bucket], size);
+
+	if (pgdat->node_idle_scan_pfn >= pfn)
+		kstaled_atomic_sub(&stats[1]->count[type][bucket], size);
+}
+
+void kstaled_mem_cgroup_uncharge_list(struct folio_batch *folios,
+				      bool shrink)
+{
+	unsigned int i;
+	struct {
+		int age;
+		int count;
+	} age_map[SWAP_CLUSTER_MAX + 1] = {
+		[0 ... SWAP_CLUSTER_MAX] = {
+			.age = -1,
+			.count = 0,
+		}
+	};
+	int age_idx[KSTALED_MAX_IDLE_AGE + 1] = {[0 ... KSTALED_MAX_IDLE_AGE] = -1};
+	int nr_seen = 0;
+
+	if (mem_cgroup_disabled() || !is_kstaled_enabled())
+		return;
+
+	for (i = 0; i < folios->nr; i++) {
+		struct folio *folio = folios->folios[i];
+		struct mem_cgroup *memcg = folio_memcg(folio);
+
+		if (memcg) {
+			pg_data_t *pgdat = folio_pgdat(folio);
+			unsigned long pfn = folio_pfn(folio);
+			int age = kstaled_get_folio_age(pgdat, pfn);
+
+			if (unlikely(!pgdat->node_page_age))
+				return;
+
+			if (shrink && nr_seen < SWAP_CLUSTER_MAX &&
+			    age >= 0 && age <= KSTALED_MAX_IDLE_AGE) {
+				int idx = age_idx[age];
+
+				if (idx == -1) {
+					age_idx[age] = nr_seen;
+					age_map[nr_seen].age = age;
+					age_map[nr_seen].count++;
+					nr_seen++;
+				} else
+					age_map[idx].count++;
+			}
+			kstaled_mem_cgroup_uncharge(folio, memcg);
+		}
+	}
+
+	if (shrink && trace_kstaled_folio_age_enabled()
+	    && nr_seen > 0) {
+		int i;
+		char buf[128] = {'\0'};
+		int len = 0;
+
+		for (i = 0; i < nr_seen; i++) {
+			int age = age_map[i].age;
+
+			if (len >= 100) {
+				trace_kstaled_folio_age(buf);
+				len = 0;
+				memset(buf, '\0', sizeof(buf));
+			}
+			len += snprintf(buf + len, sizeof(buf) - len, "[%d:%u] ",
+					age, age_map[i].count);
+		}
+
+		if (len > 0)
+			trace_kstaled_folio_age(buf);
+	}
+}
+EXPORT_SYMBOL_GPL(kstaled_mem_cgroup_uncharge_list);
 
 static inline void
 kstaled_mem_cgroup_scan_done(struct kstaled_scan_control scan_control)

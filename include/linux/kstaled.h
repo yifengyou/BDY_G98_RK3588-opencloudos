@@ -106,6 +106,29 @@ extern unsigned long kstaled_scan_rounds;
 #define KSTALED_OP_SET_DURATION		(1 << 0)
 #define KSTALED_OP_INC_SEQ		(1 << 1)
 
+static inline void kstaled_atomic_add(unsigned long *ptr, unsigned long val)
+{
+	atomic_long_add(val, (atomic_long_t *)ptr);
+}
+
+static inline void kstaled_atomic_sub(unsigned long *ptr, unsigned long val)
+{
+	unsigned long old, new;
+
+	do {
+		old = READ_ONCE(*ptr);
+		if (old > val)
+			new = old - val;
+		else
+			new = 0;
+	} while (cmpxchg(ptr, old, new) != old);
+}
+
+static inline void kstaled_atomic_set(unsigned long *ptr, unsigned long val)
+{
+	WRITE_ONCE(*ptr, val);
+}
+
 static inline struct kstaled_scan_control kstaled_get_current_scan_control(void)
 {
 	struct kstaled_scan_control scan_control;
@@ -256,6 +279,8 @@ void kstaled_mem_cgroup_move_stats(struct mem_cgroup *from,
 				  struct mem_cgroup *to,
 				  struct folio *folio,
 				  unsigned long size);
+void kstaled_mem_cgroup_uncharge_list(struct folio_batch *folios,
+				      bool shrink);
 #endif /* CONFIG_MEMCG */
 
 void kstaled_free_folio_age(pg_data_t *pgdat);
@@ -300,6 +325,9 @@ static inline void kstaled_set_folio_age(pg_data_t *pgdat,
 {
 	u8 *age;
 
+	if (!is_kstaled_enabled())
+		return;
+
 	rcu_read_lock();
 	age = rcu_dereference(pgdat->node_page_age);
 	if (unlikely(!age)) {
@@ -318,6 +346,11 @@ static inline void kstaled_mem_cgroup_move_stats(struct mem_cgroup *from,
 						struct mem_cgroup *to,
 						struct folio *folio,
 						unsigned long size)
+{
+}
+
+static inline void kstaled_mem_cgroup_uncharge_list(struct folio_batch *folios,
+						    bool shrink)
 {
 }
 
