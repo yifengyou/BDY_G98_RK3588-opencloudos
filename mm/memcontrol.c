@@ -6083,11 +6083,6 @@ static void kstaled_memcg_inherit_parent_buckets(struct mem_cgroup *parent,
 static void kstaled_memcg_init(struct mem_cgroup *memcg)
 {
 }
-
-static void kstaled_memcg_inherit_parent_buckets(struct mem_cgroup *parent,
-						struct mem_cgroup *memcg)
-{
-}
 #endif /* CONFIG_KSTALED */
 
 static u64 mem_cgroup_move_charge_read(struct cgroup_subsys_state *css,
