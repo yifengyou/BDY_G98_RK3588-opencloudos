@@ -228,6 +228,8 @@ source "security/safesetid/Kconfig"
 source "security/lockdown/Kconfig"
 source "security/landlock/Kconfig"
 
+source "security/shellguard/Kconfig"
+
 source "security/integrity/Kconfig"
 
 choice
@@ -283,4 +285,3 @@ config LSM
 source "security/Kconfig.hardening"
 
 endmenu
-

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SHELL_GUARD
+	bool "Shell Guard Security Module"
+	depends on SECURITY && X86
+	default y
+	help
+		This option enables the Shell Guard security module, which provides
+		enhanced protection for shell environments and prctl syscall.
+
+		Shell Guard implements various security features including:
+		- shell command validation and filtering
+		- Real-time monitoring and logging
+		- Forbid main processor to modify processor name with prctl syscall
+
+		If you are running shell services in a production environment or
+		need additional security layers for your shell operations and prctl syscall, say y here.
+
+		If unsure, say n.
