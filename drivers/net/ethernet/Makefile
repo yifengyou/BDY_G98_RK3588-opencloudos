@@ -111,3 +111,4 @@ obj-$(CONFIG_NET_VENDOR_SYNOPSYS) += synopsys/
 obj-$(CONFIG_NET_VENDOR_PENSANDO) += pensando/
 obj-$(CONFIG_NET_VENDOR_NORTHLINK) += northlink/
 obj-$(CONFIG_THIRDPARTY_TCNIC_NET) += tcnic/
+obj-$(CONFIG_NET_VENDOR_DINGHAI) += dinghai/
