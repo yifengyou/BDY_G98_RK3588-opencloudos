@@ -236,6 +236,17 @@ config ZSMALLOC_CHAIN_SIZE
 
 	  For more information, see zsmalloc documentation.
 
+config ZSMALLOC_HIGHORDER_ZSPAGE
+	bool "High-order compound pages and extended size classes for zspages"
+	depends on ZSMALLOC && !HIGHMEM
+	help
+	  Extend zsmalloc so a zspage is not limited to a chain of order-0
+	  pages, it supports up to order 9. Each slot within this chain can be
+	  backed by higher-order compound pages, which are chosen from the
+	  object size classes.
+
+	  If unsure, say N. Not compatible with HIGHMEM.
+
 menu "Slab allocator options"
 
 config SLUB
