@@ -87,10 +87,9 @@
 #define VMX_FEATURE_BUS_LOCK_DETECTION	( 2*32+ 30) /* "" VM-Exit when bus lock caused */
 #define VMX_FEATURE_NOTIFY_VM_EXITING	( 2*32+ 31) /* VM-Exit when no event windows after notify window */
 
+/* Tertiary Processor-Based VM-Execution Controls, word 3 */
+#define VMX_FEATURE_IPI_VIRT		( 3*32+  4) /* Enable IPI virtualization */
+
 /* Zhaoxin Tertiary Processor-Based VM-Execution Controls, word 3 */
-#define VMX_FEATURE_GUEST_ZXPAUSE      (3*32 +  0) /* zxpause instruction in guest mode */
-
-/* Tertiary Processor-Based VM-Execution Controls, word 4 */
-#define VMX_FEATURE_IPI_VIRT          (4*32 +  4) /* Enable IPI virtualization */
-
+#define VMX_FEATURE_GUEST_PAUSEOPT	( 4*32+  0) /* pauseopt instruction in guest mode */
 #endif /* _ASM_X86_VMXFEATURES_H */

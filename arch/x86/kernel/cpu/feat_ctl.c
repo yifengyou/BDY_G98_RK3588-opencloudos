@@ -15,13 +15,38 @@ enum vmx_feature_leafs {
 	MISC_FEATURES = 0,
 	PRIMARY_CTLS,
 	SECONDARY_CTLS,
-	ZX_TERTIARY_CTLS,
 	TERTIARY_CTLS_LOW,
 	TERTIARY_CTLS_HIGH,
+	ZX_TERTIARY_CTLS,
 	NR_VMX_FEATURE_WORDS,
 };
 
 #define VMX_F(x) BIT(VMX_FEATURE_##x & 0x1f)
+
+static void init_zhaoxin_ext_capabilities(struct cpuinfo_x86 *c)
+{
+	u32 ext_vmcs_cap = 0;
+	u32 proc_based_ctls3_high = 0;
+	u32 ign, msr_high;
+	int err;
+
+	if (!(boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN ||
+		boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR))
+		return;
+
+	err = rdmsr_safe(MSR_ZX_EXT_VMCS_CAPS, &ext_vmcs_cap, &ign);
+
+	if (!(ext_vmcs_cap & MSR_ZX_VMCS_EXEC_CTL3_EN))
+		return;
+
+	err = rdmsr_safe(MSR_ZX_VMX_PROCBASED_CTLS3, &ign, &msr_high);
+	if (!(msr_high & 0x1)) /* CTLS3 MSR doesn't exist */
+		proc_based_ctls3_high = 0x1; /* set PAUSEOPT(bit0) */
+	else
+		proc_based_ctls3_high = msr_high;
+
+	c->vmx_capability[ZX_TERTIARY_CTLS] = proc_based_ctls3_high;
+}
 
 static void init_vmx_capabilities(struct cpuinfo_x86 *c)
 {
@@ -98,13 +123,8 @@ static void init_vmx_capabilities(struct cpuinfo_x86 *c)
 		set_cpu_cap(c, X86_FEATURE_EPT_AD);
 	if (c->vmx_capability[MISC_FEATURES] & VMX_F(VPID))
 		set_cpu_cap(c, X86_FEATURE_VPID);
-	/*
-	 * Initialize Zhaoxin Tertiary Exec Control feature flags.
-	 */
-	rdmsr_safe(MSR_ZX_EXT_VMCS_CAPS, &supported, &ign);
-	if (supported & MSR_ZX_VMCS_EXEC_CTL3)
-		c->vmx_capability[ZX_TERTIARY_CTLS] |= VMX_F(GUEST_ZXPAUSE);
 
+	init_zhaoxin_ext_capabilities(c);
 }
 #endif /* CONFIG_X86_VMX_FEATURE_NAMES */
 
