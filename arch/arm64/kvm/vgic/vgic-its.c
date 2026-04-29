@@ -22,6 +22,7 @@
 
 #include "vgic.h"
 #include "vgic-mmio.h"
+#include "hisilicon/hisi_virt.h"
 
 static int vgic_its_save_tables_v0(struct vgic_its *its);
 static int vgic_its_restore_tables_v0(struct vgic_its *its);
@@ -504,6 +505,14 @@ static unsigned long vgic_mmio_read_its_typer(struct kvm *kvm,
 	return extract_bytes(reg, addr & 7, len);
 }
 
+#ifdef CONFIG_ARM64_HISI_IPIV
+/*
+ * Use bit7 not used by GITS_IIDR to indicate whether IPIV is
+ * enabled for guest OS.
+ */
+#define HISI_GUEST_ENABLE_IPIV_SHIFT 7
+#endif
+
 static unsigned long vgic_mmio_read_its_iidr(struct kvm *kvm,
 					     struct vgic_its *its,
 					     gpa_t addr, unsigned int len)
@@ -524,6 +533,13 @@ static int vgic_mmio_uaccess_write_its_iidr(struct kvm *kvm,
 
 	if (rev >= NR_ITS_ABIS)
 		return -EINVAL;
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	if (hisi_ipiv_supported_per_vm(kvm) &&
+	    val & (1UL << HISI_GUEST_ENABLE_IPIV_SHIFT))
+		kvm->arch.vgic.its_vm.enable_ipiv_from_guest = true;
+#endif
+
 	return vgic_its_set_abi(its, rev);
 }
 
@@ -2114,6 +2130,11 @@ static int vgic_its_attr_regs_access(struct kvm_device *dev,
 			region->its_write(dev->kvm, its, addr, len, *reg);
 	} else {
 		*reg = region->its_read(dev->kvm, its, addr, len);
+#ifdef CONFIG_ARM64_HISI_IPIV
+		if (dev->kvm->arch.vgic.its_vm.enable_ipiv_from_guest &&
+			    offset == GITS_IIDR)
+			*reg |= 1UL << HISI_GUEST_ENABLE_IPIV_SHIFT;
+#endif
 	}
 out:
 	mutex_unlock(&dev->kvm->arch.config_lock);
@@ -2746,6 +2767,15 @@ static void vgic_its_reset(struct kvm *kvm, struct vgic_its *its)
 	its->enabled = 0;
 	vgic_its_free_device_list(kvm, its);
 	vgic_its_free_collection_list(kvm, its);
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	/*
+	 * For the para-virtualization feature IPIV, ensure that
+	 * the flag of the guest OS is reset when the guest OS is
+	 * reset.
+	 */
+	kvm->arch.vgic.its_vm.enable_ipiv_from_guest = false;
+#endif
 }
 
 static int vgic_its_has_attr(struct kvm_device *dev,

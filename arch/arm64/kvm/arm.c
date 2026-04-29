@@ -68,7 +68,6 @@ bool kvm_ncsnp_support;
 /* Capability of DVMBM */
 bool kvm_dvmbm_support;
 
-
 static DEFINE_PER_CPU(unsigned char, kvm_hyp_initialized);
 
 bool is_kvm_arm_initialised(void)
@@ -170,6 +169,14 @@ static int kvm_cap_arm_enable_hdbss(struct kvm *kvm,
 }
 #endif
 
+#ifdef CONFIG_ARM64_HISI_IPIV
+static int kvm_hisi_ipiv_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
+{
+	kvm->arch.vgic.its_vm.enable_ipiv_from_vmm = true;
+	return 0;
+}
+#endif
+
 int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			    struct kvm_enable_cap *cap)
 {
@@ -225,6 +232,11 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 #ifdef CONFIG_ARM64_HDBSS
 	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
 		r = kvm_cap_arm_enable_hdbss(kvm, cap);
+		break;
+#endif
+#ifdef CONFIG_ARM64_HISI_IPIV
+	case KVM_CAP_ARM_HISI_IPIV:
+		r = kvm_hisi_ipiv_enable_cap(kvm, cap);
 		break;
 #endif
 	default:
@@ -302,6 +314,9 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	/* The maximum number of VCPUs is limited by the host's GIC model */
 	kvm->max_vcpus = kvm_arm_default_max_vcpus();
 
+	if (cpus_have_const_cap(ARM64_HAS_NMI) && !static_branch_unlikely(&vgic_v3_cpuif_trap))
+		kvm->arch.pfr1_nmi = ID_AA64PFR1_EL1_NMI_IMP;
+
 	kvm_arm_init_hypercalls(kvm);
 
 	bitmap_zero(kvm->arch.vcpu_features, KVM_VCPU_MAX_FEATURES);
@@ -352,6 +367,10 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	kvm_arm_teardown_hypercalls(kvm);
 	kvm_destroy_realm(kvm);
 }
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+extern struct static_key_false ipiv_enable;
+#endif
 
 int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 {
@@ -477,6 +496,14 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 #ifdef CONFIG_VIRT_PLAT_DEV
 	case KVM_CAP_ARM_VIRT_MSI_BYPASS:
 		r = sdev_enable;
+		break;
+#endif
+#ifdef CONFIG_ARM64_HISI_IPIV
+	case KVM_CAP_ARM_HISI_IPIV:
+		if (static_branch_unlikely(&ipiv_enable))
+			r = 1;
+		else
+			r = 0;
 		break;
 #endif
 	default:
@@ -1500,6 +1527,16 @@ static int kvm_vcpu_init_check_features(struct kvm_vcpu *vcpu,
 	/* RME is incompatible with AArch32 */
 	if (test_bit(KVM_ARM_VCPU_REC, &features))
 		return -EINVAL;
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	if (static_branch_unlikely(&ipiv_enable) &&
+		vcpu->kvm->arch.vgic.its_vm.enable_ipiv_from_vmm &&
+		vcpu->vcpu_id != vcpu->vcpu_idx) {
+			kvm_err("IPIV ERROR: vcpu_id %d != vcpu_idx %d\n",
+						vcpu->vcpu_id, vcpu->vcpu_idx);
+		return -EINVAL;
+	}
+#endif
 
 	return 0;
 }
@@ -2806,6 +2843,7 @@ static __init int kvm_arm_init(void)
 	kvm_dvmbm_support = hisi_dvmbm_supported();
 	kvm_info("KVM ncsnp %s\n", kvm_ncsnp_support ? "enabled" : "disabled");
 	kvm_info("KVM dvmbm %s\n", kvm_dvmbm_support ? "enabled" : "disabled");
+
 
 	if (kvm_dvmbm_support)
 		kvm_get_pg_cfg();
