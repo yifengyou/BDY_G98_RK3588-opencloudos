@@ -14,6 +14,10 @@ static enum hisi_cpu_type cpu_type = UNKNOWN_HI_TYPE;
 
 static bool dvmbm_enabled;
 
+#ifdef CONFIG_ARM64_HISI_IPIV
+static bool ipiv_enabled;
+#endif
+
 static const char * const hisi_cpu_type_str[] = {
 	"Hisi1612",
 	"Hisi1616",
@@ -157,6 +161,74 @@ static void hardware_disable_dvmbm(void *data)
 	val &= ~LSUDVM_CTLR_EL2_MASK;
 	write_sysreg_s(val, SYS_LSUDVM_CTRL_EL2);
 }
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+static int __init early_ipiv_enable(char *buf)
+{
+	return strtobool(buf, &ipiv_enabled);
+}
+early_param("kvm-arm.ipiv_enabled", early_ipiv_enable);
+
+bool hisi_ipiv_supported(void)
+{
+	if (cpu_type != HI_IP12)
+		return false;
+
+	/* Determine whether IPIV is supported by the hardware */
+	if (!(read_sysreg(aidr_el1) & AIDR_EL1_IPIV_MASK)) {
+		kvm_info("Hisi ipiv not supported by the hardware\n");
+		return false;
+	}
+
+	if (!gic_get_ipiv_status()) {
+		kvm_info("Hisi ipiv is disabled by BIOS\n");
+		return false;
+	}
+
+	/* User provided kernel command-line parameter */
+	if (!ipiv_enabled || !is_kernel_in_hyp_mode())
+		return false;
+
+	/* Enable IPIV feature if necessary */
+	if (!kvm_vgic_global_state.has_gicv4_1) {
+		kvm_info("Hisi ipiv needs to enable GICv4p1!\n");
+		return false;
+	}
+
+	kvm_info("Enable Hisi ipiv, do not support vSGI broadcast\n");
+	return true;
+}
+
+extern struct static_key_false ipiv_enable;
+
+bool hisi_ipiv_supported_per_vm(struct kvm *kvm)
+{
+	/* IPIV is supported by the hardware */
+	if (!static_branch_unlikely(&ipiv_enable))
+		return false;
+
+	/* vSGI passthrough is configured */
+	if (!kvm->arch.vgic.nassgireq)
+		return false;
+
+	/* IPIV is enabled by the user */
+	if (!kvm->arch.vgic.its_vm.enable_ipiv_from_vmm)
+		return false;
+
+	return true;
+}
+
+void hisi_ipiv_enable_per_vm(struct kvm *kvm)
+{
+	/* Enable IPIV feature */
+	kvm->arch.vgic.its_vm.enable_ipiv_from_guest = true;
+}
+
+void ipiv_gicd_init(void)
+{
+	gic_dist_enable_ipiv();
+}
+#endif /* CONFIG_ARM64_HISI_IPIV */
 
 bool hisi_dvmbm_supported(void)
 {

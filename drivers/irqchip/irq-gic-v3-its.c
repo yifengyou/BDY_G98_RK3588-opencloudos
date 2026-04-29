@@ -430,6 +430,15 @@ void build_devid_pools(void)
 }
 #endif
 
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+void __iomem *gic_data_rdist_get_vlpi_base(void)
+{
+	return gic_data_rdist_vlpi_base();
+}
+EXPORT_SYMBOL(gic_data_rdist_get_vlpi_base);
+#endif
+
 static struct page *its_alloc_pages_node(int node, gfp_t gfp,
 					 unsigned int order)
 {
@@ -740,6 +749,7 @@ struct its_cmd_desc {
 			u8 sgi;
 			u8 priority;
 			bool enable;
+			bool nmi;
 			bool group;
 			bool clear;
 		} its_vsgi_cmd;
@@ -899,6 +909,11 @@ static void its_encode_sgi_intid(struct its_cmd_block *cmd, u8 sgi)
 static void its_encode_sgi_priority(struct its_cmd_block *cmd, u8 prio)
 {
 	its_mask_encode(&cmd->raw_cmd[0], prio >> 4, 23, 20);
+}
+
+static void its_encode_sgi_nmi(struct its_cmd_block *cmd, bool nmi)
+{
+	its_mask_encode(&cmd->raw_cmd[0], nmi, 11, 11);
 }
 
 static void its_encode_sgi_group(struct its_cmd_block *cmd, bool grp)
@@ -1362,6 +1377,7 @@ static struct its_vpe *its_build_vsgi_cmd(struct its_node *its,
 	its_encode_vpeid(cmd, desc->its_vsgi_cmd.vpe->vpe_id);
 	its_encode_sgi_intid(cmd, desc->its_vsgi_cmd.sgi);
 	its_encode_sgi_priority(cmd, desc->its_vsgi_cmd.priority);
+	its_encode_sgi_nmi(cmd, desc->its_vsgi_cmd.nmi);
 	its_encode_sgi_group(cmd, desc->its_vsgi_cmd.group);
 	its_encode_sgi_clear(cmd, desc->its_vsgi_cmd.clear);
 	its_encode_sgi_enable(cmd, desc->its_vsgi_cmd.enable);
@@ -4520,11 +4536,69 @@ static void its_vpe_4_1_unmask_irq(struct irq_data *d)
 	its_vpe_4_1_send_inv(d);
 }
 
+#ifdef CONFIG_ARM64_HISI_IPIV
+/* IPIV private register */
+#define CPU_SYS_TRAP_EL2		sys_reg(3, 4, 15, 7, 2)
+#define CPU_SYS_TRAP_EL2_IPIV_ENABLE_SHIFT	0
+#define CPU_SYS_TRAP_EL2_IPIV_ENABLE		\
+	(1ULL << CPU_SYS_TRAP_EL2_IPIV_ENABLE_SHIFT)
+
+/*
+ * ipiv_disable_vsgi_trap and ipiv_enable_vsgi_trap run only
+ * in VHE mode and in EL2.
+ */
+static void ipiv_disable_vsgi_trap(void)
+{
+	u64 val;
+
+	/* disable guest access ICC_SGI1R_EL1 trap, enable ipiv */
+	val = read_sysreg_s(CPU_SYS_TRAP_EL2);
+	val |= CPU_SYS_TRAP_EL2_IPIV_ENABLE;
+	write_sysreg_s(val, CPU_SYS_TRAP_EL2);
+}
+
+static void ipiv_enable_vsgi_trap(void)
+{
+	u64 val;
+
+	/* enable guest access ICC_SGI1R_EL1 trap, disable ipiv */
+	val = read_sysreg_s(CPU_SYS_TRAP_EL2);
+	val &= ~CPU_SYS_TRAP_EL2_IPIV_ENABLE;
+	write_sysreg_s(val, CPU_SYS_TRAP_EL2);
+}
+#endif /* CONFIG_ARM64_HISI_IPIV */
+
 static void its_vpe_4_1_schedule(struct its_vpe *vpe,
 				 struct its_cmd_info *info)
 {
 	void __iomem *vlpi_base = gic_data_rdist_vlpi_base();
 	u64 val = 0;
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	struct its_vm *vm = vpe->its_vm;
+	unsigned long vpeid_page_addr;
+	u64 ipiv_val = 0;
+	u32 nr_vpes;
+
+	if (vm->enable_ipiv_from_guest) {
+		/* wait gicr_ipiv_busy */
+		WARN_ON_ONCE(readl_relaxed_poll_timeout_atomic(vlpi_base + GICR_IPIV_ST,
+					ipiv_val, !(ipiv_val & GICR_IPIV_ST_IPIV_BUSY), 1, 500));
+		vpeid_page_addr = virt_to_phys(page_address(vm->vpeid_page));
+		writel_relaxed(lower_32_bits(vpeid_page_addr),
+					vlpi_base + GICR_VM_TABLE_BAR_L);
+		writel_relaxed(upper_32_bits(vpeid_page_addr),
+					vlpi_base + GICR_VM_TABLE_BAR_H);
+
+		/* setup gicr_vcpu_entry_num_max and gicr_ipiv_its_ta_sel */
+		nr_vpes = vpe->its_vm->nr_vpes;
+		ipiv_val = ((nr_vpes - 1) << GICR_IPIV_CTRL_VCPU_ENTRY_NUM_MAX_SHIFT) |
+			(0 << GICR_IPIV_CTRL_IPIV_ITS_TA_SEL_SHIFT);
+		writel_relaxed(ipiv_val, vlpi_base + GICR_IPIV_CTRL);
+
+		ipiv_disable_vsgi_trap();
+	}
+#endif /* CONFIG_ARM64_HISI_IPIV */
 
 	/* Schedule the VPE */
 	val |= GICR_VPENDBASER_Valid;
@@ -4540,6 +4614,10 @@ static void its_vpe_4_1_deschedule(struct its_vpe *vpe,
 {
 	void __iomem *vlpi_base = gic_data_rdist_vlpi_base();
 	u64 val;
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	struct its_vm *vm = vpe->its_vm;
+#endif
 
 	if (info->req_db) {
 		unsigned long flags;
@@ -4570,6 +4648,18 @@ static void its_vpe_4_1_deschedule(struct its_vpe *vpe,
 					    GICR_VPENDBASER_PendingLast);
 		vpe->pending_last = true;
 	}
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	if (vm->enable_ipiv_from_guest) {
+		/* wait gicr_ipiv_busy */
+		WARN_ON_ONCE(readl_relaxed_poll_timeout_atomic(vlpi_base + GICR_IPIV_ST,
+					val, !(val & GICR_IPIV_ST_IPIV_BUSY), 1, 500));
+		writel_relaxed(0, vlpi_base + GICR_VM_TABLE_BAR_L);
+		writel_relaxed(0, vlpi_base + GICR_VM_TABLE_BAR_H);
+
+		ipiv_enable_vsgi_trap();
+	}
+#endif
 }
 
 static void its_vpe_4_1_invall(struct its_vpe *vpe)
@@ -4639,6 +4729,7 @@ static void its_configure_sgi(struct irq_data *d, bool clear)
 	desc.its_vsgi_cmd.priority = vpe->sgi_config[d->hwirq].priority;
 	desc.its_vsgi_cmd.enable = vpe->sgi_config[d->hwirq].enabled;
 	desc.its_vsgi_cmd.group = vpe->sgi_config[d->hwirq].group;
+	desc.its_vsgi_cmd.nmi = vpe->sgi_config[d->hwirq].nmi;
 	desc.its_vsgi_cmd.clear = clear;
 
 	/*
@@ -4762,6 +4853,7 @@ static int its_sgi_set_vcpu_affinity(struct irq_data *d, void *vcpu_info)
 	case PROP_UPDATE_VSGI:
 		vpe->sgi_config[d->hwirq].priority = info->priority;
 		vpe->sgi_config[d->hwirq].group = info->group;
+		vpe->sgi_config[d->hwirq].nmi = info->nmi;
 		its_configure_sgi(d, false);
 		return 0;
 
@@ -4919,6 +5011,12 @@ static void its_vpe_irq_domain_free(struct irq_domain *domain,
 	if (bitmap_empty(vm->db_bitmap, vm->nr_db_lpis)) {
 		its_lpi_free(vm->db_bitmap, vm->db_lpi_base, vm->nr_db_lpis);
 		its_free_prop_table(vm->vprop_page);
+#ifdef CONFIG_ARM64_HISI_IPIV
+		if (vm->enable_ipiv_from_vmm) {
+			free_pages((unsigned long)page_address(vm->vpeid_page),
+				    get_order(nr_irqs * 2));
+		}
+#endif
 	}
 }
 
@@ -4930,6 +5028,12 @@ static int its_vpe_irq_domain_alloc(struct irq_domain *domain, unsigned int virq
 	unsigned long *bitmap;
 	struct page *vprop_page;
 	int base, nr_ids, i, err = 0;
+
+#ifdef CONFIG_ARM64_HISI_IPIV
+	struct page *vpeid_page;
+	void *vpeid_table_va;
+	u16 *vpeid_entry;
+#endif
 
 	bitmap = its_lpi_alloc(roundup_pow_of_two(nr_irqs), &base, &nr_ids);
 	if (!bitmap)
@@ -4951,14 +5055,37 @@ static int its_vpe_irq_domain_alloc(struct irq_domain *domain, unsigned int virq
 	vm->nr_db_lpis = nr_ids;
 	vm->vprop_page = vprop_page;
 
-	if (gic_rdists->has_rvpeid)
+	if (gic_rdists->has_rvpeid) {
 		irqchip = &its_vpe_4_1_irq_chip;
+#ifdef CONFIG_ARM64_HISI_IPIV
+		if (vm->enable_ipiv_from_vmm) {
+				/*
+				* The vpeid's size is 2 bytes, so we need to allocate 2 *
+				* (num of vcpus). nr_irqs is equal to the number of vCPUs.
+				*/
+				vpeid_page = alloc_pages(GFP_KERNEL, get_order(nr_irqs * 2));
+				if (!vpeid_page) {
+						its_lpi_free(bitmap, base, nr_ids);
+						its_free_prop_table(vprop_page);
+						return -ENOMEM;
+				}
+				vm->vpeid_page = vpeid_page;
+				vpeid_table_va = page_address(vpeid_page);
+		}
+#endif
+	}
 
 	for (i = 0; i < nr_irqs; i++) {
 		vm->vpes[i]->vpe_db_lpi = base + i;
 		err = its_vpe_init(vm->vpes[i]);
 		if (err)
 			break;
+#ifdef CONFIG_ARM64_HISI_IPIV
+		if (vm->enable_ipiv_from_vmm) {
+			vpeid_entry = (u16 *)vpeid_table_va + i;
+			*vpeid_entry = vm->vpes[i]->vpe_id;
+		}
+#endif
 		err = its_irq_gic_domain_alloc(domain, virq + i,
 					       vm->vpes[i]->vpe_db_lpi);
 		if (err)
