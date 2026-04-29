@@ -49,7 +49,7 @@ enum cpuid_leafs
 	 * CPUID_C000_0006_EAX must keep at the 30th position (count from 0)!
 	 * NR_CPUID_WORDS can not bigger than 31 (the cpuid_leafs only 32 bits!).
 	 */
-	CPUID_C000_0006_EAX,	/* 30 */
+	CPUID_C000_0006_EAX,
 	NR_CPUID_WORDS,
 };
 

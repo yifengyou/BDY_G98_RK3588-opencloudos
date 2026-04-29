@@ -279,6 +279,9 @@ struct vcpu_vmx {
 
 	u64		      spec_ctrl;
 	u32		      msr_ia32_umwait_control;
+	u32 msr_pauseopt_control;
+	bool pauseopt_in_progress;
+	unsigned long pauseopt_rip;
 
 	/*
 	 * loaded_vmcs points to the VMCS currently used in this vcpu. For a
@@ -603,15 +606,7 @@ static inline u8 vmx_get_rvi(void)
 	(TERTIARY_EXEC_IPI_VIRT)
 
 #define KVM_REQUIRED_VMX_ZX_TERTIARY_VM_EXEC_CONTROL 0
-#define KVM_OPTIONAL_VMX_ZX_TERTIARY_VM_EXEC_CONTROL			\
-	(ZX_TERTIARY_EXEC_GUEST_ZXPAUSE)
-
-/*
- * We shouldn't rw zxpause_vmexit_tsc vmcs field in this
- * way, try to use another way in the future.
- */
-#define KVM_REQUIRED_VMX_ZXPAUSE_VMEXIT_TSC 0
-#define KVM_OPTIONAL_VMX_ZXPAUSE_VMEXIT_TSC	1
+#define KVM_OPTIONAL_VMX_ZX_TERTIARY_VM_EXEC_CONTROL (ZX_TERTIARY_EXEC_GUEST_PAUSEOPT)
 
 #define BUILD_CONTROLS_SHADOW(lname, uname, bits)						\
 static inline void lname##_controls_set(struct vcpu_vmx *vmx, u##bits val)			\
@@ -646,7 +641,6 @@ BUILD_CONTROLS_SHADOW(exec, CPU_BASED_VM_EXEC_CONTROL, 32)
 BUILD_CONTROLS_SHADOW(secondary_exec, SECONDARY_VM_EXEC_CONTROL, 32)
 BUILD_CONTROLS_SHADOW(tertiary_exec, TERTIARY_VM_EXEC_CONTROL, 64)
 BUILD_CONTROLS_SHADOW(zx_tertiary_exec, ZX_TERTIARY_VM_EXEC_CONTROL, 32)
-BUILD_CONTROLS_SHADOW(zx_vmexit_tsc, ZXPAUSE_VMEXIT_TSC, 64)
 
 /*
  * VMX_REGS_LAZY_LOAD_SET - The set of registers that will be updated in the
@@ -749,10 +743,10 @@ static inline bool vmx_has_waitpkg(struct vcpu_vmx *vmx)
 		SECONDARY_EXEC_ENABLE_USR_WAIT_PAUSE;
 }
 
-static inline bool vmx_guest_zxpause_enabled(struct vcpu_vmx *vmx)
+static inline bool vmx_guest_pauseopt_enabled(struct vcpu_vmx *vmx)
 {
 	return zx_tertiary_exec_controls_get(vmx) &
-		ZX_TERTIARY_EXEC_GUEST_ZXPAUSE;
+		ZX_TERTIARY_EXEC_GUEST_PAUSEOPT;
 }
 
 static inline bool vmx_need_pf_intercept(struct kvm_vcpu *vcpu)
@@ -798,4 +792,12 @@ static inline bool guest_cpuid_has_evmcs(struct kvm_vcpu *vcpu)
 	       to_vmx(vcpu)->nested.enlightened_vmcs_enabled;
 }
 
+static inline bool is_zhaoxin_cpu(void)
+{
+	/* Now zhaoxin owns 2 x86 vendor brands, Zhaoxin and Centaur */
+	return (boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN ||
+		boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR);
+}
+
+#define KVM_MSR_RET_UNHANDLED 2
 #endif /* __KVM_X86_VMX_H */
