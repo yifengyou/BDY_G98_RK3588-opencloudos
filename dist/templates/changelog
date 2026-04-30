@@ -1,3 +1,414 @@
+* Thu Apr 30 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-50
+- mm/slub: Reduce memory consumption in extreme scenarios
+- !728 [Intel-SIG] x86/microcode: backport Intel microcode staging feature
+- x86/microcode/intel: Enable staging when available
+- x86/microcode/intel: Support mailbox transfer
+- x86/microcode/intel: Implement staging handler
+- x86/microcode/intel: Define staging state struct
+- x86/microcode/intel: Establish staging control logic
+- x86/microcode: Introduce staging step to reduce late-loading time
+- x86/cpu/topology: Make primary thread mask available with SMP=n
+- ethernet,dinghai: fix header collision in out-of-tree build
+- ethernet,dinghai: fix out-of-tree build of en_np
+- ethernet,dinghai: enable dinghai CONFIG
+- !727 [Hygon][6.6][Feature] pwm: dwc: Add support for Hygon pwm controller
+- pwm: dwc: Add support for Hygon pwm controller
+- !722 sched/soft_domain: Increasing NR_MAX_CLUSTER to 32
+- sched/soft_domain: Increasing NR_MAX_CLUSTER to 32
+- !721 KVM: x86: Add support for CPUID leaf 0x8C860000
+- KVM: x86: Add support for CPUID leaf 0x8C860000
+- !719 LoongArch: Set kasan_early_stage as false at end of kasan_init()
+- LoongArch: Set kasan_early_stage as false at end of kasan_init()
+- !709 [Hygon][6.6][Feature]hwmon/k10temp: Add support for Hygon family 18h model 18h
+- hwmon/k10temp: Add support for Hygon family 18h model 18h
+- !718 [linux-6.6/devel][bugfix]: LoongArch: config: enable tracer snapshot support
+- LoongArch: config: enable tracer snapshot support
+- !717 [Intel][6.6] RDT-SNC support for Clearwater Forest platform
+- x86/resctrl: Support Sub-NUMA Cluster (SNC) mode on Clearwater Forest
+- x86/resctrl: Support Sub-NUMA cluster mode SNC6
+- !715 Fix incorrect power/idle state for offlined CPUs for SRF/CWF
+- x86/topology: Implement topology_is_core_online() to address SMT regression
+- Reapply "x86/smp: Eliminate mwait_play_dead_cpuid_hint()"
+- ACPI: processor: Rescan "dead" SMT siblings during initialization
+- intel_idle: Rescan "dead" SMT siblings during initialization
+- x86/smp: PM/hibernate: Split arch_resume_nosmt()
+- intel_idle: Use subsys_initcall_sync() for initialization
+- Revert "x86/smp: Eliminate mwait_play_dead_cpuid_hint()"
+- x86/smp: Fix mwait_play_dead() and acpi_processor_ffh_play_dead() noreturn behavior
+- ACPI/processor_idle: Export acpi_processor_ffh_play_dead()
+- x86/smp: Eliminate mwait_play_dead_cpuid_hint()
+- intel_idle: Provide the default enter_dead() handler
+- ACPI/processor_idle: Add FFH state handling
+- x86/smp: Allow calling mwait_play_dead with an arbitrary hint
+- cpuidle: Change :enter_dead() driver callback return type to void
+- cpuidle: Do not return from cpuidle_play_dead() on callback failures
+- x86/cpu: Remove unnecessary MwAIT leaf checks
+- !714 [linux-6.6/devel][bugfix]: LoongArch: config: enable QLogic and QED-related drivers as modules
+- LoongArch: config: enable QLogic and QED-related drivers as modules
+- spi: dw: Add device HID for Hygon SPI controller
+- mmc: sdhci-pci: Add support for Hygon SD controller
+- mmc: sdhci-acpi: Add device HID for Hygon eMMC controller
+- iommu/hygon: Add support for Hygon family 18h model 18h IOAPIC
+- x86/amd_nb: Add Hygon family 18h model 18h PCI IDs
+- perf/x86/uncore: Add DF PMU support for Hygon family 18h model 18h
+- ALSA: hda: Add support for Hygon family 18h model 18h HD-Audio
+- anolis: EDAC/amd64: Adjust the maximum number of memory controllers per node to 1 for Hygon family 18h model 18h
+- EDAC/amd64: Add support for Hygon family 18h model 18h
+- EDAC/amd64: Convert Hygon family 18h model checks to switch-case
+- cdrom: Call cdrom_mrw_exit from cdrom_release function
+- !702 [linux-6.6/devel][bugfix]: LoongArch: KVM fixes for memory mapping and VM booting
+- LoongArch: Fix AP booting issue in VM mode
+- LoongArch: KVM: Clear LLBCTL if secondary mmu mapping is changed
+- !701 [linux-6.6/devel][feature]: LoongArch: Hardware enablement and architectural optimizations
+- LoongArch: Enable CONFIG_PSI_DEFAULT_DISABLED=y
+- LoongArch: Relax memory ordering for atomic operations
+- pci/quirks: 2k3000: set discrete GPU as default boot device if present
+- cpufreq: loongson3-acpi-cpufreq: Expand cpu id field for 3C6000
+- !700 [linux-6.6/devel][bugfix]: LoongArch: Fixes for page table walking and Kasan initialization
+- LoongArch: Remove some code if kasan_arch_is_ready() is false
+- LoongArch: Disable instrumentation for setup_ptwalker()
+- !699 [linux-6.6/devel][bugfix]: ext4: Enhance superblock updates and journaling safety
+- ext4: avoid journaling sb update on error if journal is destroying
+- ext4: Make sb update interval tunable
+- ext4: define ext4_journal_destroy wrapper
+- ethernet/Kconfig: do not source dinghai/Kconfig
+- !697 [linux-6.6/devel][Feature]：update patches for sw64 architecture
+- !695 [linux-6.6/devel] ahci: guard Zhaoxin enclosure quirk fields behind CONFIG_X86
+- ahci: guard Zhaoxin enclosure quirk fields behind CONFIG_X86
+- !683 [linux-6.6/devel] PCI: dpc: Increase pciehp waiting time for DPC recovery
+- PCI: dpc: Increase pciehp waiting time for DPC recovery
+- PCI: pciehp: Ignore belated Presence Detect Changed caused by DPC
+- PCI: pciehp: Ignore Link Down/Up caused by Secondary Bus Reset
+- PCI: pciehp: Ignore Presence Detect Changed caused by DPC
+- PCI: Make pci_destroy_dev() concurrent safe
+- PCI: pciehp: Detect device replacement during system sleep
+- !681 [linux-6.6/devel] x86/cpu: detect extended topology for Zhaoxin CPUs
+- x86/cpu: detect extended topology for Zhaoxin CPUs
+- !691 [linux-6.6/devel] Backport Venice JSON Perf Events patches
+- perf vendor events amd: Add Zen 6 metrics
+- perf vendor events amd: Add Zen 6 uncore events
+- perf vendor events amd: Add Zen 6 core events
+- perf vendor events amd: Add Zen 6 mapping
+- perf vendor events amd: Add Zen 5 mapping
+- KVM: SVM: Manually context switch DEBUGCTL if LBR virtualization is disabled
+- cpufreq: Add CPU frequency policy change notification support
+- apei/ghes: Add Zhaoxin platform support for ghes_edac
+- efi/cper: Print correctable AER information
+- x86/hpet: Set dynamic IRQ feature for HPET for KH-50000
+- ACPI: processor: idle: Set timer broadcast state on C3 for KH-50000
+- Add platform-specific quirks for ZX-200 device
+- hwmon: zhaoxin-cputemp: Update for KX-8000
+- hwmon: zhaoxin-cputemp: Update for KH-50000
+- perf/zhaoxin/core: Tailor FMS for KH-50000
+- pinctrl: Zhaoxin: Add KH-50000 support
+- ata: ahci: Fix Zhaoxin SATA LED quirk for KH-50000
+- !672 [linux-6.6/devel] x86/split_lock: Add support for Zhaoxin
+- x86/split_lock: Add support for Zhaoxin
+- x86/split_lock: Simplify reenabling
+- x86/split_lock: Fix the delayed detection logic
+- x86/bus_lock: Add support for AMD
+- x86/split_lock: Move Split and Bus lock code to a dedicated file
+- KVM: x86: allow CPUID 0xC000_0000 to proceed on Zhaoxin CPUs
+- x86/microcode: Add Zhaoxin cpu microcode update driver
+- Merge branch 'shell-guard-release' into 'release' (merge request !1168)
+- shell-guard: Introduce a enhanced protection for shell environments on x86
+- !657 Support NMI in the virtual machine
+- KVM: arm64: vgic-v3: Handle traps of ICV_NMIAR1_EL1
+- arm64: Decouple KVM from CONFIG_ARM64_NMI
+- KVM: arm64: Handle traps of ALLINT
+- KVM: arm64: Allow GICv3.3 NMI if the host supports it
+- KVM: arm64: vgic-v3: Don't inject an NMI if the vcpu doesn't have FEAT_NMI
+- KVM: arm64: Don't trap ALLINT accesses if the vcpu has FEAT_NMI
+- KVM: arm64: Allow userspace to control ID_AA64PFR1_EL1.NMI
+- KVM: arm64: vgic-debug: Add the NMI field to the debug output
+- KVM: arm64: vgic-v3: Add userspace selection for GICv3.3 NMI
+- KVM: arm64: vgic-v3: Add support for GIC{D,R}_INMIR registers
+- KVM: arm64: vgic-v3: Use the NMI attribute as part of the AP-list sorting
+- KVM: arm64: vgic-v4: Propagate the NMI state into the GICv4.1 VSGI configuration
+- KVM: arm64: vgic-v3: Make NMI priority RES0
+- KVM: arm64: vgic-v3: Allow the NMI state to make it into the LRs
+- KVM: arm64: vgic-v3: Upgrade AP1Rn to 64bit.
+- !655  Add support for IPIv
+- KVM: arm64: ipiv: change declaration argument
+- KVM: arm64: ipiv: Change parameter from vcpu to kvm
+- KVM: arm64: ipiv: fix bug in live migration
+- KVM: arm64: check if IPIV is enabled in BIOS
+- arm64/kabi: use KABI_EXTEND to skip KABI check
+- kvm: hisi: print error for IPIV
+- KVM: arm64: using kvm_vgic_global_state for ipiv
+- kvm: hisi: Don't allow to change mpidr in IPIv
+- kvm: hisi: make sure vcpu_id and vcpu_idx have same value in IPIv
+- KVM: arm64: fix live migration bug of IPIv
+- irqchip/gic: Add HiSilicon PV SGI support
+- KVM: arm64: Implement PV_SGI related calls
+- KVM: arm64: Document PV-sgi interface
+- KVM: arm64: Introduce ipiv enable ioctl
+- arm64/config: add config to control whether enable IPIV feature
+- kabi: Use KABI_EXTEND to perform kabi repair for IPIV
+- kvm: hisi_virt: Probe and configure IPIV capacity on HIP12
+- kvm: arm64: Add interface KVM_CAP_ARM_IPIV_MODE
+- kvm: hisi_virt: Register ipiv exception interrupt
+- irqchip: gicv3-its: Set base address of vm table and targe ITS when vpe schedule and deschedule
+- kvm: arm64: avoid sending multi-SGIs in IPIV
+- kvm: hisi_virt: Allocate VM table and save vpeid in it
+- net: Add driver support for ZTE Dinghai E310/E312/E316 series NICs
+- config,arm64: add tpm spi devices configuration items
+- KVM: x86: Introduce support for Zhaoxin PAUSEOPT instruction
+- x86/delay: add support for Zhaoxin PAUSEOPT instruction
+- Revert the HOST and KVM ZXPAUSE patches
+- PCI/P2PDMA: Add Zhaoxin Zhaoxin bridges to the whitelist
+- ALSA: HDA: Add Zhaoxin HDMI Controller and Codec support
+- ALSA: HDA: Roll back the old version for consistency with the mainline
+- PCI: Supplement ACS quirk for more Zhaoxin Root Ports
+- !663 hwmon: via-cputemp,zhaoxin-cputemp: Skip operations during suspend/resume
+- Optimize Zhaoxin CPU Temp Monitoring During Suspend/Resume
+- Optimize VIA CPU Temp Monitoring During Suspend/Resume
+- iommu/vt-d: fix NULL pointer issue in acpi_rmrr_andd_probe
+- !659 [linux-6.6/devel]  Add Zhaoxin Processor Error Decode Support to CPER
+- efi/cper: Add Zhaoxin mem error decode for KH-50000
+- efi/cper: Add Zhaoxin cache error decode
+- efi/cper: Add Zhaoxin micro-architectural error decode
+- efi/cper: Add Zhaoxin non standard cper error decode
+- efi/cper: Add Zhaoxin ZDI ZPI error decode for KH-50000
+- efi: cper: Update Zhaoxin/Centaur ZDI/ZPI error decode
+- perf/zhaoxin/uncore: Enhance uncore support and fix related bugs
+- i2c: zhaoxin: Enhancements and Modifications to SMBus Driver
+- x86/mce: Set bios_cmci_threshold for CMCI threshold
+- x86/cpu: detect extended topology for Zhaoxin CPUs
+- cpufreq: ACPI: Update ITMT support when CPPC enabled
+- !656 crypto: x86: Switch to X86_MATCH_*** macros for Zhaoxin AES/SHA to comply with flags requirement
+- crypto: x86: zhaoxin-sha: Switch to X86_MATCH macro for CPU ID matching
+- crypto: x86: zhaoxin-aes: Switch to X86_MATCH macro for CPU ID matching
+- !654 [linux-6.6/devel] x86/mce: Update Centaur MCA support
+- x86/mce: Update Centaur MCA support
+- Merge branch 'merge-release-cve' into 'release' (merge request !1194)
+- media: dvb-usb: dtv5100: fix out-of-bounds in dtv5100_i2c_msg()
+- scsi: target: iscsi: Fix use-after-free in iscsit_dec_conn_usage_count()
+- RDMA/umad: Reject negative data_len in ib_umad_write
+- drm/vmwgfx: Return the correct value in vmw_translate_ptr functions
+- efivarfs: fix error propagation in efivar_entry_get()
+- net: sched: avoid qdisc_reset_all_tx_gt() vs dequeue race for lockless qdiscs
+- scsi: target: iscsi: Fix use-after-free in iscsit_dec_session_usage_count()
+- tk: mm, kstaled: fix compile warning in arm64
+- tools arch x86: Sync msr-index.h to pick AMD64_{PERF_CNTR_GLOBAL_STATUS_SET,SAVIC_CONTROL}, IA32_L3_QOS_{ABMC,EXT}_CFG
+- perf/x86: Move event pointer setup earlier in x86_pmu_enable()
+- !652 [Intel] Backport Arch-PEBS for Intel new platforms
+- tools headers: Sync x86 headers with kernel sources
+- perf/x86/intel: Fix NULL event dereference crash in handle_pmi_common()
+- perf/x86/intel: Fix and clean up intel_pmu_drain_arch_pebs() type use
+- perf/x86/intel: Optimize PEBS extended config
+- perf/x86/intel: Check PEBS dyn_constraints
+- perf/x86/intel: Add a check for dynamic constraints
+- perf/x86/intel: Add counter group support for arch-PEBS
+- perf/x86/intel: Setup PEBS data configuration and enable legacy groups
+- perf/x86/intel: Update dyn_constraint base on PEBS event precise level
+- perf/x86/intel: Allocate arch-PEBS buffer and initialize PEBS_BASE MSR
+- perf/x86/intel: Process arch-PEBS records or record fragments
+- perf/x86/intel/ds: Factor out PEBS group processing code to functions
+- perf/x86/intel/ds: Factor out PEBS record processing code to functions
+- perf/x86/intel: Initialize architectural PEBS
+- perf/x86/intel: Correct large PEBS flag check
+- perf/x86/intel: Replace x86_pmu.drain_pebs calling with static call
+- perf/x86: Fix NULL event access and potential PEBS record loss
+- perf/x86: Remove redundant is_x86_event() prototype
+- perf/x86/intel: Fix KASAN global-out-of-bounds warning
+- perf/core: Check sample_type in perf_sample_save_brstack
+- perf/core: Check sample_type in perf_sample_save_callchain
+- perf/x86/intel/ds: Remove redundant assignments to sample.period
+- perf/x86: Add PERF_CAP_PEBS_TIMING_INFO flag
+- perf/x86/intel: Use early_initcall() to hook bts_init()
+- perf/x86/intel: Introduce pairs of PEBS static calls
+- perf/x86/intel: Rename x86_pmu.pebs to x86_pmu.ds_pebs
+- perf/x86/intel: Decouple BTS initialization from PEBS initialization
+- perf mem: Fix printing PERF_MEM_LVLNUM_{L2_MHB|MSC}
+- perf/x86: Print PMU counters bitmap in x86_pmu_show_pmu_cap()
+- perf/x86/intel: Add ICL_FIXED_0_ADAPTIVE bit into INTEL_FIXED_BITS_MASK
+- KVM: x86/pmu: Manipulate FIXED_CTR_CTRL MSR with macros
+- KVM: x86/pmu: Change ambiguous _mask suffix to _rsvd in kvm_pmu
+- KVM: x86/pmu: Add common define to capture fixed counters offset
+- perf/x86/intel: Fix IA32_PMC_x_CFG_B MSRs access error
+- tools arch x86: Sync the msr-index.h copy with the kernel sources
+- x86/msr: Standardize on u64 in <asm/msr-index.h>
+- perf/x86/intel: Fix incorrect MSR index calculations in intel_pmu_config_acr()
+- perf/x86/intel: Fix bitmask of OCR and FRONTEND events for LNC
+- perf/x86/intel: Fix event constraints for LNC
+- perf/x86/intel/ds: Fix counter backwards of non-precise events counters-snapshotting
+- perf/x86/intel: Fix segfault with PEBS-via-PT with sample_freq
+- perf/x86/intel: Fix crash in icl_update_topdown_event()
+- perf/uapi: Clean up <uapi/linux/perf_event.h> a bit
+- tools headers: Update the uapi/linux/perf_event.h copy with the kernel sources
+- tools/include: Sync uapi/linux/perf.h with the kernel sources
+- tools headers UAPI: Sync include/uapi/linux/perf_event.h header with the kernel
+- perf: Extend per event callchain limit to branch stack
+- Merge branch 'zram_compress' into 'release' (merge request !1083)
+- Documentation/zram: add documentation for algorithm parameters
+- Documentation/zram: add documentation for comp backends API
+- lib: zstd: fix null-deref in ZSTD_createCDict_advanced2()
+- lib: lz4hc: export LZ4_resetStreamHC symbol
+- lib: zstd: export API needed for dictionary support
+- Merge branch 'zsmalloc_mthp' into 'release' (merge request !1063)
+- config: enable CONFIG_ZSMALLOC_HIGHORDER_ZSPAGE
+- mm: fix incorrect swap-in count in mthp
+- mm/zsmalloc: extend debugfs class stats for zspage order
+- mm/zsmalloc: add support to high-order zspages for compact
+- mm/zsmalloc: add support to high-order zspages in alloc and free
+- mm/zsmalloc: add per-order huge class thresholds for zram
+- mm/zsmalloc: extend size classes for high-order zspages
+- Merge branch 'zobjcg' into 'release' (merge request !1178)
+- mm/memcg: enable zram memcg charging by default and refactor sw_objcg setup
+- feat: add per-cpu pages stock for sw_objcg path
+- feat: add per-cpu bytes stock for sw_objcg path
+- mm/memcg: introduce sw_objcg for compressed swap backend
+- x86,config: enable CONFIG_MICROCODE_LATE_LOADING
+- Merge branch 'kstaled' into 'release' (merge request !1076)
+- tk: config: enable CONFIG_KSTALED
+- tk: mm: kstaled: update idle page stats during page reclaim and freeing
+- tk: mm/memcg: introduce emm.threshold
+- tk: mm, kstaled: ensure page allocation on correct NUMA node
+- tk: mm, kstaled: introduce idle_page_stats{.self}
+- tk: mm, kstaled: free sparse age memmap
+- tk: mm: introduce kstaled
+- Merge branch 'function_graph_support_stack' into 'release' (merge request !1175)
+- tracing/function_graph: fix stack filter with tracing_thresh mode
+- tracing/function_graph: add set_graph_stack_filter for stack trace on filtered functions
+- config: update config without manual change
+- Merge branch 'ftrace_hist_for_timestamp' into 'release' (merge request !1095)
+- mm/page_alloc: make __alloc_pages_slowpath noinline for traceability
+- tracing: add kprobe latency support and hist_pipe to vmscan test script
+- tracing: add hist_pipe interface for consume-on-read histogram data
+- tracing: fix ring mode slot waste for bucket-keyed hist triggers
+- tracing: support chained modifiers in hist trigger parse_field()
+- tracing: add wall clock time display for hist trigger keys
+- tracing: add key_unit and val_unit configuration for hist trigger display
+- tracing: add min/max/avg tracking for hist trigger values
+- tracing: add overflow=replace policy for hist trigger hash recycling
+- tracing: add overflow=ring policy for hist trigger time-series data
+- disk:modify CONFIG_CHR_DEV_SG
+- Merge branch 'rue/rqi' into 'release' (merge request !1015)
+- rue/rqi: add Resource Quality Indicator framework
+- rue/cpu: add cond_resched to scan loadavg
+- workqueue: Adjust WQ_MAX_ACTIVE from 512 to 2048
+- Merge branch 'mglru-updates' into 'release' (merge request !841)
+- mm/vmscan: unify writeback reclaim statistic and throttling
+- mm/mglru: remove no longer used reclaim argument for folio protection
+- mm/mglru: simplify and improve dirty writeback handling
+- mm/mglru: use the common routine for dirty/writeback reactivation
+- mm/mglru: remove redundant swap constrained check upon isolation
+- mm/mglru: don't abort scan immediately right after aging
+- mm/mglru: use a smaller batch for reclaim
+- mm/mglru: scan and count the exact number of folios
+- mm/mglru: restructure the reclaim loop
+- mm/mglru: relocate the LRU scan batch limit to callers
+- mm, slab: fix the comment of cpu partial list
+- mm/mglru: stop try_to_inc_min_seq() if min_seq[type] has not increased
+- mm: vmscan: fix dirty folios throttling on cgroup v1 for MGLRU
+- mm: vmscan: correct nr_requested tracing in scan_folios
+- mm: vmscan: apply proportional reclaim pressure for memcg when MGLRU is enabled
+- mm/vmscan: extract calculated pressure balance as a function
+- mm: multi-gen LRU: reuse some legacy trace events
+- mm, vmscan: remove ISOLATE_UNMAPPED
+- trace-vmscan-postprocess: sync with tracepoints updates
+- mm/mglru: rename variables related to aging and rotation
+- mm/mglru: consolidate common code for retrieving evitable size
+- mm: open-code page_folio() in dump_page()
+- mm: open-code PageTail in folio_flags() and const_folio_flags()
+- mm/huge_memory: ensure huge_zero_folio won't have large_rmappable flag set
+- mm: migrate LRU_REFS_MASK bits in folio_migrate_flags
+- mm: remove page_idle and page_young wrappers
+- proc: convert smaps_account() to use a folio
+- proc: convert clear_refs_pte_range to use a folio
+- mm: rename mm_put_huge_zero_page to mm_put_huge_zero_folio
+- dax: use huge_zero_folio
+- mm: convert do_huge_pmd_anonymous_page to huge_zero_folio
+- mm: convert huge_zero_page to huge_zero_folio
+- mm/memory-failure: convert to user folio instead
+- mm: convert migrate_vma_collect_pmd to use a folio
+- mm: add pmd_folio()
+- mm: add is_huge_zero_folio()
+- sparc: use is_huge_zero_pmd()
+- proc: rewrite stable_page_flags()
+- remove references to page->flags in documentation
+- slub: remove use of page->flags
+- mm: convert arch_clear_hugepage_flags to take a folio
+- mm: make folio_test_idle and folio_test_young take a const argument
+- mm: make page_mapped() take a const argument
+- mm: make is_free_buddy_page() take a const argument
+- mm: make page_ext_get() take a const argument
+- xtensa: remove uses of PG_arch_1 on individual pages
+- sh: remove use of PG_arch_1 on individual pages
+- mm: remove cast from page_to_nid()
+- mm: constify more page/folio tests
+- mm: constify testing page/folio flags
+- mm: make dump_page() take a const argument
+- mm: add __dump_folio()
+- mm: remove PageYoung and PageIdle definitions
+- mm: remove PageWaiters, PageSetWaiters and PageClearWaiters
+- mm: return void from folio_start_writeback() and related functions
+- afs: do not test the return value of folio_start_writeback()
+- mm: remove test_set_page_writeback()
+- mm: remove total_mapcount()
+- mm/memfd: refactor memfd_tag_pins() and memfd_wait_for_pins()
+- mm/mglru: fix PTE-mapped large folios
+- mm/mglru: rework workingset protection
+- mm/mglru: rework type selection
+- mm/mglru: rework aging feedback
+- mm/mglru: optimize deactivation
+- mm/mglru: clean up workingset
+- mm: multi-gen LRU: use {ptep,pmdp}_clear_young_notify()
+- mm: multi-gen LRU: remove MM_LEAF_OLD and MM_NONLEAF_TOTAL stats
+- mm/mglru: reset page lru tier bits when activating
+- mm: multi-gen LRU: ignore non-leaf pmd_young for force_scan=true
+- mm: shrink skip folio mapped by an exiting process
+- mm/mglru: improve swappiness handling
+- mm/mglru: improve struct lru_gen_mm_walk
+- mm/mglru: improve reset_mm_stats()
+- mm/mglru: improve should_run_aging()
+- mm/mglru: drop unused parameter
+- mm/mglru: remove CONFIG_TRANSPARENT_HUGEPAGE
+- mm/mglru: add dummy pmd_dirty()
+- mm/mglru: remove CONFIG_MEMCG
+- mm/mglru: add CONFIG_LRU_GEN_WALKS_MMU
+- mm/mglru: add CONFIG_ARCH_HAS_HW_PTE_YOUNG
+- mm: add defines for min/max swappiness
+- slub: Update frozen slabs documentations in the source
+- slub: Rename all *unfreeze_partials* functions to *put_partials*
+- slub: Optimize deactivate_slab()
+- slub: Delay freezing of partial slabs
+- slub: Introduce freeze_slab()
+- slub: Prepare __slab_free() for unfrozen partial slab out of node partial list
+- slub: Keep track of whether slub is on the per-node partial list
+- slub: Change get_partial() interfaces to return slab
+- Revert "mm, lru_gen: rework aging and reclaim control"
+- Revert "mm, mglru: avoid long tailing sleep on aging"
+- mm/swap: remove boilerplate
+- mm/swap: remove remaining _fn suffix
+- mm/swap: fold lru_rotate into cpu_fbatches
+- mm/swap: rename cpu_fbatches->activate
+- mm: fix build error with THP disabled
+- dist: improve backport helper to extend commit id automatically
+- Merge branch 'Optimize AMD LBR support' into 'release' (merge request !1138)
+- perf/x86/amd/lbr: Disable LBR in PMI handler for CPUs without freeze support
+- perf/x86/amd: Don't reject non-sampling events with configured LBR
+- perf/x86/amd: Support capturing LBR from software events
+- perf/x86/amd: Avoid taking branches before disabling LBR
+- perf/x86/amd: Ensure amd_pmu_core_disable_all() is always inlined
+- Merge branch 'support sandbox kernel' into 'release' (merge request !1106)
+- start time: modify config and driver
+- sched: change the support number of scheduler features to 64
+- Merge branch 'fix-modprobe-amdgpu-panic' into 'release' (merge request !1115)
+- sysfb: Fix screen_info type check for VGA
+- firmware/sysfb: Disable sysfb for firmware buffers with unknown parent
+- video/aperture: optionally match the device in sysfb_disable()
+- of/platform: Disable sysfb if a simple-framebuffer node is found
+- firmware: sysfb: Fix reference count of sysfb parent device
+- firmware/sysfb: fix an error code in sysfb_init()
+- fbdev/efifb: Remove framebuffer relocation tracking
+- fbdev/efifb: Do not track parent device status
+- firmware/sysfb: Create firmware device only for enabled PCI devices
+- fbdev/efifb: Remove PM for parent device
+- firmware/sysfb: Set firmware-framebuffer parent device
+- Merge branch 'release-cve' into 'release'
+
 * Fri Apr 24 2026 Jianping Liu <frankljpliu@gmail.com> - 6.6.119-49.13
 - mm: writeback: ratelimit stat flush from mem_cgroup_wb_stats
 - xsk: free the skb when hitting the upper bound MAX_SKB_FRAGS
