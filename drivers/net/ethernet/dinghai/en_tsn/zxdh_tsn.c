@@ -7,6 +7,9 @@
 #include "zxdh_tsn_comm.h"
 #include "zxdh_tsn_ioctl.h"
 
+__weak int debug_print;
+module_param(debug_print, int, 0644);
+
 int32_t zxdh_tsn_init(struct dh_core_dev *dh_dev)
 {
 	struct zxdh_tsn_private *tsn = NULL;

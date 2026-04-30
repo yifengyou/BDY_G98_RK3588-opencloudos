@@ -85,7 +85,7 @@ static struct page *xdp_linearize_page(struct receive_queue *rq, u16 *num_buf,
 		void *buf;
 		int off;
 
-		buf = virtqueue_get_buf(rq->vq, &buflen);
+		buf = zxdh_virtqueue_get_buf(rq->vq, &buflen);
 		if (unlikely(!buf))
 			goto err_buf;
 
@@ -303,7 +303,7 @@ inline void vqm_wmb(bool weak_barriers)
 	}
 }
 
-void vring_del_virtqueue(struct virtqueue *_vq)
+static void vring_del_virtqueue(struct virtqueue *_vq)
 {
 	struct zxdh_en_device *en_dev = _vq->en_dev;
 	struct vring_virtqueue *vq = to_vvq(_vq);
@@ -375,7 +375,7 @@ void vp_detach_vqs(void *para)
 	}
 }
 
-void vp_del_vqs(struct net_device *netdev)
+static void vp_del_vqs(struct net_device *netdev)
 {
 	struct zxdh_en_priv *en_priv = netdev_priv(netdev);
 	struct zxdh_en_device *en_dev = &en_priv->edev;
@@ -387,20 +387,20 @@ void vp_del_vqs(struct net_device *netdev)
 }
 
 /**
- * virtqueue_get_vring_size - return the size of the virtqueue's vring
+ * zxdh_virtqueue_get_vring_size - return the size of the virtqueue's vring
  * @_vq: the struct virtqueue containing the vring of interest.
  *
  * Returns the size of the vring.  This is mainly used for boasting to
  * userspace.  Unlike other operations, this need not be serialized.
  */
-uint32_t virtqueue_get_vring_size(struct virtqueue *_vq)
+uint32_t zxdh_virtqueue_get_vring_size(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
 	return vq->packed.vring.num;
 }
 
-dma_addr_t virtqueue_get_desc_addr(struct virtqueue *_vq)
+static dma_addr_t virtqueue_get_desc_addr(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -409,7 +409,7 @@ dma_addr_t virtqueue_get_desc_addr(struct virtqueue *_vq)
 	return vq->packed.ring_dma_addr;
 }
 
-dma_addr_t virtqueue_get_avail_addr(struct virtqueue *_vq)
+static dma_addr_t virtqueue_get_avail_addr(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -418,7 +418,7 @@ dma_addr_t virtqueue_get_avail_addr(struct virtqueue *_vq)
 	return vq->packed.driver_event_dma_addr;
 }
 
-dma_addr_t virtqueue_get_used_addr(struct virtqueue *_vq)
+static dma_addr_t virtqueue_get_used_addr(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -719,7 +719,7 @@ void zxdh_vvq_reset(struct zxdh_en_device *en_dev)
 }
 
 /* the notify function used when creating a virt queue */
-bool vp_notify(struct virtqueue *vq)
+static bool vp_notify(struct virtqueue *vq)
 {
 	/* we write the queue's selector into the notification register to
      * signal the other end */
@@ -766,7 +766,7 @@ struct virtqueue *vp_setup_vq(struct net_device *netdev, unsigned index,
 
 	/* activate the queue */
 	en_dev->ops->activate_phy_vq(en_dev->parent, en_dev->phy_index[index],
-				     virtqueue_get_vring_size(vq),
+				     zxdh_virtqueue_get_vring_size(vq),
 				     virtqueue_get_desc_addr(vq),
 				     virtqueue_get_avail_addr(vq),
 				     virtqueue_get_used_addr(vq));
@@ -1284,7 +1284,7 @@ unmap_release:
 }
 
 /**
- * virtqueue_add_inbuf_ctx - expose input buffers to other end
+ * zxdh_virtqueue_add_inbuf_ctx - expose input buffers to other end
  * @vq: the struct virtqueue we're talking about.
  * @sg: scatterlist (must be well-formed and terminated!)
  * @num: the number of entries in @sg writable by other side
@@ -1297,7 +1297,7 @@ unmap_release:
  *
  * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
  */
-int32_t virtqueue_add_inbuf_ctx(struct virtqueue *vq, struct scatterlist *sg,
+int32_t zxdh_virtqueue_add_inbuf_ctx(struct virtqueue *vq, struct scatterlist *sg,
 				uint32_t num, void *data, void *ctx, gfp_t gfp)
 {
 	return virtqueue_add_packed(vq, &sg, num, 0, 1, data, ctx, gfp);
@@ -1338,7 +1338,7 @@ bool virtqueue_poll_packed(struct virtqueue *_vq, uint16_t off_wrap)
  *
  * This does not need to be serialized.
  */
-bool virtqueue_poll(struct virtqueue *_vq, unsigned last_used_idx)
+static bool virtqueue_poll(struct virtqueue *_vq, unsigned last_used_idx)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -1383,7 +1383,7 @@ unsigned virtqueue_enable_cb_prepare_packed(struct virtqueue *_vq)
 	return vq->last_used_idx;
 }
 
-int32_t virtqueue_enable_cb_prepare(struct virtqueue *_vq)
+static int32_t virtqueue_enable_cb_prepare(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -1586,7 +1586,7 @@ void *virtqueue_get_buf_ctx_packed(struct virtqueue *_vq, uint32_t *len,
 	return ret;
 }
 
-void *virtqueue_get_buf(struct virtqueue *_vq, uint32_t *len)
+void *zxdh_virtqueue_get_buf(struct virtqueue *_vq, uint32_t *len)
 {
 	return virtqueue_get_buf_ctx_packed(_vq, len, NULL);
 }
@@ -1614,7 +1614,7 @@ void free_old_xmit_skbs(struct net_device *netdev, struct send_queue *sq,
 	uint32_t bytes = 0;
 	void *ptr = NULL;
 
-	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
+	while ((ptr = zxdh_virtqueue_get_buf(sq->vq, &len)) != NULL) {
 		if (likely(!is_xdp_frame(ptr))) {
 			struct sk_buff *skb = ptr;
 
@@ -1642,7 +1642,7 @@ void free_old_xmit_skbs(struct net_device *netdev, struct send_queue *sq,
 	u64_stats_update_end(&sq->stats.syncp);
 }
 
-void virtqueue_disable_cb_packed(struct virtqueue *_vq)
+void zxdh_virtqueue_disable_cb_packed(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -1654,7 +1654,7 @@ void virtqueue_disable_cb_packed(struct virtqueue *_vq)
 }
 
 /**
- * virtqueue_disable_cb - disable callbacks
+ * zxdh_virtqueue_disable_cb - disable callbacks
  * @_vq: the struct virtqueue we're talking about.
  *
  * Note that this is not necessarily synchronous, hence unreliable and only
@@ -1662,7 +1662,7 @@ void virtqueue_disable_cb_packed(struct virtqueue *_vq)
  *
  * Unlike other operations, this need not be serialized.
  */
-void virtqueue_disable_cb(struct virtqueue *_vq)
+void zxdh_virtqueue_disable_cb(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -1673,13 +1673,13 @@ void virtqueue_disable_cb(struct virtqueue *_vq)
 		return;
 	}
 
-	virtqueue_disable_cb_packed(_vq);
+	zxdh_virtqueue_disable_cb_packed(_vq);
 }
 
 void virtqueue_napi_schedule(struct napi_struct *napi, struct virtqueue *vq)
 {
 	if (napi_schedule_prep(napi)) {
-		virtqueue_disable_cb(vq);
+		zxdh_virtqueue_disable_cb(vq);
 		__napi_schedule(napi);
 	}
 }
@@ -1743,7 +1743,7 @@ int virtnet_poll_tx(struct napi_struct *napi, int budget)
 
 	txq = netdev_get_tx_queue(en_dev->netdev, index);
 	__netif_tx_lock(txq, raw_smp_processor_id());
-	virtqueue_disable_cb(sq->vq);
+	zxdh_virtqueue_disable_cb(sq->vq);
 	free_old_xmit_skbs(en_dev->netdev, sq, true);
 
 	if (sq->vq->num_free >= 2 + MAX_SKB_FRAGS) {
@@ -1755,7 +1755,7 @@ int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	done = napi_complete_done(napi, 0);
 
 	if (!done) {
-		virtqueue_disable_cb(sq->vq);
+		zxdh_virtqueue_disable_cb(sq->vq);
 	}
 
 	__netif_tx_unlock(txq);
@@ -1764,7 +1764,7 @@ int virtnet_poll_tx(struct napi_struct *napi, int budget)
 		if (unlikely(virtqueue_poll(sq->vq, opaque))) {
 			if (napi_schedule_prep(napi)) {
 				__netif_tx_lock(txq, raw_smp_processor_id());
-				virtqueue_disable_cb(sq->vq);
+				zxdh_virtqueue_disable_cb(sq->vq);
 				__netif_tx_unlock(txq);
 				__napi_schedule(napi);
 			}
@@ -1774,7 +1774,7 @@ int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	return 0;
 }
 
-bool virtqueue_enable_cb_delayed_packed(struct virtqueue *_vq)
+bool zxdh_virtqueue_enable_cb_delayed_packed(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 	uint16_t used_idx = 0;
@@ -1878,7 +1878,7 @@ uint32_t mergeable_ctx_to_truesize(void *mrg_ctx)
 }
 
 /**
- * virtqueue_enable_cb_delayed - restart callbacks after disable_cb.
+ * zxdh_virtqueue_enable_cb_delayed - restart callbacks after disable_cb.
  * @_vq: the struct virtqueue we're talking about.
  *
  * This re-enables callbacks but hints to the other side to delay
@@ -1890,7 +1890,7 @@ uint32_t mergeable_ctx_to_truesize(void *mrg_ctx)
  * Caller must ensure we don't call this with other virtqueue
  * operations at the same time (except where noted).
  */
-bool virtqueue_enable_cb_delayed(struct virtqueue *_vq)
+bool zxdh_virtqueue_enable_cb_delayed(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -1898,7 +1898,7 @@ bool virtqueue_enable_cb_delayed(struct virtqueue *_vq)
 		vq->event_triggered = false;
 	}
 
-	return virtqueue_enable_cb_delayed_packed(_vq);
+	return zxdh_virtqueue_enable_cb_delayed_packed(_vq);
 }
 
 void virtnet_poll_cleantx(struct receive_queue *rq)
@@ -1914,9 +1914,9 @@ void virtnet_poll_cleantx(struct receive_queue *rq)
 
 	if (__netif_tx_trylock(txq)) {
 		do {
-			virtqueue_disable_cb(sq->vq);
+			zxdh_virtqueue_disable_cb(sq->vq);
 			free_old_xmit_skbs(en_dev->netdev, sq, true);
-		} while (unlikely(!virtqueue_enable_cb_delayed(sq->vq)));
+		} while (unlikely(!zxdh_virtqueue_enable_cb_delayed(sq->vq)));
 
 		if (sq->vq->num_free >= 2 + MAX_SKB_FRAGS) {
 			netif_tx_wake_queue(txq);
@@ -2026,7 +2026,7 @@ ok:
 }
 
 /**
- * virtqueue_add_outbuf - expose output buffers to other end
+ * zxdh_virtqueue_add_outbuf - expose output buffers to other end
  * @vq: the struct virtqueue we're talking about.
  * @sg: scatterlist (must be well-formed and terminated!)
  * @num: the number of entries in @sg readable by other side
@@ -2038,7 +2038,7 @@ ok:
  *
  * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
  */
-int32_t virtqueue_add_outbuf(struct virtqueue *vq, struct scatterlist *sg,
+int32_t zxdh_virtqueue_add_outbuf(struct virtqueue *vq, struct scatterlist *sg,
 			     uint32_t num, void *data, gfp_t gfp)
 {
 	return virtqueue_add_packed(vq, &sg, num, 1, 0, data, NULL, gfp);
@@ -2064,7 +2064,7 @@ static int __zxdh_en_xdp_xmit_one(struct zxdh_en_device *en_dev,
 
 	sg_init_one(sq->sg, xdpf->data, xdpf->len);
 
-	err = virtqueue_add_outbuf(sq->vq, sq->sg, 1, xdp_to_ptr(xdpf),
+	err = zxdh_virtqueue_add_outbuf(sq->vq, sq->sg, 1, xdp_to_ptr(xdpf),
 				   GFP_ATOMIC);
 	if (unlikely(err))
 		return -ENOSPC; /* Caller handle free/refcnt */
@@ -2144,7 +2144,7 @@ int zxdh_en_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **frames,
 	}
 
 	/* Free up any pending old buffers before queueing new ones. */
-	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
+	while ((ptr = zxdh_virtqueue_get_buf(sq->vq, &len)) != NULL) {
 		if (likely(is_xdp_frame(ptr))) {
 			struct xdp_frame *frame = ptr_to_xdp(ptr);
 
@@ -2170,7 +2170,7 @@ int zxdh_en_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **frames,
 
 	if (flags & XDP_XMIT_FLUSH) {
 		if (virtqueue_kick_prepare_packed(sq->vq) &&
-		    virtqueue_notify(sq->vq))
+		    zxdh_virtqueue_notify(sq->vq))
 			kicks = 1;
 	}
 out:
@@ -2465,7 +2465,7 @@ err_xdp:
 err_skb:
 	put_page(page);
 	while (num_buf-- > 1) {
-		buf = virtqueue_get_buf(rq->vq, &len);
+		buf = zxdh_virtqueue_get_buf(rq->vq, &len);
 		if (unlikely(!buf)) {
 			LOG_ERR("%s: rx error: %d buffers missing\n",
 				netdev->name, num_buf);
@@ -2673,14 +2673,14 @@ ret_out:
 }
 
 /**
- * virtqueue_notify - second half of split virtqueue_kick call.
+ * zxdh_virtqueue_notify - second half of split virtqueue_kick call.
  * @_vq: the struct virtqueue
  *
  * This does not need to be serialized.
  *
  * Returns false if host notify failed or queue is broken, otherwise true.
  */
-bool virtqueue_notify(struct virtqueue *_vq)
+bool zxdh_virtqueue_notify(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
@@ -2769,7 +2769,7 @@ int32_t add_recvbuf_mergeable(struct receive_queue *rq, gfp_t gfp)
 
 	sg_init_one(rq->sg, buf, len);
 	ctx = mergeable_len_to_ctx(len, headroom);
-	err = virtqueue_add_inbuf_ctx(rq->vq, rq->sg, 1, buf, ctx, gfp);
+	err = zxdh_virtqueue_add_inbuf_ctx(rq->vq, rq->sg, 1, buf, ctx, gfp);
 	if (err < 0) {
 		put_page(virt_to_head_page(buf));
 	}
@@ -2866,7 +2866,7 @@ bool try_fill_recv(struct receive_queue *rq, gfp_t gfp)
 		}
 	} while (rq->vq->num_free);
 
-	if (virtqueue_kick_prepare_packed(rq->vq) && virtqueue_notify(rq->vq)) {
+	if (virtqueue_kick_prepare_packed(rq->vq) && zxdh_virtqueue_notify(rq->vq)) {
 		flags = u64_stats_update_begin_irqsave(&rq->stats.syncp);
 		rq->stats.kicks++;
 		u64_stats_update_end_irqrestore(&rq->stats.syncp, flags);
@@ -2892,7 +2892,7 @@ int32_t virtnet_receive(struct receive_queue *rq, int32_t budget,
 	}
 
 	if (rq->vq->num_free >
-	    min((uint32_t)budget, virtqueue_get_vring_size(rq->vq)) / 2) {
+	    min((uint32_t)budget, zxdh_virtqueue_get_vring_size(rq->vq)) / 2) {
 		if (!try_fill_recv(rq, GFP_ATOMIC)) {
 			schedule_delayed_work(&en_dev->refill, 0);
 		}
@@ -2922,7 +2922,7 @@ void virtqueue_napi_complete(struct napi_struct *napi, struct virtqueue *vq,
 			virtqueue_napi_schedule(napi, vq);
 		}
 	} else {
-		virtqueue_disable_cb(vq);
+		zxdh_virtqueue_disable_cb(vq);
 	}
 }
 
@@ -2955,7 +2955,7 @@ int virtnet_poll(struct napi_struct *napi, int budget)
 	if (xdp_xmit & ZXDH_XDP_TX) {
 		sq = zxdh_en_xdp_get_sq(en_dev);
 		if (virtqueue_kick_prepare_packed(sq->vq) &&
-		    virtqueue_notify(sq->vq)) {
+		    zxdh_virtqueue_notify(sq->vq)) {
 			u64_stats_update_begin(&sq->stats.syncp);
 			sq->stats.kicks++;
 			u64_stats_update_end(&sq->stats.syncp);
@@ -3262,7 +3262,7 @@ void zxdh_en_xmit_pkts(struct virtqueue *tvq)
 	struct napi_struct *napi = &en_dev->sq[vq2txq(tvq)].napi;
 
 	/* Suppress further interrupts. */
-	virtqueue_disable_cb(tvq);
+	zxdh_virtqueue_disable_cb(tvq);
 
 	if (napi->weight) {
 		virtqueue_napi_schedule(napi, tvq);
