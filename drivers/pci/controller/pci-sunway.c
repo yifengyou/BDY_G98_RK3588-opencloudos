@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/set_memory.h>
 
 #include <asm/sw64_init.h>
 
@@ -865,6 +866,9 @@ static int pci_prepare_controller(struct pci_controller *hose,
 	hose->sparse_io_base  = 0;
 	hose->dense_mem_base  = props[PROP_PCIE_IO_BASE];
 	hose->dense_io_base   = props[PROP_EP_IO_BASE];
+#ifdef CONFIG_SW64_KERNEL_PAGE_TABLE
+	set_memory_rw((unsigned long)__va(hose->dense_io_base), 0x10000 >> PAGE_SHIFT);
+#endif
 
 	if (!is_guest_or_emul()) {
 		hose->rc_config_space_base = ioremap(props[PROP_RC_CONFIG_BASE], SUNWAY_RC_SIZE);
@@ -1058,6 +1062,11 @@ static struct pci_host_bridge *sunway_pcie_of_init(struct platform_device *pdev)
 	return bridge;
 }
 
+int __weak sunway_iommu_early_init(struct pci_controller *hose)
+{
+	return -ENOENT;
+}
+
 static int sunway_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1094,6 +1103,8 @@ static int sunway_pcie_probe(struct platform_device *pdev)
 		pcie_bus_configure_settings(child);
 
 	pci_bus_add_devices(bus);
+
+	sunway_iommu_early_init(pci_bus_to_pci_controller(bus));
 
 	return 0;
 }
