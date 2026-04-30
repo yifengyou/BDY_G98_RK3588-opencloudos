@@ -5505,7 +5505,7 @@ static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 #ifdef CONFIG_MEMCG_ZRAM
 			if (zram_memcg_nocharge) {
 				val += memcg_page_state(memcg, MEMCG_ZRAM_B) / PAGE_SIZE;
-				val = min(val, min(totalram_pages() - 1, memcg->memory.max - 1));
+				val = min(val, min(totalram_pages(), memcg->memory.max));
 			}			
 #endif
 		} else
@@ -5564,7 +5564,7 @@ static u64 mem_cgroup_read_u64(struct cgroup_subsys_state *css,
 				if (mem_limit > totalram_pages())
 					mem_limit = totalram_pages();
 				return min((u64)mem_cgroup_usage(memcg, true) * PAGE_SIZE, \
-									(u64)mem_limit * PAGE_SIZE - 1);
+									(u64)mem_limit * PAGE_SIZE);
 			}
 #endif
 			return (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
@@ -5581,7 +5581,7 @@ static u64 mem_cgroup_read_u64(struct cgroup_subsys_state *css,
 		if (mem_limit > totalram_pages())
 			mem_limit = totalram_pages();
 		return min((u64)memsw_counter->watermark * PAGE_SIZE, \
-								(u64)mem_limit * PAGE_SIZE - 1);
+								(u64)mem_limit * PAGE_SIZE);
 	}
 #endif
 		return (u64)counter->watermark * PAGE_SIZE;
