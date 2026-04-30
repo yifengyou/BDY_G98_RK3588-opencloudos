@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 #include <linux/device.h>
+#include <linux/dcbnl.h>
+#include <net/dcbnl.h>
 
 /* 启用dcb会大幅度增加初始化时间，暂时先注释 */
 #define ZXDH_DCBNL_OPEN

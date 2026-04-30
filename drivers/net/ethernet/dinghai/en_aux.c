@@ -747,7 +747,7 @@ int32_t xmit_skb(struct net_device *netdev, struct send_queue *sq,
 		num_sg++;
 	}
 
-	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
+	return zxdh_virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
 
 netdev_tx_t zxdh_en_xmit(struct sk_buff *skb, struct net_device *netdev)
@@ -764,13 +764,13 @@ netdev_tx_t zxdh_en_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* Free up any pending old buffers before queueing new ones. */
 	do {
 		if (use_napi) {
-			virtqueue_disable_cb(sq->vq);
+			zxdh_virtqueue_disable_cb(sq->vq);
 		}
 
 		free_old_xmit_skbs(netdev, sq, false);
 
 	} while (use_napi && kick &&
-		 unlikely(!virtqueue_enable_cb_delayed(sq->vq)));
+		 unlikely(!zxdh_virtqueue_enable_cb_delayed(sq->vq)));
 
 	/* timestamp packet in software */
 	skb_tx_timestamp(skb);
@@ -806,19 +806,19 @@ netdev_tx_t zxdh_en_xmit(struct sk_buff *skb, struct net_device *netdev)
 		netif_stop_subqueue(netdev, qnum);
 		en_dev->hw_stats.q_stats[qnum].q_tx_stopped++;
 		if (!use_napi &&
-		    unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {
+		    unlikely(!zxdh_virtqueue_enable_cb_delayed(sq->vq))) {
 			/* More just got used, free them then recheck. */
 			free_old_xmit_skbs(netdev, sq, false);
 			if (sq->vq->num_free >= 2 + MAX_SKB_FRAGS) {
 				netif_start_subqueue(netdev, qnum);
-				virtqueue_disable_cb(sq->vq);
+				zxdh_virtqueue_disable_cb(sq->vq);
 			}
 		}
 	}
 
 	if (kick || netif_xmit_stopped(txq)) {
 		if (virtqueue_kick_prepare_packed(sq->vq) &&
-		    virtqueue_notify(sq->vq)) {
+		    zxdh_virtqueue_notify(sq->vq)) {
 			u64_stats_update_begin(&sq->stats.syncp);
 			sq->stats.kicks++;
 			u64_stats_update_end(&sq->stats.syncp);
@@ -5409,7 +5409,9 @@ void zxdh_netdev_features_init(struct net_device *netdev)
 	return;
 }
 
+#ifdef ZXDH_SEC
 extern const struct xfrmdev_ops zxdh_xfrmdev_ops;
+#endif
 static void zxdh_build_nic_netdev(struct net_device *netdev)
 {
 	struct zxdh_en_priv *en_priv = netdev_priv(netdev);

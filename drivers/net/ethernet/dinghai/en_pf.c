@@ -54,6 +54,9 @@ MODULE_DESCRIPTION(DRV_SUMMARY);
 MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("Dual BSD/GPL");
 
+__weak int debug_print;
+module_param(debug_print, int, 0644);
+
 uint32_t dh_debug_mask;
 struct slot_id_array dh_slot[DPP_PCIE_SLOT_MAX];
 module_param_named(debug_mask, dh_debug_mask, uint, 0644);

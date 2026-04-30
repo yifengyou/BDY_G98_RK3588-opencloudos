@@ -823,7 +823,9 @@ uint32_t zxdh_dcbnl_initialize(struct net_device *netdev)
 	zxdh_dcbnl_printk_ets_tree(en_priv);
 
 	en_dev->dcb_para.init_flag = ZXDH_DCBNL_INIT_FLAG;
+#ifdef CONFIG_DCB
 	netdev->dcbnl_ops = &zxdh_dcbnl_ops;
+#endif
 
 	//zxdh_dcbnl_set_tm_pport_mcode_gate_open(netdev);
 	LOG_INFO("%s dcbnl init ok ", netdev->name);
@@ -842,7 +844,9 @@ uint32_t zxdh_dcbnl_ets_uninit(struct net_device *netdev)
 	LOG_INFO("%s dcbnl uninit begin\n", netdev->name);
 
 	en_dev->dcb_para.init_flag = 0;
+#ifdef CONFIG_DCB
 	netdev->dcbnl_ops = NULL;
+#endif
 	zxdh_dcbnl_set_tm_pport_mcode_gate_close(netdev);
 
 	zxdh_dcbnl_free_flow_resources(en_priv);

@@ -9,6 +9,9 @@
 #include "en_aux/en_aux_cmd.h"
 #include "msg_common.h"
 
+int debug_print;
+module_param(debug_print, int, 0644);
+
 /*****************************************
 [src/dst]时应该将消息发到低2k(0)还是高2K(1)
 src/dst: TO_RISC, TO_PFVF, TO_MPF
