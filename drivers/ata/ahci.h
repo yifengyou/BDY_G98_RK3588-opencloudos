@@ -383,11 +383,13 @@ struct ahci_host_priv {
 	/* only required for per-port MSI(-X) support */
 	int			(*get_irq_vector)(struct ata_host *host,
 						  int port);
+#ifdef CONFIG_X86
 	/* fix zhaoxin Enclosure Management quirk */
 	void __iomem *p1_mmio;
 	u8 sx_index;
 	u8 px_index;
 	bool has_p0_p1;
+#endif
 };
 
 extern int ahci_ignore_sss;
