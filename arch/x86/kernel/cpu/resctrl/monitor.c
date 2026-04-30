@@ -1124,6 +1124,7 @@ static const struct x86_cpu_id snc_cpu_ids[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(EMERALDRAPIDS_X, 0),
 	X86_MATCH_INTEL_FAM6_MODEL(GRANITERAPIDS_X, 0),
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_CRESTMONT_X, 0),
+	X86_MATCH_INTEL_FAM6_MODEL(ATOM_DARKMONT_X, 0),
 	{}
 };
 
@@ -1162,11 +1163,12 @@ static __init int snc_get_config(void)
 
 	ret = cpus_per_l3 / cpus_per_node;
 
-	/* sanity check: Only valid results are 1, 2, 3, 4 */
+	/* sanity check: Only valid results are 1, 2, 3, 4, 6 */
 	switch (ret) {
 	case 1:
 		break;
 	case 2 ... 4:
+	case 6:
 		pr_info("Sub-NUMA Cluster mode detected with %d nodes per L3 cache\n", ret);
 		rdt_resources_all[RDT_RESOURCE_L3].r_resctrl.mon_scope = RESCTRL_L3_NODE;
 		break;
