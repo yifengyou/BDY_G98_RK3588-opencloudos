@@ -1,3 +1,15 @@
+* Thu Apr 30 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-50.1
+- emm/zram: fix include path for zram_trace.h
+- Merge branch 'release-cve' into 'release'
+- crypto: algif_aead - Revert to operating out-of-place
+- media: dvb-usb: dtv5100: fix out-of-bounds in dtv5100_i2c_msg()
+- scsi: target: iscsi: Fix use-after-free in iscsit_dec_conn_usage_count()
+- RDMA/umad: Reject negative data_len in ib_umad_write
+- drm/vmwgfx: Return the correct value in vmw_translate_ptr functions
+- efivarfs: fix error propagation in efivar_entry_get()
+- net: sched: avoid qdisc_reset_all_tx_gt() vs dequeue race for lockless qdiscs
+- scsi: target: iscsi: Fix use-after-free in iscsit_dec_session_usage_count()
+
 * Thu Apr 30 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-50
 - mm/slub: Reduce memory consumption in extreme scenarios
 - !728 [Intel-SIG] x86/microcode: backport Intel microcode staging feature
