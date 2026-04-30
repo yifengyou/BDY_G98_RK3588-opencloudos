@@ -58,6 +58,7 @@
 #include <asm/msr.h>
 #include <asm/tsc.h>
 #include <asm/fpu/api.h>
+#include <asm/smp.h>
 
 #define INTEL_IDLE_VERSION "0.5.1"
 
@@ -226,6 +227,15 @@ static __cpuidle int intel_idle_s2idle(struct cpuidle_device *dev,
 	mwait_idle_with_hints(eax, ecx);
 
 	return 0;
+}
+
+static void intel_idle_enter_dead(struct cpuidle_device *dev, int index)
+{
+	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	struct cpuidle_state *state = &drv->states[index];
+	unsigned long eax = flg2MWAIT(state->flags);
+
+	mwait_play_dead(eax);
 }
 
 /*
@@ -1727,6 +1737,7 @@ static void __init intel_idle_init_cstates_acpi(struct cpuidle_driver *drv)
 			mark_tsc_unstable("TSC halts in idle");
 
 		state->enter = intel_idle;
+		state->enter_dead = intel_idle_enter_dead;
 		state->enter_s2idle = intel_idle_s2idle;
 	}
 }
@@ -2073,6 +2084,9 @@ static void __init intel_idle_init_cstates_icpu(struct cpuidle_driver *drv)
 		    !cpuidle_state_table[cstate].enter_s2idle)
 			break;
 
+		if (!cpuidle_state_table[cstate].enter_dead)
+			cpuidle_state_table[cstate].enter_dead = intel_idle_enter_dead;
+
 		/* If marked as unusable, skip this state. */
 		if (cpuidle_state_table[cstate].flags & CPUIDLE_FLAG_UNUSABLE) {
 			pr_debug("state %s is disabled\n",
@@ -2242,9 +2256,6 @@ static int __init intel_idle_init(void)
 			return -ENODEV;
 	}
 
-	if (boot_cpu_data.cpuid_level < CPUID_MWAIT_LEAF)
-		return -ENODEV;
-
 	cpuid(CPUID_MWAIT_LEAF, &eax, &ebx, &ecx, &mwait_substates);
 
 	if (!(ecx & CPUID5_ECX_EXTENSIONS_SUPPORTED) ||
@@ -2291,6 +2302,8 @@ static int __init intel_idle_init(void)
 	pr_debug("Local APIC timer is reliable in %s\n",
 		 boot_cpu_has(X86_FEATURE_ARAT) ? "all C-states" : "C1");
 
+	arch_cpu_rescan_dead_smt_siblings();
+
 	return 0;
 
 hp_setup_fail:
@@ -2301,7 +2314,7 @@ init_driver_fail:
 	return retval;
 
 }
-device_initcall(intel_idle_init);
+subsys_initcall_sync(intel_idle_init);
 
 /*
  * We are not really modular, but we used to support that.  Meaning we also
