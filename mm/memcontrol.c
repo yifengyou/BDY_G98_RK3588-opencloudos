@@ -6263,8 +6263,10 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	unsigned long tmp;
 #ifdef CONFIG_MEMCG_ZRAM
 	int sell_flag = 0;
-	unsigned long swap = memcg_page_state_local(memcg, MEMCG_SWAP);
-	unsigned long swap_total = memcg_page_state(memcg, MEMCG_SWAP);
+	unsigned long swap = memcg_page_state_local(memcg, MEMCG_ZRAMED);
+	unsigned long swap_total = memcg_page_state(memcg, MEMCG_ZRAMED);
+	unsigned long shmem_zram = memcg_page_state_local(memcg, MEMCG_SHMEM_ZRAMED);
+	unsigned long shmem_zram_total = memcg_page_state(memcg, MEMCG_SHMEM_ZRAMED);
 
 	if (mem_sell_check_memcg(memcg))
 		sell_flag = 1;
@@ -6282,10 +6284,16 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 		nr = memcg_page_state_local(memcg, memcg1_stats[i]);
 #ifdef CONFIG_MEMCG_ZRAM
 		if (sell_flag == 1) {
+			if (memcg1_stats[i] == NR_FILE_PAGES)
+				nr += shmem_zram;
+			if (memcg1_stats[i] == NR_ANON_MAPPED)
+				nr += max(0, swap - shmem_zram);
+			if (memcg1_stats[i] == NR_SHMEM)
+				nr += shmem_zram;
+			if (memcg1_stats[i] == NR_FILE_MAPPED)
+				nr += shmem_zram;
 			if (memcg1_stats[i] == MEMCG_SWAP)
 				nr = 0;
-			if (memcg1_stats[i] == NR_ANON_MAPPED)
-				nr += swap;
 		}
 #endif
 		seq_buf_printf(s, "%s %lu\n", memcg1_stat_names[i],
@@ -6327,10 +6335,16 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 		nr = memcg_page_state(memcg, memcg1_stats[i]);
 #ifdef CONFIG_MEMCG_ZRAM
 		if (sell_flag == 1) {
+			if (memcg1_stats[i] == NR_FILE_PAGES)
+				nr += shmem_zram_total;
+			if (memcg1_stats[i] == NR_ANON_MAPPED)
+				nr += max(0, swap_total - shmem_zram_total);
+			if (memcg1_stats[i] == NR_SHMEM)
+				nr += shmem_zram_total;
+			if (memcg1_stats[i] == NR_FILE_MAPPED)
+				nr += shmem_zram_total;
 			if (memcg1_stats[i] == MEMCG_SWAP)
 				nr = 0;
-			if (memcg1_stats[i] == NR_ANON_MAPPED)
-				nr += swap_total;
 		}
 #endif
 		seq_buf_printf(s, "total_%s %llu\n", memcg1_stat_names[i],
@@ -6347,7 +6361,7 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 #ifdef CONFIG_MEMCG_ZRAM
 		if (sell_flag == 1) {
 			if (i == LRU_ACTIVE_ANON)
-				tmp += swap;
+				tmp += swap_total;
 		}
 #endif
 		seq_buf_printf(s, "total_%s %llu\n", lru_list_name(i), (u64)tmp * PAGE_SIZE);
@@ -7308,7 +7322,7 @@ static int memcg_meminfo_recursive_write(struct cgroup_subsys_state *css,
 
 static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_cgroup *memcg)
 {
-	unsigned long mem_limit, mem_usage;
+	unsigned long mem_limit, mem_usage, memsw_usage;
 	unsigned long mem_cache, mem_swap_cache;
 	unsigned long mem_active, mem_inactive;
 	unsigned long mem_active_anon, mem_inactive_anon;
@@ -7319,11 +7333,11 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 	unsigned long mem_rss_huge;
 #endif
 	unsigned long mem_file_map, mem_shmem;
-	unsigned long mem_zram_saved = 0, mem_free = 0;
+	unsigned long mem_free = 0;
 	unsigned long mem_swap, mem_swap_free;
 	int mem_oversell = 0;
 #ifdef CONFIG_MEMCG_ZRAM
-	unsigned long mem_zram_raw = 0, mem_zram_usage = 0;
+	unsigned long shmem_zram = 0, mem_zram_raw = 0;
 	if (mem_sell_check_memcg(memcg))
 		mem_oversell = 1;
 #endif
@@ -7341,25 +7355,28 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_limit = totalram_pages();
 
 	mem_usage = mem_cgroup_usage(memcg, false);
+	memsw_usage = mem_cgroup_usage(memcg, true);
+	mem_free = mem_limit - min(mem_limit, mem_oversell? memsw_usage : mem_usage);
 
 #ifdef CONFIG_MEMCG_ZRAM
 	if (mem_oversell) {
-		mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED);
-		mem_zram_usage = memcg_page_state(memcg, MEMCG_ZRAM_B) / PAGE_SIZE;
-		mem_zram_saved = mem_zram_raw - mem_zram_usage;
+		if (!memcg->meminfo_recursive) {
+			mem_zram_raw = memcg_page_state_local(memcg, MEMCG_ZRAMED);
+			shmem_zram = memcg_page_state_local(memcg, MEMCG_SHMEM_ZRAMED);
+		} else {
+			mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED);
+			shmem_zram = memcg_page_state(memcg, MEMCG_SHMEM_ZRAMED);
+		}
 	}
 #endif
-	mem_free = mem_limit - min(mem_limit, (mem_usage + mem_zram_saved));
 
-	if (mem_oversell)
+	if (mem_oversell) {
 		mem_swap = 0;
-	else
-		mem_swap = total_swap_pages;
-
-	if (mem_oversell)
 		mem_swap_free = 0;
-	else
+	} else {
+		mem_swap = total_swap_pages;
 		mem_swap_free = mem_swap - min(mem_swap, memcg_page_state(memcg, MEMCG_SWAP));
+	}
 
 	if (!memcg->meminfo_recursive) {
 		mem_cache = memcg_page_state_local(memcg, NR_FILE_PAGES);
@@ -7456,9 +7473,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		"AnonHugePages:  %8lu kB\n"
 #endif
 		, K(mem_limit)
-		, K(mem_limit - mem_usage - mem_zram_saved)
+		, K(mem_free)
 		, 0UL
-		, K(mem_cache)
+		, K(mem_cache + shmem_zram)
 		, K(mem_swap_cache)
 		, K(mem_active + mem_zram_raw) // K(pages[LRU_ACTIVE_ANON]   + pages[LRU_ACTIVE_FILE]),
 		, K(mem_inactive) // K(pages[LRU_INACTIVE_ANON] + pages[LRU_INACTIVE_FILE]),
@@ -7487,8 +7504,8 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 #else
 		, K(mem_rss + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES)),
 #endif
-		, K(mem_file_map)// K(global_page_state(NR_FILE_MAPPED)),
-		, K(mem_shmem) // K(global_page_state(NR_SHMEM)),
+		, K(mem_file_map + shmem_zram)// K(global_page_state(NR_FILE_MAPPED)),
+		, K(mem_shmem + shmem_zram) // K(global_page_state(NR_SHMEM)),
 		, 0UL // K(global_page_state(NR_SLAB_RECLAIMABLE) +
 		      // global_page_state(NR_SLAB_UNRECLAIMABLE)),
 		, 0UL // K(global_page_state(NR_SLAB_RECLAIMABLE)),
@@ -7552,12 +7569,11 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 {
 	unsigned long *v1, *v;
 	int i, stat_items_size;
-	u64 mem_limit, mem_usage;
-	u64 mem_zram_saved = 0, mem_zram_raw_pages = 0, mem_free = 0;
+	u64 mem_limit, mem_usage, memsw_usage, mem_free;
 	u64 pg_in, pg_out;
 #ifdef CONFIG_MEMCG_ZRAM
 	int mem_oversell = 0;
-	u64 mem_zram_raw = 0, mem_zram_usage = 0;
+	unsigned long mem_zram_raw = 0;
 
 	if (mem_sell_check_memcg(memcg))
 		mem_oversell = 1;
@@ -7567,21 +7583,28 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 		mem_limit = totalram_pages() * PAGE_SIZE;
 	else
 		mem_limit = mem_limit * PAGE_SIZE;
-	mem_usage = (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
 
-	pg_in = memcg_events_local(memcg, memcg1_events[0]) * (PAGE_SIZE / 1024);
-	pg_out = memcg_events_local(memcg, memcg1_events[1]) * (PAGE_SIZE / 1024);
+	mem_usage = (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
+	memsw_usage = (u64)mem_cgroup_usage(memcg, true) * PAGE_SIZE;
+
+	if (!memcg->meminfo_recursive) {
+		pg_in = memcg_events_local(memcg, memcg1_events[0]) * (PAGE_SIZE / 1024);
+		pg_out = memcg_events_local(memcg, memcg1_events[1]) * (PAGE_SIZE / 1024);
+	} else {
+		pg_in = memcg_events(memcg, memcg1_events[0]) * (PAGE_SIZE / 1024);
+		pg_out = memcg_events(memcg, memcg1_events[1]) * (PAGE_SIZE / 1024);
+	}
 #ifdef CONFIG_MEMCG_ZRAM
 	if (mem_oversell) {
-		mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED) * PAGE_SIZE;
-		mem_zram_usage = memcg_page_state(memcg, MEMCG_ZRAM_B);
-		mem_zram_saved = mem_zram_raw - mem_zram_usage;
-		mem_zram_raw_pages = memcg_page_state(memcg, MEMCG_ZRAMED);
+		if (!memcg->meminfo_recursive)
+			mem_zram_raw = memcg_page_state_local(memcg, MEMCG_ZRAMED);
+		else
+			mem_zram_raw = memcg_page_state(memcg, MEMCG_ZRAMED);
 		pg_in = 0;
 		pg_out = 0;
 	}
 #endif
-	mem_free = mem_limit - min(mem_limit, (mem_usage + mem_zram_saved));
+	mem_free = mem_limit - min(mem_limit, mem_oversell? memsw_usage : mem_usage);
 
 	stat_items_size = vmstat_text_size * sizeof(unsigned long);
 
@@ -7597,7 +7620,7 @@ static int mem_cgroup_vmstat_read_comm(struct seq_file *m, void *vv, struct mem_
 	v[NR_ZONE_INACTIVE_ANON] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_INACTIVE_ANON),
 								memcg->meminfo_recursive);
 	v[NR_ZONE_ACTIVE_ANON] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_ACTIVE_ANON),
-								memcg->meminfo_recursive) + mem_zram_raw_pages;
+								memcg->meminfo_recursive) + mem_zram_raw;
 	v[NR_ZONE_INACTIVE_FILE] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_INACTIVE_FILE),
 								memcg->meminfo_recursive);
 	v[NR_ZONE_ACTIVE_FILE] = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_ACTIVE_FILE),
