@@ -6171,8 +6171,29 @@ static unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
 	return nr;
 }
 
+static inline unsigned long mem_cgroup_nr_zramed_pages(struct mem_cgroup *memcg,
+					     bool tree)
+{
+	if (tree)
+		return memcg_page_state(memcg, MEMCG_ZRAMED);
+	else
+		return memcg_page_state_local(memcg, MEMCG_ZRAMED);
+}
+
+static unsigned long mem_cgroup_node_nr_zramed_pages(struct mem_cgroup *memcg,
+				int nid, bool tree)
+{
+	struct lruvec *lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+
+	if (tree)
+		return lruvec_page_state(lruvec, MEMCG_ZRAMED);
+	else
+		return lruvec_page_state_local(lruvec, MEMCG_ZRAMED);
+}
+
 static int memcg_numa_stat_show(struct seq_file *m, void *v)
 {
+	int sell_flag = 0, stat_flag = 0;
 	struct numa_stat {
 		const char *name;
 		unsigned int lru_mask;
@@ -6187,30 +6208,41 @@ static int memcg_numa_stat_show(struct seq_file *m, void *v)
 	const struct numa_stat *stat;
 	int nid;
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+#ifdef CONFIG_MEMCG_ZRAM
+	if (mem_sell_check_memcg(memcg))
+		sell_flag = 1;
+#endif
 
 	mem_cgroup_flush_stats(memcg);
 
 	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
+		if ((stat->lru_mask == LRU_ALL) || (stat->lru_mask == LRU_ALL_ANON))
+			stat_flag = 1;
 		seq_printf(m, "%s=%lu", stat->name,
 			   mem_cgroup_nr_lru_pages(memcg, stat->lru_mask,
-						   false));
+					false) + ((sell_flag + stat_flag == 2)? mem_cgroup_nr_zramed_pages(memcg, false): 0));
 		for_each_node_state(nid, N_MEMORY)
 			seq_printf(m, " N%d=%lu", nid,
 				   mem_cgroup_node_nr_lru_pages(memcg, nid,
-							stat->lru_mask, false));
+						stat->lru_mask, false) +
+						((sell_flag + stat_flag == 2)? mem_cgroup_node_nr_zramed_pages(memcg, nid, false): 0));
 		seq_putc(m, '\n');
+		stat_flag = 0;
 	}
 
 	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
-
+		if ((stat->lru_mask == LRU_ALL) || (stat->lru_mask == LRU_ALL_ANON))
+			stat_flag = 1;
 		seq_printf(m, "hierarchical_%s=%lu", stat->name,
 			   mem_cgroup_nr_lru_pages(memcg, stat->lru_mask,
-						   true));
+					true) + ((sell_flag + stat_flag == 2)? mem_cgroup_nr_zramed_pages(memcg, true): 0));
 		for_each_node_state(nid, N_MEMORY)
 			seq_printf(m, " N%d=%lu", nid,
 				   mem_cgroup_node_nr_lru_pages(memcg, nid,
-							stat->lru_mask, true));
+						stat->lru_mask, true) +
+						((sell_flag + stat_flag == 2)? mem_cgroup_node_nr_zramed_pages(memcg, nid, true): 0));
 		seq_putc(m, '\n');
+		stat_flag = 0;
 	}
 
 	return 0;
