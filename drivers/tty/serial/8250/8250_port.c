@@ -42,6 +42,10 @@
 #define UART_NPCM_TOR          7
 #define UART_NPCM_TOIE         BIT(7)  /* Timeout Interrupt Enable */
 
+/* Support serial disable rx */
+static bool is_enable_8250_rx = true;
+module_param(is_enable_8250_rx, bool, S_IWUSR | S_IRUGO);
+
 /*
  * Debugging.
  */
@@ -1756,6 +1760,11 @@ void serial8250_read_char(struct uart_8250_port *up, u16 lsr)
 		else if (lsr & UART_LSR_FE)
 			flag = TTY_FRAME;
 	}
+
+	if (is_enable_8250_rx == false) {
+		return;
+	}
+
 	if (uart_prepare_sysrq_char(port, ch))
 		return;
 
