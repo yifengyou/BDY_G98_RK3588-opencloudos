@@ -771,6 +771,17 @@ __tracing_map_ring_insert(struct tracing_map *map, void *key)
 		return elt;
 	}
 
+	/*
+	 * Re-check after a read barrier: another CPU may have already
+	 * replaced this slot with our key.  Aggregating is much cheaper
+	 * than a redundant clear that would wipe its statistics.
+	 */
+	smp_rmb();
+	if (keys_match(key, elt->key, map->key_size)) {
+		atomic64_inc(&map->hits);
+		return elt;
+	}
+
 	is_empty = !memchr_inv(elt->key, 0, map->key_size);
 
 	tracing_map_elt_clear(elt);
