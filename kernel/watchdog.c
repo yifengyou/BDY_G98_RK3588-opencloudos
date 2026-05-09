@@ -34,6 +34,9 @@
 
 #include <asm/irq_regs.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/lockup.h>
+
 static DEFINE_MUTEX(watchdog_mutex);
 
 #if defined(CONFIG_HARDLOCKUP_DETECTOR) || defined(CONFIG_HARDLOCKUP_DETECTOR_SPARC64)
@@ -182,6 +185,20 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 		}
 
 		/*
+		 * Structured tracepoint, NMI-safe. We can only safely read
+		 * `current` and the saved regs when the locked-up CPU is the
+		 * one running this NMI handler; for cross-CPU detection
+		 * (perf/buddy on a different CPU) leave task/ip empty rather
+		 * than racing with the remote rq.
+		 */
+		if (cpu == this_cpu) {
+			trace_hardlockup_warn(cpu, current->pid, current->comm,
+				regs ? instruction_pointer(regs) : 0);
+		} else {
+			trace_hardlockup_warn(cpu, 0, "?", 0);
+		}
+
+		/*
 		 * NOTE: we call printk_cpu_sync_get_irqsave() after printing
 		 * the lockup message. While it would be nice to serialize
 		 * that printout, we really want to make sure that if some
@@ -313,6 +330,12 @@ static u64 __read_mostly sample_period;
 
 /* Timestamp taken after the last successful reschedule. */
 static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
+/*
+ * Nanosecond-precision counterpart of watchdog_touch_ts. Updated in
+ * lockstep so that watchdog_timer_fn() can compute a true ns-precision
+ * stuck duration for the softlockup_sample tracepoint.
+ */
+static DEFINE_PER_CPU(u64, watchdog_touch_ns);
 /* Timestamp of the last softlockup report. */
 static DEFINE_PER_CPU(unsigned long, watchdog_report_ts);
 static DEFINE_PER_CPU(struct hrtimer, watchdog_hrtimer);
@@ -568,6 +591,17 @@ static unsigned long get_timestamp(void)
 	return running_clock() >> 30LL;  /* 2^30 ~= 10^9 */
 }
 
+/*
+ * Effective lockup threshold in milliseconds, exposed via the
+ * thresh_ms field of the softlockup_sample / softlockup_warn events.
+ * For now this just mirrors watchdog_thresh; a follow-up patch may
+ * introduce a sub-second override.
+ */
+static u32 get_effective_thresh_ms(void)
+{
+	return (u32)READ_ONCE(watchdog_thresh) * MSEC_PER_SEC;
+}
+
 static void set_sample_period(void)
 {
 	/*
@@ -590,6 +624,7 @@ static void update_report_ts(void)
 static void update_touch_ts(void)
 {
 	__this_cpu_write(watchdog_touch_ts, get_timestamp());
+	__this_cpu_write(watchdog_touch_ns, local_clock());
 	update_report_ts();
 }
 
@@ -740,6 +775,22 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 
 	update_cpustat();
 
+	/*
+	 * Per-tick observation tracepoint. Default-disabled; when off this
+	 * is one static_branch jump. Pair with a filter such as
+	 * "stuck_ns >= 200000000" to record only long windows.
+	 */
+	if (trace_softlockup_sample_enabled()) {
+		u64 now_ns   = local_clock();
+		u64 touch_ns = __this_cpu_read(watchdog_touch_ns);
+		u64 stuck_ns = (now_ns >= touch_ns) ? now_ns - touch_ns : 0;
+		unsigned long ip = regs ? instruction_pointer(regs) : 0;
+
+		trace_softlockup_sample(smp_processor_id(), stuck_ns,
+					get_effective_thresh_ms(),
+					current->pid, current->comm, ip);
+	}
+
 	/* Reset the interval when touched by known problematic code. */
 	if (period_ts == SOFTLOCKUP_DELAY_REPORT) {
 		if (unlikely(__this_cpu_read(softlockup_touch_sync))) {
@@ -770,6 +821,24 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 
 		/* Start period for the next softlockup warning. */
 		update_report_ts();
+
+		/*
+		 * Structured warning event, emitted in lockstep with the
+		 * pr_emerg() below so user-space consumers (hist trigger,
+		 * stacktrace trigger, external collectors) get the same
+		 * signal without grepping dmesg.
+		 */
+		{
+			u64 now_ns   = local_clock();
+			u64 touch_ns = __this_cpu_read(watchdog_touch_ns);
+			u64 stuck_ns = (now_ns >= touch_ns) ? now_ns - touch_ns
+				: (u64)duration * NSEC_PER_SEC;
+			unsigned long ip = regs ? instruction_pointer(regs) : 0;
+
+			trace_softlockup_warn(smp_processor_id(), stuck_ns,
+					      get_effective_thresh_ms(),
+					      current->pid, current->comm, ip);
+		}
 
 		printk_cpu_sync_get_irqsave(flags);
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
