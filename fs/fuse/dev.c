@@ -2516,8 +2516,8 @@ static long fuse_dev_ioctl_backing_close_all(struct file *file)
 {
 	struct fuse_dev *fud = fuse_get_dev(file);
 
-	if (IS_ERR(fud))
-		return PTR_ERR(fud);
+	if (!fud)
+		return -EPERM;
 
 	if (!IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		return -EOPNOTSUPP;
