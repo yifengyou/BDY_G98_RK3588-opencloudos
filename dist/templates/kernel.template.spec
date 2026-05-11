@@ -1659,9 +1659,9 @@ cp -a /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori /usr/src/kernels/%
 /boot/vmlinuz-%{kernel_unamer}-efi
 %endif
 %ghost /boot/.vmlinuz-%{kernel_unamer}.hmac
-/boot/System.map-%{kernel_unamer}
-/boot/config-%{kernel_unamer}
-/boot/symvers-%{kernel_unamer}.gz
+%ghost /boot/System.map-%{kernel_unamer}
+%ghost /boot/config-%{kernel_unamer}
+%ghost /boot/symvers-%{kernel_unamer}.gz
 # RUE module probe file
 %config(noreplace) %{_modulesloaddir}/rue.conf
 # Initramfs will be generated after install
