@@ -16,3 +16,5 @@ obj-$(CONFIG_INFINIBAND_QEDR)		+= qedr/
 obj-$(CONFIG_INFINIBAND_BNXT_RE)	+= bnxt_re/
 obj-$(CONFIG_INFINIBAND_ERDMA)		+= erdma/
 obj-m          += zrdma/
+obj-$(CONFIG_INFINIBAND_SXE2RDMA)	+= sxe2rdma/
+
