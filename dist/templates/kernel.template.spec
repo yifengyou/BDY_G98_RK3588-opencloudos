@@ -765,6 +765,7 @@ BuildKernel() {
 
 	%if %{with_modsign}
 	cp -a scripts/sign-file scripts/sign-file-ori || true
+	chmod -x scripts/sign-file-ori || true
 	%endif
 
 	popd
@@ -1627,6 +1628,7 @@ if [ "$HARDLINK" != "no" -a -x /usr/bin/hardlink -a ! -e /run/ostree-booted ]; t
 fi
 %if %{with_modsign}
 mv /usr/src/kernels/%{kernel_unamer}/scripts/sign-file /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-tk 1>/dev/null 2>&1 || true
+chmod +x /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori
 cp -a /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori /usr/src/kernels/%{kernel_unamer}/scripts/sign-file 1>/dev/null 2>&1 || true
 %endif
 %endif
