@@ -36,6 +36,10 @@ SYM_FUNC_START(ptp_xchg)
 	testq %r12, %r12
 	jz xchg_wp_enabled
 
+	movq %cr0, %r12
+	andq $(~X86_CR0_WP), %r12
+	movq %r12, %cr0
+
 	xchg	%rsi, (%rdi)
 	movq	%rsi, %rax
 
@@ -45,12 +49,16 @@ SYM_FUNC_START(ptp_xchg)
 
 xchg_wp_enabled:
 #endif
+	addq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
+
 	DISABLE_WP r12
 
 	xchg	%rsi, (%rdi)
 	movq	%rsi, %rax
 
 	ENABLE_WP r12
+
+	subq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
 
 	popq %r12
 
@@ -71,6 +79,10 @@ SYM_FUNC_START(ptp_try_cmpxchg)
 	testq %r12, %r12
 	jz cmpxchg_wp_enabled
 
+	movq %cr0, %r12
+	andq $(~X86_CR0_WP), %r12
+	movq %r12, %cr0
+
 	movq %rsi, %rax
 	lock cmpxchgq %rdx, (%rdi)
 
@@ -80,12 +92,16 @@ SYM_FUNC_START(ptp_try_cmpxchg)
 
 cmpxchg_wp_enabled:
 #endif
+	addq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
+
 	DISABLE_WP r12
 
 	movq %rsi, %rax
 	lock cmpxchgq %rdx, (%rdi)
 
 	ENABLE_WP r12
+
+	subq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
 
 	popq %r12
 	/* restore RFLAGS*/
@@ -106,6 +122,10 @@ SYM_FUNC_START(ptp_rw_gate)
 	testq %r12, %r12
 	jz ptprw_wp_enabled
 
+	movq %cr0, %r12
+	andq $(~X86_CR0_WP), %r12
+	movq %r12, %cr0
+
 	leaq iee_funcs(%rip), %rax
 	call *(%rax, %rdi, 8)
 
@@ -115,6 +135,8 @@ SYM_FUNC_START(ptp_rw_gate)
 
 ptprw_wp_enabled:
 #endif
+	addq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
+
 	DISABLE_WP r12
 
 	/* call iee func */
@@ -122,6 +144,8 @@ ptprw_wp_enabled:
 	call *(%rax, %rdi, 8)
 
 	ENABLE_WP r12
+
+	subq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
 
 	popq %r12
 

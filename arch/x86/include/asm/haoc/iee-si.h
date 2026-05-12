@@ -2,6 +2,7 @@
 #ifndef _LINUX_IEE_SI_H
 #define _LINUX_IEE_SI_H
 #include <linux/types.h>
+#include <asm/desc_defs.h>
 #include <asm/haoc/haoc-def.h>
 
 #define __iee_si_code   __section(".iee.si_text")
@@ -37,6 +38,12 @@ static inline void iee_write_cr4(unsigned long val)
 }
 static inline void iee_load_idt(void *ptr)
 {
+	const struct desc_ptr *dtr = ptr;
+
+	if (unlikely(dtr->size == 0 && dtr->address == 0)) {
+		asm volatile("lidt %0" :: "m" (*dtr));
+		return;
+	}
 	iee_rwx_gate(IEE_LOAD_IDT, ptr);
 }
 

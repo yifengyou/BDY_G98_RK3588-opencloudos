@@ -6154,7 +6154,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	struct mm_struct *mm = vma->vm_mm;
 	vm_fault_t ret;
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	__set_current_state(TASK_RUNNING);

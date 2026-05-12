@@ -2621,7 +2621,7 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	mt_init_flags(&mt_detach, vmi->mas.tree->ma_flags & MT_FLAGS_LOCK_MASK);
 	mt_on_stack(mt_detach);
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	/*
@@ -3449,7 +3449,7 @@ void exit_mmap(struct mm_struct *mm)
 	MA_STATE(mas, &mm->mm_mt, 0, 0);
 	int count = 0;
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	/* mm's last user has gone, and its about to be pulled down */

@@ -2976,7 +2976,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 	int trace = 0;
 	pid_t nr;
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	/*

@@ -225,6 +225,21 @@ redo:
 	return object;
 };
 
+struct ptp_pg_free_work {
+	struct work_struct work;
+	unsigned long addr;
+	unsigned long order;
+};
+
+static void ptp_pg_free_slow_work(struct work_struct *work)
+{
+	struct ptp_pg_free_work *w =
+		container_of(work, struct ptp_pg_free_work, work);
+	unset_iee_page(w->addr, w->order);
+	free_pages(w->addr, w->order);
+	kfree(w);
+}
+
 void ptp_pg_free(struct pg_cache *cache, void *object)
 {
 	unsigned long tid;
@@ -233,9 +248,17 @@ void ptp_pg_free(struct pg_cache *cache, void *object)
 	#ifdef CONFIG_X86_64
 	if (unlikely((unsigned long)object < cache->reserve_start_addr
 		|| (unsigned long)object >= cache->reserve_end_addr)) {
-		// slow path free
-		unset_iee_page((unsigned long)object, cache->object_order);
-		free_pages((unsigned long)object, cache->object_order);
+		struct ptp_pg_free_work *w =
+			kmalloc(sizeof(struct ptp_pg_free_work), GFP_ATOMIC);
+		if (unlikely(!w)) {
+			unset_iee_page((unsigned long)object, cache->object_order);
+			free_pages((unsigned long)object, cache->object_order);
+			return;
+		}
+		w->addr = (unsigned long)object;
+		w->order = cache->object_order;
+		INIT_WORK(&w->work, ptp_pg_free_slow_work);
+		schedule_work(&w->work);
 		return;
 	}
 	#endif

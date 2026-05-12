@@ -1958,7 +1958,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	struct linux_binprm *bprm;
 	int retval;
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	if (IS_ERR(filename))
