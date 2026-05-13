@@ -134,11 +134,13 @@ int apei_osc_setup(void);
 
 #ifdef CONFIG_ACPI_APEI_GHES_ARMP_VENDOR_INFO
 bool ghes_armp_vendor_critical_error(struct cper_sec_proc_arm *err, bool sync);
+int ghes_armp_vendor_handle_sei(struct pt_regs *regs);
 #else
 static inline bool
 ghes_armp_vendor_critical_error(struct cper_sec_proc_arm *err, bool sync)
 {
 	return false;
 }
+static inline int ghes_armp_vendor_handle_sei(struct pt_regs *regs) { return -ENOENT; }
 #endif
 #endif
