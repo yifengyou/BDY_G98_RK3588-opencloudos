@@ -589,7 +589,7 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 	unsigned long charged = 0;
 	int error;
 #if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	unsigned long reg;
+	unsigned long reg = 0;
 #endif
 
 	if (newflags == oldflags) {

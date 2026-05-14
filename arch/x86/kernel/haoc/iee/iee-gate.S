@@ -54,6 +54,10 @@ SYM_FUNC_START(iee_rw_gate)
 	testq %r12, %r12
 	jz rw_wp_enabled
 
+	movq %cr0, %rax
+	andq $(~X86_CR0_WP), %rax
+	movq %rax, %cr0
+
 	leaq iee_funcs(%rip), %rax
 	call *(%rax, %rdi, 8)
 
@@ -63,6 +67,8 @@ SYM_FUNC_START(iee_rw_gate)
 
 rw_wp_enabled:
 #endif
+	addq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
+
 	DISABLE_WP r12
 
 	/* switch to iee stack */
@@ -77,6 +83,8 @@ rw_wp_enabled:
 	movq %r12, %rsp
 
 	ENABLE_WP r12
+
+	subq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
 
 	popq %r12
 
@@ -120,6 +128,8 @@ SYM_FUNC_START(iee_rwx_gate)
 
 rwx_wp_enabled:
 #endif
+	addq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
+
 	/* set SMEP=0 to enable supervisor-mode exec user-mode insn */
 	movq %cr4, %rax  /* rax -> cr4 */
 	andq $(~X86_CR4_SMEP), %rax
@@ -140,6 +150,8 @@ rwx_wp_enabled:
 	movq %r12, %rsp
  
 	ENABLE_WP r12
+
+	subq $1, PER_CPU_VAR(iee_disables) + IEE_DISABLE
  
 	/* set SMEP=1 to disable supervisor-mode exec user-mode insn */
 	movq %cr4, %rax  /* rax -> cr4 */
