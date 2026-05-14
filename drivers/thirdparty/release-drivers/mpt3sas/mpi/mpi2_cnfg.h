@@ -667,18 +667,15 @@ typedef struct _MPI2_CHIP_REVISION_ID
 /* Manufacturing Page 2 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check Header.PageLength at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check Header.PageLength at
+ * runtime before using HwSettings[].
  */
-#ifndef MPI2_MAN_PAGE_2_HW_SETTINGS_WORDS
-#define MPI2_MAN_PAGE_2_HW_SETTINGS_WORDS   (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_MAN_2
 {
     MPI2_CONFIG_PAGE_HEADER Header;                     /* 0x00 */
     MPI2_CHIP_REVISION_ID   ChipId;                     /* 0x04 */
-    U32                     HwSettings[MPI2_MAN_PAGE_2_HW_SETTINGS_WORDS];/* 0x08 */
+    U32                     HwSettings[];		/* 0x08 */
 } MPI2_CONFIG_PAGE_MAN_2,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_MAN_2,
   Mpi2ManufacturingPage2_t, MPI2_POINTER pMpi2ManufacturingPage2_t;
@@ -689,18 +686,15 @@ typedef struct _MPI2_CONFIG_PAGE_MAN_2
 /* Manufacturing Page 3 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check Header.PageLength at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check Header.PageLength at
+ * runtime before using Info[].
  */
-#ifndef MPI2_MAN_PAGE_3_INFO_WORDS
-#define MPI2_MAN_PAGE_3_INFO_WORDS          (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_MAN_3
 {
     MPI2_CONFIG_PAGE_HEADER             Header;         /* 0x00 */
     MPI2_CHIP_REVISION_ID               ChipId;         /* 0x04 */
-    U32                                 Info[MPI2_MAN_PAGE_3_INFO_WORDS];/* 0x08 */
+    U32                                 Info[];		/* 0x08 */
 } MPI2_CONFIG_PAGE_MAN_3,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_MAN_3,
   Mpi2ManufacturingPage3_t, MPI2_POINTER pMpi2ManufacturingPage3_t;
@@ -787,12 +781,9 @@ typedef struct _MPI2_CONFIG_PAGE_MAN_4
 /* Manufacturing Page 5 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using Phy[].
  */
-#ifndef MPI2_MAN_PAGE_5_PHY_ENTRIES
-#define MPI2_MAN_PAGE_5_PHY_ENTRIES         (1)
-#endif
 
 typedef struct _MPI2_MANUFACTURING5_ENTRY
 {
@@ -809,7 +800,7 @@ typedef struct _MPI2_CONFIG_PAGE_MAN_5
     U16                                 Reserved2;      /* 0x06 */
     U32                                 Reserved3;      /* 0x08 */
     U32                                 Reserved4;      /* 0x0C */
-    MPI2_MANUFACTURING5_ENTRY           Phy[MPI2_MAN_PAGE_5_PHY_ENTRIES];/* 0x08 */
+    MPI2_MANUFACTURING5_ENTRY           Phy[];		/* 0x10 */
 } MPI2_CONFIG_PAGE_MAN_5,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_MAN_5,
   Mpi2ManufacturingPage5_t, MPI2_POINTER pMpi2ManufacturingPage5_t;
@@ -883,12 +874,9 @@ typedef struct _MPI2_MANPAGE7_CONNECTOR_INFO
 #define MPI2_MANPAGE7_SLOT_UNKNOWN                      (0xFFFF)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using ConnectorInfo[].
  */
-#ifndef MPI2_MANPAGE7_CONNECTOR_INFO_MAX
-#define MPI2_MANPAGE7_CONNECTOR_INFO_MAX  (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_MAN_7
 {
@@ -900,7 +888,7 @@ typedef struct _MPI2_CONFIG_PAGE_MAN_7
     U8                              NumPhys;            /* 0x20 */
     U8                              Reserved3;          /* 0x21 */
     U16                             Reserved4;          /* 0x22 */
-    MPI2_MANPAGE7_CONNECTOR_INFO    ConnectorInfo[MPI2_MANPAGE7_CONNECTOR_INFO_MAX]; /* 0x24 */
+    MPI2_MANPAGE7_CONNECTOR_INFO    ConnectorInfo[]; 	/* 0x24 */
 } MPI2_CONFIG_PAGE_MAN_7,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_MAN_7,
   Mpi2ManufacturingPage7_t, MPI2_POINTER pMpi2ManufacturingPage7_t;
@@ -1036,12 +1024,9 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_3
 /* IO Unit Page 5 */
 
 /*
- * Upper layer code (drivers, utilities, etc.) should leave this define set to
- * one and check the value returned for NumDmaEngines at runtime.
+ * Upper layer code (drivers, utilities, etc.) should check the value returned
+ * for NumDmaEngines at runtime before using DmaEngineCapabilities[].
  */
-#ifndef MPI2_IOUNITPAGE5_DMAENGINE_ENTRIES
-#define MPI2_IOUNITPAGE5_DMAENGINE_ENTRIES      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_5
 {
@@ -1056,7 +1041,7 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_5
     U32                     Reserved1;                                  /* 0x20 */
     U32                     Reserved2;                                  /* 0x24 */
     U32                     Reserved3;                                  /* 0x28 */
-    U32                     DmaEngineCapabilities[MPI2_IOUNITPAGE5_DMAENGINE_ENTRIES]; /* 0x2C */
+    U32                     DmaEngineCapabilities[]; 			/* 0x2C */
 } MPI2_CONFIG_PAGE_IO_UNIT_5, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_IO_UNIT_5,
   Mpi2IOUnitPage5_t, MPI2_POINTER pMpi2IOUnitPage5_t;
 
@@ -1148,6 +1133,7 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_7
 #define MPI2_IOUNITPAGE7_PCIE_SPEED_5_0_GBPS        (0x01)
 #define MPI2_IOUNITPAGE7_PCIE_SPEED_8_0_GBPS        (0x02)
 #define MPI2_IOUNITPAGE7_PCIE_SPEED_16_0_GBPS       (0x03)
+#define MPI2_IOUNITPAGE7_PCIE_SPEED_32_0_GBPS       (0x04)
 
 /* defines for IO Unit Page 7 ProcessorState field */
 #define MPI2_IOUNITPAGE7_PSTATE_MASK_SECOND         (0x0000000F)
@@ -1228,12 +1214,9 @@ typedef struct _MPI2_IOUNIT8_SENSOR
 #define MPI2_IOUNIT8_SENSOR_FLAGS_T0_ENABLE         (0x0001)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumSensors at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumSensors at runtime before using Sensor[].
  */
-#ifndef MPI2_IOUNITPAGE8_SENSOR_ENTRIES
-#define MPI2_IOUNITPAGE8_SENSOR_ENTRIES     (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_8
 {
@@ -1243,7 +1226,7 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_8
     U8                      NumSensors;                             /* 0x0C */
     U8                      PollingInterval;                        /* 0x0D */
     U16                     Reserved3;                              /* 0x0E */
-    MPI2_IOUNIT8_SENSOR     Sensor[MPI2_IOUNITPAGE8_SENSOR_ENTRIES];/* 0x10 */
+    MPI2_IOUNIT8_SENSOR     Sensor[];				    /* 0x10 */
 } MPI2_CONFIG_PAGE_IO_UNIT_8, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_IO_UNIT_8,
   Mpi2IOUnitPage8_t, MPI2_POINTER pMpi2IOUnitPage8_t;
 
@@ -1268,12 +1251,9 @@ typedef struct _MPI2_IOUNIT9_SENSOR
 #define MPI2_IOUNIT9_SENSOR_FLAGS_TEMP_VALID        (0x01)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumSensors at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumSensors at runtime before using Sensor[].
  */
-#ifndef MPI2_IOUNITPAGE9_SENSOR_ENTRIES
-#define MPI2_IOUNITPAGE9_SENSOR_ENTRIES     (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_9
 {
@@ -1283,7 +1263,7 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_9
     U8                      NumSensors;                             /* 0x0C */
     U8                      Reserved4;                              /* 0x0D */
     U16                     Reserved3;                              /* 0x0E */
-    MPI2_IOUNIT9_SENSOR     Sensor[MPI2_IOUNITPAGE9_SENSOR_ENTRIES];/* 0x10 */
+    MPI2_IOUNIT9_SENSOR     Sensor[];				    /* 0x10 */
 } MPI2_CONFIG_PAGE_IO_UNIT_9, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_IO_UNIT_9,
   Mpi2IOUnitPage9_t, MPI2_POINTER pMpi2IOUnitPage9_t;
 
@@ -1301,12 +1281,9 @@ typedef struct _MPI2_IOUNIT10_FUNCTION
   Mpi2IOUnit10Function_t, MPI2_POINTER pMpi2IOUnit10Function_t;
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumFunctions at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumFunctions at runtime before using Function[].
  */
-#ifndef MPI2_IOUNITPAGE10_FUNCTION_ENTRIES
-#define MPI2_IOUNITPAGE10_FUNCTION_ENTRIES      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_10
 {
@@ -1316,7 +1293,7 @@ typedef struct _MPI2_CONFIG_PAGE_IO_UNIT_10
     U16                     Reserved2;                                      /* 0x06 */
     U32                     Reserved3;                                      /* 0x08 */
     U32                     Reserved4;                                      /* 0x0C */
-    MPI2_IOUNIT10_FUNCTION  Function[MPI2_IOUNITPAGE10_FUNCTION_ENTRIES];   /* 0x10 */
+    MPI2_IOUNIT10_FUNCTION  Function[];   				    /* 0x10 */
 } MPI2_CONFIG_PAGE_IO_UNIT_10, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_IO_UNIT_10,
   Mpi2IOUnitPage10_t, MPI2_POINTER pMpi2IOUnitPage10_t;
 
@@ -1775,12 +1752,9 @@ typedef struct _MPI2_CONFIG_PAGE_BIOS_3
 /* BIOS Page 4 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using Phy[].
  */
-#ifndef MPI2_BIOS_PAGE_4_PHY_ENTRIES
-#define MPI2_BIOS_PAGE_4_PHY_ENTRIES        (1)
-#endif
 
 typedef struct _MPI2_BIOS4_ENTRY
 {
@@ -1795,7 +1769,7 @@ typedef struct _MPI2_CONFIG_PAGE_BIOS_4
     U8                      NumPhys;                            /* 0x04 */
     U8                      Reserved1;                          /* 0x05 */
     U16                     Reserved2;                          /* 0x06 */
-    MPI2_BIOS4_ENTRY        Phy[MPI2_BIOS_PAGE_4_PHY_ENTRIES];  /* 0x08 */
+    MPI2_BIOS4_ENTRY        Phy[];  				/* 0x08 */
 } MPI2_CONFIG_PAGE_BIOS_4, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_BIOS_4,
   Mpi2BiosPage4_t, MPI2_POINTER pMpi2BiosPage4_t;
 
@@ -1849,12 +1823,9 @@ typedef struct _MPI2_RAIDVOL0_SETTINGS
 #define MPI2_RAIDVOL0_SETTING_ENABLE_WRITE_CACHING      (0x0002)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhysDisks at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhysDisks at runtime before using PhysDisk[].
  */
-#ifndef MPI2_RAID_VOL_PAGE_0_PHYSDISK_MAX
-#define MPI2_RAID_VOL_PAGE_0_PHYSDISK_MAX       (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_RAID_VOL_0
 {
@@ -1875,7 +1846,7 @@ typedef struct _MPI2_CONFIG_PAGE_RAID_VOL_0
     U8                      Reserved2;                  /* 0x25 */
     U8                      Reserved3;                  /* 0x26 */
     U8                      InactiveStatus;             /* 0x27 */
-    MPI2_RAIDVOL0_PHYS_DISK PhysDisk[MPI2_RAID_VOL_PAGE_0_PHYSDISK_MAX]; /* 0x28 */
+    MPI2_RAIDVOL0_PHYS_DISK PhysDisk[]; 		/* 0x28 */
 } MPI2_CONFIG_PAGE_RAID_VOL_0, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_RAID_VOL_0,
   Mpi2RaidVolPage0_t, MPI2_POINTER pMpi2RaidVolPage0_t;
 
@@ -2056,12 +2027,9 @@ typedef struct _MPI2_CONFIG_PAGE_RD_PDISK_0
 /* RAID Physical Disk Page 1 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhysDiskPaths at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhysDiskPaths at runtime before using PhysicalDiskPath[].
  */
-#ifndef MPI2_RAID_PHYS_DISK1_PATH_MAX
-#define MPI2_RAID_PHYS_DISK1_PATH_MAX   (1)
-#endif
 
 typedef struct _MPI2_RAIDPHYSDISK1_PATH
 {
@@ -2087,7 +2055,7 @@ typedef struct _MPI2_CONFIG_PAGE_RD_PDISK_1
     U8                              PhysDiskNum;                /* 0x05 */
     U16                             Reserved1;                  /* 0x06 */
     U32                             Reserved2;                  /* 0x08 */
-    MPI2_RAIDPHYSDISK1_PATH         PhysicalDiskPath[MPI2_RAID_PHYS_DISK1_PATH_MAX];/* 0x0C */
+    MPI2_RAIDPHYSDISK1_PATH         PhysicalDiskPath[];		/* 0x0C */
 } MPI2_CONFIG_PAGE_RD_PDISK_1,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_RD_PDISK_1,
   Mpi2RaidPhysDiskPage1_t, MPI2_POINTER pMpi2RaidPhysDiskPage1_t;
@@ -2232,12 +2200,9 @@ typedef struct _MPI2_SAS_IO_UNIT0_PHY_DATA
 #define MPI26_SASIOUNIT0_PHY_PORT_NO_PORT                   (0xFF)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using PhyData[].
  */
-#ifndef MPI2_SAS_IOUNIT0_PHY_MAX
-#define MPI2_SAS_IOUNIT0_PHY_MAX        (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_0
 {
@@ -2246,7 +2211,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_0
     U8                                  NumPhys;                            /* 0x0C */
     U8                                  Reserved2;                          /* 0x0D */
     U16                                 Reserved3;                          /* 0x0E */
-    MPI2_SAS_IO_UNIT0_PHY_DATA          PhyData[MPI2_SAS_IOUNIT0_PHY_MAX];  /* 0x10 */
+    MPI2_SAS_IO_UNIT0_PHY_DATA          PhyData[];  			    /* 0x10 */
 } MPI2_CONFIG_PAGE_SASIOUNIT_0,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SASIOUNIT_0,
   Mpi2SasIOUnitPage0_t, MPI2_POINTER pMpi2SasIOUnitPage0_t;
@@ -2305,12 +2270,9 @@ typedef struct _MPI2_SAS_IO_UNIT1_PHY_DATA
   Mpi2SasIOUnit1PhyData_t, MPI2_POINTER pMpi2SasIOUnit1PhyData_t;
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using PhyData[].
  */
-#ifndef MPI2_SAS_IOUNIT1_PHY_MAX
-#define MPI2_SAS_IOUNIT1_PHY_MAX        (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_1
 {
@@ -2323,7 +2285,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_1
     U8                                  SATAMaxQDepth;                      /* 0x11 */
     U8                                  ReportDeviceMissingDelay;           /* 0x12 */
     U8                                  IODeviceMissingDelay;               /* 0x13 */
-    MPI2_SAS_IO_UNIT1_PHY_DATA          PhyData[MPI2_SAS_IOUNIT1_PHY_MAX];  /* 0x14 */
+    MPI2_SAS_IO_UNIT1_PHY_DATA          PhyData[];  			    /* 0x14 */
 } MPI2_CONFIG_PAGE_SASIOUNIT_1,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SASIOUNIT_1,
   Mpi2SasIOUnitPage1_t, MPI2_POINTER pMpi2SasIOUnitPage1_t;
@@ -2352,6 +2314,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_1
 #define MPI2_SASIOUNIT1_CONTROL_CLEAR_AFFILIATION                   (0x0001) /* MPI v2.0 only. Obsolete in MPI v2.5 and later. */
 
 /* values for SAS IO Unit Page 1 AdditionalControlFlags */
+#define MPI2_SASIOUNIT1_ACONTROL_PROD_SPECIFIC_1                    (0x8000)
 #define MPI2_SASIOUNIT1_ACONTROL_DA_PERSIST_CONNECT                 (0x0100)
 #define MPI2_SASIOUNIT1_ACONTROL_MULTI_PORT_DOMAIN_ILLEGAL          (0x0080)
 #define MPI2_SASIOUNIT1_ACONTROL_SATA_ASYNCHROUNOUS_NOTIFICATION    (0x0040)
@@ -2491,12 +2454,9 @@ typedef struct _MPI2_SAS_IO_UNIT5_PHY_PM_SETTINGS
 #define MPI2_SASIOUNIT5_ITE_ONE_MICROSECOND             (0)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using SASPhyPowerManagementSettings[].
  */
-#ifndef MPI2_SAS_IOUNIT5_PHY_MAX
-#define MPI2_SAS_IOUNIT5_PHY_MAX        (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_5
 {
@@ -2505,7 +2465,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_5
     U8                                  Reserved1;                          /* 0x09 */
     U16                                 Reserved2;                          /* 0x0A */
     U32                                 Reserved3;                          /* 0x0C */
-    MPI2_SAS_IO_UNIT5_PHY_PM_SETTINGS   SASPhyPowerManagementSettings[MPI2_SAS_IOUNIT5_PHY_MAX];  /* 0x10 */
+    MPI2_SAS_IO_UNIT5_PHY_PM_SETTINGS   SASPhyPowerManagementSettings[];    /* 0x10 */
 } MPI2_CONFIG_PAGE_SASIOUNIT_5,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SASIOUNIT_5,
   Mpi2SasIOUnitPage5_t, MPI2_POINTER pMpi2SasIOUnitPage5_t;
@@ -2544,12 +2504,9 @@ typedef struct _MPI2_SAS_IO_UNIT6_PORT_WIDTH_MOD_GROUP_STATUS
 #define MPI2_SASIOUNIT6_MODULATION_100_PERCENT                  (0x03)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumGroups at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumGroups at runtime before using PortWidthModulationGroupStatus[].
  */
-#ifndef MPI2_SAS_IOUNIT6_GROUP_MAX
-#define MPI2_SAS_IOUNIT6_GROUP_MAX      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_6
 {
@@ -2560,7 +2517,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_6
     U8                                  Reserved3;                  /* 0x11 */
     U16                                 Reserved4;                  /* 0x12 */
     MPI2_SAS_IO_UNIT6_PORT_WIDTH_MOD_GROUP_STATUS
-        PortWidthModulationGroupStatus[MPI2_SAS_IOUNIT6_GROUP_MAX]; /* 0x14 */
+        PortWidthModulationGroupStatus[]; 			    /* 0x14 */
 } MPI2_CONFIG_PAGE_SASIOUNIT_6,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SASIOUNIT_6,
   Mpi2SasIOUnitPage6_t, MPI2_POINTER pMpi2SasIOUnitPage6_t;
@@ -2589,12 +2546,9 @@ typedef struct _MPI2_SAS_IO_UNIT7_PORT_WIDTH_MOD_GROUP_SETTINGS
 
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumGroups at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumGroups at runtime before using PortWidthModulationGroupSettings[].
  */
-#ifndef MPI2_SAS_IOUNIT7_GROUP_MAX
-#define MPI2_SAS_IOUNIT7_GROUP_MAX      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_7
 {
@@ -2608,7 +2562,7 @@ typedef struct _MPI2_CONFIG_PAGE_SASIOUNIT_7
     U8                                          Reserved4;          /* 0x15 */
     U16                                         Reserved5;          /* 0x16 */
     MPI2_SAS_IO_UNIT7_PORT_WIDTH_MOD_GROUP_SETTINGS
-        PortWidthModulationGroupSettings[MPI2_SAS_IOUNIT7_GROUP_MAX]; /* 0x18 */
+        PortWidthModulationGroupSettings[]; 			    /* 0x18 */
 } MPI2_CONFIG_PAGE_SASIOUNIT_7,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SASIOUNIT_7,
   Mpi2SasIOUnitPage7_t, MPI2_POINTER pMpi2SasIOUnitPage7_t;
@@ -2964,12 +2918,9 @@ typedef struct _MPI2_SASPHY2_PHY_EVENT
 
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhyEvents at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhyEvents at runtime before using PhyEvent[].
  */
-#ifndef MPI2_SASPHY2_PHY_EVENT_MAX
-#define MPI2_SASPHY2_PHY_EVENT_MAX      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SAS_PHY_2
 {
@@ -2978,7 +2929,7 @@ typedef struct _MPI2_CONFIG_PAGE_SAS_PHY_2
     U8                                  NumPhyEvents;               /* 0x0C */
     U8                                  Reserved2;                  /* 0x0D */
     U16                                 Reserved3;                  /* 0x0E */
-    MPI2_SASPHY2_PHY_EVENT              PhyEvent[MPI2_SASPHY2_PHY_EVENT_MAX]; /* 0x10 */
+    MPI2_SASPHY2_PHY_EVENT              PhyEvent[]; 		    /* 0x10 */
 } MPI2_CONFIG_PAGE_SAS_PHY_2, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SAS_PHY_2,
   Mpi2SasPhyPage2_t, MPI2_POINTER pMpi2SasPhyPage2_t;
 
@@ -3068,12 +3019,9 @@ typedef struct _MPI2_SASPHY3_PHY_EVENT_CONFIG
 #define MPI2_SASPHY3_TFLAGS_EVENT_NOTIFY                    (0x0001)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhyEvents at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhyEvents at runtime before using PhyEventConfig[].
  */
-#ifndef MPI2_SASPHY3_PHY_EVENT_MAX
-#define MPI2_SASPHY3_PHY_EVENT_MAX      (1)
-#endif
 
 typedef struct _MPI2_CONFIG_PAGE_SAS_PHY_3
 {
@@ -3082,7 +3030,7 @@ typedef struct _MPI2_CONFIG_PAGE_SAS_PHY_3
     U8                                  NumPhyEvents;               /* 0x0C */
     U8                                  Reserved2;                  /* 0x0D */
     U16                                 Reserved3;                  /* 0x0E */
-    MPI2_SASPHY3_PHY_EVENT_CONFIG       PhyEventConfig[MPI2_SASPHY3_PHY_EVENT_MAX]; /* 0x10 */
+    MPI2_SASPHY3_PHY_EVENT_CONFIG       PhyEventConfig[]; 	    /* 0x10 */
 } MPI2_CONFIG_PAGE_SAS_PHY_3, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_SAS_PHY_3,
   Mpi2SasPhyPage3_t, MPI2_POINTER pMpi2SasPhyPage3_t;
 
@@ -3205,12 +3153,9 @@ typedef struct _MPI2_CONFIG_PAGE_SAS_ENCLOSURE_0
 /* Log Page 0 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumLogEntries at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumLogEntries at runtime before using LogEntry[].
  */
-#ifndef MPI2_LOG_0_NUM_LOG_ENTRIES
-#define MPI2_LOG_0_NUM_LOG_ENTRIES          (1)
-#endif
 
 #define MPI2_LOG_0_LOG_DATA_LENGTH          (0x1C)
 
@@ -3241,7 +3186,7 @@ typedef struct _MPI2_CONFIG_PAGE_LOG_0
     U32                                 Reserved2;                  /* 0x0C */
     U16                                 NumLogEntries;              /* 0x10 */
     U16                                 Reserved3;                  /* 0x12 */
-    MPI2_LOG_0_ENTRY                    LogEntry[MPI2_LOG_0_NUM_LOG_ENTRIES]; /* 0x14 */
+    MPI2_LOG_0_ENTRY                    LogEntry[]; 		    /* 0x14 */
 } MPI2_CONFIG_PAGE_LOG_0, MPI2_POINTER PTR_MPI2_CONFIG_PAGE_LOG_0,
   Mpi2LogPage0_t, MPI2_POINTER pMpi2LogPage0_t;
 
@@ -3255,12 +3200,9 @@ typedef struct _MPI2_CONFIG_PAGE_LOG_0
 /* RAID Page 0 */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumElements at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumElements at runtime before using ConfigElement[].
  */
-#ifndef MPI2_RAIDCONFIG0_MAX_ELEMENTS
-#define MPI2_RAIDCONFIG0_MAX_ELEMENTS       (1)
-#endif
 
 typedef struct _MPI2_RAIDCONFIG0_CONFIG_ELEMENT
 {
@@ -3294,7 +3236,7 @@ typedef struct _MPI2_CONFIG_PAGE_RAID_CONFIGURATION_0
     U8                                  NumElements;                /* 0x2C */
     U8                                  Reserved2;                  /* 0x2D */
     U16                                 Reserved3;                  /* 0x2E */
-    MPI2_RAIDCONFIG0_CONFIG_ELEMENT     ConfigElement[MPI2_RAIDCONFIG0_MAX_ELEMENTS]; /* 0x30 */
+    MPI2_RAIDCONFIG0_CONFIG_ELEMENT     ConfigElement[]; 	    /* 0x30 */
 } MPI2_CONFIG_PAGE_RAID_CONFIGURATION_0,
   MPI2_POINTER PTR_MPI2_CONFIG_PAGE_RAID_CONFIGURATION_0,
   Mpi2RaidConfigurationPage0_t, MPI2_POINTER pMpi2RaidConfigurationPage0_t;
@@ -3490,6 +3432,7 @@ typedef struct _MPI2_CONFIG_PAGE_EXT_MAN_PS
 #define MPI26_PCIE_NEG_LINK_RATE_5_0                    (0x03)
 #define MPI26_PCIE_NEG_LINK_RATE_8_0                    (0x04)
 #define MPI26_PCIE_NEG_LINK_RATE_16_0                   (0x05)
+#define MPI26_PCIE_NEG_LINK_RATE_32_0                   (0x06)
 
 
 /****************************************************************************
@@ -3513,12 +3456,9 @@ typedef struct _MPI26_PCIE_IO_UNIT0_PHY_DATA
   Mpi26PCIeIOUnit0PhyData_t, MPI2_POINTER pMpi26PCIeIOUnit0PhyData_t;
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using PhyData[].
  */
-#ifndef MPI26_PCIE_IOUNIT0_PHY_MAX
-#define MPI26_PCIE_IOUNIT0_PHY_MAX      (1)
-#endif
 
 typedef struct _MPI26_CONFIG_PAGE_PIOUNIT_0
 {
@@ -3529,7 +3469,7 @@ typedef struct _MPI26_CONFIG_PAGE_PIOUNIT_0
     U8                                  NumPhys;                                /* 0x0C */
     U8                                  InitStatus;                             /* 0x0D */
     U16                                 Reserved3;                              /* 0x0E */
-    MPI26_PCIE_IO_UNIT0_PHY_DATA        PhyData[MPI26_PCIE_IOUNIT0_PHY_MAX];    /* 0x10 */
+    MPI26_PCIE_IO_UNIT0_PHY_DATA        PhyData[];    				/* 0x10 */
 } MPI26_CONFIG_PAGE_PIOUNIT_0,
   MPI2_POINTER PTR_MPI26_CONFIG_PAGE_PIOUNIT_0,
   Mpi26PCIeIOUnitPage0_t, MPI2_POINTER pMpi26PCIeIOUnitPage0_t;
@@ -3611,12 +3551,9 @@ typedef struct _MPI26_PCIE_IO_UNIT1_PHY_DATA
 #define MPI26_PCIEIOUNIT1_LINKFLAGS_SRNS_EN                 (0x02)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumPhys at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumPhys at runtime before using PhyData[].
  */
-#ifndef MPI26_PCIE_IOUNIT1_PHY_MAX
-#define MPI26_PCIE_IOUNIT1_PHY_MAX      (1)
-#endif
 
 typedef struct _MPI26_CONFIG_PAGE_PIOUNIT_1
 {
@@ -3629,7 +3566,7 @@ typedef struct _MPI26_CONFIG_PAGE_PIOUNIT_1
     U8                                  NumPhys;                            /* 0x10 */
     U8                                  DMDReportPCIe;                      /* 0x11 */
     U16                                 Reserved2;                          /* 0x12 */
-    MPI26_PCIE_IO_UNIT1_PHY_DATA        PhyData[MPI26_PCIE_IOUNIT1_PHY_MAX];/* 0x14 */
+    MPI26_PCIE_IO_UNIT1_PHY_DATA        PhyData[];			    /* 0x14 */
 } MPI26_CONFIG_PAGE_PIOUNIT_1,
   MPI2_POINTER PTR_MPI26_CONFIG_PAGE_PIOUNIT_1,
   Mpi26PCIeIOUnitPage1_t, MPI2_POINTER pMpi26PCIeIOUnitPage1_t;
@@ -3679,6 +3616,7 @@ typedef struct _MPI26_CONFIG_PAGE_PIOUNIT_1
 #define MPI26_PCIEIOUNIT1_MAX_RATE_5_0                              (0x30)
 #define MPI26_PCIEIOUNIT1_MAX_RATE_8_0                              (0x40)
 #define MPI26_PCIEIOUNIT1_MAX_RATE_16_0                             (0x50)
+#define MPI26_PCIEIOUNIT1_MAX_RATE_32_0                             (0x60)
 
 /* values for PCIe IO Unit Page 1 DMDReportPCIe */
 #define MPI26_PCIEIOUNIT1_DMDRPT_UNIT_MASK                          (0x80)
@@ -3920,12 +3858,9 @@ typedef struct _MPI26_PCIELINK2_LINK_EVENT
 
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumLinkEvents at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumLinkEvents at runtime before using LinkEvent[].
  */
-#ifndef MPI26_PCIELINK2_LINK_EVENT_MAX
-#define MPI26_PCIELINK2_LINK_EVENT_MAX      (1)
-#endif
 
 typedef struct _MPI26_CONFIG_PAGE_PCIELINK_2
 {
@@ -3936,7 +3871,7 @@ typedef struct _MPI26_CONFIG_PAGE_PCIELINK_2
     U8                                  NumLinkEvents;              /* 0x0C */
     U8                                  Reserved3;                  /* 0x0D */
     U16                                 Reserved4;                  /* 0x0E */
-    MPI26_PCIELINK2_LINK_EVENT          LinkEvent[MPI26_PCIELINK2_LINK_EVENT_MAX]; /* 0x10 */
+    MPI26_PCIELINK2_LINK_EVENT          LinkEvent[]; 		    /* 0x10 */
 } MPI26_CONFIG_PAGE_PCIELINK_2, MPI2_POINTER PTR_MPI26_CONFIG_PAGE_PCIELINK_2,
   Mpi26PcieLinkPage2_t, MPI2_POINTER pMpi26PcieLinkPage2_t;
 
@@ -3996,8 +3931,8 @@ typedef struct _MPI26_PCIELINK3_LINK_EVENT_CONFIG
 #define MPI26_PCIELINK3_TFLAGS_EVENT_NOTIFY                 (0x0001)
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check the value returned for NumLinkEvents at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check the value returned
+ * for NumLinkEvents at runtime before using LinkEventConfig[].
  */
 #ifndef MPI26_PCIELINK3_LINK_EVENT_MAX
 #define MPI26_PCIELINK3_LINK_EVENT_MAX      (1)
@@ -4012,7 +3947,7 @@ typedef struct _MPI26_CONFIG_PAGE_PCIELINK_3
     U8                                  NumLinkEvents;              /* 0x0C */
     U8                                  Reserved3;                  /* 0x0D */
     U16                                 Reserved4;                  /* 0x0E */
-    MPI26_PCIELINK3_LINK_EVENT_CONFIG   LinkEventConfig[MPI26_PCIELINK3_LINK_EVENT_MAX]; /* 0x10 */
+    MPI26_PCIELINK3_LINK_EVENT_CONFIG   LinkEventConfig[]; 	    /* 0x10 */
 } MPI26_CONFIG_PAGE_PCIELINK_3, MPI2_POINTER PTR_MPI26_CONFIG_PAGE_PCIELINK_3,
   Mpi26PcieLinkPage3_t, MPI2_POINTER pMpi26PcieLinkPage3_t;
 

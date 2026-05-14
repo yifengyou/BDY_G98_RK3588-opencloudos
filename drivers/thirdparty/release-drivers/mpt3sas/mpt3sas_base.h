@@ -3,9 +3,9 @@
  * for access to MPT (Message Passing Technology) firmware.
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_base.h
- * Copyright (C) 2013-2021  LSI Corporation
- * Copyright (C) 2013-2021  Avago Technologies
- * Copyright (C) 2013-2021  Broadcom Inc.
+ * Copyright (C) 2013-2026  LSI Corporation
+ * Copyright (C) 2013-2026  Avago Technologies
+ * Copyright (C) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -79,9 +79,9 @@
 #define MPT3SAS_DRIVER_NAME		"mpt3sas"
 #define MPT3SAS_AUTHOR	"Broadcom Inc. <MPT-FusionLinux.pdl@broadcom.com>"
 #define MPT3SAS_DESCRIPTION	"LSI MPT Fusion SAS 3.0 & SAS 3.5 Device Driver"
-#define MPT3SAS_DRIVER_VERSION		"51.00.00.00"
-#define MPT3SAS_MAJOR_VERSION		51
-#define MPT3SAS_MINOR_VERSION           00
+#define MPT3SAS_DRIVER_VERSION		"57.00.00.00"
+#define MPT3SAS_MAJOR_VERSION		57
+#define MPT3SAS_MINOR_VERSION       	00
 #define MPT3SAS_BUILD_VERSION		00
 #define MPT3SAS_RELEASE_VERSION		00
 
@@ -227,8 +227,8 @@
 
 struct mpt3sas_nvme_cmd {
 	u8	rsvd[24];
-	u64	prp1;
-	u64	prp2;
+	__le64	prp1;
+	__le64	prp2;
 };
 
 /*
@@ -265,6 +265,7 @@ struct mpt3sas_nvme_cmd {
 #define MPT_TARGET_FLAGS_DELETED	0x04
 #define MPT_TARGET_FASTPATH_IO		0x08
 #define MPT_TARGET_FLAGS_PCIE_DEVICE	0x10
+#define MPT_TARGET_FLAGS_SATA_DEVICE    0x20
 
 #define SAS2_PCI_DEVICE_B0_REVISION         (0x01)
 #define SAS3_PCI_DEVICE_C0_REVISION         (0x02)
@@ -1583,7 +1584,6 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @ioc_pg8: static ioc page 8
  * @iounit_pg0: static iounit page 0
  * @iounit_pg1: static iounit page 1
- * @iounit_pg8: static iounit page 8
  * @sas_hba: sas host object
  * @sas_expander_list: expander object list
  * @enclosure_list: enclosure object list
@@ -1710,6 +1710,7 @@ struct MPT3SAS_ADAPTER {
 	char		hba_hot_unplug_work_q_name[20];
 	struct workqueue_struct *fault_reset_work_q;
 	struct workqueue_struct *hba_hot_unplug_work_q;
+	struct work_struct      hba_suspend_work_q;
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,19))
 	struct delayed_work fault_reset_work;
 	struct delayed_work hba_hot_unplug_work;
@@ -1767,9 +1768,9 @@ struct MPT3SAS_ADAPTER {
 	u8		msix_enable;
 	u8		*cpu_msix_table;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,18))
-	resource_size_t	**reply_post_host_index;
+	resource_size_t	__iomem **reply_post_host_index;
 #else
-	u64		**reply_post_host_index;
+	phys_addr_t	**reply_post_host_index;
 #endif
 	u16		cpu_msix_table_sz;
 	u32		ioc_reset_count;
@@ -1860,7 +1861,6 @@ struct MPT3SAS_ADAPTER {
 	Mpi2IOCPage8_t ioc_pg8;
 	Mpi2IOUnitPage0_t iounit_pg0;
 	Mpi2IOUnitPage1_t iounit_pg1;
-	Mpi2IOUnitPage8_t iounit_pg8;
 #if defined(CPQ_CIM)
 	Mpi2IOCPage1_t ioc_pg1;
 #endif
@@ -1996,7 +1996,7 @@ struct MPT3SAS_ADAPTER {
 	u8		smp_affinity_enable;
 	/* reply post register index */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,18))
-	resource_size_t	**replyPostRegisterIndex;
+	resource_size_t __iomem	**replyPostRegisterIndex;
 #else
 	u64		**replyPostRegisterIndex;
 #endif
@@ -2144,6 +2144,13 @@ __le64 mpt3sas_base_get_sense_buffer_dma_64(struct MPT3SAS_ADAPTER *ioc,
 void *mpt3sas_base_get_pcie_sgl(struct MPT3SAS_ADAPTER *ioc, u16 smid);
 dma_addr_t mpt3sas_base_get_pcie_sgl_dma(struct MPT3SAS_ADAPTER *ioc, u16 smid);
 void mpt3sas_base_sync_reply_irqs(struct MPT3SAS_ADAPTER *ioc, u8 poll);
+int _base_process_reply_queue(struct adapter_reply_queue *reply_q);
+int _base_irqpoll(struct irq_poll *irqpoll, int budget);
+void _base_init_irqpolls(struct MPT3SAS_ADAPTER *ioc);
+void base_make_prp_nvme(struct MPT3SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
+	struct scatterlist *sg_scmd, Mpi25SCSIIORequest_t *mpi_request,
+	u16 smid, int sge_count);
+void _base_flush_ios_and_panic(struct MPT3SAS_ADAPTER *ioc, u16 fault_code);
 
 /* hi-priority queue */
 u16 mpt3sas_base_get_smid_hpr(struct MPT3SAS_ADAPTER *ioc, u8 cb_idx);
@@ -2528,6 +2535,9 @@ mpt3sas_setup_direct_io(struct MPT3SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 
 void _scsih_hide_unhide_sas_devices(struct MPT3SAS_ADAPTER *ioc);
 
+void
+_scsih_log_entry_add_event(struct MPT3SAS_ADAPTER *ioc,
+                        Mpi2EventDataLogEntryAdded_t *log_entry);
 void mpt3sas_setup_debugfs(struct MPT3SAS_ADAPTER *ioc);
 void mpt3sas_destroy_debugfs(struct MPT3SAS_ADAPTER *ioc);
 void mpt3sas_init_debugfs(void);

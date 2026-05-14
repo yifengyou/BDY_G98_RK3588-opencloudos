@@ -2,7 +2,7 @@
  * This is the Fusion MPT base driver providing common API layer interface
  * for access to MPT (Message Passing Technology) firmware.
  *
- * Copyright (C) 2020  Broadcom Inc.
+ * Copyright (C) 2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -57,7 +57,7 @@
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-struct dentry *mpt3sas_debugfs_root = NULL;
+static struct dentry *mpt3sas_debugfs_root = NULL;
 
 /*
  * _debugfs_iocdump_read :	copy ioc dump from debugfs buffer

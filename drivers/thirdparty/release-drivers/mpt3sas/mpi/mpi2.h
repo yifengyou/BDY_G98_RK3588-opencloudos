@@ -172,7 +172,7 @@
 
 
 /* Unit and Dev versioning for this MPI header set */
-#define MPI2_HEADER_VERSION_UNIT            (0x3A)
+#define MPI2_HEADER_VERSION_UNIT            (0x3E)
 #define MPI2_HEADER_VERSION_DEV             (0x00)
 #define MPI2_HEADER_VERSION_UNIT_MASK       (0xFF00)
 #define MPI2_HEADER_VERSION_UNIT_SHIFT      (8)
@@ -696,6 +696,7 @@ typedef union _MPI2_REPLY_DESCRIPTORS_UNION
 #define MPI2_FUNCTION_PWR_MGMT_CONTROL              (0x30) /* Power Management Control */
 #define MPI2_FUNCTION_SEND_HOST_MESSAGE             (0x31) /* Send Host Message */
 #define MPI2_FUNCTION_NVME_ENCAPSULATED             (0x33) /* NVMe Encapsulated (MPI v2.6) */
+#define MPI2_FUNCTION_MCTP_PASSTHROUGH              (0x34) /* MCTP Passthrough  (MPI v2.6) */
 #define MPI2_FUNCTION_MIN_PRODUCT_SPECIFIC          (0xF0) /* beginning of product-specific range */
 #define MPI2_FUNCTION_MAX_PRODUCT_SPECIFIC          (0xFF) /* end of product-specific range */
 

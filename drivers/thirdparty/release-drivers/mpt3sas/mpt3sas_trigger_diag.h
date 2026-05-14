@@ -4,9 +4,9 @@
  * controllers
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_base.h
- * Copyright (C) 2013-2018  LSI Corporation
- * Copyright (C) 2013-2018  Avago Technologies
- * Copyright (C) 2013-2018  Broadcom Inc.
+ * Copyright (C) 2013-2026  LSI Corporation
+ * Copyright (C) 2013-2026  Avago Technologies
+ * Copyright (C) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or

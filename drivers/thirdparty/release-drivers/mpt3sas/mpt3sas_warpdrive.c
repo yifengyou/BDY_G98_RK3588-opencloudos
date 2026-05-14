@@ -1,9 +1,9 @@
 /*
  * Scsi Host Layer for MPT (Message Passing Technology) based controllers
  *
- * Copyright (C) 2012-2018  LSI Corporation
- * Copyright (C) 2013-2018 Avago Technologies
- * Copyright (C) 2013-2018 Broadcom Inc.
+ * Copyright (C) 2012-2026  LSI Corporation
+ * Copyright (C) 2013-2026 Avago Technologies
+ * Copyright (C) 2013-2026 Broadcom Inc.
  *  (mailto: MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -46,7 +46,12 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0))
 #include <asm/unaligned.h>
+#else
+#include <linux/unaligned.h>
+#endif
 
 #include "mpt3sas_base.h"
 
@@ -196,8 +201,7 @@ mpt3sas_init_warpdrive_properties(struct MPT3SAS_ADAPTER *ioc,
 		return;
 	}
 
-	sz = offsetof(Mpi2RaidVolPage0_t, PhysDisk) + (num_pds *
-	    sizeof(Mpi2RaidVol0PhysDisk_t));
+	sz = struct_size(vol_pg0, PhysDisk, num_pds);
 	vol_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!vol_pg0) {
 		printk(MPT3SAS_INFO_FMT "WarpDrive : Direct IO is disabled "

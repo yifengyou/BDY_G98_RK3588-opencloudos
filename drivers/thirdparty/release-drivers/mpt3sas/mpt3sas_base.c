@@ -3,9 +3,9 @@
  * for access to MPT (Message Passing Technology) firmware.
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_base.c
- * Copyright (C) 2013-2021  LSI Corporation
- * Copyright (C) 2013-2021  Avago Technologies
- * Copyright (C) 2013-2021  Broadcom Inc.
+ * Copyright (C) 2013-2026  LSI Corporation
+ * Copyright (C) 2013-2026  Avago Technologies
+ * Copyright (C) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -173,6 +173,11 @@ _base_wait_on_iocstate(struct MPT3SAS_ADAPTER *ioc,
 void
 mpt3sas_base_unmask_interrupts(struct MPT3SAS_ADAPTER *ioc);
 
+static inline int _base_scsi_dma_map(struct scsi_cmnd *cmd);
+
+static int
+_base_diag_reset(struct MPT3SAS_ADAPTER *ioc);
+
 /**
  * _scsih_set_fwfault_debug - global setting of ioc->fwfault_debug.
  *
@@ -289,7 +294,7 @@ _base_clone_reply_to_sys_mem(struct MPT3SAS_ADAPTER *ioc, u32 reply,
 	 256 offset MPI frame starts. Max MPI frame supported is 32.
 	 32 * 128 = 4K. From here, Clone of reply free for mcpu starts*/
 	u16 cmd_credit = ioc->facts.RequestCredit + 1;
-	void *reply_free_iomem = (void*)ioc->chip + MPI_FRAME_START_OFFSET + 
+	void __iomem *reply_free_iomem = ioc->chip + MPI_FRAME_START_OFFSET + 
 		(cmd_credit * ioc->request_sz) + (index * sizeof(u32));
 	writel(reply, reply_free_iomem);     
 }
@@ -303,7 +308,7 @@ _base_clone_reply_to_sys_mem(struct MPT3SAS_ADAPTER *ioc, u32 reply,
  * @size: Size of data to be copied.
  */
 static void
-_base_clone_mpi_to_sys_mem(void *dst_iomem, void *src, u32 size)
+_base_clone_mpi_to_sys_mem(volatile void __iomem *dst_iomem, void *src, u32 size)
 {
 	int i;
 	u32 *src_virt_mem = (u32 *)src;
@@ -320,7 +325,8 @@ _base_clone_mpi_to_sys_mem(void *dst_iomem, void *src, u32 size)
  * @size: Size of data to be copied.
  */
 static void
-_base_clone_to_sys_mem( void *dst_iomem, void *src, u32 size)
+//_base_clone_to_sys_mem(void *dst_iomem, void *src, u32 size)
+_base_clone_to_sys_mem(volatile void __iomem *dst_iomem, void *src, u32 size)
 {
 	int i;
 	u32 *src_virt_mem = (u32 *)(src);
@@ -339,13 +345,14 @@ _base_clone_to_sys_mem( void *dst_iomem, void *src, u32 size)
  *
  * @Return: chain address.
  */
-static inline void *
+static inline void __iomem *
 _base_get_chain(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 		u8 sge_chain_count)
 {
-	void *base_chain, *chain_virt;
+	void __iomem *base_chain, *chain_virt;
+
 	u16 cmd_credit = ioc->facts.RequestCredit + 1;
-	base_chain  = (void *)ioc->chip + MPI_FRAME_START_OFFSET +
+	base_chain  = (void __iomem *)ioc->chip + MPI_FRAME_START_OFFSET +
 			(cmd_credit * ioc->request_sz) +
 			(cmd_credit * 4 * sizeof(U32));
 	chain_virt = base_chain + (smid * ioc->facts.MaxChainDepth *
@@ -389,12 +396,12 @@ _base_get_chain_phys(struct MPT3SAS_ADAPTER *ioc, u16 smid,
  * @Returns - Pointer to buffer location in BAR0.
  */
 
-static void *
+static void __iomem *
 _base_get_buffer_bar0(struct MPT3SAS_ADAPTER *ioc, u16 smid)
 {
 	u16 cmd_credit = ioc->facts.RequestCredit + 1;
 	// Added extra 1 to reach end of chain.
-	void *chain_end = _base_get_chain(ioc,
+	void __iomem *chain_end = _base_get_chain(ioc,
 				cmd_credit + 1,
 				ioc->facts.MaxChainDepth);
 	return chain_end + (smid * 64 * 1024);
@@ -470,9 +477,9 @@ static void _clone_sg_entries(struct MPT3SAS_ADAPTER *ioc,
 	u32  sgl_flags, sge_chain_count = 0;
 	bool is_write = 0;
 	u16 i = 0;
-	void __iomem *buffer_iomem;
+	volatile void __iomem *buffer_iomem;
 	phys_addr_t buffer_iomem_phys;
-	void __iomem *buff_ptr;
+	volatile void __iomem *buff_ptr;
 	phys_addr_t buff_ptr_phys;
 	void __iomem *dst_chain_addr[MCPU_MAX_CHAINS_PER_IO];
 	void *src_chain_addr[MCPU_MAX_CHAINS_PER_IO];
@@ -1583,6 +1590,11 @@ _base_sas_ioc_info(struct MPT3SAS_ADAPTER *ioc, MPI2DefaultReply_t *mpi_reply,
 		    ioc->sge_size;
 		func_str = "nvme_encapsulated";
 		break;
+	case MPI2_FUNCTION_MCTP_PASSTHROUGH:
+		frame_sz = sizeof(Mpi26MctpPassthroughRequest_t) +
+		    ioc->sge_size;
+		func_str = "mctp_passthru";
+		break;
 	default:
 		frame_sz = 32;
 		func_str = "unknown";
@@ -2206,7 +2218,7 @@ _base_process_reply_queue(struct adapter_reply_queue *reply_q)
 				writel(reply_q->reply_post_host_index |
 				 ((msix_index  & 7) <<
 				 MPI2_RPHI_MSIX_INDEX_SHIFT),
-				 ioc->replyPostRegisterIndex[msix_index/8]);
+				 (volatile void __iomem *)ioc->replyPostRegisterIndex[msix_index/8]);
 			} else {
 				writel(reply_q->reply_post_host_index |
 				 (msix_index << MPI2_RPHI_MSIX_INDEX_SHIFT),
@@ -2241,14 +2253,14 @@ _base_process_reply_queue(struct adapter_reply_queue *reply_q)
 	wmb();
  	if (ioc->is_warpdrive) {
  		writel(reply_q->reply_post_host_index,
- 			ioc->reply_post_host_index[msix_index]);
+ 				(volatile void __iomem *)ioc->reply_post_host_index[msix_index]);
 		atomic_dec(&reply_q->busy);
 		return completed_cmds;
 	}
 
 	if (ioc->combined_reply_queue) {
 		writel(reply_q->reply_post_host_index | ((msix_index  & 7) <<
-			MPI2_RPHI_MSIX_INDEX_SHIFT), ioc->replyPostRegisterIndex[msix_index/8]);
+			MPI2_RPHI_MSIX_INDEX_SHIFT), (volatile void __iomem *)ioc->replyPostRegisterIndex[msix_index/8]);
 	} else {
 		writel(reply_q->reply_post_host_index | (msix_index <<
 			MPI2_RPHI_MSIX_INDEX_SHIFT), &ioc->chip->ReplyPostHostIndex);
@@ -2772,8 +2784,8 @@ _base_build_nvme_prp(struct MPT3SAS_ADAPTER *ioc, u16 smid,
     size_t data_in_sz)
 {
 	int		prp_size = NVME_PRP_SIZE;
-	u64		*prp_entry, *prp1_entry, *prp2_entry;
-	u64		*prp_page;
+	__le64		*prp_entry, *prp1_entry, *prp2_entry;
+	__le64		*prp_page;
 	dma_addr_t	prp_entry_dma, prp_page_dma, dma_addr;
 	u32		offset, entry_len;
 	u32		page_mask_result, page_mask;
@@ -2805,7 +2817,7 @@ _base_build_nvme_prp(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	 * DSM command for SCSI UNMAP.
 	 */
 	if (data_in_sz > ioc->page_size || data_out_sz > ioc->page_size) {
-		prp_page = (u64 *)mpt3sas_base_get_pcie_sgl(ioc, smid);
+		prp_page = (__le64 *)mpt3sas_base_get_pcie_sgl(ioc, smid);
 		prp_page_dma = mpt3sas_base_get_pcie_sgl_dma(ioc, smid);
 	} else {
 		prp_page = NULL;
@@ -2821,7 +2833,7 @@ _base_build_nvme_prp(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	if (!page_mask_result)
 	{
 		/* Bump up to next page boundary. */
-		prp_page = (u64 *)((u8 *)prp_page + prp_size);
+		prp_page = (__le64 *)((u8 *)prp_page + prp_size);
 		prp_page_dma = prp_page_dma + prp_size;
 	}
 
@@ -2970,7 +2982,7 @@ base_make_prp_nvme(struct MPT3SAS_ADAPTER *ioc,
 {
 	int sge_len, num_prp_in_chain = 0;
 	Mpi25IeeeSgeChain64_t *main_chain_element, *ptr_first_sgl;
-	u64 *curr_buff;
+	__le64 *curr_buff;
 	dma_addr_t msg_dma, sge_addr, offset;
 	u32 page_mask, page_mask_result;
 	u32 first_prp_len;
@@ -3137,9 +3149,9 @@ base_is_prp_possible(struct MPT3SAS_ADAPTER *ioc,
 	nvme_pg_size = max_t(u32, ioc->page_size,
 			NVME_PRP_PAGE_SIZE);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23))
-	data_length = cpu_to_le32(scmd->request_bufflen);
+	data_length = scmd->request_bufflen;
 #else
-	data_length = cpu_to_le32(scsi_bufflen(scmd));
+	data_length = scsi_bufflen(scmd);
 #endif
 
 	if (pcie_device &&
@@ -3397,7 +3409,7 @@ _base_build_sg_scmd(struct MPT3SAS_ADAPTER *ioc,
 	}
 #else
 	sg_scmd = scsi_sglist(scmd);
-	sges_left = scsi_dma_map(scmd);
+	sges_left = _base_scsi_dma_map(scmd);
 	if (sges_left < 0) {
 		pr_err_ratelimited("sd %s: scsi_dma_map failed: request for %d bytes!\n",
 		    dev_name(&scmd->device->sdev_gendev), scsi_bufflen(scmd));
@@ -3562,6 +3574,38 @@ _base_build_zero_len_sge_ieee(struct MPT3SAS_ADAPTER *ioc, void *paddr)
 	_base_add_sg_single_ieee(paddr, sgl_flags, 0, 0, -1);
 }
 
+static inline int _base_scsi_dma_map(struct scsi_cmnd *cmd)
+{
+	/*
+	 * Some firmware versions byte-swap the REPORT ZONES command reply from
+	 * ATA-ZAC devices by directly accessing in the host buffer. This does
+	 * not respect the default command DMA direction and causes IOMMU page
+	 * faults on some architectures with an IOMMU enforcing write mappings
+	 * (e.g. AMD hosts). Avoid such issue by making the report zones buffer
+	 * mapping bi-directional.
+	 */
+
+	switch (cmd->cmnd[0]) {
+
+		case SECURITY_PROTOCOL_IN:
+			cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		case ZBC_IN:
+			if  (cmd->cmnd[1] == ZI_REPORT_ZONES)
+				cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		case SERVICE_ACTION_IN_16:
+			if (cmd->cmnd[1] == 0x17)
+				cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		default:
+			break;
+		}
+
+	return scsi_dma_map(cmd);
+}
+
+
 /**
  * _base_build_sg_scmd_ieee - main sg creation routine for IEEE format
  * @ioc: per adapter object
@@ -3662,7 +3706,7 @@ _base_build_sg_scmd_ieee(struct MPT3SAS_ADAPTER *ioc,
 	}
 #else
 	sg_scmd = scsi_sglist(scmd);
-	sges_left = scsi_dma_map(scmd);
+	sges_left = _base_scsi_dma_map(scmd);
 	if (sges_left < 0) {
 		pr_err_ratelimited("sd %s: scsi_dma_map failed: request for %d bytes!\n",
 		    dev_name(&scmd->device->sdev_gendev), scsi_bufflen(scmd));
@@ -4029,7 +4073,7 @@ enum mpt3sas_pci_bus_speed {
 	MPT_PCI_SPEED_UNKNOWN		= 0xff,
 };
 
-const unsigned char mpt3sas_pcie_link_speed[] = {
+static const unsigned char mpt3sas_pcie_link_speed[] = {
 	MPT_PCI_SPEED_UNKNOWN,              /* 0 */
 	MPT_PCIE_SPEED_2_5GT,               /* 1 */
 	MPT_PCIE_SPEED_5_0GT,               /* 2 */
@@ -4878,12 +4922,13 @@ _base_handshake_req_reply_wait(struct MPT3SAS_ADAPTER *ioc, int request_bytes,
 	int i;
 	u8 failed;
 	__le32 *mfp;
+	int ret_val;
 
 	/* make sure doorbell is not in use */
 	if ((ioc->base_readl_ext_retry(&ioc->chip->Doorbell) & MPI2_DOORBELL_USED)) {
 		printk(MPT3SAS_ERR_FMT "doorbell is in use "
 		    " (line=%d)\n", ioc->name, __LINE__);
-		return -EFAULT;
+		goto doorbell_diag_reset;
 	}
 
 	/* clear pending doorbell interrupts from previous state changes */
@@ -4976,6 +5021,10 @@ _base_handshake_req_reply_wait(struct MPT3SAS_ADAPTER *ioc, int request_bytes,
 			    i*4, le32_to_cpu(mfp[i]));
 	}
 	return 0;
+
+doorbell_diag_reset:
+	ret_val = _base_diag_reset(ioc);
+	return ret_val;
 }
 
 /**
@@ -5602,8 +5651,8 @@ mpt3sas_base_map_resources(struct MPT3SAS_ADAPTER *ioc)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,18))
 		for ( i = 0; i < ioc->nc_reply_index_count; i++ ) {
-			ioc->replyPostRegisterIndex[i] =(resource_size_t *)
-				((u8 *)&ioc->chip->Doorbell +
+			ioc->replyPostRegisterIndex[i] =(resource_size_t __iomem *)
+				((u8 __force *)&ioc->chip->Doorbell +
 				MPI25_SUP_REPLY_POST_HOST_INDEX_OFFSET + (i * 0x10));
 		}
 #else
@@ -6135,11 +6184,11 @@ _base_put_smid_mpi_ep_scsi_io(struct MPT3SAS_ADAPTER *ioc, u16 smid, u16 handle)
 {
 	Mpi2RequestDescriptorUnion_t descriptor;
 	u64 *request = (u64 *)&descriptor;
-	void *mpi_req_iomem;
+	void __iomem *mpi_req_iomem;
 
 	__le32 *mfp = (__le32 *)mpt3sas_base_get_msg_frame(ioc, smid);
 	_clone_sg_entries(ioc, (void*) mfp, smid);
-	mpi_req_iomem = (void*)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
+	mpi_req_iomem = (void __iomem *)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
 	_base_clone_mpi_to_sys_mem( mpi_req_iomem, (void*)mfp, ioc->request_sz);	
 	
 	descriptor.SCSIIO.RequestFlags = MPI2_REQ_DESCRIPT_FLAGS_SCSI_IO;
@@ -6210,7 +6259,7 @@ static void
 _base_put_smid_hi_priority(struct MPT3SAS_ADAPTER *ioc, u16 smid, u16 msix_task)
 {
 	Mpi2RequestDescriptorUnion_t descriptor;
-	void *mpi_req_iomem;
+	void __iomem *mpi_req_iomem;
 	u64 *request;
 
 	if (ioc->is_mcpu_endpoint) {
@@ -6218,7 +6267,7 @@ _base_put_smid_hi_priority(struct MPT3SAS_ADAPTER *ioc, u16 smid, u16 msix_task)
 		__le32 *mfp = (__le32 *)mpt3sas_base_get_msg_frame(ioc, smid);
 		request_hdr = (MPI2RequestHeader_t*) mfp;
 		/*TBD 256 is offset within sys register. */
-		mpi_req_iomem = (void*)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
+		mpi_req_iomem = (void __iomem *)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
 		_base_clone_mpi_to_sys_mem( mpi_req_iomem, (void*)mfp, ioc->request_sz);	
 	}
 
@@ -6273,7 +6322,7 @@ static void
 _base_put_smid_default(struct MPT3SAS_ADAPTER *ioc, u16 smid)
 {
 	Mpi2RequestDescriptorUnion_t descriptor;
-	void *mpi_req_iomem;
+	void __iomem *mpi_req_iomem;
 	u64 *request;
 	MPI2RequestHeader_t *request_hdr;
 
@@ -6284,7 +6333,7 @@ _base_put_smid_default(struct MPT3SAS_ADAPTER *ioc, u16 smid)
 		_clone_sg_entries(ioc, (void*) mfp, smid);
 	
 		/* TBD 256 is offset within sys register */
-		mpi_req_iomem = (void*)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
+		mpi_req_iomem = (void __iomem *)ioc->chip + MPI_FRAME_START_OFFSET + (smid * ioc->request_sz);
 		_base_clone_mpi_to_sys_mem( mpi_req_iomem, (void*)mfp, ioc->request_sz);
 	}
 	request = (u64 *)&descriptor;
@@ -6348,7 +6397,7 @@ _base_put_smid_scsi_io_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	descriptor.MSIxIndex = _base_set_and_get_msix_index(ioc, smid);
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 
 /**
@@ -6370,7 +6419,7 @@ _base_put_smid_fast_path_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	descriptor.MSIxIndex = _base_set_and_get_msix_index(ioc, smid);
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 
 /**
@@ -6394,7 +6443,7 @@ _base_put_smid_hi_priority_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	descriptor.MSIxIndex = msix_task;
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 
 /**
@@ -6415,7 +6464,7 @@ _base_put_smid_nvme_encap_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid)
 	descriptor.MSIxIndex = _base_set_and_get_msix_index(ioc, smid);
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 
 /**
@@ -6436,7 +6485,7 @@ _base_put_smid_default_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid)
 	descriptor.MSIxIndex = _base_set_and_get_msix_index(ioc, smid);
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 
 
@@ -6461,7 +6510,7 @@ _base_put_smid_target_assist_atomic(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	descriptor.MSIxIndex = _base_set_and_get_msix_index(ioc, smid);
 	descriptor.SMID = cpu_to_le16(smid);
 
-	writel(cpu_to_le32(*request), &ioc->chip->AtomicRequestDescriptorPost);
+	writel(*request, &ioc->chip->AtomicRequestDescriptorPost);
 }
 #endif
 
@@ -6787,7 +6836,7 @@ _base_display_fwpkg_version(struct MPT3SAS_ADAPTER *ioc)
 	memset(mpi_request, 0, sizeof(Mpi25FWUploadRequest_t));
 	mpi_request->Function = MPI2_FUNCTION_FW_UPLOAD;
 	mpi_request->ImageType = MPI2_FW_UPLOAD_ITYPE_FW_FLASH;
-	mpi_request->ImageSize = data_length;
+	mpi_request->ImageSize = cpu_to_le32((u32)data_length);
 	ioc->build_sg(ioc, &mpi_request->SGL, 0, 0, fwpkg_data_dma,
 	    data_length);
 	init_completion(&ioc->base_cmds.done);
@@ -6947,7 +6996,11 @@ _base_display_ioc_capabilities(struct MPT3SAS_ADAPTER *ioc)
 		printk("%sTask Set Full", i ? "," : "");
 		i++;
 	}
-
+	if (ioc->facts.IOCCapabilities &
+	    MPI26_IOCFACTS_CAPABILITY_MCTP_PASSTHRU) {
+		printk("%sMCTP Passthru", i ? "," : "");
+		i++;
+	}
 	iounit_pg1_flags = le32_to_cpu(ioc->iounit_pg1.Flags);
 	if (!(iounit_pg1_flags & MPI2_IOUNITPAGE1_NATIVE_COMMAND_Q_DISABLE)) {
 		printk("%sNCQ", i ? "," : "");
@@ -6985,8 +7038,7 @@ mpt3sas_base_update_missing_delay(struct MPT3SAS_ADAPTER *ioc,
 	if (!num_phys)
 		return;
 
-	sz = offsetof(Mpi2SasIOUnitPage1_t, PhyData) + (num_phys *
-	    sizeof(Mpi2SasIOUnit1PhyData_t));
+	sz = struct_size(sas_iounit_pg1, PhyData, num_phys);
 	sas_iounit_pg1 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_iounit_pg1) {
 		printk(MPT3SAS_ERR_FMT "failure at %s:%d/%s()!\n",
@@ -7141,7 +7193,7 @@ _base_get_mpi_diag_triggers(struct MPT3SAS_ADAPTER *ioc)
 {
 	Mpi26DriverTriggerPage4_t trigger_pg4;
 	struct SL_WH_MPI_TRIGGER_T *status_tg;
-	MPI26_DRIVER_IOCSTATUS_LOGINFO_TIGGER_ENTRY *mpi_status_tg;
+	MPI26_DRIVER_IOCSTATUS_LOGINFO_TRIGGER_ENTRY *mpi_status_tg;
 	Mpi2ConfigReply_t mpi_reply;
 	int r = 0, i = 0;
 	u16 count = 0;
@@ -7196,7 +7248,7 @@ _base_get_scsi_diag_triggers(struct MPT3SAS_ADAPTER *ioc)
 {
 	Mpi26DriverTriggerPage3_t trigger_pg3;
 	struct SL_WH_SCSI_TRIGGER_T *scsi_tg;
-	MPI26_DRIVER_SCSI_SENSE_TIGGER_ENTRY *mpi_scsi_tg;
+	MPI26_DRIVER_SCSI_SENSE_TRIGGER_ENTRY *mpi_scsi_tg;
 	Mpi2ConfigReply_t mpi_reply;
 	int r = 0, i = 0;
 	u16 count = 0;
@@ -7249,7 +7301,7 @@ _base_get_event_diag_triggers(struct MPT3SAS_ADAPTER *ioc)
 {
 	Mpi26DriverTriggerPage2_t trigger_pg2;
 	struct SL_WH_EVENT_TRIGGER_T *event_tg;
-	MPI26_DRIVER_MPI_EVENT_TIGGER_ENTRY *mpi_event_tg;
+	MPI26_DRIVER_MPI_EVENT_TRIGGER_ENTRY *mpi_event_tg;
 	Mpi2ConfigReply_t mpi_reply;
 	int r = 0, i = 0;
 	u16 count = 0;
@@ -7547,6 +7599,7 @@ out:
 static int
 _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 {
+	Mpi2IOUnitPage8_t iounit_pg8;
 	Mpi2ConfigReply_t mpi_reply;
 	u32 iounit_pg1_flags;
 	u16 tg_flags;
@@ -7644,7 +7697,7 @@ _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 	rc = mpt3sas_config_get_iounit_pg1(ioc, &mpi_reply, &ioc->iounit_pg1);
 	if (rc)
 		return rc;
-	rc = mpt3sas_config_get_iounit_pg8(ioc, &mpi_reply, &ioc->iounit_pg8);
+	rc = mpt3sas_config_get_iounit_pg8(ioc, &mpi_reply, &iounit_pg8);
 	if (rc)
 		return rc;
 	_base_display_ioc_capabilities(ioc);
@@ -7671,8 +7724,8 @@ _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 	if (rc)
 		return rc;
 
-	if(ioc->iounit_pg8.NumSensors)
-		ioc->temp_sensors_count = ioc->iounit_pg8.NumSensors;
+	if(iounit_pg8.NumSensors)
+		ioc->temp_sensors_count = iounit_pg8.NumSensors;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0))
@@ -9258,7 +9311,7 @@ _base_send_ioc_init(struct MPT3SAS_ADAPTER *ioc)
 	}
 
 	/* CoreDump. Set the flag to enable CoreDump in the FW */
-	mpi_request.ConfigurationFlags |= MPI26_IOCINIT_CFGFLAGS_COREDUMP_ENABLE;
+	mpi_request.ConfigurationFlags |= cpu_to_le16(MPI26_IOCINIT_CFGFLAGS_COREDUMP_ENABLE);
 
 	/* This time stamp specifies number of milliseconds
 	 * since epoch ~ midnight January 1, 1970.
@@ -10026,12 +10079,11 @@ mpt3sas_base_attach(struct MPT3SAS_ADAPTER *ioc)
 	if (ioc->is_warpdrive) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,18))
 		ioc->reply_post_host_index[0] =
-		    (resource_size_t *)&ioc->chip->ReplyPostHostIndex;
+		    (resource_size_t __iomem *)&ioc->chip->ReplyPostHostIndex;
 
 		for (i = 1; i < ioc->cpu_msix_table_sz; i++)
-			ioc->reply_post_host_index[i] = (resource_size_t *)
-			    ((u8 *)&ioc->chip->Doorbell + (0x4000 + ((i - 1)
-				* 4)));
+			ioc->reply_post_host_index[i] = (resource_size_t __iomem *)
+			    ((u8 __iomem  *)&ioc->chip->Doorbell + (0x4000 + ((i - 1)* 4)));
 #else
 		ioc->reply_post_host_index[0] =
 		    (u64 *)&ioc->chip->ReplyPostHostIndex;
