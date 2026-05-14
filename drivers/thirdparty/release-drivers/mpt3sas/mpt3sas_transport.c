@@ -2,9 +2,9 @@
  * SAS Transport Layer for MPT (Message Passing Technology) based controllers
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_transport.c
- * Copyright (C) 2013-2018  LSI Corporation
- * Copyright (C) 2013-2018  Avago Technologies
- * Copyright (C) 2013-2018  Broadcom Inc.
+ * Copyright (C) 2013-2026  LSI Corporation
+ * Copyright (C) 2013-2026  Avago Technologies
+ * Copyright (C) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -186,7 +186,7 @@ _transport_find_parent_node(struct MPT3SAS_ADAPTER *ioc,
  *
  * Returns Port number.
  */
-u8
+static u8
 _transport_get_port_id_by_rphy(struct MPT3SAS_ADAPTER *ioc,
 	 struct sas_rphy *rphy)
 {
@@ -251,6 +251,9 @@ _transport_convert_phy_link_rate(u8 link_rate)
 #else
 		rc = SAS_LINK_RATE_6_0_GBPS;
 #endif
+		break;
+	case MPI26_SAS_NEG_LINK_RATE_22_5:
+		rc = MPT3SAS_SAS_LINK_RATE_22_5_GBPS;
 		break;
 	case MPI2_SAS_NEG_LINK_RATE_PHY_DISABLED:
 		rc = SAS_PHY_DISABLED;
@@ -1922,8 +1925,7 @@ _transport_phy_enable(struct sas_phy *phy, int enable)
 	/* handle hba phys */
 
 	/* read sas_iounit page 0 */
-	sz = offsetof(Mpi2SasIOUnitPage0_t, PhyData) + (ioc->sas_hba.num_phys *
-	    sizeof(Mpi2SasIOUnit0PhyData_t));
+	sz = struct_size(sas_iounit_pg0, PhyData, ioc->sas_hba.num_phys);
 	sas_iounit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_iounit_pg0) {
 		printk(MPT3SAS_ERR_FMT "failure at %s:%d/%s()!\n",
@@ -1965,8 +1967,7 @@ _transport_phy_enable(struct sas_phy *phy, int enable)
 	}
 
 	/* read sas_iounit page 1 */
-	sz = offsetof(Mpi2SasIOUnitPage1_t, PhyData) + (ioc->sas_hba.num_phys *
-	    sizeof(Mpi2SasIOUnit1PhyData_t));
+	sz = struct_size(sas_iounit_pg1, PhyData, ioc->sas_hba.num_phys);
 	sas_iounit_pg1 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_iounit_pg1) {
 		printk(MPT3SAS_ERR_FMT "failure at %s:%d/%s()!\n",
@@ -2067,8 +2068,7 @@ _transport_phy_speed(struct sas_phy *phy, struct sas_phy_linkrates *rates)
 	/* handle hba phys */
 
 	/* sas_iounit page 1 */
-	sz = offsetof(Mpi2SasIOUnitPage1_t, PhyData) + (ioc->sas_hba.num_phys *
-	    sizeof(Mpi2SasIOUnit1PhyData_t));
+	sz = struct_size(sas_iounit_pg1, PhyData, ioc->sas_hba.num_phys);
 	sas_iounit_pg1 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_iounit_pg1) {
 		printk(MPT3SAS_ERR_FMT "failure at %s:%d/%s()!\n",

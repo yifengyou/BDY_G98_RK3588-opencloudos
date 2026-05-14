@@ -390,6 +390,7 @@ typedef struct _MPI2_IOC_FACTS_REPLY
 /* ProductID field uses MPI2_FW_HEADER_PID_ */
 
 /* IOCCapabilities */
+#define MPI26_IOCFACTS_CAPABILITY_MCTP_PASSTHRU         (0x00800000)
 #define MPI26_IOCFACTS_CAPABILITY_AUTH_ENCRYPT          (0x00400000)
 #define MPI26_IOCFACTS_CAPABILITY_COREDUMP_ENABLED      (0x00200000)
 #define MPI26_IOCFACTS_CAPABILITY_PCIE_SRIOV            (0x00100000)
@@ -555,7 +556,7 @@ typedef struct _MPI2_EVENT_NOTIFICATION_REPLY
     U16                     Event;                          /* 0x14 */
     U16                     Reserved4;                      /* 0x16 */
     U32                     EventContext;                   /* 0x18 */
-    U32                     EventData[1];                   /* 0x1C */
+    U32                     EventData[];                    /* 0x1C */
 } MPI2_EVENT_NOTIFICATION_REPLY, MPI2_POINTER PTR_MPI2_EVENT_NOTIFICATION_REPLY,
   Mpi2EventNotificationReply_t, MPI2_POINTER pMpi2EventNotificationReply_t;
 
@@ -845,12 +846,9 @@ typedef struct _MPI2_EVENT_DATA_IR_PHYSICAL_DISK
 /* Integrated RAID Configuration Change List Event data */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check NumElements at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check NumElements at
+ * runtime before using ConfigElement[].
  */
-#ifndef MPI2_EVENT_IR_CONFIG_ELEMENT_COUNT
-#define MPI2_EVENT_IR_CONFIG_ELEMENT_COUNT          (1)
-#endif
 
 typedef struct _MPI2_EVENT_IR_CONFIG_ELEMENT
 {
@@ -886,7 +884,7 @@ typedef struct _MPI2_EVENT_DATA_IR_CONFIG_CHANGE_LIST
     U8                              Reserved2;          /* 0x02 */
     U8                              ConfigNum;          /* 0x03 */
     U32                             Flags;              /* 0x04 */
-    MPI2_EVENT_IR_CONFIG_ELEMENT    ConfigElement[MPI2_EVENT_IR_CONFIG_ELEMENT_COUNT];    /* 0x08 */
+    MPI2_EVENT_IR_CONFIG_ELEMENT    ConfigElement[];    /* 0x08 */
 } MPI2_EVENT_DATA_IR_CONFIG_CHANGE_LIST,
   MPI2_POINTER PTR_MPI2_EVENT_DATA_IR_CONFIG_CHANGE_LIST,
   Mpi2EventDataIrConfigChangeList_t,
@@ -1018,12 +1016,9 @@ typedef struct _MPI2_EVENT_DATA_SAS_INIT_TABLE_OVERFLOW
 /* SAS Topology Change List Event data */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check NumEntries at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check NumEntries at
+ * runtime before using PHY[].
  */
-#ifndef MPI2_EVENT_SAS_TOPO_PHY_COUNT
-#define MPI2_EVENT_SAS_TOPO_PHY_COUNT           (1)
-#endif
 
 typedef struct _MPI2_EVENT_SAS_TOPO_PHY_ENTRY
 {
@@ -1044,7 +1039,7 @@ typedef struct _MPI2_EVENT_DATA_SAS_TOPOLOGY_CHANGE_LIST
     U8                              StartPhyNum;                /* 0x09 */
     U8                              ExpStatus;                  /* 0x0A */
     U8                              PhysicalPort;               /* 0x0B */
-    MPI2_EVENT_SAS_TOPO_PHY_ENTRY   PHY[MPI2_EVENT_SAS_TOPO_PHY_COUNT]; /* 0x0C*/
+    MPI2_EVENT_SAS_TOPO_PHY_ENTRY   PHY[]; 			/* 0x0C*/
 } MPI2_EVENT_DATA_SAS_TOPOLOGY_CHANGE_LIST,
   MPI2_POINTER PTR_MPI2_EVENT_DATA_SAS_TOPOLOGY_CHANGE_LIST,
   Mpi2EventDataSasTopologyChangeList_t,
@@ -1284,8 +1279,8 @@ typedef struct _MPI26_EVENT_DATA_PCIE_ENUMERATION
 /* PCIe Topology Change List Event data (MPI v2.6 and later) */
 
 /*
- * Host code (drivers, BIOS, utilities, etc.) should leave this define set to
- * one and check NumEntries at runtime.
+ * Host code (drivers, BIOS, utilities, etc.) should check NumEntries at
+ * runtime before using PortEntry[].
  */
 #ifndef MPI26_EVENT_PCIE_TOPO_PORT_COUNT
 #define MPI26_EVENT_PCIE_TOPO_PORT_COUNT        (1)
@@ -1340,7 +1335,7 @@ typedef struct _MPI26_EVENT_DATA_PCIE_TOPOLOGY_CHANGE_LIST
     U8                                  StartPortNum;           /* 0x09 */
     U8                                  SwitchStatus;           /* 0x0A */
     U8                                  PhysicalPort;           /* 0x0B */
-    MPI26_EVENT_PCIE_TOPO_PORT_ENTRY    PortEntry[MPI26_EVENT_PCIE_TOPO_PORT_COUNT]; /* 0x0C */
+    MPI26_EVENT_PCIE_TOPO_PORT_ENTRY    PortEntry[]; 		/* 0x0C */
 } MPI26_EVENT_DATA_PCIE_TOPOLOGY_CHANGE_LIST,
   MPI2_POINTER PTR_MPI26_EVENT_DATA_PCIE_TOPOLOGY_CHANGE_LIST,
   Mpi26EventDataPCIeTopologyChangeList_t,
@@ -1877,6 +1872,58 @@ typedef struct _MPI26_IOUNIT_CONTROL_REPLY
 } MPI26_IOUNIT_CONTROL_REPLY, MPI2_POINTER PTR_MPI26_IOUNIT_CONTROL_REPLY,
   Mpi26IoUnitControlReply_t, MPI2_POINTER pMpi26IoUnitControlReply_t;
 
+/****************************************************************************
+*  MCTP Passthrough messages (MPI v2.6 and later only.)
+****************************************************************************/
+
+/* MCTP Passthrough Request Message */
+typedef struct _MPI26_MCTP_PASSTHROUGH_REQUEST
+{
+    U8                      MsgContext;         /* 0x00 */
+    U8                      Reserved1[2];       /* 0x01 */
+    U8                      Function;           /* 0x03 */
+    U8                      Reserved2[3];       /* 0x04 */
+    U8                      MsgFlags;           /* 0x07 */
+    U8                      VP_ID;              /* 0x08 */
+    U8                      VF_ID;              /* 0x09 */
+    U16                     Reserved3;          /* 0x0A */
+    U32                     Reserved4;          /* 0x0C */
+    U8                      Flags;              /* 0x10 */
+    U8                      Reserved5[3];       /* 0x11 */
+    U32                     Reserved6;          /* 0x14 */
+    U32                     H2DLength;          /* 0x18 */
+    U32                     D2HLength;          /* 0x1C */
+    MPI25_SGE_IO_UNION      H2DSGL;             /* 0x20 */
+    MPI25_SGE_IO_UNION      D2HSGL;             /* 0x30 */
+} MPI26_MCTP_PASSTHRUOGH_REQUEST,
+  MPI2_POINTER PTR_MPI26_MCTP_PASSTHROUGH_REQUEST,
+  Mpi26MctpPassthroughRequest_t, MPI2_POINTER pMpi26MctpPassthroughRequest_t;
+
+/* values for the MsgContext field */
+#define MPI26_MCTP_MSG_CONEXT_UNUSED            (0x00)
+
+/* values for the Flags field */
+#define MPI26_MCTP_FLAGS_MSG_FORMAT_MPT         (0x01)
+
+/* MCTP Passthrough Reply Message */
+typedef struct _MPI26_MCTP_PASSTHROUGH_REPLY
+{
+    U8                      MsgContext;         /* 0x00 */
+    U8                      Reserved1;          /* 0x01 */
+    U8                      MsgLength;          /* 0x02 */
+    U8                      Function;           /* 0x03 */
+    U8                      Reserved2[3];       /* 0x04 */
+    U8                      MsgFlags;           /* 0x07 */
+    U8                      VP_ID;              /* 0x08 */
+    U8                      VF_ID;              /* 0x09 */
+    U16                     Reserved3;          /* 0x0A */
+    U16                     Reserved4;          /* 0x0C */
+    U16                     IOCStatus;          /* 0x0E */
+    U32                     IOCLogInfo;         /* 0x10 */
+    U32                     ResponseDataLength; /* 0x14 */
+} MPI26_MCTP_PASSTHRUOGH_REPLY,
+  MPI2_POINTER PTR_MPI26_MCTP_PASSTHROUGH_REPLY,
+  Mpi26MctpPassthroughReply_t, MPI2_POINTER pMpi26MctpPassthroughReply_t;
 
 #endif
 

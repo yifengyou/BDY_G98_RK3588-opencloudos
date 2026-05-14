@@ -2,9 +2,9 @@
  * Compatiblity Header for compilation working across multiple kernels
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_base.c
- * Copyright (C) 2013-2018  LSI Corporation
- * Copyright (C) 2013-2018  Avago Technologies
- * Copyright (C) 2013-2018  Broadcom Inc.
+ * Copyright (C) 2013-2026  LSI Corporation
+ * Copyright (C) 2013-2026  Avago Technologies
+ * Copyright (C) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -235,6 +235,30 @@ mpt3sas_determine_failed_or_fast_io_fail_status(void)
 #else
 	return FAILED;
 #endif
+}
+
+static inline void mpt3sas_set_manage_start_stop(struct scsi_device *sdev) {
+#if ((defined(RHEL_MAJOR) && (RHEL_MAJOR == 9) && (RHEL_MINOR < 5)) || \
+    (defined(RHEL_MAJOR) && (RHEL_MAJOR == 8)) || \
+    (defined(CONFIG_SUSE_KERNEL) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,12,14)) && (LINUX_VERSION_CODE < KERNEL_VERSION(6,4,0))) || \
+    (!(defined(RHEL_MAJOR)) && (!defined(CONFIG_SUSE_KERNEL)) && (LINUX_VERSION_CODE <= (KERNEL_VERSION(6,1,56)))))
+
+                sdev->manage_start_stop = 1;
+#else
+                sdev->manage_system_start_stop = true;
+                sdev->manage_runtime_start_stop = true;
+#endif
+
+#if ((defined(RHEL_MAJOR) && (RHEL_MAJOR == 9 && RHEL_MINOR >= 1)) \
+    || LINUX_VERSION_CODE >= KERNEL_VERSION(5,16,0)) \
+    || (defined(RHEL_MAJOR) && (RHEL_MAJOR == 8 && RHEL_MINOR >= 8)) \
+    || (defined(CONFIG_SUSE_KERNEL) && \
+    ((CONFIG_SUSE_VERSION == 15) && (CONFIG_SUSE_PATCHLEVEL >= 5)))
+#define MPT3SAS_SAS_LINK_RATE_22_5_GBPS SAS_LINK_RATE_22_5_GBPS
+#else
+#define MPT3SAS_SAS_LINK_RATE_22_5_GBPS SAS_LINK_RATE_12_0_GBPS
+#endif
+
 }
 
 #endif /* FUSION_LINUX_COMPAT_H */

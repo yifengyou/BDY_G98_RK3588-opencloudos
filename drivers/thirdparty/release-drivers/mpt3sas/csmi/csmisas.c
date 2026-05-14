@@ -3,9 +3,9 @@
  * for access to MPT (Message Passing Technology) firmware.
  *
  * This code is based on drivers/scsi/mpt2sas/mpt2_base.c
- * Copyright (c) 2007-2018  LSI Corporation
- * Copyright (c)  2013-2018 Avago Technologies 
- * Copyright (c) 2013-2018  Broadcom Inc.
+ * Copyright (c) 2007-2026  LSI Corporation
+ * Copyright (c)  2013-2026 Avago Technologies
+ * Copyright (c) 2013-2026  Broadcom Inc.
  *  (mailto:MPT-FusionLinux.pdl@broadcom.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -2502,9 +2502,9 @@ _csmisas_firmware_download(struct MPT3SAS_ADAPTER *ioc,
 	pFwHeader = (pMpi2FWImageHeader_t)karg->bDataBuffer;
 
 	/* verify the fimware signature */
-	if (!((pFwHeader->Signature0 == MPI2_FW_HEADER_SIGNATURE0) &&
-	    (pFwHeader->Signature1 == MPI2_FW_HEADER_SIGNATURE1) &&
-	    (pFwHeader->Signature2 == MPI2_FW_HEADER_SIGNATURE2)))
+	if (!((le32_to_cpu(pFwHeader->Signature0) == MPI2_FW_HEADER_SIGNATURE0) &&
+	    (le32_to_cpu(pFwHeader->Signature1) == MPI2_FW_HEADER_SIGNATURE1) &&
+	    (le32_to_cpu(pFwHeader->Signature2) == MPI2_FW_HEADER_SIGNATURE2)))
 		goto out;
 
 	if (_ctl_do_fw_download(ioc, karg->bDataBuffer,
