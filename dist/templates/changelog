@@ -1,6 +1,62 @@
+* Thu May 14 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.5
+- config: drop CONFIG_INET_ESPINTCP and CONFIG_INET6_ESPINTCP
+- psi: do not use jiffies for psi since it may compromise correctness
+- psi: fix possible NULL pointer deref when psi is disabled in cgroupv1
+- smb: client: validate the whole DACL before rewriting it in cifsacl
+- f2fs: fix UAF caused by decrementing sbi->nr_pages[] in f2fs_write_end_io()
+- apparmor: fix race between freeing data and fs accessing it
+- apparmor: fix unprivileged local user can do privileged policy management
+- smb: client: fix OOB read in smb2_ioctl_query_info QUERY_INFO path
+- crypto: ccp: Don't attempt to copy PDH cert to userspace if PSP command failed
+- fuse: reject oversized dirents in page cache
+- fs/ntfs3: validate rec->used in journal-replay file record check
+- scsi: qla2xxx: Fix bsg_done() causing double free
+- drivers,mpt3sas: update mpt3sas driver to 57.00.00.00
+- HAOC: fix NMI safety and add haoc.config
+- Bluetooth: hci_event: move wake reason storage into validated event handlers
+- netfilter: ctnetlink: ignore explicit helper on new expectations
+- ip6_tunnel: clear skb2->cb[] in ip4ip6_err()
+- net: atm: fix crash due to unvalidated vcc pointer in sigd_send()
+- ipv6: icmp: clear skb2->cb[] in ip6_err_gen_icmpv6_unreach()
+- can: gw: fix OOB heap access in cgw_csum_crc8_rel()
+- netfilter: nf_conntrack_helper: pass helper to expect cleanup
+- smb: client: fix OOB reads parsing symlink error response
+- smb: client: correctly handle ErrorContextData as a flexible array
+- crypto: ccp: Don't attempt to copy ID to userspace if PSP command failed
+- crypto: ccp: Don't attempt to copy CSR to userspace if PSP command failed
+- dlm: validate length in dlm_search_rsb_tree
+- selftests: mm: skip whole test instead of failure
+- selftests: mm: fix some build warnings
+- mm/pagemap: fix ioctl(PAGEMAP_SCAN) on vma check
+- mm/pagemap: fix wr-protect even if PM_SCAN_WP_MATCHING not set
+- mm/selftests: fix pagemap_ioctl memory map test
+- fs/proc/task_mmu: move mmu notification mechanism inside mm lock
+- fs/proc/task_mmu: fix loss of young/dirty bits during pagemap scan
+- fs/proc/task_mmu: fix uffd-wp confusion in pagemap_scan_pmd_entry()
+- selftests: mm: check return values
+- fs/proc/task_mmu: prevent integer overflow in pagemap_scan_get_args()
+- selftests: mm: fix conversion specifiers in transact_test()
+- fs/proc/task_mmu: fix PAGE_IS_PFNZERO detection for the huge zero folio
+- fs/proc/task_mmu: check p->vec_buf for NULL
+- mm/memory.c: remove stray newline at top of file
+- selftests: mm: add pagemap ioctl tests
+- mm/pagemap: add documentation of PAGEMAP_SCAN IOCTL
+- tools headers UAPI: update linux/fs.h with the kernel sources
+- fs/proc/task_mmu: add fast paths to get/clear PAGE_IS_WRITTEN flag
+- fs/proc/task_mmu: implement IOCTL to get and optionally clear info about PTEs
+- userfaultfd: UFFD_FEATURE_WP_ASYNC
+- dist,spec: silence "Duplicate build-ids" warning for sign-file-ori
+- dist,spec: mark symvers/config/System.map as %ghost files
+- shell-guard: fix a compiler problem about section mismatch
+- fuse: fix null pointer dereference in fuse_dev_ioctl_backing_close_all
+- tracing: reduce ring mode stat loss on concurrent slot replacement
+- xfrm: esp: avoid in-place decrypt on shared skb frags
+- config,riscv: drop CONFIG_RXKAD from tencent.config
+- Serial: Add RX enable feature for serial port
+
 * Fri May  1 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.3
-- 2026-05-01 [ Herbert Xu ] crypto: algif_aead - Fix minimum RX size check for decryption
-- 2026-05-01 [ Jianping Liu ] emm/zram: and dummy file for backend_*.c
+- crypto: algif_aead - Fix minimum RX size check for decryption
+- emm/zram: and dummy file for backend_*.c
 
 * Thu Apr 30 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-50.2
 - crypto: af_alg - Fix page reassignment overflow in af_alg_pull_tsgl
