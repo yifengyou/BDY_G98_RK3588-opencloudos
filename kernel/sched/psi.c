@@ -140,7 +140,7 @@
 static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
-static DEFINE_STATIC_KEY_TRUE(psi_cgroups_enabled);
+DEFINE_STATIC_KEY_TRUE(psi_cgroups_enabled);
 #ifdef CONFIG_PSI_DYN_SWITCH
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 unsigned int sysctl_psi_dyn_stat_types = (1U << PSI_IO) |
@@ -948,6 +948,16 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		schedule_delayed_work(&group->avgs_work, PSI_FREQ);
 }
 
+static inline struct psi_group *task_psi_group_subsys(struct task_struct *task,
+					   int subsys_id)
+{
+#ifdef CONFIG_CGROUPS
+	if (static_branch_likely(&psi_cgroups_enabled))
+		return cgroup_psi(task_cgroup(task, subsys_id));
+#endif
+	return &psi_system;
+}
+
 /*
  * Iteration for cgroup V1, we only have SOME PSI support for each cgroup due
  * to the nature of splitted resource types of cgroup V1 design will bring
@@ -965,21 +975,21 @@ static inline void psi_group_change_legacy(struct task_struct *task, int cpu,
 	struct psi_group *group;
 
 	if ((clear | set) & TSK_IOWAIT) {
-		group = cgroup_psi(task_cgroup(task, io_cgrp_subsys.id));
+		group = task_psi_group_subsys(task, io_cgrp_subsys.id);
 		do {
 			psi_group_change(group, cpu, clear & TSK_IOWAIT, set & TSK_IOWAIT, now, wake, 0);
 		} while ((group = group->parent));
 	}
 #ifdef CONFIG_MEMCG
 	if ((clear | set) & TSK_MEMSTALL) {
-		group = cgroup_psi(task_cgroup(task, memory_cgrp_subsys.id));
+		group = task_psi_group_subsys(task, memory_cgrp_subsys.id);
 		do {
 			psi_group_change(group, cpu, clear & TSK_MEMSTALL, set & TSK_MEMSTALL, now, wake, 0);
 		} while ((group = group->parent));
 	}
 #endif
 	if ((clear | set) & TSK_RUNNING) {
-		group = cgroup_psi(task_cgroup(task, cpu_cgrp_subsys.id));
+		group = task_psi_group_subsys(task, cpu_cgrp_subsys.id);
 		do {
 			psi_group_change(group, cpu, clear & TSK_RUNNING, set & TSK_RUNNING, now, wake, 0);
 		} while ((group = group->parent));
@@ -1401,6 +1411,9 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 	if (static_branch_likely(&psi_disabled))
 		return -EOPNOTSUPP;
 
+	if (!static_branch_likely(&psi_cgroups_enabled) && group != &psi_system)
+		return -EOPNOTSUPP;
+
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	if (!irqtime_enabled() && res == PSI_IRQ)
 		return -EOPNOTSUPP;
@@ -1452,7 +1465,13 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	bool privileged;
 	u32 window_us;
 
-	if (static_branch_likely(&psi_disabled) || !group->enabled)
+	if (static_branch_likely(&psi_disabled))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	if (!static_branch_likely(&psi_cgroups_enabled) && group != &psi_system)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	if (!group->enabled)
 		return ERR_PTR(-EOPNOTSUPP);
 
 	/*
@@ -1837,6 +1856,9 @@ int psi_dyn_stat_handler(struct ctl_table *table, int write, void *buffer,
 	struct ctl_table t;
 	unsigned int psi_stat, old_psi_stat;
 	int ret;
+
+	if (static_branch_likely(&psi_disabled))
+		return -EOPNOTSUPP;
 
 	if (write) {
 		old_psi_stat = sysctl_psi_dyn_stat_types;
