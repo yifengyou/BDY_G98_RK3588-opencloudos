@@ -3952,6 +3952,12 @@ int cgroup_pressure_show(struct seq_file *seq, void *v)
 	struct cgroup *cgrp = seq_css(seq)->cgroup;
 	struct psi_group *psi = cgroup_psi(cgrp);
 
+	if (static_branch_likely(&psi_disabled))
+		return -EOPNOTSUPP;
+
+	if (!static_branch_likely(&psi_cgroups_enabled) && psi != &psi_system)
+		return -EOPNOTSUPP;
+
 	seq_printf(seq, "%d\n", psi->enabled);
 
 	return 0;
@@ -3966,6 +3972,9 @@ ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
 	struct cgroup *cgrp;
 	struct psi_group *psi;
 
+	if (static_branch_likely(&psi_disabled))
+		return -EOPNOTSUPP;
+
 	ret = kstrtoint(strstrip(buf), 0, &enable);
 	if (ret)
 		return ret;
@@ -3978,6 +3987,13 @@ ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
 		return -ENOENT;
 
 	psi = cgroup_psi(cgrp);
+
+	if (!static_branch_likely(&psi_cgroups_enabled)
+		&& psi != &psi_system) {
+		cgroup_kn_unlock(of->kn);
+		return -EOPNOTSUPP;
+	}
+
 	if (psi->enabled != enable) {
 		int i;
 

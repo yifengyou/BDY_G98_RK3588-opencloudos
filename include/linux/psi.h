@@ -16,6 +16,7 @@ struct css_set;
 #ifdef CONFIG_PSI
 
 extern struct static_key_false psi_disabled;
+extern struct static_key_true psi_cgroups_enabled;
 extern struct psi_group psi_system;
 #ifdef CONFIG_PSI_DYN_SWITCH
 extern unsigned int sysctl_psi_dyn_stat_types;
