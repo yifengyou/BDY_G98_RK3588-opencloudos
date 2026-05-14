@@ -711,7 +711,7 @@ config PSI_DYN_SWITCH
 
 config PSI_USE_JIFFIES
 	bool "Use jiffies for PSI"
-	default y
+	default n
 	depends on PSI
 	help
 	  Select this option to make PSI use jiffies to record time, since
