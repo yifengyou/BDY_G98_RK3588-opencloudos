@@ -889,10 +889,18 @@ static bool folio_referenced_one(struct folio *folio,
 		}
 	}
 
-	if (referenced)
-		folio_clear_idle(folio);
-	if (folio_test_clear_young(folio))
-		referenced++;
+	/*
+	 * For mglru, the idle and young bit have both already been handled
+	 * in the lru_gen_look_around() above, since we don't want to miss
+	 * that look around operation even when we run page idle
+	 * simultaneously. So there is no need to handle them again here.
+	 */
+	if (!lru_gen_enabled()) {
+		if (referenced)
+			folio_clear_idle(folio);
+		if (folio_test_clear_young(folio))
+			referenced++;
+	}
 
 	if (referenced) {
 		pra->referenced++;

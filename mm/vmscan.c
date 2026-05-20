@@ -3768,7 +3768,8 @@ restart:
 		if (!folio)
 			continue;
 
-		if (!ptep_clear_young_notify(args->vma, addr, pte + i))
+		if (!ptep_clear_young_notify(args->vma, addr, pte + i)
+			&& !folio_test_clear_young(folio))
 			continue;
 
 		if (folio_test_idle(folio))
@@ -3862,7 +3863,8 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 		if (!folio)
 			goto next;
 
-		if (!pmdp_clear_young_notify(vma, addr, pmd + i))
+		if (!pmdp_clear_young_notify(vma, addr, pmd + i)
+			&& !folio_test_clear_young(folio))
 			goto next;
 
 		if (folio_test_idle(folio))
@@ -4472,7 +4474,8 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	lockdep_assert_held(pvmw->ptl);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
 
-	if (!ptep_clear_young_notify(vma, addr, pte))
+	if (!ptep_clear_young_notify(vma, addr, pte)
+		&& !folio_test_clear_young(folio))
 		return false;
 
 	if (folio_test_idle(folio))
@@ -4525,7 +4528,8 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 		if (!folio)
 			continue;
 
-		if (!ptep_clear_young_notify(vma, addr, pte + i))
+		if (!ptep_clear_young_notify(vma, addr, pte + i)
+			&& !folio_test_clear_young(folio))
 			continue;
 
 		if (folio_test_idle(folio))
