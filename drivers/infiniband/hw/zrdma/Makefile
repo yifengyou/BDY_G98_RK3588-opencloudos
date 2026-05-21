@@ -1,20 +1,20 @@
 ccflags-y += -I$(zrdma)
 ccflags-y += -I$(zrdma)/smmu/kernel
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/table/include
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/comm/include
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/driver/include
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/table/se
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/se
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/api
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/chip
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/reg
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/dma
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/nppu
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/ppu
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/table
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/tm
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/diag
-subdir-ccflags-y += -I$(src)/../../../net/ethernet/dinghai/en_np/agent/include
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/table/include
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/comm/include
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/driver/include
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/table/se
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/se
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/api
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/chip
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/reg
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/dma
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/nppu
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/ppu
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/table
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/dev/module/tm
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/sdk/include/diag
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../net/ethernet/dinghai/en_np/agent/include
 
 obj-$(CONFIG_INFINIBAND_ZRDMA) += zrdma.o
 
