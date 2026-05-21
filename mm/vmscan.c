@@ -4896,7 +4896,7 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 			  int *isolate_type, int *isolate_scanned)
 {
 	int i;
-	int scanned = 0;
+	int total_scanned = 0;
 	int type = get_type_to_scan(lruvec, swappiness);
 
 #ifdef CONFIG_EMM_RECLAIM
@@ -4909,31 +4909,31 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	 * and return directly to avoid FILE LRU fallback.
 	 */
 	if (sc->emm_running && sc->emm_swappiness == 201) {
-		scanned = scan_folios(nr_to_scan, lruvec, sc, LRU_GEN_ANON,
+		total_scanned = scan_folios(nr_to_scan, lruvec, sc, LRU_GEN_ANON,
 				      MAX_NR_TIERS, list, isolated);
 		*isolate_type = LRU_GEN_ANON;
-		*isolate_scanned = scanned;
-		return scanned;
+		*isolate_scanned = total_scanned;
+		return total_scanned;
 	}
 #endif
 
 	for_each_evictable_type(i, swappiness) {
-		int type_scan;
+		int scanned;
 		int tier = get_tier_idx(lruvec, type);
 
-		type_scan = scan_folios(nr_to_scan, lruvec, sc,
-					type, tier, list, isolated);
+		scanned = scan_folios(nr_to_scan, lruvec, sc,
+				      type, tier, list, isolated);
 
-		scanned += type_scan;
+		total_scanned += scanned;
 		if (*isolated) {
 			*isolate_type = type;
-			*isolate_scanned = type_scan;
+			*isolate_scanned = scanned;
 			break;
 		}
 		type = !type;
 	}
 
-	return scanned;
+	return total_scanned;
 }
 
 static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
@@ -4960,7 +4960,7 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	scanned = isolate_folios(nr_to_scan, lruvec, sc, swappiness,
 				 &list, &isolated, &type, &type_scanned);
 
-	/* Isolation might create empty gen, flush them */
+	/* Scanning may have emptied the oldest gen, flush it */
 	if (scanned)
 		try_to_inc_min_seq(lruvec, swappiness);
 
@@ -5038,7 +5038,7 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
 	if (evictable_min_seq(min_seq, swappiness) + MIN_NR_GENS > max_seq)
 		return true;
 
-	/* try to get away with not aging at the default priority */
+	/* try to avoid aging, do gentle reclaim at the default priority */
 	if (sc->priority == DEF_PRIORITY)
 		return false;
 
@@ -5060,9 +5060,6 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
 
 	nr_to_scan = apply_proportional_protection(memcg, sc, nr_to_scan);
 	nr_to_scan >>= sc->priority;
-
-	if (!nr_to_scan && sc->priority < DEF_PRIORITY)
-		nr_to_scan = min(evictable, SWAP_CLUSTER_MAX);
 
 	return nr_to_scan;
 }
@@ -5134,7 +5131,10 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		if (should_abort_scan(lruvec, sc))
 			break;
 
-		/* For cgroup reclaim, fairness is handled by iterator, not rotation */
+		/*
+		 * Root reclaim needs rotation when low on cold folio for better
+		 * fairness. Cgroup reclaim gets fairness from the iterator.
+		 */
 		if (root_reclaim(sc) && should_age)
 			break;
 
