@@ -1331,6 +1331,14 @@ struct super_block {
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
 
+#ifdef CONFIG_CGROUP_WRITEBACK
+	/*
+	 * Number of in-flight inode wb switches for this sb.  Drained by
+	 * cgroup_writeback_umount() before tear-down.
+	 */
+	atomic_t		s_isw_nr_in_flight;
+#endif
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 } __randomize_layout;
