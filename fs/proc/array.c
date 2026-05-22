@@ -749,7 +749,7 @@ int proc_pid_statm(struct seq_file *m, struct pid_namespace *ns,
 {
 	struct mm_struct *mm = get_task_mm(task);
 	int mem_sell = 0;
-#ifdef CONFIG_EMM_MEMORY_OVERSELL
+#ifdef CONFIG_MEMCG_ZRAM
 	if (mem_sell_check_task(task))
 		mem_sell = 1;
 #endif

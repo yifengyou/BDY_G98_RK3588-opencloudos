@@ -1222,6 +1222,12 @@ const char * const vmstat_text[] = {
 	"workingset_restore_anon",
 	"workingset_restore_file",
 	"workingset_nodereclaim",
+#ifdef CONFIG_MEMCG_ZRAM
+	"nr_zram",
+	"nr_zramed",
+	"nr_shmem_zram",
+	"nr_shmem_zramed",
+#endif
 	"nr_anon_pages",
 	"nr_mapped",
 	"nr_file_pages",

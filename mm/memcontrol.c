@@ -702,6 +702,12 @@ static const unsigned int memcg_node_stat_items[] = {
 #ifdef CONFIG_SWAP
 	NR_SWAPCACHE,
 #endif
+#ifdef CONFIG_MEMCG_ZRAM
+	MEMCG_ZRAM_B,
+	MEMCG_ZRAMED,
+	MEMCG_SHMEM_ZRAM_B,
+	MEMCG_SHMEM_ZRAMED,
+#endif
 };
 
 static const unsigned int memcg_stat_items[] = {
@@ -712,12 +718,6 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
-#ifdef CONFIG_MEMCG_ZRAM
-	MEMCG_ZRAM_B,
-	MEMCG_ZRAMED,
-	MEMCG_SHMEM_ZRAM_B,
-	MEMCG_SHMEM_ZRAMED,
-#endif
 };
 
 #define NR_MEMCG_NODE_STAT_ITEMS ARRAY_SIZE(memcg_node_stat_items)
