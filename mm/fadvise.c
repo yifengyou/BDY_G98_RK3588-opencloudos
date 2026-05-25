@@ -20,8 +20,12 @@
 #include <linux/swap.h>
 
 #include <asm/unistd.h>
+#include <linux/moduleparam.h>
 
 #include "internal.h"
+
+static bool fadvise_drain_all_enable = true;
+module_param_named(fadvise_drain_all, fadvise_drain_all_enable, bool, 0644);
 
 /*
  * POSIX_FADV_WILLNEED could set PG_Referenced, and POSIX_FADV_NOREUSE could
@@ -163,7 +167,7 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 			 * in the LRU cache of a remote CPU. Drain all
 			 * caches and try again.
 			 */
-			if (nr_failed) {
+			if (nr_failed && fadvise_drain_all_enable) {
 				lru_add_drain_all();
 				invalidate_mapping_pages(mapping, start_index,
 						end_index);
