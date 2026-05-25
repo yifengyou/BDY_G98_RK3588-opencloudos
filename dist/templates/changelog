@@ -1,3 +1,28 @@
+* Mon May 25 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.6
+- x86/sev: Fix potential sign extension in amd_enc_status_change_finish()
+- config/x86: set CONFIG_INFINIBAND_ZRDMA=m
+- Ethernet: Linkdata: modify RDMA_DRIVER_SXE2
+- Ethernet: Linkdata: Supports Linkdata ethernet Controllers
+- net: skbuff: propagate shared-frag marker through frag-transfer helpers
+- net: skbuff: preserve shared-frag marker during coalescing
+- sched: replace task_on_rq_queued with task_is_runnable in set_user_nice
+- ipv6: rpl: reserve mac_len headroom when recompressed SRH grows
+- usb: usbtmc: Flush anchored URBs in usbtmc_release
+- drm/amdkfd: Fix out-of-bounds write in kfd_event_page_set()
+- iommu: disable SVA when CONFIG_X86 is set
+- nbd: defer config unlock in nbd_genl_connect
+- tk: mm/fadvise: add sysfs switch to bypass lru_add_drain_all() on DONTNEED
+- mm/mglru: trivial cleanup and remove unnecessary scan budget roundup
+- macsec: use rcu_work to defer TX SA crypto cleanup out of softirq
+- macsec: use rcu_work to defer RX SA crypto cleanup out of softirq
+- macsec: introduce dedicated workqueue for SA crypto cleanup
+- net/rds: reset op_nents when zerocopy page pin fails
+- xfs: Add cond_resched to block unmap range and reflink remap path
+- sched/fair: Fix unfairness caused by stalled tg_load_avg_contrib when the last task migrates out
+- sched/fair: Ratelimit update to tg->load_avg
+- dist/config: add make dist-config CONFIG="generic-haoc" support
+- ptrace: slightly saner 'get_dumpable()' logic
+
 * Thu May 14 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.5
 - config: drop CONFIG_INET_ESPINTCP and CONFIG_INET6_ESPINTCP
 - psi: do not use jiffies for psi since it may compromise correctness
