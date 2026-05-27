@@ -29,6 +29,7 @@
 #include <linux/kprobes.h>
 
 #include <linux/sched/clock.h>
+#include <linux/sched/cputime.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 
@@ -63,6 +64,13 @@ static int __read_mostly watchdog_thresh_next;
  */
 static int __read_mostly watchdog_thresh_ms;
 static int __read_mostly watchdog_thresh_ms_next;
+/*
+ * "Long on-CPU" detection threshold (ms). 0: disabled. 100..150000:
+ * emit long_oncpu_sample when @current has been continuously on-CPU
+ * (modulo IRQ/steal, see task_oncpu_ns) for at least this many ms.
+ */
+static int __read_mostly long_oncpu_thresh_ms;
+static int __read_mostly long_oncpu_thresh_ms_next;
 static int __read_mostly watchdog_hardlockup_available;
 
 struct cpumask watchdog_cpumask __read_mostly;
@@ -890,6 +898,28 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 					current->pid, current->comm, ip);
 	}
 
+	/*
+	 * "Long on-CPU" detection. Unlike softlockup, only resets on a real
+	 * context switch into a different task, so cond_resched() callers
+	 * that always win the rebid still surface.
+	 */
+	if (trace_long_oncpu_sample_enabled()) {
+		u32 ms = READ_ONCE(long_oncpu_thresh_ms);
+
+		if (ms && !is_idle_task(current)) {
+			u64 oncpu_ns = task_oncpu_ns(current);
+
+			if (oncpu_ns >= (u64)ms * NSEC_PER_MSEC) {
+				unsigned long ip = regs ?
+					instruction_pointer(regs) : 0;
+
+				trace_long_oncpu_sample(smp_processor_id(),
+					oncpu_ns, ms,
+					current->pid, current->comm, ip);
+			}
+		}
+	}
+
 	/* Reset the interval when touched by known problematic code. */
 	if (period_ts == SOFTLOCKUP_DELAY_REPORT) {
 		if (unlikely(__this_cpu_read(softlockup_touch_sync))) {
@@ -1364,6 +1394,39 @@ out:
 	mutex_unlock(&watchdog_mutex);
 	return err;
 }
+
+/*
+ * /proc/sys/kernel/long_oncpu_thresh_ms - "Long on-CPU" threshold (ms).
+ * Lighter than proc_watchdog_thresh_ms(): no sample_period reconfig
+ * needed, the next hrtimer tick picks up the new value via WRITE_ONCE.
+ */
+int proc_long_oncpu_thresh_ms(struct ctl_table *table, int write,
+			      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int err, old, val;
+
+	mutex_lock(&watchdog_mutex);
+
+	long_oncpu_thresh_ms_next = READ_ONCE(long_oncpu_thresh_ms);
+
+	old = long_oncpu_thresh_ms_next;
+	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (err || !write)
+		goto out;
+
+	val = long_oncpu_thresh_ms_next;
+	if (val != 0 && val < 100) {
+		long_oncpu_thresh_ms_next = old;
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (old != val)
+		WRITE_ONCE(long_oncpu_thresh_ms, val);
+out:
+	mutex_unlock(&watchdog_mutex);
+	return err;
+}
 #endif /* CONFIG_SOFTLOCKUP_DETECTOR */
 
 /*
@@ -1436,6 +1499,15 @@ static struct ctl_table watchdog_sysctls[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_watchdog_thresh_ms,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= (void *)&watchdog_thresh_ms_max,
+	},
+	{
+		.procname	= "long_oncpu_thresh_ms",
+		.data		= &long_oncpu_thresh_ms_next,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_long_oncpu_thresh_ms,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= (void *)&watchdog_thresh_ms_max,
 	},

@@ -111,6 +111,44 @@ TRACE_EVENT(hardlockup_warn,
 		(void *)__entry->ip)
 );
 
+/*
+ * long_oncpu_sample - @current has been continuously on the same CPU.
+ * Unlike softlockup_sample, only resets on a real context switch, so
+ * cond_resched() callers that always win the rebid still surface.
+ * Default off; gated by kernel.long_oncpu_thresh_ms.
+ */
+TRACE_EVENT(long_oncpu_sample,
+
+	TP_PROTO(int cpu, u64 oncpu_ns, u32 thresh_ms,
+		 pid_t pid, const char *comm, unsigned long ip),
+
+	TP_ARGS(cpu, oncpu_ns, thresh_ms, pid, comm, ip),
+
+	TP_STRUCT__entry(
+		__field(	int,		cpu		)
+		__field(	u64,		oncpu_ns	)
+		__field(	u32,		thresh_ms	)
+		__field(	pid_t,		pid		)
+		__array(	char,		comm,	TASK_COMM_LEN)
+		__field(	unsigned long,	ip		)
+	),
+
+	TP_fast_assign(
+		__entry->cpu		= cpu;
+		__entry->oncpu_ns	= oncpu_ns;
+		__entry->thresh_ms	= thresh_ms;
+		__entry->pid		= pid;
+		memcpy(__entry->comm, comm, TASK_COMM_LEN);
+		__entry->ip		= ip;
+	),
+
+	TP_printk("cpu=%d oncpu=%llu ns thresh=%u ms task=%s(%d) ip=%pS",
+		__entry->cpu,
+		(unsigned long long)__entry->oncpu_ns,
+		__entry->thresh_ms,
+		__entry->comm, __entry->pid, (void *)__entry->ip)
+);
+
 #endif /* _TRACE_LOCKUP_H */
 
 /* This part must be outside protection */
