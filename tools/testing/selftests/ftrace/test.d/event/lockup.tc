@@ -1,19 +1,25 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
-# description: lockup tracepoints - softlockup_sample / softlockup_warn / hardlockup_warn
+# description: lockup tracepoints - softlockup_{sample,warn} / hardlockup_warn / long_oncpu_sample
 # requires: events/lockup/softlockup_sample/enable
 
 EV=events/lockup
 THRESH_MS=/proc/sys/kernel/watchdog_thresh_ms
+ONCPU_THRESH=/proc/sys/kernel/long_oncpu_thresh_ms
 
 reset() {
     echo 0 > $EV/softlockup_sample/enable 2>/dev/null
     echo 0 > $EV/softlockup_warn/enable   2>/dev/null
     echo 0 > $EV/hardlockup_warn/enable   2>/dev/null
+    echo 0 > $EV/long_oncpu_sample/enable 2>/dev/null
     echo '!stacktrace*' > $EV/softlockup_sample/trigger 2>/dev/null || true
     echo '!hist*'       > $EV/softlockup_sample/trigger 2>/dev/null || true
+    echo '!stacktrace*' > $EV/long_oncpu_sample/trigger 2>/dev/null || true
+    echo '!hist*'       > $EV/long_oncpu_sample/trigger 2>/dev/null || true
     echo '0' > $EV/softlockup_sample/filter 2>/dev/null || true
-    [ -w "$THRESH_MS" ] && echo 0 > "$THRESH_MS"
+    echo '0' > $EV/long_oncpu_sample/filter 2>/dev/null || true
+    [ -w "$THRESH_MS" ]    && echo 0 > "$THRESH_MS"
+    [ -w "$ONCPU_THRESH" ] && echo 0 > "$ONCPU_THRESH"
     clear_trace
 }
 
@@ -75,5 +81,33 @@ echo 1 > $EV/softlockup_sample/enable
 sleep 6
 grep -q '<stack trace>' trace || fail "T6: stacktrace not recorded"
 reset
+
+# ----- T7: long_oncpu_thresh_ms boundary checks -----
+if [ ! -w "$ONCPU_THRESH" ]; then
+    echo "skip T7/T8: $ONCPU_THRESH not present (CONFIG_SOFTLOCKUP_DETECTOR=n)"
+else
+    echo 50      > "$ONCPU_THRESH" 2>/dev/null && fail "T7: 50 should be rejected"
+    echo 200000  > "$ONCPU_THRESH" 2>/dev/null && fail "T7: 200000 should be rejected"
+    echo 100     > "$ONCPU_THRESH" || fail "T7: 100 (lower bound) rejected"
+    echo 0       > "$ONCPU_THRESH" || fail "T7: 0 (disable) rejected"
+    got=$(cat "$ONCPU_THRESH")
+    [ "$got" = "0" ] || fail "T7: readback after disable mismatch: $got"
+    reset
+
+    # ----- T8: long_oncpu_sample fires for a CPU-bound user task -----
+    echo 100 > "$ONCPU_THRESH"
+    echo 1   > $EV/long_oncpu_sample/enable
+    if command -v taskset >/dev/null 2>&1; then
+        taskset -c 0 sh -c 'end=$((`date +%s`+3)); while [ `date +%s` -lt $end ]; do :; done' &
+    else
+        sh -c 'end=$((`date +%s`+3)); while [ `date +%s` -lt $end ]; do :; done' &
+    fi
+    bgpid=$!
+    sleep 4
+    wait "$bgpid" 2>/dev/null
+    n=$(grep -c long_oncpu_sample trace)
+    [ "$n" -lt 1 ] && fail "T8: no long_oncpu_sample emitted under user CPU stress"
+    reset
+fi
 
 exit 0

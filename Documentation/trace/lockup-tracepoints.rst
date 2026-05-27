@@ -16,8 +16,9 @@ ftrace event framework::
     softlockup_sample   - per-tick observation event (soft IRQ ctx)
     softlockup_warn     - emitted at the softlockup report threshold
     hardlockup_warn     - emitted by the NMI hardlockup detector
+    long_oncpu_sample   - per-task on-CPU duration event
 
-All three are off by default. When disabled the cost is one
+All four are off by default. When disabled the cost is one
 ``static_branch`` jump in the relevant detector path.
 
 Trigger contexts
@@ -58,6 +59,21 @@ threshold cannot drop below 2 s. To detect kernel-mode windows below
 ``softlockup_sample`` carries true ns-precision ``stuck_ns`` either
 way, so you can observe sub-second windows even without flipping
 ``thresh_ms``.
+
+"Long on-CPU" detection with ``long_oncpu_sample``
+==================================================
+
+``softlockup`` resets at every context switch, so a task that politely
+calls ``cond_resched()`` but always wins the rebid never triggers it.
+``long_oncpu_sample`` fills that gap: it resets only on a real context
+switch into a different task. Enable via::
+
+  echo 100 > /proc/sys/kernel/long_oncpu_thresh_ms
+  echo 1   > /sys/kernel/tracing/events/lockup/long_oncpu_sample/enable
+
+Fields: ``cpu``, ``oncpu_ns`` (ns @current has been continuously on
+CPU, approximated by ``local_clock - p->se.exec_start``), ``thresh_ms``,
+``pid``, ``comm``, ``ip``.
 
 Recipes
 =======
