@@ -1697,3 +1697,18 @@ is 10 seconds.
 
 The softlockup threshold is (``2 * watchdog_thresh``). Setting this
 tunable to zero will disable lockup detection altogether.
+
+
+watchdog_thresh_ms
+==================
+
+Sub-second softlockup detection threshold in milliseconds. Range
+``[100, 150000]`` overrides ``watchdog_thresh``:
+
+* hrtimer period becomes ``thresh_ms * 2 / 5`` ms
+* a softlockup is reported when a CPU fails to reschedule for
+  ``thresh_ms * 2`` ms
+
+Set to 0 (default) to use the legacy second-precision
+``watchdog_thresh``. Hardlockup detection and ``softlockup_panic``
+behavior are unchanged.

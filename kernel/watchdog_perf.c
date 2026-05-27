@@ -34,7 +34,8 @@ static ktime_t watchdog_hrtimer_sample_threshold __read_mostly;
 void watchdog_update_hrtimer_threshold(u64 period)
 {
 	/*
-	 * The hrtimer runs with a period of (watchdog_threshold * 2) / 5
+	 * The hardlockup hrtimer sampling cadence is
+	 * (watchdog_threshold * 2) / 5.
 	 *
 	 * So it runs effectively with 2.5 times the rate of the NMI
 	 * watchdog. That means the hrtimer should fire 2-3 times before
@@ -45,6 +46,10 @@ void watchdog_update_hrtimer_threshold(u64 period)
 	 * frequency. Depending on the Turbo-Mode factor this might be fast
 	 * enough to get the NMI period smaller than the hrtimer watchdog
 	 * period and trigger false positives.
+	 *
+	 * The softlockup hrtimer may run faster when watchdog_thresh_ms is
+	 * enabled. Keep this threshold tied to the seconds-grained cadence so
+	 * the hardlockup detector keeps the original watchdog_thresh timing.
 	 *
 	 * The sample threshold is used to check in the NMI handler whether
 	 * the minimum time between two NMI samples has elapsed. That
