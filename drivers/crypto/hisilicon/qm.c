@@ -6,6 +6,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/idr.h>
 #include <linux/io.h>
+#include <linux/iommu.h>
 #include <linux/irqreturn.h>
 #include <linux/log2.h>
 #include <linux/pm_runtime.h>
@@ -3063,6 +3064,20 @@ err_free_qp_finish_id:
 	return ret;
 }
 
+static inline bool is_iommu_used(struct device *dev)
+{
+	struct iommu_domain *domain;
+
+	domain = iommu_get_domain_for_dev(dev);
+	if (domain) {
+		dev_info(dev, "iommu domain type = %u\n", domain->type);
+		if (domain->type & __IOMMU_DOMAIN_PAGING)
+			return true;
+	}
+
+	return false;
+}
+
 static void hisi_qm_pre_init(struct hisi_qm *qm)
 {
 	struct pci_dev *pdev = qm->pdev;
@@ -3081,6 +3096,11 @@ static void hisi_qm_pre_init(struct hisi_qm *qm)
 	mutex_init(&qm->ifc_lock);
 	init_rwsem(&qm->qps_lock);
 	qm->qp_in_used = 0;
+	qm->use_iommu = is_iommu_used(&pdev->dev);
+	/*
+	 * If the firmware does not support power manageable,
+	 * clear the flag to avoid entering the suspend and resume process later.
+	 */
 	if (test_bit(QM_SUPPORT_RPM, &qm->caps)) {
 		if (!acpi_device_power_manageable(ACPI_COMPANION(&pdev->dev)))
 			dev_info(&pdev->dev, "_PS0 and _PR0 are not defined");

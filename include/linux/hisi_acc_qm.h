@@ -433,6 +433,7 @@ struct hisi_qm {
 	struct work_struct cmd_process;
 
 	bool use_sva;
+	bool use_iommu;
 
 	resource_size_t phys_base;
 	resource_size_t db_phys_base;
