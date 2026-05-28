@@ -1373,7 +1373,6 @@ static int hisi_zip_pf_probe_init(struct hisi_zip *hisi_zip)
 	if (ret)
 		return ret;
 
-	hisi_qm_dev_err_init(qm);
 	hisi_zip_debug_regs_clear(qm);
 
 	ret = hisi_zip_show_last_regs_init(qm);
@@ -1516,7 +1515,6 @@ static void hisi_zip_probe_uninit(struct hisi_qm *qm)
 
 	hisi_zip_show_last_regs_uninit(qm);
 	hisi_zip_close_sva_prefetch(qm);
-	hisi_qm_dev_err_uninit(qm);
 }
 
 static int hisi_zip_probe(struct pci_dev *pdev, const struct pci_device_id *id)

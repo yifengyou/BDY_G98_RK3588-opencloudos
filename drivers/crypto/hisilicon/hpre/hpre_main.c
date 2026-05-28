@@ -1552,7 +1552,6 @@ static int hpre_pf_probe_init(struct hpre *hpre)
 	if (ret)
 		return ret;
 
-	hisi_qm_dev_err_init(qm);
 	ret = hpre_show_last_regs_init(qm);
 	if (ret)
 		pci_err(qm->pdev, "Failed to init last word regs!\n");
@@ -1589,7 +1588,6 @@ static void hpre_probe_uninit(struct hisi_qm *qm)
 	qm->debug.curr_qm_qp_num = 0;
 	hpre_show_last_regs_uninit(qm);
 	hpre_close_sva_prefetch(qm);
-	hisi_qm_dev_err_uninit(qm);
 }
 
 static int hpre_probe(struct pci_dev *pdev, const struct pci_device_id *id)

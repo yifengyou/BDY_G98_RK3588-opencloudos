@@ -1257,7 +1257,6 @@ static int sec_pf_probe_init(struct sec_dev *sec)
 	if (ret)
 		return ret;
 
-	hisi_qm_dev_err_init(qm);
 	sec_debug_regs_clear(qm);
 	ret = sec_show_last_regs_init(qm);
 	if (ret)
@@ -1386,7 +1385,6 @@ static void sec_probe_uninit(struct hisi_qm *qm)
 	sec_debug_regs_clear(qm);
 	sec_show_last_regs_uninit(qm);
 	sec_close_sva_prefetch(qm);
-	hisi_qm_dev_err_uninit(qm);
 }
 
 static int sec_probe(struct pci_dev *pdev, const struct pci_device_id *id)
