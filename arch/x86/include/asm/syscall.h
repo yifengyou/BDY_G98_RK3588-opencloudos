@@ -13,12 +13,16 @@
 #include <uapi/linux/audit.h>
 #include <linux/sched.h>
 #include <linux/err.h>
+#include <linux/jump_label.h>
 #include <asm/thread_info.h>	/* for TS_COMPAT */
 #include <asm/unistd.h>
 
-/* This is used purely for kernel/trace/trace_syscalls.c */
+/* This is used for kernel/trace/trace_syscalls.c and table-based dispatch */
 typedef long (*sys_call_ptr_t)(const struct pt_regs *);
 extern const sys_call_ptr_t sys_call_table[];
+
+/* Toggled via /proc/sys/kernel/x86_syscall_dispatch_table: 0=switch, 1=table */
+extern struct static_key_true syscall_table_dispatch;
 
 /*
  * These may not exist, but still put the prototypes in so we

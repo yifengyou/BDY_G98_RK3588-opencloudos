@@ -77,6 +77,9 @@
 
 #include <linux/uaccess.h>
 #include <asm/processor.h>
+#ifdef CONFIG_X86_64
+#include <asm/syscall.h>
+#endif
 #include <linux/memcontrol.h>
 #include <linux/rue.h>
 
@@ -2713,6 +2716,15 @@ static struct ctl_table kern_table[] = {
 		.maxlen         = sizeof(rps_using_pvipi),
 		.mode           = 0644,
 		.proc_handler   = proc_do_static_key,
+	},
+#endif
+#ifdef CONFIG_X86_64
+	{
+		.procname	= "x86_syscall_dispatch_table",
+		.data		= &syscall_table_dispatch.key,
+		.maxlen		= sizeof(syscall_table_dispatch),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
 	},
 #endif
 #ifdef CONFIG_CPUSETS

@@ -5,7 +5,10 @@
 #include <linux/sys.h>
 #include <linux/cache.h>
 #include <linux/syscalls.h>
+#include <linux/jump_label.h>
 #include <asm/syscall.h>
+
+DEFINE_STATIC_KEY_TRUE(syscall_table_dispatch);
 
 #define __SYSCALL(nr, sym) extern long __x64_##sym(const struct pt_regs *);
 #include <asm/syscalls_64.h>
@@ -26,6 +29,9 @@ const sys_call_ptr_t sys_call_table[] = {
 
 long x64_sys_call(const struct pt_regs *regs, unsigned int nr)
 {
+	if (static_branch_likely(&syscall_table_dispatch))
+		return sys_call_table[nr](regs);
+
 	switch (nr) {
 	#include <asm/syscalls_64.h>
 	default: return __x64_sys_ni_syscall(regs);
