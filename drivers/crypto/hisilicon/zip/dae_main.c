@@ -89,7 +89,7 @@ int hisi_dae_set_alg(struct hisi_qm *qm)
 	if (!dae_is_support(qm))
 		return 0;
 
-	if (!qm->uacce)
+	if (!qm->uacce || qm->mode != UACCE_MODE_SVA)
 		return 0;
 
 	if (qm->ver >= QM_HW_V5)
