@@ -3208,7 +3208,9 @@ static s64 cpuset_read_s64(struct cgroup_subsys_state *css, struct cftype *cft)
 }
 
 extern int cpu_get_max_cpus(struct task_struct *p);
-static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpuset *cs, int max_cpu)
+static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v,
+					struct cpuset *cs, int max_cpu,
+					bool show_scx_stat __maybe_unused)
 {
 	int i, j, k = 0;
 	u64 user, nice, system, idle, iowait, irq, softirq, steal;
@@ -3221,7 +3223,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	int show_realinfo = cpuset_cpuinfo_show_realinfo;
 #ifdef CONFIG_SCHED_CLASS_EXT
 	u64 scx = 0;
-	bool show_scx = seq_cft(sf)->private == FILE_CPUSET_SCX_STAT;
+	bool show_scx = show_scx_stat;
 #endif
 
 	user = nice = system = idle = iowait =
@@ -3565,7 +3567,7 @@ int cpuset_cgroupfs_stat_show(struct seq_file *m, void *v)
 	if (cgroupfs_stat_show_cpuacct_info)
 		ret = cpuset_cgroupfs_stat_cpuacct(cs, m, v, max_cpu);
 	else
-		ret = cpuset_cgroup_stat_show_comm(m, v, cs, max_cpu);
+		ret = cpuset_cgroup_stat_show_comm(m, v, cs, max_cpu, false);
 	css_put(css);
 
 	return ret;
@@ -3830,14 +3832,14 @@ static int cpuset_cgroup_scx_stat_show(struct seq_file *sf, void *v)
 {
 	struct cpuset *cs = css_cs(seq_css(sf));
 
-	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX);
+	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX, true);
 }
 #endif
 
 static int cpuset_cgroup_stat_show(struct seq_file *sf, void *v)
 {
 	struct cpuset *cs = css_cs(seq_css(sf));
-	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX);
+	return cpuset_cgroup_stat_show_comm(sf, v, cs, INT_MAX, false);
 }
 
 static int cpuset_cgroup_loadavg_show(struct seq_file *sf, void *v);
