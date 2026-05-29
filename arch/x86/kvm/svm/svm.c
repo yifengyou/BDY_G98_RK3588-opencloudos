@@ -918,6 +918,9 @@ static void svm_recalc_lbr_msr_intercepts(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	bool intercept = !(svm->vmcb->control.virt_ext & LBR_CTL_ENABLE_MASK);
 
+	if (intercept == svm->lbr_msrs_intercepted)
+		return;
+
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTBRANCHFROMIP, !intercept, !intercept);
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTBRANCHTOIP, !intercept, !intercept);
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTINTFROMIP, !intercept,!intercept);
@@ -925,6 +928,8 @@ static void svm_recalc_lbr_msr_intercepts(struct kvm_vcpu *vcpu)
 
 	if (sev_es_guest(vcpu->kvm))
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_DEBUGCTLMSR, !intercept, !intercept);
+
+	svm->lbr_msrs_intercepted = intercept;
 }
 
 void svm_vcpu_init_msrpm(struct kvm_vcpu *vcpu, u32 *msrpm)
@@ -1499,6 +1504,7 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 	}
 
 	svm->x2avic_msrs_intercepted = true;
+	svm->lbr_msrs_intercepted = true;
 
 	svm->vmcb01.ptr = page_address(vmcb01_page);
 	svm->vmcb01.pa = __sme_set(page_to_pfn(vmcb01_page) << PAGE_SHIFT);
