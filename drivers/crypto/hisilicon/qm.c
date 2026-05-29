@@ -79,6 +79,8 @@
 #define QM_EQ_OVERFLOW			1
 #define QM_CQE_ERROR			2
 
+#define QM_XQC_MIN_DEPTH		1024
+
 #define QM_XQ_DEPTH_SHIFT		16
 #define QM_XQ_DEPTH_MASK		GENMASK(15, 0)
 
@@ -3181,6 +3183,7 @@ static inline bool is_iommu_used(struct device *dev)
 static void hisi_qm_pre_init(struct hisi_qm *qm)
 {
 	struct pci_dev *pdev = qm->pdev;
+	struct acpi_device *adev;
 
 	if (qm->ver == QM_HW_V1)
 		qm->ops = &qm_hw_ops_v1;
@@ -3202,8 +3205,11 @@ static void hisi_qm_pre_init(struct hisi_qm *qm)
 	 * clear the flag to avoid entering the suspend and resume process later.
 	 */
 	if (test_bit(QM_SUPPORT_RPM, &qm->caps)) {
-		if (!acpi_device_power_manageable(ACPI_COMPANION(&pdev->dev)))
-			dev_info(&pdev->dev, "_PS0 and _PR0 are not defined");
+		adev = ACPI_COMPANION(&pdev->dev);
+		if (!adev || !acpi_device_power_manageable(adev)) {
+			dev_info(&pdev->dev, "_PS0 and _PR0 are not defined!\n");
+			clear_bit(QM_SUPPORT_RPM, &qm->caps);
+		}
 	}
 }
 
@@ -4928,6 +4934,7 @@ static int qm_controller_reset_done(struct hisi_qm *qm)
 	qm_restart_prepare(qm);
 	qm_dev_err_init(qm);
 	qm_disable_axi_error(qm);
+	qm_restart_done(qm);
 	if (qm->err_ini->open_axi_master_ooo)
 		qm->err_ini->open_axi_master_ooo(qm);
 
@@ -4952,8 +4959,6 @@ static int qm_controller_reset_done(struct hisi_qm *qm)
 		pci_err(pdev, "failed to start by vfs in soft reset!\n");
 	qm_enable_axi_error(qm);
 	qm_cmd_init(qm);
-	qm_restart_done(qm);
-
 	qm_reset_bit_clear(qm);
 
 	return 0;
@@ -5616,7 +5621,15 @@ static int qm_init_eq_work(struct hisi_qm *qm)
 	if (!qm->poll_data)
 		return ret;
 
+	/* Check the minimum value to avoid array out of boundary errors. */
 	qm_get_xqc_depth(qm, &qm->eq_depth, &qm->aeq_depth, QM_XEQ_DEPTH_CAP);
+	if (qm->eq_depth < QM_XQC_MIN_DEPTH || qm->aeq_depth < QM_XQC_MIN_DEPTH) {
+		dev_err(&qm->pdev->dev, "invalid, eq depth %u, aeq depth %u, the min value %u!\n",
+			qm->eq_depth, qm->aeq_depth, QM_XQC_MIN_DEPTH);
+		kfree(qm->poll_data);
+		return -EINVAL;
+	}
+
 	eq_depth = qm->eq_depth >> 1;
 	for (i = 0; i < qm->qp_num; i++) {
 		qm->poll_data[i].qp_finish_id = kcalloc(eq_depth, sizeof(u16), GFP_KERNEL);
@@ -5801,9 +5814,11 @@ static int qm_get_hw_caps(struct hisi_qm *qm)
 	if (val)
 		set_bit(QM_SUPPORT_DB_ISOLATION, &qm->caps);
 
-	if (qm->ver >= QM_HW_V3) {
-		val = readl(qm->io_base + QM_FUNC_CAPS_REG);
-		qm->cap_ver = val & QM_CAPBILITY_VERSION;
+	val = readl(qm->io_base + QM_FUNC_CAPS_REG);
+	qm->cap_ver = val & QM_CAPBILITY_VERSION;
+	if (qm->cap_ver == QM_CAPBILITY_VERSION) {
+		dev_err(&qm->pdev->dev, "Device is abnormal, return directly!\n");
+		return -EINVAL;
 	}
 
 	/* Get PF/VF common capbility */
@@ -5993,17 +6008,24 @@ static int hisi_qp_alloc_memory(struct hisi_qm *qm)
 	if (!qm->qp_array)
 		return -ENOMEM;
 
+	/* Check the minimum value to avoid division by zero later. */
 	qm_get_xqc_depth(qm, &sq_depth, &cq_depth, QM_QP_DEPTH_CAP);
+	if (sq_depth < QM_XQC_MIN_DEPTH || cq_depth < QM_XQC_MIN_DEPTH) {
+		dev_err(dev, "invalid, sq depth %u, cq depth %u, the min value %u!\n",
+			sq_depth, cq_depth, QM_XQC_MIN_DEPTH);
+		kfree(qm->qp_array);
+		return -EINVAL;
+	}
 
 	/* one more page for device or qp statuses */
 	qp_dma_size = qm->sqe_size * sq_depth + sizeof(struct qm_cqe) * cq_depth;
 	qp_dma_size = PAGE_ALIGN(qp_dma_size) + PAGE_SIZE;
 	for (i = 0; i < qm->qp_num; i++) {
 		ret = hisi_qp_memory_init(qm, qp_dma_size, i, sq_depth, cq_depth);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "failed to allocate qp dma buf size=%zx)\n", qp_dma_size);
 			goto err_init_qp_mem;
-
-		dev_dbg(dev, "allocate qp dma buf size=%zx)\n", qp_dma_size);
+		}
 	}
 
 	return 0;
