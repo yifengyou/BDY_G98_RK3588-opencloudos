@@ -1041,6 +1041,8 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 					return ret;
 			}
 		}
+		if (VM_ALLOW_ANY_UNCACHED != VM_NONE)
+			info.flags |= VFIO_REGION_INFO_FLAG_NORMAL_NC;
 
 		break;
 	case VFIO_PCI_ROM_REGION_INDEX: {
