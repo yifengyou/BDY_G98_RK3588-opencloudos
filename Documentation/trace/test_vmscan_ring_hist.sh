@@ -15,7 +15,7 @@
 #   ./test_vmscan_ring_hist.sh pipe      # display + clear (consume mode)
 #
 # Ring mode key distribution:
-#   With ring_key_divisor optimization, .bucket=N values are divided by N
+#   With ring_key_divisor optimization, .buckets=N values are divided by N
 #   before index computation, so all ring slots are fully utilized.
 #   e.g., RING_SIZE=8192 gives ~8192-second sliding window.
 #
@@ -212,7 +212,7 @@ do_setup() {
         echo "hist:keys=common_pid:ts0=common_timestamp.usecs" \
             > "$VMSCAN/$begin_evt/trigger"
 
-        echo "hist:keys=end_ts.bucket=$BUCKET:vals=lat:overflow=ring:size=$RING_SIZE:key_unit=s:val_unit=us:wallclock" \
+        echo "hist:keys=end_ts.buckets=$BUCKET:vals=lat:overflow=ring:size=$RING_SIZE:key_unit=s:val_unit=us:wallclock" \
             > "$TRACEFS/events/synthetic/${name}_lat/trigger"
 
         echo "hist:keys=common_pid:lat=common_timestamp.usecs-\$ts0:end_ts=common_timestamp.usecs:onmatch(vmscan.$begin_evt).trace(${name}_lat,\$lat,\$end_ts)" \
@@ -226,7 +226,7 @@ do_setup() {
     # ── Single events: simple per-second hit count ──
     #
     # With chained modifier support, we can now use:
-    #   common_timestamp.usecs.bucket=1000000
+    #   common_timestamp.usecs.buckets=1000000
     # This gives microsecond timestamps bucketed to 1-second intervals.
     #
     for evt in "${SINGLE_EVENTS[@]}"; do
@@ -235,7 +235,7 @@ do_setup() {
             continue
         fi
 
-        echo "hist:keys=common_timestamp.usecs.bucket=$BUCKET:vals=hitcount:overflow=ring:size=$RING_SIZE:key_unit=s:wallclock" \
+        echo "hist:keys=common_timestamp.usecs.buckets=$BUCKET:vals=hitcount:overflow=ring:size=$RING_SIZE:key_unit=s:wallclock" \
             > "$VMSCAN/$evt/trigger"
 
         echo "[OK] $evt: per-second hitcount (${RING_SIZE}s window)"
@@ -281,7 +281,7 @@ do_setup() {
         echo "hist:keys=common_pid:ts0=common_timestamp.usecs" \
             > "$TRACEFS/events/kprobes/${name}_entry/trigger"
 
-        echo "hist:keys=end_ts.bucket=$BUCKET:vals=lat:overflow=ring:size=$RING_SIZE:key_unit=s:val_unit=us:wallclock" \
+        echo "hist:keys=end_ts.buckets=$BUCKET:vals=lat:overflow=ring:size=$RING_SIZE:key_unit=s:val_unit=us:wallclock" \
             > "$TRACEFS/events/synthetic/${name}_lat/trigger"
 
         echo "hist:keys=common_pid:lat=common_timestamp.usecs-\$ts0:end_ts=common_timestamp.usecs:onmatch(kprobes.${name}_entry).trace(${name}_lat,\$lat,\$end_ts)" \
