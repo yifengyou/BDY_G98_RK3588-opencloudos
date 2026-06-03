@@ -24,6 +24,13 @@ elif [[ $1 == mlnx_tgz_name ]]; then
 elif [[ $1 == mlnx_tgz_sha256 ]]; then
 	echo ${mlnx_tgz_sha256}
 	exit 0
+elif [[ $1 == mlnx_check_sha256 ]]; then
+    sha256_tmp=$(sha256sum ${mlnx_tgz_name} | awk '{printf $1}')
+    if [[ $sha256_tmp == $mlnx_tgz_sha256 ]]; then
+        exit 0
+    else
+        exit 1
+    fi
 else
 	echo "Error: wrong parameter for get_mlnx_info.sh!"
 	exit 1

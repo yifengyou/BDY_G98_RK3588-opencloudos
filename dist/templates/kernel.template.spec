@@ -494,7 +494,7 @@ This package provides debug information for the bpftool package.
 %endif
 
 %if %{with_ofed}
-%define with_ofed %(pushd $(dirname %{SOURCE3000}) 1>/dev/null 2>&1 ; %{SOURCE3000} url_reachable 1>/dev/null 2>&1 && echo 1 || echo 0 ; popd 1>/dev/null 2>&1 )
+%define with_ofed %(pushd $(dirname %{SOURCE3003}) 1>/dev/null 2>&1 ; %{SOURCE3003} mlnx_check_sha256 1>/dev/null 2>&1 && echo 1 || echo 0 ; popd 1>/dev/null 2>&1 )
 
 # To avoid compile error, do not integrate mlnx commercial quality drivers if not tencentos release.
 # Users could compile and install MLNX_OFED_LINUX-* manually.
@@ -694,13 +694,11 @@ BuildConfig() {
 		sha256_tmp=$(sha256sum %{SOURCE3001} | awk '{printf $1}')
 		if [[ $sha256_tmp == $mlnx_tgz_sha256 ]]; then
 			cp -a %{SOURCE3001} release-drivers/mlnx/
-			./copy-drivers.sh without_mlnx
 		else
-			./copy-drivers.sh
+			echo "Warning: The sha256sum of MLNX_OFED_LINUX*.tgz is not right!"
 		fi
-	%else
-		./copy-drivers.sh without_mlnx
 	%endif
+	./copy-drivers.sh without_mlnx
 	popd
 
 	mkdir -p $_KernBuild

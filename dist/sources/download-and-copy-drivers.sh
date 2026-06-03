@@ -26,7 +26,7 @@ check_url_reachable()
 	curl --silent --head --fail $mlnx_tgz_url 1>/dev/null 2>&1
 	if (( $? != 0 )); then
 		echo "Could not download ${mlnx_tgz_name} ! URL can't reachable!"
-		exit 1
+		return 1
 	fi
 }
 
@@ -45,7 +45,7 @@ thirdparty_mlnx(){
 
 	if (( $get_mlnx_tgz_ok == 0 )); then
 		echo "Download ${mlnx_tgz_name} fail!"
-		exit 1
+		return 1
 	fi
 }
 
@@ -65,7 +65,10 @@ for attempt in {1..3}; do
 		thirdparty_mlnx
 		if (( $? == 0 )); then
 			echo "Having downloaded thirdparty drivers."
+			exit 0
 		fi
-		break
 	fi
 done
+
+# If it has been attempted 3 times and every attempt failed, exit 1.
+exit 1
