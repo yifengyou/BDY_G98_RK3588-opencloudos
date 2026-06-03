@@ -100,7 +100,6 @@ int ub_device_reset(struct ub_entity *ent)
 	}
 
 	ub_entity_assign_priv_flag(ent, UB_ENTITY_DISCONNECTED, true);
-	ub_info(ent, "reset, mark disconnect\n");
 
 	device_unlock(&ent->dev);
 	ub_info(ent, "device reset success\n");
@@ -131,19 +130,9 @@ static int ub_save_state(struct ub_entity *dev)
 {
 	const struct ub_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
-	int ret;
 
-	if (err_handler) {
-		if (err_handler->ub_reset_prepare_return) {
-			ret = err_handler->ub_reset_prepare_return(dev);
-			if (ret) {
-				ub_err(dev, "ub reset prepare failed, ret[%d]\n", ret);
-				return ret;
-			}
-		} else if (err_handler->ub_reset_prepare) {
-			err_handler->ub_reset_prepare(dev);
-		}
-	}
+	if (err_handler && err_handler->ub_reset_prepare)
+		err_handler->ub_reset_prepare(dev);
 
 	ub_save_token_state(dev);
 
@@ -177,32 +166,24 @@ static void ub_restore_config_dword(struct ub_entity *dev, u32 pos, u32 saved_va
 	}
 }
 
-static void ub_restore_state(struct ub_entity *dev, int pret)
+static void ub_restore_state(struct ub_entity *dev)
 {
 	const struct ub_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
-	int i, ret;
+	int i;
 
 	if (!dev->state_saved)
 		return;
 
-	for (i = DEV_TOKEN_ID; i <= DEV_TOKEN_ID; i++)
+	for (i = DEV_TOKEN_ID; i <= DEV_TOKEN_ID; i++) {
 		ub_restore_config_dword(dev, saved_cfg_offset[i],
 					dev->saved_config_space[i]);
+	}
 
 	dev->state_saved = false;
 
-	if (!err_handler)
-		return;
-
-	if (err_handler->ub_reset_done_with_pret) {
-		ret = err_handler->ub_reset_done_with_pret(dev, pret);
-		if (ret)
-			ub_err(dev, "reset done with pret failed, ret[%d]\n",
-			       ret);
-	} else if (err_handler->ub_reset_done) {
+	if (err_handler && err_handler->ub_reset_done)
 		err_handler->ub_reset_done(dev);
-	}
 }
 
 static int ub_reset_check(struct ub_entity *dev)
@@ -220,35 +201,35 @@ static int ub_reset_check(struct ub_entity *dev)
 
 int ub_reset_entity(struct ub_entity *dev)
 {
-	int ret;
+	int ret, rc;
 
 	if (!dev) {
 		pr_err("device is NULL\n");
 		return -EINVAL;
 	}
 
-	ret = ub_reset_check(dev);
-	if (ret)
-		return ret;
+	rc = ub_reset_check(dev);
+	if (rc)
+		return rc;
 
 	if (!device_trylock(&dev->dev))
 		return -EBUSY;
 
 	ret = ub_save_state(dev);
-	if (ret)
-		goto unlock;
+	if (ret) {
+		device_unlock(&dev->dev);
+		return ret;
+	}
 
-	ret = ub_entity_enable_return(dev, 0);
-	if (ret)
-		goto restore;
+	ub_entity_enable(dev, 0);
 
-	ret = ub_elr(dev);
+	rc = ub_elr(dev);
 
-restore:
-	ub_restore_state(dev, ret);
-unlock:
+	ub_restore_state(dev);
+
 	device_unlock(&dev->dev);
-	return ret;
+
+	return rc;
 }
 EXPORT_SYMBOL_GPL(ub_reset_entity);
 

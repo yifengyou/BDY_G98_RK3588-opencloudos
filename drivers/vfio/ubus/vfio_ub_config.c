@@ -581,7 +581,6 @@ static int vfio_ub_cfg1_basic_read(struct vfio_ub_core_device *vdev, u64 pos,
 static int vfio_ub_cfg1_basic_write(struct vfio_ub_core_device *vdev, u64 pos,
 				    int count, __le32 val)
 {
-	int ret;
 	u8 *elr;
 	u8 *buf;
 
@@ -589,11 +588,8 @@ static int vfio_ub_cfg1_basic_write(struct vfio_ub_core_device *vdev, u64 pos,
 	if (count < 0)
 		return count;
 
-	if (pos == UB_ENTITY_RS_ACCESS_EN) {
-		ret = ub_entity_enable_return(vdev->uent, val & 0x1);
-		if (ret)
-			return ret;
-	}
+	if (pos == UB_ENTITY_RS_ACCESS_EN)
+		ub_entity_enable(vdev->uent, val & 0x1);
 
 	buf = vfio_ub_find_cfg_buf(vdev, UB_CFG1_BASIC_CAP);
 	if (!buf)
@@ -602,11 +598,8 @@ static int vfio_ub_cfg1_basic_write(struct vfio_ub_core_device *vdev, u64 pos,
 	elr = buf + UB_ELR - UB_CFG1_BASIC;
 	if (*elr & UB_ELR_BIT) {
 		*elr = *elr & (u8)~UB_ELR_BIT;
-		ret = ub_reset_entity(vdev->uent);
-		if (ret) {
+		if (ub_reset_entity(vdev->uent))
 			ub_warn(vdev->uent, "do elr reset failed\n");
-			return ret;
-		}
 	}
 
 	return count;

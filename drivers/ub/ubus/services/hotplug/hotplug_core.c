@@ -8,7 +8,6 @@
 #include "../../enum.h"
 #include "../../route.h"
 #include "../../port.h"
-#include "../../task.h"
 #include "../service.h"
 #include "hotplug.h"
 
@@ -479,7 +478,7 @@ static int ubhp_handle_link_up(struct ub_slot *slot)
 		goto err_link_up;
 	}
 
-	ret = ub_enum_entities_active(&dev_list, TASK_SRC_SELF);
+	ret = ub_enum_entities_active(&dev_list);
 	if (ret) {
 		ub_err(slot->uent, "hotplug start devices failed, ret=%d\n", ret);
 		goto err_link_up;
