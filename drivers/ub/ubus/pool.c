@@ -158,9 +158,8 @@ static int ub_pool_attach(struct ub_entity *uent,
 
 	ub_entity_assign_task_src(uent, TASK_SRC_POOL, true);
 	ub_entity_add(uent, uent->ubc);
-	atomic_set(&uent->ent_mgmt_state, MGMT_STATE_REGISTERING);
 
-	return 0;
+	return ret;
 }
 
 bool ub_rsp_msg_init(struct msg_pkt_header *header, u8 status, u32 plen)
@@ -244,7 +243,7 @@ static u8 ub_entity_reg_handle(struct ub_bus_controller *ubc,
 		return UB_MSG_RSP_EXEC_ENOMEM;
 	}
 
-	uent->ubc = ub_ubc_get(ubc);
+	uent->ubc = ubc;
 	uent->dev.parent = &ubc->uent->dev;
 	ub_pool_uent_init(pld, uent);
 
