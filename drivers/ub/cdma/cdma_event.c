@@ -6,6 +6,7 @@
 
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
+#include <linux/rcupdate.h>
 #include <linux/ioctl.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
@@ -24,6 +25,7 @@ static __poll_t cdma_jfe_poll(struct cdma_jfe *jfe, struct file *filp,
 	spin_lock_irq(&jfe->lock);
 	if (!list_empty(&jfe->event_list))
 		flag = EPOLLIN | EPOLLRDNORM;
+
 	spin_unlock_irq(&jfe->lock);
 
 	return flag;
@@ -32,22 +34,28 @@ static __poll_t cdma_jfe_poll(struct cdma_jfe *jfe, struct file *filp,
 static u32 cdma_read_jfe_event(struct cdma_jfe *jfe, u32 max_event_cnt,
 			       struct list_head *event_list)
 {
-	struct cdma_jfe_event *event, *tmp;
+	struct cdma_jfe_event *event;
+	struct list_head *next;
+	struct list_head *p;
 	u32 cnt = 0;
 
 	if (!max_event_cnt)
 		return 0;
 
 	spin_lock_irq(&jfe->lock);
-	list_for_each_entry_safe(event, tmp, &jfe->event_list, node) {
+
+	list_for_each_safe(p, next, &jfe->event_list) {
+		event = list_entry(p, struct cdma_jfe_event, node);
 		if (event->counter) {
 			++(*event->counter);
 			list_del(&event->obj_node);
 		}
-		list_del(&event->node);
-		jfe->event_list_count--;
-		list_add_tail(&event->node, event_list);
-		if (++cnt == max_event_cnt)
+		list_del(p);
+		if (jfe->event_list_count > 0)
+			jfe->event_list_count--;
+		list_add_tail(p, event_list);
+		cnt++;
+		if (cnt == max_event_cnt)
 			break;
 	}
 	spin_unlock_irq(&jfe->lock);
@@ -62,20 +70,27 @@ static int cdma_wait_event(struct cdma_jfe *jfe, bool nonblock,
 	int ret;
 
 	*event_cnt = 0;
+	spin_lock_irq(&jfe->lock);
+	while (list_empty(&jfe->event_list)) {
+		spin_unlock_irq(&jfe->lock);
+		if (nonblock)
+			return -EAGAIN;
 
-	if (nonblock) {
-		*event_cnt = cdma_read_jfe_event(jfe, max_event_cnt, event_list);
-		return *event_cnt ? 0 : -EAGAIN;
+		ret = wait_event_interruptible(jfe->poll_wait,
+					       !list_empty(&jfe->event_list));
+		if (ret)
+			return ret;
+
+		spin_lock_irq(&jfe->lock);
+		if (list_empty(&jfe->event_list)) {
+			spin_unlock_irq(&jfe->lock);
+			return -EIO;
+		}
 	}
-
-	ret = wait_event_interruptible(jfe->poll_wait,
-				       !list_empty(&jfe->event_list));
-	if (ret)
-		return ret;
-
+	spin_unlock_irq(&jfe->lock);
 	*event_cnt = cdma_read_jfe_event(jfe, max_event_cnt, event_list);
 
-	return *event_cnt ? 0 : -EIO;
+	return 0;
 }
 
 static int cdma_wait_event_timeout(struct cdma_jfe *jfe,
@@ -86,30 +101,19 @@ static int cdma_wait_event_timeout(struct cdma_jfe *jfe,
 {
 	long timeout = (long)max_timeout;
 
-	*event_cnt = cdma_read_jfe_event(jfe, max_event_cnt, event_list);
-	if (*event_cnt > 0)
-		return 0;
-
-	timeout = wait_event_interruptible_timeout(jfe->poll_wait,
-			!list_empty(&jfe->event_list), timeout);
-	if (timeout < 0)
-		return timeout;
-	if (timeout == 0)
-		return -ETIMEDOUT;
-
-	*event_cnt = cdma_read_jfe_event(jfe, max_event_cnt, event_list);
-
-	return *event_cnt ? 0 : -EIO;
-}
-
-static void cdma_free_event_list(struct list_head *event_list)
-{
-	struct cdma_jfe_event *event, *tmp;
-
-	list_for_each_entry_safe(event, tmp, event_list, node) {
-		list_del(&event->node);
-		kfree(event);
+	*event_cnt = 0;
+	while (1) {
+		asm volatile("" : : : "memory");
+		*event_cnt = cdma_read_jfe_event(jfe, max_event_cnt, event_list);
+		if (*event_cnt > 0)
+			break;
+		timeout = wait_event_interruptible_timeout(jfe->poll_wait,
+			  !list_empty(&jfe->event_list), timeout);
+		if (timeout <= 0)
+			return timeout;
 	}
+
+	return 0;
 }
 
 static int cdma_jfce_wait(struct cdma_jfce *jfce, struct file *filp,
@@ -118,15 +122,17 @@ static int cdma_jfce_wait(struct cdma_jfce *jfce, struct file *filp,
 	struct cdma_cmd_jfce_wait_args we = { 0 };
 	struct cdma_jfe_event *event;
 	struct list_head event_list;
+	struct list_head *next;
+	struct list_head *p;
 	u32 max_event_cnt;
 	u32 i = 0;
 	int ret;
 
-	if (copy_from_user(&we, (const void __user *)arg, sizeof(we)))
+	if (copy_from_user(&we, (const void __user *)arg,
+			   (u32)sizeof(we)) != 0)
 		return -EFAULT;
 
-	max_event_cnt = min_t(u32, we.in.max_event_cnt,
-			      (u32)CDMA_MAX_JFCE_EVENT_CNT);
+	max_event_cnt = min_t(u32, we.in.max_event_cnt, (u32)CDMA_MAX_JFCE_EVENT_CNT);
 	INIT_LIST_HEAD(&event_list);
 	if (we.in.time_out <= 0) {
 		ret = cdma_wait_event(
@@ -140,19 +146,21 @@ static int cdma_jfce_wait(struct cdma_jfce *jfce, struct file *filp,
 					      &event_list);
 	}
 	if (ret < 0) {
-		if (ret != -EAGAIN)
-			pr_err("wait jfce event failed, ret = %d\n", ret);
-		cdma_free_event_list(&event_list);
+		pr_err("wait jfce event failed, ret = %d\n", ret);
 		return ret;
 	}
 
-	list_for_each_entry(event, &event_list, node)
+	list_for_each_safe(p, next, &event_list) {
+		event = list_entry(p, struct cdma_jfe_event, node);
 		we.out.event_data[i++] = event->event_data;
-	cdma_free_event_list(&event_list);
+		list_del(p);
+		kfree(event);
+	}
 
-	if (we.out.event_cnt > 0 &&
-	    copy_to_user((void __user *)arg, &we, sizeof(we)))
+	if (we.out.event_cnt > 0 && copy_to_user((void *)arg, &we, sizeof(we))) {
+		pr_err("copy to user failed.\n");
 		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -209,7 +217,8 @@ static int cdma_delete_jfce(struct inode *inode, struct file *filp)
 	if (!cfile)
 		return 0;
 
-	mutex_lock(&cfile->ctx_mutex);
+	if (!mutex_trylock(&cfile->ctx_mutex))
+		return -ENOLCK;
 	cdma_destroy_jfce(jfce);
 	filp->private_data = NULL;
 	mutex_unlock(&cfile->ctx_mutex);
@@ -276,7 +285,7 @@ static void cdma_write_event(struct cdma_jfe *jfe, u64 event_data,
 	unsigned long flags;
 
 	event = kzalloc(sizeof(*event), GFP_ATOMIC);
-	if (!event)
+	if (event == NULL)
 		return;
 
 	spin_lock_irqsave(&jfe->lock, flags);
@@ -305,17 +314,16 @@ static void cdma_init_jfe(struct cdma_jfe *jfe)
 
 static void cdma_uninit_jfe(struct cdma_jfe *jfe)
 {
-	struct cdma_jfe_event *event, *tmp;
+	struct cdma_jfe_event *event;
+	struct list_head *p, *next;
 
 	spin_lock_irq(&jfe->lock);
-	list_for_each_entry_safe(event, tmp, &jfe->event_list, node) {
+	list_for_each_safe(p, next, &jfe->event_list) {
+		event = list_entry(p, struct cdma_jfe_event, node);
 		if (event->counter)
 			list_del(&event->obj_node);
-		list_del(&event->node);
 		kfree(event);
 	}
-	INIT_LIST_HEAD(&jfe->event_list);
-	jfe->event_list_count = 0;
 	spin_unlock_irq(&jfe->lock);
 }
 
@@ -350,17 +358,19 @@ void cdma_jfc_comp_event_cb(struct cdma_base_jfc *jfc)
 	struct cdma_jfc_event *jfc_event;
 	struct cdma_jfce *jfce;
 
+	if (!jfc)
+		return;
+
 	jfc_event = &jfc->jfc_event;
-	if (!jfc_event->jfce)
-		return;
+	if (!IS_ERR_OR_NULL(jfc_event->jfce)) {
+		jfce = jfc_event->jfce;
+		if (jfce->jfe.event_list_count >= MAX_EVENT_LIST_SIZE)
+			return;
 
-	jfce = jfc_event->jfce;
-	if (jfce->jfe.event_list_count >= MAX_EVENT_LIST_SIZE)
-		return;
-
-	cdma_write_event(&jfce->jfe, jfc->jfc_cfg.queue_id, 0,
-			 &jfc_event->comp_event_list,
-			 &jfc_event->comp_events_reported);
+		cdma_write_event(&jfce->jfe, jfc->jfc_cfg.queue_id, 0,
+				 &jfc_event->comp_event_list,
+				 &jfc_event->comp_events_reported);
+	}
 }
 
 struct cdma_jfce *cdma_alloc_jfce(struct cdma_file *cfile)
@@ -417,8 +427,21 @@ err_put_unused_fd:
 
 void cdma_free_jfce(struct cdma_jfce *jfce)
 {
-	if (!jfce)
+	struct cdma_dev *cdev;
+
+	if (!jfce || !jfce->cdev)
 		return;
+
+	cdev = jfce->cdev;
+
+	if (jfce->id >= cdev->caps.jfce.max_cnt + cdev->caps.jfce.start_idx ||
+		jfce->id < cdev->caps.jfce.start_idx) {
+		dev_err(cdev->dev,
+			"jfce id invalid, id = %u, start_idx = %u, max_cnt = %u.\n",
+			jfce->id, cdev->caps.jfce.start_idx,
+			cdev->caps.jfce.max_cnt);
+		return;
+	}
 
 	fput(jfce->file);
 	put_unused_fd(jfce->fd);
@@ -435,38 +458,45 @@ void cdma_destroy_jfce(struct cdma_jfce *jfce)
 	kfree(jfce);
 }
 
-static void cdma_write_async_event(struct cdma_jfae *jfae, u64 event_data,
+static void cdma_write_async_event(struct cdma_context *ctx, u64 event_data,
 				   u32 type, struct list_head *obj_event_list,
 				   u32 *counter)
 {
+	struct cdma_jfae *jfae;
+
+	rcu_read_lock();
+	jfae = rcu_dereference(ctx->jfae);
 	if (!jfae)
-		return;
+		goto err_free_rcu;
 
 	if (jfae->jfe.event_list_count >= MAX_EVENT_LIST_SIZE) {
 		pr_debug(
 			"event list overflow, and this write will be discarded.\n");
-		return;
+		goto err_free_rcu;
 	}
 
 	cdma_write_event(&jfae->jfe, event_data, type, obj_event_list, counter);
+
+err_free_rcu:
+	rcu_read_unlock();
 }
 
-void cdma_jfs_async_event_cb(struct cdma_event *event, struct cdma_jfae *jfae)
+void cdma_jfs_async_event_cb(struct cdma_event *event, struct cdma_context *ctx)
 {
 	struct cdma_jfs_event *jfs_event;
 
 	jfs_event = &event->element.jfs->jfs_event;
-	cdma_write_async_event(jfae, event->element.jfs->cfg.queue_id,
+	cdma_write_async_event(ctx, event->element.jfs->cfg.queue_id,
 			       event->event_type, &jfs_event->async_event_list,
 			       &jfs_event->async_events_reported);
 }
 
-void cdma_jfc_async_event_cb(struct cdma_event *event, struct cdma_jfae *jfae)
+void cdma_jfc_async_event_cb(struct cdma_event *event, struct cdma_context *ctx)
 {
 	struct cdma_jfc_event *jfc_event;
 
 	jfc_event = &event->element.jfc->jfc_event;
-	cdma_write_async_event(jfae, event->element.jfc->jfc_cfg.queue_id,
+	cdma_write_async_event(ctx, event->element.jfc->jfc_cfg.queue_id,
 			       event->event_type, &jfc_event->async_event_list,
 			       &jfc_event->async_events_reported);
 }
@@ -489,38 +519,49 @@ static int cdma_get_async_event(struct cdma_jfae *jfae, struct file *filp,
 	u32 event_cnt;
 	int ret;
 
-	if (!arg)
+	if (!arg) {
+		pr_err("invalid jfae arg.\n");
 		return -EINVAL;
+	}
 
-	ctx = cdma_jfae_to_ctx(jfae);
+	ctx = jfae->ctx;
 	cdev = jfae->cfile->cdev;
 
 	if (!cdev || cdev->status == CDMA_INVALID || !ctx || ctx->invalid) {
 		pr_info("wait dev invalid event success.\n");
 		async_event.event_data = 0;
 		async_event.event_type = CDMA_EVENT_DEV_INVALID;
-		if (copy_to_user((void __user *)arg, &async_event,
-				 sizeof(async_event)))
+		ret = (int)copy_to_user((void *)arg, &async_event,
+					sizeof(async_event));
+		if (ret) {
+			pr_err("dev copy to user failed, ret = %d\n", ret);
 			return -EFAULT;
-		return 0;
-	}
-
-	INIT_LIST_HEAD(&event_list);
-	ret = cdma_wait_event(&jfae->jfe, filp->f_flags & O_NONBLOCK, 1,
-			      &event_cnt, &event_list);
-	if (ret < 0) {
-		if (ret != -EAGAIN)
+		}
+	} else {
+		INIT_LIST_HEAD(&event_list);
+		ret = cdma_wait_event(&jfae->jfe, filp->f_flags & O_NONBLOCK, 1,
+				      &event_cnt, &event_list);
+		if (ret < 0) {
 			pr_err("wait event failed, ret = %d.\n", ret);
-		return ret;
+			return ret;
+		}
+		event = list_first_entry(&event_list, struct cdma_jfe_event, node);
+		if (event == NULL)
+			return -EIO;
+
+		cdma_set_async_event(&async_event, event);
+		list_del(&event->node);
+		kfree(event);
+
+		if (event_cnt > 0) {
+			ret = (int)copy_to_user((void *)arg, &async_event,
+						sizeof(async_event));
+			if (ret) {
+				pr_err("dev copy to user failed, ret = %d\n", ret);
+				return -EFAULT;
+			}
+		}
 	}
-
-	event = list_first_entry(&event_list, struct cdma_jfe_event, node);
-	async_event.event_data = event->event_data;
-	async_event.event_type = event->event_type;
-	cdma_free_event_list(&event_list);
-
-	if (copy_to_user((void __user *)arg, &async_event, sizeof(async_event)))
-		return -EFAULT;
 
 	return 0;
 }
@@ -534,7 +575,7 @@ static __poll_t cdma_jfae_poll(struct file *filp, struct poll_table_struct *wait
 	if (!jfae || !jfae->cfile)
 		return POLLERR;
 
-	ctx = cdma_jfae_to_ctx(jfae);
+	ctx = jfae->ctx;
 	cdev = jfae->cfile->cdev;
 
 	if (!cdev || cdev->status == CDMA_INVALID || !ctx || ctx->invalid)
@@ -572,11 +613,23 @@ static long cdma_jfae_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 
 static int cdma_delete_jfae(struct inode *inode, struct file *filp)
 {
-	struct cdma_jfae *jfae = filp->private_data;
-	struct cdma_file *cfile = jfae->cfile;
+	struct cdma_file *cfile;
+	struct cdma_jfae *jfae;
 
-	mutex_lock(&cfile->ctx_mutex);
-	cfile->jfae = NULL;
+	if (!filp || !filp->private_data)
+		return 0;
+
+	jfae = (struct cdma_jfae *)filp->private_data;
+	cfile = jfae->cfile;
+	if (!cfile)
+		return 0;
+
+	if (!mutex_trylock(&cfile->ctx_mutex))
+		return -ENOLCK;
+
+	if (jfae->ctx)
+		jfae->ctx->jfae = NULL;
+
 	cdma_uninit_jfe(&jfae->jfe);
 	kfree(jfae);
 	filp->private_data = NULL;
@@ -657,51 +710,15 @@ void cdma_free_jfae(struct cdma_jfae *jfae)
 	put_unused_fd(jfae->fd);
 }
 
-void cdma_init_jfc_event(struct cdma_jfc_event *event)
+int cdma_get_jfae(struct cdma_context *ctx)
 {
-	event->comp_events_reported = 0;
-	event->async_events_reported = 0;
-	INIT_LIST_HEAD(&event->comp_event_list);
-	INIT_LIST_HEAD(&event->async_event_list);
-}
-
-static void cdma_release_events(struct cdma_jfe *jfe,
-				struct list_head *event_list)
-{
-	struct cdma_jfe_event *event, *tmp;
-
-	spin_lock_irq(&jfe->lock);
-	list_for_each_entry_safe(event, tmp, event_list, obj_node) {
-		list_del(&event->node);
-		list_del(&event->obj_node);
-		jfe->event_list_count--;
-		kfree(event);
-	}
-	spin_unlock_irq(&jfe->lock);
-}
-
-void cdma_release_comp_event(struct cdma_jfce *jfce, struct list_head *event_list)
-{
-	if (!jfce)
-		return;
-
-	cdma_release_events(&jfce->jfe, event_list);
-	fput(jfce->file);
-}
-
-void cdma_release_async_event(struct cdma_jfae *jfae, struct list_head *event_list)
-{
-	if (!jfae)
-		return;
-
-	cdma_release_events(&jfae->jfe, event_list);
-	fput(jfae->file);
-}
-
-int cdma_get_jfae_ref(struct cdma_jfae *jfae)
-{
+	struct cdma_jfae *jfae;
 	struct file *file;
 
+	if (!ctx)
+		return -EINVAL;
+
+	jfae = ctx->jfae;
 	if (!jfae)
 		return -EINVAL;
 
@@ -717,8 +734,61 @@ int cdma_get_jfae_ref(struct cdma_jfae *jfae)
 	return 0;
 }
 
-void cdma_put_jfae_ref(struct cdma_jfae *jfae)
+void cdma_init_jfc_event(struct cdma_jfc_event *event, struct cdma_base_jfc *jfc)
 {
+	event->comp_events_reported = 0;
+	event->async_events_reported = 0;
+	INIT_LIST_HEAD(&event->comp_event_list);
+	INIT_LIST_HEAD(&event->async_event_list);
+	event->jfc = jfc;
+}
+
+void cdma_release_comp_event(struct cdma_jfce *jfce, struct list_head *event_list)
+{
+	struct cdma_jfe_event *event, *tmp;
+	struct cdma_jfe *jfe;
+
+	if (!jfce)
+		return;
+
+	jfe = &jfce->jfe;
+	spin_lock_irq(&jfe->lock);
+	list_for_each_entry_safe(event, tmp, event_list, obj_node) {
+		list_del(&event->node);
+		kfree(event);
+	}
+	spin_unlock_irq(&jfe->lock);
+	fput(jfce->file);
+}
+
+void cdma_release_async_event(struct cdma_context *ctx, struct list_head *event_list)
+{
+	struct cdma_jfe_event *event, *tmp;
+	struct cdma_jfae *jfae;
+	struct cdma_jfe *jfe;
+
+	if (!ctx || !ctx->jfae)
+		return;
+
+	jfae = ctx->jfae;
+	jfe = &jfae->jfe;
+	spin_lock_irq(&jfe->lock);
+	list_for_each_entry_safe(event, tmp, event_list, obj_node) {
+		list_del(&event->node);
+		kfree(event);
+	}
+	spin_unlock_irq(&jfe->lock);
+	fput(jfae->file);
+}
+
+void cdma_put_jfae(struct cdma_context *ctx)
+{
+	struct cdma_jfae *jfae;
+
+	if (!ctx)
+		return;
+
+	jfae = ctx->jfae;
 	if (!jfae)
 		return;
 
