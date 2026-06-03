@@ -10,7 +10,6 @@
 
 #include "ubase_cmd.h"
 #include "ubase_trace.h"
-#include "ubase_usc.h"
 #include "ubase_mailbox.h"
 
 int ubase_mbox_cmd_init(struct ubase_dev *udev)
@@ -432,8 +431,8 @@ static bool ubase_is_jfs_opcode(u8 op)
 }
 
 static struct ubase_ctx_buf_cap*
-ubase_parse_ta_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
-			  enum ubase_mb_type *type)
+ubase_parse_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
+		       enum ubase_mb_type *type)
 {
 	struct mbx_op_match ta_matches[] = {
 		{UBASE_MB_CREATE_JFS_CONTEXT, UBASE_MB_CREATE, &udev->ctx_buf.jfs},
@@ -459,21 +458,11 @@ ubase_parse_ta_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
 	};
 	u32 size = ARRAY_SIZE(ta_matches);
 
-	return ubase_parse_common_buf(attr, ta_matches, type, size);
-}
-
-static struct ubase_ctx_buf_cap*
-ubase_parse_opcode_buf(struct ubase_dev *udev, struct ubase_mbx_attr *attr,
-		       enum ubase_mb_type *type)
-{
-	if (ubase_dev_dtu_supported(udev))
-		return NULL;
-
 	if (ubase_is_jfs_opcode(attr->op) &&
 	    test_bit(UBASE_STATE_PREALLOC_OK_B, &udev->state_bits))
 		return NULL;
 
-	return ubase_parse_ta_opcode_buf(udev, attr, type);
+	return ubase_parse_common_buf(attr, ta_matches, type, size);
 }
 
 static int ubase_check_buf_ctx_page(struct ubase_dev *udev,
@@ -539,9 +528,6 @@ int __ubase_hw_upgrade_ctx_ex(struct ubase_dev *udev,
 	enum ubase_mb_type type = UBASE_MB_OTHER;
 	struct ubase_ctx_buf_cap *ctx_buf;
 	int ret;
-
-	if (ubase_dev_usc_supported(udev) && ubase_ctx_in_usc(attr->op))
-		return __ubase_hw_upgrade_ctx(udev, attr, mailbox);
 
 	ctx_buf = ubase_parse_opcode_buf(udev, attr, &type);
 	if (ctx_buf) {

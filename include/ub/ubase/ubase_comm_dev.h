@@ -380,11 +380,6 @@ bool ubase_adev_mac_stats_supported(struct auxiliary_device *aux_dev);
 bool ubase_adev_prealloc_supported(struct auxiliary_device *aux_dev);
 bool ubase_adev_ip_over_urma_supported(struct auxiliary_device *adev);
 bool ubase_adev_ip_over_urma_utp_supported(struct auxiliary_device *adev);
-bool ubase_adev_dtu_supported(struct auxiliary_device *aux_dev);
-int ubase_adev_get_mem_node_id(struct auxiliary_device *aux_dev);
-int ubase_dtu_tbl_init(struct auxiliary_device *aux_dev, u32 tid, u16 *dtu_win_num);
-int ubase_dtu_tbl_uninit(struct auxiliary_device *aux_dev, u16 dtu_win_num);
-bool ubase_adev_ucp_supported(struct auxiliary_device *adev);
 bool ubase_adev_shutting_down(struct auxiliary_device *adev);
 
 struct ubase_resource_space *ubase_get_io_base(struct auxiliary_device *adev);

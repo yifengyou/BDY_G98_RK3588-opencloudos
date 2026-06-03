@@ -9,12 +9,10 @@
 #include <ub/ubase/ubase_comm_mbx.h>
 
 #include "ubase_cmd.h"
-#include "ubase_dtumem.h"
 #include "ubase_ctrlq.h"
 #include "ubase_dev.h"
 #include "ubase_mailbox.h"
 #include "ubase_tp.h"
-#include "ubase_usc.h"
 #include "ubase_hw.h"
 
 static DEFINE_MUTEX(ubase_perf_mutex);
@@ -135,32 +133,9 @@ static int ubase_check_dev_caps_extdb(struct ubase_dev *udev)
 	return 0;
 }
 
-static int ubase_check_dev_caps_compat(struct ubase_dev *udev)
-{
-	if (ubase_dev_usc_supported(udev)) {
-		if (ubase_dev_dtu_supported(udev)) {
-			ubase_err(udev,
-			  "failed to check caps, usc and dtu are both enabled.\n");
-			return -EINVAL;
-		}
-
-		if (ubase_dev_prealloc_supported(udev)) {
-			ubase_err(udev,
-				  "failed to check caps, usc and prealloc are both enabled.\n");
-			return -EINVAL;
-		}
-	}
-
-	return 0;
-}
-
 static int ubase_check_dev_caps(struct ubase_dev *udev)
 {
 	int ret;
-
-	ret = ubase_check_dev_caps_compat(udev);
-	if (ret)
-		return ret;
 
 	ubase_check_dev_caps_comm(udev);
 
@@ -286,9 +261,9 @@ static void ubase_init_start_idx(struct ubase_dev *udev)
 	udma_caps->jfc.start_idx = unic_caps->jfc.max_cnt;
 }
 
-int ubase_config_ctx_buf_to_hw(struct ubase_dev *udev,
-			       struct ubase_ctx_buf_cap *ctx_buf,
-			       struct ubase_mbx_attr *attr)
+static int ubase_config_ctx_buf_to_hw(struct ubase_dev *udev,
+				      struct ubase_ctx_buf_cap *ctx_buf,
+				      struct ubase_mbx_attr *attr)
 {
 	struct ubase_cmd_mailbox mailbox;
 	int ret;
@@ -300,6 +275,38 @@ int ubase_config_ctx_buf_to_hw(struct ubase_dev *udev,
 			  "failed to config ctx_buf to hw, cmd = 0x%x, ret = %d.\n",
 			  attr->op, ret);
 	return ret;
+}
+
+static void ubase_free_and_clear_ctx_buf(struct ubase_dev *udev,
+					 struct ubase_ctx_buf_cap *ctx_buf)
+{
+	struct ubase_ctx_page *ctx_page;
+	size_t npage;
+
+	if (!xa_empty(&ctx_buf->ctx_xa)) {
+		xa_for_each(&ctx_buf->ctx_xa, npage, ctx_page)
+			ubase_destroy_ctx_page(udev, ctx_page, ctx_buf);
+	}
+	dma_free_iova(ctx_buf->slot);
+
+	ctx_buf->slot = NULL;
+	ctx_buf->dma_ctx_buf_ba = 0;
+}
+
+static void ubase_cmd_ctx_buf_free(struct ubase_dev *udev,
+			    struct ubase_ctx_buf_cap *ctx_buf)
+{
+	size_t size;
+
+	if (!ctx_buf || !ctx_buf->slot)
+		return;
+
+	size = ctx_buf->entry_cnt * ctx_buf->entry_size;
+	if (!size)
+		return;
+
+	ubase_free_and_clear_ctx_buf(udev, ctx_buf);
+	xa_destroy(&ctx_buf->ctx_xa);
 }
 
 static void ubase_ctx_free(struct ubase_dev *udev,
@@ -315,14 +322,8 @@ static void ubase_ctx_free(struct ubase_dev *udev,
 	int i, end_idx = ARRAY_SIZE(map) - 1;
 
 	i = (idx == UBASE_CTX_REMOVE_ALL) ? end_idx : idx;
-	for (; i >= 0; i--) {
-		if (ubase_dev_usc_supported(udev) && ubase_ctx_in_usc(map[i].mb_cmd)) {
-			ubase_cmd_ctx_buf_free_usc(udev, map[i].ctx, map[i].mb_cmd);
-			continue;
-		}
-
-		__ubase_cmd_ctx_buf_free(udev, map[i].ctx);
-	}
+	for (; i >= 0; i--)
+		ubase_cmd_ctx_buf_free(udev, map[i].ctx);
 }
 
 static int ubase_fill_common_ctx_buf(struct ubase_dev *udev,
@@ -427,49 +428,6 @@ static int ubase_alloc_and_fill_ctx_buf(struct ubase_dev *udev,
 	return ret;
 }
 
-static void ubase_free_and_clear_ctx_buf(struct ubase_dev *udev,
-					 struct ubase_ctx_buf_cap *ctx_buf)
-{
-	struct ubase_ctx_page *ctx_page;
-	size_t npage;
-
-	if (!xa_empty(&ctx_buf->ctx_xa)) {
-		xa_for_each(&ctx_buf->ctx_xa, npage, ctx_page)
-			ubase_destroy_ctx_page(udev, ctx_page, ctx_buf);
-	}
-	dma_free_iova(ctx_buf->slot);
-
-	ctx_buf->slot = NULL;
-	ctx_buf->dma_ctx_buf_ba = 0;
-}
-
-static int ubase_config_ctx_buf_by_dtu(struct ubase_dev *udev,
-				       struct ubase_ctx_buf_cap *ctx_buf,
-				       struct ubase_mbx_attr *attr,
-				       size_t size)
-{
-	struct ubase_cmd_mailbox mailbox;
-	void *va;
-	int ret;
-
-	va = ubase_dtu_alloc(udev, &ctx_buf->page, size,
-			     &ctx_buf->dma_ctx_buf_ba);
-	if (!va) {
-		ubase_err(udev, "failed to alloc dtu memory.\n");
-		return -ENOMEM;
-	}
-
-	mailbox.dma = ctx_buf->dma_ctx_buf_ba;
-	ret = __ubase_hw_upgrade_ctx(udev, attr, &mailbox);
-	if (ret) {
-		ubase_err(udev,
-			  "failed to config ctx buf, ret = %d.\n", ret);
-		ubase_dtu_free(udev, ctx_buf->page, size, ctx_buf->dma_ctx_buf_ba);
-	}
-
-	return ret;
-}
-
 static int ubase_config_jfs_ctx_buf_by_pmem(struct ubase_dev *udev,
 					    struct ubase_mbx_attr *attr)
 {
@@ -485,40 +443,15 @@ static int ubase_config_jfs_ctx_buf_by_pmem(struct ubase_dev *udev,
 	return ret;
 }
 
-void __ubase_cmd_ctx_buf_free(struct ubase_dev *udev,
-			      struct ubase_ctx_buf_cap *ctx_buf)
-{
-	size_t size;
-
-	if (!ctx_buf || !ctx_buf->slot)
-		return;
-
-	size = ctx_buf->entry_cnt * ctx_buf->entry_size;
-	if (!size)
-		return;
-
-	if (ubase_dev_dtu_supported(udev)) {
-		ubase_dtu_free(udev, ctx_buf->page, size,
-			       ctx_buf->dma_ctx_buf_ba);
-		return;
-	}
-
-	ubase_free_and_clear_ctx_buf(udev, ctx_buf);
-	xa_destroy(&ctx_buf->ctx_xa);
-}
-
-int __ubase_cmd_ctx_buf_alloc(struct ubase_dev *udev,
-			      struct ubase_ctx_buf_cap *ctx_buf,
-			      struct ubase_mbx_attr *attr)
+static int ubase_cmd_ctx_buf_alloc(struct ubase_dev *udev,
+				   struct ubase_ctx_buf_cap *ctx_buf,
+				   struct ubase_mbx_attr *attr)
 {
 	size_t size = ctx_buf->entry_cnt * ctx_buf->entry_size;
 	int ret;
 
 	if (!size)
 		return 0;
-
-	if (ubase_dev_dtu_supported(udev))
-		return ubase_config_ctx_buf_by_dtu(udev, ctx_buf, attr, size);
 
 	if (attr->op == UBASE_MB_WRITE_JFS_CONTEXT_VA &&
 	    test_bit(UBASE_STATE_PREALLOC_OK_B, &udev->state_bits))
@@ -560,15 +493,7 @@ static int ubase_ctx_alloc(struct ubase_dev *udev,
 	for (i = 0; i < ARRAY_SIZE(map); i++) {
 		memset(&attr, 0, sizeof(attr));
 		attr.op = map[i].mb_cmd;
-
-		if (ubase_dev_usc_supported(udev) && ubase_ctx_in_usc(attr.op)) {
-			ret = ubase_cmd_ctx_buf_alloc_usc(udev, map[i].ctx, &attr);
-			if (ret)
-				goto err_alloc_ctx_buf;
-			continue;
-		}
-
-		ret = __ubase_cmd_ctx_buf_alloc(udev, map[i].ctx, &attr);
+		ret = ubase_cmd_ctx_buf_alloc(udev, map[i].ctx, &attr);
 		if (ret) {
 			ubase_err(udev,
 				  "failed to alloc ctx buf, mb_cmd = 0x%x, ret = %d.\n",
@@ -650,41 +575,24 @@ static int ubase_config_ta_timer_buf_by_pmem(struct ubase_dev *udev, u16 opc)
 	return ubase_config_dma_buf(udev, opc, dma_addr);
 }
 
-static int ubase_alloc_ta_buf(struct ubase_dev *udev, struct ubase_dma_buf *buf)
-{
-	buf->addr = ubase_alloc_buf(udev, buf->size, &buf->dma_addr, &buf->page);
-	if (!buf->addr)
-		return -ENOMEM;
-
-	return 0;
-}
-
-static void ubase_free_ta_buf(struct ubase_dev *udev, struct ubase_dma_buf *buf)
-{
-	ubase_free_buf(udev, buf->size, buf->addr, buf->dma_addr, buf->page);
-
-	buf->addr = NULL;
-}
-
 static int ubase_init_dma_buf(struct ubase_dev *udev, struct ubase_dma_buf *buf,
 			      u16 opc)
 {
 	int ret;
 
 	if (opc == UBASE_OPC_TA_TIMER_VA_CONFIG &&
-	    test_bit(UBASE_STATE_PREALLOC_OK_B, &udev->state_bits)
-	    && !ubase_dev_dtu_supported(udev))
+	    test_bit(UBASE_STATE_PREALLOC_OK_B, &udev->state_bits))
 		return ubase_config_ta_timer_buf_by_pmem(udev, opc);
 
-	ret = ubase_alloc_ta_buf(udev, buf);
-	if (ret) {
-		ubase_err(udev, "failed to alloc ta buf, ret = %d.\n", ret);
-		return ret;
-	}
+	buf->addr = dma_alloc_coherent(udev->dev, buf->size, &buf->dma_addr,
+				       GFP_KERNEL);
+	if (!buf->addr)
+		return -ENOMEM;
 
 	ret = ubase_config_dma_buf(udev, opc, buf->dma_addr);
 	if (ret)
-		ubase_free_ta_buf(udev, buf);
+		dma_free_coherent(udev->dev, buf->size, buf->addr,
+				  buf->dma_addr);
 
 	return ret;
 }
@@ -695,7 +603,8 @@ static void ubase_uninit_dma_buf(struct ubase_dev *udev,
 	if (!buf->addr)
 		return;
 
-	ubase_free_ta_buf(udev, buf);
+	dma_free_coherent(udev->dev, buf->size, buf->addr, buf->dma_addr);
+	buf->addr = NULL;
 }
 
 static int ubase_init_ta_ext_buf(struct ubase_dev *udev)

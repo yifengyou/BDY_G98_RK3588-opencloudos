@@ -12,14 +12,12 @@
 #include "ubase_arq.h"
 #include "ubase_cmd.h"
 #include "ubase_ctrlq.h"
-#include "ubase_dtumem.h"
 #include "ubase_hw.h"
 #include "ubase_mailbox.h"
 #include "ubase_pmem.h"
 #include "ubase_rct.h"
 #include "ubase_reset.h"
 #include "ubase_stats.h"
-#include "ubase_usc.h"
 #include "ubase_dev.h"
 
 #define UBASE_PERIOD_100MS 100
@@ -761,10 +759,6 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 		ubase_query_dev_res, NULL
 	},
 	{
-		"dtu memory", UBASE_SUP_UDMA, 0,
-		ubase_dtu_mem_init, ubase_dtu_mem_uninit
-	},
-	{
 		"init mailbox", UBASE_SUP_NO_PMU, 1,
 		ubase_mbox_cmd_init, ubase_mbox_cmd_uninit
 	},
@@ -815,10 +809,6 @@ static const struct ubase_init_function ubase_init_func_map[] = {
 	{
 		"init ue", UBASE_SUP_NO_PMU, 0,
 		ubase_ue_init, ubase_ue_uninit
-	},
-	{
-		"init usc", UBASE_SUP_URMA, 0,
-		ubase_usc_init, ubase_usc_uninit
 	},
 	{
 		"init hw", UBASE_SUP_NO_PMU, 1,
@@ -1602,25 +1592,6 @@ bool ubase_adev_ip_over_urma_utp_supported(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_adev_ip_over_urma_utp_supported);
 
-/**
- * ubase_adev_ucp_supported() - determine whether to support ucp
- * @adev: auxiliary device
- *
- * This function is used to determine whether to support ucp
- * (Unified Cmd Process).
- *
- * Context: Any context.
- * Return: true or false
- */
-bool ubase_adev_ucp_supported(struct auxiliary_device *adev)
-{
-	if (!adev)
-		return false;
-
-	return ubase_ucp_supported(__ubase_get_udev_by_adev(adev));
-}
-EXPORT_SYMBOL(ubase_adev_ucp_supported);
-
 static void ubase_activate_notify(struct ubase_dev *udev,
 				  struct auxiliary_device *adev, bool activate)
 {
@@ -2087,25 +2058,3 @@ bool ubase_adev_shutting_down(struct auxiliary_device *adev)
 	return ubase_shutting_down(__ubase_get_udev_by_adev(adev));
 }
 EXPORT_SYMBOL(ubase_adev_shutting_down);
-
-void *ubase_alloc_buf(struct ubase_dev *udev, size_t size,
-		      dma_addr_t *iova, struct page **page)
-{
-	void *va = NULL;
-
-	if (ubase_dev_dtu_supported(udev))
-		va = ubase_dtu_alloc(udev, page, size, iova);
-	else
-		va = dma_alloc_coherent(udev->dev, size, iova, GFP_KERNEL);
-
-	return va;
-}
-
-void ubase_free_buf(struct ubase_dev *udev, size_t size,
-		    void *va, dma_addr_t iova, struct page *page)
-{
-	if (ubase_dev_dtu_supported(udev))
-		ubase_dtu_free(udev, page, size, iova);
-	else
-		dma_free_coherent(udev->dev, size, va, iova);
-}
