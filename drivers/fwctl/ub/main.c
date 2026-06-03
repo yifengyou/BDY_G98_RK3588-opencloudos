@@ -247,9 +247,13 @@ static int ubctl_probe(struct auxiliary_device *adev,
 		return ret;
 	}
 
-	ret = ubctl_port_link_status_init(adev, ucdev);
-	if (ret)
-		ubctl_warn(ucdev, "fwctl register crq handler event failed, retval = %d.\n", ret);
+	ret = ubctl_port_link_status_init(adev);
+	if (ret) {
+		ubctl_err(ucdev, "fwctl register crq handler event failed, retval = %d.\n", ret);
+		fwctl_unregister(&ucdev->fwctl);
+		kfifo_free(&ucdev->ioctl_fifo);
+		return ret;
+	}
 
 	ucdev->adev = adev;
 	auxiliary_set_drvdata(adev, no_free_ptr(ucdev));
