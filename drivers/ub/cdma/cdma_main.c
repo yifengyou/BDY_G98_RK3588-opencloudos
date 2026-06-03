@@ -5,7 +5,6 @@
 #define dev_fmt pr_fmt
 
 #include <linux/module.h>
-#include <linux/delay.h>
 #include <ub/ubase/ubase_comm_dev.h>
 #include "cdma.h"
 #include "cdma_dev.h"
@@ -123,7 +122,7 @@ static void cdma_free_cfile_uobj(struct cdma_dev *cdev)
 	mutex_unlock(&cdev->file_mutex);
 }
 
-static int cdma_reset_down(struct auxiliary_device *adev)
+static void cdma_reset_down(struct auxiliary_device *adev)
 {
 	struct cdma_dev *cdev;
 
@@ -146,17 +145,9 @@ static int cdma_reset_down(struct auxiliary_device *adev)
 
 unlock:
 	mutex_unlock(&g_cdma_reset_mutex);
-
-	return 0;
 }
 
-static int cdma_reset_abort(struct auxiliary_device *adev)
-{
-	dev_warn(&adev->dev, "reset abort\n");
-	return 0;
-}
-
-static int cdma_reset_uninit(struct auxiliary_device *adev)
+static void cdma_reset_uninit(struct auxiliary_device *adev)
 {
 	struct cdma_dev *cdev;
 
@@ -180,11 +171,9 @@ static int cdma_reset_uninit(struct auxiliary_device *adev)
 
 unlock:
 	mutex_unlock(&g_cdma_reset_mutex);
-
-	return 0;
 }
 
-static int cdma_reset_init(struct auxiliary_device *adev)
+static void cdma_reset_init(struct auxiliary_device *adev)
 {
 	struct cdma_dev *cdev;
 	int ret;
@@ -192,17 +181,8 @@ static int cdma_reset_init(struct auxiliary_device *adev)
 	mutex_lock(&g_cdma_reset_mutex);
 
 	cdev = cdma_create_dev(adev);
-	if (IS_ERR(cdev)) {
-		if (PTR_ERR(cdev) == -ETIMEDOUT) {
-			ret = -EAGAIN;
-			dev_warn(&adev->dev,
-				 "reset init ctrlq timeout, notify ubase. ret = %d\n",
-				 ret);
-		} else {
-			ret = PTR_ERR(cdev);
-		}
+	if (!cdev)
 		goto unlock;
-	}
 
 	ret = cdma_create_chardev(cdev);
 	if (ret) {
@@ -214,11 +194,9 @@ static int cdma_reset_init(struct auxiliary_device *adev)
 
 unlock:
 	mutex_unlock(&g_cdma_reset_mutex);
-
-	return ret;
 }
 
-typedef int (*cdma_reset_func_t)(struct auxiliary_device *adev);
+typedef void (*cdma_reset_func_t)(struct auxiliary_device *adev);
 
 static cdma_reset_func_t cdma_reset_table[] = {
 	[UBASE_RESET_STAGE_NONE] = NULL,
@@ -226,20 +204,18 @@ static cdma_reset_func_t cdma_reset_table[] = {
 	[UBASE_RESET_STAGE_UNINIT] = cdma_reset_uninit,
 	[UBASE_RESET_STAGE_INIT] = cdma_reset_init,
 	[UBASE_RESET_STAGE_UP] = NULL,
-	[UBASE_RESET_STAGE_ABORT] = cdma_reset_abort,
 };
 
-static int cdma_reset_handler(struct auxiliary_device *adev,
-			      enum ubase_reset_stage stage)
+static void cdma_reset_handler(struct auxiliary_device *adev,
+			       enum ubase_reset_stage stage)
 {
-	if (!adev || stage < UBASE_RESET_STAGE_NONE ||
-	    stage > UBASE_RESET_STAGE_ABORT)
-		return -EINVAL;
+	if (!adev)
+		return;
 
-	if (!cdma_reset_table[stage])
-		return 0;
+	if (stage < UBASE_RESET_STAGE_DOWN || stage > UBASE_RESET_STAGE_INIT)
+		return;
 
-	return cdma_reset_table[stage](adev);
+	cdma_reset_table[stage](adev);
 }
 
 static int cdma_probe(struct auxiliary_device *auxdev,
@@ -252,15 +228,8 @@ static int cdma_probe(struct auxiliary_device *auxdev,
 		 auxdev->name, auxdev->id);
 
 	cdev = cdma_create_dev(auxdev);
-	if (IS_ERR(cdev)) {
-		if (PTR_ERR(cdev) == -ETIMEDOUT) {
-			dev_warn(&auxdev->dev,
-				 "create dev ctrlq timeout, notify ubase.\n");
-			ubase_update_adev_status(auxdev, UBASE_ADEV_PROBE_FAIL);
-			return -EAGAIN;
-		}
-		return PTR_ERR(cdev);
-	}
+	if (!cdev)
+		return -ENOMEM;
 
 	ret = cdma_create_chardev(cdev);
 	if (ret) {
@@ -274,60 +243,10 @@ static int cdma_probe(struct auxiliary_device *auxdev,
 	return 0;
 }
 
-static void cdma_wait_rx(struct auxiliary_device *auxdev)
-{
-#define MIN_SLEEP_TIME 100
-#define MAX_SLEEP_TIME 800
-#define TIME_SLEEP_RATE 2
-	u32 wait_time = MIN_SLEEP_TIME;
-	bool first_fail = true;
-
-	if (is_rmmod)
-		return;
-
-	while (true) {
-		if (!ubase_deactivate_dev(auxdev)) {
-			dev_info(&auxdev->dev, "cdma close ue rx success.\n");
-			return;
-		}
-
-		if (ubase_adev_shutting_down(auxdev)) {
-			dev_warn(&auxdev->dev, "enter shutdown process.\n");
-			return;
-		}
-
-		if (first_fail) {
-			dev_err(&auxdev->dev,
-				"cdma close ue rx failed, retrying...\n");
-			first_fail = false;
-		}
-
-		msleep(wait_time);
-		if (wait_time < MAX_SLEEP_TIME)
-			wait_time *= TIME_SLEEP_RATE;
-	}
-}
-
-static void cdma_restore_rx(struct auxiliary_device *auxdev)
-{
-	int ret;
-
-	if (is_rmmod)
-		return;
-
-	ret = ubase_activate_dev(auxdev);
-	if (ret) {
-		dev_warn(&auxdev->dev, "cdma restore ue rx failed, ret=%d.\n",
-			 ret);
-		ubase_update_dev_status(auxdev, UBASE_DEV_NEED_TO_ACTIVATE);
-	} else {
-		dev_info(&auxdev->dev, "cdma restore ue rx success.\n");
-	}
-}
-
 static void cdma_remove(struct auxiliary_device *auxdev)
 {
 	struct cdma_dev *cdev;
+	int ret;
 
 	dev_info(&auxdev->dev, "%s called, matched aux dev(%s.%u).\n",
 		 __func__, auxdev->name, auxdev->id);
@@ -346,15 +265,14 @@ static void cdma_remove(struct auxiliary_device *auxdev)
 	cdma_reset_unmap_vma_pages(cdev, false);
 	cdma_client_callback(cdev, CDMA_CLIENT_STOP);
 	cdma_client_callback(cdev, CDMA_CLIENT_REMOVE);
-	cdma_wait_rx(auxdev);
+	ret = is_rmmod ? 0 : ubase_deactivate_dev(auxdev);
 	cdma_destroy_chardev(cdev);
 	cdma_free_cfile_uobj(cdev);
 	cdma_kcmd_flush(cdev);
 	cdma_destroy_dev(cdev);
-	cdma_restore_rx(auxdev);
-
 	mutex_unlock(&g_cdma_reset_mutex);
-	dev_info(&auxdev->dev, "cdma device remove success.\n");
+
+	dev_info(&auxdev->dev, "cdma device remove success, ret = %d.\n", ret);
 }
 
 static const struct auxiliary_device_id cdma_id_table[] = {
@@ -369,9 +287,6 @@ static struct auxiliary_driver cdma_driver = {
 	.probe = cdma_probe,
 	.remove = cdma_remove,
 	.name = "cdma",
-	.driver = {
-		.probe_type = PROBE_FORCE_SYNCHRONOUS,
-	},
 	.id_table = cdma_id_table,
 };
 

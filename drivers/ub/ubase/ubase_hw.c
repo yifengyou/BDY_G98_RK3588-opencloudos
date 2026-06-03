@@ -983,13 +983,11 @@ static int ubase_notify_ctrl_plane_init_res(struct ubase_dev *udev)
 	req.flag = UBASE_CTRL_PLANE_INIT_RES;
 
 	ret = __ubase_ctrlq_send(udev, &msg, true, NULL);
-	if (ret) {
-		if (ret == -ETIMEDOUT)
-			set_bit(UBASE_STATE_INIT_AGAIN_B, &udev->state_bits);
+	if (ret)
 		dev_err(udev->dev,
 			"failed to notify ctrl plane init res, ret = %d.\n",
 			ret);
-	}
+
 	return ret;
 }
 

@@ -434,8 +434,7 @@ void ubase_ctrlq_disable(struct ubase_dev *udev)
 {
 #define UBASE_CTRLQ_CLEAR_WAIT_TIME	5
 
-	if (!test_and_clear_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state))
-		return;
+	clear_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state);
 
 	/* wait to ensure that the crq completes the possible left
 	 * over commands.
@@ -910,11 +909,6 @@ int __ubase_ctrlq_send(struct ubase_dev *udev, struct ubase_ctrlq_msg *msg,
 {
 	int ret;
 	u16 num;
-
-	if (!test_bit(UBASE_CTRLQ_STATE_ENABLE, &udev->ctrlq.state)) {
-		dev_warn_ratelimited(udev->dev, "ctrlq is disabled.\n");
-		return -EAGAIN;
-	}
 
 	ret = ubase_ctrlq_msg_check(udev, msg);
 	if (ret)
