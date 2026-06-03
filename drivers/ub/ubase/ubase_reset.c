@@ -139,12 +139,8 @@ static void ubase_notify_all_ue_reset(struct ubase_dev *udev)
 {
 	struct ubase_ue_node *ue_node;
 
-	list_for_each_entry(ue_node, &udev->ue_list, list) {
-		if (ue_node->isolated)
-			continue;
-
+	list_for_each_entry(ue_node, &udev->ue_list, list)
 		ubase_notify_ue_reset(udev, ue_node->bus_ue_id, 0);
-	}
 }
 
 static void ubase_wait_ue_reset_ready(struct ubase_dev *udev)

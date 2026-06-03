@@ -6,13 +6,13 @@
 
 #include <linux/delay.h>
 #include <linux/ummu_core.h>
+#include <ub/ubase/ubase_comm_mbx.h>
 
 #include "ubase_cmd.h"
-#include "ubase_ctrlq.h"
 #include "ubase_dtumem.h"
+#include "ubase_ctrlq.h"
+#include "ubase_dev.h"
 #include "ubase_mailbox.h"
-#include "ubase_pmem.h"
-#include "ubase_proxy.h"
 #include "ubase_tp.h"
 #include "ubase_usc.h"
 #include "ubase_hw.h"
@@ -615,9 +615,6 @@ static int ubase_ctx_buf_alloc(struct ubase_dev *udev)
 {
 	struct ubase_ctx_buf *ctx_buf = &udev->ctx_buf;
 
-	if (!ubase_dev_mbx_supported(udev))
-		return ubase_ue_req_ctx_buf(udev);
-
 	ubase_get_ctx_entry_cnt(udev);
 	ubase_get_ctx_entry_size(udev);
 
@@ -906,9 +903,6 @@ static void ubase_destroy_ctx_res(struct ubase_dev *udev)
 
 static inline void ubase_uninit_ctx_buf(struct ubase_dev *udev)
 {
-	if (!ubase_dev_mbx_supported(udev))
-		return;
-
 	ubase_ctx_free(udev, &udev->ctx_buf, UBASE_CTX_REMOVE_ALL);
 }
 
@@ -943,7 +937,6 @@ int ubase_ue_init(struct ubase_dev *udev)
 	ubase_init_start_idx(udev);
 	INIT_LIST_HEAD(&udev->ue_list);
 	mutex_init(&udev->ue_list_lock);
-	init_completion(&udev->ctx_status.ctx_va_done);
 	mutex_init(&udev->stats.stats_lock);
 	mutex_init(&udev->stats.activate_record.lock);
 	spin_lock_init(&udev->tp_ctx.tpg_lock);
@@ -1002,7 +995,7 @@ int ubase_hw_init(struct ubase_dev *udev)
 	ret = ubase_ctx_buf_alloc(udev);
 	if (ret) {
 		ubase_err(udev, "failed to init ctx buf, ret = %d.\n", ret);
-		goto err_ctx_buf_alloc;
+		return ret;
 	}
 
 	ret = ubase_init_ta_ext_buf(udev);
@@ -1023,9 +1016,6 @@ err_init_tp_tpg:
 	ubase_uninit_ta_ext_buf(udev);
 err_init_ta_ext_buf:
 	ubase_uninit_ctx_buf(udev);
-err_ctx_buf_alloc:
-	if (!ubase_dev_mbx_supported(udev))
-		ubase_destroy_ctx_res(udev);
 
 	return ret;
 }
