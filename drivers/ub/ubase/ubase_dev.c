@@ -39,8 +39,6 @@ bool ubase_dev_urma_supported(struct ubase_dev *udev)
 	case UBASE_DEV_ID_A_0_URMA_UE:
 	case UBASE_DEV_ID_A_0_UBOE_MUE:
 	case UBASE_DEV_ID_A_0_UBOE_UE:
-	case UBASE_DEV_ID_S_0_URMA_MUE:
-	case UBASE_DEV_ID_S_0_URMA_UE:
 		break;
 	default:
 		return false;
@@ -57,7 +55,6 @@ bool ubase_dev_unic_supported(struct ubase_dev *udev)
 	case UBASE_DEV_ID_K_0_URMA_MUE:
 	case UBASE_DEV_ID_A_0_URMA_MUE:
 	case UBASE_DEV_ID_A_0_UBOE_MUE:
-	case UBASE_DEV_ID_S_0_URMA_MUE:
 		break;
 	default:
 		return false;
@@ -75,7 +72,6 @@ bool ubase_dev_cdma_supported(struct ubase_dev *udev)
 	case UBASE_DEV_ID_K_0_CDMA_UE:
 	case UBASE_DEV_ID_A_0_CDMA_MUE:
 	case UBASE_DEV_ID_A_0_CDMA_UE:
-	case UBASE_DEV_ID_S_0_CDMA_MUE:
 		break;
 	default:
 		return false;
@@ -93,7 +89,6 @@ bool ubase_dev_pmu_supported(struct ubase_dev *udev)
 	case UBASE_DEV_ID_K_0_PMU_UE:
 	case UBASE_DEV_ID_A_0_PMU_MUE:
 	case UBASE_DEV_ID_A_0_PMU_UE:
-	case UBASE_DEV_ID_S_0_PMU_MUE:
 		break;
 	default:
 		return false;
