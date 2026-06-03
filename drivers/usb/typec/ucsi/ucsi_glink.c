@@ -258,8 +258,15 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 	}
 
 	con_num = UCSI_CCI_CONNECTOR(cci);
-	if (con_num)
-		ucsi_connector_change(ucsi->ucsi, con_num);
+	if (con_num) {
+		if (!ucsi->ucsi->cap.num_connectors ||
+		    con_num <= ucsi->ucsi->cap.num_connectors)
+			ucsi_connector_change(ucsi->ucsi, con_num);
+		else
+			dev_err(ucsi->dev,
+				"bogus connector number in CCI: %u\n",
+				con_num);
+	}
 
 	if (ucsi->sync_pending &&
 		   (cci & (UCSI_CCI_ACK_COMPLETE | UCSI_CCI_COMMAND_COMPLETE))) {
