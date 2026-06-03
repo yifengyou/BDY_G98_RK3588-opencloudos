@@ -1501,6 +1501,16 @@ static enum hist_time_unit parse_time_unit(const char *str)
 	return HIST_TIME_UNIT_NONE;
 }
 
+static const char *overflow_policy_str(enum tracing_map_overflow_policy p)
+{
+	switch (p) {
+	case TRACING_MAP_OVERFLOW_RING:		return "ring";
+	case TRACING_MAP_OVERFLOW_REPLACE:	return "replace";
+	case TRACING_MAP_OVERFLOW_DROP:
+	default:				return "drop";
+	}
+}
+
 static int parse_assignment(struct trace_array *tr,
 			    char *str, struct hist_trigger_attrs *attrs)
 {
@@ -5866,6 +5876,8 @@ static void hist_trigger_show(struct seq_file *m,
 	else if (hist_data->map->overflow_policy == TRACING_MAP_OVERFLOW_REPLACE)
 		seq_printf(m, "    Replaced: %llu\n    Overflow policy: replace\n",
 			   (u64)atomic64_read(&hist_data->map->replaces));
+	else
+		seq_puts(m, "    Overflow policy: drop\n");
 }
 
 struct hist_file_data {
@@ -6471,6 +6483,8 @@ static int event_hist_trigger_print(struct seq_file *m,
 			seq_puts(m, ".descending");
 	}
 	seq_printf(m, ":size=%u", (1 << hist_data->map->map_bits));
+	seq_printf(m, ":overflow=%s",
+		   overflow_policy_str(hist_data->attrs->overflow_policy));
 	if (hist_data->enable_timestamps)
 		seq_printf(m, ":clock=%s", hist_data->attrs->clock);
 	if (hist_data->attrs->no_hitcount)
