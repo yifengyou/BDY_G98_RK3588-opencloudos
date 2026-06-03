@@ -391,6 +391,7 @@ static void ubase_period_service_task(struct work_struct *work)
 {
 #define UBASE_STATS_TIMER_INTERVAL		(300000 / (UBASE_PERIOD_100MS))
 #define UBASE_RL_LOG_TIMER_INTERVAL		(180000 / (UBASE_PERIOD_100MS))
+#define UBASE_CTRLQ_TIMER_INTERVAL		(3000 / (UBASE_PERIOD_100MS))
 
 	struct ubase_delay_work *ubase_work =
 		container_of(work, struct ubase_delay_work, service_task.work);
@@ -406,7 +407,8 @@ static void ubase_period_service_task(struct work_struct *work)
 	    !(udev->serv_proc_cnt % UBASE_STATS_TIMER_INTERVAL))
 		ubase_update_stats_for_all(udev);
 
-	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits))
+	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
+	    !(udev->serv_proc_cnt % UBASE_CTRLQ_TIMER_INTERVAL))
 		ubase_ctrlq_clean_service_task(udev);
 
 	if (test_bit(UBASE_STATE_INITED_B, &udev->state_bits) &&
@@ -785,7 +787,6 @@ static int ubase_log_rs_init(struct ubase_dev *udev)
 	UBASE_RATELIMIT_INIT(udev, send_ue_ctrlq_msg_to_cmdq_fail);
 	UBASE_RATELIMIT_INIT(udev, mbx_buff_not_empty);
 	UBASE_RATELIMIT_INIT(udev, cmdq_is_disable);
-	UBASE_RATELIMIT_INIT(udev, ctrlq_msg_queue_wait_timeout);
 	UBASE_RATELIMIT_INIT(udev, mailbox_cmd_timeout);
 	UBASE_RATELIMIT_INIT(udev, cmdq_space_insuffice);
 	UBASE_RATELIMIT_INIT(udev, post_mailbox_fail);
