@@ -435,8 +435,15 @@ static irqreturn_t ucsi_stm32g0_irq_handler(int irq, void *data)
 	if (ret)
 		return IRQ_NONE;
 
-	if (UCSI_CCI_CONNECTOR(cci))
-		ucsi_connector_change(g0->ucsi, UCSI_CCI_CONNECTOR(cci));
+	if (UCSI_CCI_CONNECTOR(cci)) {
+		if (!g0->ucsi->cap.num_connectors ||
+		    UCSI_CCI_CONNECTOR(cci) <= g0->ucsi->cap.num_connectors)
+			ucsi_connector_change(g0->ucsi, UCSI_CCI_CONNECTOR(cci));
+		else
+			dev_err(g0->ucsi->dev,
+				"bogus connector number in CCI: %lu\n",
+				UCSI_CCI_CONNECTOR(cci));
+	}
 
 	if (cci & UCSI_CCI_ACK_COMPLETE && test_and_clear_bit(ACK_PENDING, &g0->flags))
 		complete(&g0->complete);
