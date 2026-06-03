@@ -387,7 +387,6 @@ struct ubase_dtu_info {
 	struct iommu_domain	*domain;
 	struct iova_slot	*dtu_slot;
 	u16			dtu_win_num;
-	u16			dtu_win_num_udma;
 	int			dtu_mem_node_id;
 };
 
