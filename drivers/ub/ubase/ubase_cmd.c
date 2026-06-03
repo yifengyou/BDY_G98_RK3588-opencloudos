@@ -9,7 +9,6 @@
 #include "ubase_cmd.h"
 #include "ubase_arq.h"
 #include "ubase_hw.h"
-#include "ubase_mailbox.h"
 
 /* When use tracepoint, must define "CREATE_TRACE_POINTS" before include the
  * trace header file.
@@ -717,7 +716,7 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 {
 	struct ubase_mbx_event_context *ctx = &udev->mb_cmd.ctx;
 	union ubase_mbox *mbx = (union ubase_mbox *)in->data;
-	unsigned long end, flags;
+	unsigned long end;
 	int ret;
 
 	if (!mbx) {
@@ -725,18 +724,13 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 		return -EINVAL;
 	}
 
-	raw_spin_lock_irqsave(&udev->mb_cmd.mbx_lock, flags);
 	if (ctx->mbx_buff) {
-		raw_spin_unlock_irqrestore(&udev->mb_cmd.mbx_lock, flags);
 		ubase_err_rl(udev, udev->log_rs.mbx_buff_not_empty_cnt,
 			     "Incomplete mailbox events exist.\n");
 		return -EBUSY;
 	}
 
-	reinit_completion(&ctx->done);
 	ubase_setup_mbx_info(udev, mbx);
-	raw_spin_unlock_irqrestore(&udev->mb_cmd.mbx_lock, flags);
-
 	trace_ubase_alloc_mailbox_user(udev->dev, &mailbox->count, ctx->seq_num);
 	if (atomic_inc_not_zero(&mailbox->count))
 		ctx->mbx_buff = mailbox;
@@ -754,9 +748,8 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 					    "failed to wait mbox, ret = %d.\n",
 					    ret);
 
-			raw_spin_lock_irqsave(&udev->mb_cmd.mbx_lock, flags);
-			ubase_mailbox_buff_free(udev);
-			raw_spin_unlock_irqrestore(&udev->mb_cmd.mbx_lock, flags);
+			atomic_add_unless(&mailbox->count, -1, 0);
+			ctx->mbx_buff = NULL;
 			return -ETIMEDOUT;
 		}
 
