@@ -127,6 +127,21 @@ static void cdma_jfc_id_free(struct cdma_dev *cdev, u32 jfcn)
 	spin_unlock_irqrestore(&jfc_tbl->lock, flags);
 }
 
+static struct cdma_jfc *cdma_id_find_jfc(struct cdma_dev *cdev, u32 jfcn)
+{
+	struct cdma_table *jfc_tbl = &cdev->jfc_table;
+	struct cdma_jfc *jfc;
+	unsigned long flags;
+
+	spin_lock_irqsave(&jfc_tbl->lock, flags);
+	jfc = idr_find(&jfc_tbl->idr_tbl.idr, jfcn);
+	if (!jfc)
+		dev_err(cdev->dev, "find jfc failed, id = %u\n", jfcn);
+	spin_unlock_irqrestore(&jfc_tbl->lock, flags);
+
+	return jfc;
+}
+
 static int cdma_get_jfc_buf(struct cdma_dev *cdev,
 			    struct cdma_create_jfc_ucmd *ucmd,
 			    struct cdma_udata *udata, struct cdma_jfc *jfc)
@@ -166,7 +181,7 @@ static int cdma_get_jfc_buf(struct cdma_dev *cdev,
 	if (ret) {
 		dev_err(cdev->dev, "alloc sw db for jfc failed: %u\n",
 			jfc->jfcn);
-		cdma_k_free_buf(cdev, &jfc->buf);
+		cdma_k_free_buf(cdev, size, &jfc->buf);
 	}
 
 	return ret;
@@ -174,11 +189,14 @@ static int cdma_get_jfc_buf(struct cdma_dev *cdev,
 
 static void cdma_free_jfc_buf(struct cdma_dev *cdev, struct cdma_jfc *jfc)
 {
+	u32 size;
+
 	if (!jfc->buf.kva) {
 		cdma_unpin_sw_db(jfc->base.ctx, &jfc->db);
 		cdma_put_umem(jfc->buf.umem, false);
 	} else {
-		cdma_k_free_buf(cdev, &jfc->buf);
+		size = jfc->buf.entry_size * jfc->buf.entry_cnt;
+		cdma_k_free_buf(cdev, size, &jfc->buf);
 		cdma_free_sw_db(cdev, &jfc->db);
 	}
 }
@@ -534,9 +552,7 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		    struct cdma_cmd_delete_jfc_args *arg)
 {
 	struct cdma_jfc_event *jfc_event;
-	struct cdma_table *jfc_tbl;
 	struct cdma_jfc *jfc;
-	unsigned long flags;
 	int ret;
 
 	if (!cdev)
@@ -550,12 +566,7 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		return -EINVAL;
 	}
 
-	jfc_tbl = &cdev->jfc_table;
-	spin_lock_irqsave(&jfc_tbl->lock, flags);
-	jfc = idr_find(&jfc_tbl->idr_tbl.idr, jfcn);
-	if (jfc)
-		idr_remove(&jfc_tbl->idr_tbl.idr, jfcn);
-	spin_unlock_irqrestore(&jfc_tbl->lock, flags);
+	jfc = cdma_id_find_jfc(cdev, jfcn);
 	if (!jfc) {
 		dev_err(cdev->dev, "find jfc failed, jfcn = %u\n", jfcn);
 		return -EINVAL;
@@ -571,6 +582,7 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 	wait_for_completion(&jfc->event_comp);
 
 	cdma_free_jfc_buf(cdev, jfc);
+	cdma_jfc_id_free(cdev, jfc->jfcn);
 	if (arg) {
 		jfc_event = &jfc->base.jfc_event;
 		arg->out.comp_events_reported = jfc_event->comp_events_reported;
