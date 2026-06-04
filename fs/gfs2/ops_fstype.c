@@ -73,6 +73,7 @@ static struct gfs2_sbd *init_sbd(struct super_block *sb)
 {
 	struct gfs2_sbd *sdp;
 	struct address_space *mapping;
+	gfp_t gfp_mask;
 
 	sdp = kzalloc(sizeof(struct gfs2_sbd), GFP_KERNEL);
 	if (!sdp)
@@ -116,7 +117,8 @@ static struct gfs2_sbd *init_sbd(struct super_block *sb)
 	mapping->a_ops = &gfs2_rgrp_aops;
 	mapping->host = sb->s_bdev->bd_inode;
 	mapping->flags = 0;
-	mapping_set_gfp_mask(mapping, GFP_NOFS);
+	gfp_mask = mapping_gfp_mask(sb->s_bdev->bd_inode->i_mapping);
+	mapping_set_gfp_mask(mapping, gfp_mask & ~__GFP_FS);
 	mapping->private_data = NULL;
 	mapping->writeback_index = 0;
 
