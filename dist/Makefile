@@ -7,6 +7,7 @@
 DISTPATH = dist
 TOPDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 DISTDIR := $(TOPDIR)/$(DISTPATH)
+SOURCEDIR := $(DISTDIR)/sources
 ifeq ("$(abspath $(DISTDIR)/Makefile)", "$(lastword $(MAKEFILE_LIST))")
 $(error Can't detect Makefile, aborting)
 endif
@@ -177,7 +178,7 @@ dist-tarball:
 dist-drivers:
 ifneq ($(filter ofed, $(DISABLED)), ofed)
 	@echo "Preparing thirdparty drivers."
-	@cd $(TOPDIR)/dist/sources/ ; ./download-and-copy-drivers.sh ; cd $(TOPDIR)
+	@cd $(SOURCEDIR) ; rm -f .drivers-failed ; ./download-and-copy-drivers.sh || touch .drivers-failed ; cd $(TOPDIR)
 endif
 
 $(CONFIGFILE): $(DISTFILES)
@@ -198,14 +199,15 @@ dist-config: dist-configs
 
 # TODO: Remove always-rebuild - currently these targets depend on git worktree or variables,
 .PHONY: always-rebuild
-$(SPECFILE): always-rebuild dist-configs
+$(SPECFILE): always-rebuild dist-configs dist-drivers
 	@echo "Generating kernel RPM spec: $(SPECFILE)"
-	@$(DISTDIR)/scripts/gen-spec.sh \
+	@DRV_FAIL=$$([ -f $(SOURCEDIR)/.drivers-failed ] && (echo ofed ; rm -f $(SOURCEDIR)/.drivers-failed)); \
+	$(DISTDIR)/scripts/gen-spec.sh \
 		--gitref "$(GITREF)" \
 		--build-arch "$(SRPM_ARCH)" \
 		--kernel-config "$(CONFIG)" \
 		--kernel-tarname "$(TARNAME)" \
-		--set-default-disabled "$(DISABLED)" \
+		--set-default-disabled "$$DRV_FAIL $(DISABLED)" \
 		--set-default-enabled "$(ENABLED)" \
 		> $(SPECFILE)
 	@grep -A2 "# == Package options ==" $(SPECFILE) | cut -c3-
