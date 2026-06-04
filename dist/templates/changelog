@@ -1,3 +1,50 @@
+* Thu Jun 4 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.7
+- usb: typec: ucsi: skip connector validation before init
+- usb: typec: ucsi: validate connector number in ucsi_notify_common()
+- mm: call ->free_folio() directly in folio_unmap_invalidate()
+- ALSA: 6fire: fix use-after-free on disconnect
+- HID: wacom: fix out-of-bounds read in wacom_intuos_bt_irq
+- bpf: Fix regsafe() for pointers to packet
+- ocfs2: fix use-after-free in ocfs2_fault() when VM_FAULT_RETRY
+- HID: core: Mitigate potential OOB by removing bogus memset()
+- HID: core: Add printk_ratelimited variants to hid_warn() etc
+- drm/i915/gt: fix refcount underflow in intel_engine_park_heartbeat
+- crypto: pcrypt - Fix handling of MAY_BACKLOG requests
+- KVM: x86: Use scratch field in MMIO fragment to hold small write values
+- LoongArch: KVM: Make kvm_get_vcpu_by_cpuid() more robust
+- vhost: move vdpa group bound check to vhost_vdpa
+- ALSA: ctxfi: Fix missing SPDIFI1 index handling
+- eventpoll: defer struct eventpoll free to RCU grace period
+- HID: multitouch: Check to ensure report responses match the request
+- drm/amdgpu: Fix fence put before wait in amdgpu_amdkfd_submit_ib
+- dm: clear cloned request bio pointer when last clone bio completes
+- ntfs: ->d_compare() must not block
+- fs/ntfs3: Initialize allocated memory before use
+- smb: client: reject userspace cifs.spnego descriptions
+- scsi: smartpqi: Fix device resources accessed after device removal
+- usb: ulpi: fix memory leak on ulpi_register() error paths
+- usb: ulpi: fix double free in ulpi_register_interface() error path
+- xfs: fix freemap adjustments when adding xattrs to leaf blocks
+- rtmutex: Use waiter::task instead of current in remove_waiter()
+- perf/x86: Fix potential bad container_of in intel_pmu_hw_config
+- ksmbd: fix share_conf UAF in tree_conn disconnect
+- ksmbd: fix use-after-free in ksmbd_tree_connect_put under concurrency
+- gfs2: Prevent recursive memory reclaim
+- crypto: asymmetric_keys - prevent overflow in asymmetric_key_generate_id
+- smb: client: require a full NFS mode SID before reading mode bits
+- wifi: brcmfmac: validate bsscfg indices in IF events
+- bpf: Fix incorrect pruning due to atomic fetch precision tracking
+- KVM: x86/mmu: Drop/zap existing present SPTE even when creating an MMIO SPTE
+- KVM: x86: Add SRCU protection for reading PDPTRs in __get_sregs2()
+- LoongArch: Make cpumask_of_node() robust against NUMA_NO_NODE
+- RDMA/umem: Fix double dma_buf_unpin in failure path
+- mm: filemap: fix nr_pages calculation overflow in filemap_map_pages()
+- Documentation: test_vmscan_ring_hist.sh: use .buckets= per upstream convention
+- tracing: echo back overflow= policy in hist trigger and hist output
+- cpuset: fix NULL pointer dereference in cpuset_cgroup_stat_show_comm()
+- cgroup: adapt cgroup.role to cgroup v2
+- x86/syscall/64: Add x86_syscall_dispatch_table sysctl
+
 * Mon May 25 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.6
 - x86/sev: Fix potential sign extension in amd_enc_status_change_finish()
 - config/x86: set CONFIG_INFINIBAND_ZRDMA=m
