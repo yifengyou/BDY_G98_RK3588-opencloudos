@@ -91,6 +91,7 @@
 
 #include <trace/events/vmscan.h>
 #include <linux/rue.h>
+#include "cgroup_numa_balance.h"
 
 #ifdef CONFIG_MEMCG_ZRAM
 bool zram_memcg_nocharge = false;
@@ -8722,6 +8723,20 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #ifdef CONFIG_ASYNC_FORK
 		memcg->async_fork = parent->async_fork;
 #endif
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+		/* Inherit NUMA balance settings from parent */
+		memcg->numa_balance_enabled = false;
+		memcg->nb_scan_period_ms =
+			parent->nb_scan_period_ms;
+		memcg->nb_scan_batch =
+			parent->nb_scan_batch;
+		memcg->nb_scan_rounds_left =
+			parent->nb_scan_rounds_left;
+		memcg->nb_last_scanned_pid = 0;
+		memcg->nb_scan_mapped_pages = true;
+		INIT_DELAYED_WORK(&memcg->numa_balance_work,
+				  cgroup_numa_balance_work_fn);
+#endif
 #ifdef CONFIG_KSTALED
 		memcg->emm_threshold = parent->emm_threshold;
 		kstaled_memcg_inherit_parent_buckets(parent, memcg);
@@ -8740,6 +8755,18 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		page_counter_init(&memcg->kmem, NULL);
 		page_counter_init(&memcg->tcpmem, NULL);
 		page_counter_init(&memcg->pagecache, NULL);
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+		memcg->numa_balance_enabled = false;
+		memcg->nb_scan_period_ms =
+			CG_NUMA_BALANCE_SCAN_PERIOD_MS_DEF;
+		memcg->nb_scan_batch =
+			CG_NUMA_BALANCE_SCAN_BATCH_MB_DEF << (20 - PAGE_SHIFT);
+		memcg->nb_scan_rounds_left = -1;
+		memcg->nb_last_scanned_pid = 0;
+		memcg->nb_scan_mapped_pages = true;
+		INIT_DELAYED_WORK(&memcg->numa_balance_work,
+				  cgroup_numa_balance_work_fn);
+#endif
 	}
 
 	setup_async_wmark(memcg);
@@ -8865,6 +8892,9 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	 * Notify userspace about cgroup removing only after rmdir of cgroup
 	 * directory to avoid race between userspace and kernelspace.
 	 */
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+	cgroup_numa_balance_disable(memcg);
+#endif
 	spin_lock_irq(&memcg->event_list_lock);
 	list_for_each_entry_safe(event, tmp, &memcg->event_list, list) {
 		list_del_init(&event->list);
@@ -8928,6 +8958,9 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 	vmpressure_cleanup(&memcg->vmpressure);
 	cancel_work_sync(&memcg->high_work);
 	cancel_work_sync(&memcg->async_work);
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+	cancel_delayed_work_sync(&memcg->numa_balance_work);
+#endif
 	mem_cgroup_remove_from_trees(memcg);
 	free_shrinker_info(memcg);
 	mem_cgroup_free(memcg);
@@ -10657,6 +10690,19 @@ static struct cftype memory_files[] = {
        .name = "text_unevictable_size",
        .seq_show = memcg_unevict_size_show,
    },
+#endif
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+	{
+		.name = "numa_balance.scan_ctrl",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_numa_balance_scan_ctrl_show,
+		.write = cgroup_numa_balance_scan_ctrl_write,
+	},
+	{
+		.name = "numa_balance.stat",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_numa_balance_stat_show,
+	},
 #endif
 	{ }	/* terminate */
 };

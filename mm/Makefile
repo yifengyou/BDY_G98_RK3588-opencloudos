@@ -99,6 +99,7 @@ obj-$(CONFIG_MEMCG) += swap_cgroup.o
 endif
 obj-$(CONFIG_EMM_MEMCG) += emm.o
 obj-$(CONFIG_CGROUP_HUGETLB) += hugetlb_cgroup.o
+obj-$(CONFIG_CGROUP_NUMA_BALANCE) += cgroup_numa_balance.o
 obj-$(CONFIG_GUP_TEST) += gup_test.o
 obj-$(CONFIG_DMAPOOL_TEST) += dmapool_test.o
 obj-$(CONFIG_MEMORY_FAILURE) += memory-failure.o

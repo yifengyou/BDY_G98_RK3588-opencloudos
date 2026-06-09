@@ -4767,6 +4767,12 @@ DEFINE_STATIC_KEY_FALSE(sched_numa_balancing);
 
 int sysctl_numa_balancing_mode;
 
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+DEFINE_STATIC_KEY_FALSE(cgroup_numa_balance_enabled);
+extern void cgroup_numa_balance_cancel_all(void);
+extern void cgroup_numa_balance_resume_all(void);
+#endif
+
 static void __set_numabalancing_state(bool enabled)
 {
 	if (enabled)
@@ -4816,6 +4822,25 @@ static int sysctl_numa_balancing(struct ctl_table *table, int write,
 		    (state & NUMA_BALANCING_MEMORY_TIERING))
 			reset_memory_tiering();
 		sysctl_numa_balancing_mode = state;
+
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+		/* CGROUP mode is mutually exclusive with system-level modes */
+		if ((state & NUMA_BALANCING_CGROUP) &&
+		    (state & (NUMA_BALANCING_NORMAL | NUMA_BALANCING_MEMORY_TIERING))) {
+			state &= ~NUMA_BALANCING_CGROUP;
+			sysctl_numa_balancing_mode = state;
+		}
+
+		if (state & NUMA_BALANCING_CGROUP) {
+			static_branch_enable(&cgroup_numa_balance_enabled);
+			cgroup_numa_balance_resume_all();
+		} else {
+			static_branch_disable(&cgroup_numa_balance_enabled);
+			cgroup_numa_balance_cancel_all();
+		}
+
+		state &= ~NUMA_BALANCING_CGROUP;
+#endif
 		__set_numabalancing_state(state);
 	}
 	return err;
