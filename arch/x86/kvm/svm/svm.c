@@ -1404,7 +1404,12 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	 * of MSR_IA32_SPEC_CTRL.
 	 */
 	if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
-		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SPEC_CTRL, 1, 1);
+		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SPEC_CTRL,
+				     !!guest_has_spec_ctrl_msr(vcpu),
+				     !!guest_has_spec_ctrl_msr(vcpu));
+	else
+		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SPEC_CTRL,
+				     !svm->spec_ctrl, !svm->spec_ctrl);
 
 	if (kvm_vcpu_apicv_active(vcpu))
 		avic_init_vmcb(svm, vmcb);
