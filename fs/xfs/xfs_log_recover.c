@@ -2587,13 +2587,15 @@ xlog_recover_process_intents(
 		 * access lip after it returns.
 		 */
 		error = ops->iop_recover(dfp, &capture_list);
+
+		xfs_defer_cancel_recovery(log->l_mp, dfp);
+
 		if (error) {
 			trace_xlog_intent_recovery_failed(log->l_mp, error,
 					ops->iop_recover);
 			break;
 		}
 
-		xfs_defer_cancel_recovery(log->l_mp, dfp);
 	}
 	if (error)
 		goto err;
