@@ -1,9 +1,9 @@
 #!/bin/bash
 
-mlnx_version="24.10-3.2.5.0"
+mlnx_version="26.04-0.8.5.0"
 
-mlnx_tgz_name="MLNX_OFED_LINUX-${mlnx_version}-rhel9.4-x86_64.tgz"
-mlnx_tgz_sha256="a04cba2bd669a95a5e61699da8b6c201474b3bb44c1e3379d383fd81acbdd8b9"
+mlnx_tgz_name="MLNX_OFED_SRC-${mlnx_version}.tgz"
+mlnx_tgz_sha256="30db189073b758261fc559ff7e5daaaec48999e33324b5b5768be825d79bedf5"
 
 if [[ $1 == mlnx_url0 ]]; then
 	echo "https://content.mellanox.com/ofed/MLNX_OFED-${mlnx_version}/${mlnx_tgz_name}"
