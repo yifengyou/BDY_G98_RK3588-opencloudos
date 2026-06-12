@@ -7645,12 +7645,15 @@ long shrink_page_cache_memcg(gfp_t mask, struct mem_cgroup *memcg,
 	return -EINVAL;
 }
 
+static DEFINE_MUTEX(kpclimitd_mutex);
+
 int kpagecache_limitd_run(void)
 {
 	int ret = 0;
 
+	mutex_lock(&kpclimitd_mutex);
 	if (kpclimitd)
-		return 0;
+		goto out;
 
 	kpclimitd = kthread_run(kpagecache_limitd, NULL, "kpclimitd");
 	if (IS_ERR(kpclimitd)) {
@@ -7658,16 +7661,20 @@ int kpagecache_limitd_run(void)
 		ret = PTR_ERR(kpclimitd);
 		kpclimitd = NULL;
 	}
+out:
+	mutex_unlock(&kpclimitd_mutex);
 
 	return ret;
 }
 
 void kpagecache_limitd_stop(void)
 {
+	mutex_lock(&kpclimitd_mutex);
 	if (kpclimitd) {
 		kthread_stop(kpclimitd);
 		kpclimitd = NULL;
 	}
+	mutex_unlock(&kpclimitd_mutex);
 }
 
 static void kswapd_age_node(struct pglist_data *pgdat, struct scan_control *sc)
