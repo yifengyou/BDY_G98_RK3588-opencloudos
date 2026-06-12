@@ -2592,7 +2592,7 @@ xlog_recover_process_intents(
 					ops->iop_recover);
 			break;
 		}
-		dfp->dfp_intent = NULL;
+
 		xfs_defer_cancel_recovery(log->l_mp, dfp);
 	}
 	if (error)
@@ -2624,6 +2624,18 @@ xlog_recover_cancel_intents(
 
 		xfs_defer_cancel_recovery(log->l_mp, dfp);
 	}
+}
+
+/*
+ * Transfer ownership of the recovered log intent item to the recovery
+ * transaction.
+ */
+void
+xlog_recover_transfer_intent(
+	struct xfs_trans		*tp,
+	struct xfs_defer_pending	*dfp)
+{
+	dfp->dfp_intent = NULL;
 }
 
 /*
