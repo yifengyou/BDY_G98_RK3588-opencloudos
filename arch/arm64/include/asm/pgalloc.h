@@ -14,24 +14,7 @@
 #include <asm/tlbflush.h>
 
 #define __HAVE_ARCH_PGD_FREE
-#ifdef CONFIG_PTP
-#define __HAVE_ARCH_PTE_ALLOC_ONE_KERNEL
-#endif
 #include <asm-generic/pgalloc.h>
-
-#ifdef CONFIG_PTP
-#include <linux/ptp-cache.h>
-#include <asm/haoc/haoc-def.h>
-extern bool haoc_enabled;
-
-static inline pte_t *pte_alloc_one_kernel(struct mm_struct *mm)
-{
-	if (haoc_enabled)
-		return ptp_pg_alloc(&pg_cache, GFP_PGTABLE_KERNEL);
-	return __pte_alloc_one_kernel(mm);
-}
-
-#endif
 
 #define PGD_SIZE	(PTRS_PER_PGD * sizeof(pgd_t))
 
