@@ -1,3 +1,35 @@
+* Mon Jun 15 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.8
+- ocfs2: fix out-of-bounds write in ocfs2_write_end_inline
+- drm/amd/display: Do not skip unrelated mode changes in DSC validation
+- perf: Make sure to use pmu_ctx->pmu for groups
+- perf: Extract a few helpers
+- ext4: avoid infinite loops caused by residual data
+- ext4: get rid of ppath in ext4_ext_handle_unwritten_extents()
+- ext4: get rid of ppath in ext4_ext_convert_to_initialized()
+- ext4: get rid of ppath in ext4_convert_unwritten_extents_endio()
+- ext4: get rid of ppath in ext4_split_convert_extents()
+- ext4: get rid of ppath in ext4_split_extent()
+- ext4: get rid of ppath in ext4_split_extent_at()
+- ext4: get rid of ppath in ext4_ext_insert_extent()
+- ext4: get rid of ppath in ext4_ext_create_new_leaf()
+- ext4: get rid of ppath in ext4_find_extent()
+- erofs: add GFP_NOIO in the bio completion if needed
+- bcache: fix uninitialized closure object
+- bcache: fix cached_dev.sb_bio use-after-free and crash
+- staging: rtl8723bs: initialize le_tmp64 in rtw_BIP_verify()
+- netfilter: nf_tables: remove redundant chain validation on register store
+- drm/amd/display: Fix null check for pipe_ctx->plane_state in dcn20_program_pipe
+- ocfs2: validate inline data i_size during inode read
+- ocfs2: add inline inode consistency check to ocfs2_validate_inode_block()
+- RDMA/rxe: Reject unknown opcodes before ICRC processing
+- RDMA/rxe: Validate pad and ICRC before payload_size() in rxe_rcv
+- dist:mlnx-ofed: support mlnx doca 3.4 version
+- xfs: fix null pointer
+- Revert "modify dfp->dfp_intent"
+- mm/vmscan: serialize kpagecache_limitd start/stop
+- dist,Makefile: disable ofed when driver download fails
+- dist/spec: do not check url reachable in spec
+
 * Thu Jun 4 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.7
 - usb: typec: ucsi: skip connector validation before init
 - usb: typec: ucsi: validate connector number in ucsi_notify_common()
