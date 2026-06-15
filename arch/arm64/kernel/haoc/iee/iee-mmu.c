@@ -860,10 +860,14 @@ void __init init_early_iee_data(void)
 
 	#ifdef CONFIG_PTP
 	if (haoc_enabled){
-		/* Setup iee mappings of early allocated IEE objects to enable IEE. */
 		for (i = 0; ((unsigned long)idmap_pg_dir + i * PAGE_SIZE) <
-						(unsigned long)iee_init_data_end; i++) {
+						(unsigned long)__init_begin; i++) {
 			set_iee_address_pre_init(__phys_to_iee(__pa_symbol((unsigned long)idmap_pg_dir
+						+ i * PAGE_SIZE)), true);
+		}
+		for (i = 0; ((unsigned long)__init_end + i * PAGE_SIZE) <
+						(unsigned long)iee_init_data_end; i++) {
+			set_iee_address_pre_init(__phys_to_iee(__pa_symbol((unsigned long)__init_end
 						+ i * PAGE_SIZE)), true);
 		}
 		setup_iee_early_address(&iee_pgtable);
