@@ -214,7 +214,7 @@ Source2001: cpupower.config
 ### Used for download thirdparty drivers
 # Start from Source3000 to Source3099, for thirdparty release drivers
 Source3000: download-and-copy-drivers.sh
-Source3001: MLNX_OFED_LINUX-24.10-3.2.5.0-rhel9.4-x86_64.tgz
+Source3001: MLNX_OFED_SRC-26.04-0.8.5.0.tgz
 Source3002: install.sh
 Source3003: get_mlnx_info.sh
 
@@ -1234,17 +1234,15 @@ BuildInstMLNXOFED() {
 	pushd drivers/thirdparty/release-drivers/mlnx
 	MLNX_OFED_VERSION=$(./get_mlnx_info.sh mlnx_version) ; 	MLNX_OFED_TGZ_NAME=$(./get_mlnx_info.sh mlnx_tgz_name)
 	tar -xzf $MLNX_OFED_TGZ_NAME
-	pushd MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-rhel9.4-x86_64
-	pushd src
-	echo "tar -xzf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz"
-	tar -xzf MLNX_OFED_SRC-${MLNX_OFED_VERSION}.tgz
 	pushd MLNX_OFED_SRC-${MLNX_OFED_VERSION}
 
 	# Fix TS4 compile errors by enabling LTO. So, disable LTO,  and enabling -fPIE.
 	DISTRO=$(echo "%{?dist}" | sed "s/\.//g")
 	if [[ "${DISTRO}" != "tl3" ]]; then
 		## "${DISTRO}" == "tl4" or "${DISTRO}" == "oc9"
-		sed -i "s/rpmbuild --rebuild/rpmbuild --define 'rhel 9' --define '_lto_cflags -fno-lto' --define '_hardened_cflags -fPIE' --rebuild/g" ./install.pl
+		# disabled sed modifying  with 26.04-0.4.2.0
+		# sed -i "s/rpmbuild --rebuild/rpmbuild --define 'rhel 9' --define '_lto_cflags -fno-lto' --define '_hardened_cflags -fPIE -fno-exceptions' --rebuild/g" ./install.pl
+		:
 	fi
 	# Unset $HOME, when doing koji build, koji insert special macros into ~/.rpmmacros that will break MLNX installer:
 	# Koji sets _rpmfilename  %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm,
@@ -1253,7 +1251,7 @@ BuildInstMLNXOFED() {
 	--kernel $KernUnameR --kernel-sources $KernDevel \
 	--without-mlx5_fpga_tools --without-mlnx-rdma-rxe --without-mlnx-nfsrdma \
 	--without-mlnx-nvme --without-isert --without-iser --without-srp --without-rshim --without-mdev \
-	--disable-kmp
+	--disable-kmp --without-dkms
 
 	# get all kernel module rpms that were built against target kernel
 	find RPMS -name "*.rpm" -type f | while read -r pkg; do
@@ -1264,85 +1262,8 @@ BuildInstMLNXOFED() {
 
 	popd ## MLNX_OFED_SRC*
 	rm -rf MLNX_OFED_SRC-${MLNX_OFED_VERSION}
-	popd ## src
-
-	echo "Begin to build $MLNX_OFED_TGZ_NAME"
-	## Now, we in MLNX_OFED_LINUX-* dir!
-	%ifarch x86_64
-	# The purpose is to reorgnise the mlnx tgz files for our TencentOS
-	# Build the full packages of mlnx ofed.
-	# change to build/
-	tmp=%{buildroot}/tmp
-	mkdir $tmp
-	tmppath=$(realpath $tmp)
-
-	# We need to jump the root privilege because we'll assign a normal tmpdir
-	sed -i 's/$UID -ne 0/! -z $JUMP_ROOT/g' mlnx_add_kernel_support.sh
-	if [ "${DISTRO}" != "tl3" ]; then
-		sed -i '/# Check for needed packages by install.pl/a sed -i "s/rpmbuild --rebuild/rpmbuild --define '\''rhel 9'\'' --define '\''_lto_cflags -fno-lto'\'' --define '\''_hardened_cflags -fPIE'\'' --rebuild/g" ${ofed}/install.pl' mlnx_add_kernel_support.sh
-	fi
-	sed -i 's/\(ex ${ofed}\/install\.pl\)/\1 --without-mlnx-nvme/g' mlnx_add_kernel_support.sh
-
-	# unset home
-	if [[ "${DISTRO}" != "tl3" ]]; then
-		## "${DISTRO}" == "tl4" or "${DISTRO}" == "oc9"
-		HOME= ./mlnx_add_kernel_support.sh -m ./ --distro rhel9.4 --make-tgz -y \
-			--kernel $KernUnameR --kernel-sources $KernDevel --skip-repo --tmpdir $tmppath
-	else
-		## "${DISTRO}" == "tl3"
-		HOME= ./mlnx_add_kernel_support.sh -m ./ --make-tgz -y \
-			--kernel $KernUnameR --kernel-sources $KernDevel --skip-repo --tmpdir $tmppath
-	fi
-
-	# Prepare first
-	pushd $tmppath
-	mlnx_compile_result=$(ls MLNX_OFED_LINUX-*.tgz) ; mlnx_compile_result="${mlnx_compile_result%.tgz}"
-	mlnxrelease="MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-tencent-x86_64-ext.$KernUnameR"
-	tar -xzf MLNX_OFED_LINUX-*
-	touch ko.location
-	# compatible with module signer script
-	signed=ko_files/lib/modules/$KernUnameR
-	mkdir -p workdir $signed
-
-	# Extract all the rpms containing ko files to workdir
-	rpm_rp=$(realpath MLNX_OFED_LINUX-*/RPMS)
-	pushd workdir
-	find $rpm_rp -name "*.rpm" -type f | while read -r pkg; do
-		if rpm -qlp $pkg | grep "\.ko$" | grep "6\.6" >> ../ko.location; then
-			rpm_bn=$(basename $pkg)
-			mkdir $rpm_bn && pushd $rpm_bn
-			rpm2cpio $rpm_rp/$rpm_bn | cpio -id
-			popd ## $rpm_bn
-		fi
-	done
-	popd ## workdir
-
-	# Start collecting all the ko files
-	find workdir/ -name "*.ko" | while read -r mod; do
-		mv $mod $signed/
-	done
-
-	# Now we're about to sign them.
-	%{_module_signer} "$KernUnameR" "$_KernBuild" "ko_files" || exit $?
-
-	# Compress it into a new tgz file.
-	mv $mlnx_compile_result $mlnxrelease
-	# Turn it back to the original file
-	sed -i 's/! -z $JUMP_ROOT/$UID -ne 0/g' $mlnxrelease/mlnx_add_kernel_support.sh
-	cp -r $signed $mlnxrelease/ko_files.signed
-	sed -i "s/KERNELMODULE_REPLACE/$KernUnameR/g" %{SOURCE3002}
-	cp -r ko.location %{SOURCE3002} $mlnxrelease/
-	tar -zcf $mlnxrelease.tgz $mlnxrelease
-	mkdir %{buildroot}/mlnx/
-	install -m 755 $mlnxrelease.tgz %{buildroot}/mlnx/
-
-	popd ## $tmppath
-	rm -rf $tmppath
-	%endif
-
-	popd ## MLNX_OFED_LINUX-${MLNX_OFED_VERSION}-rhel9.4-x86_64
-	rm -rf MLNX_OFED_LINUX-*
 	popd ## drivers/thirdparty/release-drivers/mlnx
+
 }
 
 ###### Start Kernel Install
@@ -1798,13 +1719,6 @@ cp -a /usr/src/kernels/%{kernel_unamer}/scripts/sign-file-ori /usr/src/kernels/%
 %defattr(-,root,root)
 %endif
 # with_bpftool
-%endif
-
-%if %{with_ofed}
-%ifarch x86_64
-%files -n mlnx-ofed-dist
-/mlnx/MLNX_OFED_LINUX-24.10-3.2.5.0-tencent-x86_64-ext.%{kernel_unamer}.tgz
-%endif
 %endif
 
 ###### Changelog ###############################################################
