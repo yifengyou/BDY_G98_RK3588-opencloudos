@@ -1031,7 +1031,7 @@ static struct security_hook_list shellguard_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(bprm_check_security, shellguard_bprm_check),
 };
 
-static int __init shellguard_init(void)
+static int shellguard_init(void)
 {
 	pr_crit("ShellGuard LSM hooks Initializing...\n");
 	security_add_hooks(shellguard_hooks,
