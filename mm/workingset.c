@@ -395,7 +395,7 @@ static void *lru_gen_eviction(struct folio *folio)
 	hist = lru_hist_from_seq(min_seq);
 
 	token = max(refs - 1, 0);
-	token <<= LRU_GEN_EVICTION_BITS;
+	token <<= type ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON;
 	token |= lru_eviction(lruvec, type, delta,
 			      type ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON,
 			      lru_gen_bucket_order[type]);
@@ -495,7 +495,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 		goto unlock;
 
 	/* see the comment in folio_lru_refs() */
-	token >>= LRU_GEN_EVICTION_BITS;
+	token >>= type ? LRU_GEN_EVICTION_BITS : LRU_GEN_EVICTION_BITS_ANON;
 	refs = (token & (BIT(LRU_REFS_WIDTH) - 1)) + workingset;
 	tier = lru_tier_from_refs(refs, workingset);
 
