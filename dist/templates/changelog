@@ -1,3 +1,16 @@
+* Thu Jun 18 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.9
+- sched/fair: rework reweight_entity() to avoid place_entity() double-counting
+- net/sched: fix pedit partial COW leading to page cache corruption
+- mm, swap: avoid leaving unused extend table after alloc race
+- mm, swap: sanity mask for swap table count
+- mm/workingset, swap: fix shadow overlap with swap table count
+- sched: compatibal with sched and running latency
+- Revert "shell-guard: Introduce a enhanced protection for shell environments on x86"
+- Revert "shell-guard: fix a compiler problem about section mismatch"
+- ext4: get rid of ppath in get_ext_path()
+- HAOC: arm64: skip init section in early IEE setup
+- HAOC: fix IEE page table allocation and boot issues
+
 * Mon Jun 15 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.8
 - ocfs2: fix out-of-bounds write in ocfs2_write_end_inline
 - drm/amd/display: Do not skip unrelated mode changes in DSC validation
