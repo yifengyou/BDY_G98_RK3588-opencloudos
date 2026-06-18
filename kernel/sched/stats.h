@@ -277,7 +277,11 @@ static void sched_info_arrive(struct rq *rq, struct task_struct *t)
 
 	now = rq_clock(rq);
 	delta = now - t->sched_info.last_queued;
+#ifdef CONFIG_KATA_SUPPORT
 	t->sched_info.last_queued = now;
+#else
+	t->sched_info.last_queued = 0;
+#endif
 	t->sched_info.run_delay += delta;
 	t->sched_info.last_arrival = now;
 	t->sched_info.pcount++;
