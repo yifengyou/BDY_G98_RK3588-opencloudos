@@ -3855,13 +3855,48 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			    unsigned long weight)
 {
 	bool curr = cfs_rq->curr == se;
+	u64 avruntime = 0;
 
 	if (se->on_rq) {
 		/* commit outstanding execution time */
 		update_curr(cfs_rq);
-		update_entity_lag(cfs_rq, se);
-		se->deadline -= se->vruntime;
+
+		/*
+		 * Snapshot avg_vruntime() before we change anything, so that
+		 * vlag/deadline are expressed in terms of the unmodified V.
+		 *
+		 * Per the upstream proof (commit 101f3498b4bd, Peter Zijlstra
+		 * "Revert 6d71a9c61604"), reweight is invariant under V:
+		 *
+		 *	V' = V       (provided cfs_rq has > 1 entity, otherwise
+		 *	              we are at 0-lag and nothing to scale)
+		 *
+		 * therefore the post-reweight position can be expressed
+		 * purely as
+		 *
+		 *	v' = V - vl' = V - vl * w / w'
+		 *	d' = V + (d - V) * w / w'
+		 *
+		 * which sidesteps the buggy place_entity() recomputation that
+		 * commit 6d71a9c61604 introduced and that double-counts w_i
+		 * when curr == se (W already excludes se after
+		 * dequeue_load_avg(), but place_entity() then adds curr->load
+		 * back -- inflating the (W+w_i)/W compensation factor and
+		 * causing vlag to drift unbounded across small repeated
+		 * reweights of a heavy entity).
+		 */
+		avruntime = avg_vruntime(cfs_rq);
+		{
+			s64 vlag, limit;
+
+			vlag = (s64)(avruntime - se->vruntime);
+			limit = calc_delta_fair(max_t(u64, 2*se->slice,
+						      TICK_NSEC), se);
+			se->vlag = clamp(vlag, -limit, limit);
+		}
+		se->deadline -= avruntime;
 		se->rel_deadline = 1;
+
 		cfs_rq->nr_queued--;
 		if (!curr)
 			__dequeue_entity(cfs_rq, se);
@@ -3870,8 +3905,10 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	dequeue_load_avg(cfs_rq, se);
 
 	/*
-	 * Because we keep se->vlag = V - v_i, while: lag_i = w_i*(V - v_i),
-	 * we need to scale se->vlag when w_i changes.
+	 * Scale vlag and rel_deadline by old_weight / new_weight.
+	 * (This is the original 6d71a9c61604 formula, which is correct
+	 * in isolation; the bug was the subsequent place_entity() call,
+	 * not this scaling.)
 	 */
 	se->vlag = div_s64(se->vlag * se->load.weight, weight);
 	if (se->rel_deadline)
@@ -3889,7 +3926,18 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 
 	enqueue_load_avg(cfs_rq, se);
 	if (se->on_rq) {
-		place_entity(cfs_rq, se, 0);
+		/*
+		 * Place the entity using the snapshotted V and the rescaled
+		 * vlag/deadline.  Do NOT call place_entity(): see the proof
+		 * above; calling it here would re-derive vruntime from a
+		 * re-computed avg_vruntime() that now (incorrectly) includes
+		 * curr == se via the curr-compensation branch, defeating the
+		 * whole point of this fix.
+		 */
+		se->vruntime = avruntime - se->vlag;
+		se->deadline += avruntime;
+		se->rel_deadline = 0;
+
 		update_load_add(&cfs_rq->load, se->load.weight);
 		if (!curr)
 			__enqueue_entity(cfs_rq, se);
