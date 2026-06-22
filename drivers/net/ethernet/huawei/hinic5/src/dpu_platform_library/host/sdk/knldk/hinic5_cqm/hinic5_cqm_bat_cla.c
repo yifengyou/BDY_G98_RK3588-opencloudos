@@ -374,7 +374,6 @@ u32 hinic5_cqm_funcid2smfid(const struct tag_hinic5_cqm_handle *hinic5_cqm_handl
 	if (HINIC5_CQM_IS_LB_MODE_0(hinic5_cqm_handle))
 		return hinic5_cqm_lb0_get_smf_id(hinic5_cqm_handle);
 	WARN_ON_ONCE(true);
-
 	return 0;
 }
 

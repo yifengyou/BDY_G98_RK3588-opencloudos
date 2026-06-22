@@ -57,7 +57,7 @@ int hinic5_poll(struct napi_struct *napi, int budget)
 	if (unlikely(!napi_complete_done(napi, max(tx_pkts, rx_pkts)))) {
 		return max(tx_pkts, rx_pkts);
 	}
- 
+
 	hinic5_set_msix_state(nic_dev->hwdev, irq_cfg->msix_entry_idx,
 			      HINIC5_MSIX_ENABLE);
 
