@@ -2614,7 +2614,8 @@ static int __init ibpb_brtype_cmdline(char *str)
 }
 early_param("ibpb_brtype", ibpb_brtype_cmdline);
 
-#define IBPB_FLUSH_ALL_BIT 55
+#define HYGON_IBPB_FLUSH_ALL_BIT_V1 55
+#define HYGON_IBPB_FLUSH_ALL_BIT_V2 59
 
 void x86_spec_ctrl_setup_ap(void)
 {
@@ -2627,8 +2628,12 @@ void x86_spec_ctrl_setup_ap(void)
 	if ((boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) &&
 		(boot_cpu_data.x86 == 0x18)) {
 		if ((boot_cpu_data.x86_model > 0x3) &&
-			(ibpb_brtype == IBPB_FLUSH_ALL))
-			msr_set_bit(MSR_ZEN4_BP_CFG, IBPB_FLUSH_ALL_BIT);
+			(ibpb_brtype == IBPB_FLUSH_ALL)) {
+			if (boot_cpu_data.x86_model < 0x7)
+				msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBPB_FLUSH_ALL_BIT_V1);
+			else
+				msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBPB_FLUSH_ALL_BIT_V2);
+		}
 	}
 }
 
@@ -2832,7 +2837,10 @@ bool ibpb_can_flush_all(void)
 		if (boot_cpu_data.x86_model <= 0x3) {
 			return true;
 		} else if (ibpb_brtype == IBPB_FLUSH_ALL) {
-			msr_set_bit(MSR_ZEN4_BP_CFG, IBPB_FLUSH_ALL_BIT);
+			if (boot_cpu_data.x86_model < 0x7)
+				msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBPB_FLUSH_ALL_BIT_V1);
+			else
+				msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBPB_FLUSH_ALL_BIT_V2);
 			return true;
 		}
 		return false;

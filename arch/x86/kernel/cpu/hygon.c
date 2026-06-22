@@ -22,7 +22,9 @@
 
 #include "cpu.h"
 
-#define IBRS_FLUSH_RAS_BIT 56
+#define HYGON_IBRS_FLUSH_RAS_BIT_V1 56
+#define HYGON_IBRS_FLUSH_RAS_BIT_V2 60
+
 #ifdef CONFIG_NUMA
 /*
  * To workaround broken NUMA config.  Read the comment in
@@ -197,7 +199,10 @@ static void cpu_vul_mitigation(void)
 	 */
 	if ((boot_cpu_data.x86 == 0x18) &&
 		(boot_cpu_data.x86_model > 0x3)) {
-		msr_set_bit(MSR_ZEN4_BP_CFG, IBRS_FLUSH_RAS_BIT);
+		if (boot_cpu_data.x86_model < 0x7)
+			msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBRS_FLUSH_RAS_BIT_V1);
+		else
+			msr_set_bit(MSR_ZEN4_BP_CFG, HYGON_IBRS_FLUSH_RAS_BIT_V2);
 	}
 }
 
