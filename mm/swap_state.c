@@ -483,6 +483,10 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 
 	__folio_set_locked(folio);
 	__folio_set_swapbacked(folio);
+
+	if (!charged && mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry))
+		goto failed;
+
 	for (;;) {
 		ret = swap_cache_add_folio(folio, entry, &shadow);
 		if (!ret)
@@ -501,11 +505,6 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 		swapcache = swap_cache_get_folio(entry);
 		if (swapcache)
 			goto failed;
-	}
-
-	if (!charged && mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry)) {
-		swap_cache_del_folio(folio);
-		goto failed;
 	}
 
 	mem_cgroup_swapin_uncharge_swap(entry, folio_nr_pages(folio));
