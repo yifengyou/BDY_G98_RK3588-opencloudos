@@ -68,6 +68,8 @@ union { \
 #define KABI_REPLACE(_orig, _new)			_orig
 #define KABI_EXCLUDE(_elem)
 #define KABI_EXTEND_ENUM(_new)
+#define KABI_BROKEN_INSERT_ENUM(_new)
+#define KABI_BROKEN_REMOVE_ENUM(_orig)			_orig
 
 #else
 
@@ -93,6 +95,8 @@ union { \
 #define KABI_REPLACE(_orig, _new)			_new
 #endif
 #define KABI_EXCLUDE(_elem)		_elem
+#define KABI_BROKEN_INSERT_ENUM(_new)			_new
+#define KABI_BROKEN_REMOVE_ENUM(_orig)
 
 #endif /* __GENKSYMS__ */
 
