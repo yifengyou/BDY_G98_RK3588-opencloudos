@@ -1,3 +1,6 @@
+* Wed Jun 24 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.11
+- mm/swap: fix swap cache memcg accounting
+
 * Mon Jun 22 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.10
 - sched/fair: Disable DELAY_DEQUEUE by default temporarily
 
