@@ -749,10 +749,11 @@ __rqi_end_common(enum rqi_event_id event_id, u64 value,
 	if (delta_ns > this_cpu_read(rqi_pcpu_data.duration_max[duration_idx]))
 		this_cpu_write(rqi_pcpu_data.duration_max[duration_idx], delta_ns);
 
-	if (over_threshold && sys_rqi_save_stack && bucket >= RQI_LAT_16_32) {
+	if (over_threshold)
 		this_cpu_inc(rqi_pcpu_data.duration_over_threshold[duration_idx]);
+
+	if (over_threshold && sys_rqi_save_stack && bucket >= RQI_LAT_16_32)
 		rqi_save_stack(event_id, delta_ns, target_task);
-	}
 }
 
 void rqi_end(enum rqi_event_id event_id, u64 value)
@@ -810,7 +811,7 @@ void rqi_rundelay(struct task_struct *prev, u64 delta_ns)
 	if (over_threshold)
 		this_cpu_inc(rqi_pcpu_data.duration_over_threshold[duration_idx]);
 
-	if (over_threshold && prev)
+	if (over_threshold && sys_rqi_save_stack && bucket >= RQI_LAT_16_32 && prev)
 		rqi_save_stack(RQI_CPU_RUNDELAY, delta_ns, prev);
 }
 EXPORT_SYMBOL_GPL(rqi_rundelay);
@@ -1232,7 +1233,7 @@ static int rqi_control_proc_show(struct seq_file *m, void *v)
 	}
 	read_unlock_irqrestore(&rqi_events_lock, flags);
 
-	seq_puts(m, "event_name[,threshold=<value>],stat=<0|1>,cpu=<mask>\n");
+	seq_puts(m, "event_name[,threshold=<ms>],stat=<0|1>,cpu=<mask>\n");
 
 	for (i = 0; i < RQI_EVENT_ID_MAX; i++) {
 		const struct cpumask *cm = &snap[i].cpu_mask;
@@ -1243,7 +1244,8 @@ static int rqi_control_proc_show(struct seq_file *m, void *v)
 		seq_printf(m, "%s", snap[i].name);
 
 		if (snap[i].is_duration)
-			seq_printf(m, ",threshold=%llu", (u64)snap[i].threshold);
+			seq_printf(m, ",threshold=%llu",
+				   (u64)(snap[i].threshold / NSEC_PER_MSEC));
 
 		seq_printf(m, ",stat=%u,cpu=", snap[i].enabled ? 1 : 0);
 		if (!cpumask_empty(cm))
@@ -1324,10 +1326,17 @@ static ssize_t rqi_control_proc_write(struct file *file,
 			*p++ = '\0';
 
 		if (strncmp(token, "threshold=", 10) == 0) {
-			if (kstrtou64(token + 10, 0, &threshold)) {
+			u64 threshold_ms;
+
+			if (kstrtou64(token + 10, 0, &threshold_ms)) {
 				ret = -EINVAL;
 				goto out;
 			}
+			if (threshold_ms > U64_MAX / NSEC_PER_MSEC) {
+				ret = -EINVAL;
+				goto out;
+			}
+			threshold = threshold_ms * NSEC_PER_MSEC;
 			threshold_set = true;
 		} else if (strncmp(token, "stat=", 5) == 0) {
 			int val;
