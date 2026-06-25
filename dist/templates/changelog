@@ -1,3 +1,6 @@
+* Thu Jun 25 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.12
+- rue/rqi: fix threshold unit and some duration event semantics
+
 * Wed Jun 24 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.11
 - mm/swap: fix swap cache memcg accounting
 
