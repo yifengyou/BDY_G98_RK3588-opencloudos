@@ -5,7 +5,7 @@
 #define __LINUX_ARM_MPAM_H
 
 #include <linux/acpi.h>
-#include <linux/resctrl_types.h>
+#include <linux/resctrl_types_mpam.h>
 #include <linux/types.h>
 
 /*
