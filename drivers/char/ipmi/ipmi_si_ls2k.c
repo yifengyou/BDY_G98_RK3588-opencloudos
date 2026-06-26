@@ -152,7 +152,7 @@ static int ipmi_ls2k_probe(struct platform_device *pdev)
 
 	memset(&io, 0, sizeof(io));
 
-	io.si_info	= &ipmi_kcs_si_info;
+	io.si_type	= SI_KCS;
 	io.io_setup	= ipmi_ls2k_mem_setup;
 	io.addr_data	= pdev->resource[0].start;
 	io.regspacing	= resource_size(&pdev->resource[0]);
@@ -163,9 +163,10 @@ static int ipmi_ls2k_probe(struct platform_device *pdev)
 	return ipmi_si_add_smi(&io);
 }
 
-static void ipmi_ls2k_remove(struct platform_device *pdev)
+static int ipmi_ls2k_remove(struct platform_device *pdev)
 {
 	ipmi_si_remove_by_dev(&pdev->dev);
+	return 0;
 }
 
 static struct platform_driver ipmi_ls2k_platform_driver = {
