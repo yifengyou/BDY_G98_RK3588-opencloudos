@@ -323,6 +323,7 @@ extern bool thp_cgroup_rejected(struct vm_area_struct *vma);
 extern bool thp_cgroup_anon_enabled(struct vm_area_struct *vma);
 extern bool thp_cgroup_shmem_enabled(struct vm_area_struct *vma);
 extern bool thp_cgroup_file_enabled(struct vm_area_struct *vma);
+extern bool thp_cgroup_limit_check(struct vm_area_struct *vma);
 #endif
 
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,

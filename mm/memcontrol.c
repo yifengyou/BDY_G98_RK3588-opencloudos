@@ -8183,6 +8183,46 @@ static ssize_t memcg_thp_flag_write(struct kernfs_open_file *of,
 	}
 	return ret;
 }
+
+static int memcg_thp_limit_show(struct seq_file *sf, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (memcg->thp_limit_in_bytes == ULONG_MAX)
+		seq_printf(sf, "-1\n");
+	else
+		seq_printf(sf, "%lu\n", memcg->thp_limit_in_bytes);
+	return 0;
+}
+
+static ssize_t memcg_thp_limit_write(struct kernfs_open_file *of,
+				      char *buf, size_t nbytes, loff_t off)
+{
+	char *end;
+	u64 bytes;
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	buf = strstrip(buf);
+	if (sysfs_streq(buf, "-1")) {
+		memcg->thp_limit_in_bytes = ULONG_MAX;
+		return nbytes;
+	}
+
+	bytes = memparse(buf, &end);
+	if (*end != '\0')
+		return -EINVAL;
+	if (bytes < HPAGE_PMD_SIZE)
+		return -EINVAL;
+
+	memcg->thp_limit_in_bytes = min_t(u64, bytes, ULONG_MAX);
+	return nbytes;
+}
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE_CGROUP */
 
 static struct cftype mem_cgroup_legacy_files[] = {
@@ -8532,6 +8572,12 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.seq_show = memcg_thp_flag_show,
 		.write = memcg_thp_flag_write,
 	},
+	{
+		.name = "transparent_hugepage.limit_in_bytes",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_limit_show,
+		.write = memcg_thp_limit_write,
+	},
 #endif
 	{ },	/* terminate */
 };
@@ -8861,6 +8907,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	if (parent) {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
 		memcg->thp_flag = parent->thp_flag;
+		memcg->thp_limit_in_bytes = ULONG_MAX;
 		if (memcg->thp_flag & ((1 << TRANSPARENT_HUGEPAGE_FLAG) |
 		    (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
 			memcg_inc_thp_enabled(memcg);
@@ -10879,6 +10926,12 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = memcg_thp_flag_show,
 		.write = memcg_thp_flag_write,
+	},
+	{
+		.name = "transparent_hugepage.limit_in_bytes",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_limit_show,
+		.write = memcg_thp_limit_write,
 	},
 #endif
 	{ }	/* terminate */

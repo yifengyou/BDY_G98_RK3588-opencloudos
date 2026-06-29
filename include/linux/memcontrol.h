@@ -476,6 +476,7 @@ struct mem_cgroup {
 	 * are plain members instead of consuming KABI_RESERVE slots.
 	 */
 	unsigned long thp_flag;
+	unsigned long thp_limit_in_bytes;
 #endif
 
 	KABI_RESERVE(1);

@@ -186,6 +186,9 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 		if (thp_cgroup_rejected(vma))
 			return 0;
 
+		if (!thp_cgroup_limit_check(vma))
+			return 0;
+
 		if (enforce_sysfs) {
 			unsigned long flags = memcg_thp_flag(vma);
 			bool is_always = flags & (1 << TRANSPARENT_HUGEPAGE_FLAG);
@@ -760,6 +763,44 @@ bool thp_cgroup_file_enabled(struct vm_area_struct *vma)
 	return thp_cgroup_type_enabled(vma, THP_CGROUP_FILE);
 }
 
+#define THP_LIMIT_K(x) ((x) << (PAGE_SHIFT - 10))
+/* Hierarchical THP limit walk given an already-acquired @memcg. No get/put. */
+static bool __thp_cgroup_limit_check(struct mem_cgroup *memcg)
+{
+	struct mem_cgroup *mi;
+	unsigned long thp_pages;
+
+	for (mi = memcg; mi && !mem_cgroup_is_root(mi);
+	     mi = parent_mem_cgroup(mi)) {
+		if (mi->thp_limit_in_bytes == ULONG_MAX)
+			continue;
+		thp_pages = memcg_page_state(mi, NR_ANON_THPS) +
+			    memcg_page_state(mi, NR_SHMEM_THPS) +
+			    memcg_page_state(mi, NR_FILE_THPS);
+		if ((mi->thp_limit_in_bytes >> 10) <= THP_LIMIT_K(thp_pages))
+			return false;
+	}
+	return true;
+}
+#undef THP_LIMIT_K
+
+bool thp_cgroup_limit_check(struct vm_area_struct *vma)
+{
+	struct mem_cgroup *memcg;
+	bool valid, ret = true;
+
+	if (unlikely(!vma) || !thp_cgroup_any_enabled())
+		return true;
+
+	memcg = get_valid_memcg(vma->vm_mm, &valid);
+	if (valid)
+		ret = __thp_cgroup_limit_check(memcg);
+
+	if (memcg)
+		mem_cgroup_put(memcg);
+	return ret;
+}
+
 /*
  * Single-lookup PMD verdict for @vma under per-cgroup THP. Acquires the memcg
  * once and folds the type-enabled and hierarchical-limit checks. Returns
@@ -779,7 +820,8 @@ enum thp_cgroup_verdict thp_cgroup_pmd_verdict(struct vm_area_struct *vma,
 
 	memcg = get_valid_memcg(vma->vm_mm, &valid);
 	if (valid) {
-		bool on = __thp_cgroup_type_enabled(vma, memcg, type, vm_flags);
+		bool on = __thp_cgroup_type_enabled(vma, memcg, type, vm_flags) &&
+			  __thp_cgroup_limit_check(memcg);
 
 		v = on ? THP_CGROUP_PMD_ON : THP_CGROUP_PMD_OFF;
 	}

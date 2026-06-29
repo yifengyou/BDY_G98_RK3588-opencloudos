@@ -374,7 +374,8 @@ int hugepage_madvise(struct vm_area_struct *vma,
 		 * may not happen any time soon.
 		 */
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
-		if (!thp_cgroup_rejected(vma))
+		if (thp_cgroup_limit_check(vma) &&
+		    !thp_cgroup_rejected(vma))
 #endif
 			khugepaged_enter_vma(vma, *vm_flags);
 		break;
@@ -2452,6 +2453,12 @@ skip:
 			progress++;
 			continue;
 		}
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		if (!thp_cgroup_limit_check(vma)) {
+			progress++;
+			break;
+		}
+#endif
 		hstart = round_up(vma->vm_start, HPAGE_PMD_SIZE);
 		hend = round_down(vma->vm_end, HPAGE_PMD_SIZE);
 		if (khugepaged_scan.address > hend)
