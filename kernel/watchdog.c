@@ -29,10 +29,14 @@
 #include <linux/kprobes.h>
 
 #include <linux/sched/clock.h>
+#include <linux/sched/cputime.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 
 #include <asm/irq_regs.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/lockup.h>
 
 static DEFINE_MUTEX(watchdog_mutex);
 
@@ -54,6 +58,19 @@ int __read_mostly watchdog_thresh = 300;
 int __read_mostly watchdog_thresh = 10;
 #endif
 static int __read_mostly watchdog_thresh_next;
+/*
+ * Sub-second softlockup threshold (ms). 0: disabled, fall back to
+ * watchdog_thresh (seconds). 100..150000: override watchdog_thresh.
+ */
+static int __read_mostly watchdog_thresh_ms;
+static int __read_mostly watchdog_thresh_ms_next;
+/*
+ * "Long on-CPU" detection threshold (ms). 0: disabled. 100..150000:
+ * emit long_oncpu_sample when @current has been continuously on-CPU
+ * (modulo IRQ/steal, see task_oncpu_ns) for at least this many ms.
+ */
+static int __read_mostly long_oncpu_thresh_ms;
+static int __read_mostly long_oncpu_thresh_ms_next;
 static int __read_mostly watchdog_hardlockup_available;
 
 struct cpumask watchdog_cpumask __read_mostly;
@@ -105,6 +122,8 @@ static DEFINE_PER_CPU(atomic_t, hrtimer_interrupts);
 static DEFINE_PER_CPU(int, hrtimer_interrupts_saved);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_warned);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_touched);
+static DEFINE_PER_CPU(u64, watchdog_hardlockup_last_kick_ns);
+static u64 __read_mostly watchdog_hardlockup_sample_period;
 static unsigned long hard_lockup_nmi_warn;
 
 notrace void arch_touch_nmi_watchdog(void)
@@ -146,9 +165,30 @@ NOKPROBE_SYMBOL(is_hardlockup);
 static void watchdog_hardlockup_kick(void)
 {
 	int new_interrupts;
+	u64 now, last, period;
+
+	/* Keep seconds cadence even when softlockup hrtimer fires faster. */
+	period = READ_ONCE(watchdog_hardlockup_sample_period);
+	if (period) {
+		now = local_clock();
+		last = __this_cpu_read(watchdog_hardlockup_last_kick_ns);
+		if (last && now - last < period)
+			return;
+		__this_cpu_write(watchdog_hardlockup_last_kick_ns, now);
+	}
 
 	new_interrupts = atomic_inc_return(this_cpu_ptr(&hrtimer_interrupts));
 	watchdog_buddy_check_hardlockup(new_interrupts);
+}
+
+static void watchdog_hardlockup_update_hrtimer_sample_period(u64 period)
+{
+	WRITE_ONCE(watchdog_hardlockup_sample_period, period);
+}
+
+static void watchdog_hardlockup_reset_kick_time(void)
+{
+	__this_cpu_write(watchdog_hardlockup_last_kick_ns, local_clock());
 }
 
 void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
@@ -179,6 +219,20 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 		if (sysctl_hardlockup_all_cpu_backtrace) {
 			if (test_and_set_bit_lock(0, &hard_lockup_nmi_warn))
 				return;
+		}
+
+		/*
+		 * Structured tracepoint, NMI-safe. We can only safely read
+		 * `current` and the saved regs when the locked-up CPU is the
+		 * one running this NMI handler; for cross-CPU detection
+		 * (perf/buddy on a different CPU) leave task/ip empty rather
+		 * than racing with the remote rq.
+		 */
+		if (cpu == this_cpu) {
+			trace_hardlockup_warn(cpu, current->pid, current->comm,
+				regs ? instruction_pointer(regs) : 0);
+		} else {
+			trace_hardlockup_warn(cpu, 0, "?", 0);
 		}
 
 		/*
@@ -224,6 +278,11 @@ NOKPROBE_SYMBOL(watchdog_hardlockup_check);
 #else /* CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER */
 
 static inline void watchdog_hardlockup_kick(void) { }
+static inline void
+watchdog_hardlockup_update_hrtimer_sample_period(u64 period)
+{
+}
+static inline void watchdog_hardlockup_reset_kick_time(void) { }
 
 #endif /* !CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER */
 
@@ -310,9 +369,28 @@ unsigned int __read_mostly softlockup_panic =
 
 static bool softlockup_initialized __read_mostly;
 static u64 __read_mostly sample_period;
+/*
+ * Seconds-grained cadence for cpustat / IRQ-storm detection, always
+ * tracks the legacy seconds value even when watchdog_thresh_ms makes
+ * the hrtimer fire faster.
+ */
+static u64 __read_mostly cpustat_sample_period;
 
 /* Timestamp taken after the last successful reschedule. */
 static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
+/*
+ * Nanosecond-precision counterpart of watchdog_touch_ts. Used for
+ * the softlockup_sample tracepoint and, when watchdog_thresh_ms is
+ * set, for the actual sub-second lockup judgement.
+ */
+static DEFINE_PER_CPU(u64, watchdog_touch_ns);
+/*
+ * Rate-limit timestamp for ms-path softlockup_warn events: emit at
+ * most once per 2*thresh_ms window. Kept separate from
+ * watchdog_report_ts so the ms path does not influence the
+ * seconds-grained pr_emerg / softlockup_panic timing.
+ */
+static DEFINE_PER_CPU(u64, watchdog_ms_report_ns);
 /* Timestamp of the last softlockup report. */
 static DEFINE_PER_CPU(unsigned long, watchdog_report_ts);
 static DEFINE_PER_CPU(struct hrtimer, watchdog_hrtimer);
@@ -368,6 +446,11 @@ static const enum cpu_usage_stat tracked_stats[NUM_STATS_PER_GROUP] = {
 static DEFINE_PER_CPU(u16, cpustat_old[NUM_STATS_PER_GROUP]);
 static DEFINE_PER_CPU(u8, cpustat_util[NUM_SAMPLE_PERIODS][NUM_STATS_PER_GROUP]);
 static DEFINE_PER_CPU(u8, cpustat_tail);
+/*
+ * Gates the cpustat ring to cpustat_sample_period so HARDIRQ_PERCENT_THRESH
+ * keeps a seconds-sized window even when the hrtimer fires at ms cadence.
+ */
+static DEFINE_PER_CPU(u64, cpustat_last_update_ns);
 
 /*
  * We don't need nanosecond resolution. A granularity of 16ms is
@@ -388,17 +471,28 @@ static void update_cpustat(void)
 	struct kernel_cpustat kcpustat;
 	u64 *cpustat = kcpustat.cpustat;
 	u8 tail = __this_cpu_read(cpustat_tail);
-	u16 sample_period_16 = get_16bit_precision(sample_period);
+	u64 now_ns = local_clock();
+	u64 last_ns = __this_cpu_read(cpustat_last_update_ns);
+	u64 period_ns = READ_ONCE(cpustat_sample_period);
+	u16 period_ns_16;
 
 	if (!irqtime_enabled())
 		return;
+
+	if (!period_ns)
+		return;
+	if (last_ns && (now_ns - last_ns) < period_ns)
+		return;
+
+	__this_cpu_write(cpustat_last_update_ns, now_ns);
+	period_ns_16 = get_16bit_precision(period_ns);
 
 	kcpustat_cpu_fetch(&kcpustat, smp_processor_id());
 
 	for (i = 0; i < NUM_STATS_PER_GROUP; i++) {
 		old_stat = __this_cpu_read(cpustat_old[i]);
 		new_stat = get_16bit_precision(cpustat[tracked_stats[i]]);
-		util = DIV_ROUND_UP(100 * (new_stat - old_stat), sample_period_16);
+		util = DIV_ROUND_UP(100 * (new_stat - old_stat), period_ns_16);
 		__this_cpu_write(cpustat_util[tail][i], util);
 		__this_cpu_write(cpustat_old[i], new_stat);
 	}
@@ -410,7 +504,7 @@ static void print_cpustat(void)
 {
 	int i, group;
 	u8 tail = __this_cpu_read(cpustat_tail);
-	u64 sample_period_second = sample_period;
+	u64 sample_period_second = READ_ONCE(cpustat_sample_period);
 
 	do_div(sample_period_second, NSEC_PER_SEC);
 
@@ -568,17 +662,35 @@ static unsigned long get_timestamp(void)
 	return running_clock() >> 30LL;  /* 2^30 ~= 10^9 */
 }
 
+static u32 get_effective_thresh_ms(void)
+{
+	int ms = READ_ONCE(watchdog_thresh_ms);
+
+	if (ms > 0)
+		return (u32)ms;
+	return (u32)READ_ONCE(watchdog_thresh) * MSEC_PER_SEC;
+}
+
 static void set_sample_period(void)
 {
-	/*
-	 * convert watchdog_thresh from seconds to ns
-	 * the divide by 5 is to give hrtimer several chances (two
-	 * or three with the current relation between the soft
-	 * and hard thresholds) to increment before the
-	 * hardlockup detector generates a warning
-	 */
-	sample_period = get_softlockup_thresh() * ((u64)NSEC_PER_SEC / NUM_SAMPLE_PERIODS);
-	watchdog_update_hrtimer_threshold(sample_period);
+	int ms = READ_ONCE(watchdog_thresh_ms);
+	u64 seconds_period;
+
+	seconds_period = get_softlockup_thresh() *
+			 ((u64)NSEC_PER_SEC / NUM_SAMPLE_PERIODS);
+
+	if (ms > 0) {
+		/* Pick the faster cadence so both judgments have resolution. */
+		u64 ms_period = (u64)ms * 2 * NSEC_PER_MSEC / NUM_SAMPLE_PERIODS;
+
+		sample_period = min(seconds_period, ms_period);
+	} else {
+		sample_period = seconds_period;
+	}
+
+	WRITE_ONCE(cpustat_sample_period, seconds_period);
+	watchdog_hardlockup_update_hrtimer_sample_period(seconds_period);
+	watchdog_update_hrtimer_threshold(seconds_period);
 }
 
 static void update_report_ts(void)
@@ -590,6 +702,8 @@ static void update_report_ts(void)
 static void update_touch_ts(void)
 {
 	__this_cpu_write(watchdog_touch_ts, get_timestamp());
+	__this_cpu_write(watchdog_touch_ns, local_clock());
+	__this_cpu_write(watchdog_ms_report_ns, 0);
 	update_report_ts();
 }
 
@@ -646,7 +760,35 @@ static int is_softlockup(unsigned long touch_ts,
 			 unsigned long period_ts,
 			 unsigned long now)
 {
-	if ((watchdog_enabled & WATCHDOG_SOFTOCKUP_ENABLED) && watchdog_thresh) {
+	int thresh_ms = READ_ONCE(watchdog_thresh_ms);
+
+	if (!(watchdog_enabled & WATCHDOG_SOFTOCKUP_ENABLED))
+		return 0;
+
+	/*
+	 * Sub-second path: returns a sentinel duration for the event-only
+	 * branch in watchdog_timer_fn(). Past the seconds threshold we fall
+	 * through so the legacy IRQ-storm / pr_emerg / panic path still runs.
+	 */
+	if (thresh_ms > 0) {
+		u64 now_ns    = local_clock();
+		u64 touch_ns  = __this_cpu_read(watchdog_touch_ns);
+		u64 elapsed   = (now_ns >= touch_ns) ? now_ns - touch_ns : 0;
+		u64 ms_limit  = (u64)thresh_ms * 2 * NSEC_PER_MSEC;
+		u64 secs_limit = (u64)READ_ONCE(watchdog_thresh) * 2 *
+				 NSEC_PER_SEC;
+
+		if (elapsed > ms_limit &&
+		    (secs_limit == 0 || elapsed < secs_limit)) {
+			unsigned int secs = (unsigned int)(elapsed / NSEC_PER_SEC);
+
+			/* printk format expects non-zero duration */
+			return secs ?: 1;
+		}
+	}
+
+	/* legacy seconds path, behavior preserved */
+	if (watchdog_thresh) {
 		/*
 		 * If period_ts has not been updated during a sample_period, then
 		 * in the subsequent few sample_periods, period_ts might also not
@@ -740,6 +882,44 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 
 	update_cpustat();
 
+	/*
+	 * Per-tick observation tracepoint. Default-disabled; when off this
+	 * is one static_branch jump. Pair with a filter such as
+	 * "stuck_ns >= 200000000" to record only long windows.
+	 */
+	if (trace_softlockup_sample_enabled()) {
+		u64 now_ns   = local_clock();
+		u64 touch_ns = __this_cpu_read(watchdog_touch_ns);
+		u64 stuck_ns = (now_ns >= touch_ns) ? now_ns - touch_ns : 0;
+		unsigned long ip = regs ? instruction_pointer(regs) : 0;
+
+		trace_softlockup_sample(smp_processor_id(), stuck_ns,
+					get_effective_thresh_ms(),
+					current->pid, current->comm, ip);
+	}
+
+	/*
+	 * "Long on-CPU" detection. Unlike softlockup, only resets on a real
+	 * context switch into a different task, so cond_resched() callers
+	 * that always win the rebid still surface.
+	 */
+	if (trace_long_oncpu_sample_enabled()) {
+		u32 ms = READ_ONCE(long_oncpu_thresh_ms);
+
+		if (ms && !is_idle_task(current)) {
+			u64 oncpu_ns = task_oncpu_ns(current);
+
+			if (oncpu_ns >= (u64)ms * NSEC_PER_MSEC) {
+				unsigned long ip = regs ?
+					instruction_pointer(regs) : 0;
+
+				trace_long_oncpu_sample(smp_processor_id(),
+					oncpu_ns, ms,
+					current->pid, current->comm, ip);
+			}
+		}
+	}
+
 	/* Reset the interval when touched by known problematic code. */
 	if (period_ts == SOFTLOCKUP_DELAY_REPORT) {
 		if (unlikely(__this_cpu_read(softlockup_touch_sync))) {
@@ -760,6 +940,41 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	duration = is_softlockup(touch_ts, period_ts, now);
 	if (unlikely(duration)) {
 		/*
+		 * Sub-second observability-only branch: emit softlockup_warn
+		 * without escalating to pr_emerg / panic while still below
+		 * the seconds threshold. Falls through past 2*watchdog_thresh
+		 * so softlockup_panic=1 still works. Uses watchdog_ms_report_ns
+		 * for rate-limiting -- do NOT touch watchdog_report_ts here,
+		 * that would delay the seconds-path panic.
+		 */
+		if (READ_ONCE(watchdog_thresh_ms) > 0 &&
+		    (READ_ONCE(watchdog_thresh) == 0 ||
+		     duration < 2 * READ_ONCE(watchdog_thresh))) {
+			u64 now_ns   = local_clock();
+			u64 touch_ns = __this_cpu_read(watchdog_touch_ns);
+			u64 stuck_ns = (now_ns >= touch_ns) ? now_ns - touch_ns
+				: (u64)duration * NSEC_PER_SEC;
+			u64 last_ms_ns = __this_cpu_read(watchdog_ms_report_ns);
+			u64 window_ns  = (u64)READ_ONCE(watchdog_thresh_ms) *
+					 2 * NSEC_PER_MSEC;
+
+			if (!last_ms_ns ||
+			    (now_ns >= last_ms_ns &&
+			     now_ns - last_ms_ns >= window_ns)) {
+				unsigned long ip = regs ?
+					instruction_pointer(regs) : 0;
+
+				trace_softlockup_warn(smp_processor_id(),
+						      stuck_ns,
+						      get_effective_thresh_ms(),
+						      current->pid,
+						      current->comm, ip);
+				__this_cpu_write(watchdog_ms_report_ns, now_ns);
+			}
+			return HRTIMER_RESTART;
+		}
+
+		/*
 		 * Prevent multiple soft-lockup reports if one cpu is already
 		 * engaged in dumping all cpu back traces.
 		 */
@@ -770,6 +985,24 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 
 		/* Start period for the next softlockup warning. */
 		update_report_ts();
+
+		/*
+		 * Structured warning event, emitted in lockstep with the
+		 * pr_emerg() below so user-space consumers (hist trigger,
+		 * stacktrace trigger, external collectors) get the same
+		 * signal without grepping dmesg.
+		 */
+		{
+			u64 now_ns   = local_clock();
+			u64 touch_ns = __this_cpu_read(watchdog_touch_ns);
+			u64 stuck_ns = (now_ns >= touch_ns) ? now_ns - touch_ns
+				: (u64)duration * NSEC_PER_SEC;
+			unsigned long ip = regs ? instruction_pointer(regs) : 0;
+
+			trace_softlockup_warn(smp_processor_id(), stuck_ns,
+					      get_effective_thresh_ms(),
+					      current->pid, current->comm, ip);
+		}
 
 		printk_cpu_sync_get_irqsave(flags);
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
@@ -819,6 +1052,7 @@ static void watchdog_enable(unsigned int cpu)
 
 	/* Initialize timestamp */
 	update_touch_ts();
+	watchdog_hardlockup_reset_kick_time();
 	/* Enable the hardlockup detector */
 	if (watchdog_enabled & WATCHDOG_HARDLOCKUP_ENABLED) {
 		if (disable_sdei_nmi_watchdog)
@@ -1123,6 +1357,78 @@ int proc_watchdog_cpumask(struct ctl_table *table, int write,
 	return err;
 }
 
+#ifdef CONFIG_SOFTLOCKUP_DETECTOR
+/*
+ * /proc/sys/kernel/watchdog_thresh_ms - sub-second softlockup threshold.
+ * Reject (0, 100) explicitly so a stray small value cannot drive the
+ * hrtimer below the safe floor.
+ */
+int proc_watchdog_thresh_ms(struct ctl_table *table, int write,
+			    void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int err, old, val;
+
+	mutex_lock(&watchdog_mutex);
+
+	watchdog_thresh_ms_next = READ_ONCE(watchdog_thresh_ms);
+
+	old = watchdog_thresh_ms_next;
+	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (err || !write)
+		goto out;
+
+	val = watchdog_thresh_ms_next;
+	if (val != 0 && val < 100) {
+		watchdog_thresh_ms_next = old;
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (old != val) {
+		WRITE_ONCE(watchdog_thresh_ms, val);
+		/* Reuse the seconds-path reconfiguration so hrtimers pick up. */
+		watchdog_thresh_next = READ_ONCE(watchdog_thresh);
+		proc_watchdog_update(true);
+	}
+out:
+	mutex_unlock(&watchdog_mutex);
+	return err;
+}
+
+/*
+ * /proc/sys/kernel/long_oncpu_thresh_ms - "Long on-CPU" threshold (ms).
+ * Lighter than proc_watchdog_thresh_ms(): no sample_period reconfig
+ * needed, the next hrtimer tick picks up the new value via WRITE_ONCE.
+ */
+int proc_long_oncpu_thresh_ms(struct ctl_table *table, int write,
+			      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int err, old, val;
+
+	mutex_lock(&watchdog_mutex);
+
+	long_oncpu_thresh_ms_next = READ_ONCE(long_oncpu_thresh_ms);
+
+	old = long_oncpu_thresh_ms_next;
+	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (err || !write)
+		goto out;
+
+	val = long_oncpu_thresh_ms_next;
+	if (val != 0 && val < 100) {
+		long_oncpu_thresh_ms_next = old;
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (old != val)
+		WRITE_ONCE(long_oncpu_thresh_ms, val);
+out:
+	mutex_unlock(&watchdog_mutex);
+	return err;
+}
+#endif /* CONFIG_SOFTLOCKUP_DETECTOR */
+
 /*
  * If enable CONFIG_KASAN, the system will run much
  * slower, increase watchdog_thresh's max value to avoid soft lockup
@@ -1132,6 +1438,10 @@ int proc_watchdog_cpumask(struct ctl_table *table, int write,
 static const int three_hundred = 300;
 #else
 static const int one_hundred_fifty = 150;
+#endif
+
+#ifdef CONFIG_SOFTLOCKUP_DETECTOR
+static const int watchdog_thresh_ms_max = 150 * 1000;
 #endif
 
 static struct ctl_table watchdog_sysctls[] = {
@@ -1182,6 +1492,24 @@ static struct ctl_table watchdog_sysctls[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "watchdog_thresh_ms",
+		.data		= &watchdog_thresh_ms_next,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_watchdog_thresh_ms,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= (void *)&watchdog_thresh_ms_max,
+	},
+	{
+		.procname	= "long_oncpu_thresh_ms",
+		.data		= &long_oncpu_thresh_ms_next,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_long_oncpu_thresh_ms,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= (void *)&watchdog_thresh_ms_max,
 	},
 #ifdef CONFIG_SMP
 	{

@@ -180,4 +180,7 @@ static inline void prev_cputime_init(struct prev_cputime *prev)
 extern unsigned long long
 task_sched_runtime(struct task_struct *task);
 
+/* Approximate ns @p has been continuously on CPU. See kernel/sched/core.c. */
+extern u64 task_oncpu_ns(struct task_struct *p);
+
 #endif /* _LINUX_SCHED_CPUTIME_H */

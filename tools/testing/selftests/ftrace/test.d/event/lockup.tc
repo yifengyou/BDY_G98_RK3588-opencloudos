@@ -1,0 +1,113 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: lockup tracepoints - softlockup_{sample,warn} / hardlockup_warn / long_oncpu_sample
+# requires: events/lockup/softlockup_sample/enable
+
+EV=events/lockup
+THRESH_MS=/proc/sys/kernel/watchdog_thresh_ms
+ONCPU_THRESH=/proc/sys/kernel/long_oncpu_thresh_ms
+
+reset() {
+    echo 0 > $EV/softlockup_sample/enable 2>/dev/null
+    echo 0 > $EV/softlockup_warn/enable   2>/dev/null
+    echo 0 > $EV/hardlockup_warn/enable   2>/dev/null
+    echo 0 > $EV/long_oncpu_sample/enable 2>/dev/null
+    echo '!stacktrace*' > $EV/softlockup_sample/trigger 2>/dev/null || true
+    echo '!hist*'       > $EV/softlockup_sample/trigger 2>/dev/null || true
+    echo '!stacktrace*' > $EV/long_oncpu_sample/trigger 2>/dev/null || true
+    echo '!hist*'       > $EV/long_oncpu_sample/trigger 2>/dev/null || true
+    echo '0' > $EV/softlockup_sample/filter 2>/dev/null || true
+    echo '0' > $EV/long_oncpu_sample/filter 2>/dev/null || true
+    [ -w "$THRESH_MS" ]    && echo 0 > "$THRESH_MS"
+    [ -w "$ONCPU_THRESH" ] && echo 0 > "$ONCPU_THRESH"
+    clear_trace
+}
+
+fail() {
+    echo "FAIL: $1"
+    reset
+    exit_fail
+}
+
+reset
+
+# ----- T1: per-tick observation event emits at all -----
+echo 1 > $EV/softlockup_sample/enable
+sleep 6
+n=$(grep -c softlockup_sample trace)
+[ "$n" -lt 1 ] && fail "T1: no softlockup_sample emitted in 6s (default thresh)"
+reset
+
+# ----- T2: thresh_ms boundary checks -----
+if [ ! -w "$THRESH_MS" ]; then
+    echo "skip: $THRESH_MS not present (CONFIG_SOFTLOCKUP_DETECTOR=n)"
+else
+    echo 50      > "$THRESH_MS" 2>/dev/null && fail "T2: 50 should be rejected"
+    echo 200000  > "$THRESH_MS" 2>/dev/null && fail "T2: 200000 should be rejected"
+    echo 100     > "$THRESH_MS" || fail "T2: 100 (lower bound) rejected"
+    echo 0       > "$THRESH_MS" || fail "T2: 0 (disable) rejected"
+    got=$(cat "$THRESH_MS")
+    [ "$got" = "0" ] || fail "T2: readback after disable mismatch: $got"
+    reset
+
+    # ----- T3: sub-second cadence under thresh_ms=500 -----
+    echo 500 > "$THRESH_MS"
+    echo 1   > $EV/softlockup_sample/enable
+    sleep 2
+    n=$(grep -c softlockup_sample trace)
+    [ "$n" -lt 4 ] && fail "T3: expected >=4 samples in 2s under thresh_ms=500, got $n"
+    reset
+fi
+
+# ----- T4: filter actually filters -----
+echo 'stuck_ns >= 999999999999' > $EV/softlockup_sample/filter
+echo 1 > $EV/softlockup_sample/enable
+sleep 4
+n=$(grep -c softlockup_sample trace)
+[ "$n" -ne 0 ] && fail "T4: impossible filter let $n events through"
+reset
+
+# ----- T5: hist trigger keyed by ip.sym + comm -----
+echo 'hist:keys=ip.sym,comm:vals=hitcount,stuck_ns' > $EV/softlockup_sample/trigger \
+    || fail "T5: hist trigger rejected"
+echo 1 > $EV/softlockup_sample/enable
+sleep 6
+grep -q 'ip.sym' $EV/softlockup_sample/hist || fail "T5: hist output missing"
+reset
+
+# ----- T6: stacktrace trigger does not crash -----
+echo 'stacktrace:3' > $EV/softlockup_sample/trigger || fail "T6: stacktrace trigger rejected"
+echo 1 > $EV/softlockup_sample/enable
+sleep 6
+grep -q '<stack trace>' trace || fail "T6: stacktrace not recorded"
+reset
+
+# ----- T7: long_oncpu_thresh_ms boundary checks -----
+if [ ! -w "$ONCPU_THRESH" ]; then
+    echo "skip T7/T8: $ONCPU_THRESH not present (CONFIG_SOFTLOCKUP_DETECTOR=n)"
+else
+    echo 50      > "$ONCPU_THRESH" 2>/dev/null && fail "T7: 50 should be rejected"
+    echo 200000  > "$ONCPU_THRESH" 2>/dev/null && fail "T7: 200000 should be rejected"
+    echo 100     > "$ONCPU_THRESH" || fail "T7: 100 (lower bound) rejected"
+    echo 0       > "$ONCPU_THRESH" || fail "T7: 0 (disable) rejected"
+    got=$(cat "$ONCPU_THRESH")
+    [ "$got" = "0" ] || fail "T7: readback after disable mismatch: $got"
+    reset
+
+    # ----- T8: long_oncpu_sample fires for a CPU-bound user task -----
+    echo 100 > "$ONCPU_THRESH"
+    echo 1   > $EV/long_oncpu_sample/enable
+    if command -v taskset >/dev/null 2>&1; then
+        taskset -c 0 sh -c 'end=$((`date +%s`+3)); while [ `date +%s` -lt $end ]; do :; done' &
+    else
+        sh -c 'end=$((`date +%s`+3)); while [ `date +%s` -lt $end ]; do :; done' &
+    fi
+    bgpid=$!
+    sleep 4
+    wait "$bgpid" 2>/dev/null
+    n=$(grep -c long_oncpu_sample trace)
+    [ "$n" -lt 1 ] && fail "T8: no long_oncpu_sample emitted under user CPU stress"
+    reset
+fi
+
+exit 0

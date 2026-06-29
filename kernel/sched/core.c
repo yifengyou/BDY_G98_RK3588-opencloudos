@@ -5893,6 +5893,24 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	return ns;
 }
 
+/*
+ * Approximate "@p has been continuously on CPU for this long".
+ *
+ * All scheduling classes reset p->se.exec_start when @p is picked to
+ * run, so this delta is a self-resetting per-on-CPU-segment timer --
+ * resets on a real context-switch, not on "fake" cond_resched().
+ * Drift vs rq_clock_task (IRQ/steal) is intentional: we want
+ * wall-clock CPU occupancy by @p. Lock-free, NMI-safe.
+ */
+u64 task_oncpu_ns(struct task_struct *p)
+{
+	u64 now = local_clock();
+	u64 start = READ_ONCE(p->se.exec_start);
+
+	return (now > start) ? now - start : 0;
+}
+EXPORT_SYMBOL_GPL(task_oncpu_ns);
+
 #ifdef CONFIG_SCHED_DEBUG
 static u64 cpu_resched_latency(struct rq *rq)
 {
