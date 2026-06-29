@@ -72,6 +72,10 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+#include <linux/khugepaged.h>
+#include <linux/huge_mm.h>
+#endif
 
 #include "internal.h"
 #include <net/sock.h>
@@ -103,6 +107,10 @@ EXPORT_SYMBOL(memory_cgrp_subsys);
 
 struct mem_cgroup *root_mem_cgroup __read_mostly;
 EXPORT_SYMBOL_GPL(root_mem_cgroup);
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+atomic_t memcg_thp_enabled_count __read_mostly = ATOMIC_INIT(0);
+#endif
 
 /* Active memory cgroup to use from an interrupt context */
 DEFINE_PER_CPU(struct mem_cgroup *, int_active_memcg);
@@ -8112,6 +8120,71 @@ static int memory_early_oom_threshold_show(struct seq_file *m, void *v);
 static ssize_t memory_early_oom_threshold_write(struct kernfs_open_file *of,
 					       char *buf, size_t nbytes, loff_t off);
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+static int memcg_thp_flag_show(struct seq_file *sf, void *v)
+{
+	const char *output;
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
+	unsigned long *flag = &memcg->thp_flag;
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag))
+		output = "[always] madvise never";
+	else if (test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+		output = "always [madvise] never";
+	else
+		output = "always madvise [never]";
+
+	seq_printf(sf, "%s\n", output);
+	return 0;
+}
+
+static ssize_t memcg_thp_flag_write(struct kernfs_open_file *of,
+				     char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	ssize_t ret = nbytes;
+	unsigned long *flag = &memcg->thp_flag;
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (sysfs_streq(buf, "always")) {
+		if (!test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag)) {
+			set_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+			if (!test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+				memcg_inc_thp_enabled(memcg);
+		}
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+	} else if (sysfs_streq(buf, "madvise")) {
+		if (!test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag)) {
+			set_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+			if (!test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag))
+				memcg_inc_thp_enabled(memcg);
+		}
+		clear_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+	} else if (sysfs_streq(buf, "never")) {
+		if (test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag) ||
+		    test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+			memcg_dec_thp_enabled(memcg);
+		clear_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+	} else {
+		ret = -EINVAL;
+	}
+
+	if (ret > 0) {
+		int err = start_stop_khugepaged();
+
+		if (err)
+			ret = err;
+	}
+	return ret;
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE_CGROUP */
+
 static struct cftype mem_cgroup_legacy_files[] = {
 	{
 		.name = "latency_histogram",
@@ -8452,6 +8525,14 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.write_u64 = mem_cgroup_emm_threshold_write,
 	},
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	{
+		.name = "transparent_hugepage.enabled",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_flag_show,
+		.write = memcg_thp_flag_write,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -8778,6 +8859,12 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	atomic_long_set(&memcg->unevictable_size, 0);
 #endif
 	if (parent) {
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		memcg->thp_flag = parent->thp_flag;
+		if (memcg->thp_flag & ((1 << TRANSPARENT_HUGEPAGE_FLAG) |
+		    (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
+			memcg_inc_thp_enabled(memcg);
+#endif
 #ifdef CONFIG_TEXT_UNEVICTABLE
 		memcg->allow_unevictable = parent->allow_unevictable;
 #endif
@@ -8960,6 +9047,11 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	struct mem_cgroup_event *event, *tmp;
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	if (memcg->thp_flag & ((1 << TRANSPARENT_HUGEPAGE_FLAG) |
+	    (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
+		memcg_dec_thp_enabled(memcg);
+#endif
 	charge_dying_memcgs(memcg);
 
 	/* XXX no direct number */
@@ -10779,6 +10871,14 @@ static struct cftype memory_files[] = {
 		.name = "numa_balance.stat",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_numa_balance_stat_show,
+	},
+#endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	{
+		.name = "transparent_hugepage.enabled",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_flag_show,
+		.write = memcg_thp_flag_write,
 	},
 #endif
 	{ }	/* terminate */

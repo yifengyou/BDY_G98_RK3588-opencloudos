@@ -55,6 +55,11 @@ enum transparent_hugepage_flag {
 	TRANSPARENT_HUGEPAGE_FILE_TEXT_ENABLED_FLAG,
 	TRANSPARENT_HUGEPAGE_ANON_TEXT_ENABLED_FLAG,
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG,
+	TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG,
+	TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG,
+#endif
 };
 
 struct kobject;
@@ -282,6 +287,44 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 	       !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+#define thp_cgroup_any_enabled()	\
+	(transparent_hugepage_flags &	\
+	((1<<TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG) |	\
+	(1<<TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG) |	\
+	(1<<TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG)))
+#define thp_cgroup_anon_set()	\
+	(transparent_hugepage_flags &	\
+	(1<<TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG))
+#define thp_cgroup_shmem_set()	\
+	(transparent_hugepage_flags &	\
+	(1<<TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG))
+#define thp_cgroup_file_set()	\
+	(transparent_hugepage_flags &	\
+	(1<<TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG))
+
+enum thp_cgroup_type {
+	THP_CGROUP_ANON,
+	THP_CGROUP_SHMEM,
+	THP_CGROUP_FILE,
+};
+
+/* PMD verdict for a vma under per-cgroup THP; one memcg lookup per call. */
+enum thp_cgroup_verdict {
+	THP_CGROUP_NOT_CONTROLLED,	/* root/disabled: caller keeps global policy */
+	THP_CGROUP_PMD_ON,
+	THP_CGROUP_PMD_OFF,
+};
+
+extern enum thp_cgroup_verdict thp_cgroup_pmd_verdict(struct vm_area_struct *vma,
+						  enum thp_cgroup_type type,
+						  unsigned long vm_flags);
+extern bool thp_cgroup_rejected(struct vm_area_struct *vma);
+extern bool thp_cgroup_anon_enabled(struct vm_area_struct *vma);
+extern bool thp_cgroup_shmem_enabled(struct vm_area_struct *vma);
+extern bool thp_cgroup_file_enabled(struct vm_area_struct *vma);
+#endif
+
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
 					 unsigned long tva_flags,
@@ -309,7 +352,16 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 				       unsigned long orders)
 {
 	/* Optimization to check if required orders are enabled early. */
-	if ((tva_flags & TVA_ENFORCE_SYSFS) && vma_is_anonymous(vma)) {
+	if ((tva_flags & TVA_ENFORCE_SYSFS) && vma_is_anonymous(vma)
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	    /*
+	     * When per-cgroup THP control is active the anonymous decision may
+	     * depend on the cgroup's thp_flag, so defer it to
+	     * __thp_vma_allowable_orders() (which can reach the memcg helpers).
+	     */
+	    && !thp_cgroup_any_enabled()
+#endif
+	   ) {
 		unsigned long mask = READ_ONCE(huge_anon_orders_always);
 
 		if (vm_flags & VM_HUGEPAGE)

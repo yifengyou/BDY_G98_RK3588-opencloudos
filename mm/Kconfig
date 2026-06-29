@@ -867,6 +867,19 @@ config READ_ONLY_THP_FOR_FS
 
 endif # TRANSPARENT_HUGEPAGE
 
+config TRANSPARENT_HUGEPAGE_CGROUP
+	bool "Transparent HugePage (THP) Control for Memory Cgroups"
+	depends on TRANSPARENT_HUGEPAGE && MEMCG
+	help
+	  Provides per memory-cgroup transparent hugepage control via
+	  memory.transparent_hugepage.enabled interface. Allows administrators
+	  to enable/disable THP (always/madvise/never) on a per-cgroup basis,
+	  independent of the global THP setting.
+
+	  This is useful for container environments where different workloads
+	  have different THP requirements. Requires both THP and MEMCG support
+	  in the kernel.
+
 #
 # The architecture supports pgtable leaves that is larger than PAGE_SIZE
 #

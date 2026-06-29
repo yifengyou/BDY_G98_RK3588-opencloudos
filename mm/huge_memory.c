@@ -34,6 +34,7 @@
 #include <linux/page_idle.h>
 #include <linux/shmem_fs.h>
 #include <linux/oom.h>
+#include <linux/memcontrol.h>
 #include <linux/numa.h>
 #include <linux/page_owner.h>
 #include <linux/sched/sysctl.h>
@@ -80,6 +81,16 @@ unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
 unsigned long huge_anon_orders_madvise __read_mostly;
 unsigned long huge_anon_orders_inherit __read_mostly;
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+static struct mem_cgroup *get_valid_memcg(struct mm_struct *mm, bool *valid)
+{
+	struct mem_cgroup *memcg = get_mem_cgroup_from_mm(mm);
+
+	*valid = memcg && !mem_cgroup_disabled() && !mem_cgroup_is_root(memcg);
+	return memcg;
+}
+#endif
 
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
@@ -148,6 +159,11 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 	 * Must be done before hugepage flags check since shmem has its
 	 * own flags.
 	 */
+	/*
+	 * Per-cgroup shmem THP control is handled inside
+	 * shmem_allowable_huge_orders() (PMD-only), so both this collapse/smaps
+	 * path and the shmem fault path share one decision point.
+	 */
 	if (!in_pf && shmem_file(vma->vm_file))
 		return orders & shmem_allowable_huge_orders(file_inode(vma->vm_file),
 						   vma, vma->vm_pgoff,
@@ -166,10 +182,31 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 		 * Enforce sysfs THP requirements as necessary. Anonymous vmas
 		 * were already handled in thp_vma_allowable_orders().
 		 */
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		if (thp_cgroup_rejected(vma))
+			return 0;
+
+		if (enforce_sysfs) {
+			unsigned long flags = memcg_thp_flag(vma);
+			bool is_always = flags & (1 << TRANSPARENT_HUGEPAGE_FLAG);
+			bool is_madv = flags & (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG);
+			bool any_enabled = hugepage_global_enabled() ||
+					   memcg_has_thp_enabled();
+
+			if (!any_enabled && !is_always && !is_madv)
+				return 0;
+			if (any_enabled && !(vm_flags & VM_HUGEPAGE) && !is_always)
+				return 0;
+		}
+
+		if (!in_pf && thp_cgroup_file_enabled(vma))
+			return orders;
+#else
 		if (enforce_sysfs &&
 		    (!hugepage_global_enabled() || (!(vm_flags & VM_HUGEPAGE) &&
 						    !hugepage_global_always())))
 			return 0;
+#endif
 
 		/*
 		 * Trust that ->huge_fault() handlers know what they are doing
@@ -182,6 +219,49 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 			return orders;
 		return 0;
 	}
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	/*
+	 * Anonymous per-cgroup THP control (PMD only). The inline
+	 * thp_vma_allowable_orders() wrapper skips its early anon mask
+	 * optimization when per-cgroup THP is active, so recompute the mask
+	 * here: non-PMD (mTHP) orders keep following the global policy, and only
+	 * the PMD order is governed by per-cgroup THP.
+	 */
+	if (enforce_sysfs && thp_cgroup_any_enabled()) {
+		unsigned long mask;
+
+		mask = READ_ONCE(huge_anon_orders_always);
+		if (vm_flags & VM_HUGEPAGE)
+			mask |= READ_ONCE(huge_anon_orders_madvise);
+		if (hugepage_global_always() ||
+		    ((vm_flags & VM_HUGEPAGE) && hugepage_global_enabled()))
+			mask |= READ_ONCE(huge_anon_orders_inherit);
+
+		/*
+		 * For a vma in a non-root cgroup, the PMD order is governed
+		 * SOLELY by per-cgroup THP (the cgroup's thp_flag plus
+		 * reject/limit). The global enable and the per-size 2MB policy
+		 * (inherit/always/madvise/never) do not interfere. host (root
+		 * memcg) keeps the global per-size decision already in @mask.
+		 * One memcg lookup via thp_cgroup_pmd_verdict().
+		 */
+		switch (thp_cgroup_pmd_verdict(vma, THP_CGROUP_ANON, vm_flags)) {
+		case THP_CGROUP_PMD_ON:
+			mask |= BIT(PMD_ORDER);
+			break;
+		case THP_CGROUP_PMD_OFF:
+			mask &= ~BIT(PMD_ORDER);
+			break;
+		case THP_CGROUP_NOT_CONTROLLED:
+			break;
+		}
+
+		orders &= mask;
+		if (!orders)
+			return 0;
+	}
+#endif
 
 	if (vma_is_temporary_stack(vma))
 		return 0;
@@ -521,6 +601,195 @@ static struct kobj_attribute hugetext_pad_threshold_attr =
 			hugetext_pad_threshold_store);
 #endif /* CONFIG_HUGETEXT */
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+
+static ssize_t cgroup_enabled_show(struct kobject *kobj,
+				   struct kobj_attribute *attr, char *buf)
+{
+	int val = 0;
+
+	if (test_bit(TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG,
+		     &transparent_hugepage_flags))
+		val |= 1;
+	if (test_bit(TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG,
+		     &transparent_hugepage_flags))
+		val |= 2;
+	if (test_bit(TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG,
+		     &transparent_hugepage_flags))
+		val |= 4;
+
+	return sysfs_emit(buf, "%d\n", val);
+}
+
+static ssize_t cgroup_enabled_store(struct kobject *kobj,
+				    struct kobj_attribute *attr,
+				    const char *buf, size_t count)
+{
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret < 0 || val > 7)
+		return -EINVAL;
+
+	if (val & 1)
+		set_bit(TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG,
+			&transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_CGROUP_ANON_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	if (val & 2)
+		set_bit(TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG,
+			&transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_CGROUP_SHMEM_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	if (val & 4)
+		set_bit(TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG,
+			&transparent_hugepage_flags);
+	else
+		clear_bit(TRANSPARENT_HUGEPAGE_CGROUP_FILE_ENABLED_FLAG,
+			  &transparent_hugepage_flags);
+
+	ret = start_stop_khugepaged();
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static struct kobj_attribute cgroup_enabled_attr =
+	__ATTR(cgroup_enabled, 0644, cgroup_enabled_show,
+	       cgroup_enabled_store);
+
+static bool __thp_check_flag(unsigned long flags, unsigned long vm_flags)
+{
+	return (flags & (1 << TRANSPARENT_HUGEPAGE_FLAG)) ||
+	       ((flags & (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)) &&
+		(vm_flags & VM_HUGEPAGE));
+}
+
+/*
+ * Whether per-cgroup THP of @type is enabled for @vma, given an already
+ * acquired valid (non-root) @memcg. Pure logic, no memcg get/put, so callers
+ * can share a single lookup. @vm_flags is passed explicitly (may differ from
+ * vma->vm_flags, e.g. in mmap/mprotect pre-checks).
+ */
+static bool __thp_cgroup_type_enabled(struct vm_area_struct *vma,
+				      struct mem_cgroup *memcg,
+				      enum thp_cgroup_type type,
+				      unsigned long vm_flags)
+{
+	switch (type) {
+	case THP_CGROUP_ANON:
+		if (!vma_is_anonymous(vma) || !thp_cgroup_anon_set())
+			return false;
+		break;
+	case THP_CGROUP_SHMEM:
+		if (!vma_is_shmem(vma) || !thp_cgroup_shmem_set())
+			return false;
+		break;
+	case THP_CGROUP_FILE:
+		if (!vma->vm_file || !S_ISREG(vma->vm_file->f_inode->i_mode) ||
+		    !thp_cgroup_file_set())
+			return false;
+		break;
+	default:
+		return false;
+	}
+
+	return __thp_check_flag(READ_ONCE(memcg->thp_flag), vm_flags);
+}
+
+static bool thp_cgroup_type_enabled(struct vm_area_struct *vma,
+				    enum thp_cgroup_type type)
+{
+	bool valid, ret = false;
+	struct mem_cgroup *memcg;
+
+	if (unlikely(!vma))
+		return false;
+
+	memcg = get_valid_memcg(vma->vm_mm, &valid);
+	if (valid)
+		ret = __thp_cgroup_type_enabled(vma, memcg, type, vma->vm_flags);
+
+	if (memcg)
+		mem_cgroup_put(memcg);
+	return ret;
+}
+
+bool thp_cgroup_rejected(struct vm_area_struct *vma)
+{
+	bool valid, ret = false;
+	struct mem_cgroup *memcg;
+
+	if (unlikely(!vma) || !thp_cgroup_any_enabled())
+		return false;
+
+	memcg = get_valid_memcg(vma->vm_mm, &valid);
+	if (!valid)
+		goto out;
+
+	if (vma_is_anonymous(vma))
+		ret = !thp_cgroup_anon_set();
+	else if (vma_is_shmem(vma))
+		ret = !thp_cgroup_shmem_set();
+	else if (vma->vm_file && S_ISREG(vma->vm_file->f_inode->i_mode))
+		ret = !thp_cgroup_file_set();
+out:
+	if (memcg)
+		mem_cgroup_put(memcg);
+	return ret;
+}
+
+bool thp_cgroup_anon_enabled(struct vm_area_struct *vma)
+{
+	return thp_cgroup_type_enabled(vma, THP_CGROUP_ANON);
+}
+
+bool thp_cgroup_shmem_enabled(struct vm_area_struct *vma)
+{
+	return thp_cgroup_type_enabled(vma, THP_CGROUP_SHMEM);
+}
+
+bool thp_cgroup_file_enabled(struct vm_area_struct *vma)
+{
+	return thp_cgroup_type_enabled(vma, THP_CGROUP_FILE);
+}
+
+/*
+ * Single-lookup PMD verdict for @vma under per-cgroup THP. Acquires the memcg
+ * once and folds the type-enabled and hierarchical-limit checks. Returns
+ * THP_CGROUP_NOT_CONTROLLED for root/disabled so the caller keeps the global
+ * per-size policy.
+ */
+enum thp_cgroup_verdict thp_cgroup_pmd_verdict(struct vm_area_struct *vma,
+					   enum thp_cgroup_type type,
+					   unsigned long vm_flags)
+{
+	struct mem_cgroup *memcg;
+	bool valid;
+	enum thp_cgroup_verdict v = THP_CGROUP_NOT_CONTROLLED;
+
+	if (unlikely(!vma) || !thp_cgroup_any_enabled())
+		return THP_CGROUP_NOT_CONTROLLED;
+
+	memcg = get_valid_memcg(vma->vm_mm, &valid);
+	if (valid) {
+		bool on = __thp_cgroup_type_enabled(vma, memcg, type, vm_flags);
+
+		v = on ? THP_CGROUP_PMD_ON : THP_CGROUP_PMD_OFF;
+	}
+
+	if (memcg)
+		mem_cgroup_put(memcg);
+	return v;
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE_CGROUP */
+
 static struct attribute *hugepage_attr[] = {
 	&enabled_attr.attr,
 	&defrag_attr.attr,
@@ -532,6 +801,9 @@ static struct attribute *hugepage_attr[] = {
 #ifdef CONFIG_HUGETEXT
 	&hugetext_enabled_attr.attr,
 	&hugetext_pad_threshold_attr.attr,
+#endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	&cgroup_enabled_attr.attr,
 #endif
 	NULL,
 };

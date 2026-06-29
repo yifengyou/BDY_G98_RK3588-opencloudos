@@ -37,6 +37,7 @@
 #include <linux/swap.h>
 #include <linux/uio.h>
 #include <linux/hugetlb.h>
+#include <linux/huge_mm.h>
 #include <linux/fs_parser.h>
 #include <linux/swapfile.h>
 #include <linux/iversion.h>
@@ -1757,6 +1758,7 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	unsigned long mask = READ_ONCE(huge_shmem_orders_always);
 	unsigned long within_size_orders = READ_ONCE(huge_shmem_orders_within_size);
 	unsigned long vm_flags = vma ? vma->vm_flags : 0;
+	unsigned long orders = 0;
 	pgoff_t aligned_index;
 	bool global_huge;
 	loff_t i_size;
@@ -1777,7 +1779,8 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 		 * For tmpfs, we now only support PMD sized THP if huge page
 		 * is enabled, otherwise fallback to order 0.
 		 */
-		return global_huge ? BIT(HPAGE_PMD_ORDER) : 0;
+		orders = global_huge ? BIT(HPAGE_PMD_ORDER) : 0;
+		goto out;
 	}
 
 	/*
@@ -1791,8 +1794,10 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	 * Only allow inherit orders if the top-level value is 'force', which
 	 * means non-PMD sized THP can not override 'huge' mount option now.
 	 */
-	if (shmem_huge == SHMEM_HUGE_FORCE)
-		return READ_ONCE(huge_shmem_orders_inherit);
+	if (shmem_huge == SHMEM_HUGE_FORCE) {
+		orders = READ_ONCE(huge_shmem_orders_inherit);
+		goto out;
+	}
 
 	/* Allow mTHP that will be fully within i_size. */
 	order = highest_order(within_size_orders);
@@ -1813,7 +1818,30 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	if (global_huge)
 		mask |= READ_ONCE(huge_shmem_orders_inherit);
 
-	return THP_ORDERS_ALL_FILE_DEFAULT & mask;
+	orders = THP_ORDERS_ALL_FILE_DEFAULT & mask;
+
+out:
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	/*
+	 * Per-cgroup shmem THP control (PMD only). The hard "no huge"
+	 * preconditions above (VM_NOHUGEPAGE / MMF_DISABLE_THP / UNSUPPORTED /
+	 * SHMEM_HUGE_DENY) returned early. For a vma in a non-root cgroup the
+	 * shmem PMD order is governed SOLELY by per-cgroup THP; the global shmem
+	 * policy is ignored for PMD. Sub-PMD shmem mTHP orders keep following the
+	 * global policy. host (root memcg) keeps the global PMD decision.
+	 */
+	switch (thp_cgroup_pmd_verdict(vma, THP_CGROUP_SHMEM, vm_flags)) {
+	case THP_CGROUP_PMD_ON:
+		orders |= BIT(HPAGE_PMD_ORDER);
+		break;
+	case THP_CGROUP_PMD_OFF:
+		orders &= ~BIT(HPAGE_PMD_ORDER);
+		break;
+	case THP_CGROUP_NOT_CONTROLLED:
+		break;
+	}
+#endif
+	return orders;
 }
 
 static unsigned long shmem_suitable_orders(struct inode *inode, struct vm_fault *vmf,
@@ -2499,7 +2527,11 @@ repeat:
 		return 0;
 	}
 
-	/* Find hugepage orders that are allowed for anonymous shmem and tmpfs. */
+	/*
+	 * Find hugepage orders that are allowed for anonymous shmem and tmpfs.
+	 * Per-cgroup shmem THP control (PMD-only) is applied inside
+	 * shmem_allowable_huge_orders().
+	 */
 	orders = shmem_allowable_huge_orders(inode, vma, index, false);
 	if (orders > 0) {
 		gfp_t huge_gfp;
