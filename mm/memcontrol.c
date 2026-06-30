@@ -6295,18 +6295,22 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	unsigned long tmp;
 #ifdef CONFIG_MEMCG_ZRAM
 	int sell_flag = 0;
-	unsigned long swap = memcg_page_state_local(memcg, MEMCG_ZRAMED);
-	unsigned long swap_total = memcg_page_state(memcg, MEMCG_ZRAMED);
-	unsigned long shmem_zram = memcg_page_state_local(memcg, MEMCG_SHMEM_ZRAMED);
-	unsigned long shmem_zram_total = memcg_page_state(memcg, MEMCG_SHMEM_ZRAMED);
-
-	if (mem_sell_check_memcg(memcg))
-		sell_flag = 1;
+	unsigned long swap, swap_total, shmem_zram, shmem_zram_total;
 #endif
 
 	BUILD_BUG_ON(ARRAY_SIZE(memcg1_stat_names) != ARRAY_SIZE(memcg1_stats));
 
 	mem_cgroup_flush_stats(memcg);
+
+#ifdef CONFIG_MEMCG_ZRAM
+	swap = memcg_page_state_local(memcg, MEMCG_ZRAMED);
+	swap_total = memcg_page_state(memcg, MEMCG_ZRAMED);
+	shmem_zram = memcg_page_state_local(memcg, MEMCG_SHMEM_ZRAMED);
+	shmem_zram_total = memcg_page_state(memcg, MEMCG_SHMEM_ZRAMED);
+
+	if (mem_sell_check_memcg(memcg))
+		sell_flag = 1;
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(memcg1_stats); i++) {
 		unsigned long nr;
