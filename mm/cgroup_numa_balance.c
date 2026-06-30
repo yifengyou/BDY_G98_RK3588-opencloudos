@@ -152,10 +152,103 @@ int cgroup_numa_misplaced(struct folio *folio, struct vm_area_struct *vma,
 
 #define CG_NUMA_BUSY_RUNNING		(HZ / 2)
 
+#ifdef CONFIG_LRU_GEN
+/*
+ * Scan MGLRU folios for a memcg and isolate unmapped file pages
+ * that are on nodes not present in expected_nodes.
+ */
+static void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
+						nodemask_t *expected_nodes)
+{
+	unsigned long batch_pages = memcg->nb_scan_batch;
+	unsigned long pages_scanned = 0;
+	int nid;
+	LIST_HEAD(isolate_list);
+	u64 start_jiffies, elapsed;
+	unsigned long nr_reclaimed = 0;
+
+	if (nodes_empty(*expected_nodes))
+		return;
+
+	start_jiffies = jiffies_64;
+	for_each_node_state(nid, N_MEMORY) {
+		struct lruvec *lruvec;
+		struct folio *folio, *next;
+		struct lru_gen_folio *lrugen;
+		int old_gen, zone;
+		int type = LRU_GEN_FILE;
+
+		/* Skip nodes that are in the allowed expected_nodes */
+		if (node_isset(nid, *expected_nodes))
+			continue;
+
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+		lrugen = &lruvec->lrugen;
+
+		spin_lock_irq(&lruvec->lru_lock);
+
+		old_gen = lru_gen_from_seq(READ_ONCE(lrugen->min_seq[type]));
+		for (zone = 0; zone < MAX_NR_ZONES; zone++) {
+			list_for_each_entry_safe_reverse(folio, next,
+					&lrugen->folios[old_gen][type][zone], lru) {
+				unsigned long nr_pages;
+
+				if (batch_pages == 0)
+					break;
+
+				nr_pages = folio_nr_pages(folio);
+
+				/*
+				 * Only process unmapped file pages.
+				 * If mapped or unable to get, skip it
+				 * without changing its position.
+				 */
+				if (folio_mapped(folio) || !folio_try_get(folio)) {
+					pages_scanned += nr_pages;
+					batch_pages -= min(batch_pages, nr_pages);
+					continue;
+				}
+
+				if (!folio_test_clear_lru(folio)) {
+					folio_put(folio);
+					pages_scanned += nr_pages;
+					batch_pages -= min(batch_pages, nr_pages);
+					continue;
+				}
+
+				lruvec_del_folio(lruvec, folio);
+				list_add(&folio->lru, &isolate_list);
+
+				pages_scanned += nr_pages;
+				batch_pages -= min(batch_pages, nr_pages);
+			}
+			if (batch_pages == 0)
+				break;
+		}
+		spin_unlock_irq(&lruvec->lru_lock);
+
+		elapsed = jiffies_64 - start_jiffies;
+		if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
+			break;
+	}
+
+	if (!list_empty(&isolate_list)) {
+		/*
+		 * The un-reclaimed pages are put back to the LRU by
+		 * reclaim_pages() automatically.
+		 */
+		nr_reclaimed = reclaim_pages(&isolate_list, false);
+		atomic64_add(nr_reclaimed, &memcg->nb_pages_migrated);
+	}
+
+	atomic64_add(pages_scanned, &memcg->nb_pages_scanned);
+}
+#else
 static inline void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
 						nodemask_t *expected_nodes)
 {
 }
+#endif
 
 /*
  * Scan LRU_INACTIVE_FILE for a memcg and isolate unmapped file pages
