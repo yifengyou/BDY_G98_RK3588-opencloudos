@@ -36,6 +36,9 @@
 #include "cgroup_numa_balance.h"
 #include "internal.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/cgroup_numa_balance.h>
+
 /* Forward declarations from kernel/sched/sched.h */
 #include <linux/jump_label.h>
 extern struct static_key_false cgroup_numa_balance_enabled;
@@ -242,6 +245,7 @@ static void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
 	}
 
 	atomic64_add(pages_scanned, &memcg->nb_pages_scanned);
+	trace_cgroup_numa_balance_scan_file_mglru(pages_scanned, nr_reclaimed);
 }
 #else
 static inline void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
@@ -327,6 +331,7 @@ static void cgroup_numa_balance_scan_file_lru(struct mem_cgroup *memcg,
 	}
 
 	atomic64_add(pages_scanned, &memcg->nb_pages_scanned);
+	trace_cgroup_numa_balance_scan_file_lru(pages_scanned, nr_reclaimed);
 }
 
 static bool cgroup_numa_balance_scan_vma(struct vm_area_struct *vma,
@@ -495,6 +500,7 @@ static bool cgroup_numa_balance_scan(struct mem_cgroup *memcg)
 			mmput(mm);
 		}
 		css_task_iter_end(&it);
+		trace_cgroup_numa_balance_scan_vma(ctx.pages_scanned);
 
 		if (!task)
 			memcg->nb_last_scanned_pid = 0;
