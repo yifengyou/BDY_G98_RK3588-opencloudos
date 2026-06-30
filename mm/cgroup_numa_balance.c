@@ -411,9 +411,20 @@ static bool cgroup_numa_balance_scan_vmas(struct mem_cgroup *memcg,
 			continue;
 		}
 
-		/* Skip read-only file-backed mappings */
-		if (vma->vm_file &&
-		    (vma->vm_flags & (VM_READ | VM_WRITE)) == VM_READ) {
+		/*
+		 * Skip private mappings of executable files. This covers
+		 * the .data and .bss segments of shared libraries and
+		 * executables, which are typically small and don't
+		 * benefit from NUMA balancing. Ordinary private data
+		 * files will still be scanned.
+		 */
+		if (vma->vm_flags & VM_EXEC) {
+			mm_scan_offset = vma->vm_end;
+			continue;
+		}
+
+		if (vma->vm_file && !(vma->vm_flags & VM_SHARED) &&
+		    (file_inode(vma->vm_file)->i_mode & S_IXUGO)) {
 			mm_scan_offset = vma->vm_end;
 			continue;
 		}
