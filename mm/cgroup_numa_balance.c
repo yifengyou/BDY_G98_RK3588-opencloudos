@@ -155,6 +155,56 @@ int cgroup_numa_misplaced(struct folio *folio, struct vm_area_struct *vma,
 
 #define CG_NUMA_BUSY_RUNNING		(HZ / 2)
 
+static unsigned long isolate_file_lru_folios_batch(struct lruvec *lruvec,
+				struct list_head *src, unsigned long nr_to_scan,
+				struct list_head *isolate_list)
+{
+	unsigned long scanned = 0;
+	LIST_HEAD(folios_skipped);
+
+	spin_lock_irq(&lruvec->lru_lock);
+	while (scanned < nr_to_scan && !list_empty(src)) {
+		unsigned long nr_pages;
+		struct folio *folio = lru_to_folio(src);
+
+		nr_pages = folio_nr_pages(folio);
+		scanned += nr_pages;
+
+		/*
+		 * Only process unmapped file pages.
+		 * Skip mapped, dirty, or writeback pages to avoid I/O storms
+		 * caused by forced pageouts during NUMA balancing.
+		 */
+		if (folio_mapped(folio) || folio_test_dirty(folio) ||
+		    folio_test_writeback(folio) || !folio_try_get(folio)) {
+			list_move(&folio->lru, &folios_skipped);
+			continue;
+		}
+
+		if (!folio_test_clear_lru(folio)) {
+			folio_put(folio);
+			list_move(&folio->lru, &folios_skipped);
+			continue;
+		}
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
+
+		lruvec_del_folio(lruvec, folio);
+		list_add(&folio->lru, isolate_list);
+	}
+
+	/*
+	 * Splice any skipped folios to the start of the LRU list.
+	 * This prevents rescanning the same folios in the next batch.
+	 */
+	if (!list_empty(&folios_skipped))
+		list_splice(&folios_skipped, src);
+
+	spin_unlock_irq(&lruvec->lru_lock);
+
+	return scanned;
+}
+
 #ifdef CONFIG_LRU_GEN
 /*
  * Scan MGLRU folios for a memcg and isolate unmapped file pages
@@ -167,7 +217,7 @@ static void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
 	unsigned long pages_scanned = 0;
 	int nid;
 	LIST_HEAD(isolate_list);
-	u64 start_jiffies, elapsed;
+	u64 start_jiffies, elapsed = 0;
 	unsigned long nr_reclaimed = 0;
 
 	if (nodes_empty(*expected_nodes))
@@ -176,7 +226,6 @@ static void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
 	start_jiffies = jiffies_64;
 	for_each_node_state(nid, N_MEMORY) {
 		struct lruvec *lruvec;
-		struct folio *folio, *next;
 		struct lru_gen_folio *lrugen;
 		int old_gen, zone;
 		int type = LRU_GEN_FILE;
@@ -188,47 +237,41 @@ static void cgroup_numa_balance_scan_file_mglru(struct mem_cgroup *memcg,
 		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
 		lrugen = &lruvec->lrugen;
 
-		spin_lock_irq(&lruvec->lru_lock);
-
 		old_gen = lru_gen_from_seq(READ_ONCE(lrugen->min_seq[type]));
 		for (zone = 0; zone < MAX_NR_ZONES; zone++) {
-			list_for_each_entry_safe_reverse(folio, next,
-					&lrugen->folios[old_gen][type][zone], lru) {
-				unsigned long nr_pages;
+			struct list_head *src = &lrugen->folios[old_gen][type][zone];
+			long size = READ_ONCE(lrugen->nr_pages[old_gen][type][zone]);
+			unsigned long init_size = size > 0 ? size : 0;
+			unsigned long nr_to_scan_total = 0;
+			unsigned long total_scanned = 0;
+
+			nr_to_scan_total = min_t(unsigned long, batch_pages, init_size);
+			while (total_scanned < nr_to_scan_total && !list_empty(src)) {
+				unsigned long nr_to_scan;
+				unsigned long scanned;
 
 				if (batch_pages == 0)
 					break;
 
-				nr_pages = folio_nr_pages(folio);
+				nr_to_scan = min_t(unsigned long,
+						   nr_to_scan_total - total_scanned, 128);
 
-				/*
-				 * Only process unmapped file pages.
-				 * If mapped or unable to get, skip it
-				 * without changing its position.
-				 */
-				if (folio_mapped(folio) || !folio_try_get(folio)) {
-					pages_scanned += nr_pages;
-					batch_pages -= min(batch_pages, nr_pages);
-					continue;
-				}
+				scanned = isolate_file_lru_folios_batch(lruvec, src,
+						nr_to_scan, &isolate_list);
 
-				if (!folio_test_clear_lru(folio)) {
-					folio_put(folio);
-					pages_scanned += nr_pages;
-					batch_pages -= min(batch_pages, nr_pages);
-					continue;
-				}
+				pages_scanned += scanned;
+				batch_pages -= min(batch_pages, scanned);
+				total_scanned += scanned;
 
-				lruvec_del_folio(lruvec, folio);
-				list_add(&folio->lru, &isolate_list);
+				elapsed = jiffies_64 - start_jiffies;
+				if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
+					break;
 
-				pages_scanned += nr_pages;
-				batch_pages -= min(batch_pages, nr_pages);
+				cond_resched();
 			}
-			if (batch_pages == 0)
+			if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
 				break;
 		}
-		spin_unlock_irq(&lruvec->lru_lock);
 
 		elapsed = jiffies_64 - start_jiffies;
 		if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
@@ -265,9 +308,8 @@ static void cgroup_numa_balance_scan_file_lru(struct mem_cgroup *memcg,
 	unsigned long pages_scanned = 0;
 	int nid;
 	LIST_HEAD(isolate_list);
-	u64 elapsed;
+	u64 start_jiffies, elapsed = 0;
 	unsigned long nr_reclaimed = 0;
-	u64 start_jiffies;
 
 	if (nodes_empty(*expected_nodes))
 		return;
@@ -275,48 +317,41 @@ static void cgroup_numa_balance_scan_file_lru(struct mem_cgroup *memcg,
 	start_jiffies = jiffies_64;
 	for_each_node_state(nid, N_MEMORY) {
 		struct lruvec *lruvec;
-		struct folio *folio, *next;
+		struct list_head *src;
+		unsigned long init_size, nr_to_scan_total, total_scanned = 0;
 
 		/* Skip nodes that are in the allowed expected_nodes */
 		if (node_isset(nid, *expected_nodes))
 			continue;
 
 		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+		src = &lruvec->lists[LRU_INACTIVE_FILE];
+		init_size = lruvec_page_state(lruvec, NR_INACTIVE_FILE);
+		nr_to_scan_total = min_t(unsigned long, batch_pages, init_size);
 
-		spin_lock_irq(&lruvec->lru_lock);
-		list_for_each_entry_safe_reverse(folio, next, &lruvec->lists[LRU_INACTIVE_FILE], lru) {
-			unsigned long nr_pages;
+		while (total_scanned < nr_to_scan_total && !list_empty(src)) {
+			unsigned long nr_to_scan;
+			unsigned long scanned;
 
 			if (batch_pages == 0)
 				break;
 
-			nr_pages = folio_nr_pages(folio);
-			/*
-			 * Only process unmapped file pages.
-			 * If mapped or unable to get, skip it without changing its position.
-			 */
-			if (folio_mapped(folio) || !folio_try_get(folio)) {
-				pages_scanned += nr_pages;
-				batch_pages -= min(batch_pages, nr_pages);
-				continue;
-			}
+			nr_to_scan = min_t(unsigned long,
+					   nr_to_scan_total - total_scanned, 128);
 
-			if (!folio_test_clear_lru(folio)) {
-				folio_put(folio);
-				pages_scanned += nr_pages;
-				batch_pages -= min(batch_pages, nr_pages);
-				continue;
-			}
+			scanned = isolate_file_lru_folios_batch(lruvec, src,
+						nr_to_scan, &isolate_list);
 
-			lruvec_del_folio(lruvec, folio);
-			list_add(&folio->lru, &isolate_list);
+			pages_scanned += scanned;
+			batch_pages -= min(batch_pages, scanned);
+			total_scanned += scanned;
 
-			pages_scanned += nr_pages;
-			batch_pages -= min(batch_pages, nr_pages);
+			elapsed = jiffies_64 - start_jiffies;
+			if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
+				break;
+
+			cond_resched();
 		}
-		spin_unlock_irq(&lruvec->lru_lock);
-
-		elapsed = jiffies_64 - start_jiffies;
 		if (batch_pages == 0 || elapsed >= CG_NUMA_BUSY_RUNNING)
 			break;
 	}
