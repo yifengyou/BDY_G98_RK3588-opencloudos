@@ -961,6 +961,21 @@ config NUMA_BALANCING_DEFAULT_ENABLED
 	  If set, automatic NUMA balancing will be enabled if running on a NUMA
 	  machine.
 
+config CGROUP_NUMA_BALANCE
+	bool "Cgroup-level NUMA memory balancing"
+	depends on NUMA_BALANCING && CPUSETS && MEMCG
+	help
+	  This option adds support for cgroup-level proactive NUMA memory
+	  balancing. When enabled, a new NUMA balancing mode (value 4 via
+	  /proc/sys/kernel/numa_balancing) activates per-cgroup NUMA balance
+	  control. Each memory cgroup gains numa_balance.* control files
+	  to enable/disable scanning, set scan period, and batch size.
+
+	  The cgroup-level balancer periodically scans processes within a
+	  cgroup, checks if their memory pages reside on the expected NUMA
+	  nodes (derived from cpuset/mempolicy), and batch-migrates
+	  misplaced pages.
+
 config SLAB_OBJ_EXT
 	bool
 

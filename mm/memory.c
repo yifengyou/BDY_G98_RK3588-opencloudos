@@ -101,6 +101,7 @@
 #include "pgalloc-track.h"
 #include "internal.h"
 #include "swap.h"
+#include "cgroup_numa_balance.h"
 
 #if defined(LAST_CPUPID_NOT_IN_PAGE_FLAGS) && !defined(CONFIG_COMPILE_TEST)
 #warning Unfortunate NUMA and NUMA Balancing config, growing page-frame for last_cpupid.
@@ -5573,6 +5574,11 @@ int numa_migrate_prep(struct folio *folio, struct vm_area_struct *vma,
 		*flags |= TNF_FAULT_LOCAL;
 	}
 
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+	if (static_branch_unlikely(&cgroup_numa_balance_enabled))
+		return cgroup_numa_misplaced(folio, vma, addr);
+#endif
+
 	return mpol_misplaced(folio, vma, addr);
 }
 
@@ -5713,6 +5719,17 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		nid = target_nid;
 		flags |= TNF_MIGRATED;
 		task_numa_fault(last_cpupid, nid, nr_pages, flags);
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+		if (static_branch_unlikely(&cgroup_numa_balance_enabled)) {
+			struct mem_cgroup *memcg;
+
+			rcu_read_lock();
+			memcg = mem_cgroup_from_task(current);
+			if (memcg)
+				atomic64_add(nr_pages, &memcg->nb_pages_migrated);
+			rcu_read_unlock();
+		}
+#endif
 		return 0;
 	}
 

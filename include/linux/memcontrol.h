@@ -454,6 +454,22 @@ struct mem_cgroup {
 	u8 emm_threshold;
 #endif
 
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+	bool numa_balance_enabled;
+
+	unsigned int nb_scan_period_ms;
+	unsigned int nb_scan_batch;
+	int nb_scan_rounds_left;
+	pid_t nb_last_scanned_pid;
+	bool nb_scan_mapped_pages;
+	struct delayed_work numa_balance_work;
+
+	atomic64_t nb_pages_scanned;
+	atomic64_t nb_pages_migrated;
+	atomic64_t nb_scan_rounds;
+	unsigned long nb_last_scan_jiffies;
+#endif
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);

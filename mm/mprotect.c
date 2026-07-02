@@ -41,6 +41,7 @@
 #endif
 
 #include "internal.h"
+#include "cgroup_numa_balance.h"
 
 bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 			     pte_t pte)
@@ -159,6 +160,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				 * balancing is disabled
 				 */
 				if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) &&
+				    !numa_balance_is_cgroup_mode() &&
 				    toptier)
 					continue;
 				if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&

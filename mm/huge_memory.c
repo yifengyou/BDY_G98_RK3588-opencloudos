@@ -44,6 +44,7 @@
 #include <asm/pgalloc.h>
 #include "internal.h"
 #include "swap.h"
+#include "cgroup_numa_balance.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/thp.h>
@@ -2079,6 +2080,17 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 		flags |= TNF_MIGRATED;
 		nid = target_nid;
 		task_numa_fault(last_cpupid, nid, HPAGE_PMD_NR, flags);
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+		if (static_branch_unlikely(&cgroup_numa_balance_enabled)) {
+			struct mem_cgroup *memcg;
+
+			rcu_read_lock();
+			memcg = mem_cgroup_from_task(current);
+			if (memcg)
+				atomic64_add(HPAGE_PMD_NR, &memcg->nb_pages_migrated);
+			rcu_read_unlock();
+		}
+#endif
 		return 0;
 	}
 
@@ -2409,6 +2421,7 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 * balancing is disabled
 		 */
 		if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) &&
+		    !numa_balance_is_cgroup_mode() &&
 		    toptier)
 			goto unlock;
 

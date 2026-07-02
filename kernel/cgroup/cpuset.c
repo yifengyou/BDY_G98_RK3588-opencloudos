@@ -4993,6 +4993,56 @@ nodemask_t cpuset_mems_allowed(struct task_struct *tsk)
 	return mask;
 }
 
+#ifdef CONFIG_CGROUP_NUMA_BALANCE
+bool cpuset_cgroup_expected_nodes(struct cgroup *cgrp, nodemask_t *nodes)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+	nodemask_t mems, cpus_nodes;
+	int cpu;
+
+	nodes_clear(*nodes);
+	nodes_clear(mems);
+	nodes_clear(cpus_nodes);
+
+	rcu_read_lock();
+	css = cgroup_e_css(cgrp, &cpuset_cgrp_subsys);
+	if (!css) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	/*
+	 * If cpuset is not explicitly enabled on this cgroup,
+	 * the effective css belongs to an ancestor.
+	 * Return false to fallback to per-task policy.
+	 */
+	if (css->cgroup != cgrp) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	cs = css_cs(css);
+
+	/*
+	 * We don't need strict consistency here. Read effective_mems and
+	 * effective_cpus locklessly (under RCU only) to avoid holding
+	 * callback_lock and blocking other cpuset operations.
+	 */
+	mems = cs->effective_mems;
+	for_each_cpu(cpu, cs->effective_cpus)
+		node_set(cpu_to_node(cpu), cpus_nodes);
+
+	rcu_read_unlock();
+
+	nodes_and(*nodes, mems, cpus_nodes);
+	if (nodes_empty(*nodes))
+		*nodes = mems;
+
+	return true;
+}
+#endif
+
 /**
  * cpuset_nodemask_valid_mems_allowed - check nodemask vs. current mems_allowed
  * @nodemask: the nodemask to be checked
