@@ -93,13 +93,7 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 		if (folio) {
 			u32 hash;
 
-			/*
-			 * Zero the folio to prevent information leaks to userspace.
-			 * Use folio_zero_user() which is optimized for huge/gigantic
-			 * pages. Pass 0 as addr_hint since this is not a faulting path
-			 *  and we don't have a user virtual address yet.
-			 */
-			folio_zero_user(folio, 0);
+			clear_huge_page(&folio->page, 0, pages_per_huge_page(h));
 
 			/*
 			 * Mark the folio uptodate before adding to page cache,
