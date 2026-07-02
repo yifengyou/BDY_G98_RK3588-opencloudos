@@ -253,6 +253,9 @@ again:
 		goto e_uncharge;
 	}
 
+	if (!svm_register_asid(asid))
+		goto e_uncharge;
+
 	__set_bit(asid, sev_asid_bitmap);
 
 #ifdef CONFIG_KVM_SUPPORTS_CSV_REUSE_ASID
@@ -275,7 +278,7 @@ e_uncharge:
 	return ret;
 }
 
-static unsigned int sev_get_asid(struct kvm *kvm)
+unsigned int sev_get_asid(struct kvm *kvm)
 {
 	struct kvm_sev_info *sev = &to_kvm_svm(kvm)->sev_info;
 
@@ -284,8 +287,7 @@ static unsigned int sev_get_asid(struct kvm *kvm)
 
 static void sev_asid_free(struct kvm_sev_info *sev)
 {
-	struct svm_cpu_data *sd;
-	int cpu;
+	svm_unregister_asid(sev->asid);
 
 	mutex_lock(&sev_bitmap_lock);
 
@@ -308,11 +310,6 @@ static void sev_asid_free(struct kvm_sev_info *sev)
 #else
 	__set_bit(sev->asid, sev_reclaim_asid_bitmap);
 #endif
-
-	for_each_possible_cpu(cpu) {
-		sd = per_cpu_ptr(&svm_data, cpu);
-		sd->sev_vmcbs[sev->asid] = NULL;
-	}
 
 	mutex_unlock(&sev_bitmap_lock);
 
@@ -3284,18 +3281,6 @@ void sev_hardware_unsetup(void)
 	misc_cg_set_capacity(MISC_CG_RES_SEV_ES, 0);
 }
 
-int sev_cpu_init(struct svm_cpu_data *sd)
-{
-	if (!sev_enabled)
-		return 0;
-
-	sd->sev_vmcbs = kcalloc(nr_asids, sizeof(void *), GFP_KERNEL);
-	if (!sd->sev_vmcbs)
-		return -ENOMEM;
-
-	return 0;
-}
-
 /*
  * Pages used by hardware to hold guest encrypted state must be flushed before
  * returning them to the system.
@@ -3664,46 +3649,6 @@ void sev_es_unmap_ghcb(struct vcpu_svm *svm)
 
 	kvm_vcpu_unmap(&svm->vcpu, &svm->sev_es.ghcb_map, true);
 	svm->sev_es.ghcb = NULL;
-}
-
-int pre_sev_run(struct vcpu_svm *svm, int cpu)
-{
-	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, cpu);
-	struct kvm *kvm = svm->vcpu.kvm;
-	unsigned int asid = sev_get_asid(kvm);
-
-	/*
-	 * Reject KVM_RUN if userspace attempts to run the vCPU with an invalid
-	 * VMSA, e.g. if userspace forces the vCPU to be RUNNABLE after an SNP
-	 * AP Destroy event.
-	 */
-	if (sev_es_guest(kvm) && !VALID_PAGE(svm->vmcb->control.vmsa_pa))
-		return -EINVAL;
-
-	/* Assign the asid allocated with this SEV guest */
-	svm->asid = asid;
-
-#ifdef CONFIG_KVM_SUPPORTS_CSV_REUSE_ASID
-	/* If ASID is shared with other guests, then flush TLB before VMRUN */
-	if (is_x86_vendor_hygon() && csv_asid_userid_array &&
-	    csv_asid_userid_array[asid].userid_len)
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ASID;
-#endif
-
-	/*
-	 * Flush guest TLB:
-	 *
-	 * 1) when different VMCB for the same ASID is to be run on the same host CPU.
-	 * 2) or this VMCB was executed on different host CPU in previous VMRUNs.
-	 */
-	if (sd->sev_vmcbs[asid] == svm->vmcb &&
-	    svm->vcpu.arch.last_vmentry_cpu == cpu)
-		return 0;
-
-	sd->sev_vmcbs[asid] = svm->vmcb;
-	svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ASID;
-	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	return 0;
 }
 
 #define GHCB_SCRATCH_AREA_LIMIT		(16ULL * PAGE_SIZE)

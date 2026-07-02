@@ -770,7 +770,7 @@ void kvm_set_cpu_caps(void)
 	);
 
 	kvm_cpu_cap_mask(CPUID_8000_0008_EBX,
-		F(CLZERO) | F(XSAVEERPTR) |
+		F(CLZERO) | F(XSAVEERPTR) | F(INVLPGB) |
 		F(WBNOINVD) | F(AMD_IBPB) | F(AMD_IBRS) | F(AMD_SSBD) | F(VIRT_SSBD) |
 		F(AMD_SSB_NO) | F(AMD_STIBP) | F(AMD_STIBP_ALWAYS_ON) |
 		F(AMD_PSFD)
@@ -1348,7 +1348,16 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		entry->eax = phys_as | (virt_as << 8) | (g_phys_as << 16);
 		entry->ecx &= ~(GENMASK(31, 16) | GENMASK(11, 8));
-		entry->edx = 0;
+		/*
+		 * EDX bits 15:0 contain INVLPGB count max (maximum number
+		 * of pages that can be invalidated in a single INVLPGB
+		 * instruction). Preserve it from host CPUID when INVLPGB
+		 * is exposed to guest, otherwise zero EDX.
+		 */
+		if (kvm_cpu_cap_has(X86_FEATURE_INVLPGB))
+			entry->edx &= GENMASK(15, 0);
+		else
+			entry->edx = 0;
 		cpuid_entry_override(entry, CPUID_8000_0008_EBX);
 		break;
 	}

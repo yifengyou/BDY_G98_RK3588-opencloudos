@@ -493,6 +493,9 @@ enum x86_intercept {
 	x86_intercept_out,
 	x86_intercept_outs,
 	x86_intercept_xsetbv,
+	x86_intercept_invlpgb,
+	x86_intercept_invlpgb_illegal,
+	x86_intercept_tlbsync,
 
 	nr_x86_intercepts
 };

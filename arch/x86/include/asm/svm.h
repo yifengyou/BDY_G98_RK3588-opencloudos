@@ -140,7 +140,7 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 	u64 exit_info_2;
 	u32 exit_int_info;
 	u32 exit_int_info_err;
-	u64 nested_ctl;
+	u64 nested_ctl; /* Offset 0x90, NP_ENABLE at 0 bit, INVLPGB at 7 bit*/
 	u64 avic_vapic_bar;
 	u64 ghcb_gpa;
 	u32 event_inj;
@@ -169,11 +169,6 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 	};
 };
 
-
-#define TLB_CONTROL_DO_NOTHING 0
-#define TLB_CONTROL_FLUSH_ALL_ASID 1
-#define TLB_CONTROL_FLUSH_ASID 3
-#define TLB_CONTROL_FLUSH_ASID_LOCAL 7
 
 #define V_TPR_MASK 0x0f
 
@@ -236,6 +231,11 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 #define SVM_NESTED_CTL_NP_ENABLE	BIT(0)
 #define SVM_NESTED_CTL_SEV_ENABLE	BIT(1)
 #define SVM_NESTED_CTL_SEV_ES_ENABLE	BIT(2)
+/*
+ * According to the AMD APM Vol2, INVLPGB guest enable bit share the same
+ * u64 with nest paging enable in nested_ctl.
+ */
+#define SVM_NESTED_CTL_INVLPGB_ENABLE	BIT(7)
 
 
 #define SVM_TSC_RATIO_RSVD	0xffffff0000000000ULL

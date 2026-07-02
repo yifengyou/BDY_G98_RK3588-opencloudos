@@ -262,6 +262,9 @@ static unsigned long iopm_base;
 
 DEFINE_PER_CPU(struct svm_cpu_data, svm_data);
 
+static struct kvm_tlb_tags svm_asids;
+static unsigned int fallback_asid;
+
 /*
  * Only MSR_TSC_AUX is switched via the user return hook.  EFER is switched via
  * the VMCB, and the SYSCALL/SYSENTER MSRs are handled by VMLOAD/VMSAVE.
@@ -650,10 +653,6 @@ static int svm_hardware_enable(void)
 		return -EBUSY;
 
 	sd = per_cpu_ptr(&svm_data, me);
-	sd->asid_generation = 1;
-	sd->max_asid = cpuid_ebx(SVM_CPUID_FUNC) - 1;
-	sd->next_asid = sd->max_asid + 1;
-	sd->min_asid = max_sev_asid + 1;
 
 	wrmsrl(MSR_EFER, efer | EFER_SVME);
 
@@ -726,7 +725,7 @@ static void svm_cpu_uninit(int cpu)
 	if (!sd->save_area)
 		return;
 
-	kfree(sd->sev_vmcbs);
+	xa_destroy(&sd->asid_vcpu);
 	__free_page(sd->save_area);
 	sd->save_area_pa = 0;
 	sd->save_area = NULL;
@@ -742,18 +741,10 @@ static int svm_cpu_init(int cpu)
 	if (!sd->save_area)
 		return ret;
 
-	ret = sev_cpu_init(sd);
-	if (ret)
-		goto free_save_area;
+	xa_init(&sd->asid_vcpu);
 
 	sd->save_area_pa = __sme_page_pa(sd->save_area);
 	return 0;
-
-free_save_area:
-	__free_page(sd->save_area);
-	sd->save_area = NULL;
-	return ret;
-
 }
 
 static void set_dr_intercepts(struct vcpu_svm *svm)
@@ -1158,6 +1149,7 @@ static void svm_hardware_unsetup(void)
 	__free_pages(pfn_to_page(iopm_base >> PAGE_SHIFT),
 	get_order(IOPM_SIZE));
 	iopm_base = 0;
+	kvm_tlb_tags_destroy(&svm_asids);
 
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
 		kvm_arch_hypercall_exit();
@@ -1233,6 +1225,25 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu,
 		else
 			svm_set_intercept(svm, INTERCEPT_RDTSCP);
 	}
+
+	/*
+	 * X86_FEATURE_INVLPGB for Host ins support
+	 * X86_FEATURE_INVLPGB_H for Host Hyper-V ins support
+	 * According to AMD APM Vol3: "Guest usage of INVLPGB is supported
+	 * only when the instruction has been explicitly enabled by the hypervisor in the VMCB"
+	 */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+	    boot_cpu_has(X86_FEATURE_INVLPGB_H)) {
+		if (guest_cpuid_has(&svm->vcpu, X86_FEATURE_INVLPGB)) {
+			svm_clr_intercept(svm, INTERCEPT_INVLPGB);
+			svm_clr_intercept(svm, INTERCEPT_INVLPGB_ILLEGAL);
+			svm_clr_intercept(svm, INTERCEPT_TLBSYNC);
+		} else {
+			svm_set_intercept(svm, INTERCEPT_INVLPGB);
+			svm_set_intercept(svm, INTERCEPT_INVLPGB_ILLEGAL);
+			svm_set_intercept(svm, INTERCEPT_TLBSYNC);
+		}
+	}
 }
 
 static inline void init_vmcb_after_set_cpuid(struct kvm_vcpu *vcpu)
@@ -1265,6 +1276,20 @@ static inline void init_vmcb_after_set_cpuid(struct kvm_vcpu *vcpu)
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_EIP, 1, 1);
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_ESP, 1, 1);
 	}
+}
+
+unsigned int svm_asid(struct kvm *kvm)
+{
+	return to_kvm_svm(kvm)->asid;
+}
+
+static unsigned int svm_get_current_asid(struct vcpu_svm *svm)
+{
+	struct kvm *kvm = svm->vcpu.kvm;
+
+	if (sev_guest(kvm))
+		return sev_get_asid(kvm);
+	return svm_asid(kvm);
 }
 
 static void svm_set_guest_pat(struct vcpu_svm *svm, u64 *g_pat)
@@ -1348,6 +1373,8 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	control->iopm_base_pa = __sme_set(iopm_base);
 	control->msrpm_base_pa = __sme_set(__pa(svm->msrpm));
 	control->int_ctl = V_INTR_MASKING_MASK;
+	control->asid = svm_asid(vcpu->kvm);
+	vmcb_set_flush_asid(svm->vmcb);
 
 	init_seg(&save->es);
 	init_seg(&save->ss);
@@ -1382,8 +1409,6 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 			svm_set_guest_pat(svm, &save->g_pat);
 		save->cr3 = 0;
 	}
-	svm->current_vmcb->asid_generation = 0;
-	svm->asid = 0;
 
 	svm->nested.vmcb12_gpa = INVALID_GPA;
 	svm->nested.last_vmcb12_gpa = INVALID_GPA;
@@ -1396,6 +1421,11 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	} else {
 		svm_clr_intercept(svm, INTERCEPT_PAUSE);
 	}
+
+	/* Enable guest INVLPGB in VMCB */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+		boot_cpu_has(X86_FEATURE_INVLPGB_H))
+		control->nested_ctl |= SVM_NESTED_CTL_INVLPGB_ENABLE;
 
 	svm_recalc_instruction_intercepts(vcpu, svm);
 
@@ -1410,12 +1440,12 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 		avic_init_vmcb(svm, vmcb);
 
 	if (vnmi)
-		svm->vmcb->control.int_ctl |= V_NMI_ENABLE_MASK;
+		control->int_ctl |= V_NMI_ENABLE_MASK;
 
 	if (vgif) {
 		svm_clr_intercept(svm, INTERCEPT_STGI);
 		svm_clr_intercept(svm, INTERCEPT_CLGI);
-		svm->vmcb->control.int_ctl |= V_GIF_ENABLE_MASK;
+		control->int_ctl |= V_GIF_ENABLE_MASK;
 	}
 
 	if (sev_guest(vcpu->kvm))
@@ -1612,6 +1642,8 @@ static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, cpu);
+	unsigned int asid = svm_get_current_asid(svm);
+	struct kvm_vcpu *prev;
 
 	if (sd->current_vmcb != svm->vmcb) {
 		sd->current_vmcb = svm->vmcb;
@@ -1621,6 +1653,15 @@ static void svm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	}
 	if (kvm_vcpu_apicv_active(vcpu))
 		avic_vcpu_load(vcpu, cpu);
+
+	/*
+	 * Flush the TLB when a different vCPU using the same ASID is
+	 * run on the same CPU. xa_store() should always succeed because
+	 * the entry is reserved when the ASID is allocated.
+	 */
+	prev = xa_store(&sd->asid_vcpu, asid, vcpu, GFP_ATOMIC);
+	if (prev != vcpu || WARN_ON_ONCE(xa_err(prev)))
+		kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
 }
 
 static void svm_vcpu_put(struct kvm_vcpu *vcpu)
@@ -2036,19 +2077,6 @@ static void svm_update_exception_bitmap(struct kvm_vcpu *vcpu)
 		if (vcpu->guest_debug & KVM_GUESTDBG_USE_SW_BP)
 			set_exception_intercept(svm, BP_VECTOR);
 	}
-}
-
-static void new_asid(struct vcpu_svm *svm, struct svm_cpu_data *sd)
-{
-	if (sd->next_asid > sd->max_asid) {
-		++sd->asid_generation;
-		sd->next_asid = sd->min_asid;
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ALL_ASID;
-		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	}
-
-	svm->current_vmcb->asid_generation = sd->asid_generation;
-	svm->asid = sd->next_asid++;
 }
 
 static void svm_set_dr6(struct kvm_vcpu *vcpu, unsigned long value)
@@ -3432,6 +3460,9 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_CR4_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_CR8_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_INVPCID]                      = invpcid_interception,
+	[SVM_EXIT_INVLPGB]			= kvm_handle_invalid_op,
+	[SVM_EXIT_INVLPGB_ILLEGAL]	= kvm_handle_invalid_op,
+	[SVM_EXIT_TLBSYNC]			= kvm_handle_invalid_op,
 	[SVM_EXIT_NPF]				= npf_interception,
 	[SVM_EXIT_RSM]                          = rsm_interception,
 	[SVM_EXIT_AVIC_INCOMPLETE_IPI]		= avic_incomplete_ipi_interception,
@@ -3664,26 +3695,41 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 static int pre_svm_run(struct kvm_vcpu *vcpu)
 {
-	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, vcpu->cpu);
 	struct vcpu_svm *svm = to_svm(vcpu);
+	unsigned int asid = svm_get_current_asid(svm);
 
 	/*
-	 * If the previous vmrun of the vmcb occurred on a different physical
-	 * cpu, then mark the vmcb dirty and assign a new asid.  Hardware's
-	 * vmcb clean bits are per logical CPU, as are KVM's asid assignments.
+	 * Reject KVM_RUN if userspace attempts to run the vCPU with an invalid
+	 * VMSA, e.g. if userspace forces the vCPU to be RUNNABLE after an SNP
+	 * AP Destroy event.
+	 */
+	if (sev_es_guest(vcpu->kvm) && !VALID_PAGE(svm->vmcb->control.vmsa_pa))
+		return -EINVAL;
+
+	/*
+	 * If the previous VMRUN of the VMCB occurred on a different physical
+	 * CPU, then mark the VMCB dirty and flush the ASID.  Hardware's
+	 * VMCB clean bits are per logical CPU, as are KVM's ASID assignments.
 	 */
 	if (unlikely(svm->current_vmcb->cpu != vcpu->cpu)) {
-		svm->current_vmcb->asid_generation = 0;
+		vmcb_set_flush_asid(svm->vmcb);
 		vmcb_mark_all_dirty(svm->vmcb);
 		svm->current_vmcb->cpu = vcpu->cpu;
         }
 
-	if (sev_guest(vcpu->kvm))
-		return pre_sev_run(svm, vcpu->cpu);
+	/*
+	 * If we run out of space and ASID allocation fails, we fallback to a
+	 * shared fallback ASID. For that ASID, we need to flush the TLB on
+	 * every VMRUN to avoid sharing TLB entries between different guests.
+	 */
+	if (unlikely(asid == fallback_asid))
+		vmcb_set_flush_asid(svm->vmcb);
 
-	/* FIXME: handle wraparound of asid_generation */
-	if (svm->current_vmcb->asid_generation != sd->asid_generation)
-		new_asid(svm, sd);
+	if (WARN_ON_ONCE(svm->vmcb->control.asid != asid)) {
+		vmcb_set_flush_asid(svm->vmcb);
+		svm->vmcb->control.asid = asid;
+		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
+	}
 
 	return 0;
 }
@@ -4040,10 +4086,7 @@ static void svm_flush_tlb_asid(struct kvm_vcpu *vcpu)
 	 * unconditionally does a TLB flush on both nested VM-Enter and nested
 	 * VM-Exit (via kvm_mmu_reset_context()).
 	 */
-	if (static_cpu_has(X86_FEATURE_FLUSHBYASID))
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ASID;
-	else
-		svm->current_vmcb->asid_generation--;
+	vmcb_set_flush_asid(svm->vmcb);
 }
 
 static void svm_flush_tlb_current(struct kvm_vcpu *vcpu)
@@ -4081,7 +4124,7 @@ static void svm_flush_tlb_gva(struct kvm_vcpu *vcpu, gva_t gva)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 
-	invlpga(gva, svm->vmcb->control.asid);
+	invlpga(gva, svm_get_current_asid(svm));
 }
 
 static inline void sync_cr8_to_lapic(struct kvm_vcpu *vcpu)
@@ -4343,10 +4386,6 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 
 	sync_lapic_to_cr8(vcpu);
 
-	if (unlikely(svm->asid != svm->vmcb->control.asid)) {
-		svm->vmcb->control.asid = svm->asid;
-		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	}
 	svm->vmcb->save.cr2 = vcpu->arch.cr2;
 
 	svm_hv_update_vp_id(svm->vmcb, vcpu);
@@ -4427,7 +4466,7 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 		svm->nested.nested_run_pending = 0;
 	}
 
-	svm->vmcb->control.tlb_ctl = TLB_CONTROL_DO_NOTHING;
+	vmcb_clr_flush_asid(svm->vmcb);
 	vmcb_mark_all_clean(svm->vmcb);
 
 	/* if exit due to PF check for async PF */
@@ -4633,6 +4672,9 @@ static const struct __x86_intercept {
 	[x86_intercept_out]		= POST_EX(SVM_EXIT_IOIO),
 	[x86_intercept_outs]		= POST_EX(SVM_EXIT_IOIO),
 	[x86_intercept_xsetbv]		= PRE_EX(SVM_EXIT_XSETBV),
+	[x86_intercept_invlpgb]		= POST_EX(SVM_EXIT_INVLPGB),
+	[x86_intercept_invlpgb_illegal]	= POST_EX(SVM_EXIT_INVLPGB_ILLEGAL),
+	[x86_intercept_tlbsync]		= POST_EX(SVM_EXIT_TLBSYNC),
 };
 
 #undef PRE_EX
@@ -5092,15 +5134,50 @@ static void svm_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)
 	sev_vcpu_deliver_sipi_vector(vcpu, vector);
 }
 
+void svm_unregister_asid(unsigned int asid)
+{
+	struct svm_cpu_data *sd;
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		sd = per_cpu_ptr(&svm_data, cpu);
+		xa_erase(&sd->asid_vcpu, asid);
+	}
+}
+
+bool svm_register_asid(unsigned int asid)
+{
+	struct svm_cpu_data *sd;
+	int cpu;
+
+	/*
+	 * Preallocate entries on all CPUs for the ASID to avoid memory
+	 * allocations in the vCPU load path.
+	 */
+	for_each_possible_cpu(cpu) {
+		sd = per_cpu_ptr(&svm_data, cpu);
+		if (xa_reserve(&sd->asid_vcpu, asid, GFP_KERNEL_ACCOUNT)) {
+			svm_unregister_asid(asid);
+			return false;
+		}
+	}
+	return true;
+}
+
 static void svm_vm_destroy(struct kvm *kvm)
 {
+	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
+
 	avic_vm_destroy(kvm);
 	sev_vm_destroy(kvm);
+	kvm_tlb_tags_free(&svm_asids, kvm_svm->asid);
 }
 
 static int svm_vm_init(struct kvm *kvm)
 {
+	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
 	int type = kvm->arch.vm_type;
+	unsigned int asid;
 
 	if (type != KVM_X86_DEFAULT_VM &&
 	    type != KVM_X86_SW_PROTECTED_VM) {
@@ -5120,6 +5197,13 @@ static int svm_vm_init(struct kvm *kvm)
 		if (ret)
 			return ret;
 	}
+
+	asid = kvm_tlb_tags_alloc(&svm_asids);
+	if (asid && !svm_register_asid(asid)) {
+		kvm_tlb_tags_free(&svm_asids, asid);
+		asid = 0;
+	}
+	kvm_svm->asid = asid ?: fallback_asid;
 
 	return 0;
 }
@@ -5363,6 +5447,13 @@ static __init void svm_set_cpu_caps(void)
 	    boot_cpu_has(X86_FEATURE_AMD_SSBD))
 		kvm_cpu_cap_set(X86_FEATURE_VIRT_SSBD);
 
+	/* Pass invlpgb bit to vcpu */
+	if (boot_cpu_has(X86_FEATURE_INVLPGB) &&
+	    boot_cpu_has(X86_FEATURE_INVLPGB_H)) {
+		pr_info("INVLPGB support detected and enabled\n");
+		kvm_cpu_cap_set(X86_FEATURE_INVLPGB);
+	}
+
 	if (enable_pmu) {
 		/*
 		 * Enumerate support for PERFCTR_CORE if and only if KVM has
@@ -5423,6 +5514,7 @@ static __init int svm_hardware_setup(void)
 	void *iopm_va;
 	int r;
 	unsigned int order = get_order(IOPM_SIZE);
+	unsigned int min_asid, max_asid;
 
 	/*
 	 * NX is required for shadow paging and for NPT if the NX huge pages
@@ -5515,6 +5607,13 @@ static __init int svm_hardware_setup(void)
 	 */
 	sev_hardware_setup();
 
+	/* Consumes max_sev_asid initialized by sev_hardware_setup() */
+	min_asid = max_sev_asid + 1;
+	max_asid = cpuid_ebx(SVM_CPUID_FUNC) - 1;
+	r = kvm_tlb_tags_init(&svm_asids, min_asid, max_asid);
+	if (r)
+		goto err;
+
 	svm_hv_hardware_setup();
 
 	for_each_possible_cpu(cpu) {
@@ -5522,6 +5621,12 @@ static __init int svm_hardware_setup(void)
 		if (r)
 			goto err;
 	}
+
+	fallback_asid = kvm_tlb_tags_alloc(&svm_asids);
+	WARN_ON_ONCE(!fallback_asid);
+
+	/* Needs to be after svm_cpu_init() initializes the per-CPU xarrays */
+	svm_register_asid(fallback_asid);
 
 	enable_apicv = avic = avic && avic_hardware_setup();
 
