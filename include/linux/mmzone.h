@@ -185,6 +185,12 @@ enum node_stat_item {
 	WORKINGSET_RESTORE_ANON = WORKINGSET_RESTORE_BASE,
 	WORKINGSET_RESTORE_FILE,
 	WORKINGSET_NODERECLAIM,
+#ifdef CONFIG_MEMCG_ZRAM
+	MEMCG_ZRAM_B,
+	MEMCG_ZRAMED,
+	MEMCG_SHMEM_ZRAM_B,
+	MEMCG_SHMEM_ZRAMED,
+#endif
 	NR_ANON_MAPPED,	/* Mapped anonymous pages */
 	NR_FILE_MAPPED,	/* pagecache pages mapped into pagetables.
 			   only modified from process context */
