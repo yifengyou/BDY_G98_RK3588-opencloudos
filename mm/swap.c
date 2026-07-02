@@ -499,7 +499,7 @@ void folio_mark_accessed(struct folio *folio)
 
 	if (lru_gen_enabled()) {
 		lru_gen_inc_refs(folio);
-		return;
+		goto out;
 	}
 
 	if (!folio_test_referenced(folio)) {
@@ -523,6 +523,7 @@ void folio_mark_accessed(struct folio *folio)
 			__lru_cache_activate_folio(folio);
 		folio_clear_referenced(folio);
 	}
+out:
 	if (folio_test_idle(folio))
 		folio_clear_idle(folio);
 }
