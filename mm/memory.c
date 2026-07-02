@@ -48,6 +48,7 @@
 #include <linux/sched/task.h>
 #include <linux/hugetlb.h>
 #include <linux/mman.h>
+#include <linux/range.h>
 #include <linux/swap.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
@@ -6204,7 +6205,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else
 		#if defined(CONFIG_PTP) && defined(CONFIG_X86_64)
-	{	
+	{
 		if (haoc_enabled)
 		{
 			ptp_disable_iee(&reg);
@@ -6897,41 +6898,70 @@ static inline int process_huge_page(
 	return 0;
 }
 
-static void clear_gigantic_page(struct page *page,
-				unsigned long addr,
-				unsigned int pages_per_huge_page)
+static void clear_contig_highpages(struct page *page, unsigned long addr,
+				   unsigned int nr_pages)
 {
-	int i;
-	struct page *p;
+	/*
+	 * When clearing we want to operate on the largest extent possible to
+	 * allow for architecture specific extent based optimizations.
+	 *
+	 * However, since clear_user_highpages() (and primitives clear_user_pages(),
+	 * clear_pages()), do not call cond_resched(), limit the unit size when
+	 * running under non-preemptible scheduling models.
+	 */
+	const unsigned int unit = preempt_model_preemptible() ?
+				  nr_pages : PROCESS_PAGES_NON_PREEMPT_BATCH;
+	unsigned int i, count;
 
 	might_sleep();
-	for (i = 0; i < pages_per_huge_page; i++) {
-		p = nth_page(page, i);
+	for (i = 0; i < nr_pages; i += count) {
 		cond_resched();
-		clear_user_highpage(p, addr + i * PAGE_SIZE);
+		count = min(unit, nr_pages - i);
+		clear_user_highpages(page + i, addr + i * PAGE_SIZE, count);
 	}
 }
 
-static int clear_subpage(unsigned long addr, int idx, void *arg)
-{
-	struct page *page = arg;
 
-	clear_user_highpage(page + idx, addr);
-	return 0;
-}
+
+/*
+ * When zeroing a folio, we want to differentiate between pages in the
+ * vicinity of the faulting address where we have spatial and temporal
+ * locality, and those far away where we don't.
+ *
+ * Use a radius of 2 for determining the local neighbourhood.
+ */
+#define FOLIO_ZERO_LOCALITY_RADIUS	2
 
 void clear_huge_page(struct page *page,
 		     unsigned long addr_hint, unsigned int pages_per_huge_page)
 {
-	unsigned long addr = addr_hint &
-		~(((unsigned long)pages_per_huge_page << PAGE_SHIFT) - 1);
+	const unsigned long base_addr = ALIGN_DOWN(addr_hint, pages_per_huge_page * PAGE_SIZE);
+	const long fault_idx = (addr_hint - base_addr) / PAGE_SIZE;
+	const struct range pg = DEFINE_RANGE(0, pages_per_huge_page - 1);
+	const long radius = FOLIO_ZERO_LOCALITY_RADIUS;
+	struct range r[3];
+	int i;
 
-	if (unlikely(pages_per_huge_page > MAX_ORDER_NR_PAGES)) {
-		clear_gigantic_page(page, addr, pages_per_huge_page);
-		return;
+	/*
+	 * Faulting page and its immediate neighbourhood. Will be cleared at the
+	 * end to keep its cachelines hot.
+	 */
+	r[2] = DEFINE_RANGE(fault_idx - radius < (long)pg.start ? pg.start : fault_idx - radius,
+		fault_idx + radius > (long)pg.end   ? pg.end   : fault_idx + radius);
+
+	/* Region to the left of the fault */
+	r[1] = DEFINE_RANGE(pg.start, r[2].start - 1);
+
+	/* Region to the right of the fault: always valid for the common fault_idx=0 case. */
+	r[0] = DEFINE_RANGE(r[2].end + 1, pg.end);
+
+	for (i = 0; i < ARRAY_SIZE(r); i++) {
+		const unsigned long addr = base_addr + r[i].start * PAGE_SIZE;
+		const long nr_pages = (long)range_len(&r[i]);
+
+		if (nr_pages > 0)
+			clear_contig_highpages(page + r[i].start, addr, nr_pages);
 	}
-
-	process_huge_page(addr_hint, pages_per_huge_page, clear_subpage, page);
 }
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
