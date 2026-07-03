@@ -20,6 +20,7 @@
 #include <linux/swapops.h>
 #include <linux/shmem_fs.h>
 #include <linux/ksm.h>
+#include <linux/memcontrol.h>
 
 #include <asm/tlb.h>
 #include <asm/pgalloc.h>
@@ -372,7 +373,11 @@ int hugepage_madvise(struct vm_area_struct *vma,
 		 * register it here without waiting a page fault that
 		 * may not happen any time soon.
 		 */
-		khugepaged_enter_vma(vma, *vm_flags);
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		if (thp_cgroup_limit_check(vma) &&
+		    !thp_cgroup_rejected(vma))
+#endif
+			khugepaged_enter_vma(vma, *vm_flags);
 		break;
 	case MADV_NOHUGEPAGE:
 		*vm_flags &= ~VM_HUGEPAGE;
@@ -502,7 +507,11 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 			  unsigned long vm_flags)
 {
 	if (!test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags) &&
-	    hugepage_pmd_enabled()) {
+	    (hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	     || memcg_has_thp_enabled()
+#endif
+	    )) {
 		if (thp_vma_allowable_order(vma, vm_flags, TVA_ENFORCE_SYSFS,
 					    PMD_ORDER))
 			__khugepaged_enter(vma->vm_mm);
@@ -2444,6 +2453,12 @@ skip:
 			progress++;
 			continue;
 		}
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		if (!thp_cgroup_limit_check(vma)) {
+			progress++;
+			break;
+		}
+#endif
 		hstart = round_up(vma->vm_start, HPAGE_PMD_SIZE);
 		hend = round_down(vma->vm_end, HPAGE_PMD_SIZE);
 		if (khugepaged_scan.address > hend)
@@ -2705,7 +2720,12 @@ breakouterloop_mmap_lock:
 
 static int khugepaged_has_work(void)
 {
-	return !list_empty(&khugepaged_scan.mm_head) && hugepage_pmd_enabled();
+	return !list_empty(&khugepaged_scan.mm_head) &&
+		(hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		 || memcg_has_thp_enabled()
+#endif
+		);
 }
 
 static int khugepaged_wait_event(void)
@@ -2801,7 +2821,11 @@ static void khugepaged_wait_work(void)
 		return;
 	}
 
-	if (hugepage_pmd_enabled())
+	if (hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	    || memcg_has_thp_enabled()
+#endif
+	   )
 		wait_event_freezable(khugepaged_wait, khugepaged_wait_event());
 }
 
@@ -2841,7 +2865,11 @@ static void set_recommended_min_free_kbytes(void)
 	int nr_zones = 0;
 	unsigned long recommended_min;
 
-	if (!hugepage_pmd_enabled()) {
+	if (!hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	    && !memcg_has_thp_enabled()
+#endif
+	   ) {
 		calculate_min_free_kbytes();
 		goto update_wmarks;
 	}
@@ -2891,7 +2919,11 @@ int start_stop_khugepaged(void)
 	int err = 0;
 
 	mutex_lock(&khugepaged_mutex);
-	if (hugepage_pmd_enabled()) {
+	if (hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	    || memcg_has_thp_enabled()
+#endif
+	   ) {
 		if (!khugepaged_thread)
 			khugepaged_thread = kthread_run(khugepaged, NULL,
 							"khugepaged");
@@ -2917,7 +2949,11 @@ fail:
 void khugepaged_min_free_kbytes_update(void)
 {
 	mutex_lock(&khugepaged_mutex);
-	if (hugepage_pmd_enabled() && khugepaged_thread)
+	if ((hugepage_pmd_enabled()
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	     || memcg_has_thp_enabled()
+#endif
+	    ) && khugepaged_thread)
 		set_recommended_min_free_kbytes();
 	mutex_unlock(&khugepaged_mutex);
 }

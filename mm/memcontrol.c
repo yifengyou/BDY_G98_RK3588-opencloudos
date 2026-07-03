@@ -72,6 +72,10 @@
 #ifdef CONFIG_CGROUP_SLI
 #include <linux/sli.h>
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+#include <linux/khugepaged.h>
+#include <linux/huge_mm.h>
+#endif
 
 #include "internal.h"
 #include <net/sock.h>
@@ -103,6 +107,10 @@ EXPORT_SYMBOL(memory_cgrp_subsys);
 
 struct mem_cgroup *root_mem_cgroup __read_mostly;
 EXPORT_SYMBOL_GPL(root_mem_cgroup);
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+atomic_t memcg_thp_enabled_count __read_mostly = ATOMIC_INIT(0);
+#endif
 
 /* Active memory cgroup to use from an interrupt context */
 DEFINE_PER_CPU(struct mem_cgroup *, int_active_memcg);
@@ -6255,6 +6263,8 @@ static const unsigned int memcg1_stats[] = {
 	NR_ANON_MAPPED,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	NR_ANON_THPS,
+	NR_SHMEM_THPS,
+	NR_FILE_THPS,
 #endif
 	NR_SHMEM,
 	NR_FILE_MAPPED,
@@ -6269,7 +6279,9 @@ static const char *const memcg1_stat_names[] = {
 	"cache",
 	"rss",
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	"rss_huge",
+	"rss_anon_huge",
+	"rss_shmem_huge",
+	"rss_file_huge",
 #endif
 	"shmem",
 	"mapped_file",
@@ -7367,7 +7379,7 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 	unsigned long mem_unevictable;
 	unsigned long mem_rss;
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	unsigned long mem_rss_huge;
+	unsigned long mem_rss_anon_huge, mem_rss_shmem_huge, mem_rss_file_huge;
 #endif
 	unsigned long mem_file_map, mem_shmem;
 	unsigned long mem_free = 0;
@@ -7427,7 +7439,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_unevictable = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_UNEVICTABLE), false);
 		mem_rss = memcg_page_state_local(memcg, NR_ANON_MAPPED);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		mem_rss_huge = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_anon_huge  = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_shmem_huge = memcg_page_state(memcg, NR_SHMEM_THPS);
+		mem_rss_file_huge  = memcg_page_state(memcg, NR_FILE_THPS);
 #endif
 		mem_file_map = memcg_page_state_local(memcg, NR_FILE_MAPPED);
 		mem_shmem = memcg_page_state_local(memcg, NR_SHMEM);
@@ -7443,7 +7457,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		mem_unevictable = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_UNEVICTABLE), true);
 		mem_rss = memcg_page_state(memcg, NR_ANON_MAPPED);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		mem_rss_huge = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_anon_huge  = memcg_page_state(memcg, NR_ANON_THPS);
+		mem_rss_shmem_huge = memcg_page_state(memcg, NR_SHMEM_THPS);
+		mem_rss_file_huge  = memcg_page_state(memcg, NR_FILE_THPS);
 #endif
 		mem_file_map = memcg_page_state(memcg, NR_FILE_MAPPED);
 		mem_shmem = memcg_page_state(memcg, NR_SHMEM);
@@ -7508,6 +7524,8 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 		"AnonHugePages:  %8lu kB\n"
+		"ShmemHugePages: %8lu kB\n"
+		"FileHugePages:  %8lu kB\n"
 #endif
 		, K(mem_limit)
 		, K(mem_free)
@@ -7536,7 +7554,7 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		, 0UL // K(global_page_state(NR_FILE_DIRTY)),
 		, 0UL // K(global_page_state(NR_WRITEBACK)),
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		, K(mem_rss + mem_rss_huge + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES) +
+		, K(mem_rss + mem_rss_anon_huge + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES) +
 					    // global_page_state(NR_ANON_TRANSPARENT_HUGEPAGES) * HPAGE_PMD_NR),
 #else
 		, K(mem_rss + mem_zram_raw) // K(global_page_state(NR_ANON_PAGES)),
@@ -7564,7 +7582,9 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 		, 0UL // atomic_long_read(&num_poisoned_pages) << (PAGE_SHIFT - 10)
 #endif
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-		, K(mem_rss_huge)
+		, K(mem_rss_anon_huge)
+		, K(mem_rss_shmem_huge)
+		, K(mem_rss_file_huge)
 #endif
 		);
 
@@ -8100,6 +8120,111 @@ static int memory_early_oom_threshold_show(struct seq_file *m, void *v);
 static ssize_t memory_early_oom_threshold_write(struct kernfs_open_file *of,
 					       char *buf, size_t nbytes, loff_t off);
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+static int memcg_thp_flag_show(struct seq_file *sf, void *v)
+{
+	const char *output;
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
+	unsigned long *flag = &memcg->thp_flag;
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag))
+		output = "[always] madvise never";
+	else if (test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+		output = "always [madvise] never";
+	else
+		output = "always madvise [never]";
+
+	seq_printf(sf, "%s\n", output);
+	return 0;
+}
+
+static ssize_t memcg_thp_flag_write(struct kernfs_open_file *of,
+				     char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	ssize_t ret = nbytes;
+	unsigned long *flag = &memcg->thp_flag;
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (sysfs_streq(buf, "always")) {
+		if (!test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag)) {
+			set_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+			if (!test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+				memcg_inc_thp_enabled(memcg);
+		}
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+	} else if (sysfs_streq(buf, "madvise")) {
+		if (!test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag)) {
+			set_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+			if (!test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag))
+				memcg_inc_thp_enabled(memcg);
+		}
+		clear_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+	} else if (sysfs_streq(buf, "never")) {
+		if (test_bit(TRANSPARENT_HUGEPAGE_FLAG, flag) ||
+		    test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag))
+			memcg_dec_thp_enabled(memcg);
+		clear_bit(TRANSPARENT_HUGEPAGE_FLAG, flag);
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG, flag);
+	} else {
+		ret = -EINVAL;
+	}
+
+	if (ret > 0) {
+		int err = start_stop_khugepaged();
+
+		if (err)
+			ret = err;
+	}
+	return ret;
+}
+
+static int memcg_thp_limit_show(struct seq_file *sf, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	if (memcg->thp_limit_in_bytes == ULONG_MAX)
+		seq_printf(sf, "-1\n");
+	else
+		seq_printf(sf, "%lu\n", memcg->thp_limit_in_bytes);
+	return 0;
+}
+
+static ssize_t memcg_thp_limit_write(struct kernfs_open_file *of,
+				      char *buf, size_t nbytes, loff_t off)
+{
+	char *end;
+	u64 bytes;
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	if (!thp_cgroup_any_enabled() || mem_cgroup_is_root(memcg))
+		return -EPERM;
+
+	buf = strstrip(buf);
+	if (sysfs_streq(buf, "-1")) {
+		memcg->thp_limit_in_bytes = ULONG_MAX;
+		return nbytes;
+	}
+
+	bytes = memparse(buf, &end);
+	if (*end != '\0')
+		return -EINVAL;
+	if (bytes < HPAGE_PMD_SIZE)
+		return -EINVAL;
+
+	memcg->thp_limit_in_bytes = min_t(u64, bytes, ULONG_MAX);
+	return nbytes;
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE_CGROUP */
+
 static struct cftype mem_cgroup_legacy_files[] = {
 	{
 		.name = "latency_histogram",
@@ -8440,6 +8565,20 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.write_u64 = mem_cgroup_emm_threshold_write,
 	},
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	{
+		.name = "transparent_hugepage.enabled",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_flag_show,
+		.write = memcg_thp_flag_write,
+	},
+	{
+		.name = "transparent_hugepage.limit_in_bytes",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_limit_show,
+		.write = memcg_thp_limit_write,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -8766,6 +8905,13 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	atomic_long_set(&memcg->unevictable_size, 0);
 #endif
 	if (parent) {
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+		memcg->thp_flag = parent->thp_flag;
+		memcg->thp_limit_in_bytes = ULONG_MAX;
+		if (memcg->thp_flag & ((1 << TRANSPARENT_HUGEPAGE_FLAG) |
+		    (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
+			memcg_inc_thp_enabled(memcg);
+#endif
 #ifdef CONFIG_TEXT_UNEVICTABLE
 		memcg->allow_unevictable = parent->allow_unevictable;
 #endif
@@ -8948,6 +9094,11 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	struct mem_cgroup_event *event, *tmp;
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	if (memcg->thp_flag & ((1 << TRANSPARENT_HUGEPAGE_FLAG) |
+	    (1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
+		memcg_dec_thp_enabled(memcg);
+#endif
 	charge_dying_memcgs(memcg);
 
 	/* XXX no direct number */
@@ -10767,6 +10918,20 @@ static struct cftype memory_files[] = {
 		.name = "numa_balance.stat",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_numa_balance_stat_show,
+	},
+#endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	{
+		.name = "transparent_hugepage.enabled",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_flag_show,
+		.write = memcg_thp_flag_write,
+	},
+	{
+		.name = "transparent_hugepage.limit_in_bytes",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memcg_thp_limit_show,
+		.write = memcg_thp_limit_write,
 	},
 #endif
 	{ }	/* terminate */

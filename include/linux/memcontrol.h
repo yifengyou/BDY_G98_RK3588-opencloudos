@@ -470,6 +470,15 @@ struct mem_cgroup {
 	unsigned long nb_last_scan_jiffies;
 #endif
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+	/*
+	 * Per-cgroup THP control. This release allows KABI changes, so these
+	 * are plain members instead of consuming KABI_RESERVE slots.
+	 */
+	unsigned long thp_flag;
+	unsigned long thp_limit_in_bytes;
+#endif
+
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
@@ -1402,6 +1411,45 @@ mem_cgroup_get_unstable_idle_stats(struct mem_cgroup *memcg)
 }
 #endif /* CONFIG_KSTALED */
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+extern atomic_t memcg_thp_enabled_count;
+
+static inline unsigned long memcg_thp_flag(struct vm_area_struct *vma)
+{
+	struct mem_cgroup *memcg;
+	unsigned long flags = transparent_hugepage_flags;
+
+	if (unlikely(!vma) || !thp_cgroup_any_enabled())
+		return flags;
+
+	memcg = get_mem_cgroup_from_mm(vma->vm_mm);
+	if (memcg && !mem_cgroup_disabled() && !mem_cgroup_is_root(memcg) &&
+	    thp_cgroup_any_enabled())
+		flags = READ_ONCE(memcg->thp_flag);
+
+	if (memcg)
+		mem_cgroup_put(memcg);
+	return flags;
+}
+
+static inline int memcg_has_thp_enabled(void)
+{
+	return atomic_read(&memcg_thp_enabled_count) > 0;
+}
+
+static inline void memcg_inc_thp_enabled(struct mem_cgroup *memcg)
+{
+	if (!mem_cgroup_is_root(memcg))
+		atomic_add_unless(&memcg_thp_enabled_count, 1, INT_MAX);
+}
+
+static inline void memcg_dec_thp_enabled(struct mem_cgroup *memcg)
+{
+	if (!mem_cgroup_is_root(memcg))
+		atomic_dec_if_positive(&memcg_thp_enabled_count);
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE_CGROUP */
+
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1879,6 +1927,17 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 {
 	return 0;
 }
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE_CGROUP
+static inline unsigned long memcg_thp_flag(struct vm_area_struct *vma)
+{
+	return transparent_hugepage_flags;
+}
+static inline int memcg_has_thp_enabled(void) { return 0; }
+static inline void memcg_inc_thp_enabled(struct mem_cgroup *memcg) {}
+static inline void memcg_dec_thp_enabled(struct mem_cgroup *memcg) {}
+#endif
+
 #endif /* CONFIG_MEMCG */
 
 /*
