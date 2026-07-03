@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SHELL_GUARD
+	bool "Shell Guard Security Module"
+	depends on SECURITY && X86
+	default y
+	help
+	  This selects Shell Guard.
