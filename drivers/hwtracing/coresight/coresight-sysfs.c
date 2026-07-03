@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 
 #include "coresight-priv.h"
+#include "coresight-trace-id.h"
 
 /*
  * Connections group - links attribute.

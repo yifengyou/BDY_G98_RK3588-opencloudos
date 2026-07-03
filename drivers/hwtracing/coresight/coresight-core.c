@@ -384,7 +384,7 @@ int coresight_enable_source(struct coresight_device *csdev, enum cs_mode mode,
 
 	if (!csdev->enable) {
 		if (source_ops(csdev)->enable) {
-			ret = source_ops(csdev)->enable(csdev, data, mode);
+			ret = source_ops(csdev)->enable(csdev, data, mode, NULL);
 			if (ret)
 				return ret;
 		}
@@ -678,23 +678,25 @@ coresight_get_enabled_sink(struct coresight_device *source)
 	return coresight_find_enabled_sink(source);
 }
 
+u32 coresight_get_sink_id(struct coresight_device *csdev)
+{
+	if (!csdev->ea)
+		return 0;
+
+	/*
+	 * See function etm_perf_add_symlink_sink() to know where
+	 * this comes from.
+	 */
+	return (u32) (unsigned long) csdev->ea->var;
+}
+
 static int coresight_sink_by_id(struct device *dev, const void *data)
 {
 	struct coresight_device *csdev = to_coresight_device(dev);
-	unsigned long hash;
 
 	if (csdev->type == CORESIGHT_DEV_TYPE_SINK ||
-	     csdev->type == CORESIGHT_DEV_TYPE_LINKSINK) {
-
-		if (!csdev->ea)
-			return 0;
-		/*
-		 * See function etm_perf_add_symlink_sink() to know where
-		 * this comes from.
-		 */
-		hash = (unsigned long)csdev->ea->var;
-
-		if ((u32)hash == *(u32 *)data)
+	    csdev->type == CORESIGHT_DEV_TYPE_LINKSINK) {
+		if (coresight_get_sink_id(csdev) == *(u32 *)data)
 			return 1;
 	}
 
@@ -1354,6 +1356,7 @@ static void coresight_device_release(struct device *dev)
 	struct coresight_device *csdev = to_coresight_device(dev);
 
 	fwnode_handle_put(csdev->dev.fwnode);
+	free_percpu(csdev->perf_sink_id_map.cpu_map);
 	kfree(csdev);
 }
 
@@ -1614,6 +1617,18 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 	csdev->dev.parent = desc->dev;
 	csdev->dev.release = coresight_device_release;
 	csdev->dev.bus = &coresight_bustype;
+
+	if (csdev->type == CORESIGHT_DEV_TYPE_SINK ||
+	    csdev->type == CORESIGHT_DEV_TYPE_LINKSINK) {
+		spin_lock_init(&csdev->perf_sink_id_map.lock);
+		csdev->perf_sink_id_map.cpu_map = alloc_percpu(atomic_t);
+		if (!csdev->perf_sink_id_map.cpu_map) {
+			kfree(csdev);
+			ret = -ENOMEM;
+			goto err_out;
+		}
+	}
+
 	/*
 	 * Hold the reference to our parent device. This will be
 	 * dropped only in coresight_device_release().
