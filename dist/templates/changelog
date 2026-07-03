@@ -1,3 +1,196 @@
+* Fri Jul 3 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51
+- arch/x86: Enable per-cgroup THP control in tencent.config
+- mm/thp: Add per-cgroup THP allocation limit
+- mm/thp: Introduce per-cgroup THP control with global switch and per-type granularity
+- mm/memcontrol: add shmem_thp/file_thp to cgroup v1 stats and meminfo
+- tools headers x86 cpufeatures: Sync with the kernel sources
+- KVM: x86: Advertise AVX10_VNNI_INT CPUID to userspace
+- KVM: x86: Advertise AVX10.2 CPUID to userspace
+- KVM: x86: Advertise AMX CPUIDs in subleaf 0x1E.0x1 to userspace
+- KVM: x86: Advertise MOVRS CPUID to userspace
+- KVM: x86: Replace guts of "governed" features with comprehensive cpu_caps
+- ACPI: processor: Downgrade Intel _OSC and _PDC messages to debug
+- shell-guard: implement shell-guard
+- mm/memfd: fix folio_zero_user build errors
+- mm/hugetlb: don't crash when allocating a folio if there are no resv
+- perf cs-etm: Bounds-check CPU in cs_etm__get_queue()
+- perf cs-etm: Reject CPU IDs that would overflow signed comparison
+- workqueue: forbid TEST_WORKQUEUE from being built-in
+- mm/gup: fix memfd_pin_folios hugetlb page allocation
+- mm/hugetlb: fix memfd_pin_folios resv_huge_pages leak
+- mm/memfd: fix information leak in hugetlb folios
+- config: add nvidia grace soc configuration items
+- Revert "arm64: tlb: Improve __TLBI_VADDR_RANGE()"
+- mm/hugetlb: simplify refs in memfd_alloc_folio
+- mm/gup: fix memfd_pin_folios alloc race panic
+- mm/hugetlb: fix memfd_pin_folios free_huge_pages leak
+- mm/filemap: fix filemap_get_folios_contig THP panic
+- perf cs-etm: Fix the assert() to handle captured and unprocessed cpu trace
+- perf arm-spe: Use old behavior when opening old SPE files
+- coresight: Fix incorrect handling for return value of devm_kzalloc
+- coresight: Get parent device reference after sink ID map allocation
+- workqueue: avoid unguarded 64-bit division
+- PCI/ASPM: Save parent L1SS config in pci_save_aspm_l1ss_state()
+- arm64: tlb: Improve __TLBI_VADDR_RANGE()
+- arm64: Utilize for_each_cpu_wrap for reference lookup
+- PCI/ASPM: Save L1 PM Substates Capability for suspend/resume
+- PCI: Move pci_clear_and_set_dword() helper to PCI header
+- arm64: Update AMU-based freq scale factor on entering idle
+- arm64: Provide an AMU-based version of arch_freq_get_on_cpu
+- arch_topology: init capacity_freq_ref to 0
+- arm64/io: add constant-argument check
+- mm/gup: remove unnecessary check in memfd_pin_folios()
+- perf: arm_cspmu: nvidia: monitor all ports by default
+- mm/gup: avoid an unnecessary allocation call for FOLL_LONGTERM cases
+- mm/gup: stop leaking pinned pages in low memory conditions
+- mm/gup: introduce memfd_pin_folios() for pinning memfd folios
+- mm/gup: introduce check_and_migrate_movable_folios()
+- mm/gup: introduce unpin_folio/unpin_folios helpers
+- PCI/ACS: Fix 'pci=config_acs=' parameter
+- perf: arm_cspmu: nvidia: enable NVLINK-C2C port filtering
+- perf: arm_cspmu: nvidia: remove unsupported SCF events
+- perf: arm_cspmu: nvidia: fix sysfs path in the kernel doc
+- mm/gup: handle NULL pages in unpin_user_pages()
+- PCI: Fix pci_enable_acs() support for the ACS quirks
+- PCI: Extend ACS configurability
+- cpufreq/cppc: Don't compare desired_perf in target()
+- PCI: Clear Secondary Status errors after enumeration
+- net: hns3: Remove io_stop_wc() calls after __iowrite64_copy()
+- arm64: tlb: Allow range operation for MAX_TLBI_RANGE_PAGES
+- ACPI: arm64: export acpi_arch_thermal_cpufreq_pctg()
+- ACPI: processor: reduce CPUFREQ thermal reduction pctg for Tegra241
+- workqueue: validate cpumask_first() result in llc_populate_cpu_shard_id()
+- workqueue: fix typo in WQ_AFFN_SMT comment
+- tools/workqueue: add CACHE_SHARD support to wq_dump.py
+- workqueue: add WQ_AFFN_CACHE_SHARD affinity scope
+- workqueue: set WQ_AFFN_CACHE_SHARD as the default affinity scope
+- docs: workqueue: document WQ_AFFN_CACHE_SHARD affinity scope
+- workqueue: add test_workqueue benchmark module
+- workqueue: fix parse_affn_scope() prefix matching bug
+- arm64: contpte: fix set_access_flags() no-op check for SMMU/ATS faults
+- spi: tegra210-quad: Protect curr_xfer check in IRQ handler
+- spi: tegra210-quad: Protect curr_xfer clearing in tegra_qspi_non_combined_seq_xfer
+- spi: tegra210-quad: Protect curr_xfer in tegra_qspi_combined_seq_xfer
+- spi: tegra210-quad: Protect curr_xfer assignment in tegra_qspi_setup_transfer_one
+- spi: tegra210-quad: Move curr_xfer read inside spinlock
+- spi: tegra210-quad: Return IRQ_HANDLED when timeout already processed transfer
+- spi: tegra210-quad: Check hardware status on timeout
+- spi: tegra210-quad: Refactor error handling into helper functions
+- spi: tegra210-quad: Fix timeout handling
+- i2c: tegra: Use internal reset when reset property is not available
+- iommu: Skip PASID validation for devices without PASID capability
+- cpufreq: Introduce an optional cpuinfo_avg_freq sysfs entry
+- cpufreq: Allow arch_freq_get_on_cpu to return an error
+- ACPI/HMAT: Move HMAT messages to pr_debug()
+- arm64/io: Provide a WC friendly __iowriteXX_copy()
+- s390: Stop using weak symbols for __iowrite64_copy()
+- coresight: Make trace ID map spinlock local to the map
+- coresight: Remove pending trace ID release mechanism
+- coresight: Emit sink ID in the HW_ID packets
+- coresight: Use per-sink trace ID maps for Perf sessions
+- coresight: Make CPU id map a property of a trace ID map
+- coresight: Expose map arguments in trace ID API
+- coresight: Clarify comments around the PID of the sink owner
+- coresight: Move struct coresight_trace_id_map to common header
+- coresight: Remove unused ETM Perf stubs
+- coresight: trbe: Enable ACPI based TRBE devices
+- coresight: trbe: Add a representative coresight_platform_data for TRBE
+- perf arm-spe: Dump metadata with version 2
+- perf arm-spe: Support metadata version 2
+- perf arm-spe: Save per CPU information in metadata
+- perf arm-spe: Calculate meta data size
+- perf arm-spe: Define metadata header version 2
+- perf arm-spe: Rename arm_spe__synth_data_source_generic()
+- perf arm-spe: Use metadata to decide the data source feature
+- perf arm-spe: Remove the unused 'midr' field
+- perf arm-spe: Introduce arm_spe__is_homogeneous()
+- perf: cs-etm: Support version 0.1 of HW_ID packets
+- perf: cs-etm: Only save valid trace IDs into files
+- perf: cs-etm: Create decoders based on the trace ID mappings
+- perf cs-etm: Use struct perf_cpu as much as possible
+- perf: cs-etm: Move traceid_list to each queue
+- perf arm-spe: Add Neoverse-V2 to common data source encoding list
+- perf: cs-etm: Print queue number in raw trace dump
+- perf: cs-etm: Allocate queues for all CPUs
+- perf cs-etm: Create decoders after both AUX and HW_ID search passes
+- perf cs-etm: Fix incorrect or missing decoder for raw trace
+- tools: arm64: Add Cortex-A720AE definitions
+- perf arm-spe: Add Cortex CPUs to common data source encoding list
+- tools/include: Sync arm64 headers with the kernel sources
+- s390: Implement __iowrite32_copy()
+- x86: Stop using weak symbols for __iowrite32_copy()
+- tk: config: enable CONFIG_CGROUP_NUMA_BALANCE
+- tk: mm/numa: optimize LRU scanning with batching
+- tk: mm/numa: skip executable VMAs and private data segments
+- tk: mm/numa: add trace events for scanning activities
+- tk: mm/numa: scan old MGLRU generations for file lru
+- tk: mm/numa: support THP in per cgroup NUMA balancing
+- tk: mm/numa: introduce per cgroup numa balancing
+- x86/cpu: Keep the PROCESSOR_SELECT menu together
+- tools headers: Update the x86 headers with the kernel sources
+- x86/mm: Disable broadcast TLB flush when PCID is disabled
+- KVM: SVM: Use a single ASID per VM
+- KVM: SEV: Generalize tracking ASID->vCPU with xarrays
+- KVM: SEV: Drop pre_sev_run()
+- KVM: SEV: Track ASID->vCPU on vCPU load
+- KVM: SEV: Track ASID->vCPU instead of ASID->VMCB
+- KVM: SVM: Flush the ASID when running on a new CPU
+- KVM: SVM: Flush everything if FLUSHBYASID is not available
+- KVM: SVM: Add helpers to set/clear ASID flush in VMCB
+- KVM: SVM: Use cached local variable in init_vmcb()
+- KVM: VMX: Generalize VPID allocation to be vendor-neutral
+- x86/kvm: hypervisor INVLPGB: support guest usage of INVLPGB
+- x86/mm: Limit INVLPGB to VA in invlpgb_flush_addr_nosync()
+- mm: remove unnecessary calls to lru_add_drain
+- config: invlpgb: enable config flag
+- x86/CPU/AMD: Disable INVLPGB on Zen2
+- x86/mm: Fix early boot use of INVPLGB
+- x86/mm: Disable INVLPGB when PTI is enabled
+- x86/mm: Always set the ASID valid bit for the INVLPGB instruction
+- x86/mm: Enable AMD translation cache extensions
+- x86/mm: Enable broadcast TLB invalidation for multi-threaded processes
+- x86/mm: Add global ASID process exit helpers
+- x86/mm: Handle global ASID context switch and TLB flush
+- x86/mm: Add global ASID allocation helper functions
+- x86/mm: Use broadcast TLB flushing in page reclaim
+- x86/mm: Use INVLPGB for kernel TLB flushes
+- x86/mm: Add INVLPGB support code
+- x86/mm: Add INVLPGB feature and Kconfig entry
+- x86/mm: Consolidate full flush threshold decision
+- mm: folio_zero_user: open code range computation in folio_zero_user()
+- mm: folio_zero_user: cache neighbouring pages
+- mm: folio_zero_user: clear page ranges
+- mm: folio_zero_user: clear pages sequentially
+- x86/clear_page: introduce clear_pages()
+- x86/mm: simplify clear_page_*
+- highmem: introduce clear_user_highpages()
+- mm: introduce clear_pages() and clear_user_pages()
+- treewide: provide a generic clear_user_page() variant
+- page_idle: do not influence mglru result when running page idle
+- page_idle: make sure idle stat setup correctly under MGLRU
+- memcg: move zram stat reads after mem_cgroup_flush_stats()
+- memcg: move zram stat counters to node_stat_item for lruvec granularity
+- mm: memcg: include zram-compressed pages in numa_stat for oversell containers
+- mm: memcg: fix zram memory stat accounting for shmem pages
+- mm: memcg: remove incorrect off-by-one adjustments in zram usage accounting
+- mm/memcg: add shmem zram compression statistics
+- watchdog: document long_oncpu_sample and extend ftrace selftest
+- watchdog: document watchdog_thresh_ms and add ftrace selftest
+- watchdog: add long_oncpu_sample for "on-CPU hog" detection
+- watchdog: add sub-second softlockup threshold via watchdog_thresh_ms
+- watchdog: add lockup tracepoints (softlockup_sample/warn, hardlockup_warn)
+- eventpoll: fix ep_remove struct eventpoll / struct file UAF
+- eventpoll: drop vestigial __ prefix from ep_remove_{file,epi}()
+- eventpoll: kill __ep_remove()
+- eventpoll: move epi_fget() up
+- eventpoll: rename ep_remove_safe() back to ep_remove()
+- eventpoll: split __ep_remove()
+- eventpoll: use hlist_is_singular_node() in __ep_remove()
+- net: skbuff: fix missing zerocopy reference in pskb_carve helpers
+- bpf: Fix undefined behavior in interpreter sdiv/smod for INT_MIN
+- xfs: save ailp before dropping the AIL lock in push callbacks
+- ext4: validate p_idx bounds in ext4_ext_correct_indexes
+
 * Thu Jun 25 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-50.12
 - rue/rqi: fix threshold unit and some duration event semantics
 
