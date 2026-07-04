@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
+
+#include "cgroup-internal.h"
+
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/cgroup.h>
@@ -1569,7 +1572,7 @@ static inline bool is_notify_active(struct sli_notify_event *ne)
 __poll_t sli_monitor_poll(struct kernfs_open_file *of,
 			  poll_table *pt)
 {
-	struct cgroup *cgrp = of->kn->parent->priv;
+	struct cgroup *cgrp = kn_priv(of->kn);
 	struct file *filp = of->file;
 	struct sli_notify_ctx *sctx;
 	__poll_t events = 0;
