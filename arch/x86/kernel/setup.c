@@ -1270,6 +1270,9 @@ void __init setup_arch(char **cmdline_p)
 
 	initmem_init();
 
+	/* CSV guest memory specific initialization */
+	early_csv_guest_mem_init();
+
 	/* Try to reserve contiguous memory to support CSV3 */
 	early_csv_reserve_mem();
 
