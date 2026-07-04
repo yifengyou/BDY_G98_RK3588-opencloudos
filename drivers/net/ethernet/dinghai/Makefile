@@ -27,7 +27,7 @@ dinghai10e-y := events.o en_pf.o eq.o pci_irq.o en_pf/en_pf_irq.o en_pf/en_pf_eq
 
 dinghai10e-$(CONFIG_ZXDH_SF) += irq_affinity.o en_sf.o en_sf/en_sf_eq.o en_sf/en_sf_irq.o en_sf/en_sf_devlink.o
 
-dinghai10e-$(CONFIG_DINGHAI_EN_AUX) += en_aux.o eq.o pci_irq.o irq_affinity.o en_aux/queue.o en_aux/en_aux_cmd.o en_aux/en_aux_eq.o \
+dinghai10e-y += en_aux.o eq.o pci_irq.o irq_affinity.o en_aux/queue.o en_aux/en_aux_cmd.o en_aux/en_aux_eq.o \
                  en_aux/en_aux_events.o en_ethtool/ethtool.o en_aux/en_aux_ioctl.o \
                  en_aux/dcbnl/en_dcbnl.o en_aux/dcbnl/en_dcbnl_api.o \
                  zxdh_tools/zxdh_tools_ioctl.o zxdh_tools/zxdh_tools_netlink.o \

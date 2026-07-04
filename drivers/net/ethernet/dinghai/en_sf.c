@@ -10,9 +10,7 @@
 #include "en_aux.h"
 #include "en_sf.h"
 #include "./en_sf/en_sf_eq.h"
-#ifdef CONFIG_DINGHAI_EN_AUX
 #include <linux/dinghai/en_aux.h>
-#endif
 
 extern struct devlink_ops dh_sf_devlink_ops;
 extern struct dh_core_devlink_ops dh_sf_core_devlink_ops;
@@ -1130,29 +1128,24 @@ int32_t zxdh_en_sf_driver_register(void)
 		goto err_auxiliary_driver_register;
 	}
 
-#ifdef CONFIG_DINGHAI_EN_AUX
 	err = zxdh_en_driver_register();
 	if (err != 0) {
 		LOG_ERR("zxdh_en_driver_register failed: %d\n", err);
 		goto err_en_driver_register;
 	}
-#endif
 
 	return 0;
 
-#ifdef CONFIG_DINGHAI_EN_AUX
 err_en_driver_register:
 	zxdh_auxiliary_driver_unregister(&zxdh_en_sf_driver);
-#endif
+
 err_auxiliary_driver_register:
 	return err;
 }
 
 void zxdh_en_sf_driver_unregister(void)
 {
-#ifdef CONFIG_DINGHAI_EN_AUX
 	zxdh_en_driver_unregister();
-#endif
 
 	zxdh_auxiliary_driver_unregister(&zxdh_en_sf_driver);
 }
