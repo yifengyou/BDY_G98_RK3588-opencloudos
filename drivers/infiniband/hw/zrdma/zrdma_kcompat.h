@@ -39,83 +39,14 @@
 #include <net/route.h>
 #include <rdma/ib_cache.h>
 #include <rdma/ib_umem.h>
-#if KERNEL_VERSION(4, 14, 0) <= LINUX_VERSION_CODE
 #include <rdma/uverbs_ioctl.h>
-#endif
-#if KERNEL_VERSION(3, 4, 0) <= LINUX_VERSION_CODE
 #include <linux/kconfig.h>
-#endif
-#if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE
 #include <net/secure_seq.h>
-#endif
-#if KERNEL_VERSION(4, 4, 0) > LINUX_VERSION_CODE
-#include <asm-generic/io-64-nonatomic-lo-hi.h>
-#else
 #include <linux/io-64-nonatomic-lo-hi.h>
-#endif
-
-// #include "distro_ver.h"
-
-// #if defined(__OFED_BUILD__) || defined(__OFED_4_8__)
-//     #if (defined(__OFED_24_04__) || defined(__OFED_24_10__)) && defined(KYLIN_V10_4)
-//     #include "kylin_kcompat.h"
-//     #else
-//     #include "ofed_kcompat.h"
-//     #endif
-// #elif defined(RHEL_RELEASE_CODE)
-// #include "rhel_kcompat.h"
-// #elif defined(CONFIG_SUSE_KERNEL)
-// #include "suse_kcompat.h"
-// #elif defined(UTS_UBUNTU_RELEASE_ABI)
-// #include "ubuntu_kcompat.h"
-// #elif defined(KYLIN_RELEASE_CODE)
-// #include "kylin_kcompat.h"
-// #else
 #include "linux_kcompat.h"
-// #endif
-
-#ifndef RDMA_DRIVER_ZXDH
-#define RDMA_DRIVER_ZXDH 50
-#endif
 
 #ifndef IB_QP_ATTR_STANDARD_BITS
 #define IB_QP_ATTR_STANDARD_BITS GENMASK(20, 0)
-#endif
-
-#if (KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE)
-#define TASKLET_DATA_TYPE unsigned long
-#define TASKLET_FUNC_TYPE void (*)(TASKLET_DATA_TYPE)
-
-#define tasklet_setup(tasklet, callback)                       \
-	tasklet_init((tasklet), (TASKLET_FUNC_TYPE)(callback), \
-		     (TASKLET_DATA_TYPE)(tasklet))
-
-#define from_tasklet(var, callback_tasklet, tasklet_fieldname) \
-	container_of(callback_tasklet, typeof(*var), tasklet_fieldname)
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) */
-
-#if (KERNEL_VERSION(4, 14, 0) > LINUX_VERSION_CODE)
-#define TIMER_DATA_TYPE unsigned long
-#define TIMER_FUNC_TYPE void (*)(TIMER_DATA_TYPE)
-
-#define timer_setup(timer, callback, flags)                 \
-	__setup_timer((timer), (TIMER_FUNC_TYPE)(callback), \
-		      (TIMER_DATA_TYPE)(timer), (flags))
-
-#define from_timer(var, callback_timer, timer_fieldname) \
-	container_of(callback_timer, typeof(*var), timer_fieldname)
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)) */
-
-#if !defined(__OFED_BUILD__) && !defined(__OFED_4_8__)
-#if KERNEL_VERSION(5, 0, 0) > LINUX_VERSION_CODE
-#define dma_alloc_coherent dma_zalloc_coherent
-#endif
-#endif
-
-#if KERNEL_VERSION(5, 0, 0) > LINUX_VERSION_CODE &&                                        \
-	!(defined(KYLIN_V10_4) && (defined(__OFED_24_10__) || defined(__OFED_24_04__))) && \
-	!((KERNEL_VERSION(4, 19, 90) == LINUX_VERSION_CODE) && (defined(__OFED_24_10__)))
-#define IB_GET_NETDEV_OP_NOT_DEPRECATED
 #endif
 
 #ifdef USE_KMAP
