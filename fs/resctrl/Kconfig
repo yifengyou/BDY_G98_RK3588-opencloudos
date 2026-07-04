@@ -1,6 +1,10 @@
 config RESCTRL_FS
 	bool "CPU Resource Control Filesystem (resctrl)"
 	depends on ARCH_HAS_CPU_RESCTRL
+	# The generic resctrl filesystem and the ARM MPAM resctrl filesystem
+	# both provide the resctrl interface and define conflicting types via
+	# <linux/resctrl.h>. They are mutually exclusive.
+	depends on !ARM_CPU_RESCTRL
 	select KERNFS
 	select PROC_CPU_RESCTRL if PROC_FS
 	help
