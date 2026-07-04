@@ -452,6 +452,7 @@ static inline void pmd_clear(pmd_t *pmdp)
 	pmd_val(*pmdp) = 0;
 }
 
+#define pmd_dirty pmd_dirty
 static inline int pmd_dirty(pmd_t pmd)
 {
 	return !!(pmd_val(pmd) & _PAGE_DIRTY);
