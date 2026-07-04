@@ -16,13 +16,6 @@ config DINGHAI_DH_CMD
     help
       Command interface for Dinghai devices.
 
-config DINGHAI_EN_AUX
-    tristate "Dinghai Auxiliary Support"
-    depends on (X86 || ARM64)
-    default m
-    help
-      Auxiliary functionality for Dinghai devices.
-
 config DINGHAI_NP
     tristate "Dinghai NP Support"
     default m
@@ -58,13 +51,6 @@ config ZXDH_SF
     default m
     help
       Sub-Function (SF) support.
-
-config ZXDH_MSGQ
-    tristate "Dinghai MSGQ Support"
-    depends on (X86 || ARM64)
-    default m
-    help
-      Message queue support.
 
 config DINGHAI_SEC
     tristate "Dinghai SEC Support"
