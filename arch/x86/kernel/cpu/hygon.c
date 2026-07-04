@@ -256,6 +256,19 @@ static void early_init_hygon(struct cpuinfo_x86 *c)
 	early_detect_mem_encrypt(c);
 }
 
+static void fix_erratum_1386(struct cpuinfo_x86 *c)
+{
+	/*
+	 * Work around AMD Erratum 1386 for Hygon C86-4G-M4/M6.  The BIOS on
+	 * these platforms does not provide the fix, so avoid using XSAVES.
+	 *
+	 * Affected parts have no supervisor XSAVE states, so XSAVEC is
+	 * equivalent for the kernel's xstate management.
+	 */
+	if (c->x86 == 0x18 && (c->x86_model == 0x4 || c->x86_model == 0x6))
+		clear_cpu_cap(c, X86_FEATURE_XSAVES);
+}
+
 static void init_hygon(struct cpuinfo_x86 *c)
 {
 	early_init_hygon(c);
@@ -276,6 +289,8 @@ static void init_hygon(struct cpuinfo_x86 *c)
 
 	set_cpu_cap(c, X86_FEATURE_ZEN);
 	set_cpu_cap(c, X86_FEATURE_CPB);
+
+	fix_erratum_1386(c);
 
 	cpu_detect_cache_sizes(c);
 
