@@ -1,3 +1,106 @@
+* Sat Jul  4 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-51.1
+- x86/cpu/hygon: Disable XSAVES for C86-4G-M4/M6
+- !773 hygon-6.6-disable-avic-ipi-virtualization-on-hygon-family-18h
+- KVM: SVM: Disable AVIC IPI virtualization on Hygon Family 18h (erratum #1235)
+- KVM: SVM: Disable (x2)AVIC IPI virtualization if CPU has erratum #1235
+- KVM: SVM: Add enable_ipiv param, never set IsRunning if disabled
+- KVM: VMX: Move enable_ipiv knob to common x86
+- fs/resctrl: make RESCTRL_FS mutually exclusive with ARM_CPU_RESCTRL
+- !772 Backport cstate PMU for DMR
+- perf/x86/intel/cstate: Add Diamond Rapids support
+- !771 Backport SST support for DMR
+- platform/x86: ISST: Reset core count to 0
+- platform/x86: ISST: Update minor version
+- platform/x86: ISST: Support SST-PP revision 2
+- platform/x86: ISST: Support SST-TF revision 2
+- !770 Backport intel-pstate support for DMR
+- cpufreq: intel_pstate: Add Diamond Rapids OOB mode support
+- cpufreq: intel_pstate: Switch to new Intel CPU model defines
+- !765 [Intel][6.6] Intel AET Support for New Platforms
+- x86: config: enable Intel Application Energy Telemetry (AET)
+- perf/x86/intel/uncore: Add per-scheduler IMC CAS count events
+- x86,fs/resctrl: Update documentation for telemetry events
+- ......
+- x86/resctrl: Use kthread_run_on_cpu()
+- x86/resctrl: Slightly clean-up mbm_config_show()
+- x86/resctrl: Switch to new Intel CPU model defines
+- Decouple mpam resctrl
+- !767 Ethernet: Linkdata: Add MODULE_FIRMWARE
+- Ethernet: Linkdata: Add MODULE_FIRMWARE
+- !766 RDMA/zxdh: modify zxdh-rdma driver_id
+- RDMA/zxdh: modify zxdh-rdma driver_id
+- tools arch amd ibs: Sync ibs.h with the kernel sources
+- tools/arch/x86: Move the <asm/amd-ibs.h> header to <asm/amd/ibs.h>
+- x86/platform/amd: Add standard header guards to <asm/amd/ibs.h>
+- !763 net/hinic5: Rename Huawei hinic5 driver version
+- net/hinic5: Rename Huawei hinic5 driver version
+- !762 [Hygon]x86/hw-vuln:Software changes are required for the MSR 0xC001102E modifications.
+- cpu vulnerabilities: Software changes are required for the MSR 0xC001102E modifications.
+- !759 [linux-6.6/devel][Feature]：update patches for sw64 architecture
+- sw64: define pmd_dirty to fix compile error
+- sw64: fix compile error with missing header file
+- sw64: kvm: use common helpers for KVM_RUN signal masks
+- ......
+- sw64: enable -relax when CONFIG_FUNCTION_TRACER=y
+- sw64: remove some unsuitable junzhang version check
+- !760 AMD IBS Feature Enhancements and Reliability Fixes Backport
+- perf/amd/ibs: Advertise remote socket capability
+- perf/amd/ibs: Enable streaming store filter
+- perf/amd/ibs: Enable RIP bit63 hardware filtering
+- perf/amd/ibs: Enable fetch latency filtering
+- perf/amd/ibs: Support IBS_{FETCH|OP}_CTL2[Dis] to eliminate RMW race
+- perf/amd/ibs: Add new MSRs and CPUID bits definitions
+- perf/amd/ibs: Define macro for ldlat mask and shift
+- perf/amd/ibs: Avoid race between event add and NMI
+- perf/amd/ibs: Avoid calling perf_allow_kernel() from the IBS NMI handler
+- perf/amd/ibs: Preserve PhyAddrVal bit when clearing PhyAddr MSR
+- perf/amd/ibs: Account interrupt for discarded samples
+- x86/platform/amd: Move the <asm/amd-ibs.h> header to <asm/amd/ibs.h>
+- perf/amd/ibs: Update DTLB/PageSize decode logic
+- perf/amd/ibs: Ceil sample_period to min_period
+- perf/amd/ibs: Add ->check_period() callback
+- perf/amd/ibs: Add PMU specific minimum period
+- perf/amd/ibs: Don't allow freq mode event creation through ->config interface
+- perf/amd/ibs: Remove pointless sample period check
+- perf/amd/ibs: Remove IBS_{FETCH|OP}_CONFIG_MASK macros
+- perf/amd/ibs: Limit ldlat->l3missonly dependency to Zen5
+- perf/amd/ibs: Add support for OP Load Latency Filtering
+- perf/amd/ibs: Prevent leaking sensitive data to userspace
+- perf/x86: Check data address for IBS software filter
+- perf/x86: Relax privilege filter restriction on AMD IBS
+- perf/core: Export perf_exclude_event()
+- !755 RDMA/zxdh: Add userspace ABI header for zrdma driver & optimize dinghai CONFIG
+- RDMA/zxdh: Add userspace ABI header for zrdma driver & optimize dinghai CONFIG
+- !754 [Intel][6.6] Support PMU core events on Intel DMR platform
+- perf/x86/intel: Enable auto counter reload for DMR
+- perf/x86/intel: Disable PMI for self-reloaded ACR events
+- perf/x86/intel: Always reprogram ACR events to prevent stale masks
+- perf/x86/intel: Improve validation and configuration of ACR masks
+- perf/x86/intel: Only check GP counters for PEBS constraints validation
+- perf/x86: Fix potential bad container_of in intel_pmu_hw_config
+- perf/x86/intel: Fix OMR snoop information parsing issues
+- perf/x86/intel: Add missing branch counters constraint apply
+- perf/x86/intel: Add support for rdpmc user disable feature
+- perf/x86: Use macros to replace magic numbers in attr_rdpmc
+- perf/x86/intel: Add core PMU support for DMR
+- perf/x86/intel: Add support for PEBS memory auxiliary info field in DMR
+- perf/x86/intel: Support the 4 new OMR MSRs introduced in DMR and NVL
+- !752 [GRT][6.6][Feature] net: ethernet: Add guangruntong nic driver support
+- net: ethernet: add guangruntong nic driver support
+- !751 [Hygon][6.6][Backport] KVM: nSVM: Fix LBR  virtualization
+- KVM: SVM: Fix redundant updates of LBR MSR intercepts
+- KVM: nSVM: Fix and simplify LBR virtualization handling with nested
+- KVM: nSVM: Always recalculate LBR MSR intercepts in svm_update_lbrv()
+- KVM: SVM: Refactor LBR MSR intercept logic into a helper
+- !748 [Hygon][6.6][KVM] SVM: Fix  SPEC_CTRL intercept
+- KVM: SVM: Intercept SPEC_CTRL unless the guest has a SPEC_CTRL MSR
+- !741 arch/x86/mm: reserve memblock for CSV3 guest
+- arch/x86/mm: reserve memblock for CSV3 guest
+- !747 [Hygon][6.6][Backport] KVM: nSVM: Set exit_code_hi to -1 when synthesizing SVM_EXIT_ERR (failed VMRUN)
+- KVM: nSVM: Set exit_code_hi to -1 when synthesizing SVM_EXIT_ERR (failed VMRUN)
+- !737 net/hinic5:Add Huawei Intelligent Network Card Driver:hinic5
+- net/hinic5: Add Huawei Intelligent Network Card Driver: hinic5
+
 * Fri Jul 3 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51
 - arch/x86: Enable per-cgroup THP control in tencent.config
 - mm/thp: Add per-cgroup THP allocation limit
