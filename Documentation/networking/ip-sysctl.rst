@@ -987,6 +987,12 @@ tcp_tw_reuse - INTEGER
 
 	Default: 2
 
+tcp_tw_timeout - INTEGER
+	How long to wait to destroy TIME-WAIT state. The maximum value
+	is 60 seconds, the minimum value is 10 seconds.
+
+	Default: 60 seconds
+
 tcp_window_scaling - BOOLEAN
 	Enable window scaling as defined in RFC1323.
 
