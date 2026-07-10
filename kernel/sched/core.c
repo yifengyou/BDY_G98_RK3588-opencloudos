@@ -12279,13 +12279,13 @@ static int cpu_core_tag_write_u64(struct cgroup_subsys_state *css, struct cftype
 	struct write_core_tag wtag;
 
 	if (!sysctl_cpu_qos || !sysctl_ht_isolate)
-		return -EINVAL;
+		return 0;
 
 	if (val > HT_SYS_JUDG_TYPE || val < HT_TOLERATE_TYPE)
 		return -ERANGE;
 
 	if (!static_branch_likely(&sched_smt_present))
-		return -EINVAL;
+		return 0;
 
 	if (tg->ht_sensi_type == val)
 		return 0;
