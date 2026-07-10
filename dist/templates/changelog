@@ -1,3 +1,17 @@
+* Fri Jul 10 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51.2
+- rue/cpu: Stop ht_sensi_type from returning EINVAL
+- KVM: x86: Fix shadow paging use-after-free due to unexpected role
+- KVM: x86: Fix shadow paging use-after-free due to unexpected GFN
+- ipv4: account for fraggap on the paged allocation path
+- ipv6: account for fraggap on the paged allocation path
+- inet: add indirect call wrapper for getfrag() calls
+- ASoC: soc-core: flush delayed work before removing DAIs and widgets
+- config: set CONFIG_INIT_STACK_NONE=y
+- config: update config without manual change
+- net: change TCP_TIMEWAIT_LEN on runtime
+- Reapply "cpuidle: menu: Avoid discarding useful information"
+- configs: update std-configs-list
+
 * Sat Jul  4 2026 Jianping Liu <frankjpliu@tencent.com> - 6.6.119-51.1
 - x86/cpu/hygon: Disable XSAVES for C86-4G-M4/M6
 - !773 hygon-6.6-disable-avic-ipi-virtualization-on-hygon-family-18h
