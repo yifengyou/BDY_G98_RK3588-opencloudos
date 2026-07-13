@@ -685,6 +685,7 @@ The value to set can be the result of ORing the following:
 0 NUMA_BALANCING_DISABLED
 1 NUMA_BALANCING_NORMAL
 2 NUMA_BALANCING_MEMORY_TIERING
+4 NUMA_BALANCING_CGROUP
 = =================================
 
 Or NUMA_BALANCING_NORMAL to optimize page placement among different
@@ -704,6 +705,17 @@ Or NUMA_BALANCING_MEMORY_TIERING to optimize page placement among
 different types of memory (represented as different NUMA nodes) to
 place the hot pages in the fast memory.  This is implemented based on
 unmapping and page fault too.
+
+Or NUMA_BALANCING_CGROUP to delegate NUMA balancing to individual memory
+cgroups instead of the system-wide task fault scanner.  This mode is
+mutually exclusive with NUMA_BALANCING_NORMAL and
+NUMA_BALANCING_MEMORY_TIERING: if any of those bits is set together with
+NUMA_BALANCING_CGROUP the cgroup bit is dropped.  When this mode is
+active, each memory cgroup controls its own periodic scan through
+``memory.numa_balance.scan_ctrl`` (keys: ``enabled``, ``period_ms``,
+``batch_mb``, ``rounds``) and exposes statistics through
+``memory.numa_balance.stat``.  This mode is only available when
+``CONFIG_CGROUP_NUMA_BALANCE`` is enabled.
 
 numa_balancing_promote_rate_limit_MBps
 ======================================
