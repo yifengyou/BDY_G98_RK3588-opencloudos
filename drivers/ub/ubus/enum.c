@@ -993,18 +993,19 @@ kfifo_fail:
 	return ret;
 }
 
-int ub_cfg_read_guid(struct ub_entity *uent)
+int ub_cfg_read_guid(struct ub_entity *uent, u32 *dw)
 {
-	u32 val = 0;
+	u32 val[UB_GUID_DW_NUM];
 	int i, ret;
 
 	for (i = 0; i < UB_GUID_DW_NUM; i++) {
-		ret = ub_cfg_read_dword(uent, UB_GUID + i * sizeof(u32), &val);
+		ret = ub_cfg_read_dword(uent, UB_GUID + i * sizeof(u32), &val[i]);
 		if (ret)
 			return ret;
-
-		uent->guid.dw[i] = val;
 	}
+
+	for (i = 0; i < UB_GUID_DW_NUM; i++)
+		*(dw + i) = val[i];
 
 	return 0;
 }
@@ -1056,7 +1057,7 @@ static struct ub_entity *ub_enum_create_bus_controller(struct ub_bus_controller 
 		return (struct ub_entity *)ERR_PTR(-ENOMEM);
 
 	ubc->uent = uent;
-	ret = ub_cfg_read_guid(uent);
+	ret = ub_cfg_read_guid(uent, uent->guid.dw);
 	if (ret) {
 		dev_err(&ubc->dev, "read guid failed, ret=%d\n", ret);
 		goto err_out;

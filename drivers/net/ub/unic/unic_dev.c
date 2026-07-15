@@ -14,9 +14,9 @@
 #endif
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_eq.h>
-#include <ub/ubase/ubase_comm_hw.h>
 #include <ub/ubase/ubase_comm_qos.h>
 
+#include "unic_bond.h"
 #include "unic_cmd.h"
 #include "unic_dcbnl.h"
 #include "unic_ethtool.h"
@@ -543,6 +543,7 @@ static inline void unic_uninit_rss(struct unic_dev *unic_dev)
 
 static void __unic_uninit_channels(struct unic_dev *unic_dev)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct unic_channels *channels = &unic_dev->channels;
 	u32 i;
 
@@ -551,8 +552,10 @@ static void __unic_uninit_channels(struct unic_dev *unic_dev)
 	if (!channels->c)
 		return;
 
-	for (i = 0; i < channels->num; i++)
-		netif_napi_del(&channels->c[i].napi);
+	if (!ubase_adev_shutting_down(adev)) {
+		for (i = 0; i < channels->num; i++)
+			netif_napi_del(&channels->c[i].napi);
+	}
 
 	unic_destroy_jetty(unic_dev, channels->num);
 
@@ -705,6 +708,16 @@ static void unic_task_schedule(struct unic_dev *unic_dev,
 		mod_delayed_work(unic_wq, &unic_dev->service_task, delay_time);
 }
 
+static void unic_sync_bond_port(struct unic_dev *unic_dev)
+{
+	struct net_device *netdev = unic_dev->comdev.netdev;
+
+	if (test_and_clear_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state)) {
+		if (unic_sync_bond_status(netdev))
+			set_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state);
+	}
+}
+
 static void unic_periodic_service_task(struct unic_dev *unic_dev)
 {
 #define UNIC_UPDATE_STATS_TIMER_INTERVAL	300UL
@@ -713,9 +726,12 @@ static void unic_periodic_service_task(struct unic_dev *unic_dev)
 	unic_link_status_update(unic_dev);
 	unic_update_port_info(unic_dev);
 	unic_sync_ip_table(unic_dev);
+	unic_sync_bond_ip_table(unic_dev);
 
-	if (unic_dev_eth_mac_supported(unic_dev))
+	if (unic_dev_eth_mac_supported(unic_dev)) {
 		unic_sync_mac_table(unic_dev);
+		unic_sync_bond_port(unic_dev);
+	}
 
 	unic_sync_promisc_mode(unic_dev);
 	unic_sync_vlan_filter(unic_dev);
@@ -743,6 +759,8 @@ static void unic_init_vport_info(struct unic_dev *unic_dev)
 	spin_lock_init(&unic_dev->vport.addr_tbl.tmp_ip_lock);
 	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.ip_list);
 	spin_lock_init(&unic_dev->vport.addr_tbl.ip_list_lock);
+	INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.bond_ip_list);
+	spin_lock_init(&unic_dev->vport.addr_tbl.bond_ip_list_lock);
 
 	if (unic_dev_eth_mac_supported(unic_dev)) {
 		INIT_LIST_HEAD(&unic_dev->vport.addr_tbl.uc_mac_list);
@@ -843,6 +861,7 @@ static int unic_init_vport(struct unic_dev *unic_dev)
 static void unic_uninit_vport(struct unic_dev *unic_dev)
 {
 	unic_uninit_ip_table(unic_dev);
+	unic_uninit_bond_ip_table(unic_dev);
 
 	if (unic_dev_eth_mac_supported(unic_dev)) {
 		unic_uninit_mac_table(unic_dev);
@@ -1107,10 +1126,31 @@ err_free_netdev:
 	return ret;
 }
 
-void unic_dev_uninit(struct auxiliary_device *adev)
+static void unic_uninit_netdev(struct auxiliary_device *adev)
 {
 	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct net_device *netdev = priv->comdev.netdev;
+
+	if (netdev->reg_state != NETREG_UNINITIALIZED) {
+		if (ubase_adev_shutting_down(adev)) {
+			rtnl_lock();
+			netif_device_detach(netdev);
+			dev_close(netdev);
+			rtnl_unlock();
+		} else {
+			unregister_netdev(netdev);
+		}
+	}
+
+	unic_uninit_netdev_priv(netdev);
+
+	if (!ubase_adev_shutting_down(adev))
+		free_netdev(netdev);
+}
+
+void unic_dev_uninit(struct auxiliary_device *adev)
+{
+	struct unic_dev *priv = (struct unic_dev *)dev_get_drvdata(&adev->dev);
 	struct unic_promisc_en promisc_en = {0};
 
 	/* cancel service task and wait it finish before release resources. */
@@ -1125,12 +1165,7 @@ void unic_dev_uninit(struct auxiliary_device *adev)
 	/* Explicitly disable promisc to avoid hardware promisc residue */
 	unic_set_promisc_mode(priv, &promisc_en);
 
-	if (netdev->reg_state != NETREG_UNINITIALIZED)
-		unregister_netdev(netdev);
-
-	unic_uninit_netdev_priv(netdev);
-
-	free_netdev(netdev);
+	unic_uninit_netdev(adev);
 
 	dev_set_drvdata(&adev->dev, NULL);
 }

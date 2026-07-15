@@ -9,6 +9,8 @@ ummu-core-$(CONFIG_UB_UMMU_CORE_DRIVER) := core_tid.o \
 	core.o \
 	core_ioctl.o
 
+ummu-core-$(CONFIG_UB_UMMU_SVA_SEPARATED_PAGES) += core_matt.o
+
 obj-$(CONFIG_UB_UMMU_CORE) += ummu_core_builtin.o
 
 obj-$(CONFIG_UB_UMMU_CORE_DRIVER) += ummu-core.o

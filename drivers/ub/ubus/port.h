@@ -25,6 +25,7 @@ void ub_ports_unset(struct ub_entity *uent);
 void ub_notify_share_port(struct ub_port *port,
 			  enum ub_port_event type);
 
+int ub_port_read_byte(struct ub_port *port, u32 pos, u8 *val);
 int ub_port_write_dword(struct ub_port *port, u32 pos, u32 val);
 bool ub_port_check_link_up(struct ub_port *port);
 

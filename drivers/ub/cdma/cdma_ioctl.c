@@ -45,9 +45,11 @@ static int cdma_query_dev(struct cdma_ioctl_hdr *hdr, struct cdma_file *cfile)
 		return -EINVAL;
 
 	args.out.attr.eid.dw0 = cdev->eid;
+	mutex_lock(&cdev->eu_mutex);
 	args.out.attr.eu_num = cdev->base.attr.eu_num;
 	memcpy(args.out.attr.eus, cdev->base.attr.eus,
 	       sizeof(struct eu_info) * cdev->base.attr.eu_num);
+	mutex_unlock(&cdev->eu_mutex);
 	cdma_fill_device_attr(cdev, &args.out.attr.dev_cap);
 
 	ret = copy_to_user((void __user *)(uintptr_t)hdr->args_addr, &args,
@@ -97,7 +99,7 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 		goto free_context;
 	}
 
-	jfae = (struct cdma_jfae *)ctx->jfae;
+	jfae = ctx->jfae;
 	jfae->ctx = ctx;
 	args.out.cqe_size = cdev->caps.cqe_size;
 	args.out.dwqe_enable =
@@ -116,7 +118,7 @@ static int cdma_create_ucontext(struct cdma_ioctl_hdr *hdr,
 
 free_jfae:
 	cfile->uctx = NULL;
-	cdma_free_jfae((struct cdma_jfae *)ctx->jfae);
+	cdma_free_jfae(ctx->jfae);
 free_context:
 	cdma_free_context(cdev, ctx);
 
@@ -127,7 +129,6 @@ static int cdma_delete_ucontext(struct cdma_ioctl_hdr *hdr,
 				struct cdma_file *cfile)
 {
 	struct cdma_dev *cdev = cfile->cdev;
-	struct cdma_jfae *jfae;
 
 	if (!cfile->uctx) {
 		dev_err(cdev->dev, "cdma context has not been created.\n");
@@ -140,10 +141,6 @@ static int cdma_delete_ucontext(struct cdma_ioctl_hdr *hdr,
 			cfile->uctx->handle);
 		return -EBUSY;
 	}
-
-	jfae = cfile->uctx->jfae;
-	if (jfae)
-		jfae->ctx = NULL;
 
 	cdma_free_context(cdev, cfile->uctx);
 	cfile->uctx = NULL;
@@ -407,7 +404,8 @@ static int cdma_cmd_delete_jfs(struct cdma_ioctl_hdr *hdr,
 	base_jfs = uobj->object;
 	ret = cdma_delete_jfs(cdev, base_jfs->id);
 	if (ret) {
-		dev_err(&cdev->adev->dev, "delete jfs failed.\n");
+		dev_err(&cdev->adev->dev, "delete jfs failed, ret = %d.\n",
+			ret);
 		return ret;
 	}
 
@@ -548,7 +546,7 @@ static int cdma_cmd_register_seg(struct cdma_ioctl_hdr *hdr,
 
 	cfg.sva = arg.in.addr;
 	cfg.len = arg.in.len;
-	seg = cdma_register_seg(cdev, &cfg, false);
+	seg = cdma_register_seg(cdev, &cfg, false, cfile->uctx);
 	if (!seg) {
 		dev_err(cdev->dev, "register seg failed.\n");
 		ret = -EINVAL;

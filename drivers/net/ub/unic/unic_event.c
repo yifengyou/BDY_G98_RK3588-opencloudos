@@ -11,7 +11,6 @@
 #include <linux/netdevice.h>
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_eq.h>
-#include <ub/ubase/ubase_comm_hw.h>
 #include <ub/ubase/ubase_comm_qos.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 
@@ -305,10 +304,10 @@ static int unic_register_ae_event(struct auxiliary_device *adev)
 {
 	struct ubase_event_nb unic_ae_nbs[UNIC_AE_LEVEL_NUM] = {
 		{
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_JETTY_LEVEL_ERROR,
-			{ unic_ae_jetty_level_error },
-			adev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_JETTY_LEVEL_ERROR,
+			.nb = { unic_ae_jetty_level_error },
+			.back = adev
 		},
 	};
 	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);

@@ -202,6 +202,50 @@ DEFINE_EVENT(ubase_ctrlq_template, ubase_ctrlq_crq,
 		 const void *buf, u16 len),
 	TP_ARGS(dev, bb_num, pi, ci, buf, len));
 
+DECLARE_EVENT_CLASS(ubase_ctrlq_ue_msg_template,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len),
+
+	TP_STRUCT__entry(
+		__field(u16, bus_ue_id)
+		__dynamic_array(u8, data, len)
+		__field(u16, len)
+		__dynamic_array(char, devname, TRACE_DEV_NAME_MAX_LEN)
+	),
+
+	TP_fast_assign(
+		__entry->bus_ue_id = bus_ue_id;
+		__entry->len = len;
+		memcpy(__get_dynamic_array(data), buf, len);
+		if (dev) {
+			(void)snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
+				       "%s %s", dev_driver_string(dev),
+				       dev_name(dev));
+		}
+	),
+
+	TP_printk(
+		"%s ue id: %u data: %s", __get_str(devname), __entry->bus_ue_id,
+		__print_array(__get_dynamic_array(data), __entry->len, sizeof(__u8))
+	)
+);
+
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_ue_req_callback,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
+
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_ue_resp_callback,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
+
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_mue2ue_resp,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
+
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_ue_req,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
+
 #endif /* __UBASE_TRACE_H__ */
 
 /* This must be outside ifdef __UBASE_TRACE_H__ */

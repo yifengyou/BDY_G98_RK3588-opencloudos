@@ -53,7 +53,7 @@ config UB_UBMEM_UMMU
 	default n
 	help
 	  Support the special UMMU for the address resolution of UB memory.
-	  This is a private implementation. User must check the hareware
+	  This is a private implementation. User must check the hardware
 	  version.
 	  If you need them say Y here.
 

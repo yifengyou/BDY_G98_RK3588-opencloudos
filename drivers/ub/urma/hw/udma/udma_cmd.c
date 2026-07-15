@@ -12,7 +12,7 @@
 #include "udma_jfr.h"
 #include "udma_jetty.h"
 
-bool debug_switch = true;
+bool debug_switch;
 
 int udma_cmd_init(struct udma_dev *udma_dev)
 {
@@ -75,8 +75,7 @@ void udma_free_cmd_mailbox(struct udma_dev *dev,
 	kfree(mailbox);
 }
 
-static void udma_set_mb_flag_or_fd(uint8_t op, struct udma_mbx_op_match *match,
-				   void *buf)
+static void udma_set_mb_flag_or_fd(uint8_t op, void *buf)
 {
 	struct udma_jetty_ctx *jfs_ctx;
 
@@ -112,13 +111,12 @@ static bool udma_op_ignore_eagain(uint8_t op, void *buf)
 		{ UDMA_CMD_MODIFY_RC_CONTEXT, true },
 		{ UDMA_CMD_DESTROY_RC_CONTEXT, true },
 		{ UDMA_CMD_QUERY_RC_CONTEXT, true },
-		{ UDMA_CMD_READ_SEID_UPI, true },
 	};
 	uint32_t i;
 
 	for (i = 0; i < ARRAY_SIZE(matches); i++) {
 		if (op == matches[i].op) {
-			udma_set_mb_flag_or_fd(op, &matches[i], buf);
+			udma_set_mb_flag_or_fd(op, buf);
 			return matches[i].ignore_ret;
 		}
 	}
@@ -279,4 +277,4 @@ int udma_open_ue_rx(struct udma_dev *dev, bool check_feature_enable, bool check_
 }
 
 module_param(debug_switch, bool, 0444);
-MODULE_PARM_DESC(debug_switch, "set debug print ON, default: true");
+MODULE_PARM_DESC(debug_switch, "set debug print ON, default: false");

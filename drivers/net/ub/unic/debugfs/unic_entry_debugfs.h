@@ -75,6 +75,7 @@ int unic_dbg_dump_mac_tbl_spec(struct seq_file *s, void *data);
 int unic_dbg_dump_mc_mac_tbl_list(struct seq_file *s, void *data);
 int unic_dbg_dump_uc_mac_tbl_list(struct seq_file *s, void *data);
 int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data);
+int unic_dbg_dump_bond_ip_tbl_list(struct seq_file *s, void *data);
 int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_mac_tbl_list_hw(struct seq_file *s, void *data);
 

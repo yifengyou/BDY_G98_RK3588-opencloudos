@@ -13,8 +13,8 @@ static int cdma_post_mailbox(struct cdma_dev *cdev, struct ubase_mbx_attr *attr,
 	ret = ubase_hw_upgrade_ctx_ex(cdev->adev, attr, mailbox);
 	if (ret)
 		dev_err(cdev->dev,
-			"send mailbox err, tag = 0x%x, op = %u, mbx_ue_id = %u.\n",
-			attr->tag, attr->op, attr->mbx_ue_id);
+			"send mailbox err, tag = 0x%x, op = %u, mbx_ue_id = %u, ret = %d.\n",
+			attr->tag, attr->op, attr->mbx_ue_id, ret);
 
 	return ret;
 }

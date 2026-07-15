@@ -7,6 +7,7 @@
 #include <net/page_pool/types.h>
 #include <linux/debugfs.h>
 
+#include "unic_bond.h"
 #include "unic_comm_addr.h"
 #include "unic_dev.h"
 #include "unic_debugfs.h"
@@ -149,6 +150,33 @@ int unic_dbg_dump_ip_tbl_list(struct seq_file *s, void *data)
 		seq_puts(s, "\n");
 	}
 	spin_unlock_bh(&ip_tbl->ip_list_lock);
+
+	return 0;
+}
+
+int unic_dbg_dump_bond_ip_tbl_list(struct seq_file *s, void *data)
+{
+	struct unic_dev *unic_dev = dev_get_drvdata(s->private);
+	struct unic_comm_addr_node *ip_node;
+	struct unic_addr_tbl *ip_tbl;
+	struct list_head *list;
+	u16 i = 0;
+
+	if (!unic_bond_ip_sync_supported(unic_dev))
+		return -EOPNOTSUPP;
+
+	seq_printf(s, "No  %-43sSTATE    IP_MASK\n", "IP_ADDR");
+
+	ip_tbl = &unic_dev->vport.addr_tbl;
+	list = &ip_tbl->bond_ip_list;
+	spin_lock_bh(&ip_tbl->bond_ip_list_lock);
+	list_for_each_entry(ip_node, list, node) {
+		seq_printf(s, "%-4u", i++);
+		seq_printf(s, "%-43pI6c", &ip_node->ip_addr.s6_addr);
+		seq_printf(s, "%-9s", unic_entry_state_str[ip_node->state]);
+		seq_printf(s, "%-3u\n", ip_node->node_mask);
+	}
+	spin_unlock_bh(&ip_tbl->bond_ip_list_lock);
 
 	return 0;
 }

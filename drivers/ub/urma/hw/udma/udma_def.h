@@ -9,6 +9,10 @@
 #include <linux/ummu_core.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
+#define UDMA_AE_EVENT_TYPE 4
+#define UDMA_CQE_NUM_PER_TYPE 2
+#define NUM_JETTY_PER_GROUP 32
+
 enum {
 	UDMA_CAP_FEATURE_AR		= BIT(0),
 	UDMA_CAP_FEATURE_JFC_INLINE	= BIT(4),
@@ -69,6 +73,7 @@ struct udma_caps {
 	uint8_t port_num;
 	uint8_t cqe_size;
 	struct udma_tbl seid;
+	bool sva_sep_mode_en;
 };
 
 struct udma_dfx_jetty {
@@ -104,22 +109,46 @@ struct udma_dfx_info {
 	struct udma_dfx_entity	seg;
 };
 
+struct udma_umem {
+	struct ubcore_device *ub_dev;
+	struct mm_struct *owning_mm;
+	uint64_t length;
+	uint64_t va;
+	union ubcore_umem_flag flag;
+	struct sg_append_table append;
+	uint32_t nmap;
+	bool is_writable;
+};
+
 struct udma_sw_db_page {
 	struct list_head list;
-	struct ubcore_umem *umem;
+	struct udma_umem *umem;
 	uint64_t user_virt;
 	refcount_t refcount;
 };
 
 struct udma_hugepage_priv {
 	struct list_head list;
+	uint32_t seq;
 	struct page **pages;
 	uint32_t page_num;
-	struct ubcore_umem *umem;
+	uint32_t page_size;
+	struct udma_umem *umem;
 	void *va_base;
 	uint32_t va_len;
 	uint32_t left_va_offset;
 	uint32_t left_va_len;
+	refcount_t refcnt;
+	struct sg_table sgt;
+};
+
+struct udma_page_priv {
+	struct list_head list;
+	struct page **pages;
+	uint32_t page_num;
+	void *va_base;
+	uint32_t va_len;
+	struct sg_table sgt;
 	refcount_t refcnt;
 };
 
@@ -131,13 +160,14 @@ struct udma_hugepage {
 
 struct udma_buf {
 	dma_addr_t		addr;
+	struct page *pages;
 	union {
 		void			*kva; /* used for kernel mode */
 		struct iova_slot	*slot;
 		void			*kva_or_slot;
 	};
 	void			*aligned_va;
-	struct ubcore_umem	*umem;
+	struct udma_umem	*umem;
 	uint32_t		entry_size;
 	uint32_t		entry_cnt;
 	uint32_t		cnt_per_page_shift;
@@ -145,6 +175,8 @@ struct udma_buf {
 	struct mutex		id_table_mutex;
 	bool			is_hugepage;
 	struct udma_hugepage	*hugepage;
+	uint32_t		len;
+	struct udma_page_priv	*page_priv;
 };
 
 struct udma_k_sw_db_page {
@@ -162,29 +194,29 @@ struct udma_sw_db {
 	uint64_t db_addr;
 	uint32_t *db_record;
 	void *virt_addr;
+	struct udma_page_priv *page_priv;
 };
 
-struct udma_req_msg {
+struct udma_entity_buf {
+	uint32_t len;
+	uint32_t seq_num;
+	uint8_t data[0];
+};
+
+struct udma_entity_msg {
 	uint8_t dst_ue_idx;
-	uint8_t resp_code;
+	uint8_t opcode;
 	uint16_t rsv;
-	struct ubcore_req req;
-};
-
-struct udma_resp_msg {
-	uint8_t dst_ue_idx;
-	uint8_t resp_code;
-	uint16_t rsv;
-	struct ubcore_resp resp;
-};
-
-enum num_elem_in_grp {
-	NUM_TP_PER_GROUP = 16,
-	NUM_JETTY_PER_GROUP = 32,
+	struct udma_entity_buf buf;
 };
 
 enum {
 	RCT_INIT_FLAG,
+};
+
+struct udma_ae_event_type {
+	uint8_t event_type;
+	uint8_t sub_type;
 };
 
 #endif /* __UDMA_DEF_H__ */

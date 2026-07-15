@@ -78,6 +78,8 @@ static int ub_entity_num_alloc(void)
 
 static int ub_get_guid(struct ub_entity *uent)
 {
+	char buf[SZ_64] = {};
+	struct ub_guid guid;
 	u16 code;
 	int ret;
 
@@ -86,9 +88,22 @@ static int ub_get_guid(struct ub_entity *uent)
 
 	if (!uent->pool || uent_type(uent->pue) == UB_TYPE_ICONTROLLER) {
 		uent_type(uent) = uent_type(uent->pue);
-		ret = ub_cfg_read_guid(uent);
+		ret = ub_cfg_read_guid(uent, uent->guid.dw);
 		if (ret)
 			return ret;
+	}
+
+	if (uent->pool && uent_type(uent) == UB_TYPE_CONTROLLER) {
+		ret = ub_cfg_read_guid(uent, guid.dw);
+		if (ret)
+			return ret;
+
+		if (!guid_equal(&uent->guid.id, &guid.id)) {
+			(void)ub_show_guid(&guid, buf);
+			ub_err(uent, "pool pld guid is not equal entity guid %s\n",
+			       buf);
+			return -EINVAL;
+		}
 	}
 
 	ret = ub_cfg_read_word(uent, UB_CLASS_CODE, &code);
@@ -203,22 +218,6 @@ static int ub_setup_ent_normal(struct ub_entity *uent)
 	return 0;
 }
 
-static int ub_fad_cfg_access_check(struct ub_entity *uent)
-{
-	u32 feature;
-	int ret = 0;
-
-	if (is_p_device(uent)) {
-		ret = ub_cfg_read_dword(uent, UB_CFG1_SUPPORT_FEATURE_L,
-					&feature);
-		if (ret)
-			ub_err(uent, "fad cfg access failed, eid=%#x, ret=%d\n",
-			       uent->eid, ret);
-	}
-
-	return ret;
-}
-
 static int ub_uent_cfg(struct ub_entity *uent, u32 uent_num)
 {
 	struct ub_guid *guid = &uent->guid;
@@ -301,9 +300,6 @@ int ub_setup_ent(struct ub_entity *uent)
 	}
 
 	ub_config_upi(uent);
-	ret = ub_fad_cfg_access_check(uent);
-	if (ret)
-		goto err_alloc;
 
 	/* common setup */
 	ret = ub_eid_alloc(uent);
@@ -438,7 +434,10 @@ void ub_start_ent(struct ub_entity *uent)
 		return;
 
 	ret = ub_default_bus_instance_init(uent);
-	WARN_ON(ret);
+	if (ret) {
+		ub_err(uent, "default bi init failed, ret=%d\n", ret);
+		return;
+	}
 
 	ub_create_sysfs_dev_files(uent);
 	ub_mem_decoder_init(uent);

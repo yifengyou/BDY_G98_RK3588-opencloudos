@@ -27,7 +27,7 @@ DECLARE_RWSEM(g_device_rwsem);
  * Users can perform subsequent resource creation operations using a pointer
  * to a DMA device in the list.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: address of the first device in the list
  */
 struct dma_device *dma_get_device_list(u32 *num_devices)
@@ -58,19 +58,22 @@ struct dma_device *dma_get_device_list(u32 *num_devices)
 	xa_for_each(cdma_devs_tbl, index, cdev) {
 		attr = &cdev->base.attr;
 		if (cdev->status >= CDMA_SUSPEND) {
-			pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+			pr_warn("not prepared to get device list, eid = 0x%x.\n",
 				attr->eid.dw0);
 			continue;
 		}
 
+		mutex_lock(&cdev->eu_mutex);
 		if (!attr->eu_num) {
 			pr_warn("no eu in cdma dev eid = 0x%x.\n", cdev->eid);
+			mutex_unlock(&cdev->eu_mutex);
 			continue;
 		}
 
 		memcpy(&attr->eu, &attr->eus[0], sizeof(attr->eu));
 		attr->eid.dw0 = cdev->eid;
 		memcpy(&ret_list[count], &cdev->base, sizeof(*ret_list));
+		mutex_unlock(&cdev->eu_mutex);
 		ret_list[count].private_data = kzalloc(
 			sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_list[count].private_data)
@@ -90,7 +93,7 @@ EXPORT_SYMBOL_GPL(dma_get_device_list);
  *
  * It can be called after using dev_list and must be called.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_free_device_list(struct dma_device *dev_list, u32 num_devices)
@@ -123,7 +126,7 @@ EXPORT_SYMBOL_GPL(dma_free_device_list);
  *
  * Choose one to use with the dma_get_device_list function.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA device structure pointer
  */
 struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
@@ -151,16 +154,20 @@ struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
 	xa_for_each(cdma_devs_tbl, index, cdev) {
 		attr = &cdev->base.attr;
 		if (cdev->status >= CDMA_SUSPEND) {
-			pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+			pr_warn("not prepared to get device, eid = 0x%x.\n",
 				attr->eid.dw0);
 			continue;
 		}
 
+		mutex_lock(&cdev->eu_mutex);
 		if (!cdma_find_seid_in_eus(attr->eus, attr->eu_num, eid,
-					   &attr->eu))
+					   &attr->eu)) {
+			mutex_unlock(&cdev->eu_mutex);
 			continue;
+		}
 
 		memcpy(ret_dev, &cdev->base, sizeof(*ret_dev));
+		mutex_unlock(&cdev->eu_mutex);
 		ret_dev->private_data = kzalloc(
 			sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_dev->private_data) {
@@ -182,7 +189,7 @@ EXPORT_SYMBOL_GPL(dma_get_device_by_eid);
  * The context is used to store resources such as Queue and Segment, and
  * returns a pointer to the context information.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA context ID value
  */
 int dma_create_context(struct dma_device *dma_dev)
@@ -204,7 +211,7 @@ int dma_create_context(struct dma_device *dma_dev)
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to create context, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return -EINVAL;
 	}
@@ -232,7 +239,7 @@ EXPORT_SYMBOL_GPL(dma_create_context);
  * dma_delete_context - Delete DMA context
  * @dma_dev: DMA device pointe
  * @handle: DMA context ID value
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_delete_context(struct dma_device *dma_dev, int handle)
@@ -267,9 +274,11 @@ void dma_delete_context(struct dma_device *dma_dev, int handle)
 		return;
 	}
 
+	cdma_kcmd_inc(cdev);
 	cdma_free_context(cdev, ctx);
 	ctx_res->ctx = NULL;
 	atomic_dec(&dma_dev->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_delete_context);
 
@@ -281,7 +290,7 @@ EXPORT_SYMBOL_GPL(dma_delete_context);
  *
  * The user uses the queue for DMA read and write operations.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA queue ID value
  */
 int dma_alloc_queue(struct dma_device *dma_dev, int ctx_id, struct queue_cfg *cfg)
@@ -303,7 +312,7 @@ int dma_alloc_queue(struct dma_device *dma_dev, int ctx_id, struct queue_cfg *cf
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to alloc queue, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return -EINVAL;
 	}
@@ -346,7 +355,7 @@ EXPORT_SYMBOL_GPL(dma_alloc_queue);
  * dma_free_queue - Free DMA queue
  * @dma_dev: DMA device pointer
  * @queue_id: DMA queue ID
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_free_queue(struct dma_device *dma_dev, int queue_id)
@@ -376,9 +385,10 @@ void dma_free_queue(struct dma_device *dma_dev, int queue_id)
 	xa_erase(&ctx_res->queue_xa, queue_id);
 	ctx = queue->ctx;
 
+	cdma_kcmd_inc(cdev);
 	cdma_delete_queue(cdev, queue_id);
-
 	atomic_dec(&ctx->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_free_queue);
 
@@ -391,7 +401,7 @@ EXPORT_SYMBOL_GPL(dma_free_queue);
  * The segment stores local payload information for operations such as DMA
  * read and write, and returns a pointer to the segment information.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA segment structure pointer
  */
 struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
@@ -415,7 +425,7 @@ struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n",
+		pr_warn("not prepared to register segment, eid = 0x%x.\n",
 			dma_dev->attr.eid.dw0);
 		return NULL;
 	}
@@ -428,7 +438,7 @@ struct dma_seg *dma_register_seg(struct dma_device *dma_dev, int ctx_id,
 	}
 	atomic_inc(&ctx->ref_cnt);
 
-	seg = cdma_register_seg(cdev, cfg, true);
+	seg = cdma_register_seg(cdev, cfg, true, NULL);
 	if (!seg)
 		goto decrease_cnt;
 
@@ -470,7 +480,7 @@ EXPORT_SYMBOL_GPL(dma_register_seg);
  * dma_unregister_seg - Unregister local segment
  * @dma_dev: DMA device pointer
  * @dma_seg: DMA segment pointer
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unregister_seg(struct dma_device *dma_dev, struct dma_seg *dma_seg)
@@ -501,11 +511,12 @@ void dma_unregister_seg(struct dma_device *dma_dev, struct dma_seg *dma_seg)
 	xa_erase(&ctx_res->seg_xa, dma_seg->handle);
 	ctx = seg->ctx;
 
+	cdma_kcmd_inc(cdev);
 	cdma_seg_ungrant(seg);
 	cdma_unregister_seg(cdev, seg);
 	kfree(dma_seg);
-
 	atomic_dec(&ctx->ref_cnt);
+	cdma_kcmd_dec(cdev);
 }
 EXPORT_SYMBOL_GPL(dma_unregister_seg);
 
@@ -516,7 +527,7 @@ EXPORT_SYMBOL_GPL(dma_unregister_seg);
  * The segment stores the remote payload information for operations such as
  * DMA read and write, and returns the segment information pointer.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: DMA segment structure pointer
  */
 struct dma_seg *dma_import_seg(struct dma_seg_cfg *cfg)
@@ -531,7 +542,7 @@ EXPORT_SYMBOL_GPL(dma_import_seg);
 /**
  * dma_unimport_seg - Unimport the remote segment
  * @dma_seg: DMA segment pointer
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unimport_seg(struct dma_seg *dma_seg)
@@ -559,7 +570,7 @@ static int cdma_param_transfer(struct dma_device *dma_dev, int queue_id,
 	}
 
 	if (tmp_dev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n", eid);
+		pr_warn("not prepared to send packet, eid = 0x%x.\n", eid);
 		return -EINVAL;
 	}
 
@@ -601,6 +612,7 @@ enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -611,10 +623,14 @@ enum dma_status dma_write(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, NULL);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma write failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -644,6 +660,7 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg || !data || !data->notify_seg) {
@@ -654,10 +671,15 @@ enum dma_status dma_write_with_notify(struct dma_device *dma_dev,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_write(cdev, cdma_queue, local_seg, rmt_seg, data);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev,
+			"dma write with notify failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -684,6 +706,7 @@ enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -694,10 +717,14 @@ enum dma_status dma_read(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_read(cdev, cdma_queue, local_seg, rmt_seg);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma read failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -724,6 +751,7 @@ enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg || !data) {
@@ -734,10 +762,14 @@ enum dma_status dma_cas(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_cas(cdev, cdma_queue, local_seg, rmt_seg, data);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma cas failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -763,6 +795,7 @@ enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 {
 	struct cdma_queue *cdma_queue = NULL;
 	struct cdma_dev *cdev = NULL;
+	struct cdma_tp_cfg *cfg;
 	int ret;
 
 	if (!dma_dev || !rmt_seg || !local_seg) {
@@ -773,10 +806,14 @@ enum dma_status dma_faa(struct dma_device *dma_dev, struct dma_seg *rmt_seg,
 	ret = cdma_param_transfer(dma_dev, queue_id, &cdev, &cdma_queue);
 	if (ret)
 		return DMA_STATUS_INVAL;
+	cfg = &cdma_queue->tp->cfg;
 
 	ret = cdma_faa(cdev, cdma_queue, local_seg, rmt_seg, add);
-	if (ret)
+	if (ret) {
+		dev_err(cdev->dev, "dma faa failed, seid = %u, deid = %u.\n",
+			cfg->seid, cfg->deid);
 		return DMA_STATUS_INVAL;
+	}
 
 	return DMA_STATUS_OK;
 }
@@ -803,7 +840,9 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 		   struct dma_cr *cr)
 {
 	struct cdma_queue *cdma_queue;
+	struct cdma_tp_cfg *cfg;
 	struct cdma_dev *cdev;
+	int npolled;
 	u32 eid;
 
 	if (!dma_dev || !cr_cnt || !cr) {
@@ -819,7 +858,7 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 	}
 
 	if (cdev->status >= CDMA_SUSPEND) {
-		pr_warn("cdma device is not prepared, eid = 0x%x.\n", eid);
+		pr_warn("not prepared to poll queue, eid = 0x%x.\n", eid);
 		return -EINVAL;
 	}
 
@@ -829,8 +868,14 @@ int dma_poll_queue(struct dma_device *dma_dev, int queue_id, u32 cr_cnt,
 			queue_id);
 		return -EINVAL;
 	}
+	cfg = &cdma_queue->tp->cfg;
 
-	return cdma_poll_jfc(cdma_queue->jfc, cr_cnt, cr);
+	npolled = cdma_poll_jfc(cdma_queue->jfc, cr_cnt, cr);
+	if (npolled > 0 && cr->status != DMA_CR_SUCCESS)
+		dev_err(cdev->dev, "poll jfc npolled = %d, seid = %u, deid = %u.\n",
+			npolled, cfg->seid, cfg->deid);
+
+	return npolled;
 }
 EXPORT_SYMBOL_GPL(dma_poll_queue);
 
@@ -846,7 +891,7 @@ EXPORT_SYMBOL_GPL(dma_poll_queue);
  * using the DMA channel, and then call the remove interface to notify the
  * management software to delete the DMA resources.
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: operation result, 0 on success, others on failed
  */
 int dma_register_client(struct dma_client *client)
@@ -893,7 +938,7 @@ EXPORT_SYMBOL_GPL(dma_register_client);
  *
  * Unregister the management software interface, and delete client resources
  *
- * Context: Process context.
+ * Context: Process context, must NOT be called concurrently.
  * Return: NA
  */
 void dma_unregister_client(struct dma_client *client)

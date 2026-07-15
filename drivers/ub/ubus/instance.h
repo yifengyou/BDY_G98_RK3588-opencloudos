@@ -10,8 +10,6 @@
 
 extern struct bus_attribute bus_attr_instance;
 
-typedef bool (*instance_match)(struct ub_bus_instance *bi, void *arg);
-
 #define UBUS_INSTANCE_STATIC_SERVER 0
 #define UBUS_INSTANCE_STATIC_CLUSTER 1
 
@@ -26,8 +24,6 @@ typedef bool (*instance_match)(struct ub_bus_instance *bi, void *arg);
 
 int ub_static_bus_instance_init(struct ub_bus_controller *ubc);
 void ub_static_bus_instance_uninit(struct ub_bus_controller *ubc);
-void ub_bus_instance_put(struct ub_bus_instance *bi);
-struct ub_bus_instance *ub_find_bus_instance(instance_match match, void *arg);
 int ub_ioctl_bus_instance_create(void __user *uptr);
 int ub_ioctl_bus_instance_destroy(void __user *uptr);
 int ub_ioctl_bus_instance_bind(void __user *uptr);
@@ -41,6 +37,6 @@ int ub_notify_bus_instance_handle(struct ub_bus_controller *ubc, bool flag,
 void ub_static_cluster_instance_drain(void);
 int ub_default_bus_instance_init(struct ub_entity *uent);
 void ub_default_bus_instance_uninit(struct ub_entity *uent);
-bool eid_match(struct ub_bus_instance *bi, void *arg);
+bool ub_bus_instance_exist(u32 eid);
 
 #endif /* __INSTANCE_H__ */

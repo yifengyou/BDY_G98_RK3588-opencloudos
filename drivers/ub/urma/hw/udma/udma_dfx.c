@@ -103,13 +103,13 @@ int udma_query_jfr(struct ubcore_jfr *jfr, struct ubcore_jfr_cfg *cfg,
 	if (ret)
 		goto err_jfr_ctx;
 
-	cfg->id = jfr->jfr_id.id;
-	cfg->flag = jfr->jfr_cfg.flag;
 	cfg->max_sge = 1 << jfr_ctx->rqe_size_shift;
-	cfg->depth = 1 << jfr_ctx->rqe_shift;
-	cfg->token_value.token = 0;
-	cfg->flag.bs.token_policy = UBCORE_TOKEN_NONE;
 	cfg->min_rnr_timer = jfr_ctx->rnr_timer;
+	cfg->depth = 1 << jfr_ctx->rqe_shift;
+	cfg->flag = jfr->jfr_cfg.flag;
+	cfg->token_value.token = 0;
+	cfg->id = jfr->jfr_id.id;
+	cfg->flag.bs.token_policy = UBCORE_TOKEN_NONE;
 
 	ret = to_udma_trans_mode(jfr_ctx->type, udma_dev, &cfg->trans_mode);
 	if (ret)

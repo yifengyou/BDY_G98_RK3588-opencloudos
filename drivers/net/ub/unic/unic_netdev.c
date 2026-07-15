@@ -7,6 +7,7 @@
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
 #include <net/addrconf.h>
+#include <net/bonding.h>
 #include <net/dsfield.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
@@ -20,6 +21,7 @@
 #include <ub/ubase/ubase_comm_eq.h>
 #include <ub/ubase/ubase_comm_stats.h>
 
+#include "unic_bond.h"
 #include "unic_cmd.h"
 #include "unic_dev.h"
 #include "unic_event.h"
@@ -719,11 +721,37 @@ static bool unic_port_dev_check(const struct net_device *dev)
 	return dev->netdev_ops == &unic_netdev_ops;
 }
 
+static struct unic_dev *unic_get_bond_slave(struct net_device *ndev)
+{
+	struct slave *first_slave;
+	struct bonding *bond;
+
+	if (!netif_is_bond_master(ndev))
+		return NULL;
+
+	rcu_read_lock();
+	bond = netdev_priv(ndev);
+	first_slave = bond_first_slave_rcu(bond);
+	rcu_read_unlock();
+	if (!first_slave || !unic_port_dev_check(first_slave->dev))
+		return NULL;
+
+	return netdev_priv(first_slave->dev);
+}
+
 static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,
 			     u16 ip_mask, unsigned long event)
 {
 	enum UNIC_COMM_ADDR_STATE state;
+	struct unic_dev *unic_dev;
 	int ret = NOTIFY_OK;
+
+	unic_dev = unic_get_bond_slave(ndev);
+	if (!unic_dev)
+		return NOTIFY_DONE;
+
+	if (!unic_bond_ip_sync_supported(unic_dev))
+		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_UP:
@@ -735,6 +763,9 @@ static int unic_eth_ip_event(struct sockaddr *sa, struct net_device *ndev,
 	default:
 		return NOTIFY_DONE;
 	}
+
+	if (unic_update_bond_ipaddr(unic_dev, sa, ip_mask, state))
+		ret = NOTIFY_BAD;
 
 	return ret;
 }
@@ -749,6 +780,8 @@ static int unic_ub_ip_event(struct sockaddr *sa, struct net_device *ndev,
 		return NOTIFY_DONE;
 
 	unic_dev = netdev_priv(ndev);
+	if (__unic_removing(unic_dev))
+		return NOTIFY_OK;
 
 	switch (event) {
 	case NETDEV_UP:
@@ -837,6 +870,40 @@ void unic_unregister_ipaddr_notifier(void)
 {
 	unregister_inetaddr_notifier(&unic_inetaddr_notifier);
 	unregister_inet6addr_notifier(&unic_inet6addr_notifier);
+}
+
+static int unic_netdev_event(struct notifier_block *nb,
+			     unsigned long event, void *ptr)
+{
+	struct net_device *netdev;
+	struct unic_dev *unic_dev;
+
+	netdev = netdev_notifier_info_to_dev(ptr);
+	if (!netdev || !unic_port_dev_check(netdev))
+		return NOTIFY_DONE;
+
+	unic_dev = netdev_priv(netdev);
+
+	if (!unic_dev_eth_mac_supported(unic_dev) || event != NETDEV_CHANGEUPPER)
+		return NOTIFY_DONE;
+
+	set_bit(UNIC_STATE_SYNC_BOND_PORT, &unic_dev->state);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block unic_netdev_notifier = {
+	.notifier_call = unic_netdev_event,
+};
+
+int unic_register_netdevice_notifier(void)
+{
+	return register_netdevice_notifier(&unic_netdev_notifier);
+}
+
+void unic_unregister_netdevice_notifier(void)
+{
+	unregister_netdevice_notifier(&unic_netdev_notifier);
 }
 
 int unic_query_link_status(struct unic_dev *unic_dev, u8 *link_status)

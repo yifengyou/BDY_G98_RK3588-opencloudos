@@ -467,7 +467,7 @@ static void cdma_write_async_event(struct cdma_context *ctx, u64 event_data,
 	struct cdma_jfae *jfae;
 
 	rcu_read_lock();
-	jfae = (struct cdma_jfae *)(rcu_dereference(ctx->jfae));
+	jfae = rcu_dereference(ctx->jfae);
 	if (!jfae)
 		goto err_free_rcu;
 
@@ -720,7 +720,7 @@ int cdma_get_jfae(struct cdma_context *ctx)
 	if (!ctx)
 		return -EINVAL;
 
-	jfae = (struct cdma_jfae *)ctx->jfae;
+	jfae = ctx->jfae;
 	if (!jfae)
 		return -EINVAL;
 
@@ -772,7 +772,7 @@ void cdma_release_async_event(struct cdma_context *ctx, struct list_head *event_
 	if (!ctx || !ctx->jfae)
 		return;
 
-	jfae = (struct cdma_jfae *)ctx->jfae;
+	jfae = ctx->jfae;
 	jfe = &jfae->jfe;
 	spin_lock_irq(&jfe->lock);
 	list_for_each_entry_safe(event, tmp, event_list, obj_node) {
@@ -790,7 +790,7 @@ void cdma_put_jfae(struct cdma_context *ctx)
 	if (!ctx)
 		return;
 
-	jfae = (struct cdma_jfae *)ctx->jfae;
+	jfae = ctx->jfae;
 	if (!jfae)
 		return;
 

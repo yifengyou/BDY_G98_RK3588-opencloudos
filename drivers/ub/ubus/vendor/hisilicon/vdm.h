@@ -104,6 +104,18 @@ struct idev_ue_rls_pld {
 };
 #define IDEV_UE_RLS_PLD_TOTAL_SIZE 36
 
+struct create_bi_bypass_pld {
+	/* DW1~DW4 */
+	u32 guid[UB_GUID_DW_NUM];
+	/* DW5~DW8 */
+	u32 eid[4];
+	/* DW9 */
+	u32 upi : 15;
+	u32 m : 1;
+	u32 rsvd2 : 16;
+};
+#define VDM_BI_CREATE_BYPASS_UMMU_PLD_SIZE 48
+
 struct port_reset_pld {
 	/* DW1 */
 	u16 rsvd;
@@ -119,6 +131,8 @@ struct port_reset_pld {
 	(MSG_PKT_HEADER_SIZE + IDEV_UE_REG_PLD_TOTAL_SIZE)
 #define MSG_IDEV_UE_RLS_SIZE \
 	(MSG_PKT_HEADER_SIZE + IDEV_UE_RLS_PLD_TOTAL_SIZE)
+#define VDM_BI_CREATE_BYPASS_SIZE \
+	(MSG_PKT_HEADER_SIZE + VDM_BI_CREATE_BYPASS_UMMU_PLD_SIZE)
 #define VDM_PORT_RESET_SIZE \
 	(MSG_PKT_HEADER_SIZE + VDM_PORT_RESET_PLD_SIZE)
 
@@ -135,6 +149,7 @@ struct vdm_msg_pkt {
 		struct idev_pue_rls_pld pd_rls_pld;
 		struct idev_ue_reg_pld vd_reg_pld;
 		struct idev_ue_rls_pld vd_rls_pld;
+		struct create_bi_bypass_pld bi_bypass_pld;
 	};
 };
 

@@ -146,16 +146,20 @@ static unsigned long ubase_check_event_cause(struct ubase_dev *udev)
 	if (cmdq_src_reg & BIT(UBASE_VECTOR0_RX_CMDQ_INT_B))
 		event_cause |= BIT(UBASE_ASYNC_EVENT_CRQ_B);
 
-	sw_handshake_0_reg = ubase_read_dev(&udev->hw,
-					    UBASE_SW_HANDSHAKE_0_REG);
-	if (sw_handshake_0_reg & BIT(UBASE_SW_HANDSHAKE_0_RAS_B)) {
-		ubase_save_ras_type(udev, sw_handshake_0_reg);
-		event_cause |= BIT(UBASE_ASYNC_EVENT_RAS_B);
+	if (ubase_dev_err_handle_supported(udev)) {
+		sw_handshake_0_reg = ubase_read_dev(&udev->hw,
+						    UBASE_SW_HANDSHAKE_0_REG);
+		if (sw_handshake_0_reg & BIT(UBASE_SW_HANDSHAKE_0_RAS_B)) {
+			ubase_save_ras_type(udev, sw_handshake_0_reg);
+			event_cause |= BIT(UBASE_ASYNC_EVENT_RAS_B);
+		}
 	}
 
-	ctrlq_src_reg = ubase_read_dev(&udev->hw, UBASE_VECTOR0_CTRLQ_SRC_REG);
-	if (ctrlq_src_reg & BIT(UBASE_VECTOR0_RX_CTRLQ_INT_B))
-		event_cause |= BIT(UBASE_ASYNC_EVENT_CTRLQ_B);
+	if (ubase_dev_ctrlq_supported(udev)) {
+		ctrlq_src_reg = ubase_read_dev(&udev->hw, UBASE_VECTOR0_CTRLQ_SRC_REG);
+		if (ctrlq_src_reg & BIT(UBASE_VECTOR0_RX_CTRLQ_INT_B))
+			event_cause |= BIT(UBASE_ASYNC_EVENT_CTRLQ_B);
+	}
 
 	return event_cause;
 }
@@ -202,7 +206,7 @@ static void ubase_crq_task_schedule(struct ubase_dev *udev)
 	}
 }
 
-static void ubase_errhandle_task_schedule(struct ubase_dev *udev)
+void ubase_errhandle_task_schedule(struct ubase_dev *udev)
 {
 	if (!test_and_set_bit(UBASE_SERVICE_STATE_ERR_SCHED,
 			      &udev->service_task.state))
@@ -210,13 +214,13 @@ static void ubase_errhandle_task_schedule(struct ubase_dev *udev)
 				 &udev->service_task.service_task, 0);
 }
 
-void ubase_ctrlq_task_schedule(struct ubase_dev *udev)
+void ubase_ctrlq_task_schedule(struct ubase_dev *udev, unsigned long delay)
 {
 	if (!test_and_set_bit(UBASE_STATE_CTRLQ_SERVICE_SCHED,
 			      &udev->ctrlq_service_task.state)) {
 		udev->ctrlq.crq_table.last_crq_scheduled = jiffies;
 		mod_delayed_work(udev->ubase_ctrlq_wq,
-				 &udev->ctrlq_service_task.service_task, 0);
+				 &udev->ctrlq_service_task.service_task, delay);
 	}
 }
 
@@ -234,7 +238,7 @@ static int ubase_reg_event_handler(struct ubase_dev *udev)
 		ubase_errhandle_task_schedule(udev);
 
 	if (test_bit(UBASE_ASYNC_EVENT_CTRLQ_B, &event_cause))
-		ubase_ctrlq_task_schedule(udev);
+		ubase_ctrlq_task_schedule(udev, 0);
 
 	ubase_clear_event_cause(udev, event_cause);
 	ubase_enable_misc_vector(udev, true);
@@ -625,6 +629,9 @@ static int ubase_request_aeq_irq(struct ubase_dev *udev)
 	struct ubase_irq *irq;
 	int ret;
 
+	if (ubase_dev_pmu_supported(udev))
+		return 0;
+
 	irq = irq_table->irqs[UBASE_AEQ_IRQ_INDEX];
 	snprintf(irq->name, UBASE_INT_NAME_LEN, "ubase%d-%s-%d", udev->dev_id,
 		 "aeq", 0);
@@ -671,6 +678,9 @@ static void ubase_free_ceq_irqs(struct ubase_dev *udev)
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
 
+	if (ubase_dev_pmu_supported(udev))
+		return;
+
 	for (i = 0; i < ceqs->num; i++) {
 		if (ubase_ubus_irq_vector(udev->dev, 0) != -EOPNOTSUPP)
 			free_irq(ceqs->ceq[i].eq.irqn, &ceqs->ceq[i]);
@@ -681,6 +691,9 @@ static void ubase_free_aeq_irq(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
 
+	if (ubase_dev_pmu_supported(udev))
+		return;
+
 	if (ubase_ubus_irq_vector(udev->dev, 0) != -EOPNOTSUPP)
 		free_irq(aeq->eq.irqn, udev);
 }
@@ -689,6 +702,9 @@ static void ubase_destroy_ceqs(struct ubase_dev *udev)
 {
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
+
+	if (ubase_dev_pmu_supported(udev))
+		return;
 
 	if (!ceqs->ceq)
 		return;
@@ -706,6 +722,9 @@ static void ubase_destroy_ceqs(struct ubase_dev *udev)
 static void ubase_destroy_aeq(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
+
+	if (ubase_dev_pmu_supported(udev))
+		return;
 
 	if (!aeq->eq.addr.addr)
 		return;
@@ -735,7 +754,6 @@ static int ubase_request_ceq_irq(struct ubase_dev *udev, struct ubase_ceq *ceq,
 	if (ubase_ubus_irq_vector(udev->dev, 0) == -EOPNOTSUPP)
 		return 0;
 
-	irq_set_status_flags(irq->irqn, IRQ_NOAUTOEN);
 	ret = request_irq(irq->irqn, ubase_ceq_int_handler, 0, irq->name, ceq);
 	if (ret) {
 		ubase_err(udev, "failed to request ceq[%u], ret = %d.\n",
@@ -753,6 +771,9 @@ static int ubase_request_ceq_irqs(struct ubase_dev *udev)
 	struct ubase_ceqs *ceqs = &irq_table->ceqs;
 	u32 ceq_irq_num, i;
 	int ret;
+
+	if (ubase_dev_pmu_supported(udev))
+		return 0;
 
 	mutex_lock(&udev->irq_table.ceq_lock);
 	ceq_irq_num = udev->caps.dev_caps.num_ceq_vectors;
@@ -896,6 +917,9 @@ int ubase_irq_table_init(struct ubase_dev *udev)
 	struct ubase_irq_table *irq_table = &udev->irq_table;
 	int i, j, ret;
 
+	if (ubase_dev_pmu_supported(udev) && !ubase_pmu_irq_supported(udev))
+		return 0;
+
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
 		for (i = 0; i < UBASE_DRV_MAX; i++) {
 			for (j = 0; j < UBASE_EVENT_TYPE_MAX; j++)
@@ -953,6 +977,9 @@ void ubase_irq_table_free(struct ubase_dev *udev)
 
 void ubase_irq_table_uninit(struct ubase_dev *udev)
 {
+	if (ubase_dev_pmu_supported(udev) && !ubase_pmu_irq_supported(udev))
+		return;
+
 	ubase_irq_table_free(udev);
 	ubase_destroy_ceqs(udev);
 	ubase_destroy_aeq(udev);
@@ -966,25 +993,14 @@ void ubase_disable_ce_irqs(struct ubase_dev *udev)
 	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
 	u32 i;
 
+	if (ubase_dev_pmu_supported(udev))
+		return;
+
 	if (test_bit(UBASE_STATE_IRQ_INVALID_B, &udev->state_bits))
 		return;
 
 	for (i = 0; i < ceqs->num; i++)
 		disable_irq(ceqs->ceq[i].eq.irqn);
-}
-
-int ubase_enable_ce_irqs(struct ubase_dev *udev)
-{
-	struct ubase_ceqs *ceqs = &udev->irq_table.ceqs;
-	u32 i;
-
-	if (test_bit(UBASE_STATE_IRQ_INVALID_B, &udev->state_bits))
-		return 0;
-
-	for (i = 0; i < ceqs->num; i++)
-		enable_irq(ceqs->ceq[i].eq.irqn);
-
-	return 0;
 }
 
 static int __ubase_event_register(struct ubase_dev *udev,
@@ -1108,6 +1124,10 @@ int ubase_comp_register(struct auxiliary_device *adev,
 
 	uadev = container_of(adev, struct ubase_adev, adev);
 	uadev->comp_notifier.notifier_call = comp_handler;
+
+	if (ubase_shutting_down(uadev->udev))
+		return 0;
+
 	ret = atomic_notifier_chain_register(&uadev->comp_nh,
 					     &uadev->comp_notifier);
 	if (ret)
@@ -1137,6 +1157,8 @@ void ubase_comp_unregister(struct auxiliary_device *adev)
 		return;
 
 	uadev = container_of(adev, struct ubase_adev, adev);
+	if (ubase_shutting_down(uadev->udev))
+		return;
 
 	ret = atomic_notifier_chain_unregister(&uadev->comp_nh,
 					       &uadev->comp_notifier);
@@ -1181,20 +1203,20 @@ int ubase_register_ae_event(struct ubase_dev *udev)
 {
 	struct ubase_event_nb ubase_ae_nbs[UBASE_AE_LEVEL_NUM] = {
 		{
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_TP_FLUSH_DONE,
-			{ ubase_ae_tp_flush_done },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_TP_FLUSH_DONE,
+			.nb = { ubase_ae_tp_flush_done },
+			.back = udev
 		}, {
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_TP_LEVEL_ERROR,
-			{ ubase_ae_tp_level_error },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_TP_LEVEL_ERROR,
+			.nb = { ubase_ae_tp_level_error },
+			.back = udev
 		}, {
-			UBASE_DRV_UNIC,
-			UBASE_EVENT_TYPE_ENTITY_LEVEL_ERROR,
-			{ ubase_ae_entity_level_error },
-			udev
+			.drv_type = UBASE_DRV_UNIC,
+			.event_type = UBASE_EVENT_TYPE_ENTITY_LEVEL_ERROR,
+			.nb = { ubase_ae_entity_level_error },
+			.back = udev
 		}
 	};
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;

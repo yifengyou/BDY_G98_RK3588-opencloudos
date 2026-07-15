@@ -4,8 +4,9 @@
 #ifndef __CDMA_SEGMENT_H__
 #define __CDMA_SEGMENT_H__
 
-#include "cdma_common.h"
 #include <ub/cdma/cdma_api.h>
+#include "cdma_common.h"
+#include "cdma_context.h"
 
 struct cdma_dev;
 
@@ -24,7 +25,8 @@ static inline struct cdma_segment *to_cdma_seg(struct dma_seg *seg)
 }
 
 struct cdma_segment *cdma_register_seg(struct cdma_dev *cdev,
-				       struct dma_seg_cfg *cfg, bool is_kernel);
+				       struct dma_seg_cfg *cfg, bool is_kernel,
+				       struct cdma_context *ctx);
 void cdma_unregister_seg(struct cdma_dev *cdev, struct cdma_segment *seg);
 int cdma_seg_grant(struct cdma_dev *cdev, struct cdma_segment *seg,
 		   struct dma_seg_cfg *cfg);

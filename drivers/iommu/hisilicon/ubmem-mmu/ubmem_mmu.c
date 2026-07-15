@@ -347,7 +347,7 @@ static void write_ate_entries(struct ubmem_mmu_domain *dom,
 		cnt = info->size / granule_size;
 		for (i = 0; i < cnt; i++) {
 			reg = readl_relaxed(mdev->base + UMMU_MEM_START_ADDR) &
-			      ~START_ATE_ADDR_MASK;
+			      ~START_PTE_ADDR_MASK;
 			reg |= (start_addr & PHYS_ADDR_MASK) >> SZ_2M_SHIFT;
 			writel_relaxed(reg, mdev->base + UMMU_MEM_START_ADDR);
 
@@ -714,7 +714,7 @@ static bool ubmem_mmu_tdev_support_attr(struct ummu_core_device *core_device,
 	ubrt_fw = ubrt_fwnode_get(ubmem_dev->ummu.dev->fwnode);
 	if (!ubrt_fw || ubrt_fw->type != UBRT_UMMU) {
 		dev_err(ubmem_dev->ummu.dev, "get fwnode failed, exist = %d, type = %d.\n",
-			!!(ubrt_fw), ubrt_fw ? ubrt_fw->type : -1);
+			!!(ubrt_fw), (int)(ubrt_fw ? ubrt_fw->type : -1));
 		return false;
 	}
 

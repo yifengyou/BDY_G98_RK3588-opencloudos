@@ -512,9 +512,9 @@ int _ub_entity_setup_mmio(struct ub_entity *dev)
 			goto fail;
 		}
 
-		ub_info(dev, "MMIO[%d]: ubba=%#lx, size=%#llx, hpa=%#llx, wr attr=%01u, prefetchable=%01u, order type=%01u,\n",
+		ub_info(dev, "MMIO[%d]: ubba=%#lx, size=%#llx, hpa=%#llx, wr attr=0, prefetchable=0, order type=0,\n",
 			i, dev->zone[i].region.start, ub_resource_len(dev, i),
-			dev->zone[i].res.start, 0, 0, 0);
+			dev->zone[i].res.start);
 		dev->zone[i].init_succ = 1;
 	}
 

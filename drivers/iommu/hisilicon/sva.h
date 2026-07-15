@@ -10,7 +10,10 @@
 #include "ummu.h"
 
 #if IS_ENABLED(CONFIG_UB_UMMU_SVA)
+extern const struct iommu_perm_ops ummu_sva_perm_ops;
+
 int ummu_master_enable_iopf(struct ummu_master *master);
+bool ummu_master_iopf_enabled(struct ummu_master *master);
 int ummu_master_disable_iopf(struct ummu_master *master);
 int ummu_master_enable_sva(struct ummu_master *master,
 			   enum iommu_dev_features feat);
@@ -31,6 +34,11 @@ void ummu_sva_tcte_invalidate(struct ummu_domain *u_domain);
 static inline int ummu_master_enable_iopf(struct ummu_master *master)
 {
 	return -ENODEV;
+}
+
+static inline bool ummu_master_iopf_enabled(struct ummu_master *master)
+{
+	return false;
 }
 
 static inline int ummu_master_disable_iopf(struct ummu_master *master)
