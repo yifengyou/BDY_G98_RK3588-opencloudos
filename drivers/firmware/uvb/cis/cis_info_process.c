@@ -165,7 +165,7 @@ static int try_obtain_uvb_window(u64 *wd_obtain, u32 sender_id)
 	return 0;
 }
 
-struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id, u64 *wd_obtain)
+struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id, u64 **wd_obtain)
 {
 	struct uvb_window_description *wd = NULL;
 	ktime_t start;
@@ -184,8 +184,8 @@ struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id,
 			round++;
 		}
 		wd = &(uvb->wd[i]);
-		wd_obtain = memremap(wd->obtain, wd->size, MEMREMAP_WC);
-		if (!wd_obtain) {
+		*wd_obtain = memremap(wd->obtain, sizeof(u64), MEMREMAP_WC);
+		if (!*wd_obtain) {
 			pr_err("uvb window obtain map failed\n");
 			return NULL;
 		}
@@ -195,17 +195,16 @@ struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id,
 			goto free_resources;
 		}
 
-		if (atomic_cmpxchg(lock, 0, 1) == 0
-			&& try_obtain_uvb_window(wd_obtain, sender_id)) {
-			atomic_set(lock, 0);
-			udelay(uvb->delay);
-			if (*wd_obtain == sender_id) {
-				now = ktime_get();
-				time_interval = ktime_to_us(ktime_sub(now, start));
-				pr_info("occupy uvb window successfully, elapsed time: %lldus\n",
-					time_interval);
-				return wd;
+		if (atomic_cmpxchg(lock, 0, 1) == 0) {
+			if (try_obtain_uvb_window(*wd_obtain, sender_id)) {
+				udelay(uvb->delay);
+				if (**wd_obtain == sender_id) {
+					atomic_set(lock, 0);
+					pr_info("occupy uvb window successfully\n");
+					return wd;
+				}
 			}
+			atomic_set(lock, 0);
 		}
 
 		now = ktime_get();
@@ -216,13 +215,13 @@ struct uvb_window_description *uvb_occupy_window(struct uvb *uvb, u32 sender_id,
 			goto free_resources;
 		}
 		i++;
-		memunmap(wd_obtain);
-		wd_obtain = NULL;
+		memunmap(*wd_obtain);
+		*wd_obtain = NULL;
 	}
 
 free_resources:
-	memunmap(wd_obtain);
-	wd_obtain = NULL;
+	memunmap(*wd_obtain);
+	*wd_obtain = NULL;
 
 	return NULL;
 }
@@ -231,7 +230,8 @@ void uvb_free_wd_obtain(u64 *wd_obtain)
 {
 	if (!wd_obtain)
 		return;
-	*wd_obtain = 0;
+	if (*wd_obtain)
+		*wd_obtain = 0;
 	memunmap(wd_obtain);
 }
 
@@ -406,7 +406,7 @@ void free_io_param_with_buffer(struct cis_message *io_param)
 
 int cis_call_uvb(u8 index, struct udfi_para *para)
 {
-	int err;
+	int err = 0;
 	struct uvb_window *window = NULL;
 	struct uvb_window_description *wd = NULL;
 	struct cis_message *io_param = NULL;
@@ -422,7 +422,7 @@ int cis_call_uvb(u8 index, struct udfi_para *para)
 		return -EOVERFLOW;
 	}
 
-	wd = uvb_occupy_window(g_uvb_info->uvbs[index], para->sender_id, wd_obtain);
+	wd = uvb_occupy_window(g_uvb_info->uvbs[index], para->sender_id, &wd_obtain);
 	if (!wd) {
 		pr_err("obtain window failed\n");
 		return -EBUSY;
@@ -430,6 +430,7 @@ int cis_call_uvb(u8 index, struct udfi_para *para)
 
 	if (!wd->buffer) {
 		pr_err("no window buffer to save data\n");
+		err = -EOPNOTSUPP;
 		goto free_obtain;
 	}
 
@@ -477,7 +478,7 @@ free_obtain:
 
 int cis_call_uvb_sync(u8 index, struct udfi_para *para)
 {
-	int err;
+	int err = 0;
 	struct uvb_window *window = NULL;
 	struct uvb_window_description *wd = NULL;
 	u64 *wd_obtain = NULL;
@@ -494,7 +495,7 @@ int cis_call_uvb_sync(u8 index, struct udfi_para *para)
 		return -EOVERFLOW;
 	}
 
-	wd = uvb_occupy_window(g_uvb_info->uvbs[index], para->sender_id, wd_obtain);
+	wd = uvb_occupy_window(g_uvb_info->uvbs[index], para->sender_id, &wd_obtain);
 	if (!wd) {
 		pr_err("sync call obtain window failed\n");
 		return -EBUSY;
@@ -502,6 +503,7 @@ int cis_call_uvb_sync(u8 index, struct udfi_para *para)
 
 	if (!wd->buffer) {
 		pr_err("sync call no window buffer to save data\n");
+		err = -EOPNOTSUPP;
 		goto free_obtain;
 	}
 
@@ -685,6 +687,7 @@ int register_local_cis_func(u32 call_id, u32 receiver_id, msg_handler func)
 	if (!p)
 		return -ENOMEM;
 
+	INIT_LIST_HEAD(&p->link);
 	p->call_id = call_id;
 	p->receiver_id = receiver_id;
 	p->func = func;
@@ -692,7 +695,7 @@ int register_local_cis_func(u32 call_id, u32 receiver_id, msg_handler func)
 	spin_lock_irqsave(&cis_register_lock, flags);
 	list_add_tail_rcu(&p->link, &g_local_cis_list);
 	spin_unlock_irqrestore(&cis_register_lock, flags);
-	pr_info("register cis func success\n");
+	pr_info("register cis func for callid=%08x recvid=%08x success\n", call_id, receiver_id);
 
 	return 0;
 }
@@ -726,7 +729,8 @@ int unregister_local_cis_func(u32 call_id, u32 receiver_id)
 	synchronize_rcu();
 
 	kfree(p);
-	pr_info("unregister cis func success\n");
+	pr_info("unregister cis func for callid=%08x recvid=%08x success\n",
+			call_id, receiver_id);
 
 	return 0;
 }

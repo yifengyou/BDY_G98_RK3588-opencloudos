@@ -2500,7 +2500,7 @@ out_free_vma:
  * Split a vma into two pieces at address 'addr', a new vma is allocated
  * either for the first part or the tail.
  */
-static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
+int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		     unsigned long addr, int new_below)
 {
 #ifdef CONFIG_PID_NS
@@ -2512,6 +2512,7 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	return __split_vma(vmi, vma, addr, new_below);
 }
+EXPORT_SYMBOL(split_vma);
 
 /*
  * We are about to modify one or multiple of a VMA's flags, policy, userfaultfd

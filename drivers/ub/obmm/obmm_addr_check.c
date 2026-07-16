@@ -50,7 +50,6 @@ int occupy_pa_range(const struct obmm_pa_range *pa_range)
 int free_pa_range(const struct obmm_pa_range *pa_range)
 {
 	int ret;
-	const char *user;
 	void *entry;
 	unsigned long flags;
 
@@ -67,8 +66,6 @@ int free_pa_range(const struct obmm_pa_range *pa_range)
 		pr_err("BUG: PA range to be freed does not fully match.\n");
 		ret = -ENOTRECOVERABLE;
 	}
-	user = ((struct obmm_pa_range *)entry)->info.user == OBMM_ADDR_USER_DIRECT_IMPORT ?
-		       "import" : "preimport";
 	kfree(entry);
 	return ret;
 }

@@ -454,7 +454,7 @@ static int __init odf_init(void)
 	status = create_odf_info();
 	if (status) {
 		pr_err("odf table init failed\n");
-		return -1;
+		return 0;
 	}
 
 	status = create_cis_info_from_odf();
@@ -478,7 +478,7 @@ free_cis:
 free_odf:
 	free_odf_info();
 
-	return -1;
+	return 0;
 }
 
 static void __exit odf_exit(void)

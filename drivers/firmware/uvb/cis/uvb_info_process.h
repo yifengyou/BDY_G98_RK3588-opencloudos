@@ -9,6 +9,8 @@
 #ifndef UVB_INFO_PROCESS_H
 #define UVB_INFO_PROCESS_H
 
+extern DECLARE_HASHTABLE(uvb_lock_table, MAX_UVB_LOCK_IN_BITS);
+
 int uvb_poll_window(void *data);
 u32 checksum32(const void *data, u32 size);
 #endif

@@ -135,7 +135,7 @@ int send_msg_to_userspace_and_ack(struct sentry_msg_helper_msg *msg,
 		}
 
 		/* Get acknowledgment success, send acknowledgment message */
-		char send_ack[URMA_SEND_DATA_MAX_LEN];
+		char send_ack[URMA_SEND_DATA_MAX_LEN] = {0};
 
 		ret = snprintf(send_ack, URMA_SEND_DATA_MAX_LEN, "%d_%u_%s_%lu",
 			       ack_type,
@@ -274,7 +274,7 @@ int create_kthread_to_process_msg(const char *event_msg,
 				  enum SENTRY_REMOTE_COMM_TYPE comm_type)
 {
 	int ret;
-	struct sentry_msg_helper_msg msg;
+	struct sentry_msg_helper_msg msg = {0};
 	uint32_t random_id;
 	struct child_thread_process_data *child_data;
 	struct task_struct *child_thread;
@@ -388,7 +388,7 @@ static int process_urma_data(void *data)
 	}
 
 free_msg:
-	free_char_array(msg_str, MAX_NODE_NUM);
+	free_char_array(msg_str, MAX_NODE_NUM * MAX_DIE_NUM);
 
 	pr_info("Urma receiver thread stopped!\n");
 	return ret;
