@@ -8,7 +8,7 @@ Lockup tracepoints
 Overview
 ========
 
-The lockup detectors in ``kernel/watchdog.c`` expose three tracepoints
+The lockup detectors in ``kernel/watchdog.c`` expose four tracepoints
 that allow filtering, aggregation, and stack capture via the standard
 ftrace event framework::
 
