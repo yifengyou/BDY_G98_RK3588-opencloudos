@@ -31,6 +31,7 @@
 enum ubcore_uvs_global_cmd {
 	UBCORE_CMD_SET_TOPO = 1,
 	UBCORE_CMD_GET_ROUTE_LIST = 2,
+	UBCORE_CMD_GET_TOPO = 3,
 	UBCORE_CMD_GLOBAL_LAST
 };
 
@@ -39,6 +40,12 @@ struct ubcore_cmd_set_topo {
 		void *topo_info;
 		uint32_t topo_num;
 	} in;
+};
+
+struct ubcore_cmd_get_topo {
+	struct {
+		void *topo_map;
+	} out;
 };
 
 struct ubcore_cmd_get_route_list {

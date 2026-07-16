@@ -16,9 +16,12 @@
 #include "ubagg_types.h"
 
 enum ubagg_cmd {
-	UBAGG_ADD_DEV = 1,
-	UBAGG_RMV_DEV,
-	UBAGG_SET_TOPO_INFO,
+	UBAGG_CMD_ADD_DEV = 1,
+	UBAGG_CMD_RMV_DEV,
+	UBAGG_CMD_SET_TOPO_INFO,
+	UBAGG_CMD_CREATE_DEV,
+	UBAGG_CMD_DELETE_DEV,
+	UBAGG_CMD_GET_DEV_NAME,
 };
 
 struct ubagg_cmd_hdr {
@@ -66,6 +69,11 @@ union ubagg_tp_feature {
 	uint32_t value;
 };
 
+struct ubagg_sl_info {
+	uint32_t SL;
+	union ubagg_tp_type_cap tp_type;
+};
+
 struct ubagg_device_cap {
 	union ubcore_device_feat feature;
 	uint32_t max_jfc;
@@ -108,6 +116,7 @@ struct ubagg_device_cap {
 	union ubagg_tp_type_cap rc_tp_cap;
 	union ubagg_tp_type_cap um_tp_cap;
 	union ubagg_tp_feature tp_feature;
+	struct ubagg_sl_info priority_info[UBCORE_MAX_PRIORITY_CNT];
 };
 /** A structure mimicking `urma_device_attr`.
  * The field `dev_cap` is the same of that in `urma_device_attr`.
@@ -139,6 +148,27 @@ struct ubagg_set_topo_info {
 	} in;
 };
 
+struct ubagg_create_dev_arg {
+	struct {
+		union ubcore_eid agg_eid;
+	} in;
+};
+
+struct ubagg_delete_dev_arg {
+	struct {
+		union ubcore_eid agg_eid;
+	} in;
+};
+
+struct ubagg_get_dev_name_arg {
+	struct {
+		union ubcore_eid eid;
+	} in;
+	struct {
+		char dev_name[UBAGG_MAX_DEV_NAME_LEN];
+	} out;
+};
+
 enum ubagg_userctl_opcode {
 	GET_SLAVE_DEVICE = 1,
 	GET_TOPO_INFO = 2,
@@ -154,7 +184,7 @@ struct ubagg_slave_device {
 };
 
 struct ubagg_topo_info_out {
-	struct ubagg_topo_info topo_info[MAX_NODE_NUM];
+	struct ubagg_topo_node topo_info[MAX_NODE_NUM];
 	uint32_t node_num;
 };
 
@@ -167,7 +197,7 @@ struct ubagg_primary_port_eid {
 
 struct ubagg_add_dev_by_uvs {
 	char master_dev_name[UBAGG_MAX_DEV_NAME_LEN];
-	union ubcore_eid bonding_eid;
+	union ubcore_eid agg_eid;
 	struct ubagg_primary_port_eid slave_eid[IODIE_NUM];
 };
 

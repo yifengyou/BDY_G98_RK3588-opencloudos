@@ -31,11 +31,14 @@ ubcore_msg.o \
 ubcore_netlink.o \
 ubcore_dp.o \
 ubcore_segment.o \
-ubcm/ubcm_log.o \
 ubcm/ub_mad.o \
 ubcm/ubcm_genl.o \
 ubcm/ub_cm.o \
 ubcm/ubmad_datapath.o \
-ubcore_umem.o
+ubcore_umem.o \
+ubmgr/ubmgr.o \
+ubmgr/ubmgr_ping.o \
+ubmgr/ubmgr_topo.o \
+ubcore_dmac.o
 
 obj-$(CONFIG_UB_URMA) += ubcore.o

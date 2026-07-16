@@ -19,6 +19,7 @@
 #include "ubcore_connect_bonding.h"
 #include "ubcore_genl.h"
 #include "ubcm/ub_cm.h"
+#include "ubmgr/ubmgr.h"
 
 #define UBCORE_LOG_FILE_PERMISSION (0644)
 
@@ -66,9 +67,17 @@ static int __init ubcore_init(void)
 		goto ubcm;
 	}
 
+	ret = ubmgr_init();
+	if (ret != 0) {
+		pr_err("Failed to init ubmgr, ret: %d.\n", ret);
+		goto ubmgr;
+	}
+
 	ubcore_log_info("ubcore module init success.\n");
 	return 0;
 
+ubmgr:
+	ubcm_uninit();
 ubcm:
 	ubcore_destroy_workqueues();
 create_wq:

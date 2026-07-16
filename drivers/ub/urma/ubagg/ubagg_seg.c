@@ -9,9 +9,46 @@
  * History: 2025-8-6: Create file
  */
 
-#include "ubagg_seg.h"
 #include "ubagg_bitmap.h"
 #include "ubagg_log.h"
+#include "ubagg_topo_info.h"
+
+#include "ubagg_seg.h"
+
+#define URMA_UBAGG_DEV_MAX_NUM (20)
+
+struct ubagg_import_seg_udata {
+	/*
+	 * Hacky: The seg has different sizes in user mode and kernel mode
+	 * so the offset can only be resolved using a fixed length.
+	 */
+	char peer_p_seg[960];
+	uint32_t ports[IODIE_NUM][MAX_PORT_NUM];
+};
+
+static int fill_udata(struct ubcore_target_seg_cfg *cfg,
+		      struct ubcore_udata *udata)
+{
+	struct ubagg_import_seg_udata *udata_typed;
+	uint32_t ports[IODIE_NUM][MAX_PORT_NUM] = { 0 };
+	int ret;
+
+	ret = find_linked_port(&cfg->seg.ubva.eid, ports);
+	if (ret != 0) {
+		ubagg_log_err("Failed to find linked port\n");
+		return ret;
+	}
+	udata_typed =
+		(struct ubagg_import_seg_udata *)udata->udrv_data->out_addr;
+
+	ret = copy_to_user((void __user *)udata_typed->ports, (void *)ports,
+			   sizeof(udata_typed->ports));
+	if (ret != 0) {
+		ubagg_log_err("Failed to copy to user, ret:%d", ret);
+		return ret;
+	}
+	return 0;
+}
 
 int ubagg_unregister_seg(struct ubcore_target_seg *seg)
 {
@@ -103,10 +140,17 @@ struct ubcore_target_seg *ubagg_import_seg(struct ubcore_device *dev,
 {
 	struct ubagg_device *ubagg_dev = to_ubagg_dev(dev);
 	struct ubcore_target_seg *tseg;
+	int ret;
 
 	if (ubagg_dev == NULL || cfg == NULL || udata == NULL ||
 	    udata->uctx == NULL) {
 		ubagg_log_err("Invalid param");
+		return NULL;
+	}
+
+	ret = fill_udata(cfg, udata);
+	if (ret != 0) {
+		ubagg_log_err("Failed to fill udata, ret:%d\n", ret);
 		return NULL;
 	}
 

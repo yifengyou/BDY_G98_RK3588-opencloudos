@@ -41,14 +41,14 @@ static inline void fill_spec(struct ubcore_cmd_spec *spec, uint16_t type,
 	};
 }
 
-/**
+/*
  * Fill spec with a field, which is a value or an array taken as a whole.
  * @param v Full path of field, e.g. `arg->out.attr.dev_cap.feature`
  */
 #define SPEC(spec, type, v) \
 	fill_spec(spec, type, sizeof(v), 1, 0, (uintptr_t)(&(v)))
 
-/**
+/*
  * Fill spec with a field, which belongs to an array of structs.
  * @param v1 Full path of struct array, e.g. `arg->out.attr.port_attr`
  * @param v2 Path relative to struct in array, e.g. `active_speed`
@@ -65,6 +65,15 @@ static void ubcore_set_topo_fill_spec_in(void *arg_addr,
 
 	SPEC(s++, SET_TOPO_IN_TOPO_INFO, arg->in.topo_info);
 	SPEC(s++, SET_TOPO_IN_TOPO_NUM, arg->in.topo_num);
+}
+
+static void ubcore_get_topo_fill_spec_in(void *arg_addr,
+					 struct ubcore_cmd_spec *spec)
+{
+	struct ubcore_cmd_get_topo *arg = arg_addr;
+	struct ubcore_cmd_spec *s = spec;
+
+	SPEC(s++, GET_TOPO_OUT_TOPO_MAP, arg->out.topo_map);
 }
 
 static void ubcore_get_route_list_fill_spec_in(void *arg_addr,
@@ -99,6 +108,12 @@ static struct ubcore_tlv_handler
 			GET_ROUTE_LIST_IN_NUM,
 			ubcore_get_route_list_fill_spec_out,
 			GET_ROUTE_LIST_OUT_NUM,
+		},
+		[UBCORE_CMD_GET_TOPO] = {
+			ubcore_get_topo_fill_spec_in,
+			GET_TOPO_OUT_NUM,
+			NULL,
+			0,
 		}
 	};
 
@@ -248,7 +263,7 @@ static int ubcore_cmd_tlv_append(struct ubcore_cmd_spec *spec,
 	return 0;
 }
 
-int ubcore_tlv_parse(ubcore_fill_spec_func fill_spec, size_t spec_size,
+static int ubcore_tlv_parse(ubcore_fill_spec_func fill_spec, size_t spec_size,
 		     struct ubcore_cmd_hdr *hdr, void *arg)
 {
 	struct ubcore_cmd_spec *spec = NULL;
@@ -282,7 +297,7 @@ free_spec:
 	return ret;
 }
 
-int ubcore_tlv_append(ubcore_fill_spec_func fill_spec, size_t spec_size,
+static int ubcore_tlv_append(ubcore_fill_spec_func fill_spec, size_t spec_size,
 		      struct ubcore_cmd_hdr *hdr, void *arg)
 {
 	struct ubcore_cmd_spec *spec = NULL;

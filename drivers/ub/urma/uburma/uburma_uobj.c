@@ -43,9 +43,11 @@ struct uburma_uobj *uobj_alloc_begin(const struct uobj_type *type,
 		return ERR_PTR(-EIO);
 	}
 	uobj = type->type_class->alloc_begin(type, ufile);
-	uobj->class_id = class_id;
-	if (IS_ERR(uobj))
+	if (IS_ERR_OR_NULL(uobj))
+		/* up_read will be executed in alloc_commit for normal uobj */
 		up_read(&ufile->cleanup_rwsem);
+	else
+		uobj->class_id = class_id;
 	return uobj;
 }
 
@@ -807,30 +809,35 @@ static int uburma_free_seg(struct uburma_uobj *uobj,
 	return ubcore_unregister_seg((struct ubcore_target_seg *)uobj->object);
 }
 
+static void uburma_release_jfce_event(struct uburma_jfc_uobj *jfc_uobj)
+{
+	struct uburma_jfce_uobj *jfce_uobj;
+
+	if (!IS_ERR_OR_NULL(jfc_uobj->jfce)) {
+		jfce_uobj = container_of(jfc_uobj->jfce,
+					 struct uburma_jfce_uobj, uobj);
+		uburma_release_comp_event(jfce_uobj,
+					  &jfc_uobj->comp_event_list);
+		uobj_put(jfc_uobj->jfce);
+		jfc_uobj->jfce = NULL;
+	}
+}
+
 static int uburma_free_jfc(struct uburma_uobj *uobj,
 			   enum uburma_remove_reason why)
 {
 	struct uburma_jfc_uobj *jfc_uobj =
 		container_of(uobj, struct uburma_jfc_uobj, uobj);
 	struct ubcore_jfc *jfc = (struct ubcore_jfc *)uobj->object;
-	struct uburma_jfce_uobj *jfce_uobj;
-	uint32_t jfc_id = jfc->id;
 	int ret;
 
 	ret = ubcore_delete_jfc(jfc);
-	if (ret)
+	if (ret) {
+		uburma_release_jfce_event(jfc_uobj);
 		return ret;
-
-	if (!IS_ERR(jfc_uobj->jfce)) {
-		jfce_uobj = container_of(jfc_uobj->jfce,
-					 struct uburma_jfce_uobj, uobj);
-		uburma_release_comp_event(jfce_uobj,
-					  &jfc_uobj->comp_event_list);
-		uobj_put(jfc_uobj->jfce);
 	}
-
 	uburma_release_async_event(uobj->ufile, &jfc_uobj->async_event_list);
-	uburma_log_info("Finish to delete jfc: %u.\n", jfc_id);
+	uburma_release_jfce_event(jfc_uobj);
 	return ret;
 }
 
@@ -839,7 +846,6 @@ static int uburma_free_jfc_batch(struct uburma_uobj **uobj_arr, int arr_num,
 				 enum uburma_remove_reason why)
 {
 	struct uburma_jfc_uobj **jfc_uobj_arr = NULL;
-	struct uburma_jfce_uobj *jfce_uobj = NULL;
 	struct uburma_jfc_uobj *jfc_uobj = NULL;
 	struct ubcore_jfc **jfc_arr = NULL;
 	struct uburma_uobj *uobj = NULL;
@@ -876,16 +882,9 @@ static int uburma_free_jfc_batch(struct uburma_uobj **uobj_arr, int arr_num,
 		for (i = 0; i < end_index; ++i) {
 			jfc_uobj = jfc_uobj_arr[i];
 			uobj = uobj_arr[i];
-			if (!IS_ERR(jfc_uobj->jfce)) {
-				jfce_uobj = container_of(
-					jfc_uobj->jfce, struct uburma_jfce_uobj,
-					uobj);
-				uburma_release_comp_event(
-					jfce_uobj, &jfc_uobj->comp_event_list);
-				uobj_put(jfc_uobj->jfce);
-			}
 			uburma_release_async_event(uobj->ufile,
 						   &jfc_uobj->async_event_list);
+			uburma_release_jfce_event(jfc_uobj);
 		}
 	}
 

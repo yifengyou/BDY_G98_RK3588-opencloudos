@@ -21,6 +21,7 @@
 #include <ub/urma/ubcore_api.h>
 #include <ub/urma/ubcore_opcode.h>
 #include <ub/urma/ubcore_types.h>
+#include <ub/urma/ubcore_uapi.h>
 #include "ubcore_log.h"
 
 int ubcore_post_jetty_send_wr(struct ubcore_jetty *jetty,

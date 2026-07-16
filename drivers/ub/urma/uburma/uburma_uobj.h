@@ -122,6 +122,7 @@ struct uburma_jfc_uobj {
 	struct list_head async_event_list;
 	uint32_t comp_events_reported;
 	uint32_t async_events_reported;
+	spinlock_t jfc_lock;
 };
 
 struct uburma_jfc_uobj_array {
