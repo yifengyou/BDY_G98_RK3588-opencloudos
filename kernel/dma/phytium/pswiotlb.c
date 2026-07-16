@@ -678,8 +678,6 @@ static struct p_io_tlb_pool *pswiotlb_formal_alloc(struct device *dev,
 		return NULL;
 	}
 
-	add_mem_pool(mem, pool);
-
 	return pool;
 }
 
@@ -1244,6 +1242,8 @@ static int pswiotlb_find_slots(struct device *dev, int nid, phys_addr_t orig_add
 		pswiotlb_dyn_free(&pool->rcu);
 		return -1;
 	}
+
+	add_mem_pool(mem, pool);
 
 found:
 	WRITE_ONCE(dev->dma_uses_p_io_tlb, true);
