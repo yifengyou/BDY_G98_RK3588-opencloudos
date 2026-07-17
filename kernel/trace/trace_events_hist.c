@@ -5780,11 +5780,11 @@ static void hist_trigger_entry_print(struct seq_file *m,
 			if (min_val == U64_MAX)
 				min_val = 0;
 			if (val_unit != HIST_TIME_UNIT_NONE)
-				seq_printf(m, " %s: avg:%10llu %s  min:%10llu %s  max:%10llu %s",
+				seq_printf(m, " %s: avg=%10llu %s  min=%10llu %s  max=%10llu %s",
 					   field_name, avg, unit,
 					   min_val, unit, max_val, unit);
 			else
-				seq_printf(m, " %s: avg:%10llu  min:%10llu  max:%10llu",
+				seq_printf(m, " %s: avg=%10llu  min=%10llu  max=%10llu",
 					   field_name, avg, min_val, max_val);
 		} else {
 			seq_puts(m, " ");
