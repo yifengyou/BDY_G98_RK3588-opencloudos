@@ -8,7 +8,10 @@
 
 # Sort and remove duplicated items in each config base file
 for file in "$CONFIG_PATH"/*/*/*.config; do
-	config_sanitizer < "$file" > "$file.fmt.tmp"
+	# Some config entries are symlinks to their source files. Resolve the
+	# destination so the atomic rename does not replace the symlink itself.
+	config_file=$(realpath "$file")
+	config_sanitizer < "$config_file" > "$config_file.fmt.tmp"
 
-	mv "$file.fmt.tmp" "$file"
+	mv "$config_file.fmt.tmp" "$config_file"
 done
