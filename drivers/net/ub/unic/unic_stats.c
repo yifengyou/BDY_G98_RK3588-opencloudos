@@ -102,39 +102,46 @@ static struct unic_dfx_regs_group unic_dfx_reg_arr[] = {
 		.property = UBASE_SUP_UBL,
 		.is_supported = unic_dfx_reg_support
 	},
+	{
+		.regs_idx = UNIC_REG_NUM_IDX_HIMAC,
+		.tag = UNIC_TAG_HIMAC,
+		.opcode = UBASE_OPC_DFX_HIMAC_REG,
+		.property = UBASE_SUP_ETH,
+		.is_supported = unic_dfx_reg_support
+	},
 };
 
 static const struct unic_stats_desc unic_sq_stats_str[] = {
-	{"pad_err", UNIC_SQ_STATS_FIELD_OFF(pad_err)},
-	{"packets", UNIC_SQ_STATS_FIELD_OFF(packets)},
-	{"bytes", UNIC_SQ_STATS_FIELD_OFF(bytes)},
-	{"busy", UNIC_SQ_STATS_FIELD_OFF(busy)},
-	{"more", UNIC_SQ_STATS_FIELD_OFF(more)},
-	{"restart_queue", UNIC_SQ_STATS_FIELD_OFF(restart_queue)},
-	{"over_max_sge_num", UNIC_SQ_STATS_FIELD_OFF(over_max_sge_num)},
-	{"csum_err", UNIC_SQ_STATS_FIELD_OFF(csum_err)},
-	{"ci_mismatch", UNIC_SQ_STATS_FIELD_OFF(ci_mismatch)},
-	{"vlan_err", UNIC_SQ_STATS_FIELD_OFF(vlan_err)},
-	{"fd_cnt", UNIC_SQ_STATS_FIELD_OFF(fd_cnt)},
-	{"drop_cnt", UNIC_SQ_STATS_FIELD_OFF(drop_cnt)},
-	{"cfg5_drop_cnt", UNIC_SQ_STATS_FIELD_OFF(cfg5_drop_cnt)},
-	{"polled_old_pi", UNIC_SQ_STATS_FIELD_OFF(polled_old_pi)},
-	{"polled_skb_null", UNIC_SQ_STATS_FIELD_OFF(polled_skb_null)},
-	{"pi_ci_over_depth", UNIC_SQ_STATS_FIELD_OFF(pi_ci_over_depth)}
+	{"pad_err", UNIC_SQ_STATS_FIELD_OFFSET(pad_err)},
+	{"packets", UNIC_SQ_STATS_FIELD_OFFSET(packets)},
+	{"bytes", UNIC_SQ_STATS_FIELD_OFFSET(bytes)},
+	{"busy", UNIC_SQ_STATS_FIELD_OFFSET(busy)},
+	{"more", UNIC_SQ_STATS_FIELD_OFFSET(more)},
+	{"restart_queue", UNIC_SQ_STATS_FIELD_OFFSET(restart_queue)},
+	{"over_max_sge_num", UNIC_SQ_STATS_FIELD_OFFSET(over_max_sge_num)},
+	{"csum_err", UNIC_SQ_STATS_FIELD_OFFSET(csum_err)},
+	{"ci_mismatch", UNIC_SQ_STATS_FIELD_OFFSET(ci_mismatch)},
+	{"vlan_err", UNIC_SQ_STATS_FIELD_OFFSET(vlan_err)},
+	{"fd_cnt", UNIC_SQ_STATS_FIELD_OFFSET(fd_cnt)},
+	{"drop_cnt", UNIC_SQ_STATS_FIELD_OFFSET(drop_cnt)},
+	{"cfg5_drop_cnt", UNIC_SQ_STATS_FIELD_OFFSET(cfg5_drop_cnt)},
+	{"polled_old_pi", UNIC_SQ_STATS_FIELD_OFFSET(polled_old_pi)},
+	{"polled_skb_null", UNIC_SQ_STATS_FIELD_OFFSET(polled_skb_null)},
+	{"pi_ci_over_depth", UNIC_SQ_STATS_FIELD_OFFSET(pi_ci_over_depth)}
 };
 
 static const struct unic_stats_desc unic_rq_stats_str[] = {
-	{"alloc_skb_err", UNIC_RQ_STATS_FIELD_OFF(alloc_skb_err)},
-	{"packets", UNIC_RQ_STATS_FIELD_OFF(packets)},
-	{"bytes", UNIC_RQ_STATS_FIELD_OFF(bytes)},
-	{"err_pkt_len_cnt", UNIC_RQ_STATS_FIELD_OFF(err_pkt_len_cnt)},
-	{"doi_cnt", UNIC_RQ_STATS_FIELD_OFF(doi_cnt)},
-	{"trunc_cnt", UNIC_RQ_STATS_FIELD_OFF(trunc_cnt)},
-	{"multicast", UNIC_RQ_STATS_FIELD_OFF(multicast)},
-	{"l2_err", UNIC_RQ_STATS_FIELD_OFF(l2_err)},
-	{"l3_l4_csum_err", UNIC_RQ_STATS_FIELD_OFF(l3_l4_csum_err)},
-	{"alloc_frag_err", UNIC_RQ_STATS_FIELD_OFF(alloc_frag_err)},
-	{"csum_complete", UNIC_RQ_STATS_FIELD_OFF(csum_complete)},
+	{"alloc_skb_err", UNIC_RQ_STATS_FIELD_OFFSET(alloc_skb_err)},
+	{"packets", UNIC_RQ_STATS_FIELD_OFFSET(packets)},
+	{"bytes", UNIC_RQ_STATS_FIELD_OFFSET(bytes)},
+	{"err_pkt_len_cnt", UNIC_RQ_STATS_FIELD_OFFSET(err_pkt_len_cnt)},
+	{"doi_cnt", UNIC_RQ_STATS_FIELD_OFFSET(doi_cnt)},
+	{"trunc_cnt", UNIC_RQ_STATS_FIELD_OFFSET(trunc_cnt)},
+	{"multicast", UNIC_RQ_STATS_FIELD_OFFSET(multicast)},
+	{"l2_err", UNIC_RQ_STATS_FIELD_OFFSET(l2_err)},
+	{"l3_l4_csum_err", UNIC_RQ_STATS_FIELD_OFFSET(l3_l4_csum_err)},
+	{"alloc_frag_err", UNIC_RQ_STATS_FIELD_OFFSET(alloc_frag_err)},
+	{"csum_complete", UNIC_RQ_STATS_FIELD_OFFSET(csum_complete)},
 };
 
 static const struct unic_mac_stats_desc unic_eth_stats_str[] = {
@@ -286,6 +293,9 @@ static int unic_get_dfx_regs_len(struct unic_dev *unic_dev,
 		if (!reg_arr[i].is_supported(unic_dev, reg_arr[i].property))
 			continue;
 
+		if (!reg_num[reg_arr[i].regs_idx])
+			continue;
+
 		count += sizeof(struct unic_tlv_hdr) + sizeof(u32) *
 			 reg_num[reg_arr[i].regs_idx];
 	}
@@ -405,6 +415,9 @@ static int unic_get_dfx_regs(struct unic_dev *unic_dev, u8 *data,
 			continue;
 
 		idx = reg_arr[i].regs_idx;
+		if (!reg_num[idx])
+			continue;
+
 		ret = unic_query_regs_data(unic_dev, data, reg_num[idx],
 					   reg_arr[i].opcode);
 		if (ret) {
@@ -630,9 +643,10 @@ static int unic_get_mac_count(struct unic_dev *unic_dev,
 	if (!ubase_adev_mac_stats_supported(adev))
 		return 0;
 
-	for (i = 0; i < size; i++)
+	for (i = 0; i < size; i++) {
 		if (strs[i].stats_num <= stats_num)
 			count++;
+	}
 
 	return count;
 }

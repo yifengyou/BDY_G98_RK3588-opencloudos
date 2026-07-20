@@ -496,6 +496,34 @@ static void udma_clear_eid_table(struct udma_dev *udma_dev)
 	}
 }
 
+static void udma_clear_eid_guid_table(struct udma_dev *udma_dev)
+{
+	struct udma_ctrlq_ue_eid_guid_out *eid_guid_entry = NULL;
+	unsigned long index = 0;
+	eid_t ummu_eid = 0;
+	guid_t guid = {};
+
+	mutex_lock(&udma_dev->eid_guid_mutex);
+	if (!xa_empty(&udma_dev->eid_guid_table)) {
+		xa_for_each(&udma_dev->eid_guid_table, index, eid_guid_entry) {
+			xa_erase(&udma_dev->eid_guid_table, index);
+			(void)memcpy(&ummu_eid, eid_guid_entry->eid_info.eid.raw, sizeof(ummu_eid));
+			(void)memcpy(&guid, &eid_guid_entry->ue_guid, sizeof(guid));
+			ummu_core_del_eid(&guid, ummu_eid, EID_NONE);
+			kfree(eid_guid_entry);
+			eid_guid_entry = NULL;
+		}
+	}
+	mutex_unlock(&udma_dev->eid_guid_mutex);
+}
+
+void udma_destroy_eid_guid_table(struct udma_dev *udma_dev)
+{
+	udma_clear_eid_guid_table(udma_dev);
+	xa_destroy(&udma_dev->eid_guid_table);
+	mutex_destroy(&udma_dev->eid_guid_mutex);
+}
+
 void udma_destroy_eid_table(struct udma_dev *udma_dev)
 {
 	udma_clear_eid_table(udma_dev);

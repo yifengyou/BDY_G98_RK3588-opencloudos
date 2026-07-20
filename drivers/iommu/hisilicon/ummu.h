@@ -253,6 +253,7 @@ struct ummu_device_helper {
 		const struct iommu_user_data *user_data);
 	int (*cache_invalidate_user)(struct iommu_domain *domain,
 				     struct iommu_user_data_array *array);
+	void (*sync_iotlb_all)(struct iommu_domain *domain);
 };
 
 struct ummu_device {

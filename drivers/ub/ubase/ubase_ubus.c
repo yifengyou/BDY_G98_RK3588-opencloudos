@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <ub/ubase/ubase_comm_dev.h>
+#include <ub/ubus/ub_black_box.h>
 
 #include "ubase_cmd.h"
 #include "ubase_dev.h"
@@ -504,4 +505,11 @@ void ubase_ubus_reinit(struct device *dev)
 
 	ub_set_user_info(ue);
 	ub_entity_enable(ue, 1);
+}
+
+void ubase_ubus_fault_log(struct ubase_dev *udev, u32 event_id, void *data)
+{
+	struct ub_entity *ue = container_of(udev->dev, struct ub_entity, dev);
+
+	ub_fault_log(ue, event_id, data);
 }

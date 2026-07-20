@@ -7,6 +7,8 @@
 #ifndef __UBASE_EQ_H__
 #define __UBASE_EQ_H__
 
+#include <linux/sched.h>
+#include <linux/spinlock_types_raw.h>
 #include <ub/ubase/ubase_comm_eq.h>
 
 #include "ubase.h"
@@ -30,7 +32,7 @@
 #define UBASE_CEQ_CEQE_OWNER_BIT	BIT(31)
 #define UBASE_CEQE_COMP_CQN_M		GENMASK(19, 0)
 #define UBASE_EQ_DB_CMD_CEQ		0x2
-#define EQC_EQ_MAX_PERIOD_INDX	4U
+#define EQC_EQ_DEFAULT_PERIOD_INDX	4U
 
 #define UBASE_INT_NAME_LEN 32
 
@@ -171,6 +173,9 @@ struct ubase_aeq {
 	struct ubase_dev	*udev;
 	struct ubase_eq		eq;
 	struct ubase_event_nb	cb[UBASE_AE_LEVEL_NUM];
+	struct completion	poll;
+	struct task_struct	*ae_task;
+	raw_spinlock_t		aeq_lock;
 };
 
 struct ubase_ceqs {

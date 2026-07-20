@@ -4,7 +4,6 @@
  *
  */
 
-#include <linux/interrupt.h>
 #include <ub/ubase/ubase_comm_eq.h>
 
 #include "ubase_cmd.h"
@@ -231,6 +230,7 @@ static int ubase_reg_event_handler(struct ubase_dev *udev)
 	ubase_enable_misc_vector(udev, false);
 
 	event_cause = ubase_check_event_cause(udev);
+	trace_ubase_misc_event_cause(udev->dev, event_cause);
 	if (test_bit(UBASE_ASYNC_EVENT_CRQ_B, &event_cause))
 		ubase_crq_task_schedule(udev);
 
@@ -352,8 +352,8 @@ static void ubase_aeq_event_handler(struct ubase_dev *udev,
 	u8 idx;
 
 	if (event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev, "event type wrong, event_type = %u.\n",
-			  event_type);
+		ubase_err_rl(udev, udev->log_rs.aeq_event_type_exceed_max_cnt,
+			     "event type wrong, event_type = %u.\n", event_type);
 		return;
 	}
 
@@ -424,15 +424,15 @@ static int ubase_async_event_handler(struct ubase_dev *udev)
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
 	struct ubase_eq *eq = &aeq->eq;
 	struct ubase_aeqe *aeqe;
-	int ret = IRQ_NONE;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&aeq->aeq_lock, flags);
 
 	aeqe = ubase_next_aeqe(udev, aeq);
 	while (aeqe) {
 		dma_rmb();
 
 		trace_ubase_aeqe(udev->dev, aeqe, eq);
-
-		ret = IRQ_HANDLED;
 
 		if (aeqe->event_type == UBASE_EVENT_TYPE_MB)
 			ubase_mbx_complete(udev, aeqe);
@@ -445,7 +445,9 @@ static int ubase_async_event_handler(struct ubase_dev *udev)
 		ubase_update_eq_db(&aeq->eq, UBASE_EQ_TYPE_AEQ);
 	}
 
-	return ret;
+	raw_spin_unlock_irqrestore(&aeq->aeq_lock, flags);
+
+	return IRQ_HANDLED;
 }
 
 static irqreturn_t ubase_misc_int_handler(int irq, void *data)
@@ -458,8 +460,6 @@ static irqreturn_t ubase_misc_int_handler(int irq, void *data)
 static irqreturn_t ubase_aeq_int_handler(int irq, void *data)
 {
 	struct ubase_dev *udev = (struct ubase_dev *)data;
-
-	ubase_dbg(udev, "ubase enter aeq handler.\n");
 
 	return IRQ_RETVAL(ubase_async_event_handler(udev));
 }
@@ -494,14 +494,14 @@ static int ubase_fill_eq_attribute(struct ubase_dev *udev, struct ubase_eq *eq,
 	if (eq_type == UBASE_EQ_TYPE_AEQ) {
 		eq->eqe_size = udev->caps.dev_caps.aeqe_size;
 		eq->entries_num = udev->caps.dev_caps.aeqe_depth;
-		eq->eq_period = EQC_EQ_MAX_PERIOD_INDX;
+		eq->eq_period = EQC_EQ_DEFAULT_PERIOD_INDX;
 		eq->eqc_irqn = eqn + udev->caps.dev_caps.num_misc_vectors;
 	} else {
 		eq->eqe_size = udev->caps.dev_caps.ceqe_size;
 		eq->entries_num = udev->caps.dev_caps.ceqe_depth;
 		eq->eqc_irqn = eqn + udev->caps.dev_caps.num_misc_vectors +
 			       udev->caps.dev_caps.num_aeq_vectors;
-		eq->eq_period = EQC_EQ_MAX_PERIOD_INDX;
+		eq->eq_period = EQC_EQ_DEFAULT_PERIOD_INDX;
 	}
 
 	eq->cons_index = 0;
@@ -622,9 +622,54 @@ static int ubase_request_misc_irq(struct ubase_dev *udev)
 	return ret;
 }
 
+static inline void ubase_poll_aeqe(struct ubase_dev *udev,
+				   struct ubase_aeq *aeq)
+{
+#define UBASE_KEEP_POLL_TIME	10
+#define UBASE_POLL_MSLEEP	20
+
+	unsigned long keep, end;
+
+	keep = msecs_to_jiffies(UBASE_KEEP_POLL_TIME) + jiffies;
+	end = msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT) + jiffies;
+
+	while (time_before(jiffies, end)) {
+		(void)ubase_async_event_handler(udev);
+		if (!atomic_read(&udev->mb_cmd.mbx_cnt) ||
+		    kthread_should_stop())
+			break;
+
+		if (time_after(jiffies, keep))
+			msleep(UBASE_POLL_MSLEEP);
+		else
+			udelay(1);
+	}
+}
+
+static int ubase_ae_task_handle(void *data)
+{
+#define UBASE_WAIT_COMPLETION_TIME 1000
+
+	struct ubase_dev *udev = (struct ubase_dev *)data;
+	struct ubase_irq_table *irq_table = &udev->irq_table;
+	struct ubase_aeq *aeq = &irq_table->aeq;
+
+	ubase_info(udev, "ubase ae task start.\n");
+
+	while (!kthread_should_stop()) {
+		if (wait_for_completion_timeout(&aeq->poll,
+						msecs_to_jiffies(UBASE_WAIT_COMPLETION_TIME)))
+			ubase_poll_aeqe(udev, aeq);
+	}
+
+	ubase_info(udev, "ubase ae task exit.\n");
+	return 0;
+}
+
 static int ubase_request_aeq_irq(struct ubase_dev *udev)
 {
 	struct ubase_irq_table *irq_table = &udev->irq_table;
+	char task_name[UBASE_INT_NAME_LEN] = {0};
 	struct ubase_aeq *aeq = &irq_table->aeq;
 	struct ubase_irq *irq;
 	int ret;
@@ -645,12 +690,29 @@ static int ubase_request_aeq_irq(struct ubase_dev *udev)
 	if (ubase_ubus_irq_vector(udev->dev, 0) == -EOPNOTSUPP)
 		return 0;
 
+	raw_spin_lock_init(&aeq->aeq_lock);
 	ret = request_irq(irq->irqn, ubase_aeq_int_handler, 0, irq->name, udev);
 	if (ret) {
 		ubase_err(udev,
 			  "failed to request aeq irq, ret = %d.\n", ret);
 
 		if (ubase_destroy_eq(udev, &irq_table->aeq.eq, UBASE_EQ_TYPE_AEQ))
+			ubase_err(udev, "failed to destroy aeq.\n");
+		return ret;
+	}
+
+	init_completion(&aeq->poll);
+
+	(void)snprintf(task_name, UBASE_INT_NAME_LEN, "ubase_ae%d",
+		       udev->dev_id);
+	aeq->ae_task = kthread_run(ubase_ae_task_handle, udev, task_name);
+	if (IS_ERR(aeq->ae_task)) {
+		ret = PTR_ERR(aeq->ae_task);
+		ubase_err(udev, "failed to create ae task thread, ret = %d\n",
+			  ret);
+		free_irq(aeq->eq.irqn, udev);
+		if (ubase_destroy_eq(udev, &irq_table->aeq.eq,
+				     UBASE_EQ_TYPE_AEQ))
 			ubase_err(udev, "failed to destroy aeq.\n");
 		return ret;
 	}
@@ -690,9 +752,20 @@ static void ubase_free_ceq_irqs(struct ubase_dev *udev)
 static void ubase_free_aeq_irq(struct ubase_dev *udev)
 {
 	struct ubase_aeq *aeq = &udev->irq_table.aeq;
+	int ret;
 
 	if (ubase_dev_pmu_supported(udev))
 		return;
+
+	if (!aeq->ae_task)
+		return;
+
+	ret = kthread_stop(aeq->ae_task);
+	if (ret)
+		ubase_err(udev, "failed to stop ae task thread, ret = %d\n",
+			  ret);
+
+	aeq->ae_task = NULL;
 
 	if (ubase_ubus_irq_vector(udev->dev, 0) != -EOPNOTSUPP)
 		free_irq(aeq->eq.irqn, udev);
@@ -1010,13 +1083,14 @@ static int __ubase_event_register(struct ubase_dev *udev,
 	int ret;
 
 	if (cb->drv_type >= UBASE_DRV_MAX) {
-		ubase_err(udev, "unsupported drv_type(%u).\n", cb->drv_type);
+		ubase_err(udev, "register unsupported drv_type(%u).\n",
+			  cb->drv_type);
 		return -EINVAL;
 	}
 
 	if (cb->event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev,
-			  "unsupported event type(%u).\n", cb->event_type);
+		ubase_err(udev, "register unsupported event type(%u).\n",
+			  cb->event_type);
 		return -EINVAL;
 	}
 
@@ -1060,13 +1134,14 @@ static void __ubase_event_unregister(struct ubase_dev *udev,
 	int ret;
 
 	if (cb->drv_type >= UBASE_DRV_MAX) {
-		ubase_err(udev, "unsupported drv_type(%u).\n", cb->drv_type);
+		ubase_err(udev, "unregister unsupported drv_type(%u).\n",
+			  cb->drv_type);
 		return;
 	}
 
 	if (cb->event_type >= UBASE_EVENT_TYPE_MAX) {
-		ubase_err(udev,
-			  "unsupported event type(%u).\n", cb->event_type);
+		ubase_err(udev, "unregister unsupported event type(%u).\n",
+			  cb->event_type);
 		return;
 	}
 

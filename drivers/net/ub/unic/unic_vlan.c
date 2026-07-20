@@ -64,33 +64,35 @@ static bool unic_need_update_port_vlan(struct unic_dev *unic_dev, u16 vlan_id,
 				       bool is_add)
 {
 	struct unic_vlan_tbl *vlan_tbl = &unic_dev->vport.vlan_tbl;
-	struct unic_vlan_cfg *vlan, *tmp;
+	struct unic_vlan_cfg *vlan;
 	bool exist = false;
+
+	if (!is_add && !vlan_id)
+		return false;
 
 	spin_lock_bh(&vlan_tbl->vlan_lock);
 
-	list_for_each_entry_safe(vlan, tmp, &vlan_tbl->vlan_list, node)
+	list_for_each_entry(vlan, &vlan_tbl->vlan_list, node) {
 		if (vlan->vlan_id == vlan_id) {
 			exist = true;
 			break;
 		}
+	}
 
 	spin_unlock_bh(&vlan_tbl->vlan_lock);
 
-	/* vlan 0 may be added twice when 8021q module is enabled */
-	if (is_add && !vlan_id && exist)
-		return false;
-
 	if (is_add && exist) {
-		dev_warn(unic_dev->comdev.adev->dev.parent,
-			 "failed to add port vlan(%u), which is already in hw.\n",
-			 vlan_id);
+		/* vlan 0 may be added twice when 8021q module is enabled */
+		if (vlan_id)
+			dev_warn(unic_dev->comdev.adev->dev.parent,
+				 "failed to add port vlan(%hu), which is already in hw.\n",
+				 vlan_id);
 		return false;
 	}
 
 	if (!is_add && !exist) {
 		dev_warn(unic_dev->comdev.adev->dev.parent,
-			 "failed to delete port vlan(%u), which is not in hw.\n",
+			 "failed to delete port vlan(%hu), which is not in hw.\n",
 			 vlan_id);
 		return false;
 	}
@@ -101,32 +103,26 @@ static bool unic_need_update_port_vlan(struct unic_dev *unic_dev, u16 vlan_id,
 static int unic_set_port_vlan(struct unic_dev *unic_dev, u16 vlan_id,
 			      bool is_add)
 {
-	if (!is_add && !vlan_id)
-		return 0;
-
 	if (!unic_need_update_port_vlan(unic_dev, vlan_id, is_add))
 		return 0;
 
 	return unic_set_port_vlan_hw(unic_dev, vlan_id, is_add);
 }
 
-static void unic_add_vlan_table(struct unic_dev *unic_dev, u16 vlan_id)
+static void unic_add_vlan_table(struct unic_dev *unic_dev,
+				struct unic_vlan_cfg *vlan)
 {
 	struct unic_vlan_tbl *vlan_tbl = &unic_dev->vport.vlan_tbl;
-	struct unic_vlan_cfg *vlan, *tmp;
+	struct unic_vlan_cfg *entry;
 
 	spin_lock_bh(&vlan_tbl->vlan_lock);
 
-	list_for_each_entry_safe(vlan, tmp, &vlan_tbl->vlan_list, node) {
-		if (vlan->vlan_id == vlan_id)
+	list_for_each_entry(entry, &vlan_tbl->vlan_list, node) {
+		if (entry->vlan_id == vlan->vlan_id) {
+			kfree(vlan);
 			goto out;
+		}
 	}
-
-	vlan = kzalloc(sizeof(*vlan), GFP_ATOMIC);
-	if (!vlan)
-		goto out;
-
-	vlan->vlan_id = vlan_id;
 
 	list_add_tail(&vlan->node, &vlan_tbl->vlan_list);
 
@@ -152,23 +148,14 @@ static void unic_rm_vlan_table(struct unic_dev *unic_dev, u16 vlan_id)
 	spin_unlock_bh(&vlan_tbl->vlan_lock);
 }
 
-static void unic_set_vlan_filter_change(struct unic_dev *unic_dev)
-{
-	struct unic_vport *vport = &unic_dev->vport;
-
-	if (unic_dev_cfg_vlan_filter_supported(unic_dev))
-		set_bit(UNIC_VPORT_STATE_VLAN_FILTER_CHANGE, &vport->state);
-}
-
 int unic_set_vlan_table(struct unic_dev *unic_dev, __be16 proto, u16 vlan_id,
 			bool is_add)
 {
-#define UNIC_MAX_VLAN_ID	4095
-
 	struct unic_vlan_tbl *vlan_tbl = &unic_dev->vport.vlan_tbl;
+	struct unic_vlan_cfg *vlan;
 	int ret;
 
-	if (vlan_id > UNIC_MAX_VLAN_ID)
+	if (vlan_id >= VLAN_N_VID)
 		return -EINVAL;
 
 	if (proto != htons(ETH_P_8021Q))
@@ -187,23 +174,33 @@ int unic_set_vlan_table(struct unic_dev *unic_dev, __be16 proto, u16 vlan_id,
 
 	spin_unlock_bh(&vlan_tbl->vlan_lock);
 
+	if (is_add) {
+		vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
+		if (!vlan)
+			return -ENOMEM;
+
+		vlan->vlan_id = vlan_id;
+	}
+
 	ret = unic_set_port_vlan(unic_dev, vlan_id, is_add);
 	if (!ret) {
 		if (is_add)
-			unic_add_vlan_table(unic_dev, vlan_id);
+			unic_add_vlan_table(unic_dev, vlan);
 		else if (!is_add && vlan_id != 0)
 			unic_rm_vlan_table(unic_dev, vlan_id);
+		set_bit(UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
+			&unic_dev->vport.state);
 	} else if (!is_add) {
 		/* when remove hw vlan filter failed, record the vlan id,
-		 * and try to remove it from hw later, to be consistence
+		 * and try to remove it from hw later, to be consistent
 		 * with stack.
 		 */
 		spin_lock_bh(&vlan_tbl->vlan_lock);
 		set_bit(vlan_id, vlan_tbl->vlan_del_fail_bmap);
 		spin_unlock_bh(&vlan_tbl->vlan_lock);
+	} else {
+		kfree(vlan);
 	}
-
-	unic_set_vlan_filter_change(unic_dev);
 
 	return ret;
 }
@@ -211,13 +208,13 @@ int unic_set_vlan_table(struct unic_dev *unic_dev, __be16 proto, u16 vlan_id,
 static bool unic_need_enable_vlan_filter(struct unic_dev *unic_dev, bool enable)
 {
 	struct unic_vlan_tbl *vlan_tbl = &unic_dev->vport.vlan_tbl;
-	struct unic_vlan_cfg *vlan, *tmp;
+	struct unic_vlan_cfg *vlan;
 
 	if ((unic_dev->netdev_flags & UNIC_USER_UPE) || !enable)
 		return false;
 
 	spin_lock_bh(&vlan_tbl->vlan_lock);
-	list_for_each_entry_safe(vlan, tmp, &vlan_tbl->vlan_list, node) {
+	list_for_each_entry(vlan, &vlan_tbl->vlan_list, node) {
 		if (vlan->vlan_id != 0) {
 			spin_unlock_bh(&vlan_tbl->vlan_lock);
 			return true;
@@ -297,7 +294,8 @@ void unic_sync_vlan_filter(struct unic_dev *unic_dev)
 
 		clear_bit(vlan_id, vlan_tbl->vlan_del_fail_bmap);
 		unic_rm_vlan_table(unic_dev, vlan_id);
-		unic_set_vlan_filter_change(unic_dev);
+		set_bit(UNIC_VPORT_STATE_VLAN_FILTER_CHANGE,
+			&unic_dev->vport.state);
 
 		if (++sync_cnt >= UNIC_MAX_SYNC_COUNT)
 			break;

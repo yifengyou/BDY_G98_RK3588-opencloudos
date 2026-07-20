@@ -57,8 +57,10 @@ static int ubfi_get_dts_ubrt(void)
 
 	if (of_property_read_u64(node, UBIOS_INFO_TABLE, &phys_addr)) {
 		pr_err("Failed to get %s node\n", UBIOS_INFO_TABLE);
+		of_node_put(node);
 		return -EINVAL;
 	}
+	of_node_put(node);
 
 	ubios_table = (struct ubios_root_table *)ub_table_get(phys_addr);
 	if (!ubios_table)

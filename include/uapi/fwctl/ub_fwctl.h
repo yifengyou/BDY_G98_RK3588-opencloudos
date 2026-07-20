@@ -128,6 +128,10 @@ enum ub_fwctl_cmdrpc_type {
 	 * @UTOOL_CMD_QUERY_DL_BIST_ERR: Query DL layer BIST_ERR related registers
 	 */
 	UTOOL_CMD_QUERY_DL_BIST_ERR = 0x0019,
+	/**
+	 * @UTOOL_CMD_QUERY_DL_RT_BANDWIDTH: Query DL layer real time bandwidth
+	 */
+	UTOOL_CMD_QUERY_DL_RT_BANDWIDTH = 0x001C,
 
 	/**
 	 * @UTOOL_CMD_QUERY_TA: Query all registers at the TA layer
@@ -264,6 +268,20 @@ enum ub_fwctl_cmdrpc_type {
 	 * @UTOOL_CMD_QUERY_PRBS_RESULT: Query PRBS error count result
 	 */
 	UTOOL_CMD_QUERY_PRBS_RESULT = 0x00D5,
+
+	/**
+	 * @UTOOL_CMD_QUERY_FIRMWARE_VERSION: Query firmware version
+	 */
+	UTOOL_CMD_QUERY_FIRMWARE_VERSION = 0x00E1,
+	/**
+	 * @UTOOL_CMD_QUERY_PORT_PKT_STATS: Query statistical indicators at the ub and uboe port
+	 */
+	UTOOL_CMD_QUERY_PORT_PKT_STATS = 0x00E2,
+
+	/**
+	 * @UTOOL_CMD_QUERY_PORT_LINK_STATS: Query the historical status of port links
+	 */
+	UTOOL_CMD_QUERY_PORT_LINK_STATS = 0x00F1,
 
 	/**
 	 * @UTOOL_CMD_QUERY_DUMP: Dump all register data

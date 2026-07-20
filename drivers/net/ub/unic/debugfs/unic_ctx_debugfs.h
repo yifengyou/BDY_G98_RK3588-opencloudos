@@ -15,5 +15,6 @@ int unic_dbg_dump_jfs_context_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_jfr_context_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_sq_jfc_context_hw(struct seq_file *s, void *data);
 int unic_dbg_dump_rq_jfc_context_hw(struct seq_file *s, void *data);
+int unic_dbg_dump_sq_rq_cq_info(struct seq_file *s, void *data);
 
 #endif

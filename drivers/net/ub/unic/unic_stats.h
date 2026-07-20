@@ -16,12 +16,12 @@ struct unic_dev;
 
 #define UNIC_ETH_MAC_STATS_CAP_1	95
 
-#define UNIC_ETH_MAC_STATS_FIELD_OFF(fld) offsetof(struct ubase_eth_mac_stats, fld)
+#define UNIC_ETH_MAC_STATS_FIELD_OFFSET(fld) offsetof(struct ubase_eth_mac_stats, fld)
 #define UNIC_ETH_MAC_STATS_FLD_CAP_1(fld) {#fld, UNIC_ETH_MAC_STATS_CAP_1, \
-					   UNIC_ETH_MAC_STATS_FIELD_OFF(fld)}
-#define UNIC_SQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_sq, stats) + \
+					   UNIC_ETH_MAC_STATS_FIELD_OFFSET(fld)}
+#define UNIC_SQ_STATS_FIELD_OFFSET(fld) (offsetof(struct unic_sq, stats) + \
 				      offsetof(struct unic_sq_stats, fld))
-#define UNIC_RQ_STATS_FIELD_OFF(fld) (offsetof(struct unic_rq, stats) + \
+#define UNIC_RQ_STATS_FIELD_OFFSET(fld) (offsetof(struct unic_rq, stats) + \
 				      offsetof(struct unic_rq_stats, fld))
 
 #define UNIC_STATS_READ(p, offset) (*(u64 *)((u8 *)(p) + (offset)))
@@ -58,6 +58,7 @@ enum unic_reg_num_idx {
 	UNIC_REG_NUM_IDX_BA,
 	UNIC_REG_NUM_IDX_TP,
 	UNIC_REG_NUM_IDX_TA,
+	UNIC_REG_NUM_IDX_HIMAC,
 	UNIC_REG_NUM_IDX_MAX,
 };
 
@@ -69,6 +70,7 @@ enum unic_reg_tag {
 	UNIC_TAG_BA,
 	UNIC_TAG_TP,
 	UNIC_TAG_TA,
+	UNIC_TAG_HIMAC,
 	UNIC_TAG_MAX,
 };
 

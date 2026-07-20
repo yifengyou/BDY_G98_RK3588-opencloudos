@@ -7,6 +7,7 @@
 #include "udma_dev.h"
 #include "udma_ctx.h"
 #include "udma_common.h"
+#include "udma_jetty.h"
 
 #define RQE_VA_L_PAGE_4K_OFFSET 12U
 #define RQE_VA_L_VALID_BIT GENMASK(19, 0)
@@ -51,6 +52,7 @@
 
 #define UDMA_DEF_JFR_SLEEP_TIME 1000
 #define UDMA_SLEEP_DELAY_TIME 10
+#define UDMA_INIT_JFR_ID -1
 
 enum jfr_state {
 	UDMA_JFR_STATE_RESET = 0,
@@ -152,6 +154,20 @@ struct udma_jfr_ctx {
 	uint32_t reserved[3];
 };
 
+/* stub UBCORE */
+
+enum udma_k_set_get_jfr_opt_perm {
+	PERM_READ = 1,
+	PERM_WRITE = 1 << 1,
+};
+
+struct udma_jfr_opt_info {
+	uint64_t opt;
+	uint32_t buf_len;
+	enum udma_k_set_get_jfr_opt_perm perm;
+	enum udma_set_get_jetty_opt_ignore_attr attr;
+};
+
 static inline struct udma_jfr *to_udma_jfr(struct ubcore_jfr *jfr)
 {
 	return container_of(jfr, struct udma_jfr, ubcore_jfr);
@@ -180,11 +196,19 @@ struct ubcore_jfr *udma_create_jfr(struct ubcore_device *dev, struct ubcore_jfr_
 int udma_destroy_jfr(struct ubcore_jfr *jfr);
 int udma_destroy_jfr_batch(struct ubcore_jfr **jfr_arr, int jfr_num, int *bad_jfr_index);
 int udma_unimport_jfr(struct ubcore_tjetty *tjfr);
+int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
+		     struct ubcore_jfr_wr **bad_wr);
 struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
 					 struct ubcore_tjetty_cfg *cfg,
 					 struct ubcore_active_tp_cfg *active_tp_cfg,
 					 struct ubcore_udata *udata);
-int udma_post_jfr_wr(struct ubcore_jfr *ubcore_jfr, struct ubcore_jfr_wr *wr,
-		     struct ubcore_jfr_wr **bad_wr);
-
+int udma_alloc_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg, struct ubcore_jfr **jfr,
+		   struct ubcore_udata *udata);
+int udma_active_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
+int udma_set_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata);
+int udma_get_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata);
+int udma_deactive_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
+int udma_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata);
 #endif /* __UDMA_JFR_H__ */

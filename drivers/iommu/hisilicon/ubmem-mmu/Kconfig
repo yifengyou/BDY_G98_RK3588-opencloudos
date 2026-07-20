@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+menuconfig UB_UBMEM_VMMU
+	default n
+	tristate "ubmem_vmmu driver"
+	depends on UB_UMMU_CORE && UB_UMMU
+	help
+	   This option enables support for UBMEM_VMMU drivers. The
+	   UBMEM_VMMU driver provides VMU device registration,
+	   initialization, address mapping, and un-mapping inside
+	   a VM.

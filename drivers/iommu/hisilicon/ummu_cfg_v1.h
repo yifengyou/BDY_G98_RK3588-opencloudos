@@ -16,6 +16,11 @@ struct hisi_ummu_tdev_info {
 			u64 ummu_idx_mask;
 			bool on_chip;
 		} v1;
+		struct {
+			u64 reserved;
+			bool on_chip;
+			u32 tid;
+		} v2;
 	};
 };
 

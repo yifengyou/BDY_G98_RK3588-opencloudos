@@ -14,7 +14,7 @@
 #define UBASE_CMDQ_DESC_NUM_S		3
 #define UBASE_CMDQ_DESC_NUM		1024
 #define UBASE_CMDQ_TX_TIMEOUT		300000
-#define UBASE_CMDQ_MBX_TX_TIMEOUT	50
+#define UBASE_CMDQ_MBX_TX_TIMEOUT	3000
 #define UBASE_CMDQ_CLEAR_WAIT_TIME	200
 #define UBASE_CMDQ_WAIT_TIME		10
 
@@ -140,7 +140,13 @@ struct ubase_stop_perf_stats_cmd {
 	__le32	rx_port_bw;
 	__le32	tx_vl_bw[UBASE_STATS_MAX_VL_NUM];
 	__le32	rx_vl_bw[UBASE_STATS_MAX_VL_NUM];
-	u8	rsv1[8];
+	u32	tx_max_port_bw;
+	u32	rx_max_port_bw;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct ubase_cfg_ets_vl_sch_cmd {
@@ -148,6 +154,16 @@ struct ubase_cfg_ets_vl_sch_cmd {
 	u8 rsvd[2];
 	u8 vl_bw[UBASE_MAX_VL_NUM];
 	__le32 port_bitmap;
+};
+
+struct ubase_query_dl_pkt_stats_cmd {
+	__le16	logic_port_id;
+	u8	rsvd[2];
+	__le32	tx_flit_num_l;
+	__le32	tx_flit_num_h;
+	__le32	rx_flit_num_l;
+	__le32	rx_flit_num_h;
+	u8	rsvd1[4];
 };
 
 struct ubase_cfg_tm_vl_sch_cmd {
@@ -291,6 +307,13 @@ struct ubase_query_tm_port_cmd {
 	u8 resv0[2];
 	__le32 rate;
 	u8 resv1[12];
+};
+
+struct ubase_config_vl_speed_cmd {
+	u8 resv0[2];
+	__le16 vl_bitmap;
+	__le32 max_speed[UBASE_MAX_VL_NUM];
+	u8 resv1[20];
 };
 
 struct ubase_activate_req {

@@ -9,7 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <net/rtnetlink.h>
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 #include <net/ub/ubl.h>
 #endif
 #include <ub/ubase/ubase_comm_cmd.h>
@@ -185,54 +185,43 @@ static void unic_vl_bitmap_init(struct unic_dev *unic_dev)
 	}
 }
 
-static int unic_init_vl_sch(struct unic_dev *unic_dev)
+static void unic_init_vl_sch(struct unic_dev *unic_dev)
 {
-#define UNIC_BW_PERCENT 100
-
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct ubase_caps *caps = ubase_get_dev_caps(adev);
 	struct unic_vl *vl = &unic_dev->channels.vl;
-	u8 vl_tsa[UBASE_MAX_VL_NUM] = {0};
-	u8 vl_bw[UBASE_MAX_VL_NUM] = {0};
-	int quo, rem;
+	struct ubase_initial_qset_qos *initial_qos;
 	u32 i;
 
 	if (!unic_dev_ets_supported(unic_dev))
-		return 0;
+		return;
 
-	quo = UNIC_BW_PERCENT / caps->vl_num;
-	rem = UNIC_BW_PERCENT % caps->vl_num;
-
+	initial_qos = ubase_get_initial_qset_qos(adev);
 	for (i = 0; i < caps->vl_num; i++) {
-		vl->vl_tsa[i] = UNIC_VL_TSA_DWRR;
-		vl->vl_bw[i] = quo;
-		if (i < rem)
-			vl->vl_bw[i]++;
-
-		vl_bw[caps->req_vl[i]] = vl->vl_bw[i];
-		vl_bw[caps->resp_vl[i]] = vl->vl_bw[i];
-		vl_tsa[caps->req_vl[i]] = vl->vl_tsa[i];
-		vl_tsa[caps->resp_vl[i]] = vl->vl_tsa[i];
+		vl->vl_tsa[i] = initial_qos->qset_weight[caps->req_vl[i]] ?
+				UNIC_VL_TSA_DWRR : 0;
+		vl->vl_bw[i] = initial_qos->qset_weight[caps->req_vl[i]];
 	}
-
-	return ubase_config_tm_vl_sch(adev, vl->vl_bitmap, vl_bw, vl_tsa);
 }
 
-static int unic_init_vl_maxrate(struct unic_dev *unic_dev)
+static void unic_init_vl_maxrate(struct unic_dev *unic_dev)
 {
-	u64 max_speed = unic_dev->hw.mac.max_speed;
-	u64 vl_maxrate[UBASE_MAX_VL_NUM];
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	struct ubase_caps *caps = ubase_get_dev_caps(adev);
+	struct unic_vl *vl = &unic_dev->channels.vl;
+	struct ubase_initial_qset_qos *initial_qos;
 	u8 i;
 
 	if (!unic_dev_ets_supported(unic_dev) ||
 	    !unic_dev_tc_speed_limit_supported(unic_dev))
-		return 0;
+		return;
 
-	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
-		vl_maxrate[i] = max_speed * UNIC_MBYTE_PER_SEND;
-
-	return unic_config_vl_rate_limit(unic_dev, vl_maxrate,
-					 unic_dev->channels.vl.vl_bitmap);
+	initial_qos = ubase_get_initial_qset_qos(adev);
+	for (i = 0; i < caps->vl_num; i++) {
+		vl->vl_maxrate[i] = (u64)initial_qos->rate[caps->req_vl[i]] *
+				    UNIC_MBYTE_PER_SEND;
+		vl->maxrate = max(vl->maxrate, initial_qos->rate[caps->req_vl[i]]);
+	}
 }
 
 static int unic_init_pause(struct unic_dev *unic_dev)
@@ -287,13 +276,9 @@ static int unic_init_vl_info(struct unic_dev *unic_dev)
 	if (ret)
 		return ret;
 
-	ret = unic_init_vl_maxrate(unic_dev);
-	if (ret && ret != -EPERM)
-		return ret;
-
-	ret = unic_init_vl_sch(unic_dev);
-
-	return ret == -EPERM ? 0 : ret;
+	unic_init_vl_maxrate(unic_dev);
+	unic_init_vl_sch(unic_dev);
+	return 0;
 }
 
 static int unic_init_channels_attr(struct unic_dev *unic_dev)
@@ -330,7 +315,11 @@ static int unic_init_channels_attr(struct unic_dev *unic_dev)
 
 static void unic_uninit_channels_attr(struct unic_dev *unic_dev)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct unic_channels *channels = &unic_dev->channels;
+
+	/* Prevent residual QoS configurations caused by the unic driver. */
+	(void)ubase_restore_initial_qset_qos(adev);
 
 	mutex_destroy(&channels->mutex);
 }
@@ -635,11 +624,6 @@ static int unic_init_mac(struct unic_dev *unic_dev)
 		return ret;
 
 	ret = unic_set_mac_autoneg(unic_dev, mac->autoneg);
-	if (ret)
-		return ret;
-
-	ret = unic_dev_fec_supported(unic_dev) && mac->user_fec_mode ?
-		unic_set_fec_mode(unic_dev, mac->user_fec_mode) : 0;
 	if (ret)
 		return ret;
 
@@ -1057,14 +1041,14 @@ static struct net_device *unic_alloc_netdev(struct auxiliary_device *adev)
 		channel_num = UNIC_DEFAULT_CHANNEL_NUM;
 
 	if (ubase_adev_ubl_supported(adev)) {
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 		snprintf(name, IFNAMSIZ, "ublc%ud%ue%u", caps->chip_id,
 			 caps->die_id, caps->ue_id);
 		netdev = alloc_netdev_mq(sizeof(struct unic_dev), name,
 					 NET_NAME_USER, ubl_setup, channel_num);
 #else
 		dev_warn(adev->dev.parent,
-			 "failed to alloc netdev because of ubl macro is not enabled.\n");
+			 "failed to alloc netdev because of CONFIG_UB_UNIC_UBL is not enabled.\n");
 #endif
 	} else {
 		snprintf(name, IFNAMSIZ, "ethc%ud%ue%u", caps->chip_id,
