@@ -16,7 +16,6 @@
 #include <linux/cdev.h>
 #include "net/ubcore_cm.h"
 #include "ub_mad.h"
-#include "ubcm_genl.h"
 
 struct ubcm_context {
 	struct list_head device_list;

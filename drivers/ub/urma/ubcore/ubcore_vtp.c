@@ -1939,7 +1939,7 @@ static void ubcore_delay_destroy_vtp(struct work_struct *work)
 	ret = ubcore_send_del_vtp_req(vtp_work->vtpn);
 
 	vtp_work->retry_times++;
-	ubcore_log_warn("Retry to destroy vtpn:%u, retry_time:%u, ret:%d",
+	ubcore_log_info("Retry to destroy vtpn:%u, retry_time:%u, ret:%d",
 			vtp_work->vtpn->vtpn, vtp_work->retry_times, ret);
 
 	if (ret == 0 || ret == -ENOENT ||
@@ -1981,7 +1981,7 @@ int ubcore_queue_destroy_vtp_task(struct ubcore_device *dev,
 
 	timeout = (1 << retry_times) * DESTROY_VTP_INI_INTERVAL;
 
-	ubcore_log_warn(
+	ubcore_log_info(
 		"queue delay work to destroy vtpn:%u, dev:%s, retry_time:%u",
 		vtp_work->vtpn->vtpn, dev->dev_name, retry_times);
 

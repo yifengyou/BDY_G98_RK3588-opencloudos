@@ -37,7 +37,7 @@ enum ubcore_log_level {
 		((int)current->pid), __func__, __LINE__, ##args)
 /* use default log, info/warn/err */
 #define ubcore_default_log(l, format, args...)                        \
-	((void)pr_##l("%s|%s|%d|%s:[%d]|" format, UBCORE_LOG_TAG, UBCORE_LOG, \
+	((void)pr_##l("%s|%s|%d|%s[%d]|" format, UBCORE_LOG_TAG, UBCORE_LOG, \
 		((int)current->pid), __func__, __LINE__, ##args))
 
 #define UBCORE_RATELIMIT_INTERVAL (5 * HZ)
