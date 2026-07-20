@@ -72,6 +72,7 @@
 #include <linux/balloon_compaction.h>
 #include <linux/sched/sysctl.h>
 #include <linux/cpumask.h>
+#include <linux/page_idle.h>
 
 #include "internal.h"
 #include "swap.h"
