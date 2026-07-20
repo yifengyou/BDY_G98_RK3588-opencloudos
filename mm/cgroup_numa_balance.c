@@ -31,6 +31,7 @@
 #include <linux/jiffies.h>
 #include <linux/vmstat.h>
 #include <linux/page-isolation.h>
+#include <linux/page_idle.h>
 #include <asm/tlbflush.h>
 
 #include "cgroup_numa_balance.h"
