@@ -49,6 +49,17 @@ void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
 	flush_ptrace_access(vma, (unsigned long)dst, (unsigned long)dst + len);
 }
 
+int copy_mc_to_user_page(struct vm_area_struct *vma, struct page *page,
+		unsigned long uaddr, void *dst, const void *src,
+		unsigned long len)
+{
+	if (memcpy_mc(dst, src, len))
+		return -EHWPOISON;
+
+	flush_ptrace_access(vma, (unsigned long)dst, (unsigned long)dst + len);
+	return 0;
+}
+
 void __sync_icache_dcache(pte_t pte)
 {
 	struct folio *folio = page_folio(pte_page(pte));

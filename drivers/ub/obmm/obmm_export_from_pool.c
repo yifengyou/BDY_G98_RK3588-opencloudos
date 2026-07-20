@@ -221,7 +221,7 @@ static int calculate_export_region_size(unsigned long *total_size,
 			return -ENODEV;
 		}
 		if (cmd_export->size[i] != 0) {
-			if (*total_size > *total_size + cmd_export->size[i]) {
+			if (*total_size > ULONG_MAX - cmd_export->size[i]) {
 				pr_err("Memory size overflowed!\n");
 				return -EOVERFLOW;
 			}

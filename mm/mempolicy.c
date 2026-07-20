@@ -2198,7 +2198,8 @@ bool mempolicy_in_oom_domain(struct task_struct *tsk,
 }
 
 static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
-						int nid, nodemask_t *nodemask)
+						int nid, nodemask_t *nodemask,
+						nodemask_t *fallback_nodemask)
 {
 	struct page *page;
 	gfp_t preferred_gfp;
@@ -2206,16 +2207,41 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	/*
 	 * This is a two pass approach. The first pass will only try the
 	 * preferred nodes but skip the direct reclaim and allow the
-	 * allocation to fail, while the second pass will try all the
-	 * nodes in system.
+	 * allocation to fail. The second pass will try fallback nodes
+	 * if specified, otherwise all nodes in system.
 	 */
 	preferred_gfp = gfp | __GFP_NOWARN;
 	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
 	page = __alloc_pages(preferred_gfp, order, nid, nodemask);
 	if (!page)
-		page = __alloc_pages(gfp, order, nid, NULL);
+		page = __alloc_pages(gfp, order, nid, fallback_nodemask);
 
 	return page;
+}
+
+/**
+ * mpol_update_interleave_stats - Update interleave allocation hit statistics
+ * @pol: Pointer to the NUMA mempolicy
+ * @page: Allocated page
+ * @nid: The node id that was targeted for allocation
+ *
+ * This function checks if the allocation is for interleave policy and updates
+ * NUMA interleave hit statistics when the allocation hits the targeted node.
+ * Should be called after page allocation for MPOL_INTERLEAVE and
+ * MPOL_WEIGHTED_INTERLEAVE policies.
+ */
+static void mpol_update_interleave_stats(struct mempolicy *pol, struct page *page, int nid)
+{
+	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
+		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {
+		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
+		if (static_branch_likely(&vm_numa_stat_key) &&
+		    page_to_nid(page) == nid) {
+			preempt_disable();
+			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
+			preempt_enable();
+		}
+	}
 }
 
 /**
@@ -2237,7 +2263,7 @@ struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		return alloc_pages_preferred_many(gfp, order, nid, nodemask, NULL);
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2274,16 +2300,7 @@ struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 
 	page = __alloc_pages(gfp, order, nid, nodemask);
 
-	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
-		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {
-		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
-		if (static_branch_likely(&vm_numa_stat_key) &&
-		    page_to_nid(page) == nid) {
-			preempt_disable();
-			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
-			preempt_enable();
-		}
-	}
+	mpol_update_interleave_stats(pol, page, nid);
 
 	return page;
 }
@@ -3547,3 +3564,107 @@ err_kobj:
 
 late_initcall(mempolicy_sysfs_init);
 #endif /* CONFIG_SYSFS */
+
+#ifdef CONFIG_FILEMAP_LOCAL_ALLOC
+/*
+ * policy_nodemask_local - Get nodemask for local NUMA nodes only.
+ * @gfp: GFP flags.
+ * @pol: Pointer to the NUMA mempolicy.
+ * @ilx: Index for interleave mempolicy.
+ * @nid: Pointer to preferred node, will be updated to a local node.
+ * @policy_nodes: Output nodemask for policy-specific local nodes.
+ * @local_nodes: Output nodemask for all standard nodes (fallback).
+ *
+ * Creates a local-only copy of the policy by filtering out cpuless NUMA nodes
+ * from policy->nodes, then uses standard policy_nodemask() logic.
+ *
+ * If policy_nodemask() returns a nodemask (e.g., PREFERRED_MANY, BIND),
+ * policy_nodes is set to that nodemask. If policy_nodemask() returns NULL
+ * (e.g., PREFERRED, INTERLEAVE, LOCAL), policy_nodes is set to all local nodes.
+ *
+ * Return: 0 on success, -ENOMEM if no local nodes available.
+ */
+int policy_nodemask_local(gfp_t gfp, struct mempolicy *pol, pgoff_t ilx,
+			int *nid, nodemask_t *policy_nodes, nodemask_t *local_nodes)
+{
+	struct mempolicy pol_local;
+	nodemask_t *nodemask;
+	int node;
+
+	/* Build local_nodes: all local nodes from mems_allowed */
+	nodes_clear(*local_nodes);
+	for_each_node_mask(node, current->mems_allowed) {
+		if (numa_is_standard_node(node))
+			node_set(node, *local_nodes);
+	}
+	/* If no local nodes available, return error */
+	if (nodes_empty(*local_nodes))
+		return -ENOMEM;
+
+	/* Copy policy and filter out cpuless nodes */
+	pol_local = *pol;
+	nodes_clear(pol_local.nodes);
+
+	/* Clear home_node if it points to a cpuless node */
+	if (pol->home_node != NUMA_NO_NODE && !numa_is_standard_node(pol->home_node))
+		pol_local.home_node = NUMA_NO_NODE;
+
+	for_each_node_mask(node, pol->nodes) {
+		if (numa_is_standard_node(node))
+			node_set(node, pol_local.nodes);
+	}
+
+	/* If no standard nodes in policy, use all standard nodes from mems_allowed */
+	if (nodes_empty(pol_local.nodes))
+		pol_local.nodes = *local_nodes;
+
+	/* Use standard policy_nodemask logic on the local-only policy */
+	nodemask = policy_nodemask(gfp, &pol_local, ilx, nid);
+
+	/*
+	 * If policy_nodemask returns a nodemask, use it as policy_nodes.
+	 * Otherwise, use local_nodes (all standard nodes).
+	 */
+	if (nodemask)
+		*policy_nodes = *nodemask;
+	else
+		*policy_nodes = *local_nodes;
+
+	return 0;
+}
+
+/**
+ * __alloc_pages_mpol_local - Allocate pages on local NUMA nodes only.
+ * @gfp: GFP flags.
+ * @order: Order of the page allocation.
+ * @pol: Pointer to the NUMA mempolicy.
+ * @ilx: Index for interleave mempolicy.
+ * @nid: Preferred node.
+ *
+ * This function allocates pages according to the NUMA mempolicy, but
+ * restricts allocations to standard NUMA nodes only, excluding cpuless NUMA nodes.
+ *
+ * For MPOL_PREFERRED_MANY, it first tries to allocate from preferred local
+ * nodes without direct reclaim, then falls back to all local nodes (not
+ * cpuless nodes) with reclaim enabled.
+ *
+ * Return: The page on success or NULL if allocation fails.
+ */
+struct page *__alloc_pages_mpol_local(gfp_t gfp, unsigned int order,
+		struct mempolicy *pol, pgoff_t ilx, int nid)
+{
+	nodemask_t policy_nodes, local_nodes;
+	struct page *page;
+
+	if (policy_nodemask_local(gfp, pol, ilx, &nid, &policy_nodes, &local_nodes))
+		return NULL;
+
+	/* For PREFERRED_MANY, reuse alloc_pages_preferred_many with local fallback */
+	if (pol->mode == MPOL_PREFERRED_MANY)
+		return alloc_pages_preferred_many(gfp, order, nid, &policy_nodes, &local_nodes);
+
+	page = __alloc_pages(gfp, order, nid, &policy_nodes);
+	mpol_update_interleave_stats(pol, page, nid);
+	return page;
+}
+#endif

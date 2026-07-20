@@ -465,10 +465,15 @@ static inline bool page_copy_sane(struct page *page, size_t offset, size_t n)
 	return true;
 }
 
+/*
+ * return short copy for ITER_KVEC & ITER_BVEC as _copy_mc_to_iter
+ * explained for iov_iter_is_copy_mc.
+ */
 size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 			 struct iov_iter *i)
 {
 	size_t res = 0;
+	const bool mc = iov_iter_is_copy_mc(i);
 	if (!page_copy_sane(page, offset, bytes))
 		return 0;
 	if (WARN_ON_ONCE(i->data_source))
@@ -477,12 +482,19 @@ size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 	offset %= PAGE_SIZE;
 	while (1) {
 		void *kaddr = kmap_local_page(page);
-		size_t n = min(bytes, (size_t)PAGE_SIZE - offset);
-		n = _copy_to_iter(kaddr + offset, n, i);
+		size_t need_copied = min(bytes, (size_t)PAGE_SIZE - offset);
+		size_t n;
+
+		if (!mc)
+			n = _copy_to_iter(kaddr + offset, need_copied, i);
+		else
+			n = _copy_mc_to_iter(kaddr + offset, need_copied, i);
 		kunmap_local(kaddr);
 		res += n;
 		bytes -= n;
 		if (!bytes || !n)
+			break;
+		if (mc && (n != need_copied))
 			break;
 		offset += n;
 		if (offset == PAGE_SIZE) {

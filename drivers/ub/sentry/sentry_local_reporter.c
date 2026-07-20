@@ -17,16 +17,18 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/types.h>
-#include <linux/ratelimit.h>
 
 #include "smh_message.h"
+#include "oom_rate_limit.h"
 
 #define REBOOT_RESULT_SUCCESS	0
 #define MAX_TIMEOUT		3600000
 #define FD_MODE			0
 #define NUMA_MODE		1
 
-static DEFINE_RATELIMIT_STATE(oom_log_rs, HZ, 5);
+#define WAIT_TIME_TO_GET_ACK 300   // sleep time before get ack msg
+
+DEFINE_RATELIMIT_STATE(oom_log_rs, HZ, 5);
 
 static unsigned int reboot_timeout_ms = 30000;
 static unsigned int oom_timeout_ms = 30000;
@@ -88,6 +90,8 @@ static int smh_message_retry_send(struct sentry_msg_helper_msg *msg, bool ack)
 		if (!ack)
 			return ret;
 
+		msleep_interruptible(WAIT_TIME_TO_GET_ACK);
+
 		ret = smh_message_get_ack(msg);
 		if (ret)
 			return 0;
@@ -148,8 +152,8 @@ static int lowmem_notifier_callback(struct notifier_block *nb,
 {
 	struct reclaim_notify_data *data = parm;
 	struct sentry_msg_helper_msg msg = {0};
-	int ret;
-	int i;
+	int ret, i;
+	bool should_report = false;
 
 	if (!g_oom_enable)
 		return NOTIFY_OK;
@@ -167,9 +171,20 @@ static int lowmem_notifier_callback(struct notifier_block *nb,
 
 	msg.type = SMH_MESSAGE_OOM;
 	msg.helper_msg_info.oom_info.nr_nid = data->nr_nid > OOM_EVENT_MAX_NUMA_NODES ?
-					      OOM_EVENT_MAX_NUMA_NODES : data->nr_nid;
+					 OOM_EVENT_MAX_NUMA_NODES : data->nr_nid;
 	for (i = 0; i < msg.helper_msg_info.oom_info.nr_nid; i++)
 		msg.helper_msg_info.oom_info.nid[i] = data->nid[i];
+
+	for (i = 0; i < msg.helper_msg_info.oom_info.nr_nid; i++) {
+		ret = oom_rate_limit_check(data->reason, data->nid[i]);
+		if (ret == 0) {
+			should_report = true;
+			break;
+		}
+	}
+
+	if (!should_report)
+		return NOTIFY_OK;
 
 	msg.helper_msg_info.oom_info.sync = data->sync;
 	msg.helper_msg_info.oom_info.timeout = oom_timeout_ms;
@@ -229,6 +244,7 @@ static ssize_t proc_oom_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s oom event report\n", g_oom_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -295,6 +311,7 @@ static ssize_t proc_power_off_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s powef off event report\n", g_power_off_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -361,6 +378,7 @@ static ssize_t proc_ub_mem_fault_enable_write(struct file *file,
 		return -EINVAL;
 	}
 
+	pr_info("%s UB memory fault event report\n", g_ub_mem_fault_enable ? "enable" : "disable");
 	return cnt;
 }
 
@@ -455,6 +473,99 @@ static const struct proc_ops proc_ub_mem_fault_with_kill_file_operations = {
 };
 
 /**
+ * proc_oom_rate_limit_write - Write handler for proc interface to configure OOM rate limit
+ * @file: Proc file structure (unused)
+ * @ubuf: User-space buffer containing configuration string
+ * @cnt: Number of bytes to write
+ * @ppos: File position (unused)
+ *
+ * This function handles write operations to the proc file for OOM rate limit configuration.
+ * It copies the user buffer, removes trailing newline if present, and passes the configuration
+ * string to the rate limit configuration handler.
+ *
+ * Configuration string format: "event1:limit1,event2:limit2,..."
+ * Example: "RR_KSWAPD:10,RR_DIRECT_RECLAIM:5"
+ *
+ * Return: Number of bytes written on success, negative error code on failure
+ */
+static ssize_t proc_oom_rate_limit_write(struct file *file,
+					 const char __user *ubuf,
+					 size_t cnt, loff_t *ppos)
+{
+	char *buf;
+	int ret;
+
+	if (cnt == 0 || cnt > OOM_RATE_LIMIT_RAW_STR_MAX_LEN) {
+		pr_err("invalid input length for oom_rate_limit, max %d\n",
+		       OOM_RATE_LIMIT_RAW_STR_MAX_LEN);
+		return -EINVAL;
+	}
+
+	buf = kzalloc(cnt + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, ubuf, cnt)) {
+		kfree(buf);
+		return -EFAULT;
+	}
+
+	if (cnt > 0 && buf[cnt - 1] == '\n')
+		buf[cnt - 1] = '\0';
+
+	ret = oom_rate_limit_config_write(buf, cnt);
+	kfree(buf);
+
+	if (ret)
+		return ret;
+
+	return cnt;
+}
+
+/**
+ * proc_oom_rate_limit_show - Read handler for proc interface to show OOM rate limit config
+ * @file: Proc file structure (unused)
+ * @buf: User-space buffer to receive configuration data
+ * @count: Maximum number of bytes to read
+ * @ppos: File position (updated by simple_read_from_buffer)
+ *
+ * This function handles read operations from the proc file for OOM rate limit configuration.
+ * It retrieves the current configuration, formats it as a string, and copies it to user space.
+ *
+ * Output format: "event1:limit1,event2:limit2,..." followed by newline
+ * Example: "RR_KSWAPD:10,RR_DIRECT_RECLAIM:5\n"
+ *
+ * Return: Number of bytes read on success, negative error code on failure
+ */
+static ssize_t proc_oom_rate_limit_show(struct file *file,
+					char __user *buf,
+					size_t count, loff_t *ppos)
+{
+	char *kbuf;
+	int ret;
+
+	kbuf = kzalloc(OOM_RATE_LIMIT_RAW_STR_MAX_LEN, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	ret = oom_rate_limit_config_read(kbuf, OOM_RATE_LIMIT_RAW_STR_MAX_LEN);
+	if (ret < 0) {
+		kfree(kbuf);
+		return ret;
+	}
+
+	ret = simple_read_from_buffer(buf, count, ppos, kbuf, ret);
+	kfree(kbuf);
+
+	return ret;
+}
+
+static const struct proc_ops proc_oom_rate_limit_file_operations = {
+	.proc_read	= proc_oom_rate_limit_show,
+	.proc_write	= proc_oom_rate_limit_write,
+};
+
+/**
  * ub_mem_ras_handler - UB memory RAS error handler
  * @phys_addr: Physical address of the error
  * @err_type: Error type
@@ -465,10 +576,11 @@ static int ub_mem_ras_handler(uint64_t phys_addr, enum ras_err_type err_type)
 {
 	struct sentry_msg_helper_msg msg = {0};
 	struct page *page;
+	unsigned long pfn;
 	int ret;
 
 	if (!g_ub_mem_fault_enable)
-		return NOTIFY_OK;
+		return 0;
 
 	pr_info("ub mem error: type=%d\n", err_type);
 
@@ -498,10 +610,15 @@ static int ub_mem_ras_handler(uint64_t phys_addr, enum ras_err_type err_type)
 		pr_info("ub mem error: mem mode is fd mode\n");
 	} else {
 		/* NUMA mode */
+		pfn = PHYS_PFN(phys_addr);
 		msg.helper_msg_info.ub_mem_info.mem_type = NUMA_MODE;
 		pr_info("ub mem error: mem mode is numa mode\n");
-		if (msg.helper_msg_info.ub_mem_info.fault_with_kill)
-			memory_failure_queue(PHYS_PFN(phys_addr), 0);
+		if (pfn != 0) {
+			if (msg.helper_msg_info.ub_mem_info.fault_with_kill)
+				memory_failure_queue(pfn, 0);
+		} else {
+			pr_warn("pfn is 0x0, skip memory_failure processing\n");
+		}
 	}
 
 	ret = smh_message_send(&msg, false);
@@ -524,6 +641,8 @@ static int __init sentry_reporter_init(void)
 	if (ret)
 		return ret;
 
+	oom_rate_limit_init();
+
 	g_sentry_reporter_proc_dir = proc_mkdir_mode("sentry_reporter",
 						     PROC_DIR_PERMISSION, NULL);
 	if (!g_sentry_reporter_proc_dir) {
@@ -543,6 +662,9 @@ static int __init sentry_reporter_init(void)
 	ret |= sentry_create_proc_file("ub_mem_fault",
 				      g_sentry_reporter_proc_dir,
 				      &proc_ub_mem_fault_enable_file_operations);
+	ret |= sentry_create_proc_file("oom_rate_limit",
+				      g_sentry_reporter_proc_dir,
+				      &proc_oom_rate_limit_file_operations);
 	if (ret < 0)
 		goto remove_proc_dir;
 

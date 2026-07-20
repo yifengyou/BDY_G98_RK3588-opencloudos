@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
+#include <linux/delay.h>
 
 #include "conti_mem_allocator.h"
 
@@ -381,6 +382,7 @@ out:
 	return found;
 }
 
+#define CLEAR_THREAD_DELAY_MS 10000
 static int conti_clear_thread(void *p)
 {
 	struct conti_mem_allocator *allocator = p;
@@ -422,6 +424,8 @@ static int conti_clear_thread(void *p)
 			list_add(&node->list, &allocator->memseg_ready);
 		}
 		spin_unlock_irqrestore(&allocator->lock, flags);
+		if (ret)
+			msleep_interruptible(CLEAR_THREAD_DELAY_MS);
 	}
 	pr_debug("%s: nid=%d, exit\n", __func__, allocator->nid);
 

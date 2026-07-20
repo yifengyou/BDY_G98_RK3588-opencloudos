@@ -76,6 +76,7 @@ obj-$(CONFIG_ARM64_MTE)			+= mte.o
 obj-y					+= vdso-wrap.o
 obj-$(CONFIG_COMPAT_VDSO)		+= vdso32-wrap.o
 obj-$(CONFIG_UNWIND_PATCH_PAC_INTO_SCS)	+= patch-scs.o
+obj-$(CONFIG_ARM64_SYNC_SEI)		+= arm64_sync_sei.o
 CFLAGS_patch-scs.o			+= -mbranch-protection=none
 obj-$(CONFIG_SCHED_PARAL)		+= prefer_numa.o
 
