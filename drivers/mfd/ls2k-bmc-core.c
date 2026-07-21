@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kbd_kern.h>
 #include <linux/kernel.h>
@@ -427,29 +428,34 @@ static int ls2k_bmc_init(struct ls2k_bmc_ddata *ddata)
  */
 static int ls2k_bmc_parse_mode(struct pci_dev *pdev, struct simplefb_platform_data *pd)
 {
-	char *mode;
+	void __iomem *mode_addr;
+	char mode_buf[64];
+	char *mode = mode_buf;
 	int depth, ret;
 
 	/* The last 16M of PCI BAR0 is used to store the resolution string. */
-	mode = devm_ioremap(&pdev->dev, pci_resource_start(pdev, 0) + SZ_16M, SZ_16M);
-	if (!mode)
+	mode_addr = devm_ioremap(&pdev->dev, pci_resource_start(pdev, 0) + SZ_16M,
+				 SZ_16M);
+	if (!mode_addr)
 		return -ENOMEM;
+	memcpy_fromio(mode_buf, mode_addr, sizeof(mode_buf) - 1);
+	mode_buf[sizeof(mode_buf) - 1] = '\0';
 
 	/* The resolution field starts with the flag "video=". */
 	if (!strncmp(mode, "video=", 6))
 		mode = mode + 6;
 
 	ret = kstrtoint(strsep(&mode, "x"), 10, &pd->width);
-	if (ret)
-		return ret;
+	if (ret || !mode)
+		return ret ?: -EINVAL;
 
 	ret = kstrtoint(strsep(&mode, "-"), 10, &pd->height);
-	if (ret)
-		return ret;
+	if (ret || !mode)
+		return ret ?: -EINVAL;
 
 	ret = kstrtoint(strsep(&mode, "@"), 10, &depth);
-	if (ret)
-		return ret;
+	if (ret || !mode)
+		return ret ?: -EINVAL;
 
 	pd->stride = pd->width * depth / 8;
 	pd->format = depth == 32 ? "a8r8g8b8" : "r5g6b5";
