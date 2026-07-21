@@ -15,6 +15,8 @@
 
 #include "perm_table.h"
 
+#define LOCAL_TECT_TAG 0
+
 extern struct platform_driver ummu_driver;
 extern const struct ummu_core_ops ummu_ops;
 extern const struct ummu_device_helper ummu_helper;
@@ -31,7 +33,7 @@ struct ummu_l1_tct_desc {
 	phys_addr_t	l2ptr_phys;
 };
 
-bool ummu_sva_indep_page_table_enable(void);
+bool ummu_sva_separated_enabled(void);
 
 enum ummu_device_msi_index {
 	EVTQ_MSI_INDEX,

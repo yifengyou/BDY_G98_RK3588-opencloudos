@@ -63,6 +63,7 @@ enum ubase_opcode_type {
 	UBASE_OPC_ADD_MAC_TBL		= 0x241B,
 	UBASE_OPC_DEL_MAC_TBL		= 0x241C,
 	UBASE_OPC_QUERY_MAC_TBL		= 0x241E,
+	UBASE_OPC_QUERY_MNG_TBL		= 0x241F,
 
 	/* TP commands */
 	UBASE_OPC_TP_TIMER_VA_CONFIG	= 0x3007,
@@ -201,4 +202,4 @@ int ubase_register_crq_event(struct auxiliary_device *aux_dev,
 			     struct ubase_crq_event_nb *nb);
 void ubase_unregister_crq_event(struct auxiliary_device *aux_dev, u16 opcode);
 
-#endif
+#endif /* _UBASE_COMM_CMD_H_ */

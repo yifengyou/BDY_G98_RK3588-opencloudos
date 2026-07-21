@@ -21,4 +21,4 @@ int unic_mac_pause_en_cfg(struct unic_dev *unic_dev, u32 tx_pause,
 			  u32 rx_pause);
 int unic_pfc_pause_cfg(struct unic_dev *unic_dev, u8 pfc_en);
 
-#endif
+#endif /* __UNIC_IP_H__ */

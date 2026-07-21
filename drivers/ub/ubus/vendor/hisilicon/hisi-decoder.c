@@ -181,6 +181,7 @@ static void rgtlb_free_page(struct ub_decoder *decoder,
 			    struct page_table_desc *desc,
 			    struct range_table_entry *rgtlb_entry)
 {
+	memset(desc->page_base, 0, RANGE_TABLE_PAGE_SIZE);
 	dmam_free_coherent(decoder->dev, RANGE_TABLE_PAGE_SIZE, desc->page_base,
 			   desc->page_dma);
 	rgtlb_entry->next_lv_addr = decoder->invalid_page_dma;
@@ -280,6 +281,7 @@ static int rgtlb_unmap_to_range(struct ub_decoder *decoder,
 	int i, j, ret;
 	bool flag;
 
+	rgtlb_entry->token_value = 0;
 	for (i = 0; i < RGTLB_TO_PGTLB; i++) {
 		pgtlb_entry = (struct page_table_entry *)rgtlb_entry + i;
 		pgtlb_entry->entry_type = PAGE_TABLE;
@@ -313,6 +315,7 @@ static int rgtlb_unmap_to_range(struct ub_decoder *decoder,
 		}
 	}
 
+	memset(rg_base, 0, RANGE_TABLE_PAGE_SIZE);
 	dmam_free_coherent(decoder->dev, RANGE_TABLE_PAGE_SIZE, rg_base,
 			   rg_dma);
 	return 0;
@@ -405,6 +408,7 @@ static void pgtlb_free_page(struct ub_decoder *decoder,
 			    struct page_table_desc *desc,
 			    struct page_table_entry *pgtlb_entry)
 {
+	memset(desc->page_base, 0, PAGE_TABLE_PAGE_SIZE);
 	dmam_free_coherent(decoder->dev, PAGE_TABLE_PAGE_SIZE, desc->page_base,
 			   desc->page_dma);
 	pgtlb_entry->next_lv_addr = decoder->invalid_page_dma;
@@ -715,29 +719,35 @@ void hi_free_decoder_table(struct ub_decoder *decoder)
 
 int hi_decoder_unmap(struct ub_decoder *decoder, phys_addr_t addr, u64 size)
 {
-	int ret;
 	struct decoder_map_info info = {
 		.pa = addr,
 		.size = size,
 	};
+	int ret;
 
-	if (size < SZ_1M)
-		size = SZ_1M;
+	info.size = ALIGN(info.size, SZ_1M);
 	ret = handle_table(decoder, &info, false);
 	if (ret)
 		return ret;
-	return hi_decoder_cmd_request(decoder, addr, size, TLBI_PARTIAL);
+	return hi_decoder_cmd_request(decoder, info.pa, info.size, TLBI_PARTIAL);
 }
 
 int hi_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
 {
-	if (info->size < SZ_1M)
-		info->size = SZ_1M;
+	info->size = ALIGN(info->size, SZ_1M);
+
 	ub_info(decoder->uent,
 		"decoder map, pa=%#llx, uba=%#llx, size=%#llx, cna=%#x, orderid=%#x, ordertype=%#x, eid_l=%#llx, eid_h=%#llx, upi=%#x src_eid=%#x\n",
 		info->pa, info->uba, info->size, info->tpg_num, info->order_id,
 		info->order_type, info->eid_low, info->eid_high, info->upi,
 		info->src_eid);
+
+	if (info->pa < decoder->mmio_base_addr ||
+	    info->pa + info->size - 1 > decoder->mmio_end_addr ||
+	    info->pa > info->pa + info->size - 1) {
+		pr_err("decoder map range check error\n");
+		return -EINVAL;
+	}
 
 	return handle_table(decoder, info, true);
 }

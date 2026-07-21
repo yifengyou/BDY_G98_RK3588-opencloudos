@@ -26,4 +26,4 @@ int unic_query_link_status(struct unic_dev *unic_dev, u8 *link_status);
 int unic_register_netdevice_notifier(void);
 void unic_unregister_netdevice_notifier(void);
 
-#endif
+#endif /* __UNIC_NETDEV_H__ */

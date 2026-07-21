@@ -112,4 +112,4 @@ int unic_set_rss_tc_mode(struct unic_dev *unic_dev, u8 tc_vaild);
 int unic_query_rss_cfg(struct unic_dev *unic_dev,
 		       struct unic_cfg_rss_cmd *resp);
 
-#endif
+#endif /* __UNIC_HW_H__ */

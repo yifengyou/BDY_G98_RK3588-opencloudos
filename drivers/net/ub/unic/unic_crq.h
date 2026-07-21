@@ -9,4 +9,4 @@
 
 int unic_handle_link_status_event(void *dev, void *data, u32 len);
 
-#endif
+#endif /* __UNIC_CRQ_H__ */

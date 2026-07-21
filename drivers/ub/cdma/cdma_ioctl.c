@@ -419,7 +419,7 @@ static int cdma_cmd_create_queue(struct cdma_ioctl_hdr *hdr, struct cdma_file *c
 {
 	struct cdma_cmd_create_queue_args arg = { 0 };
 	struct cdma_dev *cdev = cfile->cdev;
-	struct queue_cfg cfg;
+	struct queue_cfg cfg = { 0 };
 	struct cdma_queue *queue;
 	struct cdma_uobj *uobj;
 	int ret;
@@ -434,21 +434,18 @@ static int cdma_cmd_create_queue(struct cdma_ioctl_hdr *hdr, struct cdma_file *c
 		return -EFAULT;
 	}
 
-	cfg = (struct queue_cfg) {
-		.queue_depth = arg.in.queue_depth,
-		.dcna = arg.in.dcna,
-		.priority = arg.in.priority,
-		.rmt_eid.dw0 = arg.in.rmt_eid,
-		.user_ctx = arg.in.user_ctx,
-		.trans_mode = arg.in.trans_mode,
-	};
-
 	uobj = cdma_uobj_create(cfile, UOBJ_TYPE_QUEUE);
 	if (IS_ERR(uobj)) {
 		dev_err(cdev->dev, "create queue uobj failed.\n");
 		return -ENOMEM;
 	}
 
+	cfg.queue_depth = arg.in.queue_depth;
+	cfg.dcna = arg.in.dcna;
+	cfg.priority = arg.in.priority;
+	cfg.rmt_eid.dw0 = arg.in.rmt_eid;
+	cfg.user_ctx = arg.in.user_ctx;
+	cfg.trans_mode = arg.in.trans_mode;
 	queue = cdma_create_queue(cdev, cfile->uctx, &cfg, 0, false);
 	if (!queue) {
 		dev_err(cdev->dev, "create queue failed.\n");

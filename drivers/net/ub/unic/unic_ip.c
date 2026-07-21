@@ -229,8 +229,8 @@ static int unic_set_stack_ip(struct net_device *dev,
 
 	skb = alloc_skb(NLMSG_ALIGN(sizeof(*req)), GFP_KERNEL);
 	if (!skb) {
-		unic_info(unic_dev,
-			  "failed to alloc skb, unic stop setting stack ip.\n");
+		unic_err(unic_dev,
+			 "failed to alloc skb, unic stop setting stack ip.\n");
 		return -ENOMEM;
 	}
 

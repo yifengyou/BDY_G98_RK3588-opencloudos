@@ -53,24 +53,24 @@ enum {
 #define unic_get_cap_bit(unic_dev, nr) \
 	test_bit(nr, (unsigned long *)((unic_dev)->cap_bits))
 
-#define UNIC_USER_UPE				BIT(0) /* unicast promisc enabled by user */
-#define UNIC_USER_MPE				BIT(1) /* mulitcast promisc enabled by user */
-#define UNIC_USER_BPE				BIT(2) /* broadcast promisc enabled by user */
-#define UNIC_OVERFLOW_MGP			BIT(3) /* mulitcast guid overflow */
-#define UNIC_OVERFLOW_IPP			BIT(4) /* unicast ip overflow */
-#define UNIC_OVERFLOW_UP_MAC			BIT(5) /* unicast mac overflow */
-#define UNIC_OVERFLOW_MP_MAC			BIT(6) /* multicast mac overflow */
-#define UNIC_UPE				(UNIC_USER_UPE | \
-						 UNIC_OVERFLOW_IPP | \
-						 UNIC_OVERFLOW_UP_MAC)
-#define UNIC_MPE				(UNIC_USER_MPE | \
-						 UNIC_OVERFLOW_MGP | \
-						 UNIC_OVERFLOW_MP_MAC)
+#define UNIC_USER_UPE		BIT(0) /* unicast promisc enabled by user */
+#define UNIC_USER_MPE		BIT(1) /* multicast promisc enabled by user */
+#define UNIC_USER_BPE		BIT(2) /* broadcast promisc enabled by user */
+#define UNIC_OVERFLOW_MGP	BIT(3) /* multicast guid overflow */
+#define UNIC_OVERFLOW_IPP	BIT(4) /* unicast ip overflow */
+#define UNIC_OVERFLOW_UP_MAC	BIT(5) /* unicast mac overflow */
+#define UNIC_OVERFLOW_MP_MAC	BIT(6) /* multicast mac overflow */
+#define UNIC_UPE		(UNIC_USER_UPE | \
+				 UNIC_OVERFLOW_IPP | \
+				 UNIC_OVERFLOW_UP_MAC)
+#define UNIC_MPE		(UNIC_USER_MPE | \
+				 UNIC_OVERFLOW_MGP | \
+				 UNIC_OVERFLOW_MP_MAC)
 
-#define UNIC_RSS_MAX_VL_NUM		UBASE_NIC_MAX_VL_NUM
-#define UNIC_INVALID_PRIORITY		(0xff)
-#define UNIC_MAX_PRIO_NUM		IEEE_8021QAZ_MAX_TCS
-#define UNIC_VL_TSA_DWRR		IEEE_8021QAZ_TSA_ETS
+#define UNIC_RSS_MAX_VL_NUM	UBASE_NIC_MAX_VL_NUM
+#define UNIC_INVALID_PRIORITY	(0xff)
+#define UNIC_MAX_PRIO_NUM	IEEE_8021QAZ_MAX_TCS
+#define UNIC_VL_TSA_DWRR	IEEE_8021QAZ_TSA_ETS
 
 /* must be consistent with definition in firmware */
 enum unic_media_type {
@@ -120,4 +120,4 @@ enum unic_mac_speed {
 
 #define UNIC_MBYTE_PER_SEND	125000
 
-#endif
+#endif /* __UNIC_H__ */

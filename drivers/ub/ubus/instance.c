@@ -95,7 +95,7 @@ static void ub_bus_instance_destroy(struct ub_bus_instance *bi)
 	if (is_dynamic(bi))
 		tar = &bi->info.guid.id;
 
-	ummu_core_del_eid(tar, bi->info.eid, EID_BYPASS);
+	ummu_core_del_eid(tar, bi->info.eid, EID_NONE);
 	ub_unregister_bus_instance(bi);
 }
 
@@ -415,7 +415,7 @@ int ub_static_bus_instance_init(struct ub_bus_controller *ubc)
 	}
 
 	ret = ummu_core_add_eid((guid_t *)&guid_null, bi->info.eid,
-				EID_BYPASS);
+				EID_NONE);
 	if (ret) {
 		dev_err(&ubc->dev, "static server ummu core add eid, ret=%d\n",
 			ret);
@@ -510,7 +510,7 @@ int ub_ioctl_bus_instance_create(void __user *uptr)
 	bi_info_init(&info, &create);
 
 	mutex_lock(&dynamic_mutex);
-	bi = ub_dynamic_bus_instance_create(&info, EID_BYPASS);
+	bi = ub_dynamic_bus_instance_create(&info, EID_NONE);
 	if (IS_ERR(bi)) {
 		pr_err("bus instance create failed, ret=%ld\n", PTR_ERR(bi));
 		mutex_unlock(&dynamic_mutex);
@@ -672,7 +672,7 @@ ub_static_cluster_instance_create(struct ub_bus_controller *ubc, u32 *guid,
 		goto put;
 
 	ret = ummu_core_add_eid((guid_t *)&guid_null, bi->info.eid,
-				EID_BYPASS);
+				EID_NONE);
 	if (ret) {
 		dev_err(&ubc->dev, "bus instance add eid failed, ret=%d\n", ret);
 		goto unregister;

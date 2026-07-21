@@ -194,7 +194,8 @@ static int unic_dbg_dump_ctx_sw(struct seq_file *s, void *data,
 {
 	struct unic_dbg_context {
 		void (*print_ctx_titles)(struct seq_file *s);
-		void (*get_ctx)(struct unic_channels *channels, struct seq_file *s, u32 index);
+		void (*get_ctx)(struct unic_channels *channels,
+				struct seq_file *s, u32 index);
 	} dbg_ctx[] = {
 		{
 			.print_ctx_titles = unic_jfs_ctx_titles_print,
@@ -267,7 +268,8 @@ int unic_dbg_dump_sq_rq_cq_info(struct seq_file *s, void *data)
 {
 	struct unic_dbg_context {
 		void (*print_titles)(struct seq_file *s);
-		void (*get_info)(struct unic_dev *priv, struct seq_file *s, u32 index);
+		void (*get_info)(struct unic_dev *priv, struct seq_file *s,
+				 u32 index);
 	} dbg_ctx[] = {
 		{
 			.print_titles = unic_jfs_sq_info_print,

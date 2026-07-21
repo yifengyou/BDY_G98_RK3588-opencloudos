@@ -11,8 +11,6 @@
 #include "ummu.h"
 
 enum ummu_mpam_type {
-	/* Memory traffic monitoring of the UB device. */
-	UMMU_MASTER_MPAM = 0,
 	/* Memory traffic monitoring of the UB device when ummu is bypassed. */
 	UMMU_BYPASS_MPAM,
 	/*
@@ -29,5 +27,4 @@ int ummu_set_bypass_mpam(struct ummu_device *ummu, int partid, int pmg);
 int ummu_get_bypass_mpam(struct ummu_device *ummu, int *partid, int *pmg);
 int ummu_set_uotr_mpam(struct ummu_device *ummu, int partid, int pmg);
 int ummu_get_uotr_mpam(struct ummu_device *ummu, int *partid, int *pmg);
-
 #endif  /* __UMMU_QOS_H__ */

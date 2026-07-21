@@ -17,8 +17,8 @@
 #include <linux/cleanup.h>
 #include <linux/iommufd.h>
 #include <linux/ummu_core.h>
+#include <linux/hisi_ummu.h>
 
-#include "../ummu_cfg_v1.h"
 #include "logic_ummu.h"
 
 struct logic_ummu_device {
@@ -730,8 +730,7 @@ static int logic_domain_set_dirty_ops(struct logic_ummu_domain *logic_domain)
 			return -ENOMEM;
 
 		GEN_IOMMU_DIRTY_OPS(agent_domain->dirty_ops, dirty_ops);
-		ret = xa_err(xa_store(&logic_ummu_ops_info,
-				      (uintptr_t)agent_domain->dirty_ops,
+		ret = xa_err(xa_store(&logic_ummu_ops_info, (uintptr_t)agent_domain->dirty_ops,
 				      dirty_ops, GFP_KERNEL));
 		if (ret) {
 			kfree(dirty_ops);
@@ -757,8 +756,7 @@ static int logic_domain_set_perm_ops(struct logic_ummu_domain *logic_domain)
 			return -ENOMEM;
 
 		GEN_IOMMU_PERM_OPS(agent_domain->perm_ops, perm_ops);
-		ret = xa_err(xa_store(&logic_ummu_ops_info,
-				      (uintptr_t)agent_domain->perm_ops,
+		ret = xa_err(xa_store(&logic_ummu_ops_info, (uintptr_t)agent_domain->perm_ops,
 				      perm_ops, GFP_KERNEL));
 		if (ret) {
 			kfree(perm_ops);
@@ -1963,7 +1961,7 @@ static void logic_ummu_device_del_agent(void)
 
 static int update_logic_ummu(struct ummu_device *ummu)
 {
-	int ret;
+	int ret = 0;
 
 	logic_ummu.ummu_cnt++;
 	list_add_tail(&ummu->list, &logic_ummu.dev_list);

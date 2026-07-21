@@ -23,7 +23,7 @@
 #include <linux/ummu_core.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
-#include "../../iommu/hisilicon/ummu_cfg_v1.h"
+#include <linux/hisi_ummu.h>
 #include <uapi/ub/ubmempfd/ubmempfd.h>
 
 #define UBMEMPFD_MISC_NAME "ubmempfd"
@@ -406,4 +406,5 @@ module_init(ubmempfd_core_init);
 module_exit(ubmempfd_core_exit);
 
 MODULE_DESCRIPTION("Hisilicon UB Memory Provider File Descriptor Driver For Qemu");
+MODULE_AUTHOR("HiSilicon Tech. Co., Ltd.");
 MODULE_LICENSE("GPL");

@@ -13,7 +13,7 @@
 
 #define to_ub_slot(s) container_of(s, struct ub_slot, kobj)
 
-static void ubhp_destory_slot(struct ub_slot *slot)
+static void ubhp_destroy_slot(struct ub_slot *slot)
 {
 	mutex_destroy(&slot->state_lock);
 	kfree(slot);
@@ -23,7 +23,7 @@ static void ubhp_slot_release(struct kobject *kobj)
 {
 	struct ub_slot *slot = to_ub_slot(kobj);
 
-	ubhp_destory_slot(slot);
+	ubhp_destroy_slot(slot);
 }
 
 enum slot_state {
@@ -332,7 +332,7 @@ static int ubhp_probe(struct ub_service_device *sdev)
 
 		ret = ubhp_setup_slot(slot, uent, i);
 		if (ret) {
-			ubhp_destory_slot(slot);
+			ubhp_destroy_slot(slot);
 			goto free_slots;
 		}
 

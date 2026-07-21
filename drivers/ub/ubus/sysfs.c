@@ -6,11 +6,12 @@
 #define pr_fmt(fmt)	"ubus sysfs: " fmt
 
 #include "ubus.h"
-#include "sysfs.h"
 #include "ubus_entity.h"
 #include "instance.h"
 #include "port.h"
 #include "resource.h"
+#include "ubus_driver.h"
+#include "sysfs.h"
 
 static inline void ub_resource_to_user(const struct ub_entity *dev, int res_id,
 				       const struct resource *rsrc,
@@ -673,8 +674,10 @@ static ssize_t ue_list_show(struct device *dev, struct device_attribute *attr,
 	struct ub_entity *ent;
 	int cnt = 0;
 
+	down_read(&ub_bus_sem);
 	list_for_each_entry(ent, &uent->ue_list, node)
 		cnt += sysfs_emit_at(buf, cnt, "%s\n", dev_name(&ent->dev));
+	up_read(&ub_bus_sem);
 
 	return cnt;
 }
@@ -687,8 +690,10 @@ static ssize_t mue_list_show(struct device *dev, struct device_attribute *attr,
 	struct ub_entity *ent;
 	int cnt = 0;
 
+	down_read(&ub_bus_sem);
 	list_for_each_entry(ent, &uent->mue_list, node)
 		cnt += sysfs_emit_at(buf, cnt, "%s\n", dev_name(&ent->dev));
+	up_read(&ub_bus_sem);
 
 	return cnt;
 }

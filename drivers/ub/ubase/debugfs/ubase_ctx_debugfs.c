@@ -21,7 +21,7 @@ static void ubase_dump_eq_ctx(struct seq_file *s, struct ubase_eq *eq)
 	seq_printf(s, "%-10u", eq->eqe_size);
 	seq_printf(s, "%-11u", eq->eq_period);
 	seq_printf(s, "%-14u", eq->coalesce_cnt);
-	seq_printf(s, "%-6u", eq->irqn);
+	seq_printf(s, "%-6d", eq->irqn);
 	seq_printf(s, "%-10u", eq->eqc_irqn);
 	seq_printf(s, "%-12u", eq->cons_index);
 	seq_puts(s, "\n");
@@ -174,10 +174,10 @@ static void __ubase_print_context_hw(struct seq_file *s, void *ctx_addr,
  * @ctx_addr: context address
  * @ctx_len: context length
  *
- * This function outputs the contents of `ctx_addr` to a seq_file according to
+ * This function outputs the contents of 'ctx_addr' to a seq_file according to
  * the specified format.
- * Each line in the file is 32 bits, and the number of lines is `ctx_len / sizeof(u32)`.
- * If `ctx_len` is not an integer multiple of 4, there will be truncation at the end.
+ * Each line in the file is 32 bits, and the number of lines is 'ctx_len / sizeof(u32)'.
+ * If 'ctx_len' is not an integer multiple of 4, there will be truncation at the end.
  *
  * Context: Any context.
  */
@@ -214,17 +214,17 @@ static int ubase_dbg_dump_ctx_hw(struct seq_file *s, void *data,
 	ubase_get_ctx_info(udev, ctx_type, &ctx_info);
 	for (ctxn = 0; ctxn < ubase_get_ctx_num(udev, ctx_type); ctxn++) {
 		ubase_fill_mbx_attr(&attr, ctxn + ctx_info.start_idx,
-					ctx_info.op, 0);
+				    ctx_info.op, 0);
 		ret = __ubase_hw_upgrade_ctx_ex(udev, &attr, mailbox);
 		if (ret) {
 			ubase_err(udev,
-					"failed to post query %s ctx mbx, ret = %d.\n",
-					ctx_info.ctx_name, ret);
+				  "failed to post query %s ctx mbx, ret = %d.\n",
+				  ctx_info.ctx_name, ret);
 			goto upgrade_ctx_err;
 		}
 
 		seq_printf(s, "offset\t%s%u\n", ctx_info.ctx_name,
-				ctxn + ctx_info.start_idx);
+			   ctxn + ctx_info.start_idx);
 		ubase_mask_ctx_key_words(mailbox->buf, ctx_type);
 		__ubase_print_context_hw(s, mailbox->buf, ctx_info.ctx_size);
 		seq_puts(s, "\n");

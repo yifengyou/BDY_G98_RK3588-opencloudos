@@ -55,6 +55,11 @@ struct ub_bus_controller *ub_find_bus_controller_by_cna(u32 cna)
 {
 	struct ub_bus_controller *ubc;
 
+	if (!get_ub_manage_subsystem_ops()) {
+		pr_err("manage subsystem ops is null\n");
+		return NULL;
+	}
+
 	list_for_each_entry(ubc, &ubc_list, node)
 		if (ubc->uent->cna == cna)
 			return ubc;

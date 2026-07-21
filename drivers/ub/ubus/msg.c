@@ -103,8 +103,20 @@ void message_remove_device(struct ub_entity *uent)
 int message_sync_request(struct message_device *mdev, struct msg_info *info,
 			 u8 code)
 {
-	if (mdev->ops->sync_request)
-		return mdev->ops->sync_request(mdev, info, code);
+	int ret, i = 1;
+
+	if (mdev->ops->sync_request) {
+		while (1) {
+			ret = mdev->ops->sync_request(mdev, info, code);
+			if (ret != -ETIMEDOUT)
+				return ret;
+
+			i++;
+
+			if (!msg_retry || i > RETRY_COUNT)
+				return -ETIMEDOUT;
+		}
+	}
 
 	return -ENOTTY;
 }
@@ -131,8 +143,20 @@ EXPORT_SYMBOL_GPL(message_response);
 int message_sync_enum(struct message_device *mdev, struct msg_info *info,
 		      u8 cmd)
 {
-	if (mdev->ops->sync_enum)
-		return mdev->ops->sync_enum(mdev, info, cmd);
+	int ret, i = 1;
+
+	if (mdev->ops->sync_enum) {
+		while (1) {
+			ret = mdev->ops->sync_enum(mdev, info, cmd);
+			if (ret != -ETIMEDOUT)
+				return ret;
+
+			i++;
+
+			if (!msg_retry || i > RETRY_COUNT)
+				return -ETIMEDOUT;
+		}
+	}
 
 	return -ENOTTY;
 }
@@ -231,12 +255,27 @@ static bool msg_rx_code_valid(struct ub_bus_controller *ubc, u8 code)
 	if (msg_type(code) == MSG_RSP)
 		return false;
 
-	if (msg == UB_MSG_CODE_RAS || msg == UB_MSG_CODE_CFG ||
-	    msg == UB_MSG_CODE_EXCH || msg == UB_MSG_CODE_MAX)
+	switch (msg) {
+	case UB_MSG_CODE_RAS:
+	case UB_MSG_CODE_CFG:
+	case UB_MSG_CODE_EXCH:
+	case UB_MSG_CODE_SEC:
+	case UB_MSG_CODE_MAX:
 		return false;
 
-	if (!ubc->cluster && msg == UB_MSG_CODE_POOL)
+	case UB_MSG_CODE_POOL:
+		if (!ubc->cluster)
+			return false;
+		break;
+
+	default:
+		break;
+	}
+
+	if (!rx_msg_wq[msg]) {
+		dev_err(&ubc->dev, "no workqueue registered for msg %u\n", msg);
 		return false;
+	}
 
 	return true;
 }
@@ -366,11 +405,11 @@ int ub_vdm_message(struct ub_entity *uent, struct ub_vdm_pld *vdm_pld)
 		return -EINVAL;
 	}
 
-	req_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->req_pld_len, GFP_KERNEL);
+	req_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->req_pld_len, GFP_ATOMIC);
 	if (!req_pkt)
 		return -ENOMEM;
 
-	rsp_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->rsp_buf_len, GFP_KERNEL);
+	rsp_pkt = kzalloc(MSG_PKT_HEADER_SIZE + vdm_pld->rsp_buf_len, GFP_ATOMIC);
 	if (!rsp_pkt) {
 		kfree(req_pkt);
 		return -ENOMEM;

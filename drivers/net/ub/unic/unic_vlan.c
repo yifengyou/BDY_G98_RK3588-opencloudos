@@ -54,7 +54,7 @@ void unic_uninit_vlan_config(struct unic_dev *unic_dev)
 	spin_unlock_bh(&vlan_tbl->vlan_lock);
 
 	list_for_each_entry_safe(vlan, tmp, &tmp_del_list, node) {
-		(void)unic_set_port_vlan_hw(unic_dev, vlan->vlan_id, false);
+		unic_set_port_vlan_hw(unic_dev, vlan->vlan_id, false);
 		list_del(&vlan->node);
 		kfree(vlan);
 	}

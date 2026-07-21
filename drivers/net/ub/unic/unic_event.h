@@ -13,4 +13,4 @@ int unic_register_event(struct auxiliary_device *adev);
 void unic_unregister_event(struct auxiliary_device *adev);
 int unic_comp_handler(struct notifier_block *nb, unsigned long jfcn, void *data);
 
-#endif
+#endif /* __UNIC_EVENT_H__ */

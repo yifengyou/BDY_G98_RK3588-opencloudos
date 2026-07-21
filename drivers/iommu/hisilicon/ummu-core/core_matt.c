@@ -37,10 +37,18 @@ static bool check_tid_mm_matched(struct ummu_matt_domain *matt_domain)
 {
 	struct mm_struct *mm;
 
-	mm = get_tid_mm(matt_domain->l_tid);
-	if (mm != matt_domain->mm) {
-		pr_debug("l_tid = %u mm not matched.\n", matt_domain->l_tid);
+	if (matt_domain->l_tid == UMMU_INVALID_TID &&
+	    matt_domain->r_tid == UMMU_INVALID_TID) {
+		pr_debug("l_tid and r_tid are invalid.\n");
 		return false;
+	}
+
+	if (matt_domain->l_tid != UMMU_INVALID_TID) {
+		mm = get_tid_mm(matt_domain->l_tid);
+		if (mm != matt_domain->mm) {
+			pr_debug("l_tid = %u mm not matched.\n", matt_domain->l_tid);
+			return false;
+		}
 	}
 
 	if (matt_domain->r_tid != UMMU_INVALID_TID) {
@@ -118,16 +126,15 @@ int ummu_sva_matt_map(struct ummu_matt_domain *matt_domain, unsigned long addr,
 	if (unlikely(!matt_domain || !sgt))
 		return -EINVAL;
 
-	if (matt_domain->l_tid == UMMU_INVALID_TID)
-		return -ENOPARAM;
-
 	if (!check_tid_mm_matched(matt_domain))
 		return -EPERM;
 
-	ret = sva_matt_inner_map(matt_domain->l_tid,
-				 addr, sgt, prot, &l_mapped);
-	if (ret)
-		return ret;
+	if (matt_domain->l_tid != UMMU_INVALID_TID) {
+		ret = sva_matt_inner_map(matt_domain->l_tid,
+					 addr, sgt, prot, &l_mapped);
+		if (ret)
+			return ret;
+	}
 
 	if (matt_domain->r_tid != UMMU_INVALID_TID) {
 		ret = sva_matt_inner_map(matt_domain->r_tid,
@@ -138,7 +145,9 @@ int ummu_sva_matt_map(struct ummu_matt_domain *matt_domain, unsigned long addr,
 
 	return 0;
 err_out:
-	sva_matt_inner_unmap(matt_domain->l_tid, addr, l_mapped);
+	if (matt_domain->l_tid != UMMU_INVALID_TID)
+		sva_matt_inner_unmap(matt_domain->l_tid, addr, l_mapped);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ummu_sva_matt_map);
@@ -149,13 +158,11 @@ int ummu_sva_matt_unmap(struct ummu_matt_domain *matt_domain,
 	if (unlikely(!matt_domain))
 		return -EINVAL;
 
-	if (matt_domain->l_tid == UMMU_INVALID_TID)
-		return -ENOPARAM;
-
 	if (!check_tid_mm_matched(matt_domain))
 		return -EPERM;
 
-	sva_matt_inner_unmap(matt_domain->l_tid, addr, size);
+	if (matt_domain->l_tid != UMMU_INVALID_TID)
+		sva_matt_inner_unmap(matt_domain->l_tid, addr, size);
 
 	if (matt_domain->r_tid != UMMU_INVALID_TID)
 		sva_matt_inner_unmap(matt_domain->r_tid, addr, size);

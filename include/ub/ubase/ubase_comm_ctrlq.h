@@ -147,6 +147,25 @@ struct ubase_ctrlq_ue_msg_nb {
 	KABI_RESERVE(4)
 };
 
+/**
+ * ubase_ctrlq_ue_msg_info - ubase ctrlq ue msg information structure
+ * @service_ver: ctrlq ue msg service version
+ * @bus_ue_id: bus ub entity id
+ * @mbx_ue_id: mailbox ub entity id
+ * @ret: result
+ */
+struct ubase_ctrlq_ue_msg_info {
+	u8	service_ver;
+	u8	mbx_ue_id;
+	u16	bus_ue_id;
+	int	ret;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
 int ubase_ctrlq_send_msg(struct auxiliary_device *aux_dev,
 			 struct ubase_ctrlq_msg *msg);
 int ubase_ctrlq_register_crq_event(struct auxiliary_device *aux_dev,
@@ -165,5 +184,6 @@ int ubase_ctrlq_send_mue2ue_resp(struct auxiliary_device *adev, void *data, u16 
 				 u8 result);
 int ubase_ctrlq_send_ue_req(struct auxiliary_device *adev, void *data, u16 len);
 u16 ubase_ctrlq_ue_msg_header_len(void);
-
-#endif
+void ubase_ctrlq_parse_ue_msg(struct auxiliary_device *adev, void *data, u16 len,
+			      struct ubase_ctrlq_ue_msg_info *info);
+#endif /* _UBASE_COMM_CTRLQ_H_ */

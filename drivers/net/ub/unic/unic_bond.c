@@ -238,7 +238,8 @@ static int unic_send_bond_status_change_notify(struct auxiliary_device *adev,
 
 	ret = ubase_ctrlq_send_msg(adev, &msg);
 	if (ret)
-		unic_err(unic_dev, "failed to notify bond status change, port id = %u, bonding_cmd = %s, ret = %d.\n",
+		unic_err(unic_dev,
+			 "failed to notify bond status change, port id = %u, bonding_cmd = %s, ret = %d.\n",
 			 req.port_id, req.bonding_cmd == UNIC_CTRLQ_BOND_ADD_PORT ?
 			 "ADD" : "DEL", ret);
 

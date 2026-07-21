@@ -114,7 +114,8 @@ static int unic_check_ksettings_param(struct net_device *netdev,
 	/* if user not specify lanes, use current lanes */
 	lanes = cmd->lanes ? cmd->lanes : mac->lanes;
 	if (!unic_speed_supported(unic_dev, cmd->base.speed, lanes)) {
-		unic_err(unic_dev, "speed(%u) and lanes(%u) is not supported.\n",
+		unic_err(unic_dev,
+			 "speed(%uMbps) and lanes(%u) is not supported.\n",
 			 cmd->base.speed, lanes);
 		return -EINVAL;
 	}
@@ -155,7 +156,7 @@ static int unic_set_link_ksettings(struct net_device *netdev,
 		return ret;
 
 	unic_info(unic_dev,
-		  "set link: autoneg = %u, speed = %u, duplex = %u, lanes = %u.\n",
+		  "set link: autoneg = %u, speed = %uMbps, duplex = %u, lanes = %u.\n",
 		  cmd->base.autoneg, cmd->base.speed,
 		  cmd->base.duplex, cmd->lanes);
 
@@ -350,15 +351,15 @@ static int unic_check_gl_coalesce_para(struct net_device *netdev,
 
 	if (cmd->rx_coalesce_usecs > unic_dev->caps.max_int_gl) {
 		unic_err(unic_dev,
-			 "invalid rx-usecs value, rx-usecs range is [0, %u].\n",
-			 unic_dev->caps.max_int_gl);
+			 "invalid rx-usecs value(%u), rx-usecs range is [0, %u].\n",
+			 cmd->rx_coalesce_usecs, unic_dev->caps.max_int_gl);
 		return -EINVAL;
 	}
 
 	if (cmd->tx_coalesce_usecs > unic_dev->caps.max_int_gl) {
 		unic_err(unic_dev,
-			 "invalid tx-usecs value, tx-usecs range is [0, %u].\n",
-			 unic_dev->caps.max_int_gl);
+			 "invalid tx-usecs value(%u), tx-usecs range is [0, %u].\n",
+			 cmd->tx_coalesce_usecs, unic_dev->caps.max_int_gl);
 		return -EINVAL;
 	}
 
@@ -395,7 +396,9 @@ static int unic_check_ql_coalesce_para(struct net_device *netdev,
 	if (cmd->tx_max_coalesced_frames > unic_dev->caps.max_int_ql ||
 	    cmd->rx_max_coalesced_frames > unic_dev->caps.max_int_ql) {
 		unic_err(unic_dev,
-			 "invalid coalesced frames value, range is [0, %u].\n",
+			 "invalid coalesced frames value(tx = %u, rx = %u), range is [0, %u].\n",
+			 cmd->tx_max_coalesced_frames,
+			 cmd->rx_max_coalesced_frames,
 			 unic_dev->caps.max_int_ql);
 		return -ERANGE;
 	}

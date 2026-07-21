@@ -4,8 +4,8 @@
  *
  */
 
-#ifndef __UNIC_COMM_ADDR__
-#define __UNIC_COMM_ADDR__
+#ifndef __UNIC_COMM_ADDR_H__
+#define __UNIC_COMM_ADDR_H__
 
 #include <linux/in6.h>
 #include <linux/types.h>
@@ -41,11 +41,11 @@ struct unic_comm_addr_node {
 #define UNIC_FORMAT_MAC_OFFSET_5	5
 static inline void unic_comm_format_mac_addr(char *format_mac, const u8 *mac)
 {
-	(void)snprintf(format_mac, UNIC_FORMAT_MAC_LEN,
-		       "%02x:**:**:**:%02x:%02x",
-		       mac[UNIC_FORMAT_MAC_OFFSET_0],
-		       mac[UNIC_FORMAT_MAC_OFFSET_4],
-		       mac[UNIC_FORMAT_MAC_OFFSET_5]);
+	snprintf(format_mac, UNIC_FORMAT_MAC_LEN,
+		 "%02x:**:**:**:%02x:%02x",
+		 mac[UNIC_FORMAT_MAC_OFFSET_0],
+		 mac[UNIC_FORMAT_MAC_OFFSET_4],
+		 mac[UNIC_FORMAT_MAC_OFFSET_5]);
 }
 
 static inline bool unic_comm_addr_equal(const u8 *addr1, const u8 *addr2,
@@ -82,4 +82,4 @@ void unic_comm_sync_from_addr_add_list(struct list_head *add_list,
 				       bool *all_added);
 int unic_convert_ip_addr(struct sockaddr *addr, struct in6_addr *ip_addr);
 
-#endif
+#endif /* __UNIC_COMM_ADDR_H__ */

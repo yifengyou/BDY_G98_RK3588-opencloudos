@@ -57,7 +57,7 @@ static int ubase_init_pmem_ctx(struct ubase_dev *udev, const char *type,
 		return -ENOMEM;
 	}
 
-	ctx->sg = kzalloc(page_cnt * sizeof(struct scatterlist), GFP_KERNEL);
+	ctx->sg = kcalloc(page_cnt, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!ctx->sg) {
 		ubase_err(udev, "failed to alloc mem for %s sg.page_cnt=%u\n",
 			  type, page_cnt);
