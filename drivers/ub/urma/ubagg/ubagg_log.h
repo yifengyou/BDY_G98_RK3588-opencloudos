@@ -14,6 +14,7 @@
 
 #include <linux/types.h>
 #include <linux/printk.h>
+#include <linux/sched.h>
 
 enum ubagg_log_level {
 	UBAGG_LOG_LEVEL_EMERG = 0,
@@ -32,19 +33,14 @@ enum ubagg_log_level {
 #define UBAGG_LOG     "ubagg"
 
 #define ubagg_log(l, format, args...) \
-	pr_##l("%s|%s|%d|%s:[%d]|" format, UBAGG_LOG_TAG, UBAGG_LOG, \
-		((int)current->pid), __func__, __LINE__, ##args)
+	pr_##l("%s|%s|%d|%d|%s:[%d]|" format, UBAGG_LOG_TAG, UBAGG_LOG, \
+		((int)current->pid), ((int)task_pid_vnr(current)), \
+		__func__, __LINE__, ##args)
 
 #define UBAGG_RATELIMIT_INTERVAL (5 * HZ)
 #define UBAGG_RATELIMIT_BURST 100
 
 extern uint32_t g_ubagg_log_level;
-
-#define ubagg_log_info(...)                                \
-	do {                                                   \
-		if (g_ubagg_log_level >= UBAGG_LOG_LEVEL_INFO)     \
-			ubagg_log(info, __VA_ARGS__);                  \
-	} while (0)
 
 #define ubagg_log_err(...)                                 \
 	do {                                                   \
@@ -58,6 +54,18 @@ extern uint32_t g_ubagg_log_level;
 			ubagg_log(warn, __VA_ARGS__);                  \
 	} while (0)
 
+#define ubagg_log_notice(...)                              \
+	do {                                                   \
+		if (g_ubagg_log_level >= UBAGG_LOG_LEVEL_NOTICE)   \
+			ubagg_log(notice, __VA_ARGS__);                \
+	} while (0)
+
+#define ubagg_log_info(...)                                \
+	do {                                                   \
+		if (g_ubagg_log_level >= UBAGG_LOG_LEVEL_INFO)     \
+			ubagg_log(info, __VA_ARGS__);                  \
+	} while (0)
+
 /* No need to record debug log by printk_ratelimited */
 #define ubagg_log_debug(...)                               \
 	do {                                                   \
@@ -67,15 +75,6 @@ extern uint32_t g_ubagg_log_level;
 
 /* Rate Limited log to avoid soft lockup crash by quantities of printk */
 /* Current limit is 100 log every 5 seconds */
-#define ubagg_log_info_rl(...)                                           \
-	do {                                                                 \
-		static DEFINE_RATELIMIT_STATE(_rs, UBAGG_RATELIMIT_INTERVAL,     \
-					      UBAGG_RATELIMIT_BURST);                        \
-		if ((__ratelimit(&_rs)) &&                                       \
-		    (g_ubagg_log_level >= UBAGG_LOG_LEVEL_INFO))                 \
-			ubagg_log(info, __VA_ARGS__);                                \
-	} while (0)
-
 #define ubagg_log_err_rl(...)                                            \
 	do {                                                                 \
 		static DEFINE_RATELIMIT_STATE(_rs, UBAGG_RATELIMIT_INTERVAL,     \
@@ -92,6 +91,24 @@ extern uint32_t g_ubagg_log_level;
 		if ((__ratelimit(&_rs)) &&                                       \
 		    (g_ubagg_log_level >= UBAGG_LOG_LEVEL_WARNING))              \
 			ubagg_log(warn, __VA_ARGS__);                                \
+	} while (0)
+
+#define ubagg_log_notice_rl(...)                                         \
+	do {                                                                 \
+		static DEFINE_RATELIMIT_STATE(_rs, UBAGG_RATELIMIT_INTERVAL,     \
+					      UBAGG_RATELIMIT_BURST);                        \
+		if ((__ratelimit(&_rs)) &&                                       \
+		    (g_ubagg_log_level >= UBAGG_LOG_LEVEL_NOTICE))               \
+			ubagg_log(notice, __VA_ARGS__);                              \
+	} while (0)
+
+#define ubagg_log_info_rl(...)                                           \
+	do {                                                                 \
+		static DEFINE_RATELIMIT_STATE(_rs, UBAGG_RATELIMIT_INTERVAL,     \
+					      UBAGG_RATELIMIT_BURST);                        \
+		if ((__ratelimit(&_rs)) &&                                       \
+		    (g_ubagg_log_level >= UBAGG_LOG_LEVEL_INFO))                 \
+			ubagg_log(info, __VA_ARGS__);                                \
 	} while (0)
 
 #endif /* UBAGG_LOG_H */

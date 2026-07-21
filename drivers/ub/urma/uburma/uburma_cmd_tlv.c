@@ -1513,8 +1513,6 @@ uburma_query_device_fill_spec_out(void *arg_addr,
 	     arg->out.attr.dev_cap.atomic_feat);
 	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_TRANS_MODE,
 	     arg->out.attr.dev_cap.trans_mode);
-	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_SUB_TRANS_MODE_CAP,
-	     arg->out.attr.dev_cap.sub_trans_mode_cap);
 	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_CONGESTION_CTRL_ALG,
 	     arg->out.attr.dev_cap.congestion_ctrl_alg);
 	SPEC(s++, QUERY_DEVICE_OUT_DEV_CAP_CEQ_CNT,
@@ -1710,6 +1708,8 @@ uburma_import_jetty_ex_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JETTY_EX_IN_TAG, arg->in.tag);
 	SPEC(s++, IMPORT_JETTY_EX_IN_TX_PSN, arg->in.tx_psn);
 	SPEC(s++, IMPORT_JETTY_EX_IN_RX_PSN, arg->in.rx_psn);
+	SPEC(s++, IMPORT_JETTY_EX_IN_STAG, arg->in.stag);
+	SPEC(s++, IMPORT_JETTY_EX_IN_DTAG, arg->in.dtag);
 	SPEC(s++, IMPORT_JETTY_EX_IN_UDATA, arg->udata);
 }
 
@@ -1744,6 +1744,8 @@ uburma_import_jfr_ex_fill_spec_in(void *arg_addr,
 	SPEC(s++, IMPORT_JFR_EX_IN_TAG, arg->in.tag);
 	SPEC(s++, IMPORT_JFR_EX_IN_TX_PSN, arg->in.tx_psn);
 	SPEC(s++, IMPORT_JFR_EX_IN_RX_PSN, arg->in.rx_psn);
+	SPEC(s++, IMPORT_JFR_EX_IN_STAG, arg->in.stag);
+	SPEC(s++, IMPORT_JFR_EX_IN_DTAG, arg->in.dtag);
 	SPEC(s++, IMPORT_JFR_EX_IN_UDATA, arg->udata);
 }
 
@@ -2052,6 +2054,23 @@ uburma_get_dmac_fill_spec_out(void *arg_addr,
 	struct uburma_cmd_spec *s = spec;
 
 	SPEC(s++, GET_DMAC_OUT_MAC, arg->out.mac);
+}
+
+static void uburma_get_jfce_cnt_fill_spec_in(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfce_cnt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFCE_CNT_IN_THRESHOLD, arg->in.threshold);
+}
+
+static void uburma_get_jfce_cnt_fill_spec_out(void *arg_addr, struct uburma_cmd_spec *spec)
+{
+	struct uburma_cmd_get_jfce_cnt *arg = arg_addr;
+	struct uburma_cmd_spec *s = spec;
+
+	SPEC(s++, GET_JFCE_CNT_OUT_JFCE_TOTAL_CNT, arg->out.jfce_total_cnt);
+	SPEC(s++, GET_JFCE_CNT_OUT_JFCE_THRESH_CNT, arg->out.jfce_thresh_cnt);
 }
 
 static struct uburma_tlv_handler g_tlv_handler[] = {
@@ -2414,6 +2433,11 @@ static struct uburma_tlv_handler g_tlv_handler[] = {
 		uburma_deactive_jetty_fill_spec_in, DEACTIVE_JETTY_IN_NUM,
 		uburma_deactive_jetty_fill_spec_out,
 		DEACTIVE_JETTY_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
+	},
+	[UBURMA_CMD_GET_JFCE_CNT] = {
+		uburma_get_jfce_cnt_fill_spec_in, GET_JFCE_CNT_IN_NUM,
+		uburma_get_jfce_cnt_fill_spec_out,
+		GET_JFCE_CNT_OUT_NUM - UBURMA_CMD_OUT_TYPE_INIT,
 	},
 };
 

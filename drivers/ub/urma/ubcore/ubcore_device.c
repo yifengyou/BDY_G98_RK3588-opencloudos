@@ -343,7 +343,7 @@ int ubcore_register_client(struct ubcore_client *new_client)
 
 	up_write(&g_device_rwsem);
 
-	ubcore_log_info("ubcore client: %s register success.\n",
+	ubcore_log_notice_rl("ubcore client: %s register success.\n",
 			new_client->client_name);
 	return 0;
 }
@@ -390,7 +390,7 @@ void ubcore_unregister_client(struct ubcore_client *rm_client)
 	}
 
 	up_read(&g_device_rwsem);
-	ubcore_log_info("ubcore client: %s unregister success.\n",
+	ubcore_log_notice_rl("ubcore client: %s unregister success.\n",
 			rm_client->client_name);
 }
 EXPORT_SYMBOL(ubcore_unregister_client);
@@ -556,10 +556,51 @@ ubcore_get_all_mue_device(enum ubcore_transport_type type, uint32_t *dev_cnt)
 	return dev_list;
 }
 
-static void ubcore_free_driver_obj(void *obj)
+static void ubcore_free_driver_obj(void *obj,
+	enum ubcore_hash_table_type type)
 {
 	// obj alloced by driver, should not free by ubcore
-	ubcore_log_err("obj was not free correctly!");
+	ubcore_log_err("obj was not free correctly, type: %d.", type);
+}
+
+static void ubcore_free_jfs_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_JFS);
+}
+
+static void ubcore_free_jfr_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_JFR);
+}
+
+static void ubcore_free_jfc_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_JFC);
+}
+
+static void ubcore_free_jetty_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_JETTY);
+}
+
+static void ubcore_free_cp_vtpn_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_CP_VTPN);
+}
+
+static void ubcore_free_ex_tp_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_EX_TP);
+}
+
+static void ubcore_free_rc_tp_id_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_RC_TP_ID);
+}
+
+static void ubcore_free_rm_tp_id_obj(void *obj)
+{
+	ubcore_free_driver_obj(obj, UBCORE_HT_RM_TP_ID);
 }
 
 static struct ubcore_ht_param g_ht_params[] = {
@@ -567,42 +608,48 @@ static struct ubcore_ht_param g_ht_params[] = {
 			    offsetof(struct ubcore_jfs, hnode),
 			    offsetof(struct ubcore_jfs, jfs_id) +
 				    offsetof(struct ubcore_jetty_id, id),
-			    sizeof(uint32_t), NULL, ubcore_free_driver_obj,
+			    sizeof(uint32_t), NULL, ubcore_free_jfs_obj,
 			    ubcore_jfs_get },
 
 	[UBCORE_HT_JFR] = { UBCORE_HASH_TABLE_SIZE,
 			    offsetof(struct ubcore_jfr, hnode),
 			    offsetof(struct ubcore_jfr, jfr_id) +
 				    offsetof(struct ubcore_jetty_id, id),
-			    sizeof(uint32_t), NULL, ubcore_free_driver_obj,
+			    sizeof(uint32_t), NULL, ubcore_free_jfr_obj,
 			    ubcore_jfr_get },
 	[UBCORE_HT_JFC] = { UBCORE_HASH_TABLE_SIZE,
 			    offsetof(struct ubcore_jfc, hnode),
 			    offsetof(struct ubcore_jfc, id), sizeof(uint32_t),
-			    NULL, ubcore_free_driver_obj, NULL },
+			    NULL, ubcore_free_jfc_obj, NULL },
 
 	[UBCORE_HT_JETTY] = { UBCORE_HASH_TABLE_SIZE,
 			      offsetof(struct ubcore_jetty, hnode),
 			      offsetof(struct ubcore_jetty, jetty_id) +
 				      offsetof(struct ubcore_jetty_id, id),
-			      sizeof(uint32_t), NULL, ubcore_free_driver_obj,
+			      sizeof(uint32_t), NULL, ubcore_free_jetty_obj,
 			      ubcore_jetty_get },
 	/* key: currently tp_handle */
 	[UBCORE_HT_CP_VTPN] = { UBCORE_HASH_TABLE_SIZE,
 				offsetof(struct ubcore_vtpn, hnode),
 				offsetof(struct ubcore_vtpn, tp_handle),
-				sizeof(uint64_t), NULL, ubcore_free_driver_obj,
+				sizeof(uint64_t), NULL, ubcore_free_cp_vtpn_obj,
 				ubcore_vtpn_get },
 	[UBCORE_HT_EX_TP] = { UBCORE_HASH_TABLE_SIZE,
 			      offsetof(struct ubcore_ex_tp_info, hnode),
 			      offsetof(struct ubcore_ex_tp_info, tp_handle),
-			      sizeof(uint64_t), NULL, ubcore_free_driver_obj,
+			      sizeof(uint64_t), NULL, ubcore_free_ex_tp_obj,
 			      NULL },
 	[UBCORE_HT_RC_TP_ID] = { UBCORE_HASH_TABLE_SIZE,
 			      offsetof(struct ubcore_tpid_ctx, hnode),
 			      offsetof(struct ubcore_tpid_ctx, key),
 			      sizeof(struct ubcore_tpid_key), NULL,
-			      ubcore_free_driver_obj, ubcore_tpid_get },
+			      ubcore_free_rc_tp_id_obj, ubcore_tpid_get },
+	[UBCORE_HT_RM_TP_ID] = { UBCORE_HASH_TABLE_SIZE,
+				offsetof(struct ubcore_rm_tp_info, hnode),
+				offsetof(struct ubcore_rm_tp_info, key),
+				sizeof(struct ubcore_rm_tp_key),
+				NULL, ubcore_free_rm_tp_id_obj,
+				NULL },
 };
 
 static inline void ubcore_set_vtpn_hash_table_size(uint32_t vtpn_size)
@@ -1229,8 +1276,8 @@ int ubcore_register_device(struct ubcore_device *dev)
 	list_add_tail(&dev->list_node, &g_device_list);
 	up_write(&g_device_rwsem);
 
-	ubcore_log_info_rl("ubcore device: %s register success.\n",
-			   dev->dev_name);
+	ubcore_log_notice_rl("ubcore device: %s register success.\n",
+		dev->dev_name);
 	return 0;
 
 err:
@@ -1280,8 +1327,8 @@ void ubcore_unregister_device(struct ubcore_device *dev)
 	uninit_ubcore_device(
 		dev); /* Protect eid table access security based on ref cnt */
 
-	ubcore_log_info_rl("ubcore device: %s unregister success.\n",
-			   dev->dev_name);
+	ubcore_log_notice_rl("ubcore device: %s unregister success.\n",
+		dev->dev_name);
 }
 EXPORT_SYMBOL(ubcore_unregister_device);
 
@@ -1300,7 +1347,7 @@ void ubcore_stop_requests(struct ubcore_device *dev)
 			ctx->client->stop(dev, ctx->data);
 	}
 	up_read(&dev->client_ctx_rwsem);
-	ubcore_log_info("ubcore device: %s stop success.\n", dev->dev_name);
+	ubcore_log_notice("ubcore device: %s stop success.\n", dev->dev_name);
 }
 EXPORT_SYMBOL(ubcore_stop_requests);
 
@@ -1588,6 +1635,7 @@ ubcore_alloc_ucontext(struct ubcore_device *dev, uint32_t eid_index,
 		return ERR_PTR(-EPERM);
 	}
 
+	memset(&cg_obj, 0, sizeof(cg_obj));
 	ret = ubcore_cgroup_try_charge(&cg_obj, dev,
 				       UBCORE_RESOURCE_HCA_HANDLE);
 	if (ret != 0) {
@@ -1716,7 +1764,7 @@ int ubcore_query_device_attr(struct ubcore_device *dev,
 	ret = dev->ops->query_device_attr(dev, attr);
 	if (ret != 0) {
 		ubcore_log_err("failed to query device attr, ret: %d.\n", ret);
-		return -UBCORE_DRV_ERRNO;
+		return ret;
 	}
 	return 0;
 }
@@ -2410,7 +2458,7 @@ void ubcore_dispatch_mgmt_event(struct ubcore_mgmt_event *event)
 
 	if (ubcore_call_cm_eid_ops(event->ub_dev, event->element.eid_info,
 				   event->event_type) != 0)
-		ubcore_log_err("cast eid to ubcm failed.\n");
+		ubcore_log_err_rl("cast eid to ubcm failed.\n");
 }
 EXPORT_SYMBOL(ubcore_dispatch_mgmt_event);
 
@@ -2434,6 +2482,7 @@ struct ubcore_device *ubcore_get_device_by_eid(union ubcore_eid *eid,
 				   sizeof(union ubcore_eid)) == 0 &&
 			    dev->transport_type == type) {
 				target = dev;
+				ubcore_get_device(target);
 				break;
 			}
 		}
