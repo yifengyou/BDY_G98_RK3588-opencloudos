@@ -29,13 +29,28 @@ static void kvm_vm_init_features(struct kvm *kvm)
 {
 	unsigned long val;
 
+	if (cpu_has_lsx)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_LSX);
+	if (cpu_has_lasx)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_LASX);
+	if (cpu_has_lbt_x86)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_X86BT);
+	if (cpu_has_lbt_arm)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_ARMBT);
+	if (cpu_has_lbt_mips)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_MIPSBT);
+	if (cpu_has_ptw)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PTW);
+	if (cpu_has_msgint)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_MSGINT);
+
 	val = read_csr_gcfg();
 	if (val & CSR_GCFG_GPMP)
 		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PMU);
 
 	/* Enable all PV features by default */
-	kvm->arch.pv_features = BIT(KVM_FEATURE_IPI);
-	kvm->arch.kvm_features = BIT(KVM_LOONGARCH_VM_FEAT_PV_IPI);
+	kvm->arch.pv_features |= BIT(KVM_FEATURE_IPI);
+	kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_IPI);
 	if (kvm_pvtime_supported()) {
 		kvm->arch.pv_features |= BIT(KVM_FEATURE_STEAL_TIME);
 		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_STEALTIME);
@@ -110,7 +125,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = 1;
 		break;
 	case KVM_CAP_NR_VCPUS:
-		r = num_online_cpus();
+		r = min_t(unsigned int, num_online_cpus(), KVM_MAX_VCPUS);
 		break;
 	case KVM_CAP_MAX_VCPUS:
 		r = KVM_MAX_VCPUS;
@@ -133,33 +148,12 @@ static int kvm_vm_feature_has_attr(struct kvm *kvm, struct kvm_device_attr *attr
 {
 	switch (attr->attr) {
 	case KVM_LOONGARCH_VM_FEAT_LSX:
-		if (cpu_has_lsx)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_LASX:
-		if (cpu_has_lasx)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_X86BT:
-		if (cpu_has_lbt_x86)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_ARMBT:
-		if (cpu_has_lbt_arm)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_MIPSBT:
-		if (cpu_has_lbt_mips)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_PTW:
-		if (cpu_has_ptw)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_MSGINT:
-		if (cpu_has_msgint)
-			return 0;
-		return -ENXIO;
 	case KVM_LOONGARCH_VM_FEAT_PMU:
 	case KVM_LOONGARCH_VM_FEAT_PV_IPI:
 	case KVM_LOONGARCH_VM_FEAT_PV_STEALTIME:

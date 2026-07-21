@@ -21,6 +21,7 @@
 #include <asm/kvm_mmu.h>
 #include <asm/loongarch.h>
 #include <asm/kvm_ipi.h>
+#include <asm/kvm_dmsintc.h>
 #include <asm/kvm_eiointc.h>
 #include <asm/kvm_pch_pic.h>
 
@@ -35,6 +36,7 @@
 #define KVM_REQ_TLB_FLUSH_GPA		KVM_ARCH_REQ(0)
 #define KVM_REQ_STEAL_UPDATE		KVM_ARCH_REQ(1)
 #define KVM_REQ_PMU			KVM_ARCH_REQ(2)
+#define KVM_REQ_AUX_LOAD		KVM_ARCH_REQ(3)
 
 #define KVM_GUESTDBG_SW_BP_MASK		\
 	(KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP)
@@ -88,7 +90,6 @@ struct kvm_context {
 struct kvm_world_switch {
 	int (*exc_entry)(void);
 	int (*enter_guest)(struct kvm_run *run, struct kvm_vcpu *vcpu);
-	unsigned long page_order;
 };
 
 #define MAX_PGTABLE_LEVELS	4
@@ -135,6 +136,7 @@ struct kvm_arch {
 	s64 time_offset;
 	struct kvm_context __percpu *vmcs;
 	struct loongarch_ipi *ipi;
+	struct loongarch_dmsintc *dmsintc;
 	struct loongarch_eiointc *eiointc;
 	struct loongarch_pch_pic *pch_pic;
 };
@@ -203,6 +205,7 @@ struct kvm_vcpu_arch {
 
 	/* Which auxiliary state is loaded (KVM_LARCH_*) */
 	unsigned int aux_inuse;
+	unsigned int aux_ldtype;
 
 	/* FPU state */
 	struct loongarch_fpu fpu FPU_ALIGN;
@@ -247,6 +250,7 @@ struct kvm_vcpu_arch {
 	struct kvm_mp_state mp_state;
 	/* ipi state */
 	struct ipi_state ipi_state;
+	struct dmsintc_state dmsintc_state;
 	/* cpucfg */
 	u32 cpucfg[KVM_MAX_CPUCFG_REGS];
 	/* paravirt steal time */
@@ -268,6 +272,11 @@ static inline unsigned long readl_sw_gcsr(struct loongarch_csrs *csr, int reg)
 static inline void writel_sw_gcsr(struct loongarch_csrs *csr, int reg, unsigned long val)
 {
 	csr->csrs[reg] = val;
+}
+
+static inline bool kvm_guest_has_msgint(struct kvm_vcpu_arch *arch)
+{
+	return arch->cpucfg[1] & CPUCFG1_MSGINT;
 }
 
 static inline bool kvm_guest_has_fpu(struct kvm_vcpu_arch *arch)
@@ -355,8 +364,6 @@ void kvm_exc_entry(void);
 int  kvm_enter_guest(struct kvm_run *run, struct kvm_vcpu *vcpu);
 
 extern unsigned long vpid_mask;
-extern const unsigned long kvm_exception_size;
-extern const unsigned long kvm_enter_guest_size;
 extern struct kvm_world_switch *kvm_loongarch_ops;
 
 #define SW_GCSR		(1 << 0)
