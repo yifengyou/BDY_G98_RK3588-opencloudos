@@ -8,7 +8,6 @@
 #include "udma_jfs.h"
 #include "udma_jfc.h"
 #include "udma_jetty.h"
-#include "udma_rct.h"
 #include "udma_dfx.h"
 
 bool dfx_switch;
@@ -338,38 +337,48 @@ static int udma_query_res_rc(struct udma_dev *udma_dev,
 			     struct ubcore_res_key *key,
 			     struct ubcore_res_val *val)
 {
-	struct ubcore_res_rc_val *res_rc = (struct ubcore_res_rc_val *)val->addr;
-	struct ubase_mbx_attr mbox_attr = {};
-	struct ubase_cmd_mailbox *mailbox;
-	struct udma_rc_ctx *rcc;
-	uint32_t *rc_id;
+	struct ubcore_res_list_val *res_list;
+	struct ubcore_res_rc_val *res_rc;
+	struct udma_rc_ctx rcc = {};
+	uint32_t i;
+	int ret;
 
-	if (key->key_cnt == 0)
-		return udma_query_res_list(udma_dev, &udma_dev->dfx_info->rc, val, "rc");
+	if (key->key_cnt == 0) {
+		if (udma_dev->caps.rc_max_cnt == 0) {
+			dev_err(udma_dev->dev, "invalid rc_max_cnt.\n");
+			return -EINVAL;
+		}
 
-	rc_id = (uint32_t *)xa_load(&udma_dev->dfx_info->rc.table, key->key);
-	if (!rc_id) {
-		dev_err(udma_dev->dev, "failed to query rc, rc_id = %u.\n",
-			key->key);
-		return -EINVAL;
+		res_list = (struct ubcore_res_list_val *)val->addr;
+		res_list->list = vmalloc(sizeof(uint32_t) * udma_dev->caps.rc_max_cnt);
+		if (!res_list->list) {
+			dev_err(udma_dev->dev, "failed to vmalloc rc_list, rc_cnt = %u!\n",
+				udma_dev->caps.rc_max_cnt);
+			return -ENOMEM;
+		}
+
+		for (i = 0; i < udma_dev->caps.rc_max_cnt; i++)
+			res_list->list[i] = i;
+		res_list->cnt = udma_dev->caps.rc_max_cnt;
+	} else {
+		res_rc = (struct ubcore_res_rc_val *)val->addr;
+		ret = ubase_adev_query_rc_ctx(udma_dev->comdev.adev, key->key,
+					      (void *)&rcc, sizeof(rcc));
+		if (ret) {
+			dev_err(udma_dev->dev, "failed to query rc, rc_id = %u.\n", key->key);
+			return ret;
+		}
+
+		res_rc->rc_id = key->key;
+		res_rc->depth = 1 << rcc.rce_shift;
+		res_rc->type = 0;
+		res_rc->state = 0;
+		rcc.rce_base_addr_l = 0;
+		rcc.rce_base_addr_h = 0;
+
+		udma_dfx_ctx_print(udma_dev, "RC", key->key, sizeof(rcc) / sizeof(uint32_t),
+				   (uint32_t *)&rcc);
 	}
-	mbox_attr.tag = key->key;
-	mbox_attr.op = UDMA_CMD_QUERY_RC_CONTEXT;
-	mailbox = udma_mailbox_query_ctx(udma_dev, &mbox_attr);
-	if (!mailbox)
-		return -ENOMEM;
-
-	rcc = (struct udma_rc_ctx *)mailbox->buf;
-	res_rc->rc_id = key->key;
-	res_rc->depth = 1 << rcc->rce_shift;
-	res_rc->type = 0;
-	res_rc->state = 0;
-	rcc->rce_base_addr_l = 0;
-	rcc->rce_base_addr_h = 0;
-
-	udma_dfx_ctx_print(udma_dev, "RC", key->key, sizeof(*rcc) / sizeof(uint32_t),
-			   (uint32_t *)rcc);
-	udma_free_cmd_mailbox(udma_dev, mailbox);
 
 	return 0;
 }
@@ -692,7 +701,6 @@ static int udma_query_res_dev_ta(struct udma_dev *udma_dev,
 	struct ubcore_res_dev_ta_val *res_ta = (struct ubcore_res_dev_ta_val *)val->addr;
 	struct udma_dfx_info *dfx = udma_dev->dfx_info;
 	struct udma_dfx_entity_cnt udma_dfx_entity_cnt_ta[] = {
-		{&dfx->rc.rwlock, &dfx->rc, &res_ta->rc_cnt},
 		{&dfx->jetty.rwlock, &dfx->jetty, &res_ta->jetty_cnt},
 		{&dfx->jetty_grp.rwlock, &dfx->jetty_grp, &res_ta->jetty_group_cnt},
 		{&dfx->jfs.rwlock, &dfx->jfs, &res_ta->jfs_cnt},
@@ -757,7 +765,6 @@ int udma_query_res(struct ubcore_device *dev, struct ubcore_res_key *key,
 static void list_lock_init(struct udma_dfx_info *dfx)
 {
 	struct udma_dfx_entity_initialization udma_dfx_entity_initialization_arr[] = {
-		{&dfx->rc.rwlock, &dfx->rc.table},
 		{&dfx->jetty.rwlock, &dfx->jetty.table},
 		{&dfx->jetty_grp.rwlock, &dfx->jetty_grp.table},
 		{&dfx->jfs.rwlock, &dfx->jfs.table},
@@ -798,7 +805,6 @@ static void udma_dfx_destroy_xa(struct udma_dev *udma_dev, struct xarray *table,
 
 static void udma_dfx_table_free(struct udma_dev *dev)
 {
-	udma_dfx_destroy_xa(dev, &dev->dfx_info->rc.table, "rc");
 	udma_dfx_destroy_xa(dev, &dev->dfx_info->jetty.table, "jetty");
 	udma_dfx_destroy_xa(dev, &dev->dfx_info->jetty_grp.table, "jetty_grp");
 	udma_dfx_destroy_xa(dev, &dev->dfx_info->jfs.table, "jfs");

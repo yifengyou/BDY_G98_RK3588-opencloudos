@@ -261,6 +261,25 @@ struct tdev_attr {
 };
 
 /**
+ * struct tdev_opt - option for tdev
+ * @mm: mm of the process that creates tid
+ * @share_by_mm: indicates whether the same mm returns the same tid.
+ *               true: share tid for same mm
+ *               false: allocate new tid
+ */
+struct tdev_opt {
+	struct mm_struct *mm;
+	bool share_by_mm;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+};
+
+/**
  * struct ummu_invalid_cfg_param - param of invalid tid config
  * @mm: mm of the process that creates tid
  * @tid: tid to invalidate
@@ -530,6 +549,7 @@ void dma_free_iova(struct iova_slot *slot);
 /**
  * ummu_fill_pages() - Fill a range of IOVA. It allocates pages and maps pages to the iova.
  * The API is not thread-safe.
+ * Deprecated: Use ummu_core_fill_pages() instead.
  * @slot: iova slot, generated from dma_alloc_iova.
  * @iova: iova start.
  * @nr_pages: fill pages count.
@@ -541,6 +561,7 @@ int ummu_fill_pages(struct iova_slot *slot, dma_addr_t iova, unsigned long nr_pa
 /**
  * ummu_drain_pages() - Drain a range of IOVA. It unmaps iova and releases pages.
  * The API is not thread-safe.
+ * Deprecated: Use ummu_core_drain_pages() instead.
  * @slot: iova slot, generated from dma_alloc_iova.
  * @iova: iova start.
  * @nr_pages: drain pages count.
@@ -548,6 +569,31 @@ int ummu_fill_pages(struct iova_slot *slot, dma_addr_t iova, unsigned long nr_pa
  * Return: 0 on success, or an error number.
  */
 int ummu_drain_pages(struct iova_slot *slot, dma_addr_t iova, unsigned long nr_pages);
+
+/**
+ * ummu_core_fill_pages() - Fill a range of IOVA, It allocates pages and maps pages to the iova.
+ * The API is not thread-safe.
+ * @slot: iova slot, generated from dma_alloc_iova.
+ * @iova: iova start.
+ * @nr_pages: fill pages count.
+ * @gfp: GFP flags for memory allocation(e.g., GFP_KERNEL, __GFP_ZERO).
+ *
+ * Return: 0 on success, or an error number.
+ */
+int ummu_core_fill_pages(struct iova_slot *slot, dma_addr_t iova,
+			 unsigned long nr_pages, gfp_t gfp);
+
+/**
+ * ummu_core_drain_pages() - Drain a range of IOVA, It unmaps iova and releases pages.
+ * The API is not thread-safe.
+ * @slot: iova slot, generated from dma_alloc_iova.
+ * @iova: iova start.
+ * @nr_pages: drain pages count.
+ *
+ * Return: 0 on success, or an error number.
+ */
+int ummu_core_drain_pages(struct iova_slot *slot, dma_addr_t iova, unsigned long nr_pages);
+
 #else
 static inline int ummu_core_add_eid(guid_t *guid, eid_t eid, enum eid_type type)
 {
@@ -577,6 +623,18 @@ static inline int ummu_fill_pages(struct iova_slot *slot, dma_addr_t iova,
 
 static inline int ummu_drain_pages(struct iova_slot *slot, dma_addr_t iova,
 				   unsigned long nr_pages)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ummu_core_fill_pages(struct iova_slot *slot, dma_addr_t iova,
+				       unsigned long nr_pages, gfp_t gfp)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ummu_core_drain_pages(struct iova_slot *slot, dma_addr_t iova,
+					unsigned long nr_pages)
 {
 	return -EOPNOTSUPP;
 }
@@ -840,6 +898,7 @@ struct device *ummu_core_alloc_tdev(struct tdev_attr *attr, u32 *ptid);
 
 /**
  * ummu_alloc_tdev_separated() - Allocate a virtual device for sva separated mode.
+ * @Deprecated: use ummu_core_alloc_separate_tdev instead.
  * @ptid: tid pointer
  * Return: device on success or NULL error.
  */
@@ -1008,6 +1067,13 @@ static inline int ummu_core_get_tid_type(struct ummu_core_device *dev, u32 tid,
 
 #if IS_ENABLED(CONFIG_UB_UMMU_SVA_SEPARATED_PAGES)
 /**
+ * ummu_core_alloc_separate_tdev() - Allocate a virtual device for sva separated mode.
+ * @opt: option for tdev
+ * @ptid: tid pointer
+ * Return: device on success or NULL error.
+ */
+struct device *ummu_core_alloc_separate_tdev(struct tdev_opt *opt, u32 *ptid);
+/**
  * ummu_sva_matt_map() - Mapping interface in SVA-separated page table mode.
  * @matt_domain: page table mapping context.
  * @addr: mapping start address.
@@ -1030,6 +1096,12 @@ int ummu_sva_matt_map(struct ummu_matt_domain *matt_domain,
 int ummu_sva_matt_unmap(struct ummu_matt_domain *matt_domain,
 			unsigned long addr, size_t size);
 #else
+static inline struct device *ummu_core_alloc_separate_tdev(
+				struct tdev_opt *opt, u32 *ptid)
+{
+	return NULL;
+}
+
 static inline int ummu_sva_matt_map(struct ummu_matt_domain *matt_domain,
 				    unsigned long addr, struct sg_table *sgt,
 				    int prot)

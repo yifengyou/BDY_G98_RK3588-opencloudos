@@ -31,7 +31,7 @@ static void unic_dump_jfs_ctx_info_sw(struct unic_sq *sq, struct seq_file *s,
 
 static inline void unic_jfr_ctx_titles_print(struct seq_file *s)
 {
-	seq_puts(s, "RQ_ID  STATE  RQE_SHIFT  RX_JFCN  PI     CI");
+	seq_puts(s, "RQ_ID  STATE  RQE_SHIFT  RX_JFCN  PI     CI     ");
 	seq_puts(s, "RECORD_DB_EN\n");
 }
 
@@ -54,7 +54,7 @@ static void unic_dump_jfr_ctx_info_sw(struct unic_rq *rq, struct seq_file *s,
 
 static inline void unic_jfc_ctx_titles_print(struct seq_file *s)
 {
-	seq_puts(s, "CQ_ID  ARM_ST  STATE  INLINE_EN  SHIFT  CQE_COAL_CNT");
+	seq_puts(s, "CQ_ID  ARM_ST  STATE  INLINE_EN  SHIFT  CQE_COAL_CNT  ");
 	seq_puts(s, "CEQN  RECORD_DB_EN  CQE_COAL_PEIRIOD\n");
 }
 

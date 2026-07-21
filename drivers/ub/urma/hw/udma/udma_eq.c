@@ -20,17 +20,28 @@
 #include <ub/urma/udma/udma_ctl.h>
 #include "udma_eq.h"
 
-static inline int udma_ae_tp_ctrlq_msg_deal(struct udma_dev *udma_dev,
-					    struct ubase_aeq_notify_info *info,
-					    uint32_t queue_num)
+static int udma_ae_tp_ctrlq_msg_deal(struct udma_dev *udma_dev,
+				     struct ubase_aeq_notify_info *info,
+				     uint32_t queue_num)
 {
+	struct udma_ae_work *ae_work;
+
 	switch (info->event_type) {
 	case UBASE_EVENT_TYPE_TP_FLUSH_DONE:
-		return udma_ctrlq_tp_flush_done(udma_dev, queue_num);
+		ae_work = kzalloc(sizeof(*ae_work), GFP_ATOMIC);
+		if (!ae_work)
+			return -ENOMEM;
+
+		ae_work->udev = udma_dev;
+		ae_work->tpn = queue_num;
+		INIT_WORK(&ae_work->work, udma_tp_ae_work);
+		queue_work(udma_dev->ae_workq, &ae_work->work);
+		return 0;
 	case UBASE_EVENT_TYPE_TP_LEVEL_ERROR:
 		return udma_ctrlq_remove_single_tp(udma_dev, queue_num, TP_ERROR);
 	default:
-		dev_warn(udma_dev->dev, "udma get unsupported async event.\n");
+		dev_warn(udma_dev->dev, "udma get unsupported async event %u.\n",
+			 info->event_type);
 		return 0;
 	}
 }
@@ -424,7 +435,7 @@ static void udma_delete_tpn_ue_idx_info(struct udma_dev *udma_dev, uint32_t tpn)
 	xa_unlock(&udma_dev->tpn_ue_idx_table);
 }
 
-static int udma_save_tp_info(struct udma_dev *udma_dev, struct udma_ue_tp_info *info,
+int udma_save_tp_info(struct udma_dev *udma_dev, struct udma_ue_tp_info *info,
 			     uint8_t ue_idx)
 {
 	uint32_t tpn;
@@ -944,7 +955,7 @@ err_register_one_ctrlq_event:
 	return ret;
 }
 
-int udma_register_activate_workqueue(struct udma_dev *udma_dev)
+int udma_register_workqueue(struct udma_dev *udma_dev)
 {
 	udma_dev->act_workq = alloc_workqueue("udma_activate_workq", WQ_UNBOUND, 0);
 	if (!udma_dev->act_workq) {
@@ -952,11 +963,21 @@ int udma_register_activate_workqueue(struct udma_dev *udma_dev)
 		return -ENOMEM;
 	}
 
+	udma_dev->ae_workq = alloc_workqueue("udma_ae_workq", WQ_UNBOUND, 0);
+	if (!udma_dev->ae_workq) {
+		dev_err(udma_dev->dev, "failed to create ae workqueue.\n");
+		flush_workqueue(udma_dev->act_workq);
+		destroy_workqueue(udma_dev->act_workq);
+		return -ENOMEM;
+	}
+
 	return 0;
 }
 
-void udma_unregister_activate_workqueue(struct udma_dev *udma_dev)
+void udma_unregister_workqueue(struct udma_dev *udma_dev)
 {
 	flush_workqueue(udma_dev->act_workq);
+	flush_workqueue(udma_dev->ae_workq);
 	destroy_workqueue(udma_dev->act_workq);
+	destroy_workqueue(udma_dev->ae_workq);
 }

@@ -31,6 +31,23 @@ static const struct ub_device_id ubase_ubus_tbl[] = {
 	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_0_PMU_UE), 0, 0},
 	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_0_UBOE_MUE), 0, 0},
 	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_0_UBOE_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_S_0_URMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_S_0_PMU_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_S_0_CDMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_URMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_URMA_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_CDMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_CDMA_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_PMU_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_K_V2_PMU_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_URMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_URMA_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_CDMA_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_CDMA_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_PMU_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_PMU_UE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_UBOE_MUE), 0, 0},
+	{UB_ENTITY(UBASE_VENDOR_ID, UBASE_DEV_ID_A_V2_UBOE_UE), 0, 0},
 	/* required last entry */
 	{0},
 };
@@ -142,6 +159,12 @@ static bool ubase_dev_reg_share_port_must_succ(struct ubase_dev *udev)
 	case UBASE_DEV_ID_K_0_CDMA_MUE:
 	case UBASE_DEV_ID_A_0_URMA_MUE:
 	case UBASE_DEV_ID_A_0_CDMA_MUE:
+	case UBASE_DEV_ID_S_0_URMA_MUE:
+	case UBASE_DEV_ID_S_0_CDMA_MUE:
+	case UBASE_DEV_ID_K_V2_URMA_MUE:
+	case UBASE_DEV_ID_K_V2_CDMA_MUE:
+	case UBASE_DEV_ID_A_V2_URMA_MUE:
+	case UBASE_DEV_ID_A_V2_CDMA_MUE:
 		break;
 	default:
 		return false;
@@ -258,6 +281,7 @@ static void __ubase_ubus_remove(struct ub_entity *ue)
 {
 	struct ubase_dev *udev = dev_get_drvdata(&ue->dev);
 
+	set_bit(UBASE_STATE_REMOVING_B, &udev->state_bits);
 	ubase_ubus_unreg_share_port(udev);
 	ubase_dev_uninit(udev);
 	ubase_ubus_uninit(ue);
@@ -293,6 +317,8 @@ static void ubase_ubus_shutdown(struct ub_entity *ue)
 	ubase_info(udev, "ubase shutdown start.\n");
 
 	__ubase_ubus_remove(ue);
+
+	ubase_info(udev, "ubase shutdown end.\n");
 }
 
 int ubase_ubus_irq_vectors_alloc(struct device *dev)
