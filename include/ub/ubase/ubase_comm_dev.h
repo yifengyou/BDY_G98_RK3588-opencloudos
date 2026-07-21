@@ -44,6 +44,9 @@ struct iova_slot;
 #define UBASE_HW_VER_K_0	(2000U)
 #define UBASE_HW_VER_K_1	(2001U)
 
+#define UBASE_DEV_NEED_TO_ACTIVATE	BIT(0)
+#define UBASE_ADEV_PROBE_FAIL		BIT(0)
+
 enum ubase_reset_type {
 	UBASE_NO_RESET,
 	UBASE_ELR_RESET,
@@ -57,6 +60,7 @@ enum ubase_reset_stage {
 	UBASE_RESET_STAGE_UNINIT,
 	UBASE_RESET_STAGE_INIT,
 	UBASE_RESET_STAGE_UP,
+	UBASE_RESET_STAGE_ABORT,
 };
 
 /**
@@ -427,8 +431,8 @@ void ubase_port_register(struct auxiliary_device *adev,
 					      bool link_up));
 void ubase_port_unregister(struct auxiliary_device *adev);
 void ubase_reset_register(struct auxiliary_device *adev,
-			  void (*reset_handler)(struct auxiliary_device *adev,
-						enum ubase_reset_stage stage));
+			  int (*reset_handler)(struct auxiliary_device *adev,
+					       enum ubase_reset_stage stage));
 void ubase_reset_unregister(struct auxiliary_device *adev);
 void ubase_activate_register(struct auxiliary_device *adev,
 			     void (*activate_handler)(struct auxiliary_device *adev,
@@ -449,5 +453,12 @@ int ubase_adev_query_rc_ctx(struct auxiliary_device *adev, u32 rc_queue_idx,
 			    void *ctx, u32 ctx_size);
 
 int ubase_himac_reset(struct auxiliary_device *adev);
+
+void ubase_reinit_register(struct auxiliary_device *adev,
+			   int (*reinit_handler)(struct auxiliary_device *adev));
+void ubase_reinit_unregister(struct auxiliary_device *adev);
+
+void ubase_update_dev_status(struct auxiliary_device *adev, unsigned long status);
+void ubase_update_adev_status(struct auxiliary_device *adev, unsigned long status);
 
 #endif /* _UBASE_COMM_DEV_H_ */
