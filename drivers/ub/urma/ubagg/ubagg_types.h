@@ -19,6 +19,7 @@
 #define UBAGG_BITMAP_SIZE (10240)
 #define UBAGG_MAX_DEV_NAME_LEN (64)
 #define UBAGG_MAX_DEV_NUM (20)
+#define UBAGG_MAX_PORT_NUM (9)
 #define ubagg_container_of(ptr, type, member) \
 	(((ptr) == NULL) ? NULL : container_of(ptr, type, member))
 
@@ -108,6 +109,13 @@ struct ubagg_jfc {
 
 struct ubagg_jfs {
 	struct ubcore_jfs base;
+};
+
+struct ubagg_physical_device {
+	char dev_name[UBCORE_MAX_DEV_NAME];
+	uint32_t chip_id;
+	uint32_t primary_eid_idx;
+	uint32_t port_eid_idx[UBAGG_MAX_PORT_NUM];
 };
 
 struct ubagg_device {

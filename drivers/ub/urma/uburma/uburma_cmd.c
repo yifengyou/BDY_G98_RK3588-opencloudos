@@ -629,12 +629,14 @@ static int uburma_cmd_delete_jfs_batch(struct ubcore_device *ubc_dev,
 
 	for (i = 0; i < arr_num; ++i) {
 		uobj = uobj_get_del(UOBJ_CLASS_JFS, jfs_arr[i], file);
-		uobj_arr[i] = uobj;
 		if (IS_ERR(uobj)) {
 			uburma_log_err("failed to find jfs, index is %d.\n", i);
 			ret = -EINVAL;
+			uobj_put_batch(uobj_arr, i);
+			uobj_put_del_batch(uobj_arr, i);
 			goto free_uobj_arr;
 		}
+		uobj_arr[i] = uobj;
 		/* To get events_reported after obj removed. */
 		uobj_get(uobj);
 		jfs_uobj = container_of(uobj, struct uburma_jfs_uobj, uobj);
@@ -3498,6 +3500,7 @@ static int uburma_cmd_bind_jetty_ex(struct ubcore_device *ubc_dev,
 {
 	struct ubcore_active_tp_cfg active_tp_cfg = { 0 };
 	struct uburma_cmd_bind_jetty_ex arg = { 0 };
+	struct ubcore_active_tp_cfg empty_cfg = { 0 };
 	struct uburma_tjetty_uobj *uburma_tjetty;
 	struct ubcore_udata udata = { 0 };
 	struct uburma_uobj *tjetty_uobj;
@@ -3522,8 +3525,14 @@ static int uburma_cmd_bind_jetty_ex(struct ubcore_device *ubc_dev,
 	fill_udata(&udata, file->ucontext, &arg.udata);
 
 	tjetty = (struct ubcore_tjetty *)tjetty_uobj->object;
-	ret = ubcore_bind_jetty_ex(jetty_uobj->object, tjetty, &active_tp_cfg,
-				   &udata);
+	if (memcmp(&active_tp_cfg, &empty_cfg, sizeof(active_tp_cfg)) == 0) {
+		uburma_log_info("tp_handle is null, exec ubcore_bind_jetty");
+		ret = ubcore_bind_jetty(jetty_uobj->object, tjetty, &udata);
+	} else {
+		uburma_log_info("tp_handle is null, exec ubcore_bind_jetty_ex");
+		ret = ubcore_bind_jetty_ex(jetty_uobj->object, tjetty, &active_tp_cfg,
+			   &udata);
+	}
 	if (ret != 0) {
 		uburma_log_err("bind jetty failed.\n");
 		uburma_put_jetty_tjetty_objs(jetty_uobj, tjetty_uobj);
@@ -3839,9 +3848,19 @@ static int uburma_cmd_get_net_addr_list(struct ubcore_device *ubc_dev,
 	}
 	mutex_unlock(&ubc_dev->sip_table.lock);
 
+	if (arg.out.addr != 0 && arg.out.len < netaddr_size) {
+		uburma_log_err("Invalid parameter.\n");
+		ret = -EINVAL;
+		goto free_list;
+	}
 	arg.out.netaddr_cnt = netaddr_cnt;
 	arg.out.len = (uint64_t)netaddr_size;
-	arg.out.addr = (uint64_t)(uintptr_t)netaddr_info;
+	ret = copy_to_user((void __user *)(uintptr_t)arg.out.addr, netaddr_info,
+			   netaddr_size);
+	if (ret != 0) {
+		uburma_log_err("Failed to copy data to user space, ret:%d.\n", ret);
+		goto free_list;
+	}
 
 	ret = uburma_tlv_append(hdr, &arg);
 
@@ -4275,7 +4294,6 @@ static int uburma_cmd_import_jetty_async(struct ubcore_device *ubc_dev,
 	ret = uburma_tlv_append(hdr, &arg);
 	if (ret != 0) {
 		ubcore_unimport_jetty_async(tjetty, 0, NULL);
-		uburma_delete_import_callback(cb);
 		uobj_alloc_abort(uobj);
 		return ret;
 	}

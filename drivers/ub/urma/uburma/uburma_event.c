@@ -81,6 +81,8 @@ void uburma_write_event_with_free_fn(
 	event->event_type = event_type;
 	event->counter = counter;
 	event->event_data_free_fn = event_data_free_fn;
+	INIT_LIST_HEAD(&event->node);
+	INIT_LIST_HEAD(&event->obj_node);
 
 	list_add_tail(&event->node, &jfe->event_list);
 	if (obj_event_list)
@@ -467,6 +469,9 @@ static int uburma_get_async_event(struct uburma_jfae_uobj *jfae,
 				&event_cnt, &event_list);
 	if (ret < 0)
 		return ret;
+
+	if (event_cnt == 0 || list_empty(&event_list))
+		return -EIO;
 
 	event = list_first_entry(&event_list, struct uburma_jfe_event, node);
 	if (!event)

@@ -146,6 +146,7 @@ static int __init ubagg_init(void)
 static void __exit ubagg_exit(void)
 {
 	ubagg_delete_topo_map();
+	ubagg_clear_dev_list();
 	ubagg_cdev_destroy();
 }
 

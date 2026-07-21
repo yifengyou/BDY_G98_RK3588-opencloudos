@@ -28,6 +28,9 @@ struct ubcore_jetty *ubcore_find_jetty(struct ubcore_device *dev,
 					   uint32_t jetty_id);
 void ubcore_put_jetty(struct ubcore_jetty *jetty);
 void ubcore_jetty_get(void *obj);
+struct ubcore_jfs *ubcore_find_get_jfs(struct ubcore_device *dev, uint32_t jfs_id);
+struct ubcore_jfr *ubcore_find_get_jfr(struct ubcore_device *dev, uint32_t jfr_id);
+struct ubcore_jetty *ubcore_find_get_jetty(struct ubcore_device *dev, uint32_t jetty_id);
 
 #endif
 

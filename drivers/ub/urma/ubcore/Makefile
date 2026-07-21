@@ -5,14 +5,13 @@
 ccflags-y += -I$(src)
 
 ubcore-objs := \
-net/ubcore_sock.o \
 ubcore_workqueue.o \
 ubcore_main.o \
 ubcore_hash_table.o \
 ubcore_tp.o \
 ubcore_tp_table.o \
 ubcore_cgroup.o \
-net/ubcore_net.o \
+net/ubcore_comm.o \
 ubcore_cdev_file.o \
 ubcore_connect_adapter.o \
 ubcore_connect_bonding.o \

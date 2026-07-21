@@ -549,7 +549,8 @@ union ubcore_device_feat {
 		uint32_t muti_seg_per_token_id : 1;
 		uint32_t ipourma_en : 1;
 		uint32_t ctp_en : 1;
-		uint32_t reserved : 13;
+		uint32_t uboe : 1;
+		uint32_t reserved : 12;
 	} bs;
 	uint32_t value;
 };
@@ -1821,7 +1822,8 @@ union ubcore_jfs_wr_flag {
 		 * 1: Inline data.
 		 */
 		uint32_t inline_flag : 1;
-		uint32_t reserved : 25;
+		uint32_t db_bypass : 1;
+		uint32_t reserved : 24;
 	} bs;
 	uint32_t value;
 };
@@ -2035,7 +2037,13 @@ struct ubcore_tp_attr_value {
 	uint8_t at_times : 5;
 	uint8_t sl : 4;
 	uint8_t ttl;
-	uint8_t reserved[78];
+	uint16_t ack_udp_srcport;
+	uint16_t data_udp_srcport;
+	uint8_t udp_srcport_range : 4;
+	uint8_t spray_en : 1;
+	uint8_t udp_global_en : 1;
+	uint8_t reserve_0 : 2;
+	uint8_t reserved[73];
 };
 #pragma pack()
 
@@ -2050,7 +2058,8 @@ union ubcore_tp_handle {
 		uint64_t uboe : 1;
 		uint64_t pre_defined : 1;
 		uint64_t dynamic_defined : 1;
-		uint64_t reserved : 5;
+		uint64_t trans_mode      : 3;
+		uint64_t reserved : 2;
 	} bs;
 	uint64_t value;
 };
