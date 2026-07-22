@@ -1,3 +1,11 @@
+* Wed Jul 22 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51.4
+- ipv6: validate extension header length before copying to cmsg
+- ip6: vti: Use ip6_tnl.net in vti6_changelink().
+- page_idle: fix compiling bug when we disable CONFIG_PAGE_IDLE_FLAG
+- sctp: don't free the ASCONF's own transport in DEL-IP processing
+- net: openvswitch: reject oversized nested action attrs
+- tracing: use '=' for hist avg/min/max output
+
 * Tue Jul 14 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51.3
 - locking/rtmutex: Skip remove_waiter() when waiter is not enqueued
 
