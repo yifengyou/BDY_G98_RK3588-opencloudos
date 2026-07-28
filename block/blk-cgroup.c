@@ -1945,9 +1945,7 @@ static void blkcg_css_free(struct cgroup_subsys_state *css)
 
 	mutex_lock(&blkcg_pol_mutex);
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 	percpu_counter_destroy(&blkcg->nr_dirtied);
-#endif
 
 	list_del(&blkcg->all_blkcgs_node);
 
@@ -2018,10 +2016,8 @@ blkcg_css_alloc(struct cgroup_subsys_state *parent_css)
 #ifdef CONFIG_CGROUP_WRITEBACK
 	INIT_LIST_HEAD(&blkcg->cgwb_list);
 #endif
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 	percpu_counter_init(&blkcg->nr_dirtied, 0, GFP_KERNEL);
 	blkcg->dirty_ratelimit = INIT_DIRTY_BW;
-#endif
 	list_add_tail(&blkcg->all_blkcgs_node, &all_blkcgs);
 
 	mutex_unlock(&blkcg_pol_mutex);
