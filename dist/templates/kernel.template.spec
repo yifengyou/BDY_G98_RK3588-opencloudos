@@ -1210,17 +1210,18 @@ BuildInstMLNXOFED() {
 		rpm2cpio $1 | cpio -id
 		num=`find . -name "*.ko" -or -name "*.ko.xz" | wc -l`
 		if [ $num -gt 0 ]; then
+			if [ ! -d $KernModule/extra/ ]; then
+				mkdir $KernModule/extra/
+			fi
+
 			# fixed MLNX_OFED not support TencentOS, it will create error
 			# direcotry %install_mod_dir, copy it into extra.
 			if [ -d ./lib/modules/$KernUnameR/"%install_mod_dir" ]; then
-				if [ ! -d $KernModule/extra/ ]; then
-					mkdir $KernModule/extra/
-				fi
 				%{_module_signer} "$KernUnameR" "$_KernBuild" "./" || exit $?
 				cp -r ./lib/modules/$KernUnameR/%install_mod_dir/* $KernModule/extra/
 			elif [ -d ./lib/modules/$KernUnameR ]; then
 				%{_module_signer} "$KernUnameR" "$_KernBuild" "./" || exit $?
-				cp -r ./lib/modules/$KernUnameR/* $KernModule
+				find ./lib/modules/$KernUnameR/ -type f -exec cp {} $KernModule/extra/ \;
 			fi
 		fi
 
