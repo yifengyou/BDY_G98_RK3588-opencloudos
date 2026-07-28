@@ -203,10 +203,27 @@ EXPORT_SYMBOL(eth_type_trans);
 int eth_header_parse(const struct sk_buff *skb, unsigned char *haddr)
 {
 	const struct ethhdr *eth = eth_hdr(skb);
+
 	memcpy(haddr, eth->h_source, ETH_ALEN);
 	return ETH_ALEN;
 }
 EXPORT_SYMBOL(eth_header_parse);
+
+/**
+ * eth_header_parse_dev - KABI-safe version of eth_header_parse()
+ * @skb: packet to extract header from
+ * @dev: network device (may differ from skb->dev in stacked setups)
+ * @haddr: destination buffer
+ *
+ * Delegates to eth_header_parse().  The extra @dev parameter prevents
+ * infinite recursion when bonding devices are stacked.
+ */
+int eth_header_parse_dev(const struct sk_buff *skb, const struct net_device *dev,
+			 unsigned char *haddr)
+{
+	return eth_header_parse(skb, haddr);
+}
+EXPORT_SYMBOL(eth_header_parse_dev);
 
 /**
  * eth_header_cache - fill cache entry from neighbour
@@ -333,6 +350,7 @@ EXPORT_SYMBOL(eth_validate_addr);
 const struct header_ops eth_header_ops ____cacheline_aligned = {
 	.create		= eth_header,
 	.parse		= eth_header_parse,
+	.dev_parse	= eth_header_parse_dev,
 	.cache		= eth_header_cache,
 	.cache_update	= eth_header_cache_update,
 	.parse_protocol	= eth_header_parse_protocol,
