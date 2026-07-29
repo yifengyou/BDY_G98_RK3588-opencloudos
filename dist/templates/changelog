@@ -1,3 +1,14 @@
+* Wed Jul 29 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51.5
+- dist,spec: modprobe prioritize updates over extra
+- net: fix kabi breakage of struct header_ops
+- team: fix header_ops type confusion with non-Ethernet ports
+- bonding: prevent potential infinite loop in bond_header_parse()
+- bonding: fix type confusion in bond_setup_by_slave()
+- ip6: vti: Use ip6_tnl.net in vti6_siocdevprivate().
+- xfs: resample the data fork mapping after cycling ILOCK
+- scsi: target: iscsi: Fix CRC overread and double-free in iscsit_handle_text_cmd()
+- nvmet: fix pre-auth out-of-bounds heap read in Discovery Get Log Page
+
 * Wed Jul 22 2026 Yongliang Gao <leonylgao@tencent.com> - 6.6.119-51.4
 - ipv6: validate extension header length before copying to cmsg
 - ip6: vti: Use ip6_tnl.net in vti6_changelink().
