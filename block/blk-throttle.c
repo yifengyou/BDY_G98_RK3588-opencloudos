@@ -1914,6 +1914,12 @@ static struct cftype throtl_files[] = {
 		.write_u64 = tg_set_buffered_write_bps,
 		.private = 256,
 	},
+	{
+		.name = "readwrite_dynamic_ratio",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = blkcg_print_readwrite_ratio,
+		.write = blkcg_set_readwrite_ratio,
+	},
 	{}	/* terminate */
 };
 
