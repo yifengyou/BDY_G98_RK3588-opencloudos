@@ -220,7 +220,7 @@ int hook_info_percpu_create(void)
 		hook_info_array[i].total_numb = alloc_percpu(unsigned long);
 		if (!hook_info_array[i].lists || !hook_info_array[i].info_num || !hook_info_array[i].total_numb
 			|| !hook_info_array[i].drop_stats || !hook_info_array[i].lock) {
-			printk(KERN_ERR "security: failed to allocate percpu data\n");
+			pr_err("security: failed to allocate percpu data\n");
 			ret = -ENOMEM;
 			goto err;
 		}
