@@ -3,6 +3,7 @@
 #define __NVBIOS_M0203_H__
 struct nvbios_M0203T {
 #define M0203T_TYPE_RAMCFG 0x00
+#define M0203T_TYPE_GB100  0x04
 	u8  type;
 	u16 pointer;
 };
