@@ -7,7 +7,7 @@
 AUTHOR="$(git config user.name) <$(git config user.email)>"
 REASON=$1
 COMMIT=$2
-UPSTRAM="upstream"
+UPSTREAM="upstream"
 
 [ -z "$COMMIT" ] && die "Usage: $0 <upstream commit id>"
 
@@ -67,7 +67,7 @@ if ! git cat-file -e "$COMMIT"; then
 	_fetch_upstream "$COMMIT"
 fi
 
-COMMIT="$(git show $COMMIT | head -n 1 | awk '{print $2}')"
+COMMIT="$(git show "$COMMIT" | head -n 1 | awk '{print $2}')"
 
 if ! git cherry-pick "$COMMIT"; then
 	_resolve_conflict_shell
@@ -81,7 +81,7 @@ git commit \
 	--message \
 	"$(git log -1 --format=%s "$COMMIT")
 
-commit $COMMIT $UPSTRAM
+commit $COMMIT $UPSTREAM
 
 Conflicts: $CONFLICT
 Back$(echo "port-reason: $REASON" | fold -s -w 75 | sed -e '2,$s/^/    /')
