@@ -1,0 +1,103 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+=======================
+TKernel Feature Guide
+=======================
+
+:Copyright: Tencent Corporation
+
+Overview
+========
+
+TKernel is a collection of production-hardened kernel extensions
+developed by Tencent for the OpenCloudOS distribution.  The features
+are gated behind ``CONFIG_TKERNEL`` and can be individually enabled
+or disabled through Kconfig options.
+
+Features
+========
+
+Non-privileged Port Binding (``CONFIG_TKERNEL_NONPRIV_NETBIND``)
+-----------------------------------------------------------------
+
+Allows unprivileged processes to bind to specific low-numbered ports
+(< 1024) that have been explicitly allowed by the administrator
+through ``/proc/tkernel/nonpriv_netbind``.
+
+TTools (``CONFIG_TKERNEL_TTOOLS``)
+-----------------------------------
+
+Provides ptrace-based process protection.  A process can mark itself
+as protected, preventing other processes from attaching via ptrace.
+Useful for security-sensitive daemons.
+
+Netatop (``CONFIG_TKERNEL_NETATOP``)
+--------------------------------------
+
+Per-task network statistics module (from the atop tool suite).
+Exposes per-process network counters through ``/proc/netatop``.
+Requires ``CONFIG_NETFILTER``.
+
+Shield Mounts (``CONFIG_TKERNEL_SHIELD_MOUNTS``)
+--------------------------------------------------
+
+Allows the administrator to mark specific mount points as "shielded",
+preventing unprivileged users from accessing or listing them.
+Configured through a proc interface.
+
+Security Monitor / Aegis (``CONFIG_TKERNEL_SECURITY_MONITOR``)
+----------------------------------------------------------------
+
+Kernel-level security event monitoring framework.  Captures exec,
+socket, and credential events and exposes them through
+``/proc/security_monitor/``.  Used by the Tencent Aegis host
+security agent.
+
+IRQ Latency Detector (``CONFIG_TKERNEL_IRQ_LATENCY``)
+-------------------------------------------------------
+
+Detects and records long IRQ and softirq latencies.  Uses hrtimers
+to measure the time between a timer firing and the interrupt handler
+actually running.  Records stack traces of the offending code paths
+and exposes them through ``/proc/irq_latency/``.
+
+Kill Hook / Kill Block (``CONFIG_TKERNEL_KILL_BLOCK``)
+--------------------------------------------------------
+
+Intercepts kill signals and blocks them based on configurable rules.
+A whitelist interface at ``/proc/whitelist`` allows administrators to
+protect specific processes from being killed (e.g. by Kubernetes
+eviction).  Depends on cgroups for scope control.
+
+Kill Protect (``CONFIG_TKERNEL_KILL_PROTECT``)
+-------------------------------------------------
+
+Protects specific processes from SIGKILL and SIGTERM.  Simpler than
+kill block; operates on a per-process basis rather than per-cgroup.
+
+Async Fork (``CONFIG_TKERNEL_ASYNC_FORK``)
+--------------------------------------------
+
+Optimises fork() performance for memory-heavy processes by
+performing page-table duplication asynchronously.
+
+Memory Cgroup Async Reclaim (``CONFIG_MEMCG_ASYNC``)
+------------------------------------------------------
+
+Enables asynchronous memory reclaim within memory cgroups, reducing
+allocation latency spikes for containerised workloads.
+
+Sysctl Interface
+================
+
+TKernel registers a top-level sysctl directory at
+``/proc/sys/tkernel/`` for global feature parameters.
+
+Building
+========
+
+Enable in ``make menuconfig`` under::
+
+    General setup -> Tencent Kernel Features (TKERNEL)
+
+Individual features can then be toggled within the TKernel submenu.
