@@ -421,7 +421,7 @@ _search_for_release_tag() {
 # We try to parse and verify RPM NVR (Name, Version, Release) info's 'VR' part using git tag or commit info
 # N: is always kernel
 # V: is kernel's major release version (eg. 5.18, 5.18.0, 5.17.2)
-# R: is a tokens seperated with '.' (eg 1[.KDIST], 2[.KDIST], 2.1[.KDIST], 0.rc1[.KDIST])
+# R: is a tokens separated with '.' (eg 1[.KDIST], 2[.KDIST], 2.1[.KDIST], 0.rc1[.KDIST])
 #    could also be 0.YYYYMMDDgit<commit> for snapshot release.
 #    But ideally all git tag are for formal release so snapshot tag shouldn't appear in repo.
 #
