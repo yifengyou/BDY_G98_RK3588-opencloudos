@@ -153,7 +153,7 @@ static int shield_mounts_parse(char *buf, bool *is_set, struct mount_pair *item)
 		/* clear */
 		*is_set = false;
 	} else {
-		printk(KERN_ERR"set parse error\n");
+		pr_err("set parse error\n");
 		goto error;
 	}
 
@@ -161,7 +161,7 @@ static int shield_mounts_parse(char *buf, bool *is_set, struct mount_pair *item)
 	/* dev path */
 	token = strsep(&buf, " ");
 	if (!buf || !token || !*token || strlen(token) > (PATH_MAX-1)) {
-		printk(KERN_ERR"dev path faild\n");
+		pr_err("dev path failed\n");
 	    goto error;
 	}
 	memcpy(item->dev_name, token, strlen(token)+1);
@@ -172,7 +172,7 @@ static int shield_mounts_parse(char *buf, bool *is_set, struct mount_pair *item)
 
 	return 0;
 error:
-	printk(KERN_ERR"Failed to parse shield mounts pair\n");
+	pr_err("Failed to parse shield mounts pair\n");
 	return -EFAULT;
 }
 
@@ -222,7 +222,7 @@ static ssize_t shield_mounts_proc_write(struct file *file, const char __user *ub
 
 	item = kmalloc(sizeof(struct mount_pair), GFP_KERNEL);
 	if (!item) {
-		printk(KERN_ERR"Failed to malloc mount_pair\n");
+		pr_err("Failed to malloc mount_pair\n");
 		ret = -ENOMEM;
 		goto out;
 	}
