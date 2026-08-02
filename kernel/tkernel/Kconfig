@@ -11,10 +11,20 @@ if TKERNEL
 config TKERNEL_NONPRIV_NETBIND
 	bool "Allow non-privileged user to bind specific low ports"
 	default n
+	help
+	  When enabled, the administrator can allow unprivileged processes
+	  to bind to specific low-numbered ports (< 1024) via the
+	  /proc/tkernel/nonpriv_netbind interface.  This avoids the need
+	  to grant CAP_NET_BIND_SERVICE for a single-port use case.
 
 config TKERNEL_TTOOLS
 	tristate "Tencent Kernel TTools"
 	default n
+	help
+	  Provides ptrace-based process protection.  A process can mark
+	  itself as ptrace-protected via prctl(), preventing other
+	  processes from attaching with PTRACE_ATTACH.  Useful for
+	  security-sensitive daemons that must not be traced.
 
 config TKERNEL_NETATOP
 	tristate 'Netatop support'
@@ -26,6 +36,13 @@ config TKERNEL_NETATOP
 config TKERNEL_SHIELD_MOUNTS
 	bool 'Shield mount'
 	default n
+	help
+	  Allows the administrator to mark specific mount points as
+	  shielded, preventing unprivileged users from accessing or
+	  listing them.  Configured through a proc interface.  This
+	  is useful in multi-tenant environments where certain mounts
+	  (e.g. security agent filesystems) should be invisible to
+	  container workloads.
 
 config TKERNEL_SECURITY_MONITOR
 	bool "security monitor"
