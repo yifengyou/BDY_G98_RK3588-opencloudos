@@ -23,5 +23,8 @@ if ! [ -s "$KABI" ] || ! [ -s "$SYMVER" ]; then
 fi
 
 cat "$KABI" | while read -r _crc _symbol _vmlinux _gpl; do
+	# Skip empty lines or entries without a symbol. Otherwise, the pattern
+	# "\b\b.*vmlinux" matches every vmlinux entry in SYMVER.
+	[ -z "$_symbol" ] && continue
 	grep "\b$_symbol\b.*vmlinux" "$SYMVER"
 done | sed -e "s/\t$//"
