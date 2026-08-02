@@ -71,7 +71,7 @@ done
 if [[ -z "${COMMITS[*]}" ]]; then
 	echo "Checking all commits that are ahead of remote tracking branch."
 
-	if ! UPSTREAM_BASE=$(git -C "$repo" merge-base HEAD "@{u}" 2>/dev/null); then
+	if ! UPSTREAM_BASE=$(git -C "$TOPDIR" merge-base HEAD "@{u}" 2>/dev/null); then
 		warn "Can't find a valid upstream, will only check HEAD commit."
 		COMMITS=HEAD
 	else

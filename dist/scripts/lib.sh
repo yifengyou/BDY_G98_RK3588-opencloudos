@@ -81,7 +81,7 @@ cat_repo_file() {
 		if git -C "$_repo" show "$_gitref:$_path" 2>/dev/null; then
 			return 0
 		fi
-		warn "Failed to retrive '$_path' from git reference '$_gitref', using current worktree as build source."
+		warn "Failed to retrieve '$_path' from git reference '$_gitref', using current worktree as build source."
 	fi
 
 	cat "$_repo"/"$1"
@@ -155,9 +155,9 @@ get_native_arch () {
 	uname -m
 }
 
-# Convert any arch name into linux kernel arch name
+# Convert any arch name into kernel build arch name (RPM-style).
 #
-# There is an inconsistence between Linux kernel's arch naming and
+# There is an inconsistency between the Linux kernel source arch naming and
 # RPM arch naming. eg. Linux kernel uses arm64 instead of aarch64
 # used by RPM, i686 vs x86, amd64 vs x86_64. Most are just same things
 # with different name due to historical reasons.
@@ -183,7 +183,7 @@ get_kernel_arch () {
 
 # Convert any arch name into linux kernel src arch name
 #
-# Similiar to get_kernel_arch but return the corresponding
+# Similar to get_kernel_arch but return the corresponding
 # source code base sub path in arch/
 get_kernel_src_arch () {
 	case $1 in
