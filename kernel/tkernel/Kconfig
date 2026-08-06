@@ -85,7 +85,7 @@ config TKERNEL_KILL_BLOCK
 config TKERNEL_KILL_PROTECT
 	tristate "Protect some processes from being killed"
 	default m
-	select KILL_HOOK
+	select TKERNEL_KILL_HOOK
 	help
 	  This option enables the kill protect feature.
 	  If the kill signal match the protect rule, it will be ignored.
