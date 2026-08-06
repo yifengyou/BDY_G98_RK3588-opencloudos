@@ -68,7 +68,7 @@ __setup("integrity=", integrity_param);
 
 /**
  * integrity_read_dim_enabled - read() for <securityfs>/integrity/dim_enabled
- * @file - file pointer, not actually used
+ * @filp: file pointer, not actually used
  * @buf: where to put the result
  * @count: maximum to send along
  * @ppos: where to start
