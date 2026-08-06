@@ -1401,7 +1401,6 @@ static void shrink_folio_list(struct list_head *folio_list,
 
 retry:
 	while (!list_empty(folio_list)) {
-		struct address_space *mapping;
 		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
@@ -1649,7 +1648,6 @@ retry:
 		if (folio_maybe_dma_pinned(folio))
 			goto activate_locked;
 
-		mapping = folio_mapping(folio);
 		if (folio_test_dirty(folio)) {
 			if (references == FOLIOREF_RECLAIM_CLEAN ||
 			    (!may_enter_fs(folio, sc->gfp_mask)) ||
