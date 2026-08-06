@@ -60,9 +60,9 @@ bool is_mount_shielded(struct task_struct *task, const char *dev_name, struct vf
 	if (!buf)
 		return false;
 
-	p = d_path(&mnt_path, buf, PAGE_SIZE);
+	p = d_path(&mnt_path, buf, PATH_MAX);
 	if (IS_ERR(p))
-		ret = PTR_ERR(p);
+		ret = false;
 	else
 		ret = __is_mount_shielded(dev_name, p);
 	kfree(buf);
@@ -160,15 +160,20 @@ static int shield_mounts_parse(char *buf, bool *is_set, struct mount_pair *item)
 	buf = skip_spaces(buf);
 	/* dev path */
 	token = strsep(&buf, " ");
-	if (!buf || !token || !*token || strlen(token) > (PATH_MAX-1)) {
+	if (!buf || !token || !*token ||
+	    strlen(token) >= sizeof(item->dev_name)) {
 		pr_err("dev path failed\n");
-	    goto error;
+		goto error;
 	}
-	memcpy(item->dev_name, token, strlen(token)+1);
+	memcpy(item->dev_name, token, strlen(token) + 1);
 
 	/* mnt */
 	buf = strim(buf);
-	memcpy(item->mnt_path, buf, strlen(buf)+1);
+	if (!*buf || strlen(buf) >= sizeof(item->mnt_path)) {
+		pr_err("mount path failed\n");
+		goto error;
+	}
+	memcpy(item->mnt_path, buf, strlen(buf) + 1);
 
 	return 0;
 error:
@@ -206,7 +211,7 @@ static ssize_t shield_mounts_proc_write(struct file *file, const char __user *ub
 	struct mount_pair *item;
 
 	/*max file lens for 8k*/
-	if (!ubuf || cnt > PAGE_SIZE * (1 << order))
+	if (!ubuf || cnt >= PAGE_SIZE * (1 << order))
 		return -EINVAL;
 
 	buffer = (char *)__get_free_pages(GFP_KERNEL, order);
