@@ -296,6 +296,11 @@ static inline void proc_tty_init(void) {}
 #endif
 
 /*
+ * stat.c
+ */
+void show_all_irqs(struct seq_file *p);
+
+/*
  * root.c
  */
 extern struct proc_dir_entry proc_root;
