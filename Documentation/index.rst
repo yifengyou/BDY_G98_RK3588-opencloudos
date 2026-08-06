@@ -81,6 +81,16 @@ developers seeking information on the kernel's user-space APIs.
 See also: the `Linux man pages <https://www.kernel.org/doc/man-pages/>`_,
 which are kept separately from the kernel's own documentation.
 
+TKernel documentation
+=====================
+
+.. toctree::
+   :maxdepth: 1
+
+   tkernel/tkernel
+   tkernel/irq-latency
+   tkernel/cgroup-v2-mbuf
+
 Firmware-related documentation
 ==============================
 The following holds information on the kernel's expectations regarding the
