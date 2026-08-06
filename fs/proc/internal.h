@@ -15,6 +15,7 @@
 #include <linux/sched/task.h>
 
 struct ctl_table_header;
+struct kernel_cpustat;
 struct mempolicy;
 
 /*
@@ -299,6 +300,7 @@ static inline void proc_tty_init(void) {}
  * stat.c
  */
 void show_all_irqs(struct seq_file *p);
+u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu);
 
 /*
  * root.c
