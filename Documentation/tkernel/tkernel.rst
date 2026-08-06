@@ -11,8 +11,9 @@ Overview
 
 TKernel is a collection of production-hardened kernel extensions
 developed by Tencent for the OpenCloudOS distribution.  The features
-are gated behind ``CONFIG_TKERNEL`` and can be individually enabled
-or disabled through Kconfig options.
+are individually enabled through Kconfig options.  Most TKernel-specific
+features are gated behind ``CONFIG_TKERNEL``; features maintained in the
+TKernel source tree can also have independent options.
 
 Features
 ========
@@ -75,17 +76,20 @@ Kill Protect (``CONFIG_TKERNEL_KILL_PROTECT``)
 Protects specific processes from SIGKILL and SIGTERM.  Simpler than
 kill block; operates on a per-process basis rather than per-cgroup.
 
-Async Fork (``CONFIG_TKERNEL_ASYNC_FORK``)
---------------------------------------------
+Async Fork (``CONFIG_ASYNC_FORK``)
+------------------------------------
 
 Optimises fork() performance for memory-heavy processes by
 performing page-table duplication asynchronously.
 
-Memory Cgroup Async Reclaim (``CONFIG_MEMCG_ASYNC``)
-------------------------------------------------------
+Memory Cgroup Async Reclaim
+---------------------------
 
-Enables asynchronous memory reclaim within memory cgroups, reducing
-allocation latency spikes for containerised workloads.
+This compatibility interface is built when both ``CONFIG_TKERNEL`` and
+``CONFIG_MEMCG`` are enabled; there is no ``CONFIG_MEMCG_ASYNC`` option.
+At runtime, ``vm.memcg_async`` controls integration with the RUE memory
+quality-of-service implementation.  Enabling it requires the RUE module to
+be installed.
 
 Sysctl Interface
 ================
@@ -100,4 +104,6 @@ Enable in ``make menuconfig`` under::
 
     General setup -> Tencent Kernel Features (TKERNEL)
 
-Individual features can then be toggled within the TKernel submenu.
+Individual TKernel features can then be toggled within that submenu.
+``CONFIG_ASYNC_FORK`` is configured separately under the memory-management
+options.
