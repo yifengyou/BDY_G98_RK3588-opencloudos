@@ -93,7 +93,7 @@ static ssize_t integrity_read_dim_enabled(struct file *filp, char __user *buf,
 
 /**
  * integrity_write_dim_enabled - write() for <securityfs>/integrity/dim_enabled
- * @file - file pointer, not actually used
+ * @file: file pointer, not actually used
  * @buf: where to get the data from
  * @count: bytes sent
  * @ppos: where to start
