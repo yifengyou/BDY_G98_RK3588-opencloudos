@@ -16,6 +16,8 @@
 #include <linux/tick.h>
 #include <linux/sched/sysctl.h>
 
+#include "internal.h"
+
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
 #endif
