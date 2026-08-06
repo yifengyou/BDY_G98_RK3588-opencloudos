@@ -194,7 +194,7 @@ int bt_show_stat(struct seq_file *p, void *v)
 	return __show_stat(p, v, false);
 }
 
-int iowait_show_stat(struct seq_file *p, void *v)
+static int iowait_show_stat(struct seq_file *p, void *v)
 {
 	return __show_stat(p, v, true);
 }
