@@ -60,17 +60,21 @@ trap cleanup EXIT INT TERM
 remove_port
 
 run_helper
-rc=$?
-if [ "$rc" -eq "$KSFT_SKIP" ]; then
+initial_bind_rc=$?
+if [ "$initial_bind_rc" -eq "$KSFT_SKIP" ]; then
 	skip_all "network namespaces are unavailable"
 fi
 
 echo "1..$TESTS"
 
-port_is_listed
-result $? "port is absent after reset"
+if port_is_listed; then
+	listed_rc=1
+else
+	listed_rc=0
+fi
+result "$listed_rc" "port is absent after reset"
 
-[ "$rc" -eq 1 ]
+[ "$initial_bind_rc" -eq 1 ]
 result $? "unprivileged bind is denied by default"
 
 printf '+%s\n' "$PORT" > "$PROC_FILE"
