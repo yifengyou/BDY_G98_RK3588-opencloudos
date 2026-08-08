@@ -4,7 +4,8 @@
 SYSCTL=/proc/sys/kernel/sig_kill_block
 RULES=/proc/kill_block/whitelist
 STAT=/proc/kill_block/stat
-TESTS=9
+PARALLEL_SENDERS=8
+TESTS=12
 target_pid=
 module_loaded=0
 
@@ -64,6 +65,50 @@ wait_for_exit()
 	return 1
 }
 
+run_parallel_senders()
+{
+	sender_pids=
+	i=0
+	while [ "$i" -lt "$PARALLEL_SENDERS" ]; do
+		"$helper" send "$sender_comm" "$target_pid" 15 \
+			>/dev/null 2>&1 &
+		sender_pids="$sender_pids $!"
+		i=$((i + 1))
+	done
+
+	rc=0
+	for sender_pid in $sender_pids; do
+		if wait "$sender_pid"; then
+			sender_rc=0
+		else
+			sender_rc=$?
+		fi
+		[ "$sender_rc" -eq 1 ] || rc=1
+	done
+
+	return "$rc"
+}
+
+reload_module()
+{
+	[ "$module_loaded" -eq 1 ] || return "$KSFT_SKIP"
+	write_sysctl 0 || return 1
+	write_rule "del $sender_comm $target_comm *" || true
+
+	i=0
+	while [ "$i" -lt 3 ]; do
+		modprobe -r kill_block 2>/dev/null || return 1
+		module_loaded=0
+		modprobe kill_block 2>/dev/null || return 1
+		module_loaded=1
+		[ -w "$SYSCTL" ] && [ -r "$RULES" ] && [ -w "$RULES" ] &&
+			[ -r "$STAT" ] || return 1
+		i=$((i + 1))
+	done
+
+	return 0
+}
+
 cleanup()
 {
 	write_sysctl 0 || true
@@ -117,6 +162,15 @@ blocked=$(awk '{ total += $2 } END { print total + 0 }' "$STAT")
 [ "$blocked" -gt 0 ]
 ksft_result $? "the blocked-signal counter is incremented"
 
+run_parallel_senders
+rc=$?
+kill -0 "$target_pid" 2>/dev/null || rc=1
+ksft_result "$rc" "concurrent SIGTERM attempts are blocked"
+
+parallel_after=$(awk '{ total += $2 } END { print total + 0 }' "$STAT")
+[ "$parallel_after" -ge "$PARALLEL_SENDERS" ]
+ksft_result $? "concurrent blocked signals are all accounted"
+
 write_rule "add $sender_comm $target_comm *"
 ksft_result $? "a matching whitelist rule can be added"
 
@@ -144,5 +198,14 @@ else
 	rc=0
 fi
 ksft_result "$rc" "an out-of-range mode is rejected"
+
+reload_module
+rc=$?
+if [ "$rc" -eq "$KSFT_SKIP" ]; then
+	ksft_result_skip "kill block survives repeated module reloads" \
+		"the module was loaded before the test"
+else
+	ksft_result "$rc" "kill block survives repeated module reloads"
+fi
 
 ksft_finished

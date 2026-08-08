@@ -27,6 +27,12 @@ ksft_result()
 	fi
 }
 
+ksft_result_skip()
+{
+	test_no=$((test_no + 1))
+	echo "ok $test_no - $1 # SKIP $2"
+}
+
 ksft_finished()
 {
 	[ "$failures" -eq 0 ]

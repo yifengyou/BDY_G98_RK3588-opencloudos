@@ -4,7 +4,8 @@
 SYSCTL=/proc/sys/kernel/sig_kill_protect
 RULES=/proc/kill_protect/blacklist
 STAT=/proc/kill_protect/stat
-TESTS=9
+PARALLEL_SENDERS=8
+TESTS=12
 target_pid=
 module_loaded=0
 
@@ -62,6 +63,50 @@ wait_for_exit()
 	done
 
 	return 1
+}
+
+run_parallel_senders()
+{
+	sender_pids=
+	i=0
+	while [ "$i" -lt "$PARALLEL_SENDERS" ]; do
+		"$helper" send "$sender_comm" "$target_pid" 15 \
+			>/dev/null 2>&1 &
+		sender_pids="$sender_pids $!"
+		i=$((i + 1))
+	done
+
+	rc=0
+	for sender_pid in $sender_pids; do
+		if wait "$sender_pid"; then
+			sender_rc=0
+		else
+			sender_rc=$?
+		fi
+		[ "$sender_rc" -eq 1 ] || rc=1
+	done
+
+	return "$rc"
+}
+
+reload_module()
+{
+	[ "$module_loaded" -eq 1 ] || return "$KSFT_SKIP"
+	write_sysctl 0 || return 1
+	write_rule "del $target_comm" || true
+
+	i=0
+	while [ "$i" -lt 3 ]; do
+		modprobe -r kill_protect 2>/dev/null || return 1
+		module_loaded=0
+		modprobe kill_protect 2>/dev/null || return 1
+		module_loaded=1
+		[ -w "$SYSCTL" ] && [ -r "$RULES" ] && [ -w "$RULES" ] &&
+			[ -r "$STAT" ] || return 1
+		i=$((i + 1))
+	done
+
+	return 0
 }
 
 cleanup()
@@ -131,6 +176,17 @@ protect_after=$(awk '/^protect count:/ { print $3 }' "$STAT")
 	[ "$protect_after" -gt "$protect_before" ]
 ksft_result $? "the protection counter is incremented"
 
+parallel_before=$protect_after
+run_parallel_senders
+rc=$?
+kill -0 "$target_pid" 2>/dev/null || rc=1
+ksft_result "$rc" "concurrent SIGTERM attempts are rejected"
+
+parallel_after=$(awk '/^protect count:/ { print $3 }' "$STAT")
+[ -n "$parallel_before" ] && [ -n "$parallel_after" ] &&
+	[ $((parallel_after - parallel_before)) -ge "$PARALLEL_SENDERS" ]
+ksft_result $? "concurrent protection events are all accounted"
+
 write_rule "del $target_comm"
 ksft_result $? "the blacklist rule can be removed"
 
@@ -143,5 +199,14 @@ else
 	rc=1
 fi
 ksft_result "$rc" "SIGTERM is delivered after removing the rule"
+
+reload_module
+rc=$?
+if [ "$rc" -eq "$KSFT_SKIP" ]; then
+	ksft_result_skip "kill protect survives repeated module reloads" \
+		"the module was loaded before the test"
+else
+	ksft_result "$rc" "kill protect survives repeated module reloads"
+fi
 
 ksft_finished

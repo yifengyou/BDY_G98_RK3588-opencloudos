@@ -4,7 +4,7 @@
 KSFT_SKIP=4
 PROC_FILE=/proc/tkernel/nonpriv_netbind
 PORT=83
-TESTS=6
+TESTS=9
 test_no=0
 failures=0
 
@@ -44,6 +44,16 @@ run_helper()
 	return $?
 }
 
+invalid_write_is_rejected()
+{
+	before=$(cat "$PROC_FILE")
+	if printf '%s\n' "$1" > "$PROC_FILE" 2>/dev/null; then
+		return 1
+	fi
+	after=$(cat "$PROC_FILE")
+	[ "$before" = "$after" ]
+}
+
 cleanup()
 {
 	[ -e "$PROC_FILE" ] && remove_port
@@ -73,6 +83,15 @@ else
 	listed_rc=0
 fi
 result "$listed_rc" "port is absent after reset"
+
+invalid_write_is_rejected "+0"
+result $? "port zero is rejected"
+
+invalid_write_is_rejected "+1024"
+result $? "a port outside the privileged range is rejected"
+
+invalid_write_is_rejected "+${PORT}junk"
+result $? "trailing garbage is rejected"
 
 [ "$initial_bind_rc" -eq 1 ]
 result $? "unprivileged bind is denied by default"
