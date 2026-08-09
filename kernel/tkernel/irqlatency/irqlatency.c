@@ -8,6 +8,8 @@
  */
 #define pr_fmt(fmt) "irqlatency: " fmt
 
+#include <linux/cpu.h>
+#include <linux/cpuhotplug.h>
 #include <linux/hrtimer.h>
 #include <linux/irqflags.h>
 #include <linux/kernel.h>
@@ -70,6 +72,7 @@ struct per_cpu_detect_data {
 static u64 freq_ms = 10;
 static u64 irq_latency_ms = 30;
 static unsigned int check_enable;
+static int irqlatency_hp_state;
 
 static struct per_cpu_detect_data __percpu *detect_data;
 
@@ -218,25 +221,46 @@ static void percpu_timers_start(void *data)
 	add_timer_on(softirq_timer, smp_processor_id());
 }
 
+static void percpu_timers_init(unsigned int cpu)
+{
+	struct per_cpu_detect_data *data = per_cpu_ptr(detect_data, cpu);
+
+	timer_setup(&data->softirq_timer, softirq_timer_func,
+		    TIMER_PINNED | TIMER_IRQSAFE);
+
+	hrtimer_init(&data->irq_timer, CLOCK_MONOTONIC,
+		     HRTIMER_MODE_PINNED);
+	data->irq_timer.function = irq_hrtimer_func;
+}
+
+static int irqlatency_cpu_online(unsigned int cpu)
+{
+	struct per_cpu_detect_data *data = per_cpu_ptr(detect_data, cpu);
+
+	percpu_timers_init(cpu);
+	if (READ_ONCE(check_enable))
+		percpu_timers_start(data);
+
+	return 0;
+}
+
+static int irqlatency_cpu_offline(unsigned int cpu)
+{
+	struct per_cpu_detect_data *data = per_cpu_ptr(detect_data, cpu);
+
+	del_timer_sync(&data->softirq_timer);
+	hrtimer_cancel(&data->irq_timer);
+
+	return 0;
+}
+
 static void latency_timers_start(void)
 {
 	int cpu;
 
-	for_each_online_cpu(cpu) {
-		struct timer_list *softirq_timer;
-		struct hrtimer *irq_timer;
-
-		softirq_timer = per_cpu_ptr(&detect_data->softirq_timer, cpu);
-		timer_setup(softirq_timer, softirq_timer_func,
-			    TIMER_PINNED | TIMER_IRQSAFE);
-
-		irq_timer = per_cpu_ptr(&detect_data->irq_timer, cpu);
-		hrtimer_init(irq_timer, CLOCK_MONOTONIC, HRTIMER_MODE_PINNED);
-		irq_timer->function = irq_hrtimer_func;
-
+	for_each_online_cpu(cpu)
 		smp_call_function_single(cpu, percpu_timers_start,
 				per_cpu_ptr(detect_data, cpu), true);
-	}
 }
 
 static void latency_timers_stop(void)
@@ -281,12 +305,17 @@ static ssize_t enable_write(struct file *file, const char __user *buf,
 	if (enable == check_enable)
 		return count;
 
-	if (!enable)
+	cpus_read_lock();
+	if (!enable) {
+		WRITE_ONCE(check_enable, 0);
 		latency_timers_stop();
-	else if (!!enable != !!check_enable)
+	} else if (!READ_ONCE(check_enable)) {
+		WRITE_ONCE(check_enable, enable);
 		latency_timers_start();
-
-	check_enable = enable;
+	} else {
+		WRITE_ONCE(check_enable, enable);
+	}
+	cpus_read_unlock();
 
 	return count;
 }
@@ -582,6 +611,7 @@ static const struct proc_ops trace_dist_fops = {
 static int __init trace_latency_init(void)
 {
 	struct proc_dir_entry *latency_dir;
+	int ret = -ENOMEM;
 
 	detect_data = alloc_percpu(struct per_cpu_detect_data);
 	if (!detect_data)
@@ -606,6 +636,14 @@ static int __init trace_latency_init(void)
 	if (!proc_create("trace_dist", 0400, latency_dir, &trace_dist_fops))
 		goto remove_proc;
 
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
+				"tkernel/irqlatency:online",
+				irqlatency_cpu_online,
+				irqlatency_cpu_offline);
+	if (ret < 0)
+		goto remove_proc;
+	irqlatency_hp_state = ret;
+
 	pr_info("Load irq latency check module!\n");
 	return 0;
 
@@ -614,13 +652,13 @@ remove_proc:
 free_data:
 	free_percpu(detect_data);
 
-	return -ENOMEM;
+	return ret;
 }
 
 static void __exit trace_latency_exit(void)
 {
-	if (check_enable)
-		latency_timers_stop();
+	WRITE_ONCE(check_enable, 0);
+	cpuhp_remove_state(irqlatency_hp_state);
 	remove_proc_subtree("irq_latency", NULL);
 	free_percpu(detect_data);
 	pr_info("Unload irq latency check module!\n");
