@@ -24,13 +24,13 @@
 #include "udma_jfr.h"
 #include "udma_cmd.h"
 #include "udma_ctx.h"
-#include "udma_rct.h"
 #include "udma_tid.h"
 #include "udma_dfx.h"
 #include "udma_eid.h"
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 #include "udma_mue.h"
+#include "udma_jetty_group.h"
 
 #define UDMA_DRV_VER "1.0"
 
@@ -143,8 +143,7 @@ static void udma_set_dev_caps(struct ubcore_device_attr *attr, struct udma_dev *
 	attr->port_cnt = udma_dev->caps.port_num;
 	attr->dev_cap.ceq_cnt = udma_dev->caps.comp_vector_cnt;
 	attr->dev_cap.max_ue_cnt = udma_dev->caps.ue_cnt;
-	attr->dev_cap.max_rc = udma_dev->caps.rc_queue_num;
-	attr->dev_cap.max_rc_depth = udma_dev->caps.rc_queue_depth;
+	attr->dev_cap.max_rc = udma_dev->caps.rc_max_cnt;
 	attr->dev_cap.max_eid_cnt = udma_dev->caps.seid.max_cnt;
 	attr->dev_cap.feature.bs.jfc_inline = (udma_dev->caps.feature &
 					       UDMA_CAP_FEATURE_JFC_INLINE) ? 1 : 0;
@@ -242,6 +241,22 @@ static int udma_query_stats(struct ubcore_device *dev, struct ubcore_stats_key *
 
 static void udma_disassociate_ucontext(struct ubcore_ucontext *uctx)
 {
+}
+
+static int udma_config_device(struct ubcore_device *ubcore_dev,
+			      struct ubcore_device_cfg *cfg)
+{
+	struct udma_dev *dev = to_udma_dev(ubcore_dev);
+
+	if ((cfg->mask.bs.reserved_jetty_id_min && cfg->reserved_jetty_id_min != 0) ||
+	    (cfg->mask.bs.reserved_jetty_id_max && cfg->reserved_jetty_id_max !=
+	    dev->caps.public_jetty.max_cnt - 1)) {
+		dev_err(dev->dev, "public jetty range must 0-%u.\n",
+			dev->caps.public_jetty.max_cnt - 1);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static struct ubcore_ops g_dev_ops = {
@@ -477,25 +492,6 @@ int udma_init_tables(struct udma_dev *udma_dev)
 	return 0;
 }
 
-static void udma_free_rct(struct udma_dev *udev)
-{
-	uint32_t min = udev->rc_table.ida_table.min;
-	uint32_t max = udev->rc_table.ida_table.max;
-	uint32_t i;
-
-	if (test_and_clear_bit(RCT_INIT_FLAG, &udev->caps.init_flag))
-		for (i = min; i < max; i++)
-			udma_free_rc_queue(udev, i);
-}
-
-static void udma_unset_ubcore_dev(struct udma_dev *udma_dev)
-{
-	struct ubcore_device *ub_dev = &udma_dev->ub_dev;
-
-	ubcore_unregister_device(ub_dev);
-	udma_free_rct(udma_dev);
-}
-
 static int udma_set_ubcore_dev(struct udma_dev *udma_dev)
 {
 	struct ubcore_device *ub_dev = &udma_dev->ub_dev;
@@ -673,13 +669,23 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	for (i = 0; i < qos_info->ctp_sl_num; i++)
 		dev->udma_sl[qos_info->tp_sl_num + i] = qos_info->ctp_sl[i];
 
-	for (i = 0; i < UDMA_MAX_SL_NUM; i++) {
-		dev->priority_info[i].SL = dev->udma_tp_sl[UDMA_DEFAULT_SL_NUM];
-		dev->priority_info[i].tp_type.bs.rtp = 1;
+	if (qos_info->tp_sl_num != 0) {
+		for (i = 0; i < UDMA_MAX_SL_NUM; i++) {
+			dev->priority_info[i].SL = dev->udma_tp_sl[UDMA_DEFAULT_SL_NUM];
+			dev->priority_info[i].tp_type.bs.rtp = 1;
+		}
+	} else {
+		for (i = 0; i < UDMA_MAX_SL_NUM; i++) {
+			dev->priority_info[i].SL = dev->udma_ctp_sl[UDMA_DEFAULT_SL_NUM];
+			dev->priority_info[i].tp_type.bs.ctp = 1;
+		}
 	}
 
-	for (i = 0; i < dev->udma_tp_sl_num; i++)
+	for (i = 0; i < dev->udma_tp_sl_num; i++) {
 		dev->priority_info[dev->udma_tp_sl[i]].SL = dev->udma_tp_sl[i];
+		dev->priority_info[dev->udma_tp_sl[i]].tp_type.bs.rtp = 1;
+		dev->priority_info[dev->udma_tp_sl[i]].tp_type.bs.ctp = 0;
+	}
 
 	for (i = 0; i < dev->udma_ctp_sl_num; i++) {
 		dev->priority_info[dev->udma_ctp_sl[i]].SL = dev->udma_ctp_sl[i];
@@ -748,7 +754,6 @@ static int udma_query_wqebb_va(struct udma_dev *dev)
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
-#define RC_QUEUE_ENTRY_SIZE 64
 	struct ubase_adev_caps *a_caps;
 	uint32_t jetty_grp_cnt;
 	int ret;
@@ -774,13 +779,9 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.jetty.start_idx = a_caps->jfs.start_idx;
 	udma_dev->caps.jetty.next_idx = udma_dev->caps.jetty.start_idx;
 	udma_dev->caps.cqe_size = UDMA_CQE_SIZE;
-	udma_dev->caps.rc_queue_num = a_caps->rc_max_cnt;
-	udma_dev->caps.rc_queue_depth = a_caps->rc_que_depth;
-	udma_dev->caps.rc_entry_size = RC_QUEUE_ENTRY_SIZE;
-	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
-	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
 	udma_dev->caps.ipourma_en = ubase_adev_ip_over_urma_supported(udma_dev->comdev.adev);
 	udma_dev->caps.ctp_en = !(ubase_adev_ip_over_urma_utp_supported(udma_dev->comdev.adev));
+	udma_dev->caps.rc_max_cnt = a_caps->rc_max_cnt;
 
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)
@@ -1216,7 +1217,7 @@ static int udma_init_dev(struct auxiliary_device *adev)
 	if (ret)
 		goto err_event_register;
 
-	ret = udma_register_activate_workqueue(udma_dev);
+	ret = udma_register_workqueue(udma_dev);
 	if (ret) {
 		dev_err(udma_dev->dev, "UDMA activate workqueue failed.\n");
 		goto err_register_act_init;
@@ -1240,9 +1241,9 @@ static int udma_init_dev(struct auxiliary_device *adev)
 	return 0;
 
 err_init_eid:
-	udma_unset_ubcore_dev(udma_dev);
+	ubcore_unregister_device(&udma_dev->ub_dev);
 err_set_ubcore_dev:
-	udma_unregister_activate_workqueue(udma_dev);
+	udma_unregister_workqueue(udma_dev);
 err_register_act_init:
 	udma_unregister_none_crq_event(adev);
 	udma_unregister_crq_event(adev);
@@ -1326,8 +1327,8 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 	}
 
 	udma_unregister_none_crq_event(adev);
-	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_activate_workqueue(udma_dev);
+	ubcore_unregister_device(&udma_dev->ub_dev);
+	udma_unregister_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
 	/* Crq event should unregister after wait flush done. */
 	udma_unregister_crq_event(adev);
@@ -1391,8 +1392,8 @@ void udma_remove(struct auxiliary_device *adev)
 	}
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_unregister_none_crq_event(adev);
-	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_activate_workqueue(udma_dev);
+	ubcore_unregister_device(&udma_dev->ub_dev);
+	udma_unregister_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
 	(void)ubase_activate_dev(adev);
 	udma_unregister_crq_event(adev);

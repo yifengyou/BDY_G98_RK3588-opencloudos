@@ -140,13 +140,9 @@ struct ubase_stop_perf_stats_cmd {
 	__le32	rx_port_bw;
 	__le32	tx_vl_bw[UBASE_STATS_MAX_VL_NUM];
 	__le32	rx_vl_bw[UBASE_STATS_MAX_VL_NUM];
-	u32	tx_max_port_bw;
-	u32	rx_max_port_bw;
 
-	KABI_RESERVE(1)
-	KABI_RESERVE(2)
-	KABI_RESERVE(3)
-	KABI_RESERVE(4)
+	__le32	tx_max_port_bw;
+	__le32	rx_max_port_bw;
 };
 
 struct ubase_cfg_ets_vl_sch_cmd {
@@ -368,7 +364,8 @@ int ubase_send_cmd(struct ubase_dev *udev,
 
 int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 				struct ubase_cmd_buf *in,
-				struct ubase_cmd_buf *out);
+				struct ubase_cmd_buf *out,
+				struct ubase_cmd_mailbox *mailbox);
 int __ubase_cmd_send_in(struct ubase_dev *udev, struct ubase_cmd_buf *in);
 int __ubase_cmd_send_inout(struct ubase_dev *udev, struct ubase_cmd_buf *in,
 			   struct ubase_cmd_buf *out);
@@ -381,4 +378,4 @@ void ubase_crq_service_task(struct ubase_delay_work *ubase_work);
 
 void ubase_mask_key_words(struct ubase_cmdq_desc *desc, u16 opc, int idx);
 
-#endif
+#endif /* __UBASE_CMD_H__ */

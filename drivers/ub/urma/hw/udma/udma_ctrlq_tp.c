@@ -4,11 +4,13 @@
 #define dev_fmt(fmt) "UDMA: " fmt
 
 #include <linux/slab.h>
+#include <linux/sched.h>
 #include <ub/ubase/ubase_comm_dev.h>
 #include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_ctrlq.h>
 #include "udma_cmd.h"
 #include <ub/urma/udma/udma_ctl.h>
+#include "udma_eq.h"
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
 
@@ -48,12 +50,16 @@ int udma_ctrlq_remove_single_tp(struct udma_dev *udev, uint32_t tpn, int status)
 
 static void udma_notify_ue_tp_flush_done(struct udma_dev *udma_dev, uint8_t ue_idx)
 {
+#define UDMA_RETRY_TIMES 3
 	struct udma_entity_buf ue_buf = {};
+	int retry = 0;
 	int ret;
 
-	ret = udma_send_msg_to_ue(udma_dev, &ue_buf, ue_idx, UDMA_CMD_NOTIFY_UE_FLUSH_DONE);
-	if (ret)
-		dev_err(udma_dev->dev, "fail to notify ue the tp flush done, ret %d.\n", ret);
+	do {
+		ret = udma_send_msg_to_ue(udma_dev, &ue_buf, ue_idx, UDMA_CMD_NOTIFY_UE_FLUSH_DONE);
+	} while (ret != 0 && retry++ < UDMA_RETRY_TIMES);
+	if (ret != 0)
+		dev_err(udma_dev->dev, "notify ue %u tp flush done failed, ret %d.\n", ue_idx, ret);
 
 	return;
 }
@@ -75,6 +81,38 @@ static struct udma_ue_idx_table *udma_find_ue_idx_by_tpn(struct udma_dev *udev,
 	xa_unlock(&udev->tpn_ue_idx_table);
 
 	return tp_ue_idx_info;
+}
+
+void udma_tp_ae_work(struct work_struct *work)
+{
+	struct udma_ae_work *ae_work = container_of(work, struct udma_ae_work, work);
+	struct udma_ctrlq_tp_flush_done_req_data tp_cfg_req = {};
+	struct udma_ue_idx_table *tp_ue_idx_info;
+	struct udma_dev *udev = ae_work->udev;
+	struct ubase_ctrlq_msg msg = {};
+	int ret = 0;
+	uint32_t i;
+
+	tp_ue_idx_info = udma_find_ue_idx_by_tpn(udev, ae_work->tpn);
+	if (tp_ue_idx_info) {
+		for (i = 0; i < tp_ue_idx_info->num; i++)
+			udma_notify_ue_tp_flush_done(udev, tp_ue_idx_info->ue_idx[i]);
+
+		kfree(tp_ue_idx_info);
+	} else {
+		ret = udma_open_ue_rx(udev, true, false, false, 0);
+		if (ret)
+			dev_warn(udev->dev, "udma open ue rx failed in tp ae work.\n");
+	}
+
+	tp_cfg_req.tpn = ae_work->tpn;
+	msg.opcode = UDMA_CMD_CTRLQ_TP_FLUSH_DONE;
+	udma_ctrlq_set_tp_msg(&msg, (void *)&tp_cfg_req, sizeof(tp_cfg_req), NULL, 0);
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret)
+		dev_err(udev->dev, "tp ae work ctrlq tp %u failed, ret %d.\n", ae_work->tpn, ret);
+
+	kfree(ae_work);
 }
 
 int udma_ctrlq_tp_flush_done(struct udma_dev *udev, uint32_t tpn)
@@ -597,7 +635,7 @@ int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_c
 	int ret;
 	int i;
 
-	if (!udata)
+	if (current->flags & PF_KTHREAD)
 		tp_cfg_req.flag = UDMA_DEFAULT_PID;
 	else
 		tp_cfg_req.flag = (uint32_t)current->tgid & UDMA_PID_MASK;
@@ -709,8 +747,6 @@ static int udma_k_ctrlq_save_tpn(struct udma_dev *udev, uint32_t tp_id, uint32_t
 	struct udma_ctrlq_tp_info_resp_data tp_info_resp = {};
 	struct udma_ctrlq_tp_info_req_data tp_info_req = {};
 	struct ubase_ctrlq_msg msg = {};
-	struct udma_entity_buf *req_msg;
-	struct udma_ue_tp_info *data;
 	int ret;
 
 	tp_info_req.tp_id = tp_id;
@@ -724,31 +760,9 @@ static int udma_k_ctrlq_save_tpn(struct udma_dev *udev, uint32_t tp_id, uint32_t
 		return ret;
 	}
 
-	if (tp_info_resp.resp_tpn_cnt != tp_info_resp.req_tpn_cnt) {
-		dev_err(udev->dev, "resp tp cnt = %u not equal to req tp cnt = %u.\n",
-			tp_info_resp.resp_tpn_cnt, tp_info_resp.req_tpn_cnt);
-		return -EINVAL;
-	}
-
 	*tp_num = tp_info_resp.resp_tpn_cnt + tp_info_resp.req_tpn_cnt;
-	if (!udev->is_ue)
-		return 0;
 
-	req_msg = kzalloc(sizeof(*req_msg) + sizeof(*data), GFP_KERNEL);
-	if (!req_msg)
-		return -ENOMEM;
-
-	data = (struct udma_ue_tp_info *)req_msg->data;
-	data->start_tpn = tp_info_resp.resp_start_tpn;
-	data->tp_cnt = tp_info_resp.resp_tpn_cnt;
-	req_msg->len = (uint32_t)sizeof(*data);
-	ret = udma_send_sync_msg_to_mue(udev, req_msg, UDMA_CMD_NOTIFY_MUE_SAVE_TP);
-	if (ret)
-		dev_err(udev->dev, "failed to notify mue save tp info, ret = %d.\n", ret);
-
-	kfree(req_msg);
-
-	return ret;
+	return 0;
 }
 
 int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_handle,
@@ -776,7 +790,7 @@ int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_ha
 	deactive_tp_req.tp_id = tp_id;
 	deactive_tp_req.tpn_cnt = tp_handle.bs.tp_cnt;
 	deactive_tp_req.start_tpn = tp_handle.bs.tpn_start;
-	if (!udata)
+	if (current->flags & PF_KTHREAD)
 		deactive_tp_req.pid_flag = UDMA_DEFAULT_PID;
 	else
 		deactive_tp_req.pid_flag = (uint32_t)current->tgid & UDMA_PID_MASK;

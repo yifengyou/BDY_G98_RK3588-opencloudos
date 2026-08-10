@@ -64,15 +64,11 @@ struct udma_caps {
 	struct udma_res stars_jetty;
 	struct udma_res public_jetty;
 	struct udma_res user_ctrl_normal_jetty;
-	uint16_t rc_queue_num;
-	uint16_t rc_queue_depth;
-	uint8_t rc_entry_size;
-	uint64_t rc_dma_len;
-	dma_addr_t rc_dma_addr;
 	uint8_t ack_queue_num;
 	uint8_t port_num;
 	uint8_t cqe_size;
 	struct udma_tbl seid;
+	uint32_t rc_max_cnt;
 	bool ctp_en;
 	bool ipourma_en;
 	bool sva_sep_mode_en;
@@ -102,7 +98,6 @@ struct udma_dfx_entity {
 };
 
 struct udma_dfx_info {
-	struct udma_dfx_entity	rc;
 	struct udma_dfx_entity	jetty;
 	struct udma_dfx_entity	jetty_grp;
 	struct udma_dfx_entity	jfs;
@@ -221,13 +216,32 @@ struct udma_sq_reserved_info {
 	bool sq_reserved;
 };
 
-enum {
-	RCT_INIT_FLAG,
-};
-
 struct udma_ae_event_type {
 	uint8_t event_type;
 	uint8_t sub_type;
+};
+
+struct udma_rc_ctx {
+	/* DW0 */
+	uint32_t rsv0 : 5;
+	uint32_t type : 3;
+	uint32_t rce_shift : 4;
+	uint32_t rsv1 : 4;
+	uint32_t state : 3;
+	uint32_t rsv2 : 1;
+	uint32_t rce_token_id_l : 12;
+	/* DW1 */
+	uint32_t rce_token_id_h : 8;
+	uint32_t rsv3 : 4;
+	uint32_t rce_base_addr_l : 20;
+	/* DW2 */
+	uint32_t rce_base_addr_h;
+	/* DW3~DW31 */
+	uint32_t rsv4[28];
+	uint32_t avail_sgmt_ost : 10;
+	uint32_t rsv5 : 22;
+	/* DW32~DW63 */
+	uint32_t rsv6[32];
 };
 
 #endif /* __UDMA_DEF_H__ */
