@@ -151,6 +151,7 @@ struct ubagg_set_topo_info {
 struct ubagg_create_dev_arg {
 	struct {
 		union ubcore_eid agg_eid;
+		char dev_name[UBAGG_MAX_DEV_NAME_LEN];
 	} in;
 };
 
@@ -181,6 +182,7 @@ enum ubagg_userctl_opcode {
 struct ubagg_slave_device {
 	int slave_dev_num;
 	char slave_dev_name[UBAGG_MAX_DEV_NUM][UBAGG_MAX_DEV_NAME_LEN];
+	struct ubagg_physical_device physical_devices[IODIE_NUM];
 };
 
 struct ubagg_topo_info_out {
@@ -202,4 +204,6 @@ struct ubagg_add_dev_by_uvs {
 };
 
 long ubagg_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+
+void ubagg_clear_dev_list(void);
 #endif // UBAGG_IOCTL_H

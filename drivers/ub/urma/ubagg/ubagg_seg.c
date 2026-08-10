@@ -100,6 +100,13 @@ struct ubcore_target_seg *ubagg_register_seg(struct ubcore_device *dev,
 	seg_node->ubagg_seg.seg.token_id = token_id;
 	seg_node->token_id = token_id;
 	seg_node->ubagg_seg.ub_dev = dev;
+	if (udata->udrv_data->in_addr != 0 &&
+		udata->udrv_data->in_len > sizeof(struct ubagg_seg_exchange_info)) {
+		ubagg_log_err(
+			"invalid udrv_data in_len.\n");
+		goto FREE_TOKEN_ID;
+
+	}
 	ret = copy_from_user(&seg_node->ex_info,
 			     (void __user *)udata->udrv_data->in_addr,
 			     udata->udrv_data->in_len);

@@ -991,7 +991,17 @@ static void ubmad_jfce_handler(struct ubcore_jfc *jfc,
 	jfce_work->agent_priv = agent_priv;
 
 	INIT_WORK(&jfce_work->work, ubmad_jfce_work_handler);
-	ret = queue_work(agent_priv->jfce_wq, &jfce_work->work);
+	switch (jfce_work->type) {
+	case UBMAD_SEND_WORK:
+		ret = queue_work(agent_priv->jfce_wq_s, &jfce_work->work);
+		break;
+	case UBMAD_RECV_WORK:
+		ret = queue_work(agent_priv->jfce_wq_r, &jfce_work->work);
+		break;
+	default:
+		ret = 0;
+		ubcore_log_err("wrong jfce_wrok->type:%d\n", jfce_work->type);
+	}
 	if (!ret) {
 		ubcore_log_err("queue work failed. ret %d\n", ret);
 		goto free_work;

@@ -41,8 +41,6 @@ void uburma_unmap_vma_pages(struct uburma_file *ufile)
 	if (list_empty(&ufile->umaps_list))
 		return;
 
-	lockdep_assert_held(&ufile->cleanup_rwsem);
-
 	while (1) {
 		mm = NULL;
 		mutex_lock(&ufile->umap_mutex);
