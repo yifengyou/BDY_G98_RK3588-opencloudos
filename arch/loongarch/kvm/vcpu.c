@@ -149,14 +149,6 @@ static void kvm_lose_pmu(struct kvm_vcpu *vcpu)
 	kvm_restore_host_pmu(vcpu);
 }
 
-static void kvm_check_pmu(struct kvm_vcpu *vcpu)
-{
-	if (kvm_check_request(KVM_REQ_PMU, vcpu)) {
-		kvm_own_pmu(vcpu);
-		vcpu->arch.aux_inuse |= KVM_LARCH_PMU;
-	}
-}
-
 static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 {
 	u32 version;
@@ -227,11 +219,41 @@ static int kvm_check_requests(struct kvm_vcpu *vcpu)
 static void kvm_late_check_requests(struct kvm_vcpu *vcpu)
 {
 	lockdep_assert_irqs_disabled();
+
+	if (!kvm_request_pending(vcpu))
+		return;
+
+	if (kvm_check_request(KVM_REQ_PMU, vcpu)) {
+		kvm_own_pmu(vcpu);
+		vcpu->arch.aux_inuse |= KVM_LARCH_PMU;
+	}
+
 	if (kvm_check_request(KVM_REQ_TLB_FLUSH_GPA, vcpu))
 		if (vcpu->arch.flush_gpa != INVALID_GPA) {
 			kvm_flush_tlb_gpa(vcpu, vcpu->arch.flush_gpa);
 			vcpu->arch.flush_gpa = INVALID_GPA;
 		}
+
+	if (kvm_check_request(KVM_REQ_AUX_LOAD, vcpu)) {
+		switch (vcpu->arch.aux_ldtype) {
+		case KVM_LARCH_FPU:
+			kvm_own_fpu(vcpu);
+			break;
+		case KVM_LARCH_LSX:
+			kvm_own_lsx(vcpu);
+			break;
+		case KVM_LARCH_LASX:
+			kvm_own_lasx(vcpu);
+			break;
+		case KVM_LARCH_LBT:
+			kvm_own_lbt(vcpu);
+			break;
+		default:
+			break;
+		}
+
+		vcpu->arch.aux_ldtype = 0;
+	}
 }
 
 /*
@@ -286,7 +308,6 @@ static int kvm_pre_enter_guest(struct kvm_vcpu *vcpu)
 		/* Make sure the vcpu mode has been written */
 		smp_store_mb(vcpu->mode, IN_GUEST_MODE);
 		kvm_check_vpid(vcpu);
-		kvm_check_pmu(vcpu);
 
 		/*
 		 * Called after function kvm_check_vpid()
@@ -294,7 +315,6 @@ static int kvm_pre_enter_guest(struct kvm_vcpu *vcpu)
 		 * and it may also clear KVM_REQ_TLB_FLUSH_GPA pending bit
 		 */
 		kvm_late_check_requests(vcpu);
-		vcpu->arch.host_eentry = csr_read64(LOONGARCH_CSR_EENTRY);
 		/* Clear KVM_LARCH_SWCSR_LATEST as CSR will change when enter guest */
 		vcpu->arch.aux_inuse &= ~KVM_LARCH_SWCSR_LATEST;
 
@@ -377,7 +397,7 @@ bool kvm_arch_vcpu_in_kernel(struct kvm_vcpu *vcpu)
 	val = gcsr_read(LOONGARCH_CSR_CRMD);
 	preempt_enable();
 
-	return (val & CSR_PRMD_PPLV) == PLV_KERN;
+	return (val & CSR_CRMD_PLV) == PLV_KERN;
 }
 
 #ifdef CONFIG_GUEST_PERF_EVENTS
@@ -656,6 +676,8 @@ static int _kvm_setcsr(struct kvm_vcpu *vcpu, unsigned int id, u64 val)
 
 static int _kvm_get_cpucfg_mask(int id, u64 *v)
 {
+	unsigned int config;
+
 	if (id < 0 || id >= KVM_MAX_CPUCFG_REGS)
 		return -EINVAL;
 
@@ -688,9 +710,18 @@ static int _kvm_get_cpucfg_mask(int id, u64 *v)
 		if (cpu_has_ptw)
 			*v |= CPUCFG2_PTW;
 
+		config = read_cpucfg(LOONGARCH_CPUCFG2);
+		*v |= config & (CPUCFG2_FRECIPE | CPUCFG2_DIV32 | CPUCFG2_LAM_BH);
+		*v |= config & (CPUCFG2_LAMCAS | CPUCFG2_LLACQ_SCREL | CPUCFG2_SCQ);
 		return 0;
 	case LOONGARCH_CPUCFG3:
-		*v = GENMASK(16, 0);
+		*v = GENMASK(23, 0);
+
+		/* VM does not support memory order and SFB setting */
+		config = read_cpucfg(LOONGARCH_CPUCFG3);
+		*v &= config & ~(CPUCFG3_SFB);
+		*v &= config & ~(CPUCFG3_ALDORDER_CAP | CPUCFG3_ASTORDER_CAP |
+				CPUCFG3_SLDORDER_CAP);
 		return 0;
 	case LOONGARCH_CPUCFG4:
 	case LOONGARCH_CPUCFG5:
@@ -721,6 +752,7 @@ static int _kvm_get_cpucfg_mask(int id, u64 *v)
 static int kvm_check_cpucfg(int id, u64 val)
 {
 	int ret;
+	u32 host;
 	u64 mask = 0;
 
 	ret = _kvm_get_cpucfg_mask(id, &mask);
@@ -750,9 +782,16 @@ static int kvm_check_cpucfg(int id, u64 val)
 			/* LASX architecturally implies LSX and FP but val does not satisfy that */
 			return -EINVAL;
 		return 0;
+	case LOONGARCH_CPUCFG3:
+		host = read_cpucfg(LOONGARCH_CPUCFG3);
+		if ((val & CPUCFG3_RVAMAX) > (host & CPUCFG3_RVAMAX))
+			return -EINVAL;
+		if ((val & CPUCFG3_SPW_LVL) > (host & CPUCFG3_SPW_LVL))
+			return -EINVAL;
+		return 0;
 	case LOONGARCH_CPUCFG6:
 		if (val & CPUCFG6_PMP) {
-			u32 host = read_cpucfg(LOONGARCH_CPUCFG6);
+			host = read_cpucfg(LOONGARCH_CPUCFG6);
 			if ((val & CPUCFG6_PMBITS) != (host & CPUCFG6_PMBITS))
 				return -EINVAL;
 			if ((val & CPUCFG6_PMNUM) > (host & CPUCFG6_PMNUM))
@@ -1302,16 +1341,11 @@ int kvm_arch_vcpu_ioctl_set_fpu(struct kvm_vcpu *vcpu, struct kvm_fpu *fpu)
 #ifdef CONFIG_CPU_HAS_LBT
 int kvm_own_lbt(struct kvm_vcpu *vcpu)
 {
-	if (!kvm_guest_has_lbt(&vcpu->arch))
-		return -EINVAL;
-
-	preempt_disable();
 	if (!(vcpu->arch.aux_inuse & KVM_LARCH_LBT)) {
 		set_csr_euen(CSR_EUEN_LBTEN);
 		_restore_lbt(&vcpu->arch.lbt);
 		vcpu->arch.aux_inuse |= KVM_LARCH_LBT;
 	}
-	preempt_enable();
 
 	return 0;
 }
@@ -1354,8 +1388,6 @@ static inline void kvm_check_fcsr_alive(struct kvm_vcpu *vcpu) { }
 /* Enable FPU and restore context */
 void kvm_own_fpu(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
-
 	/*
 	 * Enable FPU for guest
 	 * Set FR and FRE according to guest context
@@ -1366,19 +1398,12 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 	kvm_restore_fpu(&vcpu->arch.fpu);
 	vcpu->arch.aux_inuse |= KVM_LARCH_FPU;
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_FPU);
-
-	preempt_enable();
 }
 
 #ifdef CONFIG_CPU_HAS_LSX
 /* Enable LSX and restore context */
 int kvm_own_lsx(struct kvm_vcpu *vcpu)
 {
-	if (!kvm_guest_has_fpu(&vcpu->arch) || !kvm_guest_has_lsx(&vcpu->arch))
-		return -EINVAL;
-
-	preempt_disable();
-
 	/* Enable LSX for guest */
 	kvm_check_fcsr(vcpu, vcpu->arch.fpu.fcsr);
 	set_csr_euen(CSR_EUEN_LSXEN | CSR_EUEN_FPEN);
@@ -1400,7 +1425,6 @@ int kvm_own_lsx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LSX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LSX | KVM_LARCH_FPU;
-	preempt_enable();
 
 	return 0;
 }
@@ -1410,11 +1434,6 @@ int kvm_own_lsx(struct kvm_vcpu *vcpu)
 /* Enable LASX and restore context */
 int kvm_own_lasx(struct kvm_vcpu *vcpu)
 {
-	if (!kvm_guest_has_fpu(&vcpu->arch) || !kvm_guest_has_lsx(&vcpu->arch) || !kvm_guest_has_lasx(&vcpu->arch))
-		return -EINVAL;
-
-	preempt_disable();
-
 	kvm_check_fcsr(vcpu, vcpu->arch.fpu.fcsr);
 	set_csr_euen(CSR_EUEN_FPEN | CSR_EUEN_LSXEN | CSR_EUEN_LASXEN);
 	switch (vcpu->arch.aux_inuse & (KVM_LARCH_FPU | KVM_LARCH_LSX)) {
@@ -1436,7 +1455,6 @@ int kvm_own_lasx(struct kvm_vcpu *vcpu)
 
 	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LASX);
 	vcpu->arch.aux_inuse |= KVM_LARCH_LASX | KVM_LARCH_LSX | KVM_LARCH_FPU;
-	preempt_enable();
 
 	return 0;
 }
@@ -1618,9 +1636,11 @@ static int _kvm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	 * If not, any old guest state from this vCPU will have been clobbered.
 	 */
 	context = per_cpu_ptr(vcpu->kvm->arch.vmcs, cpu);
-	if (migrated || (context->last_vcpu != vcpu))
+	if (migrated || (context->last_vcpu != vcpu)) {
+		context->last_vcpu = vcpu;
 		vcpu->arch.aux_inuse &= ~KVM_LARCH_HWCSR_USABLE;
-	context->last_vcpu = vcpu;
+		vcpu->arch.host_eentry = csr_read64(LOONGARCH_CSR_EENTRY);
+	}
 
 	/* Restore timer state regardless */
 	kvm_restore_timer(vcpu);
@@ -1677,7 +1697,9 @@ static int _kvm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_DMWIN2);
 	kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_DMWIN3);
 	kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_LLBCTL);
-	if (cpu_has_msgint) {
+
+	if (kvm_guest_has_msgint(&vcpu->arch)) {
+		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_IPR);
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR0);
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR1);
 		kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_ISR2);
@@ -1686,6 +1708,7 @@ static int _kvm_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 	/* Restore Root.GINTC from unused Guest.GINTC register */
 	write_csr_gintc(csr->csrs[LOONGARCH_CSR_GINTC]);
+	write_csr_gstat(csr->csrs[LOONGARCH_CSR_GSTAT]);
 
 	/*
 	 * We should clear linked load bit to break interrupted atomics. This
@@ -1772,13 +1795,16 @@ static int _kvm_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	kvm_save_hw_gcsr(csr, LOONGARCH_CSR_DMWIN1);
 	kvm_save_hw_gcsr(csr, LOONGARCH_CSR_DMWIN2);
 	kvm_save_hw_gcsr(csr, LOONGARCH_CSR_DMWIN3);
-	if (cpu_has_msgint) {
+
+	if (kvm_guest_has_msgint(&vcpu->arch)) {
+		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_IPR);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR0);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR1);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR2);
 		kvm_save_hw_gcsr(csr, LOONGARCH_CSR_ISR3);
 	}
 
+	csr->csrs[LOONGARCH_CSR_GSTAT] = read_csr_gstat();
 	vcpu->arch.aux_inuse |= KVM_LARCH_SWCSR_LATEST;
 
 out:
