@@ -135,6 +135,7 @@ enum ubcore_slice {
 #define UBCORE_JFS_PI             (0x0010)
 #define UBCORE_JFS_PI_TYPE        (0x0011)
 #define UBCORE_JFS_CI             (0x0012)
+#define UBCORE_JFS_FULL_CTX       (0x0013)
 
 /* JFR Options */
 #define UBCORE_JFR_OPT            (0x1000)
@@ -153,6 +154,7 @@ enum ubcore_slice {
 #define UBCORE_JFR_PI             (0x100d)
 #define UBCORE_JFR_PI_TYPE        (0x100e)
 #define UBCORE_JFR_CI             (0x100f)
+#define UBCORE_JFR_FULL_CTX       (0x1010)
 
 /* JFC Options */
 #define UBCORE_JFC_OPT            (0x2000)
@@ -168,6 +170,7 @@ enum ubcore_slice {
 #define UBCORE_JFC_PI             (0x200a)
 #define UBCORE_JFC_PI_TYPE        (0x200b)
 #define UBCORE_JFC_CI             (0x200c)
+#define UBCORE_JFC_FULL_CTX       (0x200d)
 
 /* JETTY Options */
 #define UBCORE_JETTY_OPT          (0x3000)
@@ -176,5 +179,6 @@ enum ubcore_slice {
 #define UBCORE_JETTY_BIND_JFR     (0x3003)
 #define UBCORE_JETTY_BIND_RX_JFC  (0x3004)
 #define UBCORE_JETTY_BIND_JTG     (0x3005)
+#define UBCORE_JETTY_FULL_CTX     (0x3007)
 
 #endif

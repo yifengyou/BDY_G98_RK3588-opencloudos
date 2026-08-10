@@ -131,7 +131,8 @@ struct ubmad_agent_priv {
 	struct ubmad_agent agent;
 	struct kref kref;
 	struct list_head node; // g_ubmad_agent_list
-	struct workqueue_struct *jfce_wq; // ubmad_jfce_work
+	struct workqueue_struct *jfce_wq_s; // ubmad_jfce_work for Tx
+	struct workqueue_struct *jfce_wq_r; // ubmad_jfce_work for Rx
 };
 
 /** datapath **/
@@ -156,7 +157,10 @@ struct ubmad_msg {
  * msg not processed right after poll jfc in ubmad_jfce_handler(), but tranformed to ubmad_jfce_work
  * and left for workqueue.
  */
-enum ubmad_jfce_work_type { UBMAD_SEND_WORK, UBMAD_RECV_WORK };
+enum ubmad_jfce_work_type {
+	UBMAD_SEND_WORK,
+	UBMAD_RECV_WORK
+};
 
 struct ubmad_jfce_work {
 	struct work_struct work; // ubmad_agent_priv.jfce_wq

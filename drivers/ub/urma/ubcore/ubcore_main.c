@@ -14,7 +14,8 @@
 #include "ubcore_log.h"
 #include "ubcore_workqueue.h"
 #include "ubcore_device.h"
-#include "net/ubcore_net.h"
+#include "net/ubcore_comm.h"
+#include "net/ubcore_session.h"
 #include "ubcore_connect_adapter.h"
 #include "ubcore_connect_bonding.h"
 #include "ubcore_genl.h"
@@ -30,16 +31,12 @@ static int __init ubcore_init(void)
 {
 	int ret;
 
-	if (ubcore_net_comm_init() != 0) {
-		ubcore_log_err("Failed init connect alpha");
-		return -1;
-	}
 	ubcore_exchange_init();
 	ubcore_connect_bonding_init();
 
 	ret = ubcore_class_register();
 	if (ret != 0)
-		return ret;
+		return -1;
 
 	ret = ubcore_cdev_register();
 	if (ret != 0)
@@ -61,6 +58,11 @@ static int __init ubcore_init(void)
 		goto create_wq;
 	}
 
+	if (ubcore_session_init() != 0) {
+		ubcore_log_err("Failed init connect alpha");
+		goto session;
+	}
+
 	ret = ubcm_init();
 	if (ret != 0) {
 		pr_err("Failed to init ubcm, ret: %d.\n", ret);
@@ -79,6 +81,8 @@ static int __init ubcore_init(void)
 ubmgr:
 	ubcm_uninit();
 ubcm:
+	ubcore_session_uninit();
+session:
 	ubcore_destroy_workqueues();
 create_wq:
 	ubcore_unregister_pnet_ops();
@@ -94,12 +98,13 @@ class_init:
 static void __exit ubcore_exit(void)
 {
 	ubcm_uninit();
+	ubcore_comm_uninit();
+	ubcore_session_uninit();
 	ubcore_destroy_workqueues();
 	ubcore_unregister_pnet_ops();
 	ubcore_genl_exit();
 	ubcore_cdev_unregister();
 	ubcore_class_unregister();
-	ubcore_net_comm_uninit();
 	ubcore_log_info("ubcore module exits.\n");
 }
 

@@ -3806,3 +3806,31 @@ int ubcore_deactive_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata
 	return ret;
 }
 EXPORT_SYMBOL(ubcore_deactive_jetty);
+
+struct ubcore_jfs *ubcore_find_get_jfs(struct ubcore_device *dev, uint32_t jfs_id)
+{
+	if (dev == NULL) {
+		ubcore_log_err("dev is NULL\n");
+		return NULL;
+	}
+	return ubcore_hash_table_lookup_get(&dev->ht[UBCORE_HT_JFS], jfs_id, &jfs_id);
+}
+EXPORT_SYMBOL(ubcore_find_get_jfs);
+
+struct ubcore_jfr *ubcore_find_get_jfr(struct ubcore_device *dev, uint32_t jfr_id)
+{
+	if (dev == NULL) {
+		ubcore_log_err("dev is NULL\n");
+		return NULL;
+	}
+	return ubcore_hash_table_lookup_get(&dev->ht[UBCORE_HT_JFR], jfr_id, &jfr_id);
+}
+
+struct ubcore_jetty *ubcore_find_get_jetty(struct ubcore_device *dev, uint32_t jetty_id)
+{
+	if (dev == NULL) {
+		ubcore_log_err("dev is NULL\n");
+		return NULL;
+	}
+	return ubcore_hash_table_lookup_get(&dev->ht[UBCORE_HT_JETTY], jetty_id, &jetty_id);
+}

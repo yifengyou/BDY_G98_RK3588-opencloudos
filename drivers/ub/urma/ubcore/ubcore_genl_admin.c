@@ -429,8 +429,8 @@ int ubcore_set_sl(struct sk_buff *skb, struct genl_info *info)
 		ubcore_put_device(dev);
 		return -EINVAL;
 	}
-	ubcore_put_device(dev);
 	ret = dev->ops->set_sl(dev, arg.in.priority, arg.in.SL);
+	ubcore_put_device(dev);
 	if (ret != 0)
 		ubcore_log_err("ops ubcore->set_sl failed!\n");
 	return ret;

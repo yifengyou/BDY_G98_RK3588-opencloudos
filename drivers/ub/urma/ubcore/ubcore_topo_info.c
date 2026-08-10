@@ -483,6 +483,12 @@ static struct ubcore_topo_node *
 	int node_id, dev_id;
 
 	topo_map = g_ubcore_topo_map;
+	if (!topo_map) {
+		ubcore_log_err(
+			"Failed to get topo info, ubcore topo map doesn't exist.\n");
+		return NULL;
+	}
+
 	for (node_id = 0; node_id < topo_map->node_num; node_id++) {
 		for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
 			if (memcmp(agg_eid, topo_map->topo_infos[node_id].agg_devs[dev_id].agg_eid,
@@ -775,39 +781,6 @@ static int ubcore_get_route_primary_eid(union ubcore_eid *src_v_eid,
 	return 0;
 }
 
-static int ubcore_get_route_loopback_primary_eid(union ubcore_eid *local_eid,
-						  struct ubcore_route_list *route_list)
-{
-	int dev_id, iodie_id, num;
-	struct ubcore_topo_agg_dev *agg_dev = NULL;
-	struct ubcore_topo_node *topo_info = NULL;
-
-	topo_info = ubcore_get_topo_info_by_agg_eid(local_eid, &dev_id);
-	if (IS_ERR_OR_NULL(topo_info)) {
-		ubcore_log_err("Failed to get topo_info, local_eid=" EID_FMT ".\n",
-			EID_ARGS(*local_eid));
-		return -EINVAL;
-	}
-	agg_dev = &topo_info->agg_devs[dev_id];
-
-	for (iodie_id = 0; iodie_id < IODIE_NUM; iodie_id++) {
-		num = route_list->route_num;
-		if (num >= UBCORE_MAX_ROUTE_NUM) {
-			ubcore_log_warn("Invalid route num, num = %d.\n", num);
-			return 0;
-		}
-		append_route_list_ctp(route_list, agg_dev->ues[iodie_id].primary_eid,
-			agg_dev->ues[iodie_id].primary_eid, (uint32_t)(iodie_id + 1));
-	}
-
-	return 0;
-}
-
-static bool ubcore_eid_equals(union ubcore_eid *src, union ubcore_eid *dst)
-{
-	return memcmp(src, dst, sizeof(union ubcore_eid)) == 0;
-}
-
 int ubcore_get_route_list(struct ubcore_route *route,
 	struct ubcore_route_list *route_list)
 {
@@ -829,15 +802,6 @@ int ubcore_get_route_list(struct ubcore_route *route,
 
 	(void)memset(route_list, 0, sizeof(struct ubcore_route_list));
 
-	if (ubcore_eid_equals(src_v_eid, dst_v_eid)) {
-		ret = ubcore_get_route_loopback_primary_eid(src_v_eid, route_list);
-		if (ret != 0) {
-			ubcore_log_err(
-				"Failed to query primary id in loopback mode, ret: %d.\n", ret);
-		}
-		return ret;
-	}
-
 	ret = ubcore_get_route_primary_eid(src_v_eid, dst_v_eid, route_list);
 	if (ret != 0) {
 		ubcore_log_err("Failed to get primary eid, ret: %d.\n", ret);
@@ -855,3 +819,14 @@ int ubcore_get_route_list(struct ubcore_route *route,
 	return 0;
 }
 EXPORT_SYMBOL(ubcore_get_route_list);
+
+int ubcore_get_topo_eid(uint32_t tp_type, union ubcore_eid *src_v_eid,
+	union ubcore_eid *dst_v_eid, union ubcore_eid *src_p_eid, union ubcore_eid *dst_p_eid)
+{
+	if (src_v_eid != NULL && dst_v_eid != NULL && src_p_eid != NULL && dst_p_eid != NULL) {
+		ubcore_log_info("Query topo eid, tp_type: %u.\n", tp_type);
+		return 0;
+	}
+	return -1;
+}
+EXPORT_SYMBOL(ubcore_get_topo_eid);

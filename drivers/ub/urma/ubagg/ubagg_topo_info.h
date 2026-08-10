@@ -65,4 +65,10 @@ create_ubagg_topo_map_from_user(struct ubagg_topo_node *topo_infos,
 				uint32_t node_num);
 
 void delete_ubagg_topo_map(struct ubagg_topo_map *topo_map);
+
+struct ubagg_topo_node *find_cur_topo_node(struct ubagg_topo_map *topo_map);
+struct ubagg_topo_agg_dev *
+find_cur_topo_agg_dev(struct ubagg_topo_map *topo_map,
+		      union ubcore_eid *bonding_eid);
+
 #endif // ubcore_topo_node_H
