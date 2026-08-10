@@ -17,3 +17,4 @@ UnifiedBus Subsystem
    ummu/index
    cdma/index
    urma/udma/index
+   urma/ipourma/index

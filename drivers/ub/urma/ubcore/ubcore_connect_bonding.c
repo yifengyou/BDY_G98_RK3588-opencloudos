@@ -16,7 +16,7 @@
 #include "ubcore_topo_info.h"
 #include "ubcore_log.h"
 
-#define BONDING_UDATA_BUF_LEN 960
+#define BONDING_UDATA_BUF_LEN 1032
 
 struct session_data_exchange_udata {
 	int *result;
@@ -45,12 +45,21 @@ struct msg_jetty_info_resp {
 	char jetty_info[BONDING_UDATA_BUF_LEN];
 };
 
-static struct ubcore_device *ubcore_find_physical_device(void)
+static struct ubcore_device *ubcore_find_physical_device(struct ubcore_device *agg_dev)
 {
 	struct ubcore_topo_map *topo_map;
-	struct ubcore_topo_info *topo_info;
+	struct ubcore_topo_node *topo_info;
 	union ubcore_eid *primary_eid;
+	union ubcore_eid agg_dev_eid;
+	int dev_id;
+	uint32_t eid_idx;
+	bool is_eid_found = false;
+	bool is_agg_dev_found = false;
 
+	if (agg_dev == NULL) {
+		ubcore_log_err("agg_dev is NULL");
+		return NULL;
+	}
 	topo_map = ubcore_get_global_topo_map();
 	if (!topo_map) {
 		ubcore_log_err("Failed get global topo map");
@@ -63,15 +72,44 @@ static struct ubcore_device *ubcore_find_physical_device(void)
 		return NULL;
 	}
 
-	primary_eid = (union ubcore_eid *)topo_info->io_die_info[0].primary_eid;
+	spin_lock(&agg_dev->eid_table.lock);
+	for (eid_idx = 0; eid_idx < agg_dev->eid_table.eid_cnt; eid_idx++) {
+		if (agg_dev->eid_table.eid_entries[eid_idx].valid) {
+			agg_dev_eid = agg_dev->eid_table.eid_entries[eid_idx].eid;
+			is_eid_found = true;
+			break;
+		}
+	}
+	spin_unlock(&agg_dev->eid_table.lock);
+	if (!is_eid_found) {
+		ubcore_log_err("Failed to find agg_dev_eid.\n");
+		return NULL;
+	}
+
+	for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
+		if (memcmp((union ubcore_eid *)topo_info->agg_devs[dev_id].agg_eid, &agg_dev_eid,
+			sizeof(union ubcore_eid)) == 0) {
+			is_agg_dev_found = true;
+			break;
+		}
+	}
+	if (!is_agg_dev_found) {
+		ubcore_log_err("Failed to find agg_dev.\n");
+		return NULL;
+	}
+
+	primary_eid = (union ubcore_eid *)topo_info->agg_devs[dev_id].ues[0].primary_eid;
+
 	return ubcore_find_device(primary_eid, UBCORE_TRANSPORT_UB);
 }
 
-static struct ubcore_device *ubcore_find_bonding_device(void)
+static struct ubcore_device *ubcore_find_bonding_device(union ubcore_eid *eid)
 {
 	struct ubcore_topo_map *topo_map;
-	struct ubcore_topo_info *topo_info;
-	union ubcore_eid *bonding_eid;
+	struct ubcore_topo_node *topo_info;
+	union ubcore_eid *agg_eid;
+	int dev_id, ue_id, port_id;
+	bool is_found = false;
 
 	topo_map = ubcore_get_global_topo_map();
 	if (!topo_map) {
@@ -85,8 +123,42 @@ static struct ubcore_device *ubcore_find_bonding_device(void)
 		return NULL;
 	}
 
-	bonding_eid = (union ubcore_eid *)topo_info->bonding_eid;
-	return ubcore_find_device(bonding_eid, UBCORE_TRANSPORT_UB);
+	for (dev_id = 0; dev_id < DEV_NUM; dev_id++) {
+		if (!is_agg_dev_valid(&topo_info->agg_devs[dev_id]))
+			continue;
+
+		if (memcmp(eid,
+			(union ubcore_eid *)topo_info->agg_devs[dev_id].agg_eid,
+			sizeof(union ubcore_eid)) == 0) {
+			is_found = true;
+			break;
+		}
+
+		for (ue_id = 0; ue_id < IODIE_NUM; ue_id++) {
+			if (memcmp(eid,
+				(union ubcore_eid *)
+				topo_info->agg_devs[dev_id].ues[ue_id].primary_eid,
+				sizeof(union ubcore_eid)) == 0) {
+				is_found = true;
+				break;
+			}
+			for (port_id = 0; port_id < PORT_NUM; port_id++) {
+				if (memcmp(eid, (union ubcore_eid *)
+					topo_info->agg_devs[dev_id].ues[ue_id].port_eid[port_id],
+					sizeof(union ubcore_eid)) == 0) {
+					is_found = true;
+					break;
+				}
+			}
+		}
+	}
+	if (!is_found) {
+		ubcore_log_err("Failed to find bonding device.\n");
+		return NULL;
+	}
+
+	agg_eid = (union ubcore_eid *)topo_info->agg_devs[dev_id].agg_eid;
+	return ubcore_find_device(agg_eid, UBCORE_TRANSPORT_UB);
 }
 
 static struct ubcore_session *
@@ -128,15 +200,15 @@ static int send_seg_info_req(struct ubcore_device *dev, uint32_t session_id,
 	msg.session_id = session_id;
 	msg.data = req;
 
-	ret = ubcore_get_primary_eid_by_bonding_eid(&req->ubva.eid, &dest_eid);
+	ret = ubcore_get_primary_eid_by_agg_eid(&req->ubva.eid, &dest_eid);
 	if (ret != 0)
 		return ret;
 
-	ubcore_log_info("Send seg info req to " EID_FMT "\n",
-			EID_ARGS(dest_eid));
+	ubcore_log_info("Send seg info req to " EID_FMT ", Send cm messagem: " MSG_FMT "\n",
+		EID_ARGS(dest_eid), MSG_ARG(&msg));
 	ret = ubcore_net_send_to(dev, &msg, dest_eid);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send msg");
+		ubcore_log_err("Failed to send msg.\n");
 		return ret;
 	}
 	return 0;
@@ -174,16 +246,15 @@ static int send_jetty_info_req(struct ubcore_device *dev, uint32_t session_id,
 	msg.session_id = session_id;
 	msg.data = req;
 
-	ret = ubcore_get_primary_eid_by_bonding_eid(&req->jetty_id.eid,
+	ret = ubcore_get_primary_eid_by_agg_eid(&req->jetty_id.eid,
 						    &dest_eid);
 	if (ret != 0)
 		return ret;
 
-	ubcore_log_info("Send jetty info req to " EID_FMT "\n",
-			EID_ARGS(dest_eid));
+	ubcore_log_info("Send jetty info req to " EID_FMT "\n", EID_ARGS(dest_eid));
 	ret = ubcore_net_send_to(dev, &msg, dest_eid);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send msg");
+		ubcore_log_err("Failed to send msg to " EID_FMT"\n", EID_ARGS(dest_eid));
 		return ret;
 	}
 	return 0;
@@ -210,9 +281,9 @@ static int send_jetty_info_resp(struct ubcore_device *dev, void *conn,
 }
 
 int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
-						  struct ubcore_udata *udata)
+				struct ubcore_udata *udata, struct ubcore_device *dev)
 {
-	struct ubcore_device *physical_dev = ubcore_find_physical_device();
+	struct ubcore_device *physical_dev = ubcore_find_physical_device(dev);
 	struct msg_seg_info_req req = { 0 };
 	struct ubcore_session *session;
 	char buf[BONDING_UDATA_BUF_LEN];
@@ -236,7 +307,6 @@ int ubcore_connect_exchange_udata_when_import_seg(struct ubcore_seg *seg,
 	ret = send_seg_info_req(physical_dev, ubcore_session_get_id(session),
 				&req);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send create req message");
 		ubcore_session_complete(session);
 		goto release_session;
 	}
@@ -267,9 +337,10 @@ put_device:
 }
 
 int ubcore_connect_exchange_udata_when_import_jetty(
-	struct ubcore_tjetty_cfg *cfg, struct ubcore_udata *udata, bool is_jfr)
+	struct ubcore_tjetty_cfg *cfg, struct ubcore_udata *udata, bool is_jfr,
+	struct ubcore_device *dev)
 {
-	struct ubcore_device *physical_dev = ubcore_find_physical_device();
+	struct ubcore_device *physical_dev = ubcore_find_physical_device(dev);
 	struct msg_jetty_info_req req = { 0 };
 	struct ubcore_session *session;
 	char buf[BONDING_UDATA_BUF_LEN];
@@ -292,7 +363,6 @@ int ubcore_connect_exchange_udata_when_import_jetty(
 	ret = send_jetty_info_req(physical_dev, ubcore_session_get_id(session),
 				  &req);
 	if (ret != 0) {
-		ubcore_log_err("Failed to send create req message");
 		ubcore_session_complete(session);
 		goto release_session;
 	}
@@ -326,7 +396,7 @@ static void handle_seg_info_req(struct ubcore_device *dev,
 				struct ubcore_net_msg *msg, void *conn)
 {
 	struct msg_seg_info_req *req = (struct msg_seg_info_req *)msg->data;
-	struct ubcore_device *bonding_dev = ubcore_find_bonding_device();
+	struct ubcore_device *bonding_dev = ubcore_find_bonding_device(&req->ubva.eid);
 	int ret = 0;
 
 	struct msg_seg_info_resp resp = { 0 };
@@ -339,19 +409,26 @@ static void handle_seg_info_req(struct ubcore_device *dev,
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err("Failed to get seg info by user ctl");
+		goto put_device;
+	}
 
 	resp.result = ret;
-	if (send_seg_info_resp(dev, conn, msg->session_id, &resp) != 0)
+	if (send_seg_info_resp(dev, conn, msg->session_id, &resp) != 0) {
 		ubcore_log_err("Failed to send create resp message.\n");
+		goto put_device;
+	}
+
+put_device:
+	ubcore_put_device(bonding_dev);
 }
 
 static void handle_jetty_info_req(struct ubcore_device *dev,
 				  struct ubcore_net_msg *msg, void *conn)
 {
 	struct msg_jetty_info_req *req = (struct msg_jetty_info_req *)msg->data;
-	struct ubcore_device *bonding_dev = ubcore_find_bonding_device();
+	struct ubcore_device *bonding_dev = ubcore_find_bonding_device(&req->jetty_id.eid);
 	int ret = 0;
 
 	struct msg_jetty_info_resp resp = { 0 };
@@ -364,12 +441,19 @@ static void handle_jetty_info_req(struct ubcore_device *dev,
 	};
 
 	ret = ubcore_user_control(bonding_dev, &k_user_ctl);
-	if (ret != 0)
+	if (ret != 0) {
 		ubcore_log_err("Failed to get jetty info by user ctl");
+		goto put_device;
+	}
 
 	resp.result = ret;
-	if (send_jetty_info_resp(dev, conn, msg->session_id, &resp) != 0)
+	if (send_jetty_info_resp(dev, conn, msg->session_id, &resp) != 0) {
 		ubcore_log_err("Failed to send create resp message.\n");
+		goto put_device;
+	}
+
+put_device:
+	ubcore_put_device(bonding_dev);
 }
 
 static void handle_exchange_udata_resp(struct ubcore_device *dev, void *conn,

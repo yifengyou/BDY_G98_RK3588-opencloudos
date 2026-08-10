@@ -34,6 +34,7 @@ enum ubcm_genl_attr { /* Refer to enum uvs_cm_genl_attr */
 	UBCM_ATTR_NS_MODE,
 	UBCM_ATTR_DEV_NAME,
 	UBCM_ATTR_NS_FD,
+	UBCM_ATTR_EID_IDX,
 	UBCM_MSG_SEQ,
 	UBCM_MSG_TYPE,
 	UBCM_SRC_ID,

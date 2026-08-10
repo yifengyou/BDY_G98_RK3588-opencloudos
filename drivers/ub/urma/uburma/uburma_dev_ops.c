@@ -20,6 +20,7 @@
 #include "uburma_types.h"
 #include "uburma_uobj.h"
 #include "uburma_cmd.h"
+#include "uburma_file_ops.h"
 #include "uburma_mmap.h"
 
 static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
@@ -28,6 +29,7 @@ static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
 	struct uburma_file *file =
 		container_of(ub_mn, struct uburma_file, ub_mn);
 	struct uburma_device *ubu_dev = file->ubu_dev;
+	struct ubcore_ucontext *ucontext = NULL;
 	struct ubcore_device *ubc_dev;
 	int srcu_idx;
 
@@ -47,13 +49,13 @@ static void uburma_mmu_release(struct mmu_notifier *mn, struct mm_struct *mm)
 	ubc_dev = srcu_dereference(ubu_dev->ubc_dev, &ubu_dev->ubc_dev_srcu);
 
 	down_write(&file->ucontext_rwsem);
-
+	ucontext = file->ucontext;
 	uburma_cleanup_uobjs(file, UBURMA_REMOVE_CLOSE);
-	if (file->ucontext) {
+	if (ucontext) {
 		uburma_log_info("Start ubcore free ucontext.\n");
 		if (ubc_dev) {
-			ubcore_free_ucontext(ubc_dev, file->ucontext);
 			file->ucontext = NULL;
+			ubcore_free_ucontext(ubc_dev, ucontext);
 		}
 	}
 	up_write(&file->ucontext_rwsem);
@@ -65,7 +67,7 @@ static const struct mmu_notifier_ops uburma_mm_notifier_ops = {
 	.release = uburma_mmu_release,
 };
 
-void uburma_unregister_mmu(struct uburma_file *file)
+static void uburma_unregister_mmu(struct uburma_file *file)
 {
 	struct uburma_mn *ub_mn = &file->ub_mn;
 	struct mm_struct *mm = ub_mn->mm;
@@ -77,7 +79,7 @@ void uburma_unregister_mmu(struct uburma_file *file)
 	mmu_notifier_unregister(&file->ub_mn.mn, mm);
 }
 
-int uburma_register_mmu(struct uburma_file *file)
+static int uburma_register_mmu(struct uburma_file *file)
 {
 	struct uburma_mn *ub_mn = &file->ub_mn;
 	int ret = 0;
@@ -103,7 +105,7 @@ int uburma_mmap(struct file *filp, struct vm_area_struct *vma)
 	int ret;
 
 	if (!file || !file->ucontext || !file->ubu_dev) {
-		uburma_log_err("can not find ucontext.\n");
+		uburma_log_debug("can not find ucontext.\n");
 		return -EINVAL;
 	}
 
@@ -113,7 +115,7 @@ int uburma_mmap(struct file *filp, struct vm_area_struct *vma)
 	srcu_idx = srcu_read_lock(&ubu_dev->ubc_dev_srcu);
 	ubc_dev = srcu_dereference(ubu_dev->ubc_dev, &ubu_dev->ubc_dev_srcu);
 	if (!ubc_dev || !ubc_dev->ops || !ubc_dev->ops->mmap) {
-		uburma_log_err("can not find ubcore device.\n");
+		uburma_log_debug("can not find ubcore device.\n");
 		ret = -ENODEV;
 		goto out;
 	}
@@ -233,6 +235,7 @@ int uburma_close(struct inode *inode, struct file *filp)
 {
 	struct uburma_file *file = filp->private_data;
 	struct uburma_device *ubu_dev = file->ubu_dev;
+	struct ubcore_ucontext *ucontext = NULL;
 	struct ubcore_device *ubc_dev;
 	int srcu_idx;
 
@@ -255,11 +258,12 @@ int uburma_close(struct inode *inode, struct file *filp)
 	mutex_unlock(&ubu_dev->uburma_file_list_mutex);
 
 	down_write(&file->ucontext_rwsem);
+	ucontext = file->ucontext;
 	uburma_cleanup_uobjs(file, UBURMA_REMOVE_CLOSE);
-	if (file->ucontext) {
+	if (ucontext) {
 		uburma_log_info("Start ubcore free ucontext.\n");
-		ubcore_free_ucontext(ubc_dev, file->ucontext);
 		file->ucontext = NULL;
+		ubcore_free_ucontext(ubc_dev, ucontext);
 	}
 	up_write(&file->ucontext_rwsem);
 

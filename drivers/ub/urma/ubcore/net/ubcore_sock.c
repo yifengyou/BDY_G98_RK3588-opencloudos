@@ -645,7 +645,7 @@ int ubcore_sock_init(void)
 	}
 
 	ss.daemon = kthread_run(sk_event_loop, NULL, "sk_event_loop");
-	if (!ss.daemon) {
+	if (IS_ERR(ss.daemon)) {
 		ubcore_log_err("sock thread launch failed");
 		return -EINVAL;
 	}

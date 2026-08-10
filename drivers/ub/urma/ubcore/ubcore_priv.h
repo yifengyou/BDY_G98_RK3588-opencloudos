@@ -20,6 +20,8 @@
 #define UBCORE_MAX_UVS_NAME_LEN 64
 #define UBCORE_MAX_UVS_CNT 64
 #define UBCORE_MAX_MUE_NUM 16
+/* between 1 and MAX_ERRNO */
+#define UBCORE_DRV_ERRNO 2048
 
 /*
  * Pure UB device, netdev type is Unified Bus (UB).

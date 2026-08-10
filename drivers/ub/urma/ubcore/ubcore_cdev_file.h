@@ -23,12 +23,23 @@ struct ubcore_port_attribute {
 			 size_t count);
 };
 
+struct ubcore_priority_attribute {
+	struct attribute attr;
+	ssize_t (*show)(struct ubcore_priority_kobj *p,
+			struct ubcore_priority_attribute *attr, char *buf);
+	ssize_t (*store)(struct ubcore_priority_kobj *p,
+			 struct ubcore_priority_attribute *attr, const char *buf,
+			 size_t count);
+};
+
 #define PORT_ATTR(_name, _mode, _show, _store)           \
 	struct ubcore_port_attribute port_attr_##_name = \
 		__ATTR(_name, _mode, _show, _store)
 
 #define PORT_ATTR_RO(_name) \
 	struct ubcore_port_attribute port_attr_##_name = __ATTR_RO(_name)
+#define PRIORITY_ATTR_RO(_name) \
+	struct ubcore_priority_attribute priority_attr_##_name = __ATTR_RO(_name)
 
 int ubcore_fill_logic_device_attr(struct ubcore_logic_device *ldev,
 				  struct ubcore_device *dev);

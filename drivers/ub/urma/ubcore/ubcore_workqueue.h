@@ -38,6 +38,8 @@ struct ubcore_front_back_work {
 
 void ubcore_flush_workqueue(int queue_type);
 
+void ubcore_drain_workqueue(int queue_type);
+
 int ubcore_queue_work(int queue_type, struct work_struct *work);
 
 int ubcore_queue_delayed_work(int queue_type, struct delayed_work *work,

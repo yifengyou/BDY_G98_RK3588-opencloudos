@@ -99,6 +99,19 @@ void uburma_write_event(struct uburma_jfe *jfe, uint64_t event_data,
 					obj_event_list, counter, NULL);
 }
 
+static bool uburma_jfce_is_null(struct uburma_jfc_uobj *jfc_uobj)
+{
+	unsigned long flag;
+
+	spin_lock_irqsave(&jfc_uobj->jfc_lock, flag);
+	if (jfc_uobj->jfce == NULL) {
+		spin_unlock_irqrestore(&jfc_uobj->jfc_lock, flag);
+		return true;
+	}
+	spin_unlock_irqrestore(&jfc_uobj->jfc_lock, flag);
+	return false;
+}
+
 void uburma_jfce_handler(struct ubcore_jfc *jfc)
 {
 	struct uburma_jfc_uobj *jfc_uobj;
@@ -110,7 +123,8 @@ void uburma_jfce_handler(struct ubcore_jfc *jfc)
 
 	rcu_read_lock();
 	jfc_uobj = rcu_dereference(jfc->jfc_cfg.jfc_context);
-	if (jfc_uobj && !IS_ERR(jfc_uobj) && !IS_ERR(jfc_uobj->jfce)) {
+	if (!IS_ERR_OR_NULL(jfc_uobj) && !IS_ERR(jfc_uobj->jfce) &&
+		(uburma_jfce_is_null(jfc_uobj) == false)) {
 		jfce = container_of(jfc_uobj->jfce, struct uburma_jfce_uobj,
 				    uobj);
 		uburma_write_event(&jfce->jfe, jfc->urma_jfc, 0,
@@ -399,12 +413,16 @@ static int uburma_delete_jfae(struct inode *inode, struct file *filp)
 		container_of(uobj, struct uburma_jfae_uobj, uobj);
 	struct uburma_file *ufile;
 
-	if (!uobj || !jfae || !uobj->ufile)
+	if (!uobj || !jfae || !uobj->ufile || !uobj->ufile->ucontext)
 		return 0;
 
 	ufile = uobj->ufile;
 	down_write(&ufile->ucontext_rwsem);
-
+	if (!uobj->ufile || !uobj->ufile->ucontext) {
+		uburma_log_err("jfae has been released.\n");
+		up_write(&ufile->ucontext_rwsem);
+		return 0;
+	}
 	uobj_get(uobj);
 	/* call uburma_hot_unplug_jfae when cleanup is not going on */
 	uburma_close_uobj_fd(filp);

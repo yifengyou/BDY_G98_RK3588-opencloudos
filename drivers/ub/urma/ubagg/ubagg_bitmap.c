@@ -33,6 +33,9 @@ struct ubagg_bitmap *ubagg_bitmap_alloc(uint32_t bitmap_size)
 
 void ubagg_bitmap_free(struct ubagg_bitmap *bitmap)
 {
+	if (bitmap == NULL)
+		return;
+
 	spin_lock(&bitmap->lock);
 	if (bitmap->bits != NULL)
 		kfree(bitmap->bits);

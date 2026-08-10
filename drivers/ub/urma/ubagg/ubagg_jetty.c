@@ -9,21 +9,61 @@
  * History: 2025-08-13: Create file
  */
 
-#include "ubagg_jetty.h"
+#include "ubagg_topo_info.h"
 #include "ubagg_log.h"
+
+#include "ubagg_jetty.h"
 
 struct ubagg_target_jetty {
 	struct ubcore_tjetty base;
 };
+
+struct ubagg_import_jetty_udata {
+	struct ubagg_jetty_id slaves[UBAGG_DEV_MAX_NUM];
+	int dev_num;
+	bool is_multipath;
+	uint32_t ports[IODIE_NUM][MAX_PORT_NUM];
+};
+
+static int fill_udata(struct ubcore_tjetty_cfg *cfg, struct ubcore_udata *udata)
+{
+	struct ubagg_import_jetty_udata *udata_typed;
+	uint32_t ports[IODIE_NUM][MAX_PORT_NUM] = { 0 };
+	int ret;
+
+	ret = find_linked_port(&cfg->id.eid, ports);
+	if (ret != 0) {
+		ubagg_log_err("Failed to find linked port\n");
+		return ret;
+	}
+	udata_typed =
+		(struct ubagg_import_jetty_udata *)udata->udrv_data->out_addr;
+
+	ret = copy_to_user((void __user *)udata_typed->ports, (void *)ports,
+			   sizeof(udata_typed->ports));
+	if (ret != 0) {
+		ubagg_log_err("Failed to copy to user, ret:%d", ret);
+		return ret;
+	}
+	return 0;
+}
 
 struct ubcore_tjetty *ubagg_import_jfr(struct ubcore_device *dev,
 				       struct ubcore_tjetty_cfg *cfg,
 				       struct ubcore_udata *udata)
 {
 	struct ubagg_target_jetty *tjfr;
+	int ret;
 
-	if (dev == NULL || cfg == NULL || udata == NULL || udata->uctx == NULL)
+	if (cfg == NULL || dev == NULL || udata == NULL ||
+	    udata->udrv_data == NULL)
 		return NULL;
+
+	ret = fill_udata(cfg, udata);
+	if (ret != 0) {
+		ubagg_log_err("Failed to fill udata, ret:%d\n", ret);
+		return NULL;
+	}
 
 	tjfr = kzalloc(sizeof(struct ubagg_target_jetty), GFP_KERNEL);
 	if (tjfr == NULL)
@@ -52,9 +92,17 @@ struct ubcore_tjetty *ubagg_import_jetty(struct ubcore_device *dev,
 					 struct ubcore_udata *udata)
 {
 	struct ubagg_target_jetty *tjetty;
+	int ret;
 
-	if (cfg == NULL || dev == NULL || udata == NULL)
+	if (cfg == NULL || dev == NULL || udata == NULL ||
+	    udata->udrv_data == NULL)
 		return NULL;
+
+	ret = fill_udata(cfg, udata);
+	if (ret != 0) {
+		ubagg_log_err("Failed to fill udata, ret:%d\n", ret);
+		return NULL;
+	}
 
 	tjetty = kzalloc(sizeof(struct ubagg_target_jetty), GFP_KERNEL);
 	if (tjetty == NULL)
