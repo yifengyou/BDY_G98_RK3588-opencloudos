@@ -17,6 +17,7 @@
 
 #define LOCAL_TECT_TAG 0
 
+extern bool hw_bypass;
 extern struct platform_driver ummu_driver;
 extern const struct ummu_core_ops ummu_ops;
 extern const struct ummu_device_helper ummu_helper;
@@ -26,6 +27,9 @@ extern const struct ummu_device_helper ummu_helper;
 
 #define EID_HIGH_SZ_SHIFT 64
 #define UMMU_CTRL_PAGE_SIZE ((PAGE_SIZE == SZ_4K) ? SZ_4K : SZ_64K)
+
+#define UMMU_GFP(gfp) \
+	(IS_ENABLED(CONFIG_UB_HIGHUSER_MOVABLE) ? GFP_HIGHUSER_MOVABLE : gfp)
 
 /* target context table structures */
 struct ummu_l1_tct_desc {
@@ -184,6 +188,7 @@ struct ummu_capability {
 #define UMMU_OPT_MCMDQ_DECREASE		(1UL << 4)
 #define UMMU_OPT_SYNC_WITH_PLBI		(1UL << 5)
 #define UMMU_OPT_KV_CAM_CONTINUITY	(1UL << 6)
+#define UMMU_OPT_UMAU			(1UL << 7)
 	u32 options;
 
 #define UMMU_MAX_ASIDS			(1UL << 16)
