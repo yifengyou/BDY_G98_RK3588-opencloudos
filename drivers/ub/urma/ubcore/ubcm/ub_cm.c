@@ -16,7 +16,6 @@
 #include <linux/version.h>
 #include <ub/urma/ubcore_uapi.h>
 #include "ubcore_log.h"
-#include "ubcm_genl.h"
 #include "ub_mad.h"
 #include "ub_cm.h"
 
@@ -125,14 +124,9 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 			     struct ubmad_recv_cr *recv_cr)
 {
 	/* Note: agent & recv_buf cannot be NULL, no need to check */
-	struct ubcm_uvs_genl_node *uvs;
-	struct ubcm_nlmsg *nlmsg;
 	int ret;
 
 	switch (recv_cr->msg_type) {
-	case UBMAD_CONN_DATA:
-		nlmsg = ubcm_alloc_genl_msg(recv_cr);
-		break;
 	case UBMAD_UBC_CONN_DATA:
 		ret = ubcore_cm_recv(agent->device,
 				     (struct ubcore_cm_recv_cr *)recv_cr);
@@ -141,30 +135,12 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 				"Failed to handle message by ubcore net, ret: %d.\n",
 				ret);
 		return ret;
-	case UBMAD_AUTHN_DATA:
-		nlmsg = ubcm_alloc_genl_authn_msg(recv_cr);
-		break;
 	default:
 		ubcore_log_err("Invalid msg_type: %u.\n", recv_cr->msg_type);
 		return -EINVAL;
 	}
 
-	if (IS_ERR_OR_NULL(nlmsg))
-		return -ENOMEM;
-
-	uvs = ubcm_find_get_uvs_by_eid(&nlmsg->dst_eid);
-	if (uvs == NULL) {
-		ret = -1;
-		goto free_nlmsg;
-	}
-
-	ret = ubcm_genl_unicast(nlmsg, ubcm_nlmsg_len(nlmsg), uvs);
-	if (ret != 0)
-		ubcore_log_err("Failed to send genl msg.\n");
-	ubcm_uvs_kref_put(uvs);
-free_nlmsg:
-	kfree(nlmsg);
-	return ret;
+	return 0;
 }
 
 static int ubcm_add_device(struct ubcore_device *device)
@@ -345,19 +321,10 @@ int ubcm_init(void)
 		goto uninit_mad;
 	}
 
-	ret = ubcm_genl_init();
-	if (ret != 0) {
-		ubcore_log_err("Failed to init ubcm generic netlink, ret: %d.\n",
-			     ret);
-		goto uninit_base;
-	}
 	ubcore_register_cm_send_ops(ubmad_ubc_send);
 
 	ubcore_log_info("ubcm module init success.\n");
 	return 0;
-
-uninit_base:
-	ubcm_base_uninit();
 uninit_mad:
 	ubmad_uninit();
 	return ret;
@@ -365,7 +332,6 @@ uninit_mad:
 
 void ubcm_uninit(void)
 {
-	ubcm_genl_uninit();
 	ubcm_base_uninit();
 	ubmad_uninit();
 	ubcore_log_info("ubcm module exits.\n");

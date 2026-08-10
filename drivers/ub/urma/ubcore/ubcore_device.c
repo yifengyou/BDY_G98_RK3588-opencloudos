@@ -1210,16 +1210,17 @@ int ubcore_register_device(struct ubcore_device *dev)
 
 	down_write(&g_device_rwsem);
 	ubcore_clients_add(dev);
-	ret = ubcore_copy_logic_devices(dev);
-	if (ret) {
-		ubcore_clients_remove(dev);
-		up_write(&g_device_rwsem);
+	if (g_shared_ns) {
+		ret = ubcore_copy_logic_devices(dev);
+		if (ret) {
+			ubcore_clients_remove(dev);
+			up_write(&g_device_rwsem);
 
-		ubcore_log_err("copy logic device failed, device:%s.\n",
-			       dev->dev_name);
-		goto err;
+			ubcore_log_err("copy logic device failed, device:%s.\n",
+					dev->dev_name);
+			goto err;
+		}
 	}
-
 	list_add_tail(&dev->list_node, &g_device_list);
 	up_write(&g_device_rwsem);
 
