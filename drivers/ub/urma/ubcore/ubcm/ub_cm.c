@@ -127,7 +127,7 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 	int ret;
 
 	switch (recv_cr->msg_type) {
-	case UBMAD_UBC_CONN_DATA:
+	case UBMAD_UBC_CONN_REQ:
 		ret = ubcore_cm_recv(agent->device,
 				     (struct ubcore_cm_recv_cr *)recv_cr);
 		if (ret != 0)
@@ -165,6 +165,7 @@ static int ubcm_add_device(struct ubcore_device *device)
 	if (IS_ERR_OR_NULL(cm_dev->agent)) {
 		ubcore_log_err("Failed to register mad agent.\n");
 		ret = PTR_ERR(cm_dev->agent);
+		ubcm_put_ubc_dev(device);
 		goto put_dev;
 	}
 
@@ -238,7 +239,8 @@ static int ubcm_base_init(void)
 	INIT_LIST_HEAD(&cm_ctx->device_list);
 	spin_lock_init(&cm_ctx->device_lock);
 
-	cm_ctx->wq = alloc_workqueue(UBCM_MODULE_NAME, 0, 1);
+	cm_ctx->wq = alloc_workqueue(UBCM_MODULE_NAME,
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM, 1);
 	if (IS_ERR_OR_NULL(cm_ctx->wq)) {
 		ubcore_log_err("Failed to alloc ubcm workqueue.\n");
 		return -ENOMEM;

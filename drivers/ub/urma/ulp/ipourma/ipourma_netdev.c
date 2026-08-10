@@ -312,11 +312,6 @@ static int ipourma_open(struct net_device *dev)
 		netdev_err(dev, "Device opened failed. ret = %d\n", ret);
 		return ret;
 	}
-	atomic_set(&(priv->need_set_ip_route), 0);
-	if (IS_ERR_OR_NULL(priv->net_config_wq))
-		return -EINVAL;
-	queue_work(priv->net_config_wq, &(priv->set_ip));
-	queue_work(priv->net_config_wq, &(priv->set_route));
 
 	ipourma_napi_enable(dev);
 	netif_start_queue(dev);
@@ -348,6 +343,8 @@ static int ipourma_stop(struct net_device *dev)
 	ipourma_napi_disable(dev);
 	clear_bit(IPOURMA_DEV_ADMIN_UP, &priv->flags);
 	netif_stop_queue(dev);
+	if (!IS_ERR_OR_NULL(priv->tx_wq))
+		flush_workqueue(priv->tx_wq);
 	if (!IS_ERR_OR_NULL(priv->rx_wq))
 		flush_workqueue(priv->rx_wq);
 	ipourma_reset_rings(priv);
@@ -572,7 +569,6 @@ static int ipourma_priv_base_init(struct net_device *dev,
 	priv->need_restart_ring = false;
 	priv->tjetty_lru.tjetty_capacity = IPOURMA_DEFAULT_TJETTY_CAP;
 
-	atomic_set(&priv->need_set_ip_route, 1);
 	ipourma_init_stats(priv);
 	INIT_WORK(&(priv->set_dev_up), ipourma_open_dev);
 	INIT_WORK(&(priv->set_ip), ipourma_init_ipv6_addr);
@@ -583,8 +579,11 @@ static int ipourma_priv_base_init(struct net_device *dev,
 	INIT_WORK(&(priv->register_netdev), ipourma_register_netdev);
 	atomic_set(&priv->rx_jfr_ref, 0);
 	atomic_set(&priv->tx_ring_blocked, 0);
+	atomic_set(&priv->need_set_ip, 1);
 	spin_lock_init(&priv->tjetty_lru.lock);
+	spin_lock_init(&priv->set_ip_lock);
 	INIT_LIST_HEAD(&priv->tjetty_lru.list);
+	INIT_LIST_HEAD(&priv->set_ip_list);
 
 	priv->register_wq = alloc_workqueue("ipourma_register_wq", WQ_MEM_RECLAIM, 0);
 	if (IS_ERR_OR_NULL(priv->register_wq))
@@ -639,6 +638,60 @@ int ipourma_unalloc_netdev(struct net_device *dev)
 	return 0;
 }
 
+static void set_ip_callback(struct work_struct *work)
+{
+	struct delayed_work *d_work = container_of(work, struct delayed_work, work);
+	struct ipourma_set_ip_work *set_ip_work =
+					container_of(d_work, struct ipourma_set_ip_work, d_work);
+	struct ipourma_dev_priv *priv = set_ip_work->priv;
+	int eid_idx = set_ip_work->eid_idx;
+	int ret = IPOURMA_OK;
+
+	if (atomic_read(&priv->need_set_ip) == 0)
+		return;
+	if (!netif_running(priv->dev)) {
+		schedule_delayed_work(d_work, msecs_to_jiffies(MSEC_PER_SEC));
+		return;
+	}
+	ret = ipourma_send_ipv6_netlink(priv->dev, &(priv->eid_info[eid_idx].eid), RTM_NEWADDR);
+	if (ret != 0)
+		return;
+
+	ret = ipourma_add_route_rule(priv, &(priv->eid_info[eid_idx].eid));
+	if (ret != 0) {
+		ret = ipourma_send_ipv6_netlink(priv->dev,
+						&(priv->eid_info[eid_idx].eid),
+						RTM_DELADDR);
+		return;
+	}
+	ipourma_add_route_entry(&(priv->set_route_entry));
+}
+
+static void ipourma_init_set_ip_work(struct ipourma_dev_priv *priv, u32 eid_idx)
+{
+	struct ipourma_set_ip_work *set_ip_work = NULL;
+	struct delayed_work *d_work = NULL;
+
+	set_ip_work = kzalloc(sizeof(struct ipourma_set_ip_work), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(set_ip_work)) {
+		netdev_err(priv->dev, "kzalloc set_ip_work_failed, eid_idx = %u", eid_idx);
+		return;
+	}
+	set_ip_work->priv = priv;
+	set_ip_work->eid_idx = eid_idx;
+	d_work = &set_ip_work->d_work;
+	INIT_DELAYED_WORK(d_work, set_ip_callback);
+	spin_lock(&priv->set_ip_lock);
+		if (atomic_read(&priv->need_set_ip) == 0) {
+			spin_unlock(&priv->set_ip_lock);
+			kfree(set_ip_work);
+			return;
+		}
+		list_add(&set_ip_work->list, &priv->set_ip_list);
+	spin_unlock(&priv->set_ip_lock);
+	schedule_delayed_work(d_work, msecs_to_jiffies(MSEC_PER_SEC));
+}
+
 void ipourma_create_new_eid(struct ipourma_dev_priv *priv, u32 eid_idx)
 {
 	int ret;
@@ -646,15 +699,7 @@ void ipourma_create_new_eid(struct ipourma_dev_priv *priv, u32 eid_idx)
 	ret = ipourma_urma_init_by_eid(priv, eid_idx);
 	if (ret != IPOURMA_OK) {
 		memset(&priv->eid_info[eid_idx].eid, 0, UBCORE_EID_SIZE);
-		if (netif_running(priv->dev))
-			atomic_sub(1, &priv->need_set_ip_route);
 		return;
 	}
-
-	if (netif_running(priv->dev) && atomic_read(&priv->need_set_ip_route) > 0) {
-		ipourma_send_ipv6_netlink(priv->dev, &(priv->eid_info[eid_idx].eid), RTM_NEWADDR);
-		ipourma_add_route_rule(priv, &(priv->eid_info[eid_idx].eid));
-		ipourma_add_route_entry(&(priv->set_route_entry));
-		atomic_sub(1, &priv->need_set_ip_route);
-	}
+	ipourma_init_set_ip_work(priv, eid_idx);
 }
