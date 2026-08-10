@@ -825,4 +825,5 @@ const struct ummu_device_helper ummu_helper = {
 	.sync_dom_cfg = ummu_sync_dom_cfg,
 	.alloc_domain_nested = ummu_viommu_alloc_domain_nested,
 	.cache_invalidate_user = ummu_viommu_cache_invalidate_user,
+	.sync_iotlb_all = ummu_flush_iotlb_all,
 };

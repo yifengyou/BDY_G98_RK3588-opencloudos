@@ -23,16 +23,15 @@
 #define UNIC_HEX			16
 #define UNIC_DHCPV4_PROTO		0x0100
 
-static void unic_set_selftest_param(struct unic_dev *unic_dev, int *st_param)
+static void unic_set_selftest_param(struct unic_dev *unic_dev, bool *st_param)
 {
-	st_param[UNIC_LB_APP] =
-			unic_dev->loopback_flags & UNIC_SUPPORT_APP_LB;
+	st_param[UNIC_LB_APP] = unic_dev_app_lb_supported(unic_dev);
 	st_param[UNIC_LB_SERIAL_SERDES] =
-			unic_dev->loopback_flags & UNIC_SUPPORT_SERIAL_SERDES_LB;
+			unic_dev_serial_serdes_lb_supported(unic_dev);
 	st_param[UNIC_LB_PARALLEL_SERDES] =
-			unic_dev->loopback_flags & UNIC_SUPPORT_PARALLEL_SERDES_LB;
+			unic_dev_parallel_serdes_lb_supported(unic_dev);
 	st_param[UNIC_LB_EXTERNAL] =
-			unic_dev->loopback_flags & UNIC_SUPPORT_EXTERNAL_LB;
+			unic_dev_external_lb_supported(unic_dev);
 }
 
 static int unic_set_lb_mode(struct unic_dev *unic_dev, bool en, int loop_type)
@@ -135,11 +134,17 @@ static int unic_set_app_lb(struct unic_dev *unic_dev, bool en)
 	return unic_lb_link_status_wait(unic_dev, en);
 }
 
-static int unic_lb_config(struct net_device *ndev, int loop_type, bool en,
-			  struct unic_promisc_en *promisc_en)
+static int unic_lb_config(struct net_device *ndev, int loop_type, bool en)
 {
 	struct unic_dev *unic_dev = netdev_priv(ndev);
+	struct unic_vport *vport = &unic_dev->vport;
+	struct unic_promisc_en promisc_all_en = {0};
+	struct unic_promisc_en promisc_en = {0};
 	int ret = 0;
+
+	unic_fill_promisc_en(&promisc_en,
+			     unic_dev->netdev_flags | vport->last_promisc_flags);
+	memset(&promisc_all_en, 1, sizeof(promisc_all_en));
 
 	switch (loop_type) {
 	case UNIC_LB_APP:
@@ -163,7 +168,7 @@ static int unic_lb_config(struct net_device *ndev, int loop_type, bool en,
 			 "lb_config return error, ret = %d, enable = %d.\n",
 			 ret, en);
 
-	unic_set_promisc_mode(unic_dev, promisc_en);
+	(void)unic_set_promisc_mode(unic_dev, en ? &promisc_all_en : &promisc_en);
 
 	return ret;
 }
@@ -229,7 +234,7 @@ static void unic_eth_lb_check_skb_data(struct unic_channel *c,
 	}
 
 	for (i = 0; i < len; i++) {
-		if (packet[i] != (i & 0xff)) {
+		if (packet[i] != i) {
 			unic_err(unic_dev,
 				 "eth packet content error, i = %u.\n", i);
 			goto out;
@@ -281,19 +286,19 @@ static void unic_eth_lb_setup_skb(struct sk_buff *skb)
 	struct net_device *ndev = skb->dev;
 	struct ethhdr *ethh;
 	u8 *packet;
-	u32 i;
+	u8 i;
 
 	skb_reserve(skb, NET_IP_ALIGN);
 	ethh = skb_put(skb, sizeof(struct ethhdr));
 	packet = skb_put(skb, UNIC_LB_TEST_PACKET_SIZE);
 
-	memcpy(ethh->h_dest, ndev->dev_addr, ETH_ALEN);
-	memcpy(ethh->h_source, ndev->dev_addr, ETH_ALEN);
+	ether_addr_copy(ethh->h_dest, ndev->dev_addr);
+	ether_addr_copy(ethh->h_source, ndev->dev_addr);
 
 	ethh->h_proto = htons(ETH_P_ARP);
 
 	for (i = 0; i < UNIC_LB_TEST_PACKET_SIZE; i++)
-		packet[i] = (i & 0xff);
+		packet[i] = i;
 }
 
 static struct sk_buff *unic_lb_skb_prepare(struct net_device *ndev)
@@ -354,9 +359,13 @@ static int unic_lb_run_test(struct net_device *ndev, int loop_mode)
 	}
 
 	/* Used to handle the release of skb in different situations of xmit.
-	 * 1. skb is released through poll_tx and kfree in success situation.
-	 * 2. skb is released through dev_kfree_skb_any in dropped situation.
-	 * 3. skb is released through kfree in busy situation.
+	 * 1. When the chip reports cqe normally, skb is released through
+	 *    kfree_skb and napi_consume_skb in success situation.
+	 * 2. When the chip reports cqe abnormally, pi and ci are not equal,
+	 *    skb is released through kfree_skb twice in success situation.
+	 * 3. In dropped situation, pi and ci are equal, skb is released through
+	 *    kfree_skb and dev_kfree_skb_any.
+	 * 4. In busy situation, skb is released through kfree_skb twice.
 	 */
 	skb_get(skb);
 
@@ -409,25 +418,14 @@ static void unic_external_selftest_prepare(struct net_device *ndev)
 	unic_reset_tx_queue(ndev);
 }
 
-static void unic_do_external_selftest(struct net_device *ndev, int *st_param,
+static void unic_do_external_selftest(struct net_device *ndev,
 				      struct ethtool_test *eth_test, u64 *data)
 {
-	struct unic_dev *unic_dev = netdev_priv(ndev);
-	struct unic_vport *vport = &unic_dev->vport;
-	struct unic_promisc_en promisc_all_en;
-	struct unic_promisc_en promisc_en;
-
-	if (!st_param[UNIC_LB_EXTERNAL])
-		return;
-
-	unic_fill_promisc_en(&promisc_en,
-			     unic_dev->netdev_flags | vport->last_promisc_flags);
-	memset(&promisc_all_en, 1, sizeof(promisc_all_en));
-	data[UNIC_LB_EXTERNAL] = unic_lb_config(ndev, UNIC_LB_EXTERNAL,
-						true, &promisc_all_en);
+	data[UNIC_LB_EXTERNAL] = unic_lb_config(ndev, UNIC_LB_EXTERNAL, true);
 	if (!data[UNIC_LB_EXTERNAL])
 		data[UNIC_LB_EXTERNAL] = unic_lb_run_test(ndev, UNIC_LB_EXTERNAL);
-	unic_lb_config(ndev, UNIC_LB_EXTERNAL, false, &promisc_en);
+
+	unic_lb_config(ndev, UNIC_LB_EXTERNAL, false);
 
 	if (data[UNIC_LB_EXTERNAL])
 		eth_test->flags |= ETH_TEST_FL_FAILED;
@@ -439,7 +437,7 @@ static void unic_external_selftest_restore(struct net_device *ndev)
 {
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 
-	if (unic_resetting(ndev))
+	if (unic_is_initing_or_resetting(unic_dev))
 		return;
 
 	if (!test_bit(UNIC_STATE_DOWN, &unic_dev->state))
@@ -454,28 +452,20 @@ static void unic_external_selftest_restore(struct net_device *ndev)
 	clear_bit(UNIC_STATE_DOWN, &unic_dev->state);
 }
 
-static void unic_do_selftest(struct net_device *ndev, int *st_param,
+static void unic_do_selftest(struct net_device *ndev, bool *st_param,
 			     struct ethtool_test *eth_test, u64 *data)
 {
-	struct unic_dev *unic_dev = netdev_priv(ndev);
-	struct unic_vport *vport = &unic_dev->vport;
-	struct unic_promisc_en promisc_all_en;
-	struct unic_promisc_en promisc_en;
 	int lb_type;
 
-	unic_fill_promisc_en(&promisc_en,
-			     unic_dev->netdev_flags | vport->last_promisc_flags);
-	memset(&promisc_all_en, 1, sizeof(promisc_all_en));
 	for (lb_type = UNIC_LB_APP; lb_type < UNIC_LB_EXTERNAL; lb_type++) {
 		if (!st_param[lb_type])
 			continue;
 
-		data[lb_type] = unic_lb_config(ndev, lb_type, true,
-					       &promisc_all_en);
+		data[lb_type] = unic_lb_config(ndev, lb_type, true);
 		if (!data[lb_type])
 			data[lb_type] = unic_lb_run_test(ndev, lb_type);
 
-		unic_lb_config(ndev, lb_type, false, &promisc_en);
+		unic_lb_config(ndev, lb_type, false);
 
 		if (data[lb_type])
 			eth_test->flags |= ETH_TEST_FL_FAILED;
@@ -507,21 +497,15 @@ static bool unic_self_test_is_unexecuted(struct net_device *ndev,
 {
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 
-	if (unic_dev_ubl_supported(unic_dev)) {
-		unic_err(unic_dev,
-			 "failed to self test, due to in ub mode.\n");
-		return true;
-	}
-
 	if (test_bit(UNIC_STATE_DEACTIVATE, &unic_dev->state)) {
 		unic_err(unic_dev,
 			 "failed to self test, due to dev deactivate.\n");
 		return true;
 	}
 
-	if (unic_resetting(ndev)) {
+	if (unic_is_initing_or_resetting(unic_dev) || !unic_dev->channels.c) {
 		unic_err(unic_dev,
-			 "failed to self test, due to dev resetting.\n");
+			 "failed to self test, due to dev initing or resetting.\n");
 		return true;
 	}
 
@@ -531,7 +515,7 @@ static bool unic_self_test_is_unexecuted(struct net_device *ndev,
 		return true;
 	}
 
-	if (unic_dev->loopback_flags & UNIC_SUPPORT_EXTERNAL_LB)
+	if (unic_dev_external_lb_supported(unic_dev))
 		data[UNIC_LB_EXTERNAL] = UNIC_LB_TEST_UNEXECUTED;
 
 	return false;
@@ -541,30 +525,42 @@ int unic_get_selftest_count(struct unic_dev *unic_dev)
 {
 	int count = 0;
 
-	/* clear loopback bit flags at first */
-	unic_dev->loopback_flags &= (~UNIC_LB_TEST_FLAGS);
-
-	if (unic_dev_app_lb_supported(unic_dev)) {
-		unic_dev->loopback_flags |= UNIC_SUPPORT_APP_LB;
+	if (unic_dev_app_lb_supported(unic_dev))
 		count++;
-	}
 
-	if (unic_dev_serial_serdes_lb_supported(unic_dev)) {
-		unic_dev->loopback_flags |= UNIC_SUPPORT_SERIAL_SERDES_LB;
+	if (unic_dev_serial_serdes_lb_supported(unic_dev))
 		count++;
-	}
 
-	if (unic_dev_parallel_serdes_lb_supported(unic_dev)) {
-		unic_dev->loopback_flags |= UNIC_SUPPORT_PARALLEL_SERDES_LB;
+	if (unic_dev_parallel_serdes_lb_supported(unic_dev))
 		count++;
-	}
 
-	if (unic_dev_external_lb_supported(unic_dev)) {
-		unic_dev->loopback_flags |= UNIC_SUPPORT_EXTERNAL_LB;
+	if (unic_dev_external_lb_supported(unic_dev))
 		count++;
-	}
 
 	return count == 0 ? -EOPNOTSUPP : UNIC_LB_MAX;
+}
+
+static bool unic_external_selftest_is_executed(struct net_device *ndev, bool *st_param,
+					       struct ethtool_test *eth_test, bool if_running)
+{
+	struct unic_dev *unic_dev = netdev_priv(ndev);
+
+	if (!(eth_test->flags & ETH_TEST_FL_EXTERNAL_LB))
+		return false;
+
+	if (!if_running || !netif_carrier_ok(ndev)) {
+		unic_warn(unic_dev,
+			  "not to run external selftest, due to link down.\n");
+		return false;
+	}
+
+	if (!st_param[UNIC_LB_EXTERNAL]) {
+		unic_warn(unic_dev,
+			  "not to run external selftest, due to not support.\n");
+		return false;
+	}
+
+	return true;
 }
 
 void unic_self_test(struct net_device *ndev,
@@ -573,7 +569,7 @@ void unic_self_test(struct net_device *ndev,
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 	struct unic_mac *mac = &unic_dev->hw.mac;
 	bool if_running = netif_running(ndev);
-	int st_param[UNIC_LB_MAX];
+	bool st_param[UNIC_LB_MAX];
 	int ret, i;
 
 	ret = unic_get_selftest_count(unic_dev);
@@ -595,15 +591,10 @@ void unic_self_test(struct net_device *ndev,
 
 	unic_set_selftest_param(unic_dev, st_param);
 
-	if (eth_test->flags & ETH_TEST_FL_EXTERNAL_LB) {
-		if (if_running) {
-			unic_external_selftest_prepare(ndev);
-			unic_do_external_selftest(ndev, st_param, eth_test, data);
-			unic_external_selftest_restore(ndev);
-		} else {
-			unic_warn(unic_dev,
-				  "not to run external selftest, due to link down.\n");
-		}
+	if (unic_external_selftest_is_executed(ndev, st_param, eth_test, if_running)) {
+		unic_external_selftest_prepare(ndev);
+		unic_do_external_selftest(ndev, eth_test, data);
+		unic_external_selftest_restore(ndev);
 	}
 
 	ret = unic_selftest_prepare(ndev, if_running, mac->autoneg);

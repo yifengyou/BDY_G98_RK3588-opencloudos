@@ -520,7 +520,7 @@ int ub_decoder_map(struct ub_decoder *decoder, struct decoder_map_info *info)
 	}
 
 	ubc = decoder->uent->ubc;
-	if (!ubc->ops->decoder_map && !ubc->ops->decoder_unmap) {
+	if (!ubc->ops->decoder_map || !ubc->ops->decoder_unmap) {
 		pr_err("decoder_map or decoder_unmap ops not exist\n");
 		return -EINVAL;
 	}

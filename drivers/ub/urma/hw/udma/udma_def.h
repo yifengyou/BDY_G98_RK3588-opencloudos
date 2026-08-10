@@ -73,6 +73,8 @@ struct udma_caps {
 	uint8_t port_num;
 	uint8_t cqe_size;
 	struct udma_tbl seid;
+	bool ctp_en;
+	bool ipourma_en;
 	bool sva_sep_mode_en;
 };
 
@@ -208,6 +210,15 @@ struct udma_entity_msg {
 	uint8_t opcode;
 	uint16_t rsv;
 	struct udma_entity_buf buf;
+};
+
+struct udma_sq_reserved_info {
+	uint64_t va_start;
+	uint64_t va_size;
+	uint64_t va_per_ue;
+	uint64_t size_per_ue;
+	uint64_t size_per_jetty;
+	bool sq_reserved;
 };
 
 enum {

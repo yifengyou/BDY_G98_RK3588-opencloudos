@@ -624,6 +624,12 @@ int ub_register_share_port(struct ub_entity *entity, u16 port_id,
 		}
 	}
 
+	if (port_id >= parent->port_nums) {
+		ub_err(parent, "port id %u exceeds port num %u\n", port_id,
+		       parent->port_nums);
+		return -EINVAL;
+	}
+
 	port = parent->ports + port_id;
 	if (is_idev(entity) && !port->shareable) {
 		ub_err(parent, "port%u isn't shareable\n", port_id);

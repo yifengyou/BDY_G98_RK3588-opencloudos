@@ -33,6 +33,11 @@ static int udma_init_ctx_resp(struct udma_dev *dev, struct ubcore_udrv_priv *udr
 	resp.die_id = dev->die_id;
 	resp.dump_aux_info = dump_aux_info;
 	resp.jfr_sge = dev->caps.jfr_sge;
+	resp.sq_reserved = dev->sq_reserved_info.sq_reserved;
+	resp.sq_reserved_va = dev->sq_reserved_info.va_start;
+	resp.sq_reserved_len = dev->sq_reserved_info.va_size;
+	resp.ccu_jetty_start_id = dev->caps.ccu_jetty.start_idx;
+	resp.ccu_jetty_max_cnt = dev->caps.ccu_jetty.max_cnt;
 	resp.hugepage_enable = ubase_adev_prealloc_supported(dev->comdev.adev) & hugepage_enable;
 	resp.sva_sep_mode_en = dev->caps.sva_sep_mode_en;
 
@@ -347,6 +352,16 @@ int udma_mmap(struct ubcore_ucontext *uctx, struct vm_area_struct *vma)
 			     VM_DONTCOPY | VM_PFNMAP | VM_LOCKED | VM_WRITE | VM_IO);
 		vma->vm_page_prot = __pgprot(((~PTE_ATTRINDX_MASK) & vma->vm_page_prot.pgprot)
 					     | PTE_ATTRINDX(MT_NORMAL));
+		break;
+	case UDMA_MMAP_RESERVED_SQ:
+		if (vma->vm_start != udma_dev->sq_reserved_info.va_start || vma->vm_end !=
+		    udma_dev->sq_reserved_info.va_start + udma_dev->sq_reserved_info.va_size) {
+			dev_err(udma_dev->dev, "mmap failed, invalid vm area size.\n");
+			return -EINVAL;
+		}
+
+		vm_flags_set(vma, VM_WIPEONFORK | VM_DONTEXPAND | VM_DONTDUMP |
+			     VM_DONTCOPY | VM_PFNMAP | VM_LOCKED | VM_WRITE | VM_IO);
 		break;
 	case UDMA_MMAP_KERNEL_BUF:
 		return udma_mmap_kernel_buf(udma_dev, uctx, vma);

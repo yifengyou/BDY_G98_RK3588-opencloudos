@@ -360,7 +360,7 @@ int unic_dbg_dump_vlan_tbl_list_hw(struct seq_file *s, void *data)
 
 	list_for_each_entry(vlan_node, &list, node) {
 		seq_printf(s, "%-7d", cnt++);
-		seq_printf(s, "%-13u", vlan_node->ue_id);
+		seq_printf(s, "%-9u", vlan_node->ue_id);
 		seq_printf(s, "%-12u\n", vlan_node->vlan_id);
 	}
 

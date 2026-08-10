@@ -102,7 +102,6 @@ struct unic_mac {
 	u32 lanes; /* lane number */
 	u32 fec_mode; /* active fec mode */
 	u32 fec_ability; /* supported fec mode */
-	u32 user_fec_mode; /* user configured fec mode */
 	u8  mac_addr[ETH_ALEN];
 
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
@@ -143,8 +142,9 @@ struct unic_vl {
 	u16	queue_count[UBASE_MAX_VL_NUM];
 	u16	queue_offset[UBASE_MAX_VL_NUM];
 	u8	vl_sl[UBASE_MAX_VL_NUM];
-	u64	vl_maxrate[UBASE_MAX_VL_NUM];
+	u64	vl_maxrate[UBASE_MAX_VL_NUM]; /* unit: bps */
 	u16	vl_bitmap;
+	u32	maxrate; /* unit: Mbps */
 	struct	unic_pfc_info	pfc_info;
 };
 
@@ -272,7 +272,6 @@ struct unic_dev {
 	struct ubase_event_nb	ae_nbs[UNIC_AE_LEVEL_NUM];
 	struct unic_stats	stats;
 	u8			netdev_flags;
-	u8			loopback_flags;
 	struct unic_vport	vport;
 	struct unic_vport_buf	vbuf[UNIC_MAX_VPORT_BUF_NUM];
 	unsigned long		serv_processed_cnt;

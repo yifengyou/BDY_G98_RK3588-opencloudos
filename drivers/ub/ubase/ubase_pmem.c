@@ -237,7 +237,7 @@ static void ubase_unmap_udma_pmem(struct ubase_dev *udev)
 	pmem->dma_len = 0;
 }
 
-static struct ubase_pmem_init_func ubase_pmem_init_map[] = {
+static const struct ubase_pmem_init_func ubase_pmem_init_map[] = {
 	{
 		.init = ubase_init_comm_pmem_ctx,
 		.uninit = ubase_uninit_comm_pmem_ctx,

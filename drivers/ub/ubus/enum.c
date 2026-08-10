@@ -499,13 +499,16 @@ static int ub_enum_ent(struct ub_entity *uent, void *buf)
 		if (slice_id == 0) {
 			if (!info.si || !info.pi || !info.pn || !info.ci) {
 				dev_err(dev, "tlv si/pi/pn/ci NULL\n");
+				ret = -EFAULT;
 				goto err;
 			}
 
 			uent->class_code = info.ci->class_code;
 			ub_entity_type_init(uent);
-			if (!ub_type_valid(uent, !uent->topo_rank))
+			if (!ub_type_valid(uent, !uent->topo_rank)) {
+				ret = -EINVAL;
 				goto err;
+			}
 
 			total_slice = info.si->total_slice;
 			total_num_ports = (int)info.pn->total_num_ports;

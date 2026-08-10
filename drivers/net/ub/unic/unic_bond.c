@@ -97,6 +97,27 @@ out:
 	return ret;
 }
 
+static void unic_restore_bond_addr_list(struct list_head *list,
+					spinlock_t *addr_list_lock,
+					struct unic_comm_addr_node *ip_node)
+{
+	struct unic_comm_addr_node *addr_node;
+
+	spin_lock_bh(addr_list_lock);
+	addr_node = unic_comm_find_addr_node(list, (u8 *)&ip_node->ip_addr,
+					     ip_node->node_mask);
+	if (addr_node) {
+		list_del(&ip_node->node);
+		kfree(ip_node);
+		goto out;
+	}
+
+	list_move_tail(&ip_node->node, list);
+
+out:
+	spin_unlock_bh(addr_list_lock);
+}
+
 static void unic_notify_bond_ip_list(struct unic_vport *vport,
 				     struct list_head *list,
 				     struct list_head *bond_list,
@@ -105,26 +126,16 @@ static void unic_notify_bond_ip_list(struct unic_vport *vport,
 {
 	struct unic_comm_addr_node *ip_node, *tmp;
 	bool bond_service_task_flag = false;
-	int ret;
 
 	list_for_each_entry_safe(ip_node, tmp, list, node) {
 		if (unic_sync_bond_ip(vport, ip_node, state)) {
-			ret = unic_update_bond_addr_list(bond_list,
-							 addr_list_lock,
-							 ip_node->state,
-							 (u8 *)&ip_node->ip_addr,
-							 ip_node->node_mask);
-			if (!ret) {
-				bond_service_task_flag = true;
-			} else if (ret == -ENOMEM) {
-				list_move_tail(&ip_node->node, bond_list);
-				bond_service_task_flag = true;
-				continue;
-			}
+			unic_restore_bond_addr_list(bond_list, addr_list_lock,
+						    ip_node);
+			bond_service_task_flag = true;
+		} else {
+			list_del(&ip_node->node);
+			kfree(ip_node);
 		}
-
-		list_del(&ip_node->node);
-		kfree(ip_node);
 	}
 
 	if (bond_service_task_flag)

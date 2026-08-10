@@ -26,12 +26,47 @@
 
 #define UDMA_MAX_PRIORITY 16
 
+#define UDMA_SET_JETTY_OPT_MAX_NUM 4
+#define UDMA_SET_JFS_OPT_MAX_NUM 10
+
+/* stub UBCORE */
+enum udma_set_get_jetty_opt_perm {
+	PERM_R = 1,
+	PERM_W = 1 << 1,
+};
+
+enum udma_set_get_jetty_opt_ignore_attr {
+	USER_IGNORE = 1,
+	KERNEL_IGNORE = 1 << 1,
+};
+
+enum udma_set_get_jetty_opt_mode {
+	JFS_MODE = 1,
+	JETTY_MODE = 1 << 1,
+};
+
 enum jetty_state {
 	JETTY_RESET,
 	JETTY_READY,
 	JETTY_ERROR,
 	JETTY_SUSPEND,
 	STATE_NUM,
+};
+
+struct udma_jetty_opt_info {
+	uint32_t buf_len;
+	enum udma_set_get_jetty_opt_perm perm;
+	enum udma_set_get_jetty_opt_ignore_attr ignore_attr;
+	enum udma_set_get_jetty_opt_mode mode;
+};
+
+struct udma_jetty_opt_attr {
+	uint64_t opt;
+	void *buf;
+	uint32_t len;
+	enum udma_set_get_jetty_opt_mode mode;
+	enum udma_set_get_jetty_opt_perm perm;
+	bool is_user;
 };
 
 struct udma_jetty {
@@ -41,7 +76,6 @@ struct udma_jetty {
 	uint64_t jetty_addr;
 	refcount_t ae_refcount;
 	struct completion ae_comp;
-	bool pi_type;
 	bool ue_rx_closed;
 };
 
@@ -231,6 +265,8 @@ static inline struct udma_jetty *to_udma_jetty_from_queue(struct udma_jetty_queu
 	return container_of(queue, struct udma_jetty, sq);
 }
 
+void free_jetty_id(struct udma_dev *udma_dev,
+			  struct udma_jetty *udma_jetty, bool is_grp);
 enum jetty_state to_jetty_state(enum ubcore_jetty_state state);
 const char *to_state_name(enum ubcore_jetty_state state);
 bool verify_modify_jetty(enum ubcore_jetty_state jetty_state,
@@ -280,5 +316,22 @@ void udma_clean_cqe_for_jetty(struct udma_dev *dev, struct udma_jetty_queue *sq,
 int udma_batch_modify_and_destroy_jetty(struct udma_dev *dev,
 					struct udma_jetty_queue **sq_list,
 					uint32_t jetty_cnt, int *bad_jetty_index);
+int udma_add_xa_and_create_hw_ctx(struct udma_dev *udma_dev, struct udma_jetty *udma_jetty,
+				  struct ubcore_jetty_cfg *cfg);
 
+int udma_verify_jetty_opt(struct udma_dev *udma_dev, struct udma_jetty_opt_attr attr);
+int udma_set_jetty_field(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
+			 uint64_t opt, void *buf);
+int udma_get_jetty_field(struct udma_dev *udma_dev, struct udma_jetty_queue *sq,
+			 uint64_t opt, void *buf);
+int udma_free_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+int udma_active_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+int udma_alloc_jetty(struct ubcore_device *dev, struct ubcore_jetty_cfg *cfg,
+		     struct ubcore_jetty **jetty, struct ubcore_udata *udata);
+int udma_deactive_jetty(struct ubcore_jetty *jetty, struct ubcore_udata *udata);
+int udma_get_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt, void *buf,
+		       uint32_t len, struct ubcore_udata *udata);
+int udma_set_jetty_opt(struct ubcore_jetty *jetty, uint64_t opt,
+		       void *buf, uint32_t len, struct ubcore_udata *udata);
+void udma_get_jfs_cfg_field(struct ubcore_jfs_cfg *jfs_cfg, uint64_t opt, void *buf);
 #endif /* __UDMA_JETTY_H__ */

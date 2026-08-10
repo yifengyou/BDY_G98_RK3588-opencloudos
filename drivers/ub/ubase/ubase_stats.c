@@ -7,6 +7,29 @@
 #include "ubase_cmd.h"
 #include "ubase_stats.h"
 
+static int ubase_check_port_bitmap(struct ubase_dev *udev, u64 *port_bitmap,
+				   u32 data_size)
+{
+	unsigned long logic_port_bitmap = udev->caps.dev_caps.logic_port_bitmap;
+
+	if (*port_bitmap) {
+		if (data_size < bitmap_weight((unsigned long *)port_bitmap,
+					      UBASE_MAX_PORT_NUM) ||
+		    !bitmap_subset((unsigned long *)port_bitmap,
+				   &logic_port_bitmap, UBASE_MAX_PORT_NUM))
+			return -EINVAL;
+	} else {
+		if (data_size != UBASE_MAX_PORT_NUM ||
+		    data_size < bitmap_weight((unsigned long *)&logic_port_bitmap,
+					     UBASE_MAX_PORT_NUM))
+			return -EINVAL;
+
+		*port_bitmap = logic_port_bitmap;
+	}
+
+	return 0;
+}
+
 static int ubase_update_mac_stats(struct ubase_dev *udev, u16 port_id, u64 *data,
 				  u16 size, bool is_accumulate)
 {
@@ -105,6 +128,106 @@ int ubase_get_ub_port_stats(struct auxiliary_device *adev, u16 port_id,
 				      sizeof(*data) / sizeof(u64), false);
 }
 EXPORT_SYMBOL(ubase_get_ub_port_stats);
+
+static int ubase_query_dl_pkt_stats(struct ubase_dev *udev, u16 port_id,
+				    struct ubase_query_dl_pkt_stats_cmd *resp)
+{
+	struct ubase_query_dl_pkt_stats_cmd req = {0};
+	struct ubase_cmd_buf in, out;
+	int ret;
+
+	req.logic_port_id = cpu_to_le16(port_id);
+
+	__ubase_fill_inout_buf(&in, UBASE_OPC_QUERY_UB_DL_PKT_STATS, true,
+			       sizeof(req), &req);
+	__ubase_fill_inout_buf(&out, UBASE_OPC_QUERY_UB_DL_PKT_STATS, false,
+			       sizeof(*resp), resp);
+
+	ret = __ubase_cmd_send_inout(udev, &in, &out);
+	if (ret && ret != -EPERM)
+
+
+		ubase_err(udev, "failed to query ub dl pkt stats, ret = %d.\n",
+			  ret);
+
+	return ret == -EPERM ? -EOPNOTSUPP : ret;
+}
+
+static int __ubase_get_ub_dl_pkt_stats(struct ubase_dev *udev, u64 port_bitmap,
+				       struct ubase_ub_dl_pkt_stats_result *data,
+				       u32 data_size)
+{
+#define UBASE_FLIT_TO_BYTE	20
+
+	struct ubase_query_dl_pkt_stats_cmd resp;
+	unsigned long port_num, k;
+	u64 pkt_filts;
+	int ret;
+	u16 i;
+
+	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits) ||
+	    test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		return -EBUSY;
+
+	ret = ubase_check_port_bitmap(udev, &port_bitmap, data_size);
+	if (ret)
+		return ret;
+
+	port_num = bitmap_weight((unsigned long *)&port_bitmap,
+				 UBASE_MAX_PORT_NUM);
+
+	for (i = 0, k = 0; i < UBASE_MAX_PORT_NUM && k < port_num; i++) {
+		if (!test_bit(i, (unsigned long *)&port_bitmap))
+			continue;
+
+		memset(&resp, 0, sizeof(resp));
+		ret = ubase_query_dl_pkt_stats(udev, i, &resp);
+		if (ret)
+			return ret;
+
+		pkt_filts = ubase_size_gen(le32_to_cpu(resp.tx_flit_num_h),
+					   le32_to_cpu(resp.tx_flit_num_l));
+		data[k].tx_pkt_bytes = pkt_filts * UBASE_FLIT_TO_BYTE;
+		pkt_filts = ubase_size_gen(le32_to_cpu(resp.rx_flit_num_h),
+					   le32_to_cpu(resp.rx_flit_num_l));
+		data[k].rx_pkt_bytes = pkt_filts * UBASE_FLIT_TO_BYTE;
+		data[k].port_id = i;
+		data[k].valid = 1;
+
+		k++;
+	}
+
+	return ret;
+}
+
+/**
+ * ubase_get_ub_dl_pkt_stats() - get ub dl pkt stats
+ * @adev: auxiliary device
+ * @port_bitmap: port bitmap
+ * @data: ub date dl pkt stats
+ * @data_size: valid size of data
+ *
+ * The function is used to get ub dl pkt stats.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
+int ubase_get_ub_dl_pkt_stats(struct auxiliary_device *adev, u64 port_bitmap,
+			      struct ubase_ub_dl_pkt_stats_result *data,
+			      u32 data_size)
+{
+	struct ubase_dev *udev;
+
+	if (!adev || !data || !data_size)
+		return -EINVAL;
+
+	udev = __ubase_get_udev_by_adev(adev);
+	if (!(ubase_dev_ubl_supported(udev) || ubase_dev_fwctl_supported(udev)))
+		return -EOPNOTSUPP;
+
+	return __ubase_get_ub_dl_pkt_stats(udev, port_bitmap, data, data_size);
+}
+EXPORT_SYMBOL(ubase_get_ub_dl_pkt_stats);
 
 int __ubase_get_eth_port_stats(struct ubase_dev *udev,
 			       struct ubase_eth_mac_stats *data)

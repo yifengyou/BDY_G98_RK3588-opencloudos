@@ -545,35 +545,51 @@ static int ubase_ctrlq_send_to_cmdq(struct ubase_dev *udev,
 	return ret;
 }
 
+static inline void
+ubase_fill_ctrlq_trace_info(struct ubase_ctrlq_trace_info *trace_info,
+			    struct ubase_ctrlq_ring *ctrlq, u8 num,
+			    u16 bus_ue_id)
+{
+	trace_info->pi = ctrlq->pi;
+	trace_info->ci = ctrlq->ci;
+	trace_info->num = num;
+	trace_info->bus_ue_id = bus_ue_id;
+}
+
 static void ubase_ctrlq_send_to_csq(struct ubase_dev *udev,
 				    struct ubase_ctrlq_base_block *head,
 				    struct ubase_ctrlq_msg *msg, u8 num)
 {
 	struct ubase_ctrlq_ring *csq = &udev->ctrlq.csq;
+	struct ubase_ctrlq_trace_info trace_info = {0};
+	u16 bus_ue_id = le16_to_cpu(head->bus_ue_id);
 	u32 total_size = msg->in_size;
 	u32 size, offset = 0;
 	u8 cnt = 0;
 	u8 *addr;
 
+	ubase_fill_ctrlq_trace_info(&trace_info, csq, num, bus_ue_id);
 	while (cnt < num) {
 		addr = csq->base_addr + csq->pi * UBASE_CTRLQ_BB_LEN;
 		if (cnt == 0) {
 			memcpy_toio(addr, head, sizeof(*head));
-			trace_ubase_ctrlq_csq(udev->dev, num, csq->pi, csq->ci,
+			trace_ubase_ctrlq_csq(udev->dev, &trace_info,
 					      head, sizeof(*head));
 			total_size -= UBASE_CTRLQ_DATA_LEN;
 			offset += UBASE_CTRLQ_DATA_LEN;
 		} else {
 			size = min_t(u32, total_size, UBASE_CTRLQ_BB_LEN);
 			memcpy_toio(addr, (u8 *)msg->in + offset, size);
-			trace_ubase_ctrlq_csq(udev->dev, num, csq->pi, csq->ci,
-					      (u8 *)msg->in + offset, size);
+			trace_ubase_ctrlq_csq(udev->dev, &trace_info,
+					      (u8 *)msg->in + offset,
+					      size);
 			total_size -= size;
 			offset += size;
 		}
 		csq->pi++;
 		if (csq->pi >= csq->depth)
 			csq->pi = 0;
+		trace_info.pi = csq->pi;
 
 		cnt++;
 	}
@@ -926,14 +942,22 @@ static void ubase_ctrlq_update_crq_ci(struct ubase_dev *udev, u8 bb_num)
 static void ubase_ctrlq_read_msg_data(struct ubase_dev *udev, u8 num, u8 *msg)
 {
 	struct ubase_ctrlq_ring *crq = &udev->ctrlq.crq;
-	u16 pos = crq->ci;
+	struct ubase_ctrlq_trace_info trace_info = {0};
+	struct ubase_ctrlq_base_block *head;
+	u16 pos = crq->ci, bus_ue_id;
 	u8 i;
 
 	for (i = 0; i < num; i++) {
 		memcpy_fromio(msg + i * UBASE_CTRLQ_BB_LEN,
 			      (u8 *)crq->base_addr + pos * UBASE_CTRLQ_BB_LEN,
 			      UBASE_CTRLQ_BB_LEN);
-		trace_ubase_ctrlq_crq(udev->dev, num, crq->pi, crq->ci,
+		if (i == 0) {
+			head = (struct ubase_ctrlq_base_block *)msg;
+			bus_ue_id = le16_to_cpu(head->bus_ue_id);
+			ubase_fill_ctrlq_trace_info(&trace_info, crq,
+						     num, bus_ue_id);
+		}
+		trace_ubase_ctrlq_crq(udev->dev, &trace_info,
 				      msg + i * UBASE_CTRLQ_BB_LEN,
 				      UBASE_CTRLQ_BB_LEN);
 		pos = (pos + 1) % crq->depth;
