@@ -245,8 +245,6 @@ int ummu_alloc_mapt_blk_mem(struct ummu_domain *ummu_domain,
 {
 	int mode;
 
-	guard(mutex)(&ummu_domain->init_mutex);
-
 	mode = ummu_domain->cfgs.s1_cfg.io_pt_cfg.mode;
 	if (mode == MAPT_MODE_TABLE)
 		return ummu_alloc_mapt_mem_for_table(ummu_domain, blk_para);
@@ -665,7 +663,7 @@ err_free_blk:
 	return ERR_PTR(ret);
 }
 
-struct ummu_mapt_table_node *ummu_alloc_level_block(struct ummu_mapt_info *mapt_info,
+static struct ummu_mapt_table_node *ummu_alloc_level_block(struct ummu_mapt_info *mapt_info,
 						    struct ummu_mapt_table_node *pre_node,
 						    struct ummu_mapt_block *pre_node_mapt_blk)
 {
@@ -1135,13 +1133,18 @@ static int ummu_table_op(struct ummu_mapt_info *mapt_info,
 			 struct ummu_data_info *data_info)
 {
 	struct ummu_mapt_table_node node = {0};
+	int ret;
 
 	data_info->mapt_info = mapt_info;
 
 	switch (data_info->op) {
 	case UMMU_GRANT:
-		return ummu_table_fill_node_by_level(data_info, 0,
+		ret = ummu_table_fill_node_by_level(data_info, 0,
 			&node, data_info->data_base, data_info->data_limit);
+		if (ret)
+			ummu_table_clear_node_by_level(data_info, 0, &node,
+				data_info->data_base, data_info->data_limit);
+		return ret;
 	case UMMU_ADD_TOKEN:
 	case UMMU_REMOVE_TOKEN:
 		return ummu_table_update_token_by_level(data_info, 0,
@@ -1239,12 +1242,12 @@ int ummu_perm_grant(struct iommu_domain *domain, void *va, size_t size,
 		ret = ummu_update_info(data_info.op, mapt_info, &data_info);
 
 	plb_gather->va = (void *)data_info.data_base;
-	if (data_info.op == UMMU_GRANT)
+	/* plb_gather->size = 0 indicates PLB will not be flushed */
+	if (data_info.op == UMMU_GRANT && !ret)
 		plb_gather->size = 0;
 	else
 		plb_gather->size = data_info.data_size;
 
-	plb_gather->size = data_info.data_size;
 	data_info.tokenval = 0;
 	return ret;
 }
@@ -1309,10 +1312,8 @@ int ummu_perm_ungrant(struct iommu_domain *domain, void *va, size_t size,
 	}
 
 	ret = ummu_ungrant_imp(mapt_info, &data_info);
-	if (ret)
-		goto clear_info;
-
-	ret = ummu_update_info(data_info.op, mapt_info, &data_info);
+	if (ret == 0)
+		ret = ummu_update_info(data_info.op, mapt_info, &data_info);
 
 	if (data_info.op == UMMU_UNGRANT) {
 		data_info.lvl = data_info.lvl ? data_info.lvl - 1 : 0;

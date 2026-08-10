@@ -12,8 +12,6 @@
 #include "ubase_tp.h"
 #include "ubase_ctx_debugfs.h"
 
-#define UBASE_DEFAULT_CTXGN 0
-
 static void ubase_dump_eq_ctx(struct seq_file *s, struct ubase_eq *eq)
 {
 	seq_printf(s, "%-5u", eq->eqn);
@@ -54,14 +52,11 @@ static void ubase_dump_ceq_ctx(struct seq_file *s, struct ubase_dev *udev, u32 i
 enum ubase_dbg_ctx_type {
 	UBASE_DBG_AEQ_CTX = 0,
 	UBASE_DBG_CEQ_CTX,
-	UBASE_DBG_TPG_CTX,
-	UBASE_DBG_TP_CTX,
 };
 
 static u32 ubase_get_ctx_num(struct ubase_dev *udev,
-			     enum ubase_dbg_ctx_type ctx_type, u32 ctxgn)
+			     enum ubase_dbg_ctx_type ctx_type)
 {
-	struct ubase_adev_caps *unic_caps = &udev->caps.unic_caps;
 	u32 ctx_num = 0;
 
 	switch (ctx_type) {
@@ -70,15 +65,6 @@ static u32 ubase_get_ctx_num(struct ubase_dev *udev,
 		break;
 	case UBASE_DBG_CEQ_CTX:
 		ctx_num = udev->irq_table.ceqs.num;
-		break;
-	case UBASE_DBG_TPG_CTX:
-		ctx_num = unic_caps->tpg.max_cnt;
-		break;
-	case UBASE_DBG_TP_CTX:
-		spin_lock(&udev->tp_ctx.tpg_lock);
-		if (udev->tp_ctx.tpg)
-			ctx_num = udev->tp_ctx.tpg[ctxgn].tp_cnt;
-		spin_unlock(&udev->tp_ctx.tpg_lock);
 		break;
 	default:
 		ubase_err(udev, "failed to get ctx num, ctx_type = %u.\n",
@@ -110,7 +96,7 @@ static int ubase_dbg_dump_context(struct seq_file *s,
 
 	dbg_ctx[ctx_type].print_ctx_titles(s);
 
-	for (i = 0; i < ubase_get_ctx_num(udev, ctx_type, UBASE_DEFAULT_CTXGN); i++)
+	for (i = 0; i < ubase_get_ctx_num(udev, ctx_type); i++)
 		dbg_ctx[ctx_type].get_ctx(s, udev, i);
 
 	return 0;
@@ -123,16 +109,9 @@ struct ubase_ctx_info {
 	const char *ctx_name;
 };
 
-static inline u32 ubase_get_ctx_group_num(struct ubase_dev *udev,
-					  enum ubase_dbg_ctx_type ctx_type)
-{
-	return ctx_type == UBASE_DBG_TP_CTX ? udev->caps.unic_caps.tpg.max_cnt :
-	       1;
-}
-
 static void ubase_get_ctx_info(struct ubase_dev *udev,
 			       enum ubase_dbg_ctx_type ctx_type,
-			       struct ubase_ctx_info *ctx_info, u32 ctxgn)
+			       struct ubase_ctx_info *ctx_info)
 {
 	switch (ctx_type) {
 	case UBASE_DBG_AEQ_CTX:
@@ -147,22 +126,6 @@ static void ubase_get_ctx_info(struct ubase_dev *udev,
 		ctx_info->op = UBASE_MB_QUERY_CEQ_CONTEXT;
 		ctx_info->ctx_name = "ceq";
 		break;
-	case UBASE_DBG_TPG_CTX:
-		ctx_info->start_idx = udev->caps.unic_caps.tpg.start_idx;
-		ctx_info->ctx_size = UBASE_TPG_CTX_SIZE;
-		ctx_info->op = UBASE_MB_QUERY_TPG_CONTEXT;
-		ctx_info->ctx_name = "tpg";
-		break;
-	case UBASE_DBG_TP_CTX:
-		spin_lock(&udev->tp_ctx.tpg_lock);
-		ctx_info->start_idx = udev->tp_ctx.tpg ?
-				udev->tp_ctx.tpg[ctxgn].start_tpn : 0;
-		spin_unlock(&udev->tp_ctx.tpg_lock);
-
-		ctx_info->ctx_size = UBASE_TP_CTX_SIZE;
-		ctx_info->op = UBASE_MB_QUERY_TP_CONTEXT;
-		ctx_info->ctx_name = "tp";
-		break;
 	default:
 		ubase_err(udev, "failed to get ctx info, ctx_type = %u.\n",
 			  ctx_type);
@@ -176,21 +139,7 @@ static void ubase_mask_eq_ctx_key_words(void *buf)
 
 	eq->eqe_base_addr_l = 0;
 	eq->eqe_base_addr_h = 0;
-	eq->eqe_token_id = 0;
 	eq->eqe_token_value = 0;
-}
-
-static void ubase_mask_tp_ctx_key_words(void *buf)
-{
-	struct ubase_tp_ctx *tp = (struct ubase_tp_ctx *)buf;
-
-	tp->wqe_ba_l = 0;
-	tp->wqe_ba_h = 0;
-	tp->tp_wqe_token_id = 0;
-	tp->reorder_q_addr_l = 0;
-	tp->reorder_q_addr_h = 0;
-	tp->scc_token = 0;
-	tp->scc_token_1 = 0;
 }
 
 static void ubase_mask_ctx_key_words(void *buf,
@@ -200,11 +149,6 @@ static void ubase_mask_ctx_key_words(void *buf,
 	case UBASE_DBG_AEQ_CTX:
 	case UBASE_DBG_CEQ_CTX:
 		ubase_mask_eq_ctx_key_words(buf);
-		break;
-	case UBASE_DBG_TPG_CTX:
-		break;
-	case UBASE_DBG_TP_CTX:
-		ubase_mask_tp_ctx_key_words(buf);
 		break;
 	default:
 		break;
@@ -252,9 +196,9 @@ static int ubase_dbg_dump_ctx_hw(struct seq_file *s, void *data,
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
 	struct ubase_ctx_info ctx_info = {0};
 	struct ubase_cmd_mailbox *mailbox;
-	u32 max_ctxgn, ctxn, ctxgn;
 	struct ubase_mbx_attr attr;
 	int ret = 0;
+	u32 ctxn;
 
 	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits) ||
 	    test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
@@ -267,27 +211,23 @@ static int ubase_dbg_dump_ctx_hw(struct seq_file *s, void *data,
 		return -ENOMEM;
 	}
 
-	max_ctxgn = ubase_get_ctx_group_num(udev, ctx_type);
-	for (ctxgn = 0; ctxgn < max_ctxgn; ctxgn++) {
-		ubase_get_ctx_info(udev, ctx_type, &ctx_info, ctxgn);
-
-		for (ctxn = 0; ctxn < ubase_get_ctx_num(udev, ctx_type, ctxgn); ctxn++) {
-			ubase_fill_mbx_attr(&attr, ctxn + ctx_info.start_idx,
-					    ctx_info.op, 0);
-			ret = __ubase_hw_upgrade_ctx_ex(udev, &attr, mailbox);
-			if (ret) {
-				ubase_err(udev,
-					  "failed to post query %s ctx mbx, ret = %d.\n",
-					  ctx_info.ctx_name, ret);
-				goto upgrade_ctx_err;
-			}
-
-			seq_printf(s, "offset\t%s%u\n", ctx_info.ctx_name,
-				   ctxn + ctx_info.start_idx);
-			ubase_mask_ctx_key_words(mailbox->buf, ctx_type);
-			__ubase_print_context_hw(s, mailbox->buf, ctx_info.ctx_size);
-			seq_puts(s, "\n");
+	ubase_get_ctx_info(udev, ctx_type, &ctx_info);
+	for (ctxn = 0; ctxn < ubase_get_ctx_num(udev, ctx_type); ctxn++) {
+		ubase_fill_mbx_attr(&attr, ctxn + ctx_info.start_idx,
+					ctx_info.op, 0);
+		ret = __ubase_hw_upgrade_ctx_ex(udev, &attr, mailbox);
+		if (ret) {
+			ubase_err(udev,
+					"failed to post query %s ctx mbx, ret = %d.\n",
+					ctx_info.ctx_name, ret);
+			goto upgrade_ctx_err;
 		}
+
+		seq_printf(s, "offset\t%s%u\n", ctx_info.ctx_name,
+				ctxn + ctx_info.start_idx);
+		ubase_mask_ctx_key_words(mailbox->buf, ctx_type);
+		__ubase_print_context_hw(s, mailbox->buf, ctx_info.ctx_size);
+		seq_puts(s, "\n");
 	}
 
 upgrade_ctx_err:
@@ -318,32 +258,6 @@ int ubase_dbg_dump_ceq_context(struct seq_file *s, void *data)
 	mutex_unlock(&udev->irq_table.ceq_lock);
 
 	return ret;
-}
-
-int ubase_dbg_dump_tpg_ctx_hw(struct seq_file *s, void *data)
-{
-	struct ubase_dev *udev = dev_get_drvdata(s->private);
-
-	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits))
-		return -EBUSY;
-
-	return ubase_dbg_dump_ctx_hw(s, data, UBASE_DBG_TPG_CTX);
-}
-
-int ubase_dbg_dump_tp_ctx_hw(struct seq_file *s, void *data)
-{
-	struct ubase_dev *udev = dev_get_drvdata(s->private);
-
-	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits))
-		return -EBUSY;
-
-	if (!ubase_get_ctx_num(udev, UBASE_DBG_TP_CTX, UBASE_DEFAULT_CTXGN))
-		return -EOPNOTSUPP;
-
-	if (!ubase_get_ctx_group_num(udev, UBASE_DBG_TP_CTX))
-		return -EOPNOTSUPP;
-
-	return ubase_dbg_dump_ctx_hw(s, data, UBASE_DBG_TP_CTX);
 }
 
 int ubase_dbg_dump_aeq_ctx_hw(struct seq_file *s, void *data)

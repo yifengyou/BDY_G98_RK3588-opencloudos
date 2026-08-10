@@ -79,7 +79,7 @@ void ummu_device_init_permq_ctrl_page(struct ummu_device *ummu)
 
 	ctrl_base_pa = ((vmalloc_to_pfn(ummu->base) << PAGE_SHIFT) +
 			UMMU_PERMQ_CTRL_PAGE_BASE);
-	ummu->ucmdq_ctrl_page = devm_ioremap(ummu->dev, ctrl_base_pa,
+	ummu->permq_ctrl_page = devm_ioremap(ummu->dev, ctrl_base_pa,
 					     UMMU_CTRL_PAGE_SIZE * ummu->cap.permq_num);
 	/*
 	 * we don't return error code even if ioremap failed, since some times
@@ -105,7 +105,7 @@ int ummu_get_permq_resource(struct ummu_device *ummu, u32 qid,
 	queue->pcplq_base = permq->pcplq.pa;
 
 	/* pcmdq_pi is head of the page specified by qid */
-	ctrl_page_pa = vmalloc_to_pfn(ummu->ucmdq_ctrl_page) << PAGE_SHIFT;
+	ctrl_page_pa = vmalloc_to_pfn(ummu->permq_ctrl_page) << PAGE_SHIFT;
 	queue->ctrl_page = ctrl_page_pa + PERMQ_PCMDQ_PI(qid);
 
 	return 0;
@@ -123,18 +123,14 @@ int ummu_get_tid_res(struct tid_args *args)
 		get_order(cap->permq_ent_num.cmdq_num * PCMDQ_ENT_BYTES);
 	args->pcplq_order =
 		get_order(cap->permq_ent_num.cplq_num * PCPLQ_ENT_BYTES);
-	if (cap->options & UMMU_OPT_DOUBLE_PLBI)
-		args->hw_cap |= HW_CAP_DOUBLE_PLBI;
-	if (cap->options & UMMU_OPT_KCMD_PLBI)
-		args->hw_cap |= HW_CAP_KCMD_PLBI;
 
 	return 0;
 }
 
-static int ummu_device_release_ucmdq(struct ummu_device *ummu, u32 qid)
+static void ummu_device_release_ucmdq(struct ummu_device *ummu, u32 qid)
 {
 	u32 reg_rep;
-	int ret = 0;
+	int ret;
 
 	guard(mutex)(&ummu->permq_ctx_cfg.permq_rel_mutex);
 	writel_relaxed((qid & PERMQ_RELEASE_ID),
@@ -145,20 +141,8 @@ static int ummu_device_release_ucmdq(struct ummu_device *ummu, u32 qid)
 					  reg_rep,
 					  !(reg_rep & PERMQ_RELEASE_CPL_BIT), 1,
 					  PERMQ_RELEASE_TIMEOUT_US);
-	return ret;
-}
-
-static bool perm_queue_empty(struct ummu_device *ummu, u32 qid)
-{
-	void __iomem *ctrl_base = ummu->ucmdq_ctrl_page;
-	u32 pi_idx, ci_idx, size;
-
-	size = ummu->cap.permq_ent_num.cmdq_num;
-	pi_idx = readl_relaxed(ctrl_base + PERMQ_PCMDQ_PI(qid));
-	ci_idx = readl_relaxed(ctrl_base + PERMQ_PCMDQ_CI(qid));
-
-	return PQ_IDX(pi_idx, size) == PQ_IDX(ci_idx, size) &&
-	       PQ_WRAP(pi_idx, size) == PQ_WRAP(ci_idx, size);
+	if (ret)
+		dev_err(ummu->dev, "ummu release ucmdq failed, qid = %u\n", qid);
 }
 
 void ummu_release_permq_resource(struct ummu_domain *domain)
@@ -167,23 +151,11 @@ void ummu_release_permq_resource(struct ummu_domain *domain)
 					domain->base_domain.core_dev);
 	u32 qid = domain->qid;
 	struct ummu_permq_desc *permq;
-	bool empty;
-	int ret;
+	size_t pcmdq_size, pcplq_size;
 
 	domain->qid = UMMU_INVALID_QID;
 
-	ret = read_poll_timeout(perm_queue_empty, empty, empty == true,
-				0, PERMQ_TIMEOUT_US, 0, ummu, qid);
-	if (ret) {
-		pr_err("wait perm queue empty timeout, qid = %u\n", qid);
-		return;
-	}
-
-	ret = ummu_device_release_ucmdq(ummu, qid);
-	if (ret) {
-		pr_err("ummu release ucmdq failed, qid = %u\n", qid);
-		return;
-	}
+	ummu_device_release_ucmdq(ummu, qid);
 
 	/*
 	 * we not clear ctxtbl entry, because the qid is unused now, the
@@ -198,9 +170,11 @@ void ummu_release_permq_resource(struct ummu_domain *domain)
 	}
 
 	/* free the entry */
-	devm_free_pages(ummu->dev, (unsigned long)permq->pcmdq.va);
-	devm_free_pages(ummu->dev, (unsigned long)permq->pcplq.va);
-	devm_kfree(ummu->dev, permq);
+	pcmdq_size = PCMDQ_ENT_BYTES * ummu->cap.permq_ent_num.cmdq_num;
+	free_pages((unsigned long)permq->pcmdq.va, get_order(pcmdq_size));
+	pcplq_size = PCPLQ_ENT_BYTES * ummu->cap.permq_ent_num.cplq_num;
+	free_pages((unsigned long)permq->pcplq.va, get_order(pcplq_size));
+	kfree(permq);
 }
 
 void ummu_device_set_permq_ctxtbl(struct ummu_device *ummu)
@@ -290,19 +264,18 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 	u32 qid;
 	int ret;
 
-	if (!ummu->permq_ctx_cfg.tbl_va || !ummu->ucmdq_ctrl_page) {
+	if (!ummu->permq_ctx_cfg.tbl_va || !ummu->permq_ctrl_page) {
 		dev_err(ummu->dev, "permqs resource is unavailable!\n");
 		return -EINVAL;
 	}
 
-	permq = devm_kzalloc(ummu->dev, sizeof(*permq), GFP_KERNEL);
+	permq = kzalloc(sizeof(*permq), GFP_KERNEL);
 	if (!permq)
 		return -ENOMEM;
 
 	pcmdq_size = PCMDQ_ENT_BYTES * ummu->cap.permq_ent_num.cmdq_num;
-	permq->pcmdq.va = (void *)devm_get_free_pages(ummu->dev, GFP_KERNEL |
-						      __GFP_COMP | __GFP_ZERO,
-						      get_order(pcmdq_size));
+	permq->pcmdq.va = (void *)__get_free_pages(GFP_KERNEL | __GFP_COMP |
+					__GFP_ZERO, get_order(pcmdq_size));
 	if (!permq->pcmdq.va) {
 		ret = -ENOMEM;
 		goto e_free_permq;
@@ -310,9 +283,8 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 	permq->pcmdq.pa = virt_to_phys(permq->pcmdq.va);
 
 	pcplq_size = PCPLQ_ENT_BYTES * ummu->cap.permq_ent_num.cplq_num;
-	permq->pcplq.va = (void *)devm_get_free_pages(ummu->dev, GFP_KERNEL |
-						      __GFP_COMP | __GFP_ZERO,
-						      get_order(pcplq_size));
+	permq->pcplq.va = (void *)__get_free_pages(GFP_KERNEL | __GFP_COMP |
+					__GFP_ZERO, get_order(pcplq_size));
 	if (!permq->pcplq.va) {
 		ret = -ENOMEM;
 		goto e_free_pcmdq;
@@ -326,25 +298,17 @@ int ummu_domain_config_permq(struct ummu_domain *domain)
 		goto e_free_pcplq;
 	}
 
-	ret = ummu_device_release_ucmdq(ummu, qid);
-	if (ret) {
-		pr_err("ummu release ucmdq failed, qid = %u\n", qid);
-		goto e_free_xa;
-	}
-
 	domain->qid = qid;
 	ummu_init_permq_ctxtbl_ent(domain, permq);
 	dma_wmb();
-	ummu_init_permq_ctrltbl_ent(ummu->ucmdq_ctrl_page, qid);
+	ummu_init_permq_ctrltbl_ent(ummu->permq_ctrl_page, qid);
 	return 0;
 
-e_free_xa:
-	xa_erase(&ummu->permq_ctx_cfg.permq_xa, qid);
 e_free_pcplq:
-	devm_free_pages(ummu->dev, (unsigned long)permq->pcplq.va);
+	free_pages((unsigned long)permq->pcplq.va, get_order(pcplq_size));
 e_free_pcmdq:
-	devm_free_pages(ummu->dev, (unsigned long)permq->pcmdq.va);
+	free_pages((unsigned long)permq->pcmdq.va, get_order(pcmdq_size));
 e_free_permq:
-	devm_kfree(ummu->dev, permq);
+	kfree(permq);
 	return ret;
 }

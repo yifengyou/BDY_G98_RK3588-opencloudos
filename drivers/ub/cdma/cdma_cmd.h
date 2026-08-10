@@ -79,5 +79,8 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev);
 void cdma_cmd_inc(struct cdma_dev *cdev);
 void cdma_cmd_dec(struct cdma_dev *cdev);
 void cdma_cmd_flush(struct cdma_dev *cdev);
+void cdma_kcmd_inc(struct cdma_dev *cdev);
+void cdma_kcmd_dec(struct cdma_dev *cdev);
+void cdma_kcmd_flush(struct cdma_dev *cdev);
 
 #endif /* __CDMA_CMD_H__ */

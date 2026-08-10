@@ -154,7 +154,7 @@ static int cdma_remap_pfn_range(struct cdma_file *cfile, struct vm_area_struct *
 			return -EINVAL;
 		}
 
-		address = (uint64_t)db_addr + CDMA_JETTY_DSQE_OFFSET + jfs_id * PAGE_SIZE;
+		address = (uint64_t)db_addr + CDMA_JETTY_DSQE_OFFSET + jfs_id * CDMA_HW_PAGE_SIZE;
 
 		if (io_remap_pfn_range(vma, vma->vm_start, address >> PAGE_SHIFT,
 				       PAGE_SIZE, vma->vm_page_prot)) {
@@ -386,14 +386,14 @@ int cdma_create_chardev(struct cdma_dev *cdev)
 	}
 
 	chardev->dev = device_create(cdma_cdev_class, NULL, chardev->devno,
-				     NULL, chardev->name);
+				     NULL, "%s", chardev->name);
 	if (IS_ERR(chardev->dev)) {
 		ret = PTR_ERR(chardev->dev);
 		dev_err(cdev->dev, "create device failed, ret = %d\n", ret);
 		goto cdev_delete;
 	}
 
-	dev_dbg(cdev->dev, "create chardev: %s succeeded\n", chardev->name);
+	dev_info(cdev->dev, "cdma create chardev: %s success\n", chardev->name);
 	return 0;
 
 cdev_delete:

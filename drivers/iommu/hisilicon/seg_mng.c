@@ -34,11 +34,11 @@ static enum ummu_grant_op_type ummu_table_param_check(struct ummu_seg_info *exis
 	    (exist_addr->token_count == 1))
 		return UMMU_ADD_TOKEN;
 
-	pr_err("Check grant info failed.\n");
-	pr_err("Granted addr info(token_check=%u, token_count=%u, permission=%d, ",
-		exist_addr->token_check, exist_addr->token_count, exist_addr->permission);
-	pr_err("e_bit=%d),target addr info(token_check=%u, permission=%d, e_bit=%d).\n",
-		exist_addr->e_bit, grant_param->token_check, grant_param->perm, grant_param->e_bit);
+	pr_err("granted addr info: token_check=%u, token_count=%u, permission=%d e_bit=%d.\n",
+		exist_addr->token_check, exist_addr->token_count, exist_addr->permission,
+		exist_addr->e_bit);
+	pr_err("target addr info: token_check=%u, permission=%d, e_bit=%d.\n",
+		grant_param->token_check, grant_param->perm, grant_param->e_bit);
 	return UMMU_OP_END;
 }
 
@@ -96,11 +96,11 @@ static enum ummu_grant_op_type ummu_entry_param_check(struct ummu_mapt_info *map
 		return UMMU_ADD_TOKEN;
 
 	pr_err("Node data check failed!\n");
-	pr_debug("node.perm = %u, ", node->permission);
+	pr_debug("node.perm = %d, ", (int)node->permission);
 	pr_debug("node.e_bit = %d, node.token_check = %d, node.nonce = %d, ",
-		(int)node->e_bit, (int)node->token_check, node->nonce);
+		(int)node->e_bit, (int)node->token_check, (int)node->nonce);
 	pr_debug("perm = %d,e_bit = %d, token_check = %d.\n",
-		grant_param->perm, (int)grant_param->e_bit, (int)grant_param->token_check);
+		(int)grant_param->perm, (int)grant_param->e_bit, (int)grant_param->token_check);
 
 	return UMMU_OP_END;
 }
@@ -169,7 +169,7 @@ static enum ummu_grant_op_type ummu_entry_ungrant_param_check(struct ummu_mapt_i
 	}
 
 	pr_err("Check ungrant param failed. Input bytoken=%d, exist token_check=%d.\n",
-		grant_param->bytoken, node->token_check);
+		grant_param->bytoken, (int)node->token_check);
 	return UMMU_OP_END;
 }
 

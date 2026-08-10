@@ -940,8 +940,9 @@ static void ummu_mcmdq_write_entries(struct ummu_mcmdq *mcmdq, u64 *cmds,
 
 static int check_pa_continuity_nop_exec(struct ummu_queue *q, u32 prod)
 {
-	u64 cmd = (u64)le64_to_cpu(Q_ENT(q, prod));
+	u64 cmd;
 
+	cmd = (u64)le64_to_cpu(Q_ENT(q, prod));
 	if (FIELD_GET(CMD_0_OP, cmd) == CMD_NULL_OP &&
 	    FIELD_GET(CMD_NULL_OP_SUB_OP, cmd) ==
 		      SUB_CMD_NULL_CHECK_PA_CONTINUITY) {
@@ -975,12 +976,10 @@ static int ummu_mcmdq_exclusive_issue_cmdlist(struct ummu_device *ummu,
 	local_irq_save(flags);
 	llq.val = READ_ONCE(mcmdq->q.llq.val);
 	do {
-		while (!ummu_queue_has_space(&llq, n + sync)) {
+		while (!ummu_queue_has_space(&llq, n + (sync ? 1 : 0))) {
 			local_irq_restore(flags);
-			if (ummu_mcmdq_poll_until_not_full(ummu, mcmdq, &llq)) {
+			if (ummu_mcmdq_poll_until_not_full(ummu, mcmdq, &llq))
 				dev_err_ratelimited(ummu->dev, "wait MCMDQ not full timeout.\n");
-				return -ETIMEDOUT;
-			}
 			local_irq_save(flags);
 		}
 
@@ -1075,17 +1074,15 @@ int ummu_mcmdq_issue_cmdlist(struct ummu_device *ummu, u64 *cmds,
 	local_irq_save(flags);
 	llq.val = READ_ONCE(mcmdq->q.llq.val);
 	do {
-		while (!ummu_queue_has_space(&llq, n + sync)) {
+		while (!ummu_queue_has_space(&llq, n + (sync ? 1 : 0))) {
 			local_irq_restore(flags);
-			if (ummu_mcmdq_poll_until_not_full(ummu, mcmdq, &llq)) {
+			if (ummu_mcmdq_poll_until_not_full(ummu, mcmdq, &llq))
 				dev_err_ratelimited(ummu->dev, "wait MCMDQ not full timeout.\n");
-				return -ETIMEDOUT;
-			}
 			local_irq_save(flags);
 		}
 
 		head.cons = llq.cons;
-		head.prod = ummu_queue_inc_prod_n(&llq, n + sync) |
+		head.prod = ummu_queue_inc_prod_n(&llq, n + (sync ? 1 : 0)) |
 			    MCMDQ_PROD_OWNED_FLAG;
 
 		old = cmpxchg_relaxed(&mcmdq->q.llq.val, llq.val, head.val);

@@ -471,6 +471,5 @@ static bool hi_mem_validate_pa(struct ub_bus_controller *ubc,
 			return true;
 	}
 
-	dev_err(&ubc->dev, "pa_start-pa_end is invalid.\n");
 	return false;
 }

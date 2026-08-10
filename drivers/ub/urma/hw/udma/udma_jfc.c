@@ -5,6 +5,7 @@
 
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
+#include <linux/iommu.h>
 #include <linux/ummu_core.h>
 #include <ub/urma/ubcore_uapi.h>
 #include <uapi/ub/urma/udma/udma_abi.h>
@@ -123,36 +124,36 @@ static int udma_get_cmd_from_user(struct udma_create_jfc_ucmd *ucmd,
 static int udma_alloc_u_cq(struct udma_dev *dev, struct udma_create_jfc_ucmd *ucmd,
 			   struct udma_jfc *jfc)
 {
-	int ret;
+	int ret = -EINVAL;
+
+	jfc->tid = jfc->ctx->tid;
+	jfc->buf.addr = ucmd->buf_addr;
+	jfc->buf.len = ucmd->buf_len;
+	jfc->db.db_addr = ucmd->db_addr;
+	jfc->db.page_priv = udma_get_sw_db(jfc->ctx, jfc->db.db_addr);
+	if (jfc->db.page_priv == NULL) {
+		dev_err(dev->dev, "failed to get jfc db page.\n");
+		return ret;
+	}
 
 	if (ucmd->is_hugepage) {
-		jfc->buf.addr = ucmd->buf_addr;
-		if (udma_occupy_u_hugepage(jfc->ctx, (void *)jfc->buf.addr)) {
-			dev_err(dev->dev, "failed to create cq, va not map.\n");
-			return -EINVAL;
+		if (!udma_alloc_u_hugepage(jfc->ctx, jfc->buf.addr, jfc->buf.len)) {
+			dev_err(dev->dev, "failed to create cq.\n");
+
+			goto err_get_buf_page;
 		}
 		jfc->buf.is_hugepage = true;
 	} else {
-		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &jfc->buf);
-		if (ret) {
-			dev_err(dev->dev, "failed to pin queue for jfc, ret = %d.\n", ret);
-			return ret;
+		jfc->buf.page_priv = udma_get_map_page_priv(jfc->ctx, jfc->buf.addr, jfc->buf.len);
+		if (jfc->buf.page_priv == NULL) {
+			dev_err(dev->dev, "failed to get jfc buf page.\n");
+			goto err_get_buf_page;
 		}
-	}
-	jfc->tid = jfc->ctx->tid;
-
-	ret = udma_pin_sw_db(jfc->ctx, &jfc->db);
-	if (ret) {
-		dev_err(dev->dev, "failed to pin sw db for jfc, ret = %d.\n", ret);
-		goto err_pin_db;
 	}
 
 	return 0;
-err_pin_db:
-	if (ucmd->is_hugepage)
-		udma_return_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
-	else
-		unpin_queue_addr(jfc->buf.umem);
+err_get_buf_page:
+	udma_put_sw_db(jfc->ctx, jfc->db.db_addr);
 
 	return ret;
 }
@@ -193,10 +194,10 @@ static void udma_free_cq(struct udma_dev *dev, struct udma_jfc *jfc)
 		udma_free_sw_db(dev, &jfc->db);
 	} else {
 		if (jfc->buf.is_hugepage)
-			udma_return_u_hugepage(jfc->ctx, (void *)jfc->buf.addr);
+			udma_free_u_hugepage(jfc->ctx, jfc->buf.addr);
 		else
-			unpin_queue_addr(jfc->buf.umem);
-		udma_unpin_sw_db(jfc->ctx, &jfc->db);
+			udma_put_map_page_priv(jfc->ctx, jfc->buf.page_priv);
+		udma_put_sw_db(jfc->ctx, jfc->db.db_addr);
 	}
 }
 
@@ -529,7 +530,7 @@ int udma_jfc_completion(struct notifier_block *nb, unsigned long jfcn,
 	udma_jfc = (struct udma_jfc *)xa_load(&udma_dev->jfc_table.xa, jfcn);
 	if (!udma_jfc) {
 		xa_unlock(&udma_dev->jfc_table.xa);
-		dev_warn(udma_dev->dev,
+		dev_warn_ratelimited(udma_dev->dev,
 			 "Completion event for bogus jfcn %lu.\n", jfcn);
 		return -EINVAL;
 	}
@@ -997,9 +998,6 @@ static enum jfc_poll_state udma_poll_one(struct udma_dev *dev,
 	if (parse_cqe_for_jfc(dev, cqe, cr, tid_list))
 		return JFC_POLL_ERR;
 
-	if (unlikely(cr->status != UBCORE_CR_SUCCESS) && dump_aux_info)
-		dump_cqe_aux_info(dev, cr);
-
 	return JFC_OK;
 }
 
@@ -1036,6 +1034,7 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 	struct list_head tid_list;
 	unsigned long flags;
 	uint32_t ci;
+	uint32_t i;
 	int npolled;
 
 	INIT_LIST_HEAD(&tid_list);
@@ -1056,6 +1055,11 @@ int udma_poll_jfc(struct ubcore_jfc *jfc, int cr_cnt, struct ubcore_cr *cr)
 
 	if (!jfc->jfc_cfg.flag.bs.lock_free)
 		spin_unlock_irqrestore(&udma_jfc->lock, flags);
+
+	for (i = 0; i < npolled; i++) {
+		if (unlikely(cr[i].status != UBCORE_CR_SUCCESS) && dump_aux_info)
+			dump_cqe_aux_info(dev, &cr[i]);
+	}
 
 	if (!list_empty(&tid_list))
 		udma_inv_tid(dev, &tid_list);
@@ -1085,7 +1089,7 @@ void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *
 		if (pi > udma_jfc->ci + udma_jfc->buf.entry_cnt)
 			break;
 	}
-	while ((int) --pi - (int) udma_jfc->ci >= 0) {
+	while ((int) --pi - (int)udma_jfc->ci >= 0) {
 		cqe = get_buf_entry(&udma_jfc->buf, pi);
 		/* make sure cqe buffer is valid */
 		rmb();

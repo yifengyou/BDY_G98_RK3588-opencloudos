@@ -17,9 +17,13 @@ static void ubase_notify_himac_reset(struct ubase_dev *udev)
 	__ubase_fill_inout_buf(&in, UBASE_OPC_HIMAC_RESET, false, 0, NULL);
 
 	ret = __ubase_cmd_send_in(udev, &in);
-	if (ret)
+	if (ret) {
+		set_bit(UBASE_STATE_HIMAC_RESETTING_B, &udev->state_bits);
 		ubase_err(udev,
 			  "failed to send himac reset cmd, ret = %d.\n", ret);
+	} else {
+		udev->reset_stat.himac_reset_cnt++;
+	}
 }
 
 void ubase_errhandle_service_task(struct ubase_delay_work *ubase_work)
@@ -39,7 +43,6 @@ void ubase_errhandle_service_task(struct ubase_delay_work *ubase_work)
 	if (test_and_clear_bit(UBASE_STATE_HIMAC_RESETTING_B, &udev->state_bits)) {
 		ubase_err(udev, "ras occurred, ubase need to reset himac.\n");
 		ubase_notify_himac_reset(udev);
-		udev->reset_stat.himac_reset_cnt++;
 		return;
 	}
 

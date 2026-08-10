@@ -28,9 +28,10 @@
 #include "udma_tid.h"
 #include "udma_dfx.h"
 #include "udma_eid.h"
-#include "udma_debugfs.h"
 #include "udma_common.h"
 #include "udma_ctrlq_tp.h"
+
+#define UDMA_DRV_VER "1.0"
 
 bool cqe_mode = true;
 bool is_rmmod;
@@ -38,6 +39,7 @@ static DEFINE_MUTEX(udma_reset_mutex);
 uint32_t jfr_sleep_time = 1000;
 uint32_t jfc_arm_mode;
 bool dump_aux_info;
+bool hugepage_enable = true;
 
 static const struct auxiliary_device_id udma_id_table[] = {
 	{
@@ -282,7 +284,7 @@ static void udma_destroy_tp_ue_idx_table(struct udma_dev *udma_dev)
 
 void udma_destroy_tables(struct udma_dev *udma_dev)
 {
-	udma_ctrlq_destroy_tpid_list(udma_dev, &udma_dev->ctrlq_tpid_table, false);
+	udma_ctrlq_destroy_tpid_list(&udma_dev->ctrlq_tpid_table);
 	udma_destroy_eid_table(udma_dev);
 	mutex_destroy(&udma_dev->disable_ue_rx_mutex);
 	if (!ida_is_empty(&udma_dev->rsvd_jetty_ida_table.ida))
@@ -308,7 +310,7 @@ void udma_destroy_tables(struct udma_dev *udma_dev)
 }
 
 static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_table *table,
-				 uint32_t max, uint32_t min, uint32_t num_per_group)
+				 uint32_t max, uint32_t min)
 {
 	struct udma_group_bitmap *bitmap_table;
 	int i;
@@ -324,8 +326,8 @@ static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_ta
 	bitmap_table->min = min;
 	bitmap_table->grp_next = min;
 	bitmap_table->n_bits = max - min + 1;
-	bitmap_table->bitmap_cnt = ALIGN(bitmap_table->n_bits, num_per_group) /
-				   num_per_group;
+	bitmap_table->bitmap_cnt = ALIGN(bitmap_table->n_bits, NUM_JETTY_PER_GROUP) /
+				   NUM_JETTY_PER_GROUP;
 	bitmap_table->bit = vmalloc(bitmap_table->bitmap_cnt * sizeof(uint32_t));
 	if (!bitmap_table->bit) {
 		dev_err(udma_dev->dev, "failed to alloc jetty bitmap.\n");
@@ -334,6 +336,10 @@ static int udma_init_group_table(struct udma_dev *udma_dev, struct udma_group_ta
 
 	for (i = 0; i < bitmap_table->bitmap_cnt; ++i)
 		bitmap_table->bit[i] = ~(0U);
+
+	if (bitmap_table->n_bits % NUM_JETTY_PER_GROUP)
+		bitmap_table->bit[bitmap_table->bitmap_cnt - 1] =
+			GENMASK((bitmap_table->n_bits % NUM_JETTY_PER_GROUP) - 1, 0);
 
 	spin_lock_init(&bitmap_table->lock);
 	xa_init(&table->xa);
@@ -355,8 +361,7 @@ int udma_init_tables(struct udma_dev *udma_dev)
 	ret = udma_init_group_table(udma_dev, &udma_dev->jetty_table,
 				    udma_dev->caps.jetty.max_cnt +
 				    udma_dev->caps.jetty.start_idx - 1,
-				    udma_dev->caps.jetty.start_idx,
-				    NUM_JETTY_PER_GROUP);
+				    udma_dev->caps.jetty.start_idx);
 	if (ret) {
 		dev_err(udma_dev->dev,
 			"failed to init jetty table when start_idx = %u, and max_cnt = %u.\n",
@@ -415,6 +420,9 @@ static int udma_set_ubcore_dev(struct udma_dev *udma_dev)
 	scnprintf(udma_dev->dev_name, UBCORE_MAX_DEV_NAME, "udma%hu", udma_dev->adev_id);
 	strscpy(ub_dev->dev_name, udma_dev->dev_name, UBCORE_MAX_DEV_NAME);
 	scnprintf(ub_dev->ops->driver_name, UBCORE_MAX_DRIVER_NAME, "udma");
+
+	if (!ubase_adev_ubl_supported(udma_dev->comdev.adev))
+		ub_dev->netdev = udma_dev->comdev.netdev;
 
 	ret = ubcore_register_device(ub_dev);
 	if (ret)
@@ -576,20 +584,6 @@ static int udma_construct_qos_param(struct udma_dev *dev)
 	return 0;
 }
 
-static void cal_max_2m_num(struct udma_dev *dev)
-{
-	uint32_t jfs_pg = ALIGN(dev->caps.jfs.depth * MAX_WQEBB_IN_SQE *
-				UDMA_JFS_WQEBB_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-	uint32_t jfr_pg = ALIGN(dev->caps.jfr.depth * dev->caps.jfr_sge *
-				UDMA_SGE_SIZE, UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-	uint32_t jfc_pg = ALIGN(dev->caps.jfc.depth * dev->caps.cqe_size,
-				UDMA_HUGEPAGE_SIZE) >> UDMA_HUGEPAGE_SHIFT;
-
-	dev->total_hugepage_num =
-		(dev->caps.jetty.start_idx + dev->caps.jetty.max_cnt) * jfs_pg +
-		dev->caps.jfr.max_cnt * jfr_pg + dev->caps.jfc.max_cnt * jfc_pg;
-}
-
 static int udma_set_hw_caps(struct udma_dev *udma_dev)
 {
 #define MAX_MSG_LEN 0x10000
@@ -625,8 +619,6 @@ static int udma_set_hw_caps(struct udma_dev *udma_dev)
 	udma_dev->caps.rc_dma_len = a_caps->pmem.dma_len;
 	udma_dev->caps.rc_dma_addr = a_caps->pmem.dma_addr;
 
-	cal_max_2m_num(udma_dev);
-
 	ret = udma_construct_qos_param(udma_dev);
 	if (ret)
 		return ret;
@@ -648,8 +640,18 @@ static int udma_init_dev_param(struct udma_dev *udma_dev)
 {
 	struct auxiliary_device *adev = udma_dev->comdev.adev;
 	struct ubase_resource_space *mem_base = ubase_get_mem_base(adev);
+	const struct ubase_adev_com *adev_com;
 	int ret;
 	int i;
+
+	if (!ubase_adev_ubl_supported(udma_dev->comdev.adev)) {
+		adev_com = ubase_get_mdrv_data(adev);
+		if (adev_com == NULL) {
+			dev_err(&adev->dev, "Failed to get mdrv data from ubase.\n");
+			return -EINVAL;
+		}
+		udma_dev->comdev.netdev = adev_com->netdev;
+	}
 
 	udma_dev->dev = adev->dev.parent;
 	udma_dev->db_base = mem_base->addr_unmapped;
@@ -688,22 +690,66 @@ static void udma_uninit_dev_param(struct udma_dev *udma_dev)
 	udma_destroy_tables(udma_dev);
 }
 
+static void udma_disable_usva(struct udma_dev *udma_dev)
+{
+	int ret;
+
+	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	if (ret)
+		dev_warn(udma_dev->dev, "disable sva failed, ret = %d.\n", ret);
+
+	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF);
+	if (ret)
+		dev_warn(udma_dev->dev, "disable iopf failed, ret = %d.\n", ret);
+}
+
+static int udma_enable_usva(struct udma_dev *udma_dev)
+{
+	int ret;
+
+	ret = ummu_get_sva_mode(udma_dev->dev);
+	if (ret < 0) {
+		dev_err(udma_dev->dev, "invalid sva mode, ret = %d.\n", ret);
+		return -EINVAL;
+	}
+	udma_dev->caps.sva_sep_mode_en = !!ret;
+
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF);
+	if (ret) {
+		dev_err(udma_dev->dev, "enable iopf failed, ret = %d.\n", ret);
+		return -EINVAL;
+	}
+
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	if (ret) {
+		dev_err(udma_dev->dev, "enable sva failed, ret = %d.\n", ret);
+		goto err_enable_sva;
+	}
+
+	return ret;
+
+err_enable_sva:
+	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_IOPF))
+		dev_warn(udma_dev->dev, "disable iopf failed.\n");
+	return ret;
+}
+
 static int udma_alloc_dev_tid(struct udma_dev *udma_dev)
 {
 	struct ummu_seg_attr seg_attr = {.token = NULL, .e_bit = UMMU_EBIT_ON};
 	struct ummu_param param = {.mode = MAPT_MODE_TABLE};
 	int ret;
 
-	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
+	ret = udma_enable_usva(udma_dev);
 	if (ret) {
-		dev_err(udma_dev->dev, "enable ksva failed, ret = %d.\n", ret);
+		dev_err(udma_dev->dev, "Failed to enable usva, ret = %d.\n", ret);
 		return ret;
 	}
 
-	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
+	ret = iommu_dev_enable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
 	if (ret) {
-		dev_err(udma_dev->dev, "enable sva failed, ret = %d.\n", ret);
-		goto err_sva_enable_dev;
+		dev_err(udma_dev->dev, "enable ksva failed, ret = %d.\n", ret);
+		goto err_enable_ksva;
 	}
 
 	udma_dev->ksva = ummu_ksva_bind_device(udma_dev->dev, &param);
@@ -732,11 +778,11 @@ err_sva_grant_range:
 err_get_tid:
 	ummu_ksva_unbind_device(udma_dev->ksva);
 err_ksva_bind_device:
-	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA))
-		dev_warn(udma_dev->dev, "disable sva failed.\n");
-err_sva_enable_dev:
 	if (iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA))
 		dev_warn(udma_dev->dev, "disable ksva failed.\n");
+err_enable_ksva:
+	udma_disable_usva(udma_dev);
+
 	return ret;
 }
 
@@ -761,18 +807,16 @@ static void udma_free_dev_tid(struct udma_dev *udma_dev)
 
 	ummu_ksva_unbind_device(udma_dev->ksva);
 
-	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_SVA);
-	if (ret)
-		dev_warn(udma_dev->dev, "disable sva failed, ret = %d.\n", ret);
-
 	ret = iommu_dev_disable_feature(udma_dev->dev, IOMMU_DEV_FEAT_KSVA);
 	if (ret)
 		dev_warn(udma_dev->dev, "disable ksva failed, ret = %d.\n", ret);
+
+	udma_disable_usva(udma_dev);
 }
 
 static int udma_create_db_page(struct udma_dev *udev)
 {
-	udev->db_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	udev->db_page = alloc_page(GFP_KERNEL | __GFP_ZERO | GFP_HIGHUSER_MOVABLE);
 	if (!udev->db_page)
 		return -ENOMEM;
 
@@ -1008,7 +1052,6 @@ static int udma_init_dev(struct auxiliary_device *adev)
 		dev_err(udma_dev->dev, "init eid table failed.\n");
 		goto err_init_eid;
 	}
-	udma_register_debugfs(udma_dev);
 	udma_dev->status = UDMA_NORMAL;
 	mutex_unlock(&udma_reset_mutex);
 	dev_info(udma_dev->dev, "init udma successfully.\n");
@@ -1038,6 +1081,11 @@ static void check_and_wait_flush_done(struct udma_dev *udma_dev)
 	while (true) {
 		if (udma_dev->disable_ue_rx_count == 1)
 			break;
+
+		if (ubase_adev_shutting_down(udma_dev->comdev.adev)) {
+			dev_err_ratelimited(udma_dev->dev, "exit flush in shutdown process.\n");
+			break;
+		}
 
 		if (wait_times > WAIT_MAX_TIMES) {
 			dev_warn(udma_dev->dev, "wait flush done timeout.\n");
@@ -1098,9 +1146,9 @@ void udma_reset_uninit(struct auxiliary_device *adev)
 
 	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	udma_open_ue_rx(udma_dev, false, false, true, 0);
+	/* Crq event should unregister after wait flush done. */
 	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
@@ -1123,6 +1171,10 @@ int udma_probe(struct auxiliary_device *adev,
 
 void udma_remove(struct auxiliary_device *adev)
 {
+#define MIN_SLEEP_TIME 100
+#define MAX_SLEEP_TIME 800
+#define TIME_SLEEP_RATE 2
+	uint32_t wait_time = MIN_SLEEP_TIME;
 	struct udma_dev *udma_dev;
 
 	ubase_reset_unregister(adev);
@@ -1133,20 +1185,28 @@ void udma_remove(struct auxiliary_device *adev)
 		dev_info(&adev->dev, "udma device is not exist.\n");
 		return;
 	}
-
-	ubcore_stop_requests(&udma_dev->ub_dev);
-	if (udma_close_ue_rx(udma_dev, false, false, false, 0))
-		dev_err(&adev->dev, "udma close ue rx failed in remove process.\n");
-
 	udma_dev->status = UDMA_SUSPEND;
+	ubcore_stop_requests(&udma_dev->ub_dev);
+	while (true) {
+		if (!udma_close_ue_rx(udma_dev, false, false, false, 0))
+			break;
+
+		if (ubase_adev_shutting_down(adev)) {
+			dev_err_ratelimited(&adev->dev, "enter shutdown process.\n");
+			break;
+		}
+
+		msleep(wait_time);
+		if (wait_time < MAX_SLEEP_TIME)
+			wait_time *= TIME_SLEEP_RATE;
+		dev_err_ratelimited(&adev->dev, "udma close ue rx failed in remove process.\n");
+	}
 	udma_report_reset_event(UBCORE_EVENT_ELR_ERR, udma_dev);
 	udma_unregister_none_crq_event(adev);
 	udma_unset_ubcore_dev(udma_dev);
-	udma_unregister_debugfs(udma_dev);
 	udma_unregister_activate_workqueue(udma_dev);
 	check_and_wait_flush_done(udma_dev);
-	if (is_rmmod)
-		(void)ubase_activate_dev(adev);
+	(void)ubase_activate_dev(adev);
 	udma_unregister_crq_event(adev);
 	udma_destroy_dev(udma_dev);
 	mutex_unlock(&udma_reset_mutex);
@@ -1164,12 +1224,9 @@ static int __init udma_init(void)
 {
 	int ret;
 
-	udma_init_debugfs();
 	ret = auxiliary_driver_register(&udma_drv);
-	if (ret) {
+	if (ret)
 		pr_err("failed to register auxiliary_driver\n");
-		udma_uninit_debugfs();
-	}
 
 	return ret;
 }
@@ -1178,11 +1235,11 @@ static void __exit udma_exit(void)
 {
 	is_rmmod = true;
 	auxiliary_driver_unregister(&udma_drv);
-	udma_uninit_debugfs();
 }
 
 module_init(udma_init);
 module_exit(udma_exit);
+MODULE_VERSION(UDMA_DRV_VER);
 MODULE_LICENSE("GPL");
 
 module_param(cqe_mode, bool, 0444);
@@ -1198,3 +1255,6 @@ MODULE_PARM_DESC(jfc_arm_mode,
 module_param(dump_aux_info, bool, 0644);
 MODULE_PARM_DESC(dump_aux_info,
 		 "Set whether dump aux info, default: false(false:not print, true:print)");
+
+module_param(hugepage_enable, bool, 0644);
+MODULE_PARM_DESC(hugepage_enable, "Set huge page enable, default: 1(0:disable, 1:enable)");

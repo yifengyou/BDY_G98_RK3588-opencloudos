@@ -18,11 +18,14 @@
 
 static void ubase_reset_task_schedule(struct ubase_dev *udev)
 {
+#define RESET_TASK_DELAY_TIME msecs_to_jiffies(10)
+
 	if (!test_and_set_bit(UBASE_SERVICE_STATE_RESET_SCHED,
 			      &udev->service_task.state)) {
 		udev->last_reset_scheduled = jiffies;
 		mod_delayed_work(udev->ubase_reset_wq,
-				 &udev->reset_service_task.service_task, 0);
+				 &udev->reset_service_task.service_task,
+				 RESET_TASK_DELAY_TIME);
 	}
 }
 
@@ -57,6 +60,9 @@ void ubase_reset_service(struct ubase_delay_work *ubase_work)
 				&udev->service_task.state))
 		return;
 
+	if (test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
+		return;
+
 	if (time_is_before_eq_jiffies(udev->last_reset_scheduled +
 				      UBASE_RESET_SCHED_TIMEOUT))
 		ubase_warn(udev,
@@ -66,7 +72,7 @@ void ubase_reset_service(struct ubase_delay_work *ubase_work)
 
 	ret = ubase_ubus_reset_entry(udev->dev);
 	if (ret)
-		ubase_err(udev, "failed to reset hardware, ret = %d.\n", ret);
+		ubase_reset_err_handle(udev);
 }
 
 void __ubase_reset_event(struct ubase_dev *udev,
@@ -286,6 +292,10 @@ void ubase_resume(struct ubase_dev *udev)
 	udev->reset_stat.reset_retry_cnt = 0;
 	clear_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits);
 	clear_bit(UBASE_STATE_DISABLED_B, &udev->state_bits);
+
+	if (ubase_dev_err_handle_supported(udev))
+		ubase_errhandle_task_schedule(udev);
+
 	return;
 
 err_resume:

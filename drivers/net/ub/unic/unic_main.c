@@ -52,6 +52,9 @@ static void unic_remove(struct auxiliary_device *adev)
 		msleep(UNIC_RESET_WAIT_TIME);
 
 	set_bit(UNIC_STATE_REMOVING, &unic_dev->state);
+
+	unic_info(unic_dev, "unic remove start.\n");
+
 	unic_dbg_uninit(adev);
 	unic_dev_uninit(adev);
 }
@@ -86,6 +89,10 @@ static int __init unic_init(void)
 	if (ret)
 		goto err_reg_ip_notifier;
 
+	ret = unic_register_netdevice_notifier();
+	if (ret)
+		goto err_reg_netdev_notifier;
+
 	ret = auxiliary_driver_register(&unic_drv);
 	if (ret)
 		goto err_aux_reg;
@@ -93,6 +100,8 @@ static int __init unic_init(void)
 	return ret;
 
 err_aux_reg:
+	unic_unregister_netdevice_notifier();
+err_reg_netdev_notifier:
 	unic_unregister_ipaddr_notifier();
 err_reg_ip_notifier:
 	unic_destroy_wq();
@@ -101,6 +110,7 @@ err_reg_ip_notifier:
 
 static void __exit unic_exit(void)
 {
+	unic_unregister_netdevice_notifier();
 	unic_unregister_ipaddr_notifier();
 	auxiliary_driver_unregister(&unic_drv);
 	unic_destroy_wq();

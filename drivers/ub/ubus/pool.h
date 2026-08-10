@@ -66,7 +66,7 @@ struct port_reset_notify_pld {
 	u32 port_index : 16;
 };
 #define PORT_RESET_NOTIFY_PLD_SIZE 4
-
+struct msg_pkt_header;
 struct ub_entity *ub_get_fad_ent_by_eid(unsigned int eid);
 bool ub_rsp_msg_init(struct msg_pkt_header *header, u8 status, u32 plen);
 void ub_pool_rx_msg_handler(struct ub_bus_controller *ubc, void *pkt, u16 len);

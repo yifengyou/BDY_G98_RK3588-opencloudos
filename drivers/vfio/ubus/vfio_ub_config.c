@@ -903,7 +903,7 @@ static int vfio_ub_init_slice_config_info(struct vfio_ub_core_device *vdev,
 	used_size = (val >> SZ_4) << SZ_2;
 
 	if (used_size == 0 || used_size > UB_SLICE_SZ) {
-		ub_err(vdev->uent, "invalid cap_id[%#x] used_size[%#x]\n", cap_id, used_size);
+		ub_err(vdev->uent, "invalid cap_id[%#x] used_size[%d]\n", cap_id, used_size);
 		return -EINVAL;
 	}
 

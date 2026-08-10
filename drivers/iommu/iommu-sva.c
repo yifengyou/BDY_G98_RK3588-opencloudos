@@ -500,8 +500,7 @@ int iommu_sva_grant(struct iommu_sva *sva, void *va, size_t size, int perm,
 	mutex_lock(&iommu_sva_grant_lock);
 	ret = domain->perm_ops->grant(domain, va, size, perm, cookie,
 					&plb_gather);
-	if (!ret)
-		iommu_plb_sync(domain, &plb_gather);
+	iommu_plb_sync(domain, &plb_gather);
 
 	mutex_unlock(&iommu_sva_grant_lock);
 	return ret;
@@ -521,8 +520,7 @@ int iommu_sva_ungrant(struct iommu_sva *sva, void *va, size_t size,
 	mutex_lock(&iommu_sva_grant_lock);
 	ret = domain->perm_ops->ungrant(domain, va, size, cookie,
 					&plb_gather);
-	if (!ret)
-		iommu_plb_sync(domain, &plb_gather);
+	iommu_plb_sync(domain, &plb_gather);
 
 	mutex_unlock(&iommu_sva_grant_lock);
 	return ret;

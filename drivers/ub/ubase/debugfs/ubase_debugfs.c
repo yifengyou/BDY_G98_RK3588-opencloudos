@@ -54,6 +54,7 @@ static void ubase_dbg_dump_caps_bits(struct seq_file *s, struct ubase_dev *udev)
 		PRINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
 	PRINT_CAP(activate_proxy, ubase_activate_proxy_supported);
 	PRINT_CAP(utp, ubase_utp_supported);
+	PRINT_CAP(pmu_irq, ubase_pmu_irq_supported);
 }
 
 static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
@@ -73,6 +74,7 @@ static void ubase_dbg_dump_caps_info(struct seq_file *s, struct ubase_dev *udev)
 		{"\ttotal_ue_num: %u\n", dev_caps->total_ue_num},
 		{"\tta_extdb_buf_size: %llu\n", udev->ta_ctx.extdb_buf.size},
 		{"\tta_timer_buf_size: %llu\n", udev->ta_ctx.timer_buf.size},
+		{"\tnode_type: %u\n", udev->node_type},
 		{"\tpublic_jetty_cnt: %u\n", dev_caps->public_jetty_cnt},
 		{"\tvl_num: %hhu\n", dev_caps->vl_num},
 		{"\trsvd_jetty_cnt: %hu\n", dev_caps->rsvd_jetty_cnt},
@@ -534,22 +536,6 @@ static struct ubase_dbg_cmd_info ubase_dbg_cmd[] = {
 		.support = __ubase_dbg_dentry_support,
 		.init = __ubase_dbg_seq_file_init,
 		.read_func = ubase_dbg_dump_activate_record,
-	},
-	{
-		.name = "tp_context_hw",
-		.dentry_index = UBASE_DBG_DENTRY_CONTEXT,
-		.property = UBASE_SUP_URMA | UBASE_SUP_UBL_ETH,
-		.support = __ubase_dbg_dentry_support,
-		.init = __ubase_dbg_seq_file_init,
-		.read_func = ubase_dbg_dump_tp_ctx_hw,
-	},
-	{
-		.name = "tpg_context_hw",
-		.dentry_index = UBASE_DBG_DENTRY_CONTEXT,
-		.property = UBASE_SUP_URMA | UBASE_SUP_UBL_ETH,
-		.support = __ubase_dbg_dentry_support,
-		.init = __ubase_dbg_seq_file_init,
-		.read_func = ubase_dbg_dump_tpg_ctx_hw,
 	},
 	{
 		.name = "aeq_context_hw",

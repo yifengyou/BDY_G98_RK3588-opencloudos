@@ -328,6 +328,49 @@ link_up_notify:
 	ub_notify_share_port(port, UB_PORT_EVENT_LINK_UP);
 }
 
+static void check_entity_disconnected(struct ub_port *port)
+{
+	struct ub_entity *ent_near = port->uent, *ent_far = port->r_uent, *tmp;
+	bool is_connected = false;
+	struct ub_port *port_iter;
+	u8 val;
+
+	if (port->type == VIRTUAL)
+		return;
+
+	/* Ensure topo_rank of ent_near is less than topo_rank of ent_far */
+	if (ent_near->topo_rank > ent_far->topo_rank) {
+		tmp = ent_near;
+		ent_near = ent_far;
+		ent_far = tmp;
+	}
+
+	if (ub_entity_test_priv_flag(ent_far, UB_ENTITY_DISCONNECTED))
+		return;
+
+	/* Traverse all ports of ent_near and check if they are connected to ent_far */
+	for_each_uent_port(port_iter, ent_near) {
+		if (port_iter->r_uent != ent_far)
+			continue;
+		if (ub_port_read_byte(port_iter,
+		    UB_PORT_PHYSICAL_PORT_LINK_STATUS, &val)) {
+			ub_err(ent_near, "get port[%u] link status failed\n",
+			       port_iter->index);
+			return;
+		}
+		if (val) {
+			is_connected = true;
+			break;
+		}
+	}
+
+	/* If no connection is detected, mark ent_far as disconnected */
+	if (!is_connected) {
+		ub_info(ent_far, "ub entity is down\n");
+		ub_entity_assign_priv_flag(ent_far, UB_ENTITY_DISCONNECTED, true);
+	}
+}
+
 void ublc_link_down_handle(struct ub_port *port)
 {
 	struct ub_entity *uent = port->uent;
@@ -338,9 +381,12 @@ void ublc_link_down_handle(struct ub_port *port)
 		goto link_down_notify;
 	}
 
+	check_entity_disconnected(port);
+
 	device_lock(&uent->dev);
 
 	if (ublc_device_is_down(port)) {
+		ub_entity_assign_priv_flag(port->r_uent, UB_ENTITY_DISCONNECTED, true);
 		ub_info(uent, "port%u link down\n", port->index);
 		ublc_handle_all_link_down(port, port->r_uent);
 		ub_info(uent, "all port link down and remove device\n");

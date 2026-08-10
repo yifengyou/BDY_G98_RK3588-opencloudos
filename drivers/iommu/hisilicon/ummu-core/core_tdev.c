@@ -96,30 +96,35 @@ static const struct attribute_group *ummu_vdev_groups[] = {
 };
 
 static int alloc_software_node(struct device *dev, u32 *ptid,
+				struct tdev_attr *attr,
 				const struct software_node *parent)
 {
-	struct property_entry props[3];
+	struct property_entry props[5] = {0};
 
-	memset(props, 0, sizeof(props));
 	props[0] = PROPERTY_ENTRY_U32("assign-pasid", *ptid);
 	props[1] = PROPERTY_ENTRY_U32("pasid-num-bits", UB_MAX_TID_BITS);
+	props[2] = PROPERTY_ENTRY_U32("mapt-mode", attr->mode);
+
+	if (attr->usva)
+		props[3] = PROPERTY_ENTRY_BOOL("usva-used");
+
 	return device_create_managed_software_node(dev, props, parent);
 }
 
 /* tdev device creation */
-static int init_tdev(struct tid_dev *tdev, const char *device_name, u32 *ptid,
-					struct ummu_core_device *ummu_core)
+static int init_tdev(struct tid_dev *tdev, struct tdev_attr *attr, u32 *ptid,
+		     struct ummu_core_device *ummu_core)
 {
 	int ret;
 
 	if (!tdev->pdev.dev.parent)
 		tdev->pdev.dev.parent = ummu_core->ummu_core_root;
 
-	tdev->pdev.name = kstrdup(device_name ? device_name : "ummu_vdev", GFP_KERNEL);
+	tdev->pdev.name = kstrdup(attr->name ? : "ummu_vdev", GFP_KERNEL);
 	if (!tdev->pdev.name)
 		return -EINVAL;
 
-	ret = alloc_software_node(&tdev->pdev.dev, ptid, NULL);
+	ret = alloc_software_node(&tdev->pdev.dev, ptid, attr, NULL);
 	if (ret) {
 		pr_err("tdev create software node ERR!:%d\n", ret);
 		kfree(tdev->pdev.name);
@@ -212,7 +217,7 @@ struct device *ummu_alloc_tdev(struct tdev_attr *attr, u32 *ptid)
 		return NULL;
 	}
 
-	ret = init_tdev(tdev, attr->name, ptid, to_ummu_core(iommu_dev));
+	ret = init_tdev(tdev, attr, ptid, to_ummu_core(iommu_dev));
 	if (ret) {
 		iommu_fwspec_free(&tdev->pdev.dev);
 		kfree(tdev);
@@ -251,6 +256,32 @@ struct device *ummu_core_alloc_tdev(struct tdev_attr *attr, u32 *ptid)
 	return dev;
 }
 EXPORT_SYMBOL_GPL(ummu_core_alloc_tdev);
+
+struct device *ummu_alloc_tdev_separated(u32 *ptid)
+{
+	struct tdev_attr attr;
+	struct device *dev;
+	int ret;
+
+	if (!ptid)
+		return NULL;
+
+	*ptid = UMMU_INVALID_TID;
+	tdev_attr_init(&attr);
+	attr.usva = true;
+	dev = ummu_alloc_tdev(&attr, ptid);
+	if (!dev)
+		return NULL;
+
+	ret = ummu_get_tid(dev, NULL, ptid);
+	if (ret) {
+		ummu_core_free_tdev(dev);
+		return NULL;
+	}
+
+	return dev;
+}
+EXPORT_SYMBOL_GPL(ummu_alloc_tdev_separated);
 
 int ummu_core_free_tdev(struct device *dev)
 {

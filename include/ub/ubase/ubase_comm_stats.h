@@ -101,6 +101,19 @@ struct ubase_ub_dl_stats {
 	u64	dl_tx_vl13_to_nl_crd;
 	u64	dl_tx_vl14_to_nl_crd;
 	u64	dl_tx_vl15_to_nl_crd;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
+	KABI_RESERVE(9)
+	KABI_RESERVE(10)
+	KABI_RESERVE(11)
+	KABI_RESERVE(12)
 };
 
 struct ubase_eth_mac_stats {
@@ -208,6 +221,19 @@ struct ubase_eth_mac_stats {
 	u64	rx_merge_frame_ass_ok_pkts;
 	u64	rx_merge_frame_frag_count;
 	u64	rx_merge_frame_smd_error_pkts;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+	KABI_RESERVE(5)
+	KABI_RESERVE(6)
+	KABI_RESERVE(7)
+	KABI_RESERVE(8)
+	KABI_RESERVE(9)
+	KABI_RESERVE(10)
+	KABI_RESERVE(11)
+	KABI_RESERVE(12)
 };
 
 /**
@@ -220,6 +246,8 @@ struct ubase_eth_mac_stats {
  * @rx_port_bw: rx port bandwidth
  * @tx_vl_bw: tx vl bandwidth
  * @rx_vl_bw: rx vl bandwidth
+ * @tx_max_port_bw: tx port max bandwidth
+ * @rx_max_port_bw: rx port max bandwidth
  */
 struct ubase_perf_stats_result {
 	u8	valid : 1;
@@ -230,6 +258,13 @@ struct ubase_perf_stats_result {
 	u32	rx_port_bw;
 	u32	tx_vl_bw[UBASE_STATS_MAX_VL_NUM];
 	u32	rx_vl_bw[UBASE_STATS_MAX_VL_NUM];
+	u32	tx_max_port_bw;
+	u32	rx_max_port_bw;
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 void ubase_clear_eth_port_stats(struct auxiliary_device *adev);

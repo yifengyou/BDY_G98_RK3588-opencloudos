@@ -374,6 +374,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_ip_tbl_list,
 	}, {
+		.name = "bond_ip_tbl_list",
+		.dentry_index = UNIC_DBG_DENTRY_IP,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_bond_ip_tbl_list,
+	}, {
 		.name = "uc_mac_tbl_list",
 		.dentry_index = UNIC_DBG_DENTRY_MAC,
 		.property = UBASE_SUP_UNIC | UBASE_SUP_ETH,

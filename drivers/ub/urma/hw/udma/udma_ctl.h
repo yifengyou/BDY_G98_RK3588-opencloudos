@@ -7,7 +7,8 @@
 #include <ub/urma/ubcore_api.h>
 
 #define UDMA_BUS_INSTANCE_SEID_SIZE		4
-#define UDMA_EID_PAIRS_COUNT		        8
+#define UDMA_EID_PAIRS_COUNT			8
+#define UDMA_QUERY_ALL_AUX_INFO			0xFFFFFFFFU
 
 union udma_k_jfs_flag {
 	struct {
@@ -83,6 +84,10 @@ struct udma_tp_sport_out {
 struct udma_cqe_info_in {
 	enum ubcore_cr_status status;
 	uint8_t s_r;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 enum udma_cqe_aux_info_type {
@@ -135,10 +140,23 @@ struct udma_cqe_aux_info_out {
 	enum udma_cqe_aux_info_type *aux_info_type;
 	uint32_t *aux_info_value;
 	uint32_t aux_info_num;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 struct udma_ae_info_in {
 	uint32_t event_type;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
+struct udma_cqe_aux_info_type_arr {
+	enum udma_cqe_aux_info_type *type_list;
+	uint8_t type_len; /* 0: invalid type, MAX: dump all type */
 };
 
 enum udma_ae_aux_info_type {
@@ -158,6 +176,11 @@ struct udma_ae_aux_info_out {
 	enum udma_ae_aux_info_type *aux_info_type;
 	uint32_t *aux_info_value;
 	uint32_t aux_info_num;
+};
+
+struct udma_ae_aux_info_type_arr {
+	enum udma_ae_aux_info_type *type_list;
+	uint8_t type_len;
 };
 
 enum udma_user_ctl_opcode {
@@ -191,9 +214,16 @@ struct udma_dev_pair_info {
 		uint32_t local_eid[UDMA_BUS_INSTANCE_SEID_SIZE];
 		uint32_t remote_eid[UDMA_BUS_INSTANCE_SEID_SIZE];
 		uint32_t flag : 16;
-		uint32_t hop : 4;
+		uint32_t hop  : 4;
 		uint32_t rsv : 12;
 	} eid_pairs[UDMA_EID_PAIRS_COUNT];
+};
+
+struct udma_fe_info_ex {
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 static inline bool udma_check_base_param(uint64_t addr, uint32_t in_len, uint32_t len)
@@ -202,12 +232,12 @@ static inline bool udma_check_base_param(uint64_t addr, uint32_t in_len, uint32_
 }
 
 typedef int (*udma_user_ctl_ops)(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
-				   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+				 struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
 int udma_user_ctl(struct ubcore_device *dev, struct ubcore_user_ctl *k_user_ctl);
 int udma_query_cqe_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
-				   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+			    struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 int udma_query_ae_aux_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
-				  struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
+			   struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
 #endif /* _UB_UMDK_URMA_UDMA_UDMA_CTL_H_ */

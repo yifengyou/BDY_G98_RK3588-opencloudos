@@ -117,7 +117,10 @@ static const struct unic_stats_desc unic_sq_stats_str[] = {
 	{"vlan_err", UNIC_SQ_STATS_FIELD_OFF(vlan_err)},
 	{"fd_cnt", UNIC_SQ_STATS_FIELD_OFF(fd_cnt)},
 	{"drop_cnt", UNIC_SQ_STATS_FIELD_OFF(drop_cnt)},
-	{"cfg5_drop_cnt", UNIC_SQ_STATS_FIELD_OFF(cfg5_drop_cnt)}
+	{"cfg5_drop_cnt", UNIC_SQ_STATS_FIELD_OFF(cfg5_drop_cnt)},
+	{"polled_old_pi", UNIC_SQ_STATS_FIELD_OFF(polled_old_pi)},
+	{"polled_skb_null", UNIC_SQ_STATS_FIELD_OFF(polled_skb_null)},
+	{"pi_ci_over_depth", UNIC_SQ_STATS_FIELD_OFF(pi_ci_over_depth)}
 };
 
 static const struct unic_stats_desc unic_rq_stats_str[] = {

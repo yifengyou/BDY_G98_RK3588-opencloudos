@@ -772,6 +772,16 @@ static int ubase_parse_cdma_resp_vl(struct ubase_dev *udev)
 	return ubase_parse_ctp_resp_vl(udev);
 }
 
+static int ubase_parse_cdma_req_vl(struct ubase_dev *udev)
+{
+	struct ubase_adev_qos *qos = &udev->qos;
+
+	qos->ctp_vl_num = 0;
+	memset(qos->ctp_req_vl, 0, sizeof(u8) * UBASE_MAX_VL_NUM);
+	return ubase_assign_urma_vl(udev, qos->ctp_sl, qos->ctp_sl_num,
+				    qos->ctp_req_vl, &qos->ctp_vl_num);
+}
+
 static int ubase_parse_cdma_sl(struct ubase_dev *udev)
 {
 	struct ubase_adev_qos *qos = &udev->qos;
@@ -794,6 +804,10 @@ static int ubase_parse_cdma_sl_vl(struct ubase_dev *udev)
 	int ret;
 
 	ret = ubase_parse_cdma_sl(udev);
+	if (ret)
+		return ret;
+
+	ret = ubase_parse_cdma_req_vl(udev);
 	if (ret)
 		return ret;
 
@@ -928,6 +942,7 @@ static int ubase_ctrlq_query_vl(struct ubase_dev *udev)
 
 	vl_bitmap = le16_to_cpu(resp.vl_bitmap);
 
+	/* NOTE: ctp_req_vl array temporarily saves both ctp req vl and ctp resp vl */
 	for (i = 0; i < UBASE_MAX_VL_NUM; i++)
 		if (test_bit(i, &vl_bitmap))
 			udev->qos.ctp_req_vl[cdma_vl_cnt++] = i;
@@ -1064,7 +1079,7 @@ static bool ubase_is_udma_tp_vl(struct ubase_adev_qos *qos, u8 vl)
  * @dscp_num: dscp number
  *
  * The function updates the dscp to vl mapping based on 'dscp_vl' and saves it
- * to 'udma_dscp_vl' in 'truct ubase_adev_qos'.
+ * to 'udma_dscp_vl' in 'struct ubase_adev_qos'.
  *
  * Context: Any context.
  */

@@ -66,7 +66,6 @@ int ummu_delete_seg(u64 left, u64 size, struct maple_tree *seg_tree, range_compa
 		return -ERANGE;
 
 	data = mtree_erase(seg_tree, left);
-
 	if (!data)
 		return -EINVAL;
 

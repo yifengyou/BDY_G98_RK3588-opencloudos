@@ -186,6 +186,9 @@ static void ubase_destroy_multi_tp_tpg(struct ubase_dev *udev, u32 num)
 {
 	u32 idx;
 
+	if (ubase_shutting_down(udev) && ubase_is_ctrl_node(udev))
+		return;
+
 	for (idx = 0; idx < num; idx++)
 		ubase_destroy_tp_tpg(udev, idx);
 }

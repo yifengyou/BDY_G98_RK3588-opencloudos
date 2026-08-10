@@ -11,6 +11,7 @@
 #include <linux/iova.h>
 
 #include "../../dma-iommu.h"
+#include "ummu_core_priv.h"
 
 struct iova_slot {
 	struct iommu_domain *domain;

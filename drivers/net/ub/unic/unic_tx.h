@@ -97,6 +97,9 @@ struct unic_sq_stats {
 	u64 fd_cnt;
 	u64 drop_cnt;
 	u64 cfg5_drop_cnt;
+	u64 polled_old_pi;
+	u64 polled_skb_null;
+	u64 pi_ci_over_depth;
 };
 
 struct unic_jfs_ctx {
