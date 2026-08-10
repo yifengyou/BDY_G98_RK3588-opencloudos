@@ -6,7 +6,8 @@
 #include <linux/kvm_host.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_vcpu.h>
-#include <asm/kvm_extioi.h>
+#include <asm/kvm_csr.h>
+#include <asm/kvm_eiointc.h>
 #include <asm/kvm_pch_pic.h>
 
 const struct _kvm_stats_desc kvm_vm_stats_desc[] = {
@@ -23,6 +24,23 @@ const struct kvm_stats_header kvm_vm_stats_header = {
 	.data_offset = sizeof(struct kvm_stats_header) + KVM_STATS_NAME_SIZE +
 					sizeof(kvm_vm_stats_desc),
 };
+
+static void kvm_vm_init_features(struct kvm *kvm)
+{
+	unsigned long val;
+
+	val = read_csr_gcfg();
+	if (val & CSR_GCFG_GPMP)
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PMU);
+
+	/* Enable all PV features by default */
+	kvm->arch.pv_features = BIT(KVM_FEATURE_IPI);
+	kvm->arch.kvm_features = BIT(KVM_LOONGARCH_VM_FEAT_PV_IPI);
+	if (kvm_pvtime_supported()) {
+		kvm->arch.pv_features |= BIT(KVM_FEATURE_STEAL_TIME);
+		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_STEALTIME);
+	}
+}
 
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
@@ -42,13 +60,13 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	spin_lock_init(&kvm->arch.phyid_map_lock);
 
 	kvm_init_vmcs(kvm);
+	kvm_vm_init_features(kvm);
 
-	/* Enable all PV features by default */
-	kvm->arch.pv_features = BIT(KVM_FEATURE_IPI);
-	if (kvm_pvtime_supported())
-		kvm->arch.pv_features |= BIT(KVM_FEATURE_STEAL_TIME);
-
-	kvm->arch.gpa_size = BIT(cpu_vabits - 1);
+	/*
+	 * cpu_vabits means user address space only (a half of total).
+	 * GPA size of VM is the same with the size of user address space.
+	 */
+	kvm->arch.gpa_size = BIT(cpu_vabits);
 	kvm->arch.root_level = CONFIG_PGTABLE_LEVELS - 1;
 	kvm->arch.invalid_ptes[0] = 0;
 	kvm->arch.invalid_ptes[1] = (unsigned long)invalid_pte_table;
@@ -134,14 +152,18 @@ static int kvm_vm_feature_has_attr(struct kvm *kvm, struct kvm_device_attr *attr
 		if (cpu_has_lbt_mips)
 			return 0;
 		return -ENXIO;
-	case KVM_LOONGARCH_VM_FEAT_PMU:
-		if (cpu_has_pmp)
+	case KVM_LOONGARCH_VM_FEAT_PTW:
+		if (cpu_has_ptw)
 			return 0;
 		return -ENXIO;
+	case KVM_LOONGARCH_VM_FEAT_MSGINT:
+		if (cpu_has_msgint)
+			return 0;
+		return -ENXIO;
+	case KVM_LOONGARCH_VM_FEAT_PMU:
 	case KVM_LOONGARCH_VM_FEAT_PV_IPI:
-		return 0;
 	case KVM_LOONGARCH_VM_FEAT_PV_STEALTIME:
-		if (kvm_pvtime_supported())
+		if (kvm_vm_support(&kvm->arch, attr->attr))
 			return 0;
 		return -ENXIO;
 	default:
@@ -199,5 +221,5 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *data,
 
 bool kvm_arch_irqchip_in_kernel(struct kvm *kvm)
 {
-	return (bool)((!!kvm->arch.extioi) && (!!kvm->arch.pch_pic));
+	return (bool)((!!kvm->arch.eiointc) && (!!kvm->arch.pch_pic));
 }
