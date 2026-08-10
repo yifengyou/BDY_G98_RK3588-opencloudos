@@ -3689,6 +3689,15 @@ static void scx_cgroup_warn_missing_idle(struct task_group *tg)
 
 void scx_cgroup_fork(struct task_struct *p)
 {
+	struct task_group *tg = p->sched_task_group;
+
+	if (tg) {
+		if (tg->scx)
+			p->policy = SCHED_EXT;
+		else if (p->policy == SCHED_EXT)
+			p->policy = SCHED_NORMAL;
+	}
+
 	if (!scx_cgroup_enabled || READ_ONCE(scx_switching_all))
 		return;
 
@@ -3800,6 +3809,11 @@ void scx_cgroup_move_task(struct task_struct *p)
 	const struct sched_class *prev_class;
 	struct task_group *group = task_group(p);
 
+	if (group->scx)
+		p->policy = SCHED_EXT;
+	else if (p->policy == SCHED_EXT)
+		p->policy = SCHED_NORMAL;
+
 	if (!scx_cgroup_enabled)
 		return;
 
@@ -3909,13 +3923,7 @@ int scx_cpu_cgroup_switch(struct task_group *tg, int val)
 	percpu_down_write(&scx_fork_rwsem);
 	scx_cgroup_lock();
 
-	if (!scx_enabled() || READ_ONCE(scx_switching_all)) {
-		ret = -EPERM;
-		goto out;
-	}
-
 	tg->scx = val;
-
 	css_task_iter_start(&tg->css, 0, &it);
 	while ((p = css_task_iter_next(&it))) {
 		const struct sched_class *old_class = p->sched_class;
@@ -3925,6 +3933,16 @@ int scx_cpu_cgroup_switch(struct task_group *tg, int val)
 
 		rq = task_rq_lock(p, &rf);
 		update_rq_clock(rq);
+
+		if (tg->scx)
+			p->policy = SCHED_EXT;
+		else
+			p->policy = SCHED_NORMAL;
+
+		if (!scx_enabled() || READ_ONCE(scx_switching_all)) {
+			task_rq_unlock(rq, p, &rf);
+			continue;
+		}
 
 		sched_deq_and_put_task(p, DEQUEUE_SAVE | DEQUEUE_MOVE,
 				&ctx);
@@ -3940,7 +3958,6 @@ int scx_cpu_cgroup_switch(struct task_group *tg, int val)
 		task_rq_unlock(rq, p, &rf);
 	}
 	css_task_iter_end(&it);
-out:
 	scx_cgroup_unlock();
 	percpu_up_write(&scx_fork_rwsem);
 	return ret;
@@ -4103,7 +4120,6 @@ static void scx_cgroup_exit(void)
 		if (!(tg->scx_flags & SCX_TG_INITED))
 			continue;
 		tg->scx_flags &= ~SCX_TG_INITED;
-		tg->scx = 0;
 
 		if (!scx_ops.cgroup_exit)
 			continue;
@@ -4167,7 +4183,6 @@ static int scx_cgroup_init(void)
 			return ret;
 		}
 		tg->scx_flags |= SCX_TG_INITED;
-		tg->scx = 0;
 
 		rcu_read_lock();
 		css_put(css);
