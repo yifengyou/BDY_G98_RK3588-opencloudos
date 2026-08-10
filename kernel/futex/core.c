@@ -789,6 +789,9 @@ static void exit_robust_list(struct task_struct *curr)
 	unsigned long futex_offset;
 	int rc;
 
+	if (mm_is_critical_error(curr->mm))
+		return;
+
 	/*
 	 * Fetch the list head (which was registered earlier, via
 	 * sys_set_robust_list()):

@@ -2399,6 +2399,7 @@ out:
  */
 int dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
 {
+	struct folio *folio;
 	unsigned long pfn;
 	struct page *page;
 	int rc = 0;
@@ -2414,6 +2415,16 @@ int dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn += 1 << order) {
 		page = pfn_to_page(pfn);
+		folio = page_folio(page);
+
+		/*
+		 * For hwpoisoned hugetlb, put the refcount increaed by
+		 * memory-failure, make it succeed to dissolve.
+		 */
+		if (unlikely(folio_test_hwpoison(folio) && folio_test_hugetlb(folio)
+				&& !READ_ONCE(folio->mapping) && (folio_ref_count(folio) == 1)))
+			folio_put(folio);
+
 		rc = dissolve_free_huge_page(page);
 		if (rc)
 			break;

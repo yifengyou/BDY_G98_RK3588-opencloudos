@@ -3352,6 +3352,10 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			 */
 			if (!offset)
 				folio_mark_accessed(folio);
+
+			if (IS_ENABLED(CONFIG_ARM64) && iov_iter_is_kvec(to))
+				iov_iter_set_copy_mc(to);
+
 			/*
 			 * Ok, we have the page, and it's up-to-date, so
 			 * now we can copy it to user space...

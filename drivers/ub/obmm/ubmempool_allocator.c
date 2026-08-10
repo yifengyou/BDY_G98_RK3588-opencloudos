@@ -105,6 +105,7 @@ static int clear_block(struct conti_mem_allocator *a __always_unused, struct mem
 	va = ioremap_cache(pa, size);
 	if (!va) {
 		pr_err_ratelimited("%s: failed to run ioremap.\n", __func__);
+		ret = -ENOMEM;
 		goto out_recover_kernel_pagetable;
 	}
 	memset(va, 0, size);

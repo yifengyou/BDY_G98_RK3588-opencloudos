@@ -17,7 +17,7 @@
  * and stack capture can be done with native filter / hist trigger /
  * stacktrace trigger primitives -- no custom user-space agent needed.
  *
- * The three events differ in trigger context and semantics:
+ * The four events differ in trigger context and semantics:
  *
  *   softlockup_sample  - emitted from watchdog_timer_fn() on every
  *                        per-CPU hrtimer tick (soft IRQ context).
@@ -43,6 +43,11 @@
  *                        on a remote CPU). When the reported CPU is
  *                        not the local CPU, comm/ip are best-effort
  *                        and may be slightly stale.
+ *
+ *   long_oncpu_sample  - emitted from watchdog_timer_fn() when the
+ *                        current task has been continuously on-CPU
+ *                        for at least long_oncpu_thresh_ms. Default
+ *                        off; gated by kernel.long_oncpu_thresh_ms.
  */
 DECLARE_EVENT_CLASS(lockup_sample_template,
 

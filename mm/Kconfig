@@ -1454,4 +1454,16 @@ config TEXT_UNEVICTABLE
 
 	  If unsure, say N.
 
+config FILEMAP_LOCAL_ALLOC
+	bool "add a option to use local memory for page allocation"
+	depends on NUMA_REMOTE
+	default y
+	help
+	  This option allows the kernel to force Page Cache allocations from the
+	  non-cpuless NUMA node. When enabled, a new sysctl interface
+	  '/proc/sys/vm/filemap_alloc_local' will be created. If set to 1,
+	  the kernel will attempt to allocate file cache pages strictly from the
+	  non-cpuless numa's memory. If set to 0 (default), the kernel follows the
+	  standard memory allocation policy.
+
 endmenu
