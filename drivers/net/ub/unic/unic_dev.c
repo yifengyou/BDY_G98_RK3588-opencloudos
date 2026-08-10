@@ -339,7 +339,8 @@ u16 unic_cqe_period_round_down(u16 cqe_period)
 	u16 i;
 
 	for (i = 0; i < ARRAY_SIZE(period) - 1; i++) {
-		if (cqe_period >= period[i] && cqe_period < period[i + 1])
+		if (cqe_period >= period[i] &&
+		    cqe_period < period[i + 1])
 			return period[i];
 	}
 
@@ -1101,20 +1102,11 @@ int unic_dev_init(struct auxiliary_device *adev)
 		goto err_unregister_event;
 	}
 
-	ret = unic_query_ip_addr(adev);
-	if (ret) {
-		if (ret == -ETIMEDOUT)
-			ubase_update_adev_status(adev, UBASE_ADEV_PROBE_FAIL);
-
-		goto err_unregister_netdev;
-	}
-
+	unic_query_ip_addr(adev);
 	unic_start_dev_period_task(netdev);
 
 	return 0;
 
-err_unregister_netdev:
-	unregister_netdev(netdev);
 err_unregister_event:
 	unic_unregister_event(adev);
 err_uninit_netdev_priv:
