@@ -43,6 +43,7 @@ void ummu_sync_tct_all(struct ummu_device *ummu, u32 tecte_tag);
 int ummu_device_flush_plb(struct ummu_device *ummu, u32 tag, u32 tid,
 			  u64 addr, size_t size);
 void ummu_device_flush_plb_all(struct iommu_domain *iommu_domain);
+void ummu_device_flush_ioplb_all(struct ummu_device *ummu);
 int ummu_device_check_pa_continuity(struct ummu_device *ummu, u64 addr,
 				    u32 size_order, u32 id);
 #endif /*__UMMU_FLUSH_H__*/

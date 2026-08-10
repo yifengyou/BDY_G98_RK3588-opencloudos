@@ -6,10 +6,8 @@
 
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
-#include <ub/ubase/ubase_comm_cmd.h>
 #include <ub/ubase/ubase_comm_qos.h>
 
-#include "unic_cmd.h"
 #include "unic_hw.h"
 #include "unic_qos_hw.h"
 

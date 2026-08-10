@@ -74,8 +74,8 @@ struct dma_device *dma_get_device_list(u32 *num_devices)
 		attr->eid.dw0 = cdev->eid;
 		memcpy(&ret_list[count], &cdev->base, sizeof(*ret_list));
 		mutex_unlock(&cdev->eu_mutex);
-		ret_list[count].private_data = kzalloc(
-			sizeof(struct cdma_ctx_res), GFP_KERNEL);
+		ret_list[count].private_data =
+			kzalloc(sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_list[count].private_data)
 			break;
 		count++;
@@ -168,8 +168,8 @@ struct dma_device *dma_get_device_by_eid(struct dev_eid *eid)
 
 		memcpy(ret_dev, &cdev->base, sizeof(*ret_dev));
 		mutex_unlock(&cdev->eu_mutex);
-		ret_dev->private_data = kzalloc(
-			sizeof(struct cdma_ctx_res), GFP_KERNEL);
+		ret_dev->private_data =
+			kzalloc(sizeof(struct cdma_ctx_res), GFP_KERNEL);
 		if (!ret_dev->private_data) {
 			kfree(ret_dev);
 			return NULL;

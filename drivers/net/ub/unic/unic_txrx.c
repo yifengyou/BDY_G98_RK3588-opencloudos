@@ -132,7 +132,6 @@ static int unic_post_destroy_jfc_ctx(struct auxiliary_device *adev, u32 jfcn)
 	return ret;
 }
 
-#if defined(UNIC_FPGA_COMPILE) || defined(UNIC_EVB_COMPILE)
 static void unic_jfc_wait_flush_done(struct unic_dev *unic_dev, u32 jfcn)
 {
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
@@ -191,7 +190,6 @@ static void unic_jfc_wait_flush(struct unic_dev *unic_dev,
 		unic_jfc_wait_flush_done(unic_dev, (*cq)->jfcn);
 	}
 }
-#endif
 
 static void unic_destroy_multi_jfc_context(struct unic_dev *unic_dev,
 					   enum unic_cq_type type, u32 num)
@@ -215,9 +213,7 @@ static void unic_destroy_multi_jfc_context(struct unic_dev *unic_dev,
 			set_bit(i, &des_bitmap);
 	}
 
-#if defined(UNIC_FPGA_COMPILE) || defined(UNIC_EVB_COMPILE)
 	unic_jfc_wait_flush(unic_dev, type, num, des_bitmap);
-#endif
 }
 
 int unic_create_cq(struct unic_dev *unic_dev, u32 idx, enum unic_cq_type type)

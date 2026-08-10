@@ -40,8 +40,7 @@ int ummu_core_get_resource(struct iommu_sva *sva, struct device *dev,
 void ummu_core_put_resource(struct iommu_sva *sva, struct device *dev,
 			    struct resource_args *args);
 int ummu_core_get_hw_cap(struct device *dev, u32 *hw_cap);
-struct mm_struct *ummu_core_get_mm(struct ummu_core_device *ummu_core,
-				   u32 tid);
+struct mm_struct *ummu_core_get_mm(struct ummu_core_device *ummu_core, u32 tid);
 void setup_tdev_dma_ops(struct device *dev, bool coherent);
 
 #endif /* __UMMU_CORE_PRIV_H__ */

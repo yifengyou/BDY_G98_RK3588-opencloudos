@@ -579,7 +579,7 @@ static void ub_pool_bi_handler(struct ub_bus_controller *ubc, void *msg, u16 p_l
 		}
 
 		ret = ub_msg_bus_instance_create(ubc, pld->guid, pld->eid[0],
-						 pld->upi, EID_BYPASS);
+						 pld->upi, EID_NONE);
 	} else {
 		if (p_len != MSG_BI_DESTROY_SIZE) {
 			dev_err(dev, "bi destroy msg len is wrong, len=%#x\n",

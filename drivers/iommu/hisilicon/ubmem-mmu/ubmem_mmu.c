@@ -17,8 +17,8 @@
 #include <linux/maple_tree.h>
 #include <linux/interrupt.h>
 #include <ub/ubfi/ubfi.h>
+#include <linux/hisi_ummu.h>
 
-#include "../ummu_cfg_v1.h"
 #include "ubmem_mmu.h"
 
 #define UMMU_MEM_MAX_GRANULE 8
@@ -27,7 +27,8 @@ static LIST_HEAD(ubmem_device_list);
 
 static ulong ubm_granule;
 module_param(ubm_granule, ulong, 0444);
-MODULE_PARM_DESC(ubm_granule, "UB memory page table granule; range [0,7], default(0), addr|size must be aligned to 2M * 2^ubm_granule.");
+MODULE_PARM_DESC(ubm_granule,
+	"UB memory page table granule; range [0,7], default(0), addr|size must be aligned to 2M * 2^ubm_granule.");
 
 static unsigned long ummu_get_ubm_granule(void)
 {
@@ -51,7 +52,6 @@ static unsigned long ummu_get_ubm_granule(void)
 #define MEM_BTE_MASK GENMASK(16, 0)
 
 #define UMMU_MEM_INDEX 0xC
-#define MEM_INDEX_RSV_MASK GENMASK(31, 20)
 #define MEM_WR_MASK (1UL << 19)
 #define MEM_TYPE_MASK (1UL << 18)
 #define MEM_VLD_MASK (1UL << 17)
@@ -346,14 +346,10 @@ static void write_ate_entries(struct ubmem_mmu_domain *dom,
 		start_addr = info->paddr;
 		cnt = info->size / granule_size;
 		for (i = 0; i < cnt; i++) {
-			reg = readl_relaxed(mdev->base + UMMU_MEM_START_ADDR) &
-			      ~START_PTE_ADDR_MASK;
-			reg |= (start_addr & PHYS_ADDR_MASK) >> SZ_2M_SHIFT;
+			reg = (start_addr & PHYS_ADDR_MASK) >> SZ_2M_SHIFT;
 			writel_relaxed(reg, mdev->base + UMMU_MEM_START_ADDR);
 
-			reg = readl_relaxed(mdev->base + UMMU_MEM_INDEX) &
-			      MEM_INDEX_RSV_MASK;
-			reg |= MEM_TYPE_MASK | MEM_WR_MASK | MEM_VLD_MASK;
+			reg = MEM_TYPE_MASK | MEM_WR_MASK | MEM_VLD_MASK;
 			reg |= (index++) & MEM_ATE_INDEX_MASK;
 			writel_relaxed(reg, mdev->base + UMMU_MEM_INDEX);
 			start_addr += granule_size;
@@ -366,23 +362,17 @@ static void write_pte_entry(struct ubmem_mmu_domain *dom,
 {
 	u32 reg;
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_START_ADDR) &
-	      ~START_PTE_ADDR_MASK;
-	reg |= (dom->iova_start & IOVA_MASK) >> SZ_2M_SHIFT;
+	reg = (dom->iova_start & IOVA_MASK) >> SZ_2M_SHIFT;
 	writel_relaxed(reg, mdev->base + UMMU_MEM_START_ADDR);
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_LEN_GRANU) &
-	      ~(MEM_GRANU_MASK | MEM_LEN_MASK);
-	reg |= FIELD_PREP(MEM_GRANU_MASK, dom->granule);
+	reg = FIELD_PREP(MEM_GRANU_MASK, dom->granule);
 	reg |= FIELD_PREP(MEM_LEN_MASK, dom->ate_count - 1);
 	writel_relaxed(reg, mdev->base + UMMU_MEM_LEN_GRANU);
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_BTE) & ~MEM_BTE_MASK;
-	reg |= FIELD_PREP(MEM_BTE_MASK, dom->ate_index_start);
+	reg = FIELD_PREP(MEM_BTE_MASK, dom->ate_index_start);
 	writel_relaxed(reg, mdev->base + UMMU_MEM_BTE);
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_INDEX) & MEM_INDEX_RSV_MASK;
-	reg |= MEM_WR_MASK | MEM_VLD_MASK;
+	reg = MEM_WR_MASK | MEM_VLD_MASK;
 	reg |= FIELD_PREP(MEM_PTE_INDEX_MASK, dom->base_domain.tid);
 	writel_relaxed(reg, mdev->base + UMMU_MEM_INDEX);
 }
@@ -390,20 +380,16 @@ static void write_pte_entry(struct ubmem_mmu_domain *dom,
 static void clear_pte_entry(struct ubmem_mmu_domain *dom,
 			    struct ubmem_mmu_device *mdev)
 {
-	u32 reg;
+	u32 reg = MEM_WR_MASK;
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_INDEX) & MEM_INDEX_RSV_MASK;
-	reg |= MEM_WR_MASK;
 	reg |= FIELD_PREP(MEM_PTE_INDEX_MASK, dom->base_domain.tid);
 	writel_relaxed(reg, mdev->base + UMMU_MEM_INDEX);
 }
 
 static void ubmem_mmu_flush_dtlb(struct ubmem_mmu_device *mdev)
 {
-	u32 reg;
+	u32 reg = MEM_DTLB_INVLD_MASK;
 
-	reg = readl_relaxed(mdev->base + UMMU_MEM_DTLB_INVLD) |
-	      MEM_DTLB_INVLD_MASK;
 	writel_relaxed(reg, mdev->base + UMMU_MEM_DTLB_INVLD);
 }
 
@@ -481,7 +467,7 @@ static int ubmem_mmu_map_pages(struct iommu_domain *domain, unsigned long iova,
 	info->paddr = paddr;
 	info->size = size;
 	mt = (struct maple_tree *)mdom->cached_pa_list;
-	ret = mtree_insert_range(mt, iova, iova + size - 1, info, GFP_KERNEL);
+	ret = mtree_insert_range(mt, iova, iova + size - 1, info, gfp);
 	if (ret) {
 		pr_err("insert phys addr info failed, ret = %d.\n", ret);
 		kfree(info);
@@ -688,10 +674,7 @@ static bool ubmem_mmu_tdev_support_attr(struct ummu_core_device *core_device,
 	struct ubmem_mmu_device *ubmem_dev = core_to_ubmem_mmu_dev(core_device);
 	struct hisi_ummu_tdev_info *info;
 	struct ubrt_fwnode *ubrt_fw;
-	struct ummu_node *node;
-	u16 ummu_mapping;
-	u32 ummu_id;
-	int ret;
+	u32 index;
 
 	if (!attr || !attr->priv ||
 		attr->priv_len < sizeof(struct hisi_ummu_tdev_info))
@@ -703,23 +686,15 @@ static bool ubmem_mmu_tdev_support_attr(struct ummu_core_device *core_device,
 		return false;
 	}
 
-	ummu_mapping = __ffs(info->v1.ummu_idx_mask);
-	ret = ubrt_get_interrupt_id(ummu_mapping, &ummu_id);
-	if (ret) {
-		dev_err(ubmem_dev->ummu.dev, "get ummu_id failed, ummu_mapping %u.\n",
-			ummu_mapping);
+	index = __ffs(info->v1.ummu_idx_mask);
+	ubrt_fw = ubrt_fwnode_get_by_idx(index, UBRT_UMMU);
+	if (!ubrt_fw) {
+		dev_err(ubmem_dev->ummu.dev, "get ubrt fw failed, index = %u.\n",
+			index);
 		return false;
 	}
 
-	ubrt_fw = ubrt_fwnode_get(ubmem_dev->ummu.dev->fwnode);
-	if (!ubrt_fw || ubrt_fw->type != UBRT_UMMU) {
-		dev_err(ubmem_dev->ummu.dev, "get fwnode failed, exist = %d, type = %d.\n",
-			!!(ubrt_fw), (int)(ubrt_fw ? ubrt_fw->type : -1));
-		return false;
-	}
-
-	node = (struct ummu_node *)ubrt_fw->ubrt_node;
-	return node->intr_id == ummu_id;
+	return (ubrt_fw == ubrt_fwnode_get(ubmem_dev->ummu.dev->fwnode));
 }
 
 static struct ummu_core_ops ubmm_mmu_core_ops = {

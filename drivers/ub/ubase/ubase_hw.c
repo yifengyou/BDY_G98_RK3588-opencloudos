@@ -201,6 +201,7 @@ static int ubase_parse_dev_res(struct ubase_dev *udev,
 			       struct ubase_res_cmd_resp *resp)
 {
 	ubase_parse_dev_caps(udev, resp);
+
 	return ubase_check_dev_caps(udev);
 }
 
@@ -673,6 +674,7 @@ int ubase_query_port_bitmap(struct ubase_dev *udev)
 		dev_warn(udev->dev,
 			 "The function of querying real-time traffic in UBOE mode is not supported.\n");
 	}
+
 	if (ret && ret != -EPERM) {
 		dev_err(udev->dev,
 			"failed to query port bitmap, ret = %d.\n", ret);
@@ -863,7 +865,7 @@ static int ubase_notify_ctrl_plane_init_res(struct ubase_dev *udev)
 
 	req.flag = UBASE_CTRL_PLANE_INIT_RES;
 
-	ret = __ubase_ctrlq_send(udev, &msg, NULL);
+	ret = __ubase_ctrlq_send(udev, &msg, true, NULL);
 	if (ret)
 		dev_err(udev->dev,
 			"failed to notify ctrl plane init res, ret = %d.\n",
@@ -955,27 +957,28 @@ static int ubase_stop_perf_stats(struct ubase_dev *udev,
 int __ubase_perf_stats(struct ubase_dev *udev, u64 port_bitmap, u32 period,
 		       struct ubase_perf_stats_result *data, u32 data_size)
 {
-#define UBASE_MS_TO_US(ms) (1000 * (ms))
+#define UBASE_MS_TO_US(ms)	(1000 * (ms))
+
+	unsigned long logic_port_bitmap = udev->caps.dev_caps.logic_port_bitmap;
 	struct ubase_stop_perf_stats_cmd resp;
-	unsigned long logic_port_bitmap;
-	int ret, j, k, port_num;
+	u32 j, k, port_num;
+	int ret;
 	u8 i;
 
 	if (!test_bit(UBASE_STATE_INITED_B, &udev->state_bits) ||
 	    test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits))
 		return -EBUSY;
 
-	logic_port_bitmap = udev->caps.dev_caps.logic_port_bitmap;
-
 	if (port_bitmap) {
 		if (data_size < bitmap_weight((unsigned long *)&port_bitmap,
 					      UBASE_MAX_PORT_NUM) ||
 		    !bitmap_subset((unsigned long *)&port_bitmap,
-				   &logic_port_bitmap,
-				   UBASE_MAX_PORT_NUM))
+				   &logic_port_bitmap, UBASE_MAX_PORT_NUM))
 			return -EINVAL;
 	} else {
-		if (data_size != UBASE_MAX_PORT_NUM)
+		if (data_size != UBASE_MAX_PORT_NUM ||
+		    data_size < bitmap_weight((unsigned long *)&logic_port_bitmap,
+					      UBASE_MAX_PORT_NUM))
 			return -EINVAL;
 
 		port_bitmap = logic_port_bitmap;

@@ -12,7 +12,6 @@
 #include "ubase_arq.h"
 #include "ubase_cmd.h"
 #include "ubase_ctrlq.h"
-#include "ubase_err_handle.h"
 #include "ubase_hw.h"
 #include "ubase_mailbox.h"
 #include "ubase_pmem.h"
@@ -540,11 +539,12 @@ static int ubase_handle_ue2ue_ctrlq_req(struct ubase_dev *udev,
 	ue_info.seq = cmd->seq;
 	ue_info.mbx_ue_id = mbx_ue_id;
 
-	ret = __ubase_ctrlq_send(udev, &msg, &ue_info);
+	ret = __ubase_ctrlq_send(udev, &msg, false, &ue_info);
 	if (ret)
 		ubase_err(udev,
-			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, ret = %d.\n",
-			  head->service_type, head->opcode, ret);
+			  "failed to send ue's ctrlq msg, ser_type = 0x%x, opc = 0x%x, bus_ue_id = %u, seq = %u, ret = %d.\n",
+			  head->service_type, head->opcode, ue_info.bus_ue_id,
+			  ue_info.seq, ret);
 
 	return ret;
 }
@@ -628,6 +628,8 @@ static int ubase_handle_activate_resp(void *dev, void *data, u32 len)
 			  len, sizeof(*resp));
 		return -EINVAL;
 	}
+
+	ubase_dbg(udev, "recv activate resp.\n");
 
 	msn = le16_to_cpu(resp->msn);
 	self = &udev->act_ctx.self;
@@ -1470,6 +1472,17 @@ struct ubase_adev_qos *ubase_get_adev_qos(struct auxiliary_device *adev)
 }
 EXPORT_SYMBOL(ubase_get_adev_qos);
 
+/**
+ * ubase_adev_mac_stats_supported - determine whether mac statistics querying
+ * is supported
+ * @adev: auxiliary device
+ *
+ * The function is used to determine whether the auxiliary device supports
+ * querying mac statistics.
+ *
+ * Context: Any context.
+ * Return: true or false
+ */
 bool ubase_adev_mac_stats_supported(struct auxiliary_device *adev)
 {
 	if (!adev)

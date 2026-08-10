@@ -135,18 +135,16 @@ static int cdma_jfce_wait(struct cdma_jfce *jfce, struct file *filp,
 	max_event_cnt = min_t(u32, we.in.max_event_cnt, (u32)CDMA_MAX_JFCE_EVENT_CNT);
 	INIT_LIST_HEAD(&event_list);
 	if (we.in.time_out <= 0) {
-		ret = cdma_wait_event(&jfce->jfe,
-				      (filp->f_flags & O_NONBLOCK) |
-				      (!we.in.time_out),
-				      max_event_cnt,
-				      &we.out.event_cnt, &event_list);
+		ret = cdma_wait_event(
+			&jfce->jfe,
+			(filp->f_flags & O_NONBLOCK) | (!we.in.time_out),
+			max_event_cnt, &we.out.event_cnt, &event_list);
 	} else {
 		ret = cdma_wait_event_timeout(&jfce->jfe,
 					      msecs_to_jiffies(we.in.time_out),
 					      max_event_cnt, &we.out.event_cnt,
 					      &event_list);
 	}
-
 	if (ret < 0) {
 		pr_err("wait jfce event failed, ret = %d\n", ret);
 		return ret;
@@ -472,7 +470,8 @@ static void cdma_write_async_event(struct cdma_context *ctx, u64 event_data,
 		goto err_free_rcu;
 
 	if (jfae->jfe.event_list_count >= MAX_EVENT_LIST_SIZE) {
-		pr_debug("event list overflow, and this write will be discarded.\n");
+		pr_debug(
+			"event list overflow, and this write will be discarded.\n");
 		goto err_free_rcu;
 	}
 
@@ -690,9 +689,8 @@ struct cdma_jfae *cdma_alloc_jfae(struct cdma_file *cfile)
 	jfae->fd = fd;
 	jfae->file = file;
 	jfae->cfile = cfile;
-	kref_get(&cfile->ref);
 	fd_install(fd, file);
-
+	kref_get(&cfile->ref);
 	return jfae;
 
 err_free_jfae:

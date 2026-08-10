@@ -34,4 +34,4 @@ struct unic_coalesce {
 
 void unic_set_ethtool_ops(struct net_device *netdev);
 
-#endif
+#endif /* __UNIC_ETHTOOL_H__ */

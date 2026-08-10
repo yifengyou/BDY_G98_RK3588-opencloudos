@@ -392,7 +392,7 @@ void ublc_link_down_handle(struct ub_port *port)
 		ub_info(uent, "all port link down and remove device\n");
 		device_unlock(&uent->dev);
 
-		return;
+		goto link_down_notify;
 	}
 
 	r_port = port->r_uent->ports + port->r_index;
@@ -405,16 +405,6 @@ void ublc_link_down_handle(struct ub_port *port)
 	ub_info(uent, "port%u link down\n", port->index);
 link_down_notify:
 	ub_notify_share_port(port, UB_PORT_EVENT_LINK_DOWN);
-}
-
-void ub_link_change_handler(struct work_struct *work)
-{
-	struct ub_port *port = container_of(work, struct ub_port, link_work);
-
-	if (port->link_event == UB_LINK_UP)
-		ublc_link_up_handle(port);
-	else
-		ublc_link_down_handle(port);
 }
 
 static void ub_link_handle_event(struct ub_port *port, enum ub_link_event event)

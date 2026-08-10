@@ -278,7 +278,7 @@ static const struct auxiliary_device_id cdma_id_table[] = {
 	{
 		.name = UBASE_ADEV_NAME ".cdma",
 	},
-	{}
+	{},
 };
 MODULE_DEVICE_TABLE(auxiliary, cdma_id_table);
 

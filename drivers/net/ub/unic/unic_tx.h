@@ -318,4 +318,4 @@ void unic_reset_tx_queue(struct net_device *netdev);
 void unic_dump_sq_stats(struct net_device *netdev, u32 queue_idx);
 void unic_mask_key_words(void *sqebb);
 
-#endif
+#endif /* __UNIC_TX_H__ */

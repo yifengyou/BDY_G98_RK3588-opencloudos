@@ -225,4 +225,4 @@ struct unic_query_link_diagnosis_resp {
 	u8 rsv[20];
 };
 
-#endif
+#endif /* __UNIC_CMD_H__ */

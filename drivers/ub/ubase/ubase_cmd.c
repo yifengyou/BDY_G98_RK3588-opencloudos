@@ -18,23 +18,21 @@
 #define CREATE_TRACE_POINTS
 #include "ubase_trace.h"
 
-static int ubase_alloc_cmd_queue(struct ubase_dev *udev,
-				 struct ubase_cmdq_ring *ring)
+static inline int ubase_alloc_cmd_queue(struct ubase_dev *udev,
+					struct ubase_cmdq_ring *ring)
 {
 	size_t size = ring->desc_num * sizeof(struct ubase_cmdq_desc);
 
 	ring->desc = dma_alloc_coherent(udev->dev, size, &ring->desc_dma_addr,
 					GFP_KERNEL);
-	if (!ring->desc) {
-		ubase_err(udev, "failed to alloc cmdq dma addr.\n");
+	if (!ring->desc)
 		return -ENOMEM;
-	}
 
 	return 0;
 }
 
-static void ubase_free_cmd_queue(struct ubase_dev *udev,
-				 struct ubase_cmdq_ring *ring)
+static inline void ubase_free_cmd_queue(struct ubase_dev *udev,
+					struct ubase_cmdq_ring *ring)
 {
 	size_t size = ring->desc_num * sizeof(struct ubase_cmdq_desc);
 
@@ -240,7 +238,7 @@ static int ubase_csq_clean(struct ubase_dev *udev)
 	if (!ubase_csq_data_is_valid(udev, hw_ci)) {
 		ubase_warn(udev,
 			   "the cmd head is incorrect! cmd head = (%lld, %u-%u).\n",
-			 hw_ci, csq->pi, csq->ci);
+			   hw_ci, csq->pi, csq->ci);
 		ubase_warn(udev,
 			   "any further commands to the firmware are disabled!\n");
 		set_bit(UBASE_STATE_CMD_DISABLE, &udev->hw.state);
@@ -261,7 +259,7 @@ int ubase_send_cmd(struct ubase_dev *udev,
 {
 	struct ubase_cmdq_ring *csq = &udev->hw.cmdq.csq;
 	bool is_completed = false;
-	int cleaned;
+	int cleaned, free_num;
 	u32 sw_pi;
 	int ret;
 
@@ -272,10 +270,12 @@ int ubase_send_cmd(struct ubase_dev *udev,
 		goto err_unlock;
 	}
 
-	if (num > ubase_remain_cmdq_space(csq)) {
+	free_num = ubase_remain_cmdq_space(csq);
+	if (num > free_num) {
 		csq->ci = ubase_read_dev(&udev->hw, UBASE_CSQ_HEAD_REG);
 		ubase_warn(udev,
-			   "the requested space exceeds the remaining space.\n");
+			   "the requested space(%d) exceeds the remaining space(%d), csq ci: %u.\n",
+			   num, free_num, csq->ci);
 		ret = -EBUSY;
 		goto err_unlock;
 	}
@@ -464,8 +464,12 @@ static void ubase_cmd_setup_desc_by_inbuf(struct ubase_dev *udev,
 					  u16 num)
 {
 	ubase_cmd_setup_basic_desc(&desc[0], in->opcode, in->is_read, num);
-	if (in->data)
+	if (in->data) {
+		/* the size of the desc is the larger value between in and out.
+		 * the data_size is copied and filled into the subsequent desc.
+		 */
 		memcpy(desc->data, in->data, in->data_size);
+	}
 }
 
 static void ubase_cmd_setup_desc_by_outbuf(struct ubase_dev *udev,
@@ -669,11 +673,6 @@ void ubase_crq_service_task(struct ubase_delay_work *ubase_work)
 	clear_bit(UBASE_STATE_CRQ_HANDLING, &udev->service_task.state);
 }
 
-static bool ubase_cmd_is_mbx_avail(struct ubase_dev *udev)
-{
-	return true;
-}
-
 static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 					union ubase_mbox *mbx)
 {
@@ -726,7 +725,7 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 	ubase_setup_mbx_info(udev, mbx);
 
 	end = msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT) + jiffies;
-	while (ubase_cmd_is_mbx_avail(udev)) {
+	while (1) {
 		ret = __ubase_cmd_send_inout(udev, in, out);
 		if (!ret)
 			break;

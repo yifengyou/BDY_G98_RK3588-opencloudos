@@ -66,6 +66,19 @@ void ub_mem_drain_start(u32 scna);
 int ub_mem_drain_state(u32 scna);
 
 /*
+ * ub_mem_drain_start_enhanced - start ub memory drain enhanced
+ */
+void ub_mem_drain_start_enhanced(void);
+
+/*
+ * ub_mem_drain_state_enhanced - whether ub memory drain enhanced has been finished
+ * RETURN VALUE:
+ * 0 if drain not finish; 1 if drain finish
+ * other if failed.
+ */
+int ub_mem_drain_state_enhanced(void);
+
+/*
  * ub_mem_get_numa_id - get ubc numa id from scna
  * @scna: source cna
  * RETURN VALUE:

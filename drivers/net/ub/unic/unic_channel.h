@@ -27,4 +27,4 @@ void unic_get_channels_param(struct net_device *ndev,
 			     struct kernel_ethtool_ringparam *kernel_param,
 			     struct netlink_ext_ack *extack);
 
-#endif
+#endif /* __UNIC_CHANNEL_H__ */

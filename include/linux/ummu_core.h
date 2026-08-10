@@ -437,29 +437,24 @@ struct ummu_core_init_args {
 
 /**
  * struct ummu_mpam - Memory traffic monitoring of the UB device
- * @flags:		flags, see constants above
  * @eid:		entity id
- * @tid:		tid
+ * @tid:		tid; when set to UMMU_INVALID_TID, the I/O of the device
+ *			identified by eid is tagged with MPAM.
+ *			When tid is valid, the I/O of the device identified
+ *			by tid is tagged with MPAM.
  * @partid:		mpam partition id
  * @pmg:		mpam pmg
- * @s1mpam:		0 for ste mpam, 1 for cd mpam
- * @user_mpam_en:	0 for ummu mpam, 1 for user mpam
  */
 struct ummu_mpam {
-#define UMMU_DEV_SET_MPAM	(1 << 0)
-#define UMMU_DEV_GET_MPAM	(1 << 1)
-#define UMMU_DEV_SET_USER_MPAM_EN	(1 << 2)
-#define UMMU_DEV_GET_USER_MPAM_EN	(1 << 3)
-	int flags;
 	eid_t eid;
 	int tid;
 	int partid;
 	int pmg;
-	int s1mpam;
-	int user_mpam_en;
 
 	KABI_RESERVE(1)
 	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 enum ummu_device_config_type {
@@ -591,6 +586,7 @@ static inline int ummu_drain_pages(struct iova_slot *slot, dma_addr_t iova,
 /* UMMU SVA API */
 /**
  * ummu_sva_grant_range() - Grant va range permission to sva.
+ * @Deprecated: use iommu_sva_grant instead.
  * @sva: related sva handle.
  * @va: va start
  * @size: va size
@@ -615,6 +611,7 @@ int ummu_sva_grant_range(struct iommu_sva *sva, void *va, size_t size, int perm,
 
 /**
  * ummu_sva_ungrant_range() - Ungrant va range permission from sva.
+ * @Deprecated: use iommu_sva_ungrant instead.
  * @sva: related sva handle.
  * @va: va start
  * @size: va size
@@ -656,6 +653,7 @@ struct iommu_domain *ummu_core_get_domain_by_tid(struct device *dev,
 
 /**
  * ummu_is_ksva() - Check whether the UMMU works in ksva mode.
+ * @Deprecated: use iommu_is_ksva_domain instead.
  * @domain: related iommu domain
  *
  * Return: true or false.
@@ -664,6 +662,7 @@ bool ummu_is_ksva(struct iommu_domain *domain);
 
 /**
  * ummu_is_sva() - Check whether the UMMU works in sva mode.
+ * @Deprecated: use iommu_is_ksva_domain instead.
  * @domain: related iommu domain
  *
  * Return: true or false.
@@ -688,6 +687,7 @@ u32 ummu_sva_get_features(struct device *dev);
 
 /**
  * ummu_sva_bind_device() - Bind device to a process mm.
+ * @Deprecated: use iommu_sva_bind_device_isolated instead.
  * @dev: related device.
  * @mm: process memory management.
  * @drvdata: ummu_param related to tid.
@@ -707,6 +707,7 @@ struct iommu_sva *ummu_sva_bind_device(struct device *dev, struct mm_struct *mm,
 
 /**
  * ummu_ksva_bind_device() - Bind device to kernel mm.
+ * @Deprecated: use iommu_ksva_bind_device instead.
  * @dev: related device.
  * @drvdata: ummu_param related to tid. ksva doesn't support bypass mapt.
  *
@@ -714,7 +715,15 @@ struct iommu_sva *ummu_sva_bind_device(struct device *dev, struct mm_struct *mm,
  */
 struct iommu_sva *ummu_ksva_bind_device(struct device *dev,
 					struct ummu_param *drvdata);
+/**
+ * ummu_sva_unbind_device() - Unbind device to a process mm.
+ * @Deprecated: use iommu_sva_unbind_device_isolated instead.
+ */
 void ummu_sva_unbind_device(struct iommu_sva *handle);
+/**
+ * ummu_ksva_unbind_device() - Unbind device to kernel mm.
+ * @Deprecated: use iommu_ksva_unbind_device instead.
+ */
 void ummu_ksva_unbind_device(struct iommu_sva *handle);
 
 /* UMMU CORE API */

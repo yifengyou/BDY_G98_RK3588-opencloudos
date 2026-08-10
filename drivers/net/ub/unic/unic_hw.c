@@ -122,7 +122,7 @@ int unic_set_mac_speed_duplex(struct unic_dev *unic_dev, u32 speed, u8 duplex,
 	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
 	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,
-			"failed to send cmd in config speed(%u), ret = %d.\n",
+			"failed to send cmd in config speed(%uMbps), ret = %d.\n",
 			speed, ret);
 
 	return ret;

@@ -210,4 +210,4 @@ void ubase_enable_misc_vector(struct ubase_dev *udev, bool enable);
 void ubase_disable_ce_irqs(struct ubase_dev *udev);
 void ubase_errhandle_task_schedule(struct ubase_dev *udev);
 void ubase_ctrlq_task_schedule(struct ubase_dev *udev, unsigned long delay);
-#endif
+#endif /* __UBASE_EQ_H__ */

@@ -36,13 +36,13 @@ static int __init ummu_set_proximity(struct device *dev, struct ummu_node *node)
 	if (node->pxm == UBRT_UMMU_PXM_VALID)
 		return 0;
 
-	if (acpi_disabled) {
-		dev_node = node->pxm;
-		if (dev_node >= MAX_NUMNODES || !node_possible(dev_node))
-			return -EINVAL;
-	} else {
+	if (firmware_mode == ACPI) {
 		dev_node = pxm_to_node(node->pxm);
 		if (dev_node != NUMA_NO_NODE && !node_online(dev_node))
+			return -EINVAL;
+	} else {
+		dev_node = node->pxm;
+		if (dev_node >= MAX_NUMNODES || !node_possible(dev_node))
 			return -EINVAL;
 	}
 
@@ -166,9 +166,6 @@ static int ummu_config_update(struct platform_device *pdev,
 			return ret;
 	}
 
-	dev_info(&pdev->dev, "interrupt_id[0x%x], pxm[%u], its_index[%u], vendor_id[0x%x]\n",
-		 ((type == UBRT_UMMU) ? ummu_node->intr_id : ummu_node->pmu_intr_id),
-		 ummu_node->pxm, ummu_node->its_index, ummu_node->vendor_id);
 	return 0;
 }
 
@@ -242,7 +239,7 @@ out:
 static int acpi_update_ummu_config(struct ummu_node *ummu_node, u32 index)
 {
 	acpi_status status;
-	u64 node_flag;
+	u64 node_flag = 0;
 	int ret;
 
 	ret = ubrt_fwnode_add(ummu_node, index, sizeof(*ummu_node), UBRT_UMMU);
@@ -406,10 +403,10 @@ static int parse_ummu(void *info_node)
 
 	ummu_node = (struct ummu_node *)sub_table->node_data;
 	for (index = 0; index < sub_table->count; index++, ummu_node++) {
-		if (acpi_disabled)
-			ret = dts_update_ummu_config(ummu_node, index);
-		else
+		if (firmware_mode == ACPI)
 			ret = acpi_update_ummu_config(ummu_node, index);
+		else
+			ret = dts_update_ummu_config(ummu_node, index);
 
 		if (ret) {
 			pr_err("Create No.%u ummu failed, ret=%d\n", index, ret);

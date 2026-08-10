@@ -30,17 +30,16 @@
 #define UMMU_DRV_NAME "ummu"
 #define HISI_VENDOR_ID 0xCC08
 
-static bool en_sva_indep_page_table;
-module_param(en_sva_indep_page_table, bool, 0444);
-MODULE_PARM_DESC(
-	en_sva_indep_page_table,
-	"The user-mode sva uses an independent page table, does not share a process page table.");
+static bool sva_separated_mode;
+module_param(sva_separated_mode, bool, 0444);
+MODULE_PARM_DESC(sva_separated_mode,
+	"Enable user-mode SVA with an independent page table (no process page table sharing).");
 
 static u16 ummu_chip_identifier;
 
-bool ummu_sva_indep_page_table_enable(void)
+bool ummu_sva_separated_enabled(void)
 {
-	return en_sva_indep_page_table;
+	return sva_separated_mode;
 }
 
 int ummu_write_reg_sync(struct ummu_device *ummu, u32 val,
@@ -515,9 +514,7 @@ static int ummu_device_hw_init(struct ummu_device *ummu)
 
 static void ummu_device_sync(struct ummu_device *ummu)
 {
-	u32 reg;
-
-	reg = readl_relaxed(ummu->base + UMMU_CR0);
+	u32 reg = readl_relaxed(ummu->base + UMMU_CR0);
 	if (reg & CR0_UMMU_EN) {
 		dev_warn(ummu->dev, "ummu currently enabled! Resetting...\n");
 		ummu_update_gbpa(ummu, GBPA_ABORT_BIT, 0);
@@ -612,6 +609,7 @@ static int ummu_device_reset(struct ummu_device *ummu)
 	ummu_setup_irqs(ummu);
 	ummu_sync_tect_all(ummu);
 	ummu_init_flush_iotlb(ummu);
+	ummu_device_flush_ioplb_all(ummu);
 
 	return ummu_device_enable(ummu);
 }
@@ -714,12 +712,12 @@ static int ummu_device_probe(struct platform_device *pdev)
 
 	ret = ummu_device_reset(ummu);
 	if (ret)
-		return ret;
+		goto err_disable_ummu;
 
 	ret = ummu_device_register(ummu);
 	if (ret) {
-		dev_err(dev, "probe ummu device failed, ret = %d.\n", ret);
-		return ret;
+		dev_err(dev, "register ummu device failed, ret = %d.\n", ret);
+		goto err_disable_ummu;
 	}
 
 	if (ummu->impl_ops && ummu->impl_ops->dev_probe) {
@@ -739,6 +737,8 @@ static int ummu_device_probe(struct platform_device *pdev)
 probe_res_release:
 	logic_remove_ummu_device(ummu);
 	iommu_device_sysfs_remove(&ummu->core_dev.iommu);
+err_disable_ummu:
+	(void)ummu_device_disable(ummu);
 	return ret;
 }
 

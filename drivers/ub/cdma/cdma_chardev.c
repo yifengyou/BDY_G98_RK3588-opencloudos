@@ -101,14 +101,14 @@ static int cdma_remap_check_jfs_id(struct cdma_file *cfile, u32 jfs_id)
 	jfs = idr_find(&cdev->jfs_table.idr_tbl.idr, jfs_id);
 	if (!jfs) {
 		spin_unlock(&cdev->jfs_table.lock);
-		dev_err(cdev->dev,
-			"check failed, jfs_id = %u not exist.\n", jfs_id);
+		dev_err(cdev->dev, "check failed, jfs_id = %u not exist.\n",
+			jfs_id);
 		return ret;
 	}
 
 	if (cfile->uctx != jfs->base_jfs.ctx) {
-		dev_err(cdev->dev,
-			"check failed, jfs_id = %u, uctx invalid\n", jfs_id);
+		dev_err(cdev->dev, "check failed, jfs_id = %u, uctx invalid\n",
+			jfs_id);
 		spin_unlock(&cdev->jfs_table.lock);
 		return -EINVAL;
 	}
@@ -149,8 +149,8 @@ static int cdma_remap_pfn_range(struct cdma_file *cfile, struct vm_area_struct *
 	case CDMA_MMAP_JETTY_DSQE:
 		jfs_id = cdma_get_mmap_idx(vma);
 		if (cdma_remap_check_jfs_id(cfile, jfs_id)) {
-			dev_err(cdev->dev,
-				"mmap failed, invalid jfs_id = %u\n", jfs_id);
+			dev_err(cdev->dev, "mmap failed, invalid jfs_id = %u\n",
+				jfs_id);
 			return -EINVAL;
 		}
 
@@ -327,7 +327,7 @@ static int cdma_close(struct inode *inode, struct file *file)
 	mutex_unlock(&cfile->ctx_mutex);
 	mutex_unlock(&g_cdma_reset_mutex);
 	kref_put(&cfile->ref, cdma_release_file);
-	pr_debug("cdma close success.\n");
+	pr_info("cdma close success.\n");
 
 	return 0;
 }
@@ -364,8 +364,8 @@ int cdma_create_chardev(struct cdma_dev *cdev)
 		return -ENOMEM;
 	}
 
-	ret = snprintf(chardev->name, sizeof(chardev->name),
-		       "%s.%d", CDMA_DEVICE_NAME, chardev->dev_num);
+	ret = snprintf(chardev->name, sizeof(chardev->name), "%s.%d",
+		       CDMA_DEVICE_NAME, chardev->dev_num);
 	if (ret < 0) {
 		dev_err(cdev->dev, "sprintf failed in create cdma chardev\n");
 		goto num_free;

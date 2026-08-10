@@ -37,4 +37,4 @@ void unic_set_dcbnl_ops(struct net_device *netdev);
 static inline void unic_set_dcbnl_ops(struct net_device *netdev) {}
 #endif
 
-#endif
+#endif /* __UNIC_DCBNL_H__ */

@@ -82,4 +82,4 @@ int unic_add_ip_addr(struct unic_dev *unic_dev, struct sockaddr *addr,
 int unic_rm_ip_addr(struct unic_dev *unic_dev, struct sockaddr *addr,
 		    u16 ip_mask);
 
-#endif
+#endif /* __UNIC_IP_H__ */

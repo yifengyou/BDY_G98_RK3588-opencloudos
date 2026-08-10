@@ -137,32 +137,28 @@ int ummu_master_enable_sva(struct ummu_master *master,
 	guard(mutex)(&ummu_sva_mutex);
 	if (feat == IOMMU_DEV_FEAT_SVA) {
 		if (master->sva_enabled) {
-			ret = -EBUSY;
-			goto err_out;
+			pr_err("%s SVA already enabled.\n", dev_name(master->dev));
+			return -EBUSY;
 		}
 
 		if (ummu_master_iopf_supported(master)) {
 			ret = ummu_master_sva_enable_iopf(master);
 			if (ret) {
 				pr_err("enable iopf failed!\n");
-				goto err_out;
+				return ret;
 			}
 		}
 
 		master->sva_enabled = true;
 	} else {
 		if (master->ksva_enabled) {
-			ret = -EBUSY;
-			goto err_out;
+			pr_err("%s KSVA already enabled.\n", dev_name(master->dev));
+			return -EBUSY;
 		}
 		master->ksva_enabled = true;
 	}
 
-err_out:
-	pr_debug("%s enable %s, %s\n", dev_name(master->dev),
-		 feat == IOMMU_DEV_FEAT_SVA ? "SVA" : "KSVA",
-		 ret == 0 ? "successful" : "failed");
-	return ret;
+	return 0;
 }
 
 int ummu_master_disable_sva(struct ummu_master *master,
@@ -197,8 +193,6 @@ int ummu_master_disable_sva(struct ummu_master *master,
 	}
 
 err_out:
-	pr_debug("%s disable %s successful!\n", dev_name(master->dev),
-		 feat == IOMMU_DEV_FEAT_SVA ? "SVA" : "KSVA");
 	return 0;
 }
 

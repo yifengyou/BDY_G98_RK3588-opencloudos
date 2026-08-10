@@ -129,21 +129,3 @@ void ubrt_fwnode_del_all(void)
 	}
 }
 EXPORT_SYMBOL_GPL(ubrt_fwnode_del_all);
-
-int ubrt_get_interrupt_id(u16 ummu_map, u32 *intr_id)
-{
-	struct ubrt_fwnode *curr;
-	struct ummu_node *node;
-
-	guard(spinlock)(&ubrt_fwnode_lock);
-	list_for_each_entry(curr, &ubrt_fwnode_list, list) {
-		if (curr->type != UBRT_UMMU || curr->index != ummu_map)
-			continue;
-
-		node = (struct ummu_node *)curr->ubrt_node;
-		*intr_id = node->intr_id;
-		return 0;
-	}
-	return -ENXIO;
-}
-EXPORT_SYMBOL_GPL(ubrt_get_interrupt_id);

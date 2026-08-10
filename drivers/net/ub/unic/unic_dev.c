@@ -30,7 +30,7 @@
 #include "unic_vlan.h"
 #include "unic_dev.h"
 
-#define UNIC_WATCHDOG_TIMEOUT (5 * HZ)
+#define UNIC_WATCHDOG_TIMEOUT (30 * HZ)
 
 #ifndef UB_DATA_LEN
 #define UB_DATA_LEN 1500
@@ -319,7 +319,7 @@ static void unic_uninit_channels_attr(struct unic_dev *unic_dev)
 	struct unic_channels *channels = &unic_dev->channels;
 
 	/* Prevent residual QoS configurations caused by the unic driver. */
-	(void)ubase_restore_initial_qset_qos(adev);
+	ubase_restore_initial_qset_qos(adev);
 
 	mutex_destroy(&channels->mutex);
 }
@@ -705,6 +705,7 @@ static void unic_sync_bond_port(struct unic_dev *unic_dev)
 static void unic_periodic_service_task(struct unic_dev *unic_dev)
 {
 #define UNIC_UPDATE_STATS_TIMER_INTERVAL	300UL
+
 	unsigned long delta = round_jiffies_relative(HZ);
 
 	unic_link_status_update(unic_dev);
@@ -800,8 +801,8 @@ static int unic_init_vport_buf(struct unic_dev *unic_dev)
 
 	if (unic_dev->caps.vport_buf_num > UNIC_MAX_VPORT_BUF_NUM) {
 		dev_err(adev->dev.parent,
-			"vport_buf_num exceeded the maximum(%d).\n",
-			UNIC_MAX_VPORT_BUF_NUM);
+			"vport_buf_num(%hhu) exceeded the maximum(%d).\n",
+			unic_dev->caps.vport_buf_num, UNIC_MAX_VPORT_BUF_NUM);
 		return -EINVAL;
 	}
 

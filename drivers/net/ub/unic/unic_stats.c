@@ -330,7 +330,6 @@ int unic_get_regs_len(struct net_device *netdev)
 	count += unic_get_dfx_regs_len(unic_dev, unic_dfx_reg_arr,
 				       reg_arr_size, reg_num);
 	kfree(reg_num);
-
 	return count;
 }
 
@@ -598,7 +597,7 @@ unic_get_mac_strings(struct unic_dev *unic_dev, u8 *data,
 		if (strs[i].stats_num > stats_num)
 			continue;
 
-		(void)snprintf(data, ETH_GSTRING_LEN, "%s", strs[i].desc);
+		snprintf(data, ETH_GSTRING_LEN, "%s", strs[i].desc);
 		data += ETH_GSTRING_LEN;
 	}
 }
@@ -698,7 +697,7 @@ static void unic_get_fec_stats_lanes(struct unic_dev *unic_dev, u8 stats_flags,
 
 	if (lane_num == 0 || lane_num > UNIC_FEC_STATS_MAX_LANE) {
 		unic_err(unic_dev,
-			 "fec stats lane number is invalid, lane_num = %u.\n",
+			 "fec stats lane number is invalid, lane_num = %hhu.\n",
 			 lane_num);
 		return;
 	}

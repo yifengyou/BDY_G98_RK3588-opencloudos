@@ -55,4 +55,4 @@ int ubase_ae_tp_level_error(struct notifier_block *nb, unsigned long event,
 int ubase_dev_init_tp_tpg(struct ubase_dev *udev);
 void ubase_dev_uninit_tp_tpg(struct ubase_dev *udev);
 
-#endif
+#endif /* __UBASE_TP_H__ */

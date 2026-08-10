@@ -52,7 +52,8 @@ static int unic_check_set_channels_available(struct net_device *ndev)
 	struct unic_dev *unic_dev = netdev_priv(ndev);
 
 	if (netif_running(ndev)) {
-		unic_err(unic_dev, "failed to set channels, due to network interface is up, please down it first and try again.\n");
+		unic_err(unic_dev,
+			 "failed to set channels, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 
@@ -151,18 +152,29 @@ static int unic_check_channels_param(struct unic_dev *unic_dev,
 		return -EINVAL;
 
 	if (param->tx_pending > unic_caps->jfs.depth ||
-	    param->tx_pending < UNIC_TXRX_MIN_DEPTH ||
-	    param->rx_pending > unic_caps->jfr.depth ||
+	    param->tx_pending < UNIC_TXRX_MIN_DEPTH) {
+		unic_err(unic_dev,
+			 "tx queue depth = %u out of range [%d, %u].\n",
+			 param->tx_pending, UNIC_TXRX_MIN_DEPTH,
+			 unic_caps->jfs.depth);
+		return -EINVAL;
+	}
+
+	if (param->rx_pending > unic_caps->jfr.depth ||
 	    param->rx_pending < UNIC_TXRX_MIN_DEPTH) {
-		unic_err(unic_dev, "queue depth out of range [%d, %u]\n",
-			 UNIC_TXRX_MIN_DEPTH, unic_caps->jfs.depth);
+		unic_err(unic_dev,
+			 "rx queue depth = %u out of range [%d, %u].\n",
+			 param->rx_pending, UNIC_TXRX_MIN_DEPTH,
+			 unic_caps->jfr.depth);
 		return -EINVAL;
 	}
 
 	if (kernel_param->rx_buf_len != UNIC_RX_BUF_LEN_2K &&
 	    kernel_param->rx_buf_len != UNIC_RX_BUF_LEN_4K) {
-		unic_err(unic_dev, "rx buf len only support %d and %d.\n",
-			 UNIC_RX_BUF_LEN_2K, UNIC_RX_BUF_LEN_4K);
+		unic_err(unic_dev,
+			 "rx buf len(%u) is not equal to %d or %d.\n",
+			 kernel_param->rx_buf_len, UNIC_RX_BUF_LEN_2K,
+			 UNIC_RX_BUF_LEN_4K);
 		return -EINVAL;
 	}
 
@@ -347,7 +359,8 @@ int unic_set_channels_param(struct net_device *ndev,
 	if (ret)
 		return ret;
 
-	if (!unic_is_channels_param_changed(unic_dev, param, kernel_param, &new_param))
+	if (!unic_is_channels_param_changed(unic_dev, param, kernel_param,
+					    &new_param))
 		return 0;
 
 	ret = unic_alloc_txrx_stats(unic_dev, &sq_stats, &rq_stats);
