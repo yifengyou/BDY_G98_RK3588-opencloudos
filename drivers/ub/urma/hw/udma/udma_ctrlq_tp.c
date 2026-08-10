@@ -306,27 +306,40 @@ err_find_npu_nb:
 }
 
 static int udma_ctrlq_get_trans_type(struct udma_dev *dev,
+				     enum udma_link_mode mode,
 				     enum ubcore_transport_mode trans_mode,
 				     enum udma_ctrlq_trans_type *tp_type)
 {
 #define UDMA_TRANS_MODE_NUM 5
+#define UDMA_LINK_MODE_NUM 2
 
 struct udma_ctrlq_trans_map {
 	bool is_valid;
 	enum udma_ctrlq_trans_type tp_type;
 };
-	static struct udma_ctrlq_trans_map ctrlq_trans_map[UDMA_TRANS_MODE_NUM] = {
-		{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
-		{true, UDMA_CTRLQ_TRANS_TYPE_TP_RM},
-		{true, UDMA_CTRLQ_TRANS_TYPE_TP_RC},
-		{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
-		{true, UDMA_CTRLQ_TRANS_TYPE_TP_UM},
+	static struct udma_ctrlq_trans_map
+		ctrlq_trans_map[UDMA_LINK_MODE_NUM][UDMA_TRANS_MODE_NUM] = {
+			{
+				{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
+				{true, UDMA_CTRLQ_TRANS_TYPE_TP_RM},
+				{true, UDMA_CTRLQ_TRANS_TYPE_TP_RC},
+				{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
+				{true, UDMA_CTRLQ_TRANS_TYPE_TP_UM},
+			},
+			{
+				{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
+				{true, UDMA_CTRLQ_TRANS_TYPE_UBOE_RM},
+				{true, UDMA_CTRLQ_TRANS_TYPE_UBOE_RC},
+				{false, UDMA_CTRLQ_TRANS_TYPE_MAX},
+				{true, UDMA_CTRLQ_TRANS_TYPE_UBOE_UM},
+			},
 	};
 	uint8_t transport_mode = (uint8_t)trans_mode;
 
 	if ((transport_mode < UDMA_TRANS_MODE_NUM) &&
-	    ctrlq_trans_map[transport_mode].is_valid) {
-		*tp_type = ctrlq_trans_map[transport_mode].tp_type;
+	    (mode < UDMA_LINK_MODE_NUM) &&
+	    ctrlq_trans_map[mode][transport_mode].is_valid) {
+		*tp_type = ctrlq_trans_map[mode][transport_mode].tp_type;
 		return 0;
 	}
 
@@ -516,18 +529,19 @@ static int udma_ctrlq_get_tpid_list(struct udma_dev *udev,
 {
 	enum udma_ctrlq_trans_type trans_type;
 	struct ubase_ctrlq_msg msg = {};
+	enum udma_link_mode link_mode;
 	int ret;
 
-	if (!tpid_cfg->flag.bs.ctp) {
-		if (udma_ctrlq_get_trans_type(udev, tpid_cfg->trans_mode, &trans_type) != 0) {
+	link_mode = tpid_cfg->flag.bs.uboe ? UDMA_LINK_MODE_UBOE : UDMA_LINK_MODE_UB;
+	if (tpid_cfg->flag.bs.ctp) {
+		tp_cfg_req->trans_type = UDMA_CTRLQ_TRANS_TYPE_CTP;
+	} else {
+		if (udma_ctrlq_get_trans_type(udev, link_mode, tpid_cfg->trans_mode, &trans_type)) {
 			dev_err(udev->dev, "udma get ctrlq trans_type failed, trans_mode = %d.\n",
 				tpid_cfg->trans_mode);
 			return -EINVAL;
 		}
-
 		tp_cfg_req->trans_type = (uint32_t)trans_type;
-	} else {
-		tp_cfg_req->trans_type = UDMA_CTRLQ_TRANS_TYPE_CTP;
 	}
 
 	udma_swap_endian(tpid_cfg->local_eid.raw, tp_cfg_req->seid,
@@ -813,6 +827,43 @@ int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontex
 	return ret;
 }
 
+int udma_ctrlq_query_host_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
+				     struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg ctrlq_msg = {};
+	struct ubase_bus_eid eid = {};
+	int ret = 0;
+
+	if (out->addr == 0) {
+		dev_err(udev->dev, "query host ubmem info failed, addr is NULL.\n");
+		return -EINVAL;
+	}
+
+	ret = ubase_get_bus_eid(udev->comdev.adev, &eid);
+	if (ret) {
+		dev_err(udev->dev,
+			"get dev bus eid failed in query host ubmem info, ret is %d.\n", ret);
+		return ret;
+	}
+
+	ctrlq_msg.service_type = UDMA_CTRLQ_SER_TYPE_UBMEM;
+	ctrlq_msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	ctrlq_msg.need_resp = 1;
+	ctrlq_msg.in_size = sizeof(eid);
+	ctrlq_msg.in = (void *)&eid;
+	ctrlq_msg.out_size = out->len;
+	ctrlq_msg.out = (void *)(uintptr_t)out->addr;
+	ctrlq_msg.opcode = UDMA_CTRLQ_QUERY_HOST_UBMEM_INFO;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &ctrlq_msg);
+	if (ret)
+		dev_err(udev->dev,
+			"query host ubmem info send ctrlq msg failed, ret is %d.\n", ret);
+
+	return ret;
+}
+
 int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		     const uint8_t tp_attr_cnt, const uint32_t tp_attr_bitmap,
 		     const struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata)
@@ -980,4 +1031,70 @@ int udma_query_pair_dev_count(struct ubcore_device *dev, struct ubcore_ucontext 
 		dev_err(udev->dev, "get dev res send ctrlq msg failed, ret is %d.\n", ret);
 
 	return ret;
+}
+
+int udma_get_smac(struct ubcore_device *dev, uint8_t *mac)
+{
+	struct udma_dev *udev = to_udma_dev(dev);
+	int ret;
+
+	ret = ubase_get_dev_mac(udev->comdev.adev, mac, UBCORE_MAC_BYTES);
+	if (ret)
+		dev_err(udev->dev, "Failed to get smac, ret %d.\n", ret);
+
+	return ret;
+}
+
+int udma_get_eid_by_ip(struct ubcore_device *dev, const struct ubcore_net_addr *net_addr,
+		       union ubcore_eid *eid)
+{
+	struct udma_ctrlq_get_eid_by_ip_resp eid_by_ip_resp = {};
+	struct udma_ctrlq_get_eid_by_ip_req eid_by_ip_req = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	eid_by_ip_req.addr_type = net_addr->type;
+	udma_swap_endian(net_addr->net_addr.raw, eid_by_ip_req.ip, UDMA_IP_SIZE);
+	udma_ctrlq_set_tp_msg(&msg, &eid_by_ip_req, sizeof(eid_by_ip_req), &eid_by_ip_resp,
+			      sizeof(eid_by_ip_resp));
+	msg.opcode = UDMA_CMD_CTRLQ_GET_EID_BY_IP;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret) {
+		dev_err(udev->dev, "get eid by ip failed, addr_type = %u, ret = %d.\n",
+			net_addr->type, ret);
+		return ret;
+	}
+
+	udma_swap_endian(eid_by_ip_resp.eid, eid->raw, UDMA_EID_SIZE);
+
+	return 0;
+}
+
+int udma_get_ip_by_eid(struct ubcore_device *dev, const union ubcore_eid *eid,
+		       struct ubcore_net_addr *net_addr)
+{
+	struct udma_ctrlq_get_ip_by_eid_resp ip_by_eid_resp = {};
+	struct udma_ctrlq_get_ip_by_eid_req ip_by_eid_req = {};
+	struct udma_dev *udev = to_udma_dev(dev);
+	struct ubase_ctrlq_msg msg = {};
+	int ret;
+
+	ip_by_eid_req.eid_type = UDMA_CTRLQ_EID_TYPE_128;
+	udma_swap_endian(eid->raw, ip_by_eid_req.eid, UDMA_EID_SIZE);
+	udma_ctrlq_set_tp_msg(&msg, &ip_by_eid_req, sizeof(ip_by_eid_req), &ip_by_eid_resp,
+			      sizeof(ip_by_eid_resp));
+	msg.opcode = UDMA_CMD_CTRLQ_GET_IP_BY_EID;
+
+	ret = ubase_ctrlq_send_msg(udev->comdev.adev, &msg);
+	if (ret) {
+		dev_err(udev->dev, "get ip by eid failed, ret = %d.\n", ret);
+		return ret;
+	}
+
+	net_addr->type = ip_by_eid_resp.addr_type;
+	udma_swap_endian(ip_by_eid_resp.ip, net_addr->net_addr.raw, UDMA_IP_SIZE);
+
+	return 0;
 }

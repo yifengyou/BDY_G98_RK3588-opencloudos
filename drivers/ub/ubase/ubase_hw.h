@@ -128,7 +128,7 @@ struct ubase_cfg_dma_buf_req {
 	__le32 resv[3];
 };
 
-struct ubase_config_sl_vl_cmd {
+struct ubase_query_sl_vl_cmd {
 	u8	sl_num;
 	u8	sl_vl[23];
 };
@@ -186,5 +186,6 @@ int ubase_query_fst_fvt_rqmt(struct ubase_dev *udev,
 int ubase_query_port_bitmap(struct ubase_dev *udev);
 int __ubase_perf_stats(struct ubase_dev *udev, u64 port_bitmap, u32 period,
 		       struct ubase_perf_stats_result *data, u32 data_size);
+void ubase_qos_uninit(struct ubase_dev *udev);
 
 #endif

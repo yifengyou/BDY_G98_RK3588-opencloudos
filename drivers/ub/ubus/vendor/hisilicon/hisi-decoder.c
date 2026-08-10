@@ -575,7 +575,7 @@ static int handle_table(struct ub_decoder *decoder,
 	struct range_table_entry *range_tlb_entry;
 	u64 offset, rollback_size;
 	u32 table_idx;
-	int ret;
+	int ret = 0;
 
 	for (offset = 0; offset < info->size;) {
 		rollback_size = offset;

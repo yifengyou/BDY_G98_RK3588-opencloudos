@@ -21,6 +21,8 @@
 #define UDMA_JFC_DB_CI_IDX_M GENMASK(21, 0)
 #define UDMA_CQE_INV_TOKEN_ID GENMASK(19, 0)
 
+#define UDMA_INIT_JFC_ID -1
+
 enum udma_jfc_state {
 	UDMA_JFC_STATE_INVALID,
 	UDMA_JFC_STATE_VALID,
@@ -195,5 +197,15 @@ int udma_check_jfc_cfg(struct udma_dev *dev, struct udma_jfc *jfc,
 void udma_init_jfc_param(struct ubcore_jfc_cfg *cfg, struct udma_jfc *jfc);
 int udma_post_create_jfc_mbox(struct udma_dev *dev, struct udma_jfc *jfc);
 void udma_clean_jfc(struct ubcore_jfc *jfc, uint32_t jetty_id, struct udma_dev *udma_dev);
+int udma_alloc_jfc(struct ubcore_device *ubcore_dev, struct ubcore_jfc_cfg *cfg,
+		   struct ubcore_jfc **ubcore_jfc,
+		   struct ubcore_udata *udata);
+int udma_active_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_udata *udata);
+int udma_set_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata);
+int udma_get_jfc_opt(struct ubcore_jfc *jfc, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata);
+int udma_deactive_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_udata *udata);
+int udma_free_jfc(struct ubcore_jfc *ubcore_jfc, struct ubcore_udata *udata);
 
 #endif /* __UDMA_JFC_H__ */

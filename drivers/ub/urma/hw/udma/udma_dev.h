@@ -13,6 +13,8 @@
 
 extern bool dfx_switch;
 extern bool cqe_mode;
+extern uint32_t batch_flush_query_freq;
+extern uint32_t batch_flush_query_timeout;
 extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
@@ -137,6 +139,8 @@ struct udma_dev {
 	struct mutex ksva_mutex;
 	struct xarray eid_table;
 	struct mutex eid_mutex;
+	struct xarray eid_guid_table;
+	struct mutex eid_guid_mutex;
 	uint32_t tid;
 	struct iommu_sva *ksva;
 	struct list_head db_list[UDMA_DB_TYPE_NUM];
@@ -156,12 +160,14 @@ struct udma_dev {
 	u8 udma_ctp_sl[UDMA_MAX_SL_NUM];
 	u8 unic_sl[UDMA_MAX_SL_NUM];
 	u8 udma_sl[UDMA_MAX_SL_NUM];
+	struct ubcore_sl_info priority_info[UDMA_MAX_SL_NUM];
 	int disable_ue_rx_count;
 	struct mutex disable_ue_rx_mutex;
 	struct mutex hugepage_lock;
 	struct list_head hugepage_list;
 	atomic_t hugepage_seq;
 	struct udma_tp_cmdq_info *wait_cmdq_info;
+	struct udma_sq_reserved_info sq_reserved_info;
 };
 
 #define UDMA_ERR_MSG_LEN	128

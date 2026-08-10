@@ -290,7 +290,7 @@ static bool is_evt_src_sva(struct device *evt_src, u32 tid)
 	}
 
 	domain = iommu_to_agent_domain(domain);
-	if (!ummu_is_sva(domain)) {
+	if (!domain->mm || iommu_is_ksva_domain(domain)) {
 		pr_err("An iopf event reported by ksva/dma device is not allowed.\n");
 		return false;
 	}

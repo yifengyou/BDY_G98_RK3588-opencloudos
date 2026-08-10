@@ -430,6 +430,13 @@ static struct ubase_dbg_cmd_info unic_dbg_cmd[] = {
 		.init = ubase_dbg_seq_file_init,
 		.read_func = unic_dbg_dump_rq_jfc_ctx_sw,
 	}, {
+		.name = "sq_rq_cq_info",
+		.dentry_index = UNIC_DBG_DENTRY_CONTEXT,
+		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL_ETH,
+		.support = unic_dbg_dentry_support,
+		.init = ubase_dbg_seq_file_init,
+		.read_func = unic_dbg_dump_sq_rq_cq_info,
+	}, {
 		.name = "dev_info",
 		.dentry_index = UNIC_DBG_DENTRY_ROOT,
 		.property = UBASE_SUP_UNIC | UBASE_SUP_UBL_ETH,

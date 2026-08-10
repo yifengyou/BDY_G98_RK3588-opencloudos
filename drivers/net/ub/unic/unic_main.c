@@ -23,6 +23,7 @@ static int unic_probe(struct auxiliary_device *adev,
 
 	ret = unic_dev_init(adev);
 	if (ret) {
+		ubase_adev_fault_log(adev, UNIC_FAULT_EVENT_ID_PROBE, NULL);
 		dev_err(adev->dev.parent,
 			"failed to init unic dev, ret = %d.\n", ret);
 		return ret;

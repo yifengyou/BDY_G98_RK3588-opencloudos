@@ -73,9 +73,7 @@ static void unic_activate_event_process(struct unic_dev *unic_dev)
 		unic_warn(unic_dev, "failed to open net, ret = %d.\n", ret);
 
 	ret = unic_activate_promisc_mode(unic_dev, true);
-	if (ret)
-		unic_warn(unic_dev, "failed to open promisc, ret = %d.\n", ret);
-	else
+	if (!ret)
 		clear_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &unic_dev->vport.state);
 
 	if (unic_dev_eth_mac_supported(unic_dev))
@@ -118,9 +116,7 @@ static void unic_deactivate_event_process(struct unic_dev *unic_dev)
 		unic_deactivate_mac_table(unic_dev);
 
 	ret = unic_activate_promisc_mode(unic_dev, false);
-	if (ret)
-		unic_warn(unic_dev, "failed to close promisc, ret = %d.\n", ret);
-	else
+	if (!ret)
 		set_bit(UNIC_VPORT_STATE_PROMISC_CHANGE, &unic_dev->vport.state);
 
 	/* if network interface has already been stopped,

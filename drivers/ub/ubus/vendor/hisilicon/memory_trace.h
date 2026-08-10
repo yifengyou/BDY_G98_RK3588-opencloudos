@@ -20,19 +20,21 @@ TRACE_EVENT(mem_ras_event,
 		__field(u32, eid)
 		__field(u32, cna)
 		__field(u8, type)
-		__field(u64, hpa)
+		__field(u64, val0)
+		__field(u64, val1)
 	),
 
 	TP_fast_assign(
 		__entry->eid = device->uent->eid;
 		__entry->cna = device->uent->cna;
 		__entry->type = (u8)info->type;
-		__entry->hpa = info->hpa;
+		__entry->val0 = info->val0;
+		__entry->val1 = info->val1;
 	),
 
 	TP_printk(
-		"%u-%u-%u-%llu", __entry->eid, __entry->cna,
-		__entry->type, __entry->hpa
+		"%u-%u-%u-%llu-%llu", __entry->eid, __entry->cna,
+		__entry->type, __entry->val0, __entry->val1
 	)
 );
 

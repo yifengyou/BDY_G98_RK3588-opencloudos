@@ -548,22 +548,6 @@ struct ub_entity *ub_get_ent_by_uent_num(unsigned int uent_num);
 struct ub_entity *ub_get_ent_by_guid(const struct ub_guid *guid);
 
 /**
- * ub_get_entity() - Searching for UB entities by Vendor and entity ID.
- * @vendor: Vendor ID.
- * @entity: entity ID.
- * @from: Previous UB entity found in search, or %NULL for new search.
- *
- * Traverse the UB bus entity linked list and search for the entity with
- * the target Vendor and entity ID. You need to call ub_entity_put()
- * after using it.
- *
- * Context: Any context.
- * Return: The entity found, or NULL if not found.
- */
-struct ub_entity *ub_get_entity(unsigned int vendor, unsigned int entity,
-			     struct ub_entity *from);
-
-/**
  * ub_entity_enable() - Enable or disable ub entity
  * @uent: UB entity.
  * @enable: Enable or disable.
@@ -594,20 +578,6 @@ int ub_set_user_info(struct ub_entity *uent);
  * Context: Any context.
  */
 void ub_unset_user_info(struct ub_entity *uent);
-
-/**
- * ub_enable_entities() - Enable UEs of MUE in batches.
- * @pue: UB MUE.
- * @nums: Number of enabled entities.
- *
- * Create and initialize UEs in batches and add to the system.
- *
- * Context: Any context.
- * Return: 0 if success, or %-EINVAL if @pue type is not MUE or nums over
- * MUE's total UE nums, or %-ENOMEM if the system is out of memory,
- * or other failed negative values.
- */
-int ub_enable_entities(struct ub_entity *pue, int nums);
 
 /**
  * ub_disable_entities() - Disable UEs of MUE in batches.
@@ -647,16 +617,6 @@ int ub_enable_ue(struct ub_entity *pue, int entity_idx);
  * been enabled.
  */
 int ub_disable_ue(struct ub_entity *pue, int entity_idx);
-
-/**
- * ub_get_entity_flex_en() - Acquire the capability to enable flexible functionality.
- *
- * Return whether flexible enabling of entity is supported.
- *
- * Context: Any context.
- * Return: true if support, or false if not support.
- */
-bool ub_get_entity_flex_en(void);
 
 /**
  * ub_get_dst_eid() - Obtain the Dest EID of the entity.
@@ -1048,9 +1008,6 @@ static inline struct ub_entity *ub_get_ent_by_uent_num(unsigned int uent_num)
 { return NULL; }
 static inline struct ub_entity *ub_get_ent_by_guid(const struct ub_guid *guid)
 { return NULL; }
-static inline struct ub_entity *
-ub_get_entity(unsigned int vendor, unsigned int entity, struct ub_entity *from)
-{ return NULL; }
 static inline struct ub_entity *ub_entity_get(struct ub_entity *uent)
 { return NULL; }
 static inline void ub_entity_put(struct ub_entity *uent) {}
@@ -1058,15 +1015,11 @@ static inline void ub_entity_enable(struct ub_entity *uent, u8 enable) {}
 static inline int ub_set_user_info(struct ub_entity *uent)
 { return -ENODEV; }
 static inline void ub_unset_user_info(struct ub_entity *uent) {}
-static inline int ub_enable_entities(struct ub_entity *pue, int nums)
-{ return -ENODEV; }
 static inline void ub_disable_entities(struct ub_entity *pue) {}
 static inline int ub_enable_ue(struct ub_entity *pue, int entity_idx)
 { return -ENODEV; }
 static inline int ub_disable_ue(struct ub_entity *pue, int entity_idx)
 { return -ENODEV; }
-static inline bool ub_get_entity_flex_en(void)
-{ return false; }
 static inline int ub_get_dst_eid(struct ub_entity *uent)
 { return -ENODEV; }
 static inline void __iomem *

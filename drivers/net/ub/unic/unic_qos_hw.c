@@ -7,6 +7,7 @@
 #define dev_fmt(fmt) "unic: (pid %d) " fmt, current->pid
 
 #include <ub/ubase/ubase_comm_cmd.h>
+#include <ub/ubase/ubase_comm_qos.h>
 
 #include "unic_cmd.h"
 #include "unic_hw.h"
@@ -56,24 +57,22 @@ int unic_config_vl_rate_limit(struct unic_dev *unic_dev, u64 *vl_maxrate,
 {
 	struct auxiliary_device *adev = unic_dev->comdev.adev;
 	struct ubase_caps *caps = ubase_get_dev_caps(adev);
-	u32 max_speed = unic_dev->hw.mac.max_speed;
-	struct unic_config_vl_speed_cmd req = {0};
-	struct ubase_cmd_buf in;
+	u32 max_speed = max(unic_dev->channels.vl.maxrate,
+			    unic_dev->hw.mac.max_speed);
+	u32 rate[UBASE_MAX_VL_NUM] = {0};
 	u32 vl_rate;
-	int i, ret;
+	int ret;
+	u8 i;
 
-	req.vl_bitmap = cpu_to_le16(vl_bitmap);
 	for (i = 0; i < caps->vl_num; i++) {
+		vl_maxrate[i] = vl_maxrate[i] ? vl_maxrate[i] :
+						(u64)max_speed * UNIC_MBYTE_PER_SEND;
 		vl_rate = vl_maxrate[i] / UNIC_MBYTE_PER_SEND;
-		vl_rate = vl_rate ? vl_rate : max_speed;
-		req.max_speed[caps->req_vl[i]] = cpu_to_le32(vl_rate);
-		req.max_speed[caps->resp_vl[i]] = cpu_to_le32(vl_rate);
+		rate[caps->req_vl[i]] = vl_rate;
+		rate[caps->resp_vl[i]] = vl_rate;
 	}
 
-	ubase_fill_inout_buf(&in, UBASE_OPC_VL_RATE_LIMIT_CONFIG, false,
-			     sizeof(req), &req);
-
-	ret = ubase_cmd_send_in(adev, &in);
+	ret = ubase_config_tm_vl_rate_limit(adev, vl_bitmap, rate);
 	if (ret && ret != -EPERM)
 		dev_err(adev->dev.parent,
 			"failed to config vl rate limit, ret = %d.\n", ret);
@@ -90,8 +89,8 @@ int unic_mac_pause_en_cfg(struct unic_dev *unic_dev, u32 tx_pause, u32 rx_pause)
 	req.tx_en = cpu_to_le32(tx_pause);
 	req.rx_en = cpu_to_le32(rx_pause);
 
-	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_MAC_PAUSE_EN, false, sizeof(req), &req);
-
+	ubase_fill_inout_buf(&in, UBASE_OPC_CFG_MAC_PAUSE_EN, false,
+			     sizeof(req), &req);
 	ret = ubase_cmd_send_in(unic_dev->comdev.adev, &in);
 	if (ret)
 		dev_err(unic_dev->comdev.adev->dev.parent,

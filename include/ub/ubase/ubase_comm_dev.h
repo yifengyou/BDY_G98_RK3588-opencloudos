@@ -411,4 +411,7 @@ int ubase_get_dev_mac(struct auxiliary_device *adev, u8 *dev_addr, u8 addr_len);
 int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
 		      u8 addr_len);
 
+void ubase_adev_fault_log(struct auxiliary_device *adev,
+			  u32 event_id, void *data);
+
 #endif

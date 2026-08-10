@@ -34,6 +34,27 @@ struct ubase_sl_priqos {
 	KABI_RESERVE(4)
 };
 
+/**
+ * struct ubase_initial_qset_qos - ubase initial tm qset configuration
+ * @num: tm qset number
+ * @qset_id: qset id
+ * @qset_weight: qset scheduling weight
+ * @rate: qset rate
+ * @vl: vl corresponding to qset
+ */
+struct ubase_initial_qset_qos {
+	u8 num;
+	u8 qset_id[UBASE_MAX_VL_NUM];
+	u8 qset_weight[UBASE_MAX_VL_NUM];
+	u32 rate[UBASE_MAX_VL_NUM];
+	u8 vl[UBASE_MAX_VL_NUM];
+
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
+};
+
 int ubase_set_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos);
 int ubase_get_priqos_info(struct device *dev, struct ubase_sl_priqos *sl_priqos);
 
@@ -43,5 +64,10 @@ int ubase_config_tm_vl_sch(struct auxiliary_device *adev, u16 vl_bitmap,
 			   u8 *vl_bw, u8 *vl_tsa);
 void ubase_update_udma_dscp_vl(struct auxiliary_device *adev, u8 *dscp_vl,
 			       u8 dscp_num);
+int ubase_config_tm_vl_rate_limit(struct auxiliary_device *adev, u16 vl_bitmap,
+				  u32 *vl_maxrate);
+int ubase_restore_initial_qset_qos(struct auxiliary_device *adev);
+struct ubase_initial_qset_qos *
+ubase_get_initial_qset_qos(struct auxiliary_device *adev);
 
 #endif

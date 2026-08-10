@@ -56,10 +56,12 @@ static int udma_get_k_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr)
 	jfr->rq.buf.entry_size = UDMA_SGE_SIZE * min(jfr->max_sge, dev->caps.jfr_sge);
 	jfr->rq.buf.entry_cnt = jfr->wqe_cnt;
 
-	ret = udma_k_alloc_buf(dev, &jfr->rq.buf);
-	if (ret) {
-		dev_err(dev->dev, "failed to alloc rq buffer, id=%u.\n", jfr->rq.id);
-		return ret;
+	if (!jfr->rq.cstm) {
+		ret = udma_k_alloc_buf(dev, &jfr->rq.buf);
+		if (ret) {
+			dev_err(dev->dev, "failed to alloc rq buffer, id=%u.\n", jfr->rq.id);
+			return ret;
+		}
 	}
 	jfr->idx_que.buf.entry_size = UDMA_IDX_QUE_ENTRY_SZ;
 	jfr->idx_que.buf.entry_cnt = jfr->wqe_cnt;
@@ -94,7 +96,8 @@ err_alloc_db:
 err_wrid:
 	udma_free_normal_buf(dev, idx_buf_size, &jfr->idx_que.buf);
 err_idx_que:
-	udma_k_free_buf(dev, &jfr->rq.buf);
+	if (!jfr->rq.cstm)
+		udma_k_free_buf(dev, &jfr->rq.buf);
 
 	return -ENOMEM;
 }
@@ -241,7 +244,8 @@ static void udma_put_jfr_buf(struct udma_dev *dev, struct udma_jfr *jfr, bool di
 	uint32_t size;
 
 	if (jfr->udma_ctx == NULL) {
-		udma_k_free_buf(dev, &jfr->rq.buf);
+		if (!jfr->rq.cstm)
+			udma_k_free_buf(dev, &jfr->rq.buf);
 
 		udma_free_sw_db(dev, &jfr->sw_db);
 
@@ -477,6 +481,7 @@ struct ubcore_jfr *udma_create_jfr(struct ubcore_device *dev,
 		goto err_hw_init_jfrc;
 	}
 
+	udma_jfr->rq.activated = true;
 	refcount_set(&udma_jfr->ae_refcount, 1);
 	init_completion(&udma_jfr->ae_comp);
 
@@ -606,7 +611,7 @@ static int udma_modify_and_del_jfr(struct udma_dev *udma_dev, struct udma_jfr *u
 	return udma_modify_jfr_to_reset(&udma_jfr->ubcore_jfr);
 }
 
-static void udma_free_jfr(struct ubcore_jfr *jfr)
+static void udma_free_jfr_prepare(struct ubcore_jfr *jfr)
 {
 	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
 	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
@@ -625,7 +630,6 @@ static void udma_free_jfr(struct ubcore_jfr *jfr)
 	udma_put_jfr_buf(udma_dev, udma_jfr, true);
 	udma_id_free(&udma_dev->jfr_table.ida_table, udma_jfr->rq.id);
 	jfr->jfr_cfg.token_value.token = 0;
-	kfree(udma_jfr);
 }
 
 int udma_destroy_jfr(struct ubcore_jfr *jfr)
@@ -642,13 +646,17 @@ int udma_destroy_jfr(struct ubcore_jfr *jfr)
 		return ret;
 	}
 
-	udma_free_jfr(jfr);
+	udma_free_jfr_prepare(jfr);
+	kfree(jfr);
 
 	return 0;
 }
 
 int udma_destroy_jfr_batch(struct ubcore_jfr **jfr, int jfr_cnt, int *bad_jfr_index)
 {
+	struct udma_jetty_queue **rq_list;
+	struct udma_jetty_queue *rq;
+	uint32_t active_jfr_cnt = 0;
 	bool large_payload = false;
 	struct udma_dev *udma_dev;
 	struct udma_jfr *udma_jfr;
@@ -669,36 +677,54 @@ int udma_destroy_jfr_batch(struct ubcore_jfr **jfr, int jfr_cnt, int *bad_jfr_in
 
 	udma_dev = to_udma_dev(jfr[0]->ub_dev);
 
+	rq_list = kcalloc(jfr_cnt, sizeof(*rq_list), GFP_KERNEL);
+	if (!rq_list)
+		return -ENOMEM;
+
 	for (i = 0; i < jfr_cnt; i++) {
-		ret = udma_modify_jfr_to_error(jfr[i], &need_sleep);
+		rq = &(to_udma_jfr(jfr[i])->rq);
+		if (rq->activated)
+			rq_list[active_jfr_cnt++] = rq;
+	}
+
+	for (i = 0; i < active_jfr_cnt; i++) {
+		ret = udma_modify_jfr_to_error(&(to_udma_jfr_from_queue(rq_list[i])->ubcore_jfr),
+					       &need_sleep);
 		if (ret) {
 			*bad_jfr_index = 0;
+			kfree(rq_list);
 			return ret;
 		}
 
 		if (unlikely(large_payload))
 			continue;
-		udma_jfr = to_udma_jfr(jfr[i]);
+		udma_jfr = to_udma_jfr(&(to_udma_jfr_from_queue(rq_list[i])->ubcore_jfr));
 		if (!udma_jfr->rq.buf.kva && udma_jfr->jfr_sleep_buf.page)
 			large_payload = !!(*(bool *)udma_jfr->jfr_sleep_buf.virt_addr);
 	}
 
 	if (need_sleep) {
 		sleep_time = large_payload ? jfr_sleep_time : UDMA_DEF_JFR_SLEEP_TIME;
-		dev_info(udma_dev->dev, "jfr sleep time = %u us.\n", sleep_time);
+		dev_info_ratelimited(udma_dev->dev, "jfr sleep time = %u us.\n", sleep_time);
 		usleep_range(sleep_time, sleep_time + UDMA_SLEEP_DELAY_TIME);
 	}
 
-	for (i = 0; i < jfr_cnt; i++) {
-		ret = udma_modify_jfr_to_reset(jfr[i]);
+	for (i = 0; i < active_jfr_cnt; i++) {
+		ret = udma_modify_jfr_to_reset(&(to_udma_jfr_from_queue(rq_list[i])->ubcore_jfr));
 		if (ret) {
 			*bad_jfr_index = 0;
+			kfree(rq_list);
 			return ret;
 		}
 	}
 
+	for (i = 0; i < active_jfr_cnt; i++)
+		udma_free_jfr_prepare(&(to_udma_jfr_from_queue(rq_list[i])->ubcore_jfr));
+
 	for (i = 0; i < jfr_cnt; i++)
-		udma_free_jfr(jfr[i]);
+		kfree(jfr[i]);
+
+	kfree(rq_list);
 
 	return 0;
 }
@@ -969,4 +995,360 @@ struct ubcore_tjetty *udma_import_jfr_ex(struct ubcore_device *dev,
 	udma_swap_endian(cfg->id.eid.raw, udma_tjfr->le_eid.raw, UBCORE_EID_SIZE);
 
 	return &udma_tjfr->ubcore_tjetty;
+}
+
+static int udma_set_jfr_id(struct udma_dev *dev, struct udma_jfr *udma_jfr, void *buf)
+{
+	struct udma_ida *ida_table = &dev->jfr_table.ida_table;
+	uint32_t cfg_id;
+	int id;
+
+	cfg_id = *(uint32_t *)buf;
+	if (!cfg_id || (cfg_id < ida_table->min || cfg_id > ida_table->max)) {
+		dev_err(dev->dev, "user set id %u error, min %u max %u.\n",
+			cfg_id, ida_table->min, ida_table->max);
+		return -EINVAL;
+	}
+
+	spin_lock(&ida_table->lock);
+	id = ida_alloc_range(&ida_table->ida, cfg_id, cfg_id, GFP_ATOMIC);
+	if (id < 0) {
+		dev_err(dev->dev, "failed to set jfr id, id is invalid or used. cfg_id=%u.\n",
+			cfg_id);
+		spin_unlock(&ida_table->lock);
+		return -EINVAL;
+	}
+	spin_unlock(&ida_table->lock);
+
+	if (udma_jfr->rq.id != UDMA_INIT_JFR_ID)
+		udma_id_free(&dev->jfr_table.ida_table, udma_jfr->rq.id);
+
+	udma_jfr->rq.id = (uint32_t)id;
+
+	return 0;
+}
+
+int udma_free_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	kfree(jfr);
+
+	return 0;
+}
+
+static struct udma_jfr_opt_info opt_k_jfr_table[] = {
+	{UBCORE_JFR_DEPTH, sizeof(uint32_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_FLAG, sizeof(uint32_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_TRANS_MODE, sizeof(uint32_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_MAX_SGE, sizeof(uint8_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_MIN_RNR_TIMER, sizeof(uint8_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_BIND_JFC, sizeof(uint64_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_TOKEN_VALUE, sizeof(uint32_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_USER_CTX, sizeof(uint64_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_RQE_BASE_ADDR, sizeof(uint64_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_ID, sizeof(uint32_t), PERM_READ | PERM_WRITE, 0},
+	{UBCORE_JFR_DB_ADDR, sizeof(uint64_t), PERM_READ, USER_IGNORE},
+	{UBCORE_JFR_DB_STATUS, sizeof(uint8_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_PI, sizeof(uint16_t), PERM_READ, 0},
+	{UBCORE_JFR_PI_TYPE, sizeof(uint16_t), PERM_READ | PERM_WRITE, USER_IGNORE},
+	{UBCORE_JFR_CI, sizeof(uint16_t), PERM_READ, 0},
+};
+
+static int udma_query_jfr_ctx(struct udma_dev *dev, struct udma_jfr_ctx *ctx,
+			      uint32_t jfr_id)
+{
+	struct ubase_mbx_attr mbox_attr = {};
+	struct ubase_cmd_mailbox *mailbox;
+
+	mbox_attr.tag = jfr_id;
+	mbox_attr.op = UDMA_CMD_QUERY_JFR_CONTEXT;
+	mailbox = udma_mailbox_query_ctx(dev, &mbox_attr);
+	if (!mailbox) {
+		dev_err(dev->dev, "failed to alloc mailbox for JFRC.\n");
+		return -ENOMEM;
+	}
+	memcpy((void *)ctx, mailbox->buf, sizeof(*ctx));
+
+	udma_free_cmd_mailbox(dev, mailbox);
+
+	return 0;
+}
+
+static int udma_k_get_jfr_param(struct udma_dev *dev, struct ubcore_jfr *ubcore_jfr,
+				uint64_t opt, void *buf)
+{
+	struct udma_jfr *udma_jfr = to_udma_jfr(ubcore_jfr);
+	struct udma_jfr_ctx jfr_ctx = {};
+	int ret;
+
+	switch (opt) {
+	case UBCORE_JFR_DEPTH:
+		*(uint32_t *)buf = ubcore_jfr->jfr_cfg.depth;
+		break;
+	case UBCORE_JFR_FLAG:
+		*(uint32_t *)buf = ubcore_jfr->jfr_cfg.flag.value;
+		break;
+	case UBCORE_JFR_TRANS_MODE:
+		*(uint32_t *)buf = ubcore_jfr->jfr_cfg.trans_mode;
+		break;
+	case UBCORE_JFR_MAX_SGE:
+		*(uint32_t *)buf = ubcore_jfr->jfr_cfg.max_sge;
+		break;
+	case UBCORE_JFR_MIN_RNR_TIMER:
+		*(uint8_t *)buf = ubcore_jfr->jfr_cfg.min_rnr_timer;
+		break;
+	case UBCORE_JFR_BIND_JFC:
+		*(uint64_t *)buf = (uintptr_t)ubcore_jfr->jfr_cfg.jfc;
+		break;
+	case UBCORE_JFR_TOKEN_VALUE:
+		*(uint32_t *)buf = ubcore_jfr->jfr_cfg.token_value.token;
+		break;
+	case UBCORE_JFR_USER_CTX:
+		*(uint32_t *)buf = 0;
+		break;
+	case UBCORE_JFR_RQE_BASE_ADDR:
+		*(uint64_t *)buf = udma_jfr->rq.buf.addr;
+		break;
+	case UBCORE_JFR_ID:
+		*(uint32_t *)buf = udma_jfr->rq.id;
+		break;
+	case UBCORE_JFR_DB_ADDR:
+		*(uint64_t *)buf = (uintptr_t)udma_jfr->rq.db_addr;
+		break;
+	case UBCORE_JFR_DB_STATUS:
+		/* TO DO*/
+		break;
+	case UBCORE_JFR_PI:
+		ret = udma_query_jfr_ctx(dev, &jfr_ctx, udma_jfr->rq.id);
+		if (ret) {
+			dev_err(dev->dev,
+				"failed to query jfr ctx, rq_id = %u, ret = %d.\n",
+				udma_jfr->rq.id, ret);
+			return ret;
+		}
+		*(uint16_t *)buf = jfr_ctx.pi;
+		break;
+	case UBCORE_JFR_PI_TYPE:
+		/* TO DO*/
+		break;
+	case UBCORE_JFR_CI:
+		ret = udma_query_jfr_ctx(dev, &jfr_ctx, udma_jfr->rq.id);
+		if (ret) {
+			dev_err(dev->dev,
+				"failed to query jfr ctx, id = %u, ret = %d.\n",
+				udma_jfr->rq.id, ret);
+			return ret;
+		}
+		*(uint16_t *)buf = jfr_ctx.ci;
+		break;
+	default:
+		dev_err(dev->dev, "invalid param, opt=%llu.\n", opt);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int udma_k_set_jfr_param(struct udma_dev *dev, struct ubcore_jfr *ubcore_jfr,
+				uint64_t opt, void *buf)
+{
+	struct udma_jfr *udma_jfr = to_udma_jfr(ubcore_jfr);
+	uint64_t addr;
+
+	switch (opt) {
+	case UBCORE_JFR_DEPTH:
+	case UBCORE_JFR_FLAG:
+	case UBCORE_JFR_TRANS_MODE:
+	case UBCORE_JFR_MAX_SGE:
+	case UBCORE_JFR_MIN_RNR_TIMER:
+	case UBCORE_JFR_BIND_JFC:
+	case UBCORE_JFR_TOKEN_VALUE:
+		break;
+	case UBCORE_JFR_RQE_BASE_ADDR:
+		addr = *(uint64_t *)buf;
+		if (!addr) {
+			dev_err(dev->dev, "jfr rqe base addr is null.\n");
+			return -EINVAL;
+		}
+		udma_jfr->rq.buf.addr = addr;
+		udma_jfr->rq.buf.kva = (void *)(uintptr_t)udma_jfr->rq.buf.addr;
+		udma_jfr->rq.cstm = true;
+		break;
+	case UBCORE_JFR_ID:
+		if (udma_set_jfr_id(dev, udma_jfr, buf))
+			return -EINVAL;
+		break;
+	case UBCORE_JFR_DB_ADDR:
+	case UBCORE_JFR_DB_STATUS:
+	case UBCORE_JFR_PI_TYPE:
+		/* TO DO */
+		break;
+	default:
+		dev_err(dev->dev, "invalid param, opt=%llu.\n", opt);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int udma_k_check_set_get_jfr_param(uint64_t opt, void *buf, uint32_t len,
+					  struct ubcore_udata *udata,
+					  enum udma_k_set_get_jfr_opt_perm perm)
+{
+#define UDMA_K_JFR_GET_JFR_OPT_CNT 15
+
+	if (!buf)
+		return -ENOMEM;
+
+	for (size_t i = 0; i < UDMA_K_JFR_GET_JFR_OPT_CNT; i++) {
+		if ((opt_k_jfr_table[i].opt == opt) &&
+		    (opt_k_jfr_table[i].buf_len == len) &&
+		    (opt_k_jfr_table[i].perm & perm))
+			return ((opt_k_jfr_table[i].attr & USER_IGNORE) && (udata != NULL)) ?
+				-EEXIST : 0;
+	}
+
+	return -EINVAL;
+}
+
+int udma_alloc_jfr(struct ubcore_device *dev, struct ubcore_jfr_cfg *cfg, struct ubcore_jfr **jfr,
+		   struct ubcore_udata *udata)
+{
+	struct udma_jfr *udma_jfr;
+
+	udma_jfr = kzalloc(sizeof(*udma_jfr), GFP_KERNEL);
+	if (!udma_jfr)
+		return -EINVAL;
+
+	udma_jfr->ubcore_jfr.jfr_cfg = *cfg;
+	udma_jfr->rq.id = UDMA_INIT_JFR_ID;
+	*jfr = &udma_jfr->ubcore_jfr;
+
+	return 0;
+}
+
+int udma_active_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct ubcore_jfr_opt *jfr_opt = &jfr->jfr_opt;
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	struct ubcore_jfr_cfg *cfg = &jfr->jfr_cfg;
+	int ret;
+
+	if (udma_verify_jfr_param(udma_dev, cfg))
+		return -EINVAL;
+
+	if (udma_jfr->rq.id == UDMA_INIT_JFR_ID) {
+		if (udma_alloc_jfr_id(udma_dev, jfr_opt->urma_jfr_id, &udma_jfr->rq.id))
+			return -EINVAL;
+	}
+
+	set_jfr_param(udma_jfr, cfg);
+
+	ret = udma_get_jfr_buf(udma_dev, udma_jfr, udata);
+	if (ret)
+		goto err_get_jfr_buf;
+
+#ifdef CONFIG_V121
+	if (udma_bind_jfc(udma_dev, cfg->jfc->id, UDMA_RECV_JFC))
+		goto err_xa_store;
+#endif
+
+	ret = xa_err(xa_store(&udma_dev->jfr_table.xa, udma_jfr->rq.id, udma_jfr, GFP_KERNEL));
+	if (ret) {
+		dev_err(udma_dev->dev, "failed to store jfr table.\n");
+		goto err_xa_store;
+	}
+
+	ret = udma_hw_init_jfrc(udma_dev, cfg, udma_jfr, 0);
+	if (ret) {
+		dev_err(udma_dev->dev, "failed to init jfrc, ret = %d.\n", ret);
+		goto err_hw_init_jfrc;
+	}
+
+	refcount_set(&udma_jfr->ae_refcount, 1);
+	init_completion(&udma_jfr->ae_comp);
+
+	if (dfx_switch)
+		udma_dfx_store_id(udma_dev, &udma_dev->dfx_info->jfr, udma_jfr->rq.id, "jfr");
+	udma_jfr->rq.activated = true;
+
+	return 0;
+
+err_hw_init_jfrc:
+#ifdef CONFIG_V121
+	udma_unbind_jfc(udma_dev, cfg->jfc->id, UDMA_RECV_JFC);
+#endif
+	xa_erase(&udma_dev->jfr_table.xa, udma_jfr->rq.id);
+err_xa_store:
+	udma_put_jfr_buf(udma_dev, udma_jfr, false);
+err_get_jfr_buf:
+	udma_id_free(&udma_dev->jfr_table.ida_table, udma_jfr->rq.id);
+
+	return ret;
+}
+
+int udma_set_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	int ret;
+
+	ret = udma_k_check_set_get_jfr_param(opt, buf, len, udata, PERM_WRITE);
+	if (ret == -EEXIST)
+		return 0;
+
+	if (ret) {
+		dev_err(udma_dev->dev, "failed to check opt, len = %u, opt = %llu.\n", len, opt);
+		return ret;
+	}
+
+	ret = udma_k_set_jfr_param(udma_dev, jfr, opt, buf);
+	if (ret)
+		dev_err(udma_dev->dev, "failed to get jfr param.\n");
+
+	return ret;
+}
+
+int udma_get_jfr_opt(struct ubcore_jfr *jfr, uint64_t opt, void *buf, uint32_t len,
+		     struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	int ret;
+
+	ret = udma_k_check_set_get_jfr_param(opt, buf, len, udata, PERM_READ);
+	if (ret == -EEXIST)
+		return 0;
+	if (ret)
+		return ret;
+
+	ret = udma_k_get_jfr_param(udma_dev, jfr, opt, buf);
+	if (ret)
+		dev_err(udma_dev->dev, "failed to get jfr param.\n");
+
+	return ret;
+}
+
+int udma_deactive_jfr(struct ubcore_jfr *jfr, struct ubcore_udata *udata)
+{
+	struct udma_dev *udma_dev = to_udma_dev(jfr->ub_dev);
+	struct udma_jfr *udma_jfr = to_udma_jfr(jfr);
+	int ret;
+
+	if (!udma_jfr->rq.activated) {
+		dev_info_ratelimited(udma_dev->dev, "jfr no need deactivate.\n");
+		return 0;
+	}
+
+	ret = udma_modify_and_del_jfr(udma_dev, udma_jfr);
+	if (ret) {
+		dev_err(udma_dev->dev,
+			"failed to deactivate jfr, rq_id = %u, ret = %d.\n",
+			udma_jfr->rq.id, ret);
+		return ret;
+	}
+
+	udma_free_jfr_prepare(jfr);
+	udma_jfr->rq.activated = false;
+
+	return 0;
 }

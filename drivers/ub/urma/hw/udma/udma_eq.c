@@ -825,6 +825,7 @@ static int udma_ctrlq_notify_mue_eid_guid(struct auxiliary_device *adev,
 {
 	struct udma_ctrlq_ue_eid_guid_out eid_guid_entry = {};
 	struct udma_dev *udma_dev;
+	int ret;
 
 	if (adev == NULL || data == NULL) {
 		pr_err("adev is null : %d, data is null : %d.\n",
@@ -857,7 +858,18 @@ static int udma_ctrlq_notify_mue_eid_guid(struct auxiliary_device *adev,
 							 -EINVAL);
 	}
 
-	return udma_ctrlq_send_eid_guid_response(udma_dev, seq, 0);
+	mutex_lock(&udma_dev->eid_guid_mutex);
+	if (eid_guid_entry.op_type == UDMA_CTRLQ_EID_GUID_ADD)
+		ret = udma_add_one_eid_guid(udma_dev, &eid_guid_entry);
+	else
+		ret = udma_del_one_eid_guid(udma_dev, &eid_guid_entry);
+	if (ret)
+		dev_err(udma_dev->dev,
+			"update eid-guid failed, op = %u, index = %u.\n",
+			eid_guid_entry.op_type, eid_guid_entry.eid_info.eid_idx);
+	mutex_unlock(&udma_dev->eid_guid_mutex);
+
+	return udma_ctrlq_send_eid_guid_response(udma_dev, seq, ret);
 }
 
 static struct ubase_ctrlq_event_nb udma_ctrlq_opts[] = {

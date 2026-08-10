@@ -20,7 +20,8 @@ void ub_mem_uninit_usi(struct ub_entity *uent);
 
 struct ub_mem_ras_err_info {
 	enum ras_err_type type;
-	u64 hpa;
+	u64 val0; /* addr or transaction id + port bitmap or 0*/
+	u64 val1; /* port bitmap or 0 */
 };
 
 struct ub_mem_ras_ctx {

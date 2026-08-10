@@ -9,7 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/limits.h>
 #include <net/page_pool/helpers.h>
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 #include <net/ub/ubl.h>
 #endif
 #include <ub/ubase/ubase_comm_mbx.h>
@@ -838,7 +838,7 @@ static void unic_handle_rx_csum(struct net_device *netdev, struct sk_buff *skb,
 	}
 }
 
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 static __be16 unic_assign_ub_proto(struct net_device *netdev,
 				   struct sk_buff *skb, u32 l3_type)
 {
@@ -873,7 +873,7 @@ static int unic_handle_cqe(struct unic_rq *rq, union unic_cqe *cqe)
 		return -EFAULT;
 	}
 
-#ifdef CONFIG_UB_UNIC_UBL
+#if IS_ENABLED(CONFIG_UB_UNIC_UBL)
 	if (unic_dev_ubl_supported(unic_dev))
 		skb->protocol = unic_assign_ub_proto(netdev, skb,
 						     unic_rx_ptype_tbl[cqe->rx.ptype].l3_type);

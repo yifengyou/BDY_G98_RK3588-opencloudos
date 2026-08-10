@@ -627,6 +627,7 @@ void ubase_cmd_crq_handler(struct ubase_dev *udev)
 				  "drop invalid crq message, opcode = 0x%x, bd_num = %u, flag = 0x%x.",
 				  opcode, bd_num, flag);
 			UBASE_MOVE_CRQ_RING_PTR(crq);
+			ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 			continue;
 		}
 
@@ -639,9 +640,9 @@ void ubase_cmd_crq_handler(struct ubase_dev *udev)
 						msg_data_len);
 
 		ubase_free_bd_data(msg_data, bd_num);
+		ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 	}
 
-	ubase_write_dev(&udev->hw, UBASE_CRQ_HEAD_REG, crq->ci);
 }
 
 void ubase_crq_service_task(struct ubase_delay_work *ubase_work)
@@ -677,13 +678,18 @@ static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 					union ubase_mbox *mbx)
 {
 	struct ubase_mbx_event_context *ctx = &udev->mb_cmd.ctx;
+	struct ubase_irq_table *irq_table = &udev->irq_table;
+	struct ubase_aeq *aeq = &irq_table->aeq;
 	int ret;
 
+	atomic_inc(&udev->mb_cmd.mbx_cnt);
+	complete(&aeq->poll);
 	if (!wait_for_completion_timeout(&ctx->done,
 					 msecs_to_jiffies(UBASE_CMDQ_MBX_TX_TIMEOUT))) {
 		ubase_err(udev,
 			  "cmd seq_num 0x%x mailbox cmd code 0x%x timeout.\n",
 			  ctx->seq_num, mbx->cmd);
+		atomic_dec(&udev->mb_cmd.mbx_cnt);
 		return -EBUSY;
 	}
 
@@ -692,6 +698,8 @@ static int ubase_cmd_wait_mbx_completed(struct ubase_dev *udev,
 		ubase_err(udev,
 			  "cmd seq_num(0x%x) mailbox cmd code(0x%x) error, ret = %d.\n",
 			  ctx->seq_num, mbx->cmd, ret);
+
+	atomic_dec(&udev->mb_cmd.mbx_cnt);
 
 	return ret;
 }
@@ -725,7 +733,8 @@ int ubase_post_mailbox_by_event(struct ubase_dev *udev,
 
 		if (time_after(jiffies, end)) {
 			dev_err_ratelimited(udev->dev,
-					    "failed to wait mbox.\n");
+					    "failed to wait mbox, ret = %d.\n",
+					    ret);
 			return -ETIMEDOUT;
 		}
 

@@ -4,6 +4,7 @@
 #
 
 source "drivers/iommu/hisilicon/ummu-core/Kconfig"
+source "drivers/iommu/hisilicon/ubmem-mmu/Kconfig"
 
 config UB_UMMU_BASE
 	bool "Hisilicon UB MMU Support Builtin"
