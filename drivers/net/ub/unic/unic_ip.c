@@ -108,9 +108,9 @@ unlock_and_exit:
 	return ret;
 }
 
-int unic_handle_stack_ip_feedback(struct unic_vport *vport,
-				  enum UNIC_COMM_ADDR_STATE state,
-				  struct sockaddr *addr, u16 ip_mask)
+static int unic_handle_stack_ip_feedback(struct unic_vport *vport,
+					 enum UNIC_COMM_ADDR_STATE state,
+					 struct sockaddr *addr, u16 ip_mask)
 {
 	struct auxiliary_device *adev = vport->back->comdev.adev;
 	struct unic_dev *unic_dev = dev_get_drvdata(&adev->dev);
@@ -543,7 +543,7 @@ static int unic_update_ctrlq_ip_list(struct unic_ip_info *ip_info,
 	st_ip.ip_addr[2] = le32_to_be32(ip_info->ip_addr[1]);
 	st_ip.ip_addr[3] = le32_to_be32(ip_info->ip_addr[0]);
 
-	ip_node = kzalloc(sizeof(*ip_node), GFP_KERNEL);
+	ip_node = kzalloc(sizeof(*ip_node), GFP_ATOMIC);
 	if (!ip_node)
 		return -ENOMEM;
 
@@ -563,7 +563,7 @@ static int unic_update_ctrlq_ip_list(struct unic_ip_info *ip_info,
 		list_add_tail(&ip_node->node, &vport->addr_tbl.ip_list);
 	}
 
-	tmp_node = kzalloc(sizeof(*tmp_node), GFP_KERNEL);
+	tmp_node = kzalloc(sizeof(*tmp_node), GFP_ATOMIC);
 	if (!tmp_node)
 		return -ENOMEM;
 

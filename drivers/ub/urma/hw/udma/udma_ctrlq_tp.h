@@ -268,6 +268,12 @@ struct udma_ctrlq_query_host_ubmem_req {
 	struct ubase_bus_eid eid;
 };
 
+struct udma_ae_work {
+	struct udma_dev	*udev;
+	uint32_t tpn;
+	struct work_struct work;
+};
+
 int udma_query_pair_dev_count(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 			      struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
@@ -318,5 +324,6 @@ int udma_get_eid_by_ip(struct ubcore_device *dev, const struct ubcore_net_addr *
 		       union ubcore_eid *eid);
 int udma_get_ip_by_eid(struct ubcore_device *dev, const union ubcore_eid *eid,
 		       struct ubcore_net_addr *net_addr);
+void udma_tp_ae_work(struct work_struct *work);
 
 #endif /* __UDMA_CTRLQ_TP_H__ */

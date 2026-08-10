@@ -4,6 +4,10 @@
 #ifndef __UDMA_EQ_H__
 #define __UDMA_EQ_H__
 
+#include <linux/auxiliary_bus.h>
+#include "udma_dev.h"
+#include "udma_ctrlq_tp.h"
+
 int udma_register_ae_event(struct auxiliary_device *adev);
 void udma_unregister_ae_event(struct auxiliary_device *adev);
 int udma_register_ce_event(struct auxiliary_device *adev);
@@ -11,8 +15,9 @@ void udma_unregister_crq_event(struct auxiliary_device *adev);
 int udma_register_crq_event(struct auxiliary_device *adev);
 int udma_register_ctrlq_event(struct auxiliary_device *adev);
 void udma_unregister_ctrlq_event(struct auxiliary_device *adev);
-int udma_register_activate_workqueue(struct udma_dev *udma_dev);
-void udma_unregister_activate_workqueue(struct udma_dev *udma_dev);
+int udma_register_workqueue(struct udma_dev *udma_dev);
+void udma_unregister_workqueue(struct udma_dev *udma_dev);
+int udma_save_tp_info(struct udma_dev *udma_dev, struct udma_ue_tp_info *info, uint8_t ue_idx);
 
 static inline void udma_unregister_ce_event(struct auxiliary_device *adev)
 {

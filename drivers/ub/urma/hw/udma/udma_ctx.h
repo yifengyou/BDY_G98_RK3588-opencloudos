@@ -21,6 +21,7 @@ struct udma_context {
 	struct mutex page_lock;
 	struct list_head page_list;
 	struct device *ummu_dev;
+	struct mm_struct *mm;
 };
 
 static inline struct udma_context *to_udma_context(struct ubcore_ucontext *uctx)

@@ -5,6 +5,7 @@
 
 #include <ub/ubase/ubase_comm_ctrlq.h>
 #include "udma_ctrlq_tp.h"
+#include "udma_eq.h"
 #include "udma_mue.h"
 
 static uint32_t udma_get_rsp_msg_len(uint8_t opcode)
@@ -18,6 +19,8 @@ static uint32_t udma_get_rsp_msg_len(uint8_t opcode)
 		return sizeof(struct udma_ctrlq_active_tp_resp_data);
 	case UDMA_CMD_CTRLQ_GET_TP_ATTR:
 		return sizeof(struct udma_ctrlq_get_tp_attr_resp);
+	case UDMA_CMD_CTRLQ_GET_TP_INFO:
+		return sizeof(struct udma_ctrlq_tp_info_resp_data);
 	default:
 		return UDMA_DEFAULT_CTRLQ_RSP_MSG_LEN;
 	}
@@ -131,13 +134,55 @@ static int udma_reg_get_tp_attr_req_msg(struct auxiliary_device *adev, void *dat
 	return udma_handle_ue_req_msg(adev, data, len, UDMA_CMD_CTRLQ_GET_TP_ATTR);
 }
 
+static int udma_handle_ue_get_tp_info_msg(struct udma_dev *udev,
+					  void *data, uint16_t len)
+{
+	struct udma_ctrlq_tp_info_resp_data tp_info_resp = {};
+	struct ubase_ctrlq_ue_msg_info msg_info = {};
+	struct udma_ue_tp_info tp_info = {};
+	uint32_t rsp_msg_len;
+	uint16_t hdr_len;
+	int ret;
+
+	ubase_ctrlq_parse_ue_msg(udev->comdev.adev, data, len, &msg_info);
+	if (msg_info.ret) {
+		dev_err(udev->dev, "udma get tp info failed, ret = %d.\n", msg_info.ret);
+		return -EINVAL;
+	}
+
+	hdr_len = ubase_ctrlq_ue_msg_header_len();
+	rsp_msg_len = min(len - hdr_len, (uint16_t)sizeof(tp_info_resp));
+
+	memcpy(&tp_info_resp, (uint8_t *)data + hdr_len, rsp_msg_len);
+	if (tp_info_resp.resp_tpn_cnt != tp_info_resp.req_tpn_cnt) {
+		dev_err(udev->dev, "resp tp cnt = %u not equal to req tp cnt = %u.\n",
+			tp_info_resp.resp_tpn_cnt, tp_info_resp.req_tpn_cnt);
+		return -EINVAL;
+	}
+
+	tp_info.start_tpn = tp_info_resp.resp_start_tpn;
+	tp_info.tp_cnt = tp_info_resp.resp_tpn_cnt;
+	ret = udma_save_tp_info(udev, &tp_info, msg_info.mbx_ue_id);
+	if (ret)
+		dev_err(udev->dev, "udma save tp info failed, ret = %d.\n", ret);
+
+	return ret;
+}
+
 static int udma_handle_ue_get_tp_list_msg(struct udma_dev *udev,
 					  void *data, uint16_t len)
 {
 	struct udma_ctrlq_tpid_list_rsp tpid_list_resp = {};
+	struct ubase_ctrlq_ue_msg_info msg_info = {};
 	uint32_t rsp_msg_len;
 	uint16_t hdr_len;
 	uint32_t i;
+
+	ubase_ctrlq_parse_ue_msg(udev->comdev.adev, data, len, &msg_info);
+	if (msg_info.ret) {
+		dev_err(udev->dev, "udma get tp list failed, ret = %d.\n", msg_info.ret);
+		return -EINVAL;
+	}
 
 	hdr_len = ubase_ctrlq_ue_msg_header_len();
 	rsp_msg_len = min((uint16_t)(len - hdr_len), (uint16_t)sizeof(tpid_list_resp));
@@ -187,6 +232,11 @@ static int udma_handle_ue_rsp_msg(struct auxiliary_device *adev, void *data,
 					"from ctrlq get_tp_list msg is invalid.\n");
 			goto err_and_send_ue_msg;
 		}
+	} else if (opcode == UDMA_CMD_CTRLQ_GET_TP_INFO) {
+		if (udma_handle_ue_get_tp_info_msg(udma_dev, data, len)) {
+			dev_err(udma_dev->dev, "from ctrlq get_tp_info msg is invalid.\n");
+			goto err_and_send_ue_msg;
+		}
 	}
 
 	return 0;
@@ -201,6 +251,12 @@ static int udma_reg_get_tp_list_rsp_msg(struct auxiliary_device *adev, void *dat
 					u16 len)
 {
 	return udma_handle_ue_rsp_msg(adev, data, len, UDMA_CMD_CTRLQ_GET_TP_LIST);
+}
+
+static int udma_reg_get_tp_info_msg(struct auxiliary_device *adev, void *data,
+				    u16 len)
+{
+	return udma_handle_ue_rsp_msg(adev, data, len, UDMA_CMD_CTRLQ_GET_TP_INFO);
 }
 
 static const struct ubase_ctrlq_ue_msg_nb udma_ue_req[] = {
@@ -219,6 +275,8 @@ static const struct ubase_ctrlq_ue_msg_nb udma_ue_req[] = {
 static const struct ubase_ctrlq_ue_msg_nb udma_ue_rsp[] = {
 	{UBASE_CTRLQ_SER_TYPE_TP_ACL, UDMA_CMD_CTRLQ_GET_TP_LIST,
 	 NULL, udma_reg_get_tp_list_rsp_msg},
+	{UBASE_CTRLQ_SER_TYPE_TP_ACL, UDMA_CMD_CTRLQ_GET_TP_INFO,
+	 NULL, udma_reg_get_tp_info_msg},
 };
 
 static int udma_register_one_ue_msg(struct auxiliary_device *adev,

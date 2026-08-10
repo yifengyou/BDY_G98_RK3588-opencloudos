@@ -4,6 +4,7 @@
 #define dev_fmt(fmt) "UDMA: " fmt
 
 #include <linux/ummu_core.h>
+#include "udma_ctx.h"
 #include "udma_tid.h"
 
 static int udma_get_key_id_from_user(struct udma_dev *udma_dev,
@@ -113,15 +114,26 @@ int udma_free_tid(struct ubcore_token_id *token_id)
 {
 	struct udma_dev *udma_dev = to_udma_dev(token_id->ub_dev);
 	struct udma_tid *udma_tid = to_udma_tid(token_id);
+	struct ummu_invalid_cfg_param inva_param = {};
+	struct udma_context *ctx;
 	struct iommu_sva *ksva;
 	int ret;
 
-	ret = ummu_core_invalidate_cfg_table(udma_tid->tid);
-	if (ret)
-		dev_err(udma_dev->dev, "invalidate cfg_table failed, ret=%d.\n", ret);
+	if (!udma_tid->kernel_mode) {
+		ctx = to_udma_context(token_id->uctx);
+		if (!ctx) {
+			dev_err(udma_dev->dev, "udma free tid failed, ctx is null.\n");
+			goto out;
+		}
+		inva_param.tid = udma_tid->tid;
+		inva_param.mm = ctx->mm;
+		ret = ummu_core_invalidate_cfg(&inva_param);
+		if (ret)
+			dev_err_ratelimited(udma_dev->dev,
+					    "invalidate cfg_table failed, ret=%d.\n", ret);
 
-	if (!udma_tid->kernel_mode)
 		goto out;
+	}
 
 	mutex_lock(&udma_dev->ksva_mutex);
 	ksva = (struct iommu_sva *)xa_load(&udma_dev->ksva_table, udma_tid->tid);
