@@ -468,4 +468,4 @@ static inline u32 unic_cmd_timeout(struct unic_dev *unic_dev)
 	return __unic_removing(unic_dev) ? UNIC_CMD_TIMEOUT : 0;
 }
 
-#endif
+#endif /* __UNIC_DEV_H__ */

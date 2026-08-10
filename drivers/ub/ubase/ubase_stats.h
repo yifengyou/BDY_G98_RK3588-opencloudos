@@ -21,4 +21,4 @@ int ubase_update_eth_stats_trylock(struct ubase_dev *udev);
 void ubase_update_activate_stats(struct ubase_dev *udev, bool activate,
 				 int result);
 
-#endif /* _UBASE_STATS_H */
+#endif /* __UBASE_STATS_H__ */

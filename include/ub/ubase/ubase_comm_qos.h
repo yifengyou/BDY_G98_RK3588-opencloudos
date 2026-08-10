@@ -70,4 +70,4 @@ int ubase_restore_initial_qset_qos(struct auxiliary_device *adev);
 struct ubase_initial_qset_qos *
 ubase_get_initial_qset_qos(struct auxiliary_device *adev);
 
-#endif
+#endif /* _UBASE_COMM_QOS_H_ */

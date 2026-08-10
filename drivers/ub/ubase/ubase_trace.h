@@ -22,10 +22,10 @@
 #ifndef __UBASE_TRACE_INFO_STRUCT__
 #define __UBASE_TRACE_INFO_STRUCT__
 struct ubase_ctrlq_trace_info {
-	u16 bus_ue_id;
-	u8 num;
-	u16 pi;
-	u16 ci;
+	u16	bus_ue_id;
+	u8	num;
+	u16	pi;
+	u16	ci;
 };
 #endif
 
@@ -233,9 +233,8 @@ DECLARE_EVENT_CLASS(ubase_ctrlq_ue_msg_template,
 		__entry->len = len;
 		memcpy(__get_dynamic_array(data), buf, len);
 		if (dev) {
-			(void)snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
-				       "%s %s", dev_driver_string(dev),
-				       dev_name(dev));
+			snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
+				 "%s %s", dev_driver_string(dev), dev_name(dev));
 		}
 	),
 
@@ -260,6 +259,9 @@ DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_mue2ue_resp,
 DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_send_ue_req,
 	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
 	TP_ARGS(dev, bus_ue_id, buf, len));
+DEFINE_EVENT(ubase_ctrlq_ue_msg_template, ubase_parse_ue_msg,
+	TP_PROTO(const struct device *dev, u16 bus_ue_id, const void *buf, u16 len),
+	TP_ARGS(dev, bus_ue_id, buf, len));
 
 TRACE_EVENT(ubase_misc_event_cause,
 	TP_PROTO(struct device *dev, unsigned long event_cause),
@@ -273,9 +275,8 @@ TRACE_EVENT(ubase_misc_event_cause,
 	TP_fast_assign(
 		__entry->event_cause = event_cause;
 		if (dev) {
-			(void)snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
-				       "%s %s", dev_driver_string(dev),
-				       dev_name(dev));
+			snprintf(__get_str(devname), TRACE_DEV_NAME_MAX_LEN,
+				 "%s %s", dev_driver_string(dev), dev_name(dev));
 		}
 	),
 

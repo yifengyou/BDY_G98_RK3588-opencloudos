@@ -145,8 +145,6 @@ static int ubase_query_dl_pkt_stats(struct ubase_dev *udev, u16 port_id,
 
 	ret = __ubase_cmd_send_inout(udev, &in, &out);
 	if (ret && ret != -EPERM)
-
-
 		ubase_err(udev, "failed to query ub dl pkt stats, ret = %d.\n",
 			  ret);
 

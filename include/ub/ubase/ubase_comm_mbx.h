@@ -131,4 +131,4 @@ static inline void ubase_fill_mbx_attr(struct ubase_mbx_attr *attr, u32 tag,
 	attr->mbx_ue_id = mbx_ue_id;
 }
 
-#endif
+#endif /* _UBASE_COMM_MBX_H_ */

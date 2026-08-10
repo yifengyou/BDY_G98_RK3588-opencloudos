@@ -22,7 +22,6 @@ enum ub_link_event {
 	UB_LINK_DOWN
 };
 
-void ub_link_change_handler(struct work_struct *work);
 void ublc_link_up_handle(struct ub_port *port);
 void ublc_link_down_handle(struct ub_port *port);
 void ub_link_msg_handler(struct ub_bus_controller *ubc, void *pkt, u16 len);

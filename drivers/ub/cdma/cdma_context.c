@@ -78,8 +78,9 @@ static int cdma_ctx_sva_bind(struct cdma_dev *cdev, struct cdma_context *ctx)
 	sva_mode = cdev->sva_mode;
 	if (sva_mode == UMMU_SVA_SHARE_MODE) {
 		ctx->vdev = NULL;
-		ctx->sva = ummu_sva_bind_device(cdev->dev, current->mm, NULL);
-		if (!ctx->sva) {
+		ctx->sva = iommu_sva_bind_device_isolated(cdev->dev,
+							  current->mm, NULL);
+		if (IS_ERR(ctx->sva)) {
 			dev_err(cdev->dev, "sva bind device failed.\n");
 			return -EFAULT;
 		}

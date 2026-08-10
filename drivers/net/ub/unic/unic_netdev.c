@@ -509,7 +509,8 @@ static int unic_change_mtu(struct net_device *netdev, int new_mtu)
 	int ret;
 
 	if (netif_running(netdev)) {
-		unic_err(unic_dev, "failed to change MTU, due to network interface is up, please down it first and try again.\n");
+		unic_err(unic_dev,
+			 "failed to change MTU, due to network interface is up, please down it first and try again.\n");
 		return -EBUSY;
 	}
 
@@ -609,11 +610,7 @@ static void unic_set_rx_mode(struct net_device *netdev)
 
 static void unic_tx_timeout(struct net_device *netdev, u32 queue_idx)
 {
-	struct unic_dev *unic_dev = netdev_priv(netdev);
-
 	unic_dump_sq_stats(netdev, queue_idx);
-
-	ubase_reset_event(unic_dev->comdev.adev, UBASE_UE_RESET);
 }
 
 static u8 unic_get_skb_dscp(struct sk_buff *skb)

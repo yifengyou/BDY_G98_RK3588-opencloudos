@@ -403,7 +403,6 @@ static void ub_remove_decoder(struct ub_bus_controller *ubc)
 	ubc->decoder = NULL;
 }
 
-
 static irqreturn_t decoder_event_deal_handle(int irq, void *data)
 {
 	struct ub_entity *uent = (struct ub_entity *)data;

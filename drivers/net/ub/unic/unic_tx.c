@@ -644,7 +644,7 @@ static void unic_sq_free_tx_buff_resources(struct auxiliary_device *adev,
 	for (i = 0; i < tx_buff->num; i++) {
 		page_info = &tx_buff->page_info[i];
 		dma_unmap_page(adev->dev.parent, page_info->sge_dma_addr,
-			       PAGE_SIZE, DMA_FROM_DEVICE);
+			       PAGE_SIZE, DMA_TO_DEVICE);
 		__free_page(page_info->p);
 	}
 
@@ -680,7 +680,7 @@ static int unic_sq_alloc_tx_buff_resources(struct auxiliary_device *adev,
 		page_info->sge_dma_addr = dma_map_page(adev->dev.parent,
 						       page_info->p, 0,
 						       PAGE_SIZE,
-						       DMA_FROM_DEVICE);
+						       DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(adev->dev.parent,
 					       page_info->sge_dma_addr))) {
 			dev_err(adev->dev.parent,
@@ -860,9 +860,10 @@ void unic_destroy_sq(struct unic_dev *unic_dev, u32 num)
 static int unic_apply_ub_pkt(struct unic_dev *unic_dev, struct unic_sq *sq,
 			     struct sk_buff *skb)
 {
-	struct ublhdr *ubl = (struct ublhdr *)skb->data;
+	struct ublhdr *ubl;
 
 	if (unic_dev_ubl_supported(unic_dev)) {
+		ubl = (struct ublhdr *)skb->data;
 		if (unlikely(ubl->cfg == UB_NOIP_CFG_TYPE)) {
 			unic_sq_stats_inc(sq, cfg5_drop_cnt);
 			return -EIO;
@@ -1019,7 +1020,7 @@ static int unic_set_l4(struct sk_buff *skb, struct unic_sqe_ctrl_section *ctrl,
 		 */
 		if (skb_is_gso(skb)) {
 			unic_err(unic_dev,
-				 "unknown l4 header tso packets hecksum offload.\n");
+				 "unknown l4 header tso packets checksum offload.\n");
 			return -EDOM;
 		}
 		/* the stack computes the IP header already,
@@ -1232,7 +1233,7 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (!unic_dev_ubl_supported(unic_dev) &&
 	    skb_put_padto(skb, UNIC_MIN_TX_LEN)) {
 		unic_sq_stats_inc(sq, pad_err);
-		goto xmit_drop_pkt;
+		goto xmit_pad_err;
 	}
 
 	/* Prefetch the data used later */
@@ -1268,8 +1269,9 @@ netdev_tx_t unic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	return NETDEV_TX_OK;
 
 xmit_drop_pkt:
-	unic_tx_compensate_doorbell(sq);
 	dev_kfree_skb_any(skb);
+xmit_pad_err:
+	unic_tx_compensate_doorbell(sq);
 	return NETDEV_TX_OK;
 }
 

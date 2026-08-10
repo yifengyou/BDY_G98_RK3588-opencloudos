@@ -18,4 +18,4 @@ void ubase_add_to_arq(struct ubase_dev *udev, u16 opcode, void *msg_data,
 bool ubase_is_arq_msg(u16 opcode);
 void ubase_cmd_arq_handler(struct ubase_delay_work *ubase_work);
 
-#endif
+#endif /* __UBASE_ARQ_H__ */

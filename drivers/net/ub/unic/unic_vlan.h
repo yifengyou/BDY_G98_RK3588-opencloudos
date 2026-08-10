@@ -16,4 +16,4 @@ int unic_set_vlan_table(struct unic_dev *unic_dev, __be16 proto, u16 vlan_id,
 int unic_set_vlan_filter(struct unic_dev *unic_dev, bool enable);
 void unic_sync_vlan_filter(struct unic_dev *unic_dev);
 
-#endif
+#endif /* __UNIC_VLAN_H__ */

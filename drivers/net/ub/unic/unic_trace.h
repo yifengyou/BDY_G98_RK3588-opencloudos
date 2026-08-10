@@ -29,25 +29,25 @@ DECLARE_EVENT_CLASS(unic_cqe_template,
 		    TP_ARGS(netdev, cq, pi, ci, cqe_mask),
 
 		    TP_STRUCT__entry(__field(u32, jfcn)
-				__field(u32, cqe_mask)
-				__field(u16, pi)
-				__field(u16, ci)
-				__field(u32, cq_ci)
-				__field(u8, cqe_num)
-				__array(u32, cqe, trace_cqe_num)
-				__string(devname, netdev->name)
+				     __field(u32, cqe_mask)
+				     __field(u16, pi)
+				     __field(u16, ci)
+				     __field(u32, cq_ci)
+				     __field(u8, cqe_num)
+				     __array(u32, cqe, trace_cqe_num)
+				     __string(devname, netdev->name)
 		    ),
 
 		    TP_fast_assign(__entry->jfcn = cq->jfcn;
-				__entry->cqe_mask = cqe_mask;
-				__entry->pi = pi;
-				__entry->ci = ci;
-				__entry->cq_ci = cq->ci;
-				__entry->cqe_num = unic_get_cqe_size() / sizeof(u32);
-				memcpy(__entry->cqe,
-				       &cq->cqe[cq->ci & __entry->cqe_mask],
-				       unic_get_cqe_size());
-				__assign_str(devname, netdev->name);
+				   __entry->cqe_mask = cqe_mask;
+				   __entry->pi = pi;
+				   __entry->ci = ci;
+				   __entry->cq_ci = cq->ci;
+				   __entry->cqe_num = unic_get_cqe_size() / sizeof(u32);
+				   memcpy(__entry->cqe,
+					  &cq->cqe[cq->ci & __entry->cqe_mask],
+					  unic_get_cqe_size());
+				   __assign_str(devname, netdev->name);
 		    ),
 
 		    TP_printk("%s-%u-%u/%u cqe(%u): %s",
@@ -73,14 +73,14 @@ TRACE_EVENT(unic_tx_sqe,
 	    TP_ARGS(sq, sqebb_num, sqebb_mask),
 
 	    TP_STRUCT__entry(__field(u32, jfcn)
-			__field(u16, pi)
-			__field(u16, ci)
-			__field(u16, buff_pi)
-			__field(u16, buff_ci)
-			__field(u16, sqebb_num)
-			__field(u16, real_pi)
-			__array(u32, sqebb, trace_sqebb_num(trace_tx_max_sqebb_num))
-			__string(devname, sq->netdev->name)
+			     __field(u16, pi)
+			     __field(u16, ci)
+			     __field(u16, buff_pi)
+			     __field(u16, buff_ci)
+			     __field(u16, sqebb_num)
+			     __field(u16, real_pi)
+			     __array(u32, sqebb, trace_sqebb_num(trace_tx_max_sqebb_num))
+			     __string(devname, sq->netdev->name)
 	    ),
 
 	    TP_fast_assign(__entry->jfcn = sq->cq->jfcn;
@@ -122,18 +122,18 @@ TRACE_EVENT(unic_ip_req_skb,
 	    TP_ARGS(netdev, skb, nh, info, attrbuf),
 
 	    TP_STRUCT__entry(__field(u32, len)
-			__array(u32, nl_hdr, trace_nlmsghdr_arr_size)
-			__array(u32, ifa_info, trace_ifaddrmsg_arr_size)
-			__array(u32, attrs_buf, trace_attrbuf_arr_size)
-			__string(devname, netdev->name)
+			     __array(u32, nl_hdr, trace_nlmsghdr_arr_size)
+			     __array(u32, ifa_info, trace_ifaddrmsg_arr_size)
+			     __array(u32, attrs_buf, trace_attrbuf_arr_size)
+			     __string(devname, netdev->name)
 	    ),
 
 	    TP_fast_assign(__entry->len = skb->len;
-			memcpy(__entry->nl_hdr, nh, sizeof(struct nlmsghdr));
-			memcpy(__entry->ifa_info, info, sizeof(struct ifaddrmsg));
-			memcpy(__entry->attrs_buf, attrbuf,
-			       sizeof(u32) * trace_attrbuf_arr_size);
-			__assign_str(devname, netdev->name);
+			   memcpy(__entry->nl_hdr, nh, sizeof(struct nlmsghdr));
+			   memcpy(__entry->ifa_info, info, sizeof(struct ifaddrmsg));
+			   memcpy(__entry->attrs_buf, attrbuf,
+				  sizeof(u32) * trace_attrbuf_arr_size);
+			   __assign_str(devname, netdev->name);
 	    ),
 
 	    TP_printk("%s netlink: len=%u nl_hdr=%s ifa_info=%s attrs_buf=%s",
@@ -152,15 +152,15 @@ TRACE_EVENT(unic_rq_ci_mismatch,
 	    TP_ARGS(rq, start_rqe_idx),
 
 	    TP_STRUCT__entry(__field(u16, queue_index)
-			__field(u16, ci)
-			__field(u32, start_rqe_idx)
-			__string(devname, rq->netdev->name)
+			     __field(u16, ci)
+			     __field(u32, start_rqe_idx)
+			     __string(devname, rq->netdev->name)
 	    ),
 
 	    TP_fast_assign(__entry->queue_index = rq->queue_index;
-			__entry->ci = rq->ci;
-			__entry->start_rqe_idx = start_rqe_idx;
-			__assign_str(devname, rq->netdev->name);
+			   __entry->ci = rq->ci;
+			   __entry->start_rqe_idx = start_rqe_idx;
+			   __assign_str(devname, rq->netdev->name);
 	    ),
 
 	    TP_printk("%s rq_ci: queue_index=%u sw_rq_ci=%u hw_rq_ci=%u",
@@ -169,7 +169,7 @@ TRACE_EVENT(unic_rq_ci_mismatch,
 	    )
 );
 
-#endif /* _UNIC_TRACE_H_ */
+#endif /* __UNIC_TRACE_H__ */
 
 /* This must be outside ifdef _UNIC_TRACE_H */
 #undef TRACE_INCLUDE_PATH

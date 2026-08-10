@@ -149,6 +149,10 @@ void ubase_cmd_arq_handler(struct ubase_delay_work *ubase_work)
 		return;
 
 	while (atomic_read(&arq->count) > 0) {
+		/* Prevent read operations from being reordered, ensuring
+		 * the correct read order of the message queue.
+		 */
+		smp_rmb();
 		msg = &arq->msg[arq->ci];
 		event = ubase_get_arq_event(msg->opcode, msg->data_len);
 		if (event)
@@ -194,6 +198,11 @@ void ubase_add_to_arq(struct ubase_dev *udev, u16 opcode, void *msg_data,
 	arq->msg[arq->pi].data_len = msg_data_len;
 	arq->msg[arq->pi].opcode = opcode;
 	arq->pi = (arq->pi + 1) % MAX_ARQ_MSG_NUM;
+	/* Prevent write operation reordering, and ensure that the counter is
+	 * updated only after the write operation to the message queue is
+	 * completed.
+	 */
+	smp_wmb();
 	atomic_inc(&arq->count);
 
 	ubase_arq_task_schedule(udev);

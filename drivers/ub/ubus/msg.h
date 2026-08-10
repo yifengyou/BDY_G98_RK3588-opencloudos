@@ -8,6 +8,8 @@
 
 #include "ubus.h"
 
+extern bool msg_retry;
+
 struct ub_link_header {
 	u32 plen : 14;
 	u32 rt : 2;
@@ -45,6 +47,7 @@ struct compact_network_header {
 #define code_gen(msg, sub_msg, type) ((sub_msg) << 4 | ((msg) << 1 | (type)))
 #define ubba_gen(ubba_h, ubba_l) ((u64)(ubba_h) << 32 | (ubba_l))
 
+#define RETRY_COUNT 3
 #define PLD_SIZE_MAX SZ_1K
 
 enum ub_msg_type {
@@ -200,12 +203,12 @@ typedef void (*rx_msg_handler_t)(struct ub_bus_controller *ubc, void *pkt, u16 l
 struct message_ops {
 	int (*sync_request)(struct message_device *mdev, struct msg_info *info,
 			    u8 code);
-	int (*send)(struct message_device *mdev, struct msg_info *info,
-		    u8 code);
 	int (*response)(struct message_device *mdev, struct msg_info *info,
 			u8 code);
 	int (*sync_enum)(struct message_device *mdev, struct msg_info *info,
 			 u8 cmd);
+	int (*send)(struct message_device *mdev, struct msg_info *info,
+		    u8 code);
 	rx_msg_handler_t vdm_rx_handler;
 	struct module *owner;
 };

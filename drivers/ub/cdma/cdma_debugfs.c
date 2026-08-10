@@ -717,9 +717,9 @@ static int cdma_dbg_create_cfg_file(struct cdma_dev *cdev,
 		for (j = 0; j < ARRAY_SIZE(cdma_dbg_cfg); j++) {
 			if (!cdma_dbg_cfg[j].dentry_valid[i])
 				continue;
-			debugfs_file = debugfs_create_file(cdma_dbg_cfg[j].name,
-				0400, cur_dir, &cdev->cdbgfs.cfg,
-				&cdma_dbg_cfg[j].file_ops);
+			debugfs_file = debugfs_create_file(
+				cdma_dbg_cfg[j].name, 0400, cur_dir,
+				&cdev->cdbgfs.cfg, &cdma_dbg_cfg[j].file_ops);
 			if (!debugfs_file)
 				return -ENOMEM;
 		}

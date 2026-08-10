@@ -141,6 +141,7 @@ struct ubase_caps {
 	u32	ctl_no;
 
 	u32	fw_version;
+
 	u64	dtu_pa_base;
 	u64	dtu_va_base;
 	u64	dtu_iova_base;
@@ -414,4 +415,6 @@ int ubase_set_dev_mac(struct auxiliary_device *adev, const u8 *dev_addr,
 void ubase_adev_fault_log(struct auxiliary_device *adev,
 			  u32 event_id, void *data);
 
-#endif
+int ubase_himac_reset(struct auxiliary_device *adev);
+
+#endif /* _UBASE_COMM_DEV_H_ */

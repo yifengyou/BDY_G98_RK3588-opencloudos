@@ -29,20 +29,8 @@
 
 #define hpa_gen(addr_h, addr_l) (((u64)(addr_h) << 32) | (addr_l))
 
-#define RAS_VAL_COUNT 3
-#define RAS_VAL_IDX_VAL0 0
-#define RAS_VAL_IDX_VAL1 1
-#define RAS_VAL_IDX_VAL2 2
-
 #define UB_MEM_PORT_WARNING 18
 #define UB_MEM_PORT_RECOVERY 19
-
-#define WARNING_OFFSET_VAL0_LOW 0
-#define WARNING_OFFSET_VAL0_HIGH 1
-#define WARNING_OFFSET_VAL1_LOW 2
-#define WARNING_OFFSET_VAL1_HIGH 3
-#define RECOVERY_OFFSET_VAL0_LOW 4
-#define RECOVERY_OFFSET_VAL0_HIGH 5
 
 static u8 ub_mem_num;
 
@@ -146,7 +134,7 @@ static irqreturn_t hi_mem_ras_isr(int irq, void *context)
 	struct ub_mem_ras_err_info err_info;
 	ubmem_ras_handler handler;
 	u64 ctl_no = ubc->ctl_no;
-	u64 vals[RAS_VAL_COUNT];
+	u64 vals[3];
 	int ret;
 
 	handler = ub_mem_ras_handler_get();
@@ -155,9 +143,9 @@ static irqreturn_t hi_mem_ras_isr(int irq, void *context)
 		pr_info("ras: type=%u\n", err_info.type);
 		if (err_info.type == UB_MEM_PORT_WARNING ||
 		    err_info.type == UB_MEM_PORT_RECOVERY) {
-			vals[RAS_VAL_IDX_VAL0] = err_info.val0;
-			vals[RAS_VAL_IDX_VAL1] = err_info.val1;
-			vals[RAS_VAL_IDX_VAL2] = ctl_no;
+			vals[0] = err_info.val0;
+			vals[1] = err_info.val1;
+			vals[2] = ctl_no;
 			if (handler) {
 				ret = handler((u64)vals, err_info.type);
 				WARN_ON(ret);
@@ -206,17 +194,16 @@ static int save_injected_route_info(struct ub_bus_controller *ubc,
 				    unsigned long status4_bitmap)
 {
 	u32 addr_h, addr_l;
-	int i, index = 0;
 	u64 val0, val1;
-	int ret;
+	int ret, i;
 
 	if (test_bit(err_type_bitmap[UB_MEM_PORT_WARNING], &status4_bitmap)) {
 		i = UB_MEM_PORT_WARNING;
-		addr_h = info->err_addr[index + WARNING_OFFSET_VAL0_HIGH];
-		addr_l = info->err_addr[index + WARNING_OFFSET_VAL0_LOW];
+		addr_h = info->err_addr[1];
+		addr_l = info->err_addr[0];
 		val0 = hpa_gen(addr_h, addr_l);
-		addr_h = info->err_addr[index + WARNING_OFFSET_VAL1_HIGH];
-		addr_l = info->err_addr[index + WARNING_OFFSET_VAL1_LOW];
+		addr_h = info->err_addr[3];
+		addr_l = info->err_addr[2];
 		val1 = hpa_gen(addr_h, addr_l);
 		ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, val0, val1);
 		if (ret)
@@ -225,8 +212,8 @@ static int save_injected_route_info(struct ub_bus_controller *ubc,
 
 	if (test_bit(err_type_bitmap[UB_MEM_PORT_RECOVERY], &status4_bitmap)) {
 		i = UB_MEM_PORT_RECOVERY;
-		addr_h = info->err_addr[index + RECOVERY_OFFSET_VAL0_HIGH];
-		addr_l = info->err_addr[index + RECOVERY_OFFSET_VAL0_LOW];
+		addr_h = info->err_addr[5];
+		addr_l = info->err_addr[4];
 		val0 = hpa_gen(addr_h, addr_l);
 		ret = save_ras_err_info(ubc->mem_device, (enum ras_err_type)i, val0, 0);
 		if (ret)

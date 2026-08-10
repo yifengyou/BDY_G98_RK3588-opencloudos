@@ -12,7 +12,6 @@
 
 #include "debugfs/unic_debugfs.h"
 #include "unic_dev.h"
-#include "unic_hw.h"
 #include "unic_netdev.h"
 
 static int unic_probe(struct auxiliary_device *adev,

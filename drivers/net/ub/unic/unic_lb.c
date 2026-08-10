@@ -168,7 +168,7 @@ static int unic_lb_config(struct net_device *ndev, int loop_type, bool en)
 			 "lb_config return error, ret = %d, enable = %d.\n",
 			 ret, en);
 
-	(void)unic_set_promisc_mode(unic_dev, en ? &promisc_all_en : &promisc_en);
+	unic_set_promisc_mode(unic_dev, en ? &promisc_all_en : &promisc_en);
 
 	return ret;
 }
@@ -573,7 +573,7 @@ void unic_self_test(struct net_device *ndev,
 	int ret, i;
 
 	ret = unic_get_selftest_count(unic_dev);
-	if (ret <= 0) {
+	if (ret == -EOPNOTSUPP) {
 		eth_test->flags |= ETH_TEST_FL_FAILED;
 		return;
 	}

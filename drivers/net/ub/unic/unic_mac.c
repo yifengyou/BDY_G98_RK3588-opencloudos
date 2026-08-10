@@ -63,7 +63,7 @@ static int unic_add_mac_addr_common(struct unic_vport *vport, u8 *mac_addr,
 
 static int unic_del_mac_addr_common(struct unic_vport *vport, u8 *mac_addr,
 				    enum unic_mac_addr_type mac_type,
-				    u8 is_pfc)
+				    u8 is_pfc, bool need_retry)
 {
 	struct auxiliary_device *adev = vport->back->comdev.adev;
 	struct unic_mac_tbl_entry_cmd resp = {0};
@@ -79,7 +79,8 @@ static int unic_del_mac_addr_common(struct unic_vport *vport, u8 *mac_addr,
 	ubase_fill_inout_buf(&in, UBASE_OPC_DEL_MAC_TBL, false, sizeof(req), &req);
 	ubase_fill_inout_buf(&out, UBASE_OPC_DEL_MAC_TBL, true, sizeof(resp), &resp);
 	time_out = unic_cmd_timeout(vport->back);
-	ret = ubase_cmd_send_inout_ex(adev, &in, &out, time_out);
+	ret = need_retry ? ubase_cmd_send_inout_ex(adev, &in, &out, time_out) :
+			   ubase_cmd_send_inout(adev, &in, &out);
 	ret = ret ? ret : -resp.resp_code;
 	if (ret) {
 		unic_comm_format_mac_addr(format_mac, mac_addr);
@@ -106,7 +107,8 @@ int unic_cfg_mac_address(struct unic_dev *unic_dev, u8 *mac_addr)
 	if (new_node) {
 		if (new_node->state != UNIC_COMM_ADDR_TO_ADD) {
 			ret = unic_del_mac_addr_common(vport, mac_addr,
-						       UNIC_MAC_ADDR_UC, 0);
+						       UNIC_MAC_ADDR_UC, 0,
+						       false);
 			if (ret) {
 				spin_unlock_bh(&vport->addr_tbl.mac_list_lock);
 				return ret;
@@ -192,7 +194,7 @@ static void unic_unsync_mac_list(struct unic_vport *vport,
 
 	list_for_each_entry_safe(mac_node, tmp, list, node) {
 		ret = unic_del_mac_addr_common(vport, mac_node->mac_addr, mac_type,
-					       mac_node->is_pfc);
+					       mac_node->is_pfc, true);
 		if (!ret) {
 			list_del(&mac_node->node);
 			kfree(mac_node);
@@ -499,7 +501,8 @@ static void unic_deactivate_unsync_mac_list(struct unic_vport *vport,
 
 	list_for_each_entry_safe(mac_node, tmp, list, node) {
 		ret = unic_del_mac_addr_common(vport, mac_node->mac_addr,
-					       mac_type, mac_node->is_pfc);
+					       mac_type, mac_node->is_pfc,
+					       true);
 		if (ret)
 			break;
 

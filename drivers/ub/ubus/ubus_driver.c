@@ -31,6 +31,11 @@ bool entity_flex_en;
 module_param(entity_flex_en, bool, 0444);
 MODULE_PARM_DESC(entity_flex_en, "Entity Flexible enable: default: 0");
 
+bool msg_retry;
+EXPORT_SYMBOL_GPL(msg_retry);
+module_param(msg_retry, bool, 0444);
+MODULE_PARM_DESC(msg_retry, "support msg retry: 0(disable)");
+
 DECLARE_RWSEM(ub_bus_sem);
 
 #define UBC_GUID_VENDOR_SHIFT 48

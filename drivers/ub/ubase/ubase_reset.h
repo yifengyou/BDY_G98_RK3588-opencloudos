@@ -13,6 +13,7 @@
 #define UBASE_RST_ING_RST_DONE_B	0
 
 #define UBASE_RESET_SCHED_TIMEOUT	(3 * HZ)
+
 #define UBASE_RST_WAIT_REG_COUNT	60
 #define UBASE_RST_WAIT_REG_TIME		50
 #define UBASE_RST_WAIT_CMD_COUNT	60
@@ -39,5 +40,6 @@ void ubase_reset_service(struct ubase_delay_work *ubase_work);
 void __ubase_reset_event(struct ubase_dev *udev,
 			 enum ubase_reset_type reset_type);
 void ubase_port_reset(struct ubase_dev *udev);
+void ubase_errhandle_service_task(struct ubase_delay_work *ubase_work);
 
-#endif
+#endif /* __UBASE_RESET_H__ */

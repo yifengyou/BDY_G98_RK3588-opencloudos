@@ -50,4 +50,4 @@ int ubase_create_ctx_page(struct ubase_dev *udev,
 			  struct ubase_ctx_buf_cap *ctx_buf,
 			  struct ubase_ctx_page **ctx_page, u32 npage);
 
-#endif
+#endif /* __UBASE_MAILBOX_H__ */

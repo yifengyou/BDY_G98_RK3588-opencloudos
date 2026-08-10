@@ -19,8 +19,8 @@ static int cdma_cmd_query_fw_resource(struct cdma_dev *cdev, struct cdma_ue_info
 	struct ubase_cmd_buf in = { 0 };
 
 	ubase_fill_inout_buf(&in, CDMA_QUERY_UE_RES, true, 0, NULL);
-	ubase_fill_inout_buf(&out, CDMA_QUERY_UE_RES, true,
-			     sizeof(*out_addr), out_addr);
+	ubase_fill_inout_buf(&out, CDMA_QUERY_UE_RES, true, sizeof(*out_addr),
+			     out_addr);
 
 	return ubase_cmd_send_inout(cdev->adev, &in, &out);
 }
@@ -175,20 +175,17 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev)
 	u8 i;
 
 	in_query.cmd = CDMA_CTRLQ_CMD_SEID_UPI;
-
-	msg = (struct ubase_ctrlq_msg) {
-		.service_ver = UBASE_CTRLQ_SER_VER_01,
-		.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER,
-		.opcode = CDMA_CTRLQ_QUERY_SEID_UPI,
-		.need_resp = 1,
-		.is_resp = 0,
-		.resv = 0,
-		.resp_seq = 0,
-		.in_size = sizeof(in_query),
-		.in = &in_query,
-		.out_size = sizeof(out_query),
-		.out = &out_query,
-	};
+	msg.service_ver = UBASE_CTRLQ_SER_VER_01;
+	msg.service_type = UBASE_CTRLQ_SER_TYPE_DEV_REGISTER;
+	msg.opcode = CDMA_CTRLQ_QUERY_SEID_UPI;
+	msg.need_resp = 1;
+	msg.is_resp = 0;
+	msg.resv = 0;
+	msg.resp_seq = 0;
+	msg.in_size = sizeof(in_query);
+	msg.in = &in_query;
+	msg.out_size = sizeof(out_query);
+	msg.out = &out_query;
 
 	ret = ubase_ctrlq_send_msg(cdev->adev, &msg);
 	if (ret) {
@@ -209,7 +206,8 @@ int cdma_ctrlq_query_eu(struct cdma_dev *cdev)
 	attr->eu_num = out_query.seid_num;
 
 	for (i = 0; i < attr->eu_num; i++)
-		dev_info(cdev->dev,
+		dev_info(
+			cdev->dev,
 			"init eus[%u], upi = 0x%x, eid = 0x%x, eid_idx = 0x%x.\n",
 			i, eus[i].upi, eus[i].eid.dw0, eus[i].eid_idx);
 	mutex_unlock(&cdev->eu_mutex);

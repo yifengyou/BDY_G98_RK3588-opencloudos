@@ -262,7 +262,8 @@ static int cdma_post_destroy_jfc_mbox(struct cdma_dev *cdev, u32 jfcn,
 	return cdma_post_mailbox_ctx(cdev, (void *)&ctx, sizeof(ctx), &attr);
 }
 
-static int cdma_destroy_and_flush_jfc(struct cdma_dev *cdev, struct cdma_jfc *jfc)
+static int cdma_destroy_and_flush_jfc(struct cdma_dev *cdev,
+				      struct cdma_jfc *jfc)
 {
 #define QUERY_MAX_TIMES 5
 	struct cdma_context *ctx = jfc->base.ctx;
@@ -278,7 +279,8 @@ static int cdma_destroy_and_flush_jfc(struct cdma_dev *cdev, struct cdma_jfc *jf
 
 	ret = cdma_post_destroy_jfc_mbox(cdev, jfcn, CDMA_JFC_STATE_INVALID);
 	if (ret) {
-		dev_err(cdev->dev, "post mbox to destroy jfc failed, id: %u.\n", jfcn);
+		dev_err(cdev->dev, "post mbox to destroy jfc failed, id: %u.\n",
+			jfcn);
 		return ret;
 	}
 
@@ -554,8 +556,7 @@ int cdma_delete_jfc(struct cdma_dev *cdev, u32 jfcn,
 		jfcn < cdev->caps.jfc.start_idx) {
 		dev_err(cdev->dev,
 			"jfc id invalid, jfcn = %u, start_idx = %u, max_cnt = %u.\n",
-			jfcn, cdev->caps.jfc.start_idx,
-			cdev->caps.jfc.max_cnt);
+			jfcn, cdev->caps.jfc.start_idx, cdev->caps.jfc.max_cnt);
 		return -EINVAL;
 	}
 
