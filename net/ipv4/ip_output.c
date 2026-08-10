@@ -449,15 +449,20 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	struct net_device *dev = skb_dst(skb)->dev, *indev = skb->dev;
+	struct net_device *dev, *indev = skb->dev;
+	int ret_val;
 
+	rcu_read_lock();
+	dev = skb_dst_dev_rcu(skb);
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_IP);
 
-	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
-			    net, sk, skb, indev, dev,
-			    ip_finish_output,
-			    !(IPCB(skb)->flags & IPSKB_REROUTED));
+	ret_val = NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+				net, sk, skb, indev, dev,
+				ip_finish_output,
+				!(IPCB(skb)->flags & IPSKB_REROUTED));
+	rcu_read_unlock();
+	return ret_val;
 }
 EXPORT_SYMBOL(ip_output);
 
@@ -475,6 +480,26 @@ static void ip_copy_addrs(struct iphdr *iph, const struct flowi4 *fl4)
 	iph->saddr = fl4->saddr;
 	iph->daddr = fl4->daddr;
 }
+
+#ifdef CONFIG_HISOCK
+static int do_hisock_egress_redirect(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	struct iphdr *iph;
+
+	skb->protocol = htons(ETH_P_IP);
+	if (!skb->dev)
+		skb->dev = skb_dst(skb)->dev;
+
+	if (skb_mac_header_was_set(skb))
+		return dev_queue_xmit(skb);
+
+	iph = ip_hdr(skb);
+	iph_set_totlen(iph, skb->len);
+	ip_send_check(iph);
+
+	return ip_finish_output2(net, sk, skb);
+}
+#endif
 
 /* Note: skb->sk can be different from sk, in case of tunnels */
 int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
@@ -555,6 +580,25 @@ packet_routed:
 	/* TODO : should we use skb->sk here instead of sk ? */
 	skb->priority = READ_ONCE(sk->sk_priority);
 	skb->mark = READ_ONCE(sk->sk_mark);
+
+#ifdef CONFIG_HISOCK
+	res = BPF_CGROUP_RUN_PROG_HISOCK_EGRESS(sk, skb);
+	switch (res) {
+	case HISOCK_PASS:
+		break;
+	case HISOCK_REDIRECT:
+		res = do_hisock_egress_redirect(net, sk, skb);
+		rcu_read_unlock();
+		return res;
+	default:
+		pr_warn_once("Illegal HiSock return value %d, expect packet loss!", res);
+		fallthrough;
+	case HISOCK_DROP:
+		kfree_skb(skb);
+		rcu_read_unlock();
+		return NET_XMIT_DROP;
+	}
+#endif
 
 	res = ip_local_out(net, sk, skb);
 	rcu_read_unlock();
