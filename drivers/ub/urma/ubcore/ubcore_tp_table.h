@@ -57,6 +57,7 @@ struct ubcore_tp_node *ubcore_lookup_tpnode(struct ubcore_hash_table *ht,
 					    uint32_t hash,
 					    const struct ubcore_tp_key *key);
 void ubcore_tpnode_kref_put(struct ubcore_tp_node *tp_node);
+int ubcore_destroy_tp(struct ubcore_tp *tp);
 
 /* TP table ops for devices that do not natively support RM */
 struct ubcore_hash_table *ubcore_create_tptable(void);

@@ -27,15 +27,18 @@ enum ubcore_log_level {
 	UBCORE_LOG_LEVEL_MAX = 8,
 };
 
-/* add log head info, "LogTag_UBCORE|function|[line]| */
-#define UBCORE_LOG_TAG "LogTag_UBCORE"
+/* add log head info, "LogTag_UBCORE|function:[line]|format */
+#define UBCORE_LOG_TAG "URMA"
+#define UBCORE_LOG     "ubcore"
 /* only use debug log */
+/* add log head info: URMA|ubcore|thread_id|function:[line]|format */
 #define ubcore_log(l, format, args...) \
-	pr_##l("%s|%s:[%d]|" format, UBCORE_LOG_TAG, __func__, __LINE__, ##args)
+	pr_##l("%s|%s|%d|%s:[%d]|" format, UBCORE_LOG_TAG, UBCORE_LOG, \
+		((int)current->pid), __func__, __LINE__, ##args)
 /* use default log, info/warn/err */
 #define ubcore_default_log(l, format, args...)                        \
-	((void)pr_##l("%s|%s:[%d]|" format, UBCORE_LOG_TAG, __func__, \
-		      __LINE__, ##args))
+	((void)pr_##l("%s|%s|%d|%s:[%d]|" format, UBCORE_LOG_TAG, UBCORE_LOG, \
+		((int)current->pid), __func__, __LINE__, ##args))
 
 #define UBCORE_RATELIMIT_INTERVAL (5 * HZ)
 #define UBCORE_RATELIMIT_BURST 100

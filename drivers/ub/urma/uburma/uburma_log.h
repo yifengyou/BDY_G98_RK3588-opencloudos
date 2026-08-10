@@ -27,10 +27,13 @@ enum uburma_log_level {
 	UBURMA_LOG_LEVEL_MAX = 8,
 };
 
-/* add log head info, "LogTag_UBURMA|function|[line]| */
-#define UBURMA_LOG_TAG "LogTag_UBURMA"
+/* add log head info, "URMA|uburma|thread_id|function:[line]|format */
+#define UBURMA_LOG_TAG "URMA"
+#define UBURMA_LOG     "uburma"
+
 #define uburma_log(l, format, args...) \
-	pr_##l("%s|%s:[%d]|" format, UBURMA_LOG_TAG, __func__, __LINE__, ##args)
+	pr_##l("%s|%s|%d|%s:[%d]|" format, UBURMA_LOG_TAG, UBURMA_LOG, \
+		((int)current->pid), __func__, __LINE__, ##args)
 
 #define UBURMA_RATELIMIT_INTERVAL (5 * HZ)
 #define UBURMA_RATELIMIT_BURST 100

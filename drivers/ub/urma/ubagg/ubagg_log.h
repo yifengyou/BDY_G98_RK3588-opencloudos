@@ -27,10 +27,13 @@ enum ubagg_log_level {
 	UBAGG_LOG_LEVEL_MAX = 8,
 };
 
-/* add log head info, "LogTag_UBAGG|function|[line]| */
-#define UBAGG_LOG_TAG "LogTag_UBAGG"
+/* add log head info, "URMA|ubagg|thread_id|function:[line]|format */
+#define UBAGG_LOG_TAG "URMA"
+#define UBAGG_LOG     "ubagg"
+
 #define ubagg_log(l, format, args...) \
-	pr_##l("%s|%s:[%d]|" format, UBAGG_LOG_TAG, __func__, __LINE__, ##args)
+	pr_##l("%s|%s|%d|%s:[%d]|" format, UBAGG_LOG_TAG, UBAGG_LOG, \
+		((int)current->pid), __func__, __LINE__, ##args)
 
 #define UBAGG_RATELIMIT_INTERVAL (5 * HZ)
 #define UBAGG_RATELIMIT_BURST 100

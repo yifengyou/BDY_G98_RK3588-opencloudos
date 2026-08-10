@@ -14,9 +14,10 @@
 #include <ub/urma/ubcore_uapi.h>
 #include <ub/urma/ubcore_api.h>
 #include "ubcore_tp.h"
-#include "ubcm_log.h"
+#include "ubcore_log.h"
 #include "ub_mad_priv.h"
 #include "ubcore_log.h"
+#include "ubcore_topo_info.h"
 
 // udma jetty id starts from 1 currently
 #define WK_JETTY_ID_INITIALIZER                  \
@@ -76,7 +77,7 @@ uint32_t ubmad_bitmap_get_id(struct ubmad_bitmap *bitmap)
 	id = find_first_zero_bit(bitmap->bits, bitmap->size);
 	if (id >= bitmap->size) {
 		spin_unlock(&bitmap->lock);
-		ubcm_log_err("bitmap find zero bit failed\n");
+		ubcore_log_err("bitmap find zero bit failed\n");
 		return id;
 	}
 	set_bit(id, bitmap->bits);
@@ -89,7 +90,7 @@ int ubmad_bitmap_put_id(struct ubmad_bitmap *bitmap, uint32_t id)
 	spin_lock(&bitmap->lock);
 	if (id >= bitmap->size) {
 		spin_unlock(&bitmap->lock);
-		ubcm_log_err("invalid id %u\n", id);
+		ubcore_log_err("invalid id %u\n", id);
 		return -EINVAL;
 	}
 	clear_bit(id, bitmap->bits);
@@ -104,7 +105,7 @@ bool ubmad_bitmap_test_id(struct ubmad_bitmap *bitmap, uint32_t id)
 	spin_lock(&bitmap->lock);
 	if (id >= bitmap->size) {
 		spin_unlock(&bitmap->lock);
-		ubcm_log_err("invalid id %u\n", id);
+		ubcore_log_err("invalid id %u\n", id);
 		return false;
 	}
 	result = test_bit(id, bitmap->bits) == 0;
@@ -119,7 +120,7 @@ int ubmad_bitmap_set_id(struct ubmad_bitmap *bitmap, uint32_t id)
 	spin_lock(&bitmap->lock);
 	if (id >= bitmap->size) {
 		spin_unlock(&bitmap->lock);
-		ubcm_log_err("invalid id %u\n", id);
+		ubcore_log_err("invalid id %u\n", id);
 		return -1;
 	}
 
@@ -135,10 +136,10 @@ static void ubmad_event_cb(struct ubcore_event *event,
 {
 	switch (event->event_type) {
 	case UBCORE_EVENT_EID_CHANGE:
-		ubcm_log_info("No need to handle eid event.\n");
+		ubcore_log_info("No need to handle eid event.\n");
 		break;
 	default:
-		ubcm_log_err("Invalid event_type: %d, dev_name: %s.\n",
+		ubcore_log_err("Invalid event_type: %d, dev_name: %s.\n",
 			     event->event_type, event->ub_dev->dev_name);
 		break;
 	}
@@ -148,6 +149,9 @@ static int ubmad_check_eid_in_dev(struct ubcore_device *dev,
 				  struct ubcore_eid_info *eid_info)
 {
 	int i;
+
+	if (IS_ERR_OR_NULL(eid_info) || IS_ERR_OR_NULL(dev->eid_table.eid_entries))
+		return -1;
 
 	spin_lock(&dev->eid_table.lock);
 	for (i = 0; i < dev->eid_table.eid_cnt; i++) {
@@ -172,7 +176,7 @@ ubmad_update_device_priv_resources(struct ubmad_device_priv *dev_priv,
 	if (memcmp(&dev_priv->eid_info.eid, &eid_info->eid,
 		   sizeof(union ubcore_eid)) == 0 &&
 	    dev_priv->eid_info.eid_index == eid_info->eid_index) {
-		ubcm_log_warn(
+		ubcore_log_warn(
 			"eid_info is not changed, no need to update rsrc\n");
 		return 0;
 	}
@@ -184,12 +188,12 @@ ubmad_update_device_priv_resources(struct ubmad_device_priv *dev_priv,
 	dev_priv->eid_info.eid_index = eid_info->eid_index;
 	ret = ubmad_create_device_priv_resources(dev_priv);
 	if (ret != 0) {
-		ubcm_log_err("Failed to create device resources, ret: %d.\n",
+		ubcore_log_err("Failed to create device resources, ret: %d.\n",
 			     ret);
 		return ret;
 	}
 	dev_priv->has_create_jetty_rsrc = true;
-	ubcm_log_info(
+	ubcore_log_info(
 		"Success to update priv resources: dev: %s eid_idx %d, eid: " EID_FMT,
 		dev_priv->device->dev_name, dev_priv->eid_info.eid_index,
 		EID_ARGS(dev_priv->eid_info.eid));
@@ -208,7 +212,7 @@ static int ubmad_ubc_eid_ops_inner(struct ubcore_device *dev,
 	dev_priv = ubmad_get_device_priv_lockless(dev);
 	spin_unlock_irqrestore(&g_ubmad_device_list_lock, flag);
 	if (IS_ERR_OR_NULL(dev_priv)) {
-		ubcm_log_err("Failed to get dev_priv, dev_name: %s\n",
+		ubcore_log_err("Failed to get dev_priv, dev_name: %s\n",
 			     dev->dev_name);
 		return -1;
 	}
@@ -218,7 +222,7 @@ static int ubmad_ubc_eid_ops_inner(struct ubcore_device *dev,
 			ret = ubmad_update_device_priv_resources(dev_priv,
 								 eid_info);
 			if (ret != 0)
-				ubcm_log_err(
+				ubcore_log_err(
 					"Failed to update device resources, ret: %d.\n",
 					ret);
 		} else {
@@ -227,7 +231,7 @@ static int ubmad_ubc_eid_ops_inner(struct ubcore_device *dev,
 			dev_priv->eid_info.eid_index = eid_info->eid_index;
 			ret = ubmad_create_device_priv_resources(dev_priv);
 			if (ret != 0)
-				ubcm_log_err(
+				ubcore_log_err(
 					"Failed to create device resources, ret: %d.\n",
 					ret);
 			else
@@ -240,10 +244,10 @@ static int ubmad_ubc_eid_ops_inner(struct ubcore_device *dev,
 		ret = 0;
 		break;
 	default:
-		ubcm_log_err("Invali event_type: %d.\n", event_type);
+		ubcore_log_err("Invali event_type: %d.\n", event_type);
 		ret = -EINVAL;
 	}
-	ubcm_log_info("Finish to handle new eid, ret: %d, event_type: %d.\n",
+	ubcore_log_info("Finish to handle new eid, ret: %d, event_type: %d.\n",
 		      ret, (int)event_type);
 	ubmad_put_device_priv(dev_priv);
 	return ret;
@@ -254,22 +258,38 @@ static int ubmad_ubc_eid_ops(struct ubcore_device *dev,
 			     struct ubcore_eid_info *eid_info,
 			     enum ubcore_mgmt_event_type event_type)
 {
+	union ubcore_eid main_primary_eid = {0};
 	int ret;
 
 	mutex_lock(&g_ubc_eid_lock);
 	if (ubmad_check_eid_in_dev(dev, eid_info) != 0) {
 		mutex_unlock(&g_ubc_eid_lock);
-		ubcm_log_err("Eid is not in dev, dev_name: %s, eid: " EID_FMT
+		ubcore_log_err("Eid is not in dev, dev_name: %s, eid: " EID_FMT
 			     ", eid_index: %u.\n",
 			     dev->dev_name, EID_ARGS(eid_info->eid),
 			     eid_info->eid_index);
 		return -1;
 	}
 
+	ret = ubcore_get_main_primary_eid(&eid_info->eid, &main_primary_eid);
+	if (ret != 0) {
+		mutex_unlock(&g_ubc_eid_lock);
+		ubcore_log_err("Invalid eid "EID_FMT".\n", EID_ARGS(eid_info->eid));
+		return -1;
+	}
+
+	if (memcmp(&eid_info->eid, &main_primary_eid,
+		sizeof(union ubcore_eid)) != 0) {
+		mutex_unlock(&g_ubc_eid_lock);
+		ubcore_log_warn("No need to operate current eid "EID_FMT".\n",
+			EID_ARGS(eid_info->eid));
+		return 0;
+	}
+
 	ret = ubmad_ubc_eid_ops_inner(dev, eid_info, event_type);
 	if (ret != 0) {
 		mutex_unlock(&g_ubc_eid_lock);
-		ubcm_log_err("Failed to handle eid_ops_called, ret: %d.\n",
+		ubcore_log_err("Failed to handle eid_ops_called, ret: %d.\n",
 			     ret);
 		return ret;
 	}
@@ -288,13 +308,13 @@ static struct ubcore_jfc *ubmad_create_jfc_s(struct ubcore_device *device)
 	jfc = ubcore_create_jfc(device, &jfc_cfg, ubmad_jfce_handler_s, NULL,
 				NULL);
 	if (IS_ERR_OR_NULL(jfc)) {
-		ubcm_log_err("create jfc_s failed\n");
+		ubcore_log_err("create jfc_s failed\n");
 		return jfc;
 	}
 
 	rearm_ret = ubcore_rearm_jfc(jfc, false);
 	if (rearm_ret != 0) {
-		ubcm_log_err("rearm jfc_s failed. ret %d\n", rearm_ret);
+		ubcore_log_err("rearm jfc_s failed. ret %d\n", rearm_ret);
 		return NULL;
 	}
 
@@ -311,13 +331,13 @@ static struct ubcore_jfc *ubmad_create_jfc_r(struct ubcore_device *device)
 	jfc = ubcore_create_jfc(device, &jfc_cfg, ubmad_jfce_handler_r, NULL,
 				NULL);
 	if (IS_ERR_OR_NULL(jfc)) {
-		ubcm_log_err("create jfc_r failed\n");
+		ubcore_log_err("create jfc_r failed\n");
 		return jfc;
 	}
 
 	rearm_ret = ubcore_rearm_jfc(jfc, false);
 	if (rearm_ret != 0) {
-		ubcm_log_err("rearm jfc_r failed. ret %d\n", rearm_ret);
+		ubcore_log_err("rearm jfc_r failed. ret %d\n", rearm_ret);
 		return NULL;
 	}
 
@@ -340,12 +360,43 @@ static struct ubcore_jfr *ubmad_create_jfr(struct ubmad_device_priv *dev_priv,
 	return ubcore_create_jfr(dev_priv->device, &jfr_cfg, NULL, NULL);
 }
 
+static int ubmad_jetty_set_priority(struct ubmad_device_priv *dev_priv,
+		  struct ubcore_jetty_cfg *jetty_cfg)
+{
+	struct ubcore_device_attr attr = {0};
+	int set_priority_ret = 0;
+	int ret = 0;
+	int i;
+
+	ret = ubcore_query_device_attr(dev_priv->device, &attr);
+	if (ret == 0) {
+		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
+			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
+				jetty_cfg->priority = i;
+				ubcore_log_info(
+					"ubmad create jetty set priority : %d, tp_type : ctp\n", i);
+				set_priority_ret = 1;
+				break;
+			}
+		}
+		if (set_priority_ret == 0) {
+			ubcore_log_err("set priority default value : 0\n");
+			return -EINVAL;
+		}
+	} else {
+		ubcore_log_err("Failed to ubcore get dev_attr!\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static struct ubcore_jetty *
 ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 		   struct ubcore_jfc *jfc_r, struct ubcore_jfr *jfr,
 		   uint32_t jetty_id)
 {
 	struct ubcore_jetty_cfg jetty_cfg = { 0 };
+	int ret = 0;
 
 	jetty_cfg.id = jetty_id;
 	jetty_cfg.flag.bs.share_jfr = 1;
@@ -353,6 +404,9 @@ ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 	jetty_cfg.eid_index = dev_priv->eid_info.eid_index;
 	jetty_cfg.jfs_depth = UBMAD_JFS_DEPTH;
 	jetty_cfg.priority = 0; /* Highest priority */
+	ret = ubmad_jetty_set_priority(dev_priv, &jetty_cfg);
+	if (ret)
+		ubcore_log_info("ubmad create jetty set priority : 0\n");
 	jetty_cfg.max_send_sge = UBMAD_JFS_MAX_SGE_NUM;
 	jetty_cfg.max_send_rsge = UBMAD_JFS_MAX_SGE_NUM;
 	jetty_cfg.jfr_depth = UBMAD_JFR_DEPTH;
@@ -507,7 +561,7 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 	tjetty = ubmad_get_tjetty_lockless(rsrc, hash, dst_eid); // put by user
 	spin_unlock_irqrestore(&rsrc->tjetty_hlist_lock, flag);
 	if (!IS_ERR_OR_NULL(tjetty)) {
-		ubcm_log_info("tjetty0 already imported. eid " EID_FMT "\n",
+		ubcore_log_info("tjetty0 already imported. eid " EID_FMT "\n",
 			      EID_ARGS(*dst_eid));
 		return tjetty;
 	}
@@ -526,7 +580,7 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 	tjetty_cfg.eid_index = rsrc->jetty->jetty_cfg.eid_index;
 	new_target = ubmad_import_jetty_compat(device, &tjetty_cfg, NULL);
 	if (IS_ERR_OR_NULL(new_target)) {
-		ubcm_log_err("import tjetty: %u failed. eid " EID_FMT "\n",
+		ubcore_log_err("import tjetty: %u failed. eid " EID_FMT "\n",
 			     rsrc->jetty_id, EID_ARGS(*dst_eid));
 		goto free;
 	}
@@ -539,7 +593,7 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 	tjetty = ubmad_get_tjetty_lockless(rsrc, hash, dst_eid); // put by user
 	if (!IS_ERR_OR_NULL(tjetty)) {
 		spin_unlock_irqrestore(&rsrc->tjetty_hlist_lock, flag);
-		ubcm_log_info(
+		ubcore_log_info(
 			"tjetty0 already imported. dev_name: %s, deid " EID_FMT
 			".\n",
 			device->dev_name, EID_ARGS(*dst_eid));
@@ -555,7 +609,7 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 	hlist_add_head(&new_tjetty->node, &rsrc->tjetty_hlist[hash]);
 	spin_unlock_irqrestore(&rsrc->tjetty_hlist_lock, flag);
 
-	ubcm_log_info(
+	ubcore_log_info(
 		"import tjetty0 and add to hlist succeeded. dev_name: %s, deid " EID_FMT
 		".\n",
 		device->dev_name, EID_ARGS(*dst_eid));
@@ -583,7 +637,7 @@ void ubmad_remove_tjetty(union ubcore_eid *seid,
 	struct hlist_node *next;
 	unsigned long flag;
 
-	ubcm_log_info("Remove tjetty, leid: " EID_FMT ", reid: " EID_FMT ".\n",
+	ubcore_log_info("Remove tjetty, leid: " EID_FMT ", reid: " EID_FMT ".\n",
 		      EID_ARGS(rsrc->jetty->jetty_id.eid), EID_ARGS(*seid));
 	spin_lock_irqsave(&rsrc->tjetty_hlist_lock, flag);
 	hlist_for_each_entry_safe(tjetty, next, &rsrc->tjetty_hlist[hash],
@@ -619,10 +673,10 @@ static struct ubcore_target_seg *ubmad_register_seg(struct ubcore_device *dev,
 
 	ret = ubcore_register_seg(dev, &cfg, NULL);
 	if (IS_ERR_OR_NULL(ret)) {
-		ubcm_log_err("reg seg failed\n");
+		ubcore_log_err("reg seg failed\n");
 		goto free;
 	}
-	ubcm_log_info("Finish to register seg, va: 0x%llx, len: %llu", cfg.va,
+	ubcore_log_info("Finish to register seg, va: 0x%llx, len: %llu", cfg.va,
 		      seg_len);
 	return ret;
 
@@ -645,24 +699,24 @@ static int ubmad_create_seg(struct ubmad_jetty_resource *rsrc,
 	// send_seg
 	rsrc->send_seg = ubmad_register_seg(device, UBMAD_SEND_SGE_NUM);
 	if (IS_ERR_OR_NULL(rsrc->send_seg)) {
-		ubcm_log_err("register send_seg failed.\n");
+		ubcore_log_err("register send_seg failed.\n");
 		return -1;
 	}
 	rsrc->send_seg_bitmap = ubmad_create_bitmap(UBMAD_SEND_SGE_NUM);
 	if (IS_ERR_OR_NULL(rsrc->send_seg_bitmap)) {
-		ubcm_log_err("alloc send_seg_bitmap failed\n");
+		ubcore_log_err("alloc send_seg_bitmap failed\n");
 		goto unreg_send_seg;
 	}
 
 	// recv_seg
 	rsrc->recv_seg = ubmad_register_seg(device, UBMAD_RECV_SGE_NUM);
 	if (IS_ERR_OR_NULL(rsrc->recv_seg)) {
-		ubcm_log_err("register recv_seg failed\n");
+		ubcore_log_err("register recv_seg failed\n");
 		goto free_send_seg_bitmap;
 	}
 	rsrc->recv_seg_bitmap = ubmad_create_bitmap(UBMAD_RECV_SGE_NUM);
 	if (IS_ERR_OR_NULL(rsrc->recv_seg_bitmap)) {
-		ubcm_log_err("alloc recv_seg_bitmap failed\n");
+		ubcore_log_err("alloc recv_seg_bitmap failed\n");
 		rsrc->recv_seg_bitmap = NULL;
 		goto unreg_recv_seg;
 	}
@@ -709,7 +763,7 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 	/* create jetty */
 	jfc_s = ubmad_create_jfc_s(device);
 	if (IS_ERR_OR_NULL(jfc_s)) {
-		ubcm_log_err("fail to create jfc_s. dev_name: %s\n",
+		ubcore_log_err("fail to create jfc_s. dev_name: %s\n",
 			     device->dev_name);
 		return -1;
 	}
@@ -717,7 +771,7 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 
 	jfc_r = ubmad_create_jfc_r(device);
 	if (IS_ERR_OR_NULL(jfc_r)) {
-		ubcm_log_err("fail to create jfc_r. dev_name: %s\n",
+		ubcore_log_err("fail to create jfc_r. dev_name: %s\n",
 			     device->dev_name);
 		ret = -1;
 		goto del_jfc_s;
@@ -726,7 +780,7 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 
 	jfr = ubmad_create_jfr(dev_priv, jfc_r);
 	if (IS_ERR_OR_NULL(jfr)) {
-		ubcm_log_err("fail to create jfr. dev_name: %s\n",
+		ubcore_log_err("fail to create jfr. dev_name: %s\n",
 			     device->dev_name);
 		ret = -1;
 		goto del_jfc_r;
@@ -735,14 +789,14 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 
 	jetty = ubmad_create_jetty(dev_priv, jfc_s, jfc_r, jfr, rsrc->jetty_id);
 	if (IS_ERR_OR_NULL(jetty)) {
-		ubcm_log_err("fail to create wk jetty. dev_name: %s, id: %u.\n",
+		ubcore_log_err("fail to create wk jetty. dev_name: %s, id: %u.\n",
 			     device->dev_name, rsrc->jetty_id);
 		ret = -1;
 		goto del_jfr;
 	}
 	atomic_set(&rsrc->tx_in_queue, 0);
 
-	ubcm_log_info("well-known jetty id %u eid " EID_FMT ", jfr id: %u.\n",
+	ubcore_log_info("well-known jetty id %u eid " EID_FMT ", jfr id: %u.\n",
 		      jetty->jetty_id.id, EID_ARGS(jetty->jetty_id.eid),
 		      jfr->jfr_id.id);
 	rsrc->jetty = jetty;
@@ -750,7 +804,7 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 	/* create seg */
 	ret = ubmad_create_seg(rsrc, device);
 	if (ret != 0) {
-		ubcm_log_err("create seg failed. device %s.\n",
+		ubcore_log_err("create seg failed. device %s.\n",
 			     device->dev_name);
 		goto del_jetty;
 	}
@@ -759,7 +813,7 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 	for (idx = 0; idx < UBMAD_JFR_DEPTH; idx++) {
 		ret = ubmad_post_recv(rsrc);
 		if (ret != 0) {
-			ubcm_log_err(
+			ubcore_log_err(
 				"No. %u post recv in the first batch failed. device %s ret %d\n",
 				idx, device->dev_name, ret);
 			goto destroy_seg;
@@ -833,13 +887,13 @@ static int ubmad_init_jetty_rsrc_array(struct ubmad_jetty_resource *rsrc_array,
 		rsrc_array[i].jetty_id = g_ubmad_wk_jetty_id[i];
 		ret = ubmad_init_jetty_rsrc(&rsrc_array[i], dev_priv);
 		if (ret != 0) {
-			ubcm_log_err(
+			ubcore_log_err(
 				"Failed to init jetty rsrc, index: %d, ret: %d.\n",
 				i, ret);
 			goto uninit_rsrc;
 		}
 	}
-	ubcm_log_info("Finish to init jetty resource.\n");
+	ubcore_log_info("Finish to init jetty resource.\n");
 
 	return 0;
 uninit_rsrc:
@@ -898,14 +952,14 @@ ubmad_create_device_priv_resources(struct ubmad_device_priv *dev_priv)
 
 	/* check */
 	if (dev_priv->valid) {
-		ubcm_log_warn("dev_priv rsrc already inited. dev_name: %s\n",
+		ubcore_log_warn("dev_priv rsrc already inited. dev_name: %s\n",
 			      device->dev_name);
 		return 0;
 	}
 
 	eid_list = ubcore_get_eid_list(device, &cnt);
 	if (eid_list == NULL || cnt == 0) {
-		ubcm_log_warn(
+		ubcore_log_warn(
 			"No eid_list in device: %s, do not create wk-jetty resource.\n",
 			device->dev_name);
 		return 0;
@@ -913,7 +967,7 @@ ubmad_create_device_priv_resources(struct ubmad_device_priv *dev_priv)
 
 	ret = ubmad_init_jetty_rsrc_array(dev_priv->jetty_rsrc, dev_priv);
 	if (ret != 0) {
-		ubcm_log_err("Failed to init jetty rsrc array, ret: %d.\n",
+		ubcore_log_err("Failed to init jetty rsrc array, ret: %d.\n",
 			     ret);
 		return ret;
 	}
@@ -926,7 +980,7 @@ static void
 ubmad_destroy_device_priv_resources(struct ubmad_device_priv *dev_priv)
 {
 	if (!dev_priv->valid) {
-		ubcm_log_warn(
+		ubcore_log_warn(
 			"dev_priv rsrc not inited. No need to uninit. dev_name: %s\n",
 			dev_priv->device->dev_name);
 		return;
@@ -968,7 +1022,7 @@ static void ubmad_release_device_priv(struct kref *kref)
 		container_of(kref, struct ubmad_device_priv, kref);
 
 	/* retransmission */
-	flush_workqueue(dev_priv->rt_wq);
+	drain_workqueue(dev_priv->rt_wq);
 	destroy_workqueue(dev_priv->rt_wq);
 
 	/* rsrc */
@@ -1002,14 +1056,14 @@ static int ubmad_open_device(struct ubcore_device *device)
 	/* rsrc */
 	if (ubmad_create_device_priv_resources(dev_priv) != 0) {
 		// It could be due to eid not added. Wait for ubcore add eid event to init again.
-		ubcm_log_warn("fail to create dev_priv rsrc. dev_name: %s\n",
+		ubcore_log_warn("fail to create dev_priv rsrc. dev_name: %s\n",
 			      device->dev_name);
 	}
 
 	/* reliable communication */
 	dev_priv->rt_wq = create_workqueue("ubmad rt_wq");
 	if (IS_ERR_OR_NULL(dev_priv->rt_wq)) {
-		ubcm_log_err("create rt_wq failed. dev_name: %s\n",
+		ubcore_log_err("create rt_wq failed. dev_name: %s\n",
 			     device->dev_name);
 		ubmad_destroy_device_priv_resources(dev_priv);
 		ubcore_unregister_event_handler(dev_priv->device,
@@ -1035,7 +1089,7 @@ static void ubmad_rsrc_notify_close(struct ubmad_jetty_resource *rsrc)
 
 	if (IS_ERR_OR_NULL(rsrc->jetty) || IS_ERR_OR_NULL(rsrc->send_seg) ||
 	    IS_ERR_OR_NULL(rsrc->send_seg_bitmap)) {
-		ubcm_log_warn("Invalid parameter.\n");
+		ubcore_log_warn("Invalid parameter.\n");
 		return;
 	}
 
@@ -1059,7 +1113,7 @@ static void ubmad_notify_close(struct ubcore_device *device)
 	dev_priv = ubmad_get_device_priv_lockless(device);
 	spin_unlock_irqrestore(&g_ubmad_device_list_lock, flag);
 	if (dev_priv == NULL) {
-		ubcm_log_err("Failed to get dev_priv, dev_name: %s\n",
+		ubcore_log_err("Failed to get dev_priv, dev_name: %s\n",
 			     device->dev_name);
 		return;
 	}
@@ -1080,7 +1134,7 @@ static int ubmad_close_device(struct ubcore_device *device)
 	dev_priv = ubmad_get_device_priv_lockless(device);
 	if (dev_priv == NULL) {
 		spin_unlock_irqrestore(&g_ubmad_device_list_lock, flag);
-		ubcm_log_err("Failed to get dev_priv, dev_name: %s\n",
+		ubcore_log_err("Failed to get dev_priv, dev_name: %s\n",
 			     device->dev_name);
 		return -ENODEV;
 	}
@@ -1101,7 +1155,7 @@ static int ubmad_add_device(struct ubcore_device *device)
 
 	ret = ubmad_open_device(device);
 	if (ret != 0) {
-		ubcm_log_err(
+		ubcore_log_err(
 			"fail to open mad device, dev_name: %s, ret: %d.\n",
 			device->dev_name, ret);
 		return ret;
@@ -1118,7 +1172,7 @@ static void ubmad_remove_device(struct ubcore_device *device, void *client_ctx)
 
 	ret = ubmad_close_device(device);
 	if (ret != 0)
-		ubcm_log_err("Failed to close ubmad device, dev_name: %s.\n",
+		ubcore_log_err("Failed to close ubmad device, dev_name: %s.\n",
 			     device->dev_name);
 }
 
@@ -1138,7 +1192,7 @@ int ubmad_init(void)
 
 	ret = ubcore_register_client(&g_ubmad_client);
 	if (ret != 0) {
-		ubcm_log_err("Failed to register ub_mad client, ret: %d.\n",
+		ubcore_log_err("Failed to register ub_mad client, ret: %d.\n",
 			     ret);
 		return ret;
 	}
@@ -1186,7 +1240,7 @@ static void ubmad_release_agent_priv(struct kref *kref)
 	struct ubmad_agent_priv *agent_priv =
 		container_of(kref, struct ubmad_agent_priv, kref);
 
-	flush_workqueue(agent_priv->jfce_wq);
+	drain_workqueue(agent_priv->jfce_wq);
 	destroy_workqueue(agent_priv->jfce_wq);
 
 	kfree(agent_priv);
@@ -1208,13 +1262,13 @@ struct ubmad_agent *ubmad_register_agent(struct ubcore_device *device,
 
 	/* check inputs */
 	if (IS_ERR_OR_NULL(device)) {
-		ubcm_log_err("device nullptr\n");
+		ubcore_log_err("device nullptr\n");
 		return ERR_PTR(-EINVAL);
 	}
 	if (IS_ERR_OR_NULL(send_handler))
-		ubcm_log_warn("send_handler null\n");
+		ubcore_log_warn("send_handler null\n");
 	if (IS_ERR_OR_NULL(recv_handler))
-		ubcm_log_warn("recv_handler null\n");
+		ubcore_log_warn("recv_handler null\n");
 
 	/* create agent_priv */
 	agent_priv = kzalloc(sizeof(struct ubmad_agent_priv), GFP_KERNEL);
@@ -1224,7 +1278,7 @@ struct ubmad_agent *ubmad_register_agent(struct ubcore_device *device,
 
 	agent_priv->jfce_wq = create_workqueue("ubmad jfce_wq");
 	if (IS_ERR_OR_NULL(agent_priv->jfce_wq)) {
-		ubcm_log_err("create agent_priv workqueue failed.\n");
+		ubcore_log_err("create agent_priv workqueue failed.\n");
 		kfree(agent_priv);
 		return NULL;
 	}
@@ -1251,7 +1305,7 @@ int ubmad_unregister_agent(struct ubmad_agent *agent)
 	struct ubmad_agent_priv *agent_priv;
 
 	if (IS_ERR_OR_NULL(agent)) {
-		ubcm_log_err("agent nullptr\n");
+		ubcore_log_err("agent nullptr\n");
 		return -EINVAL;
 	}
 

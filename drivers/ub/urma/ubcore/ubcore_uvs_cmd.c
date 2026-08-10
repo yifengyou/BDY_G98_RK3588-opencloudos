@@ -19,6 +19,7 @@
 #include "ubcore_cmd_tlv.h"
 #include "ubcore_topo_info.h"
 #include "net/ubcore_cm.h"
+#include "ubmgr/ubmgr_topo.h"
 #include "ubcore_uvs_cmd.h"
 
 static int ubcore_eidtbl_add_entry(struct ubcore_device *dev,
@@ -174,54 +175,65 @@ static int ubcore_create_jetty_rsrc(struct ubcore_topo_map *topo_map)
 {
 	struct ubcore_device *dev;
 	struct ubcore_eid_info eid_info = { 0 };
-	struct ubcore_topo_info *cur_node_info;
-	int i, ret;
+	struct ubcore_topo_node *cur_node_info;
 	bool has_any_primary_eid = false;
+	int dev_idx, die_idx;
+	int ret;
 
 	cur_node_info = ubcore_get_cur_topo_info(topo_map);
 	if (cur_node_info == NULL) {
-		ubcore_log_err("Failed to get cur node info\n");
+		ubcore_log_err("Failed to get current node info\n");
 		return -EINVAL;
 	}
 
-	for (i = 0; i < IODIE_NUM; i++) {
-		if (!is_eid_valid(cur_node_info->io_die_info[i].primary_eid))
-			continue;
-		has_any_primary_eid = true;
-		(void)memcpy(&eid_info.eid,
-			     cur_node_info->io_die_info[i].primary_eid,
-			     sizeof(union ubcore_eid));
-		dev = ubcore_get_device_by_eid(&eid_info.eid,
-					       UBCORE_TRANSPORT_UB);
-		if (dev == NULL) {
-			ubcore_log_err(
-				"primary %d dev not exist, eid: " EID_FMT "\n",
-				i,
-				EID_RAW_ARGS(cur_node_info->io_die_info[i]
-						     .primary_eid));
-			return -1;
-		}
+	for (dev_idx = 0; dev_idx < DEV_NUM; dev_idx++) {
+		for (die_idx = 0; die_idx < IODIE_NUM; die_idx++) {
+			if (!is_eid_valid(
+				cur_node_info->agg_devs[dev_idx].ues[die_idx].primary_eid))
+				continue;
 
-		ret = ubcore_get_eid_index(dev, &eid_info.eid,
-					   &eid_info.eid_index);
-		if (ret != 0) {
-			ubcore_log_err("Failed to get eid index\n");
-			return ret;
-		}
+			has_any_primary_eid = true;
+			(void)memcpy(&eid_info.eid,
+					cur_node_info->agg_devs[dev_idx].ues[die_idx].primary_eid,
+					sizeof(union ubcore_eid));
 
-		ret = ubcore_call_cm_eid_ops(dev, &eid_info,
-					     UBCORE_MGMT_EVENT_EID_ADD);
-		if (ret != 0) {
-			ubcore_log_err("Failed to call cm eid ops\n");
-			return ret;
+			dev = ubcore_get_device_by_eid(&eid_info.eid,
+								   UBCORE_TRANSPORT_UB);
+			if (dev == NULL) {
+				ubcore_log_err(
+				"primary dev not exist, node %d dev %d die %d, eid: " EID_FMT
+				"\n",
+				cur_node_info->id, dev_idx, die_idx,
+				EID_RAW_ARGS(
+				cur_node_info->agg_devs[dev_idx].ues[die_idx].primary_eid
+				));
+				return -1;
+			}
+
+			ret = ubcore_get_eid_index(dev, &eid_info.eid,
+						&eid_info.eid_index);
+			if (ret != 0) {
+				ubcore_log_err("Failed to get eid index\n");
+				return ret;
+			}
+
+			ret = ubcore_call_cm_eid_ops(dev, &eid_info,
+						UBCORE_MGMT_EVENT_EID_ADD);
+			if (ret != 0) {
+				ubcore_log_err("Failed to call cm eid ops\n");
+				return ret;
+			}
+
+			ubcore_log_info(
+				"Created jetty rsrc: node %d dev %d primary die %d, eid: " EID_FMT
+				", idx: %d\n",
+				cur_node_info->id, dev_idx, die_idx,
+				EID_RAW_ARGS(
+				cur_node_info->agg_devs[dev_idx].ues[die_idx].primary_eid),
+				eid_info.eid_index);
 		}
-		ubcore_log_info(
-			"Success to create jetty rsrc: primary %d dev %s, eid: " EID_FMT
-			", idx: %d\n",
-			i, dev->dev_name,
-			EID_RAW_ARGS(cur_node_info->io_die_info[i].primary_eid),
-			eid_info.eid_index);
 	}
+
 	return has_any_primary_eid ? 0 : -1;
 }
 
@@ -250,11 +262,6 @@ static int ubcore_cmd_set_topo(struct ubcore_global_file *file,
 			ubcore_log_err("Failed to create topo map\n");
 			return -ENOMEM;
 		}
-		if (!is_bonding_and_primary_eid_valid(topo_map)) {
-			ubcore_delete_global_topo_map();
-			ubcore_log_err("Invalid bonding or primary eid\n");
-			return -EINVAL;
-		}
 	} else {
 		new_topo_map = ubcore_create_topo_map_from_user(
 			arg.in.topo_info, arg.in.topo_num);
@@ -270,9 +277,44 @@ static int ubcore_cmd_set_topo(struct ubcore_global_file *file,
 	ret = ubcore_create_jetty_rsrc(topo_map);
 	if (ret != 0) {
 		ubcore_log_err("Failed to create jetty rsrc\n");
-		ubcore_delete_global_topo_map();
 		return ret;
 	}
+
+	ubmgr_notify_set_topo();
+	return 0;
+}
+
+static int ubcore_cmd_get_topo(struct ubcore_global_file *file,
+			       struct ubcore_cmd_hdr *hdr)
+{
+	struct ubcore_cmd_get_topo arg = {0};
+	struct ubcore_topo_map *topo_map;
+	int ret = 0;
+
+	ret = ubcore_global_tlv_parse(hdr, (void *)&arg);
+	if (ret != 0) {
+		ubcore_log_err("Failed to parse get_topo_info params\n");
+		return ret;
+	}
+
+	if (arg.out.topo_map == NULL) {
+		ubcore_log_err("Invalid get_topo_info param\n");
+		return -EINVAL;
+	}
+
+	topo_map = ubcore_get_global_topo_map();
+	if (topo_map == NULL) {
+		ubcore_log_err("Failed to get global topo map\n");
+		return -ENOMEM;
+	}
+	ret = copy_to_user((void __user *)arg.out.topo_map, topo_map,
+					sizeof(struct ubcore_topo_map)
+	);
+	if (ret != 0) {
+		ubcore_log_err("copy_to_user fail.");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -309,7 +351,8 @@ struct ubcore_uvs_global_cmd_func {
 static struct ubcore_uvs_global_cmd_func g_ubcore_uvs_global_cmd_funcs[] = {
 	[0] = { NULL, false },
 	[UBCORE_CMD_SET_TOPO] = { ubcore_cmd_set_topo, true },
-	[UBCORE_CMD_GET_ROUTE_LIST] = { ubcore_cmd_get_route_list, true},
+	[UBCORE_CMD_GET_ROUTE_LIST] = { ubcore_cmd_get_route_list, false },
+	[UBCORE_CMD_GET_TOPO] = { ubcore_cmd_get_topo, true },
 };
 
 int ubcore_uvs_global_cmd_parse(struct ubcore_global_file *file,

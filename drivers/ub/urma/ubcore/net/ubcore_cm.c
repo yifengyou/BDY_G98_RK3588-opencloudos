@@ -76,8 +76,6 @@ int ubcore_ubcm_send_to(struct ubcore_device *dev, union ubcore_eid addr,
 	struct ubcore_cm_send_buf *send_buf = NULL;
 	int ret;
 
-	ubcore_log_info("Send cm message, " MSG_FMT, MSG_ARG(msg));
-
 	send_buf = kcalloc(1, send_buf_len, GFP_KERNEL);
 	if (IS_ERR_OR_NULL(send_buf)) {
 		ubcore_log_err("Failed to alloc cm send buf memory.\n");

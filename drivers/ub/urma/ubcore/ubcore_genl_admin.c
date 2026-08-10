@@ -280,9 +280,44 @@ int ubcore_set_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
 		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
 }
 
+int ubcore_expose_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD])
+		return -EINVAL;
+
+	return ubcore_expose_dev_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
+int ubcore_unexpose_dev_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD])
+		return -EINVAL;
+
+	return ubcore_unexpose_dev_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
+int ubcore_set_dev_eid_ns_ops(struct sk_buff *skb, struct genl_info *info)
+{
+	if (!info->attrs[UBCORE_ATTR_DEV_NAME] ||
+	    !info->attrs[UBCORE_ATTR_NS_FD] ||
+		!info->attrs[UBCORE_ATTR_EID_IDX])
+		return -EINVAL;
+
+	return ubcore_set_dev_eid_ns(
+		(char *)nla_data(info->attrs[UBCORE_ATTR_DEV_NAME]),
+		nla_get_u16(info->attrs[UBCORE_ATTR_EID_IDX]),
+		nla_get_u32(info->attrs[UBCORE_ATTR_NS_FD]));
+}
+
 int ubcore_get_topo_info(struct sk_buff *skb, struct genl_info *info)
 {
-	struct ubcore_cmd_topo_info arg = { 0 };
+	struct ubcore_cmd_topo_info *arg = NULL;
 	struct ubcore_topo_map *topo_map;
 	uint64_t args_addr;
 	int ret = -EINVAL;
@@ -290,26 +325,74 @@ int ubcore_get_topo_info(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[UBCORE_HDR_ARGS_LEN] ||
 	    !info->attrs[UBCORE_HDR_ARGS_ADDR])
 		return ret;
+	arg = kzalloc(sizeof(*arg), GFP_KERNEL);
+	if (!arg)
+		return -ENOMEM;
 	args_addr = nla_get_u64(info->attrs[UBCORE_HDR_ARGS_ADDR]);
-	ret = ubcore_copy_from_user(&arg, (void __user *)(uintptr_t)args_addr,
+	ret = ubcore_copy_from_user(arg, (void __user *)(uintptr_t)args_addr,
 				    sizeof(struct ubcore_cmd_topo_info));
 	if (ret != 0)
 		return -EPERM;
 	topo_map = ubcore_get_global_topo_map();
 	if (topo_map == NULL) {
 		ubcore_log_err("topo map is empty!\n");
+		kfree(arg);
 		return -1;
 	}
-	if (arg.in.node_idx >= topo_map->node_num) {
+	if (arg->in.node_idx >= topo_map->node_num) {
 		ubcore_log_err("topo map idx > node_num!\n");
+		kfree(arg);
 		return -EINVAL;
 	}
 
-	arg.out.node_num = topo_map->node_num;
-	(void)memcpy(&arg.out.topo_info, &topo_map->topo_infos[arg.in.node_idx],
-		     sizeof(struct ubcore_topo_info));
-	return ubcore_copy_to_user((void __user *)(uintptr_t)args_addr, &arg,
+	arg->out.node_num = topo_map->node_num;
+	(void)memcpy(&arg->out.topo_info, &topo_map->topo_infos[arg->in.node_idx],
+		     sizeof(struct ubcore_topo_node));
+	ret = ubcore_copy_to_user((void __user *)(uintptr_t)args_addr, arg,
 				   sizeof(struct ubcore_cmd_topo_info));
+	kfree(arg);
+	return ret;
+}
+
+int ubcore_set_sl(struct sk_buff *skb, struct genl_info *info)
+{
+	struct ubcore_cmd_set_sl arg = {0};
+	struct ubcore_device *dev;
+	uint64_t args_addr;
+	int ret = -EINVAL;
+
+	if (!info->attrs[UBCORE_HDR_ARGS_LEN] || !info->attrs[UBCORE_HDR_ARGS_ADDR]) {
+		ubcore_log_err("info attr invalid!\n");
+		return ret;
+	}
+	args_addr = nla_get_u64(info->attrs[UBCORE_HDR_ARGS_ADDR]);
+	ret = ubcore_copy_from_user(&arg, (void __user *)(uintptr_t)args_addr,
+		sizeof(struct ubcore_cmd_set_sl));
+	if (ret != 0) {
+		ubcore_log_err("ubcore copy data from user failed, ret = %d\n", ret);
+		return ret;
+	}
+	arg.in.dev_name[UBCORE_MAX_DEV_NAME - 1] = '\0';
+	dev = ubcore_find_device_with_name(arg.in.dev_name);
+	if (dev == NULL) {
+		ubcore_log_err("find dev_name: %s failed.\n", arg.in.dev_name);
+		return -ENODEV;
+	}
+	if (dev->ops == NULL || dev->ops->set_sl == NULL) {
+		ubcore_log_err("Invalid parameter.\n");
+		ubcore_put_device(dev);
+		return -EINVAL;
+	}
+	if (arg.in.priority >= UBCORE_MAX_PRIORITY_CNT) {
+		ubcore_log_err("Invalid parameter.\n");
+		ubcore_put_device(dev);
+		return -EINVAL;
+	}
+	ubcore_put_device(dev);
+	ret = dev->ops->set_sl(dev, arg.in.priority, arg.in.SL);
+	if (ret != 0)
+		ubcore_log_err("ops ubcore->set_sl failed!\n");
+	return ret;
 }
 
 static void ubcore_fill_res_binary(void *res_buf, struct sk_buff *msg,

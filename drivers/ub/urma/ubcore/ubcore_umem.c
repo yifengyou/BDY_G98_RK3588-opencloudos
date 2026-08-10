@@ -18,6 +18,7 @@
 #include <linux/scatterlist.h>
 #include <linux/count_zeros.h>
 #include <linux/log2.h>
+#include <ub/urma/ubcore_api.h>
 #include <ub/urma/ubcore_types.h>
 #include "ubcore_log.h"
 

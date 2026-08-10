@@ -15,16 +15,13 @@
 #include <linux/fs.h>
 #include <linux/version.h>
 #include <ub/urma/ubcore_uapi.h>
-#include "ubcm_log.h"
+#include "ubcore_log.h"
 #include "ubcm_genl.h"
 #include "ub_mad.h"
 #include "ub_cm.h"
 
 #define UBCM_LOG_FILE_PERMISSION (0644)
 #define UBCM_MODULE_NAME "ubcm"
-
-module_param(g_ubcm_log_level, uint, UBCM_LOG_FILE_PERMISSION);
-MODULE_PARM_DESC(g_ubcm_log_level, " 3: ERR, 4: WARNING, 6: INFO, 7: DEBUG");
 
 struct ubcm_device {
 	struct kref kref;
@@ -40,27 +37,6 @@ struct ubcm_context *get_ubcm_ctx(void)
 	return &g_ubcm_ctx;
 }
 
-static int ubcm_open(struct inode *i_node, struct file *filp)
-{
-	if (!try_module_get(THIS_MODULE))
-		return -ENODEV;
-	return 0;
-}
-
-static int ubcm_close(struct inode *i_node, struct file *filp)
-{
-	module_put(THIS_MODULE);
-	return 0;
-}
-
-static const struct file_operations g_ubcm_ops = {
-	.owner = THIS_MODULE,
-	.open = ubcm_open,
-	.release = ubcm_close,
-	.unlocked_ioctl = NULL, /* ubcm does not support ioctl currently */
-	.compat_ioctl = NULL,
-};
-
 static int ubcm_add_device(struct ubcore_device *device);
 static void ubcm_remove_device(struct ubcore_device *device, void *client_ctx);
 
@@ -74,7 +50,7 @@ static struct ubcore_client g_ubcm_client = {
 static int ubcm_get_ubc_dev(struct ubcore_device *device)
 {
 	if (IS_ERR_OR_NULL(device)) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 
@@ -85,7 +61,7 @@ static int ubcm_get_ubc_dev(struct ubcore_device *device)
 static void ubcm_put_ubc_dev(struct ubcore_device *device)
 {
 	if (IS_ERR_OR_NULL(device)) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return;
 	}
 
@@ -125,10 +101,6 @@ static void ubcm_kref_release(struct kref *kref)
 
 static void ubcm_put_device(struct ubcm_device *cm_dev)
 {
-	uint32_t refcnt;
-
-	refcnt = kref_read(&cm_dev->kref);
-
 	kref_put(&cm_dev->kref, ubcm_kref_release);
 }
 
@@ -137,11 +109,11 @@ static int ubcm_send_handler(struct ubmad_agent *agent,
 {
 	/* Note: agent & send_buf cannot be NULL, no need to check */
 	if (IS_ERR_OR_NULL(send_cr->cr)) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		return -EINVAL;
 	}
 	if (send_cr->cr->status != UBCORE_CR_SUCCESS) {
-		ubcm_log_err("Cr status error: %d.\n",
+		ubcore_log_err("Cr status error: %d.\n",
 			     (int)send_cr->cr->status);
 		return -EINVAL;
 	}
@@ -165,7 +137,7 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 		ret = ubcore_cm_recv(agent->device,
 				     (struct ubcore_cm_recv_cr *)recv_cr);
 		if (ret != 0)
-			ubcm_log_err(
+			ubcore_log_err(
 				"Failed to handle message by ubcore net, ret: %d.\n",
 				ret);
 		return ret;
@@ -173,7 +145,7 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 		nlmsg = ubcm_alloc_genl_authn_msg(recv_cr);
 		break;
 	default:
-		ubcm_log_err("Invalid msg_type: %u.\n", recv_cr->msg_type);
+		ubcore_log_err("Invalid msg_type: %u.\n", recv_cr->msg_type);
 		return -EINVAL;
 	}
 
@@ -188,7 +160,7 @@ static int ubcm_recv_handler(struct ubmad_agent *agent,
 
 	ret = ubcm_genl_unicast(nlmsg, ubcm_nlmsg_len(nlmsg), uvs);
 	if (ret != 0)
-		ubcm_log_err("Failed to send genl msg.\n");
+		ubcore_log_err("Failed to send genl msg.\n");
 	ubcm_uvs_kref_put(uvs);
 free_nlmsg:
 	kfree(nlmsg);
@@ -209,14 +181,13 @@ static int ubcm_add_device(struct ubcore_device *device)
 	spin_lock_init(&cm_dev->agent_lock);
 	ret = ubcm_get_ubc_dev(device);
 	if (ret != 0)
-		goto free_dev;
+		goto put_dev;
 	cm_dev->device = device;
-	ubcore_set_client_ctx_data(device, &g_ubcm_client, cm_dev);
 
 	cm_dev->agent = ubmad_register_agent(device, ubcm_send_handler,
 					     ubcm_recv_handler, (void *)cm_dev);
 	if (IS_ERR_OR_NULL(cm_dev->agent)) {
-		ubcm_log_err("Failed to register mad agent.\n");
+		ubcore_log_err("Failed to register mad agent.\n");
 		ret = PTR_ERR(cm_dev->agent);
 		goto put_dev;
 	}
@@ -225,12 +196,12 @@ static int ubcm_add_device(struct ubcore_device *device)
 	list_add_tail(&cm_dev->list_node, &cm_ctx->device_list);
 	spin_unlock(&cm_ctx->device_lock);
 
+	ubcore_set_client_ctx_data(device, &g_ubcm_client, cm_dev);
+
 	return 0;
 put_dev:
-	/* Note: cm_dev will free next */
+	/* Note: cm_dev will free */
 	ubcm_put_device(cm_dev);
-free_dev:
-	kfree(cm_dev);
 	return ret;
 }
 
@@ -239,8 +210,8 @@ static void ubcm_remove_device(struct ubcore_device *device, void *client_ctx)
 	struct ubcm_device *cm_dev = (struct ubcm_device *)client_ctx;
 	struct ubcm_context *cm_ctx = get_ubcm_ctx();
 
-	if (cm_dev->device != device) {
-		ubcm_log_err("Invalid parameter.\n");
+	if (cm_dev == NULL || cm_dev->device != device) {
+		ubcore_log_err("Invalid parameter.\n");
 		return;
 	}
 	spin_lock(&cm_ctx->device_lock);
@@ -259,13 +230,13 @@ void ubcm_work_handler(struct work_struct *work)
 	int ret;
 
 	if (IS_ERR_OR_NULL(send_buf)) {
-		ubcm_log_err("Invalid parameter.\n");
+		ubcore_log_err("Invalid parameter.\n");
 		goto free_work;
 	}
 
 	cm_dev = ubcm_find_get_device(&send_buf->src_eid);
 	if (IS_ERR_OR_NULL(cm_dev) || IS_ERR_OR_NULL(cm_dev->device)) {
-		ubcm_log_err("Failed to find ubcm device, src_eid: " EID_FMT ".\n",
+		ubcore_log_err("Failed to find ubcm device, src_eid: " EID_FMT ".\n",
 			EID_ARGS(send_buf->src_eid));
 		goto free_send_buf;
 	}
@@ -274,7 +245,7 @@ void ubcm_work_handler(struct work_struct *work)
 
 	ret = ubmad_post_send(cm_dev->device, send_buf, &bad_send_buf);
 	if (ret != 0)
-		ubcm_log_err("Failed to post send mad, ret: %d.\n", ret);
+		ubcore_log_err("Failed to post send mad, ret: %d.\n", ret);
 	ubcm_put_device(cm_dev);
 
 free_send_buf:
@@ -293,13 +264,13 @@ static int ubcm_base_init(void)
 
 	cm_ctx->wq = alloc_workqueue(UBCM_MODULE_NAME, 0, 1);
 	if (IS_ERR_OR_NULL(cm_ctx->wq)) {
-		ubcm_log_err("Failed to alloc ubcm workqueue.\n");
+		ubcore_log_err("Failed to alloc ubcm workqueue.\n");
 		return -ENOMEM;
 	}
 
 	ret = ubcore_register_client(&g_ubcm_client);
 	if (ret != 0) {
-		ubcm_log_err("Failed to register ubcm client, ret: %d.\n", ret);
+		ubcore_log_err("Failed to register ubcm client, ret: %d.\n", ret);
 		destroy_workqueue(cm_ctx->wq);
 		cm_ctx->wq = NULL;
 	}
@@ -364,25 +335,25 @@ int ubcm_init(void)
 
 	ret = ubmad_init();
 	if (ret != 0) {
-		ubcm_log_err("Failed to init ub_mad, ret: %d.\n", ret);
+		ubcore_log_err("Failed to init ub_mad, ret: %d.\n", ret);
 		return ret;
 	}
 
 	ret = ubcm_base_init();
 	if (ret != 0) {
-		ubcm_log_err("Failed to init ubcm base, ret: %d.\n", ret);
+		ubcore_log_err("Failed to init ubcm base, ret: %d.\n", ret);
 		goto uninit_mad;
 	}
 
 	ret = ubcm_genl_init();
 	if (ret != 0) {
-		ubcm_log_err("Failed to init ubcm generic netlink, ret: %d.\n",
+		ubcore_log_err("Failed to init ubcm generic netlink, ret: %d.\n",
 			     ret);
 		goto uninit_base;
 	}
 	ubcore_register_cm_send_ops(ubmad_ubc_send);
 
-	ubcm_log_info("ubcm module init success.\n");
+	ubcore_log_info("ubcm module init success.\n");
 	return 0;
 
 uninit_base:
@@ -397,5 +368,5 @@ void ubcm_uninit(void)
 	ubcm_genl_uninit();
 	ubcm_base_uninit();
 	ubmad_uninit();
-	ubcm_log_info("ubcm module exits.\n");
+	ubcore_log_info("ubcm module exits.\n");
 }
