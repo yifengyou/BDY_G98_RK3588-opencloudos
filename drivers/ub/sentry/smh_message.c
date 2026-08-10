@@ -145,6 +145,11 @@ int smh_message_send(struct sentry_msg_helper_msg *msg, bool ack)
 	int ret = 0;
 	struct smh_msg_handler *handle;
 
+	if (!msg) {
+		pr_err("%s: Invalid param, failed to send data\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!msg->msgid) {
 		RM_LOG_ERR("please set the correct msgid by 'smh_get_new_msg_id', stop to send this msg\n");
 		return -EINVAL;
@@ -304,6 +309,11 @@ int smh_message_get_ack(struct sentry_msg_helper_msg *msg)
 	struct smh_msg_handler *handle;
 	bool found = false;
 
+	if (!msg) {
+		pr_err("%s: Invalid param, failed to get data\n", __func__);
+		return found;
+	}
+
 	FIND_AND_REMOVE_TIMEOUT_FROM_LIST(handle, &msg_ctx.msgbuf_get_lock,
 					  &msg_ctx.msgbuf_get, get_list,
 					  msg->msgid, found);
@@ -358,6 +368,7 @@ int smh_message_init(void)
  */
 void smh_message_exit(void)
 {
+	int ret;
 	struct smh_msg_handler *handle, *tmp;
 
 	/* Clean up acknowledgment list */
@@ -376,5 +387,14 @@ void smh_message_exit(void)
 	}
 	spin_unlock(&msg_ctx.msgbuf_get_lock);
 
+	do {
+		ret = kfifo_out_spinlocked(&msg_ctx.msgbuf_send, &handle,
+				sizeof(handle), &msg_ctx.msgbuf_send_lock);
+		if (ret) {
+			kfree(handle);
+			continue;
+		}
+		break;
+	} while (1);
 	kfifo_free(&msg_ctx.msgbuf_send);
 }

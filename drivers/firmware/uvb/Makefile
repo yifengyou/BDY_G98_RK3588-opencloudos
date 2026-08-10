@@ -13,4 +13,5 @@ odf-objs := odf/odf_trans.o \
 obj-$(CONFIG_UDFI_CIS) += cis.o
 cis-objs := cis/cis_info_process.o \
 	cis/uvb_info_process.o \
-	cis/cis_core.o
+	cis/cis_core.o \
+	cis/cis_ub.o

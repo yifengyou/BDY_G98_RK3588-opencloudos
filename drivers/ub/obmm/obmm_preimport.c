@@ -107,7 +107,7 @@ int preimport_prepare_common(struct preimport_range *pr, uint8_t base_dist)
 		return -EINVAL;
 	}
 
-	pr_info("call external: add_memory_remote(nid=%d, flags=MEMORY_KEEP_ISOLATED)\n",
+	pr_debug("call external: add_memory_remote(nid=%d, flags=MEMORY_KEEP_ISOLATED)\n",
 		pr->numa_id);
 	ret = add_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1,
 				MEMORY_KEEP_ISOLATED);
@@ -133,7 +133,7 @@ int preimport_prepare_common(struct preimport_range *pr, uint8_t base_dist)
 	return 0;
 
 err_remove_memory_remote:
-	pr_info("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
+	pr_debug("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
 	ret_err = remove_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1);
 	pr_debug("external called: remove_memory_remote() returned %d\n", ret_err);
 	return ret;
@@ -143,7 +143,7 @@ int preimport_release_common(struct preimport_range *pr, bool force)
 {
 	int ret;
 
-	pr_info("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
+	pr_debug("call external: remove_memory_remote(nid=%d)\n", pr->numa_id);
 	ret = remove_memory_remote(pr->numa_id, pr->start, pr->end - pr->start + 1);
 	pr_debug("external called: remove_memory_remote() returned %pe\n", ERR_PTR(ret));
 	if (ret && !force) {
@@ -184,7 +184,7 @@ int check_preimport_datapath_common(const struct preimport_range *pr,
 
 static void print_preimport_param(const struct obmm_cmd_preimport *cmd)
 {
-	pr_info("obmm_preimport: pa=%#llx length=%#llx scna=%#x dcna=%#x flags=%#llx nid=%d base_dist=%u deid="
+	pr_debug("obmm_preimport: pa=%#llx length=%#llx scna=%#x dcna=%#x flags=%#llx nid=%d base_dist=%u deid="
 		EID_FMT64 " seid=" EID_FMT64 " priv_len=%u\n",
 		cmd->pa, cmd->length, cmd->scna, cmd->dcna, cmd->flags, cmd->numa_id,
 		cmd->base_dist, EID_ARGS64_H(cmd->deid), EID_ARGS64_L(cmd->deid),
@@ -206,7 +206,7 @@ int obmm_preimport(struct obmm_cmd_preimport *cmd)
 	if (ret)
 		module_put(THIS_MODULE);
 	else
-		pr_info("%s: preimport on nid=%d finished.\n", __func__, cmd->numa_id);
+		pr_debug("%s: preimport on nid=%d finished.\n", __func__, cmd->numa_id);
 	return ret;
 }
 
@@ -221,7 +221,7 @@ static int check_unpreimport_cmd_common(const struct obmm_cmd_preimport *cmd)
 
 static void print_unpreimport_param(const struct obmm_cmd_preimport *cmd)
 {
-	pr_info("obmm_unpreimport: pa=%#llx, length=%#llx.\n", cmd->pa, cmd->length);
+	pr_debug("obmm_unpreimport: pa=%#llx, length=%#llx.\n", cmd->pa, cmd->length);
 }
 
 int obmm_unpreimport(struct obmm_cmd_preimport *cmd)
@@ -236,7 +236,7 @@ int obmm_unpreimport(struct obmm_cmd_preimport *cmd)
 	ret = preimport_release_prefilled(cmd->pa, cmd->pa + cmd->length - 1);
 	if (ret == 0)
 		module_put(THIS_MODULE);
-	pr_info("%s: unpreimport on pa=%#llx finished.\n", __func__, cmd->pa);
+	pr_debug("%s: unpreimport on pa=%#llx finished.\n", __func__, cmd->pa);
 
 	return ret;
 }

@@ -15,6 +15,7 @@
 #include <linux/ktime.h>
 #include <linux/inet.h>
 #include <linux/proc_fs.h>
+#include <linux/string.h>
 
 #define SMH_TYPE ('}')
 #define MAX_DIE_NUM 2
@@ -103,7 +104,12 @@ static inline int convert_str_to_smh_msg(const char *str,
 {
     int n;
     int ret = 0;
-    char input_copy[URMA_SEND_DATA_MAX_LEN];
+    char input_copy[URMA_SEND_DATA_MAX_LEN + 1] = {0};
+
+    if (!str || strnlen(str, URMA_SEND_DATA_MAX_LEN + 1) > URMA_SEND_DATA_MAX_LEN) {
+		pr_err("%s: Invalid string, failed to convert it to smh_msg.\n", __func__);
+		return -EINVAL;
+    }
 
     n = sscanf(str, "%d_%s", (int *)&smh_msg->type, input_copy);
     if (n != 2) {
