@@ -405,6 +405,8 @@ int apei_claim_sea(struct pt_regs *regs)
 
 	local_daif_restore(current_flags);
 
+	if (err)
+		pr_warn_ratelimited("ghes_notify_sea failed, err: %d\n", err);
 	return err;
 }
 

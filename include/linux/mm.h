@@ -4488,4 +4488,36 @@ int set_linear_mapping_invalid(unsigned long start_pfn, unsigned long end_pfn,
 	return -EINVAL;
 }
 #endif
+
+#ifdef CONFIG_ACPI_APEI_RAS_CRITICAL
+static inline bool mm_is_critical_error(struct mm_struct *mm)
+{
+	return mm && test_bit(MMF_CRITICAL_ERR, &mm->flags);
+}
+
+static inline void set_node_critical_err(int nid)
+{
+	set_bit(PGDAT_CRITICAL_ERR, &NODE_DATA(nid)->flags);
+}
+
+static inline void clear_node_critical_err(int nid)
+{
+	clear_bit(PGDAT_CRITICAL_ERR, &NODE_DATA(nid)->flags);
+}
+
+static inline bool node_is_critical_err(int nid)
+{
+	return test_bit(PGDAT_CRITICAL_ERR, &NODE_DATA(nid)->flags);
+}
+#else
+static inline bool mm_is_critical_error(struct mm_struct *mm)
+{
+	return false;
+}
+
+static inline void set_node_critical_err(int nid) { return; }
+static inline void clear_node_critical_err(int nid) { return; }
+static inline bool node_is_critical_err(int nid) { return false; }
+#endif
+
 #endif /* _LINUX_MM_H */

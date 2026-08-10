@@ -113,6 +113,13 @@ extern void copy_to_user_page(struct vm_area_struct *, struct page *,
 	unsigned long, void *, const void *, unsigned long);
 #define copy_to_user_page copy_to_user_page
 
+extern int copy_mc_to_user_page(struct vm_area_struct *, struct page *,
+	unsigned long, void *, const void *, unsigned long);
+#define copy_mc_to_user_page copy_mc_to_user_page
+
+#define copy_mc_from_user_page(vma, page, vaddr, dst, src, len) \
+	memcpy_mc(dst, src, len)
+
 /*
  * flush_dcache_folio is used when the kernel has written to the page
  * cache page at virtual address page->virtual.

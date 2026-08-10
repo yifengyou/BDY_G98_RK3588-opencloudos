@@ -26,13 +26,16 @@ static int obmm_lowmem_notify_handler(struct notifier_block *nb __always_unused,
 	bool is_huge = false;
 	int i;
 
+	if (!data)
+		return NOTIFY_DONE;
+
 	pr_debug_ratelimited("got lowmem message. pid=%d sync=%d reason=%u\n", current->pid,
 			     data->sync, data->reason);
 
 	if (data->reason != RR_DIRECT_RECLAIM &&
 	    data->reason != RR_KSWAPD &&
 	    data->reason != RR_HUGEPAGE_RECLAIM)
-		return -ENOMEM;
+		return NOTIFY_DONE;
 
 	if (data->reason == RR_HUGEPAGE_RECLAIM)
 		is_huge = true;
@@ -42,7 +45,7 @@ static int obmm_lowmem_notify_handler(struct notifier_block *nb __always_unused,
 		data->nr_freed += ubmempool_contract(data->nid[i], is_huge) >> PAGE_SHIFT;
 	}
 
-	return 0;
+	return NOTIFY_OK;
 }
 
 int lowmem_notify_init(void)

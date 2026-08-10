@@ -1528,4 +1528,19 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 }
 #endif /* CONFIG_SHRINKER_DEBUG */
 
+#ifdef CONFIG_FILEMAP_LOCAL_ALLOC
+struct folio *filemap_try_alloc_local(gfp_t gfp, unsigned int order);
+bool numa_is_standard_node(int nid);
+bool filemap_alloc_local_enabled(void);
+extern struct page *__alloc_pages_mpol_local(gfp_t gfp, unsigned int order,
+			struct mempolicy *pol, pgoff_t ilx, int nid);
+#else
+static inline struct folio *filemap_try_alloc_local(gfp_t gfp,
+					unsigned int order) {return NULL; }
+static inline bool numa_is_standard_node(int nid) {return false; }
+static inline bool filemap_alloc_local_enabled(void) {return false; }
+static inline  struct page *__alloc_pages_mpol_local(gfp_t gfp, unsigned int order,
+			struct mempolicy *pol, pgoff_t ilx, int nid) {return NULL; }
+#endif /* CONFIG_FILEMAP_LOCAL_ALLOC */
+
 #endif	/* __MM_INTERNAL_H */
