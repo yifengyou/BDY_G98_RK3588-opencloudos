@@ -11,6 +11,7 @@
 #include <linux/wait.h>
 #include <linux/kthread.h>
 #include <linux/atmioc.h>
+#include <linux/kobject.h>
 
 struct memseg_node {
 	phys_addr_t addr;
@@ -69,12 +70,16 @@ struct conti_mempool_ops {
 
 struct conti_mem_allocator {
 	bool initialized;
+	bool sysfs_initialized;
 
 	int nid;
 	size_t granu;
 
 	atomic64_t pooled_mem_size;
 	atomic64_t used_mem_size;
+	atomic64_t ready_mem_size;      /* cleared but not used (memseg_ready) */
+	atomic64_t uncleared_mem_size;  /* allocated but not cleared */
+					/* (memseg_uncleared + memseg_clearing) */
 
 	spinlock_t lock;
 	struct list_head memseg_ready;
@@ -90,6 +95,9 @@ struct conti_mem_allocator {
 
 	const struct conti_mempool_ops *ops;
 	const char *name;
+
+	/* sysfs support */
+	struct kobject kobj;
 };
 
 static inline size_t conti_get_total(struct conti_mem_allocator *a)
@@ -103,7 +111,8 @@ static inline size_t conti_get_avail(struct conti_mem_allocator *a)
 }
 
 int conti_mem_allocator_init(struct conti_mem_allocator *allocator, int nid, size_t granu,
-			     const struct conti_mempool_ops *ops, const char *fmt, ...);
+			     const struct conti_mempool_ops *ops,
+			     struct kobject *parent, const char *fmt, ...);
 void conti_mem_allocator_deinit(struct conti_mem_allocator *allocator);
 
 void conti_free_memory(struct conti_mem_allocator *allocator, struct list_head *head);

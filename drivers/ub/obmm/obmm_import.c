@@ -102,7 +102,7 @@ static int teardown_remote_numa(struct obmm_import_region *i_reg, bool force)
 	if (ret)
 		return ret;
 
-	pr_info("call external: remove_memory_remote(nid=%d, size=%#llx)\n",
+	pr_debug("call external: remove_memory_remote(nid=%d, size=%#llx)\n",
 		i_reg->numa_id, i_reg->region.mem_size);
 	ret = remove_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size);
 	pr_debug("external called: remove_memory_remote, ret=%pe\n", ERR_PTR(ret));
@@ -114,7 +114,7 @@ static int teardown_remote_numa(struct obmm_import_region *i_reg, bool force)
 	}
 
 	if (region_preimport(&i_reg->region)) {
-		pr_info("call external: add_memory_remote(nid=%d, size=0x%llx, flags=MEMORY_KEEP_ISOLATED)\n",
+		pr_debug("call external: add_memory_remote(nid=%d, size=0x%llx, flags=MEMORY_KEEP_ISOLATED)\n",
 			i_reg->numa_id, i_reg->region.mem_size);
 		this_ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size,
 					     MEMORY_KEEP_ISOLATED);
@@ -144,7 +144,7 @@ static int setup_remote_numa(struct obmm_import_region *i_reg)
 		return -EINVAL;
 	}
 
-	pr_info("call external: add_memory_remote(nid=%d, flags=%d)\n",
+	pr_debug("call external: add_memory_remote(nid=%d, flags=%d)\n",
 		i_reg->numa_id, flags);
 	ret = add_memory_remote(i_reg->numa_id, i_reg->pa, i_reg->region.mem_size, flags);
 	pr_debug("external called: add_memory_remote() returned %d\n", ret);
@@ -454,7 +454,7 @@ static int init_import_region_from_cmd(const struct obmm_cmd_import *param,
 
 static void print_import_param(const struct obmm_cmd_import *cmd_import)
 {
-	pr_info("obmm_import: scna=%#x {pa=%#llx length=%#llx} flags=%#llx nid=%d base_dist=%u seid="
+	pr_debug("obmm_import: scna=%#x {pa=%#llx length=%#llx} flags=%#llx nid=%d base_dist=%u seid="
 		EID_FMT64 " priv_len=%u\n",
 		cmd_import->scna, cmd_import->addr, cmd_import->length, cmd_import->flags,
 		cmd_import->numa_id, cmd_import->base_dist, EID_ARGS64_H(cmd_import->seid),
@@ -504,7 +504,7 @@ int obmm_import(struct obmm_cmd_import *cmd_import)
 	cmd_import->numa_id = numa_id;
 	cmd_import->mem_id = mem_id;
 
-	pr_info("%s: mem_id=%llu online\n", __func__, cmd_import->mem_id);
+	pr_debug("%s: mem_id=%llu online\n", __func__, cmd_import->mem_id);
 	return 0;
 
 out_release_memory:
@@ -529,7 +529,7 @@ int obmm_unimport(const struct obmm_cmd_unimport *cmd_unimport)
 	struct obmm_region *reg;
 	struct obmm_import_region *i_reg;
 
-	pr_info("%s: mem_id=%llu, flags=%#llx.\n", __func__, cmd_unimport->mem_id,
+	pr_debug("%s: mem_id=%llu, flags=%#llx.\n", __func__, cmd_unimport->mem_id,
 		cmd_unimport->flags);
 	if (!validate_obmm_mem_id(cmd_unimport->mem_id))
 		return -ENOENT;
@@ -557,7 +557,7 @@ int obmm_unimport(const struct obmm_cmd_unimport *cmd_unimport)
 	wait_until_dev_released(&i_reg->region);
 	kfree(i_reg);
 
-	pr_info("%s: mem_id=%llu completed.\n", __func__, cmd_unimport->mem_id);
+	pr_debug("%s: mem_id=%llu completed.\n", __func__, cmd_unimport->mem_id);
 	return 0;
 
 err_unimport:

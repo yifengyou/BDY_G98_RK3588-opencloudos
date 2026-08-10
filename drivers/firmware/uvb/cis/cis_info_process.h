@@ -21,7 +21,6 @@
 
 extern struct cis_message *io_param_sync;
 extern struct list_head  g_local_cis_list;
-extern DECLARE_HASHTABLE(uvb_lock_table, MAX_UVB_LOCK_IN_BITS);
 
 struct udfi_para {
 	u32 message_id;

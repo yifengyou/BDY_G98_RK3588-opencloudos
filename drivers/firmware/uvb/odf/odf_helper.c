@@ -160,7 +160,8 @@ int odf_separate_name(char **path, char *name, u64 max_len, u16 *index)
 		c++;
 	}
 
-	if ((i > max_len) || (j >= UBIOS_OD_INDEX_STRING_MAX))
+	if ((i == max_len && name[i-1] != '\0') ||
+		(j == UBIOS_OD_INDEX_STRING_MAX && index_string[j-1] != '\0'))
 		return -EOVERFLOW;
 
 	if (*c == '\0')

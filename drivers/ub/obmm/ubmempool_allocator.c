@@ -15,6 +15,8 @@
 #include <linux/mmzone.h>
 #include <linux/hugetlb.h>
 #include <linux/numa_remote.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 #include <acpi/ghes.h>
 
 #include "obmm_core.h"
@@ -61,6 +63,9 @@ static void refill_timeout(struct timer_list *timer)
 }
 
 static struct mem_allocator mem_allocators[OBMM_MAX_LOCAL_NUMA_NODES];
+
+/* Global parent kobject for mempool sysfs entries */
+static struct kobject *mempool_kobj;
 
 static void pool_delay_expand(int nid)
 {
@@ -495,6 +500,10 @@ static int init_mem_allocator_granu(enum allocator_id aid)
 		pr_err("unsupported mem_allocator_granu: %s\n", mem_allocator_granu);
 		return -EINVAL;
 	}
+	if (!is_power_of_2(__obmm_memseg_size)) {
+		pr_err("mem_allocator_granu must be power of 2: %s\n", mem_allocator_granu);
+		return -EINVAL;
+	}
 	if (aid == ALLOCATOR_HUGETLB_PUD && __obmm_memseg_size != PUD_SIZE) {
 		pr_err("unsupported mem_allocator_granu for hugetlb_pud allocator: %s\n",
 		       mem_allocator_granu);
@@ -518,7 +527,7 @@ static int mem_allocator_init_one(int nid, enum allocator_id aid)
 	timer_setup(&mem_allocators[nid].refill_timer, refill_timeout, 0);
 
 	ret = conti_mem_allocator_init(allocator, nid, OBMM_MEMSEG_SIZE, allocator_ops[aid],
-				       "%s/%d", allocator_names[aid], nid);
+				       mempool_kobj, "obmm-%d", nid);
 	if (ret)
 		goto err_del_timer;
 
@@ -613,7 +622,6 @@ int ubmempool_allocator_init(void)
 
 	for_each_online_local_node(nid) {
 		if (nid >= OBMM_MAX_LOCAL_NUMA_NODES) {
-			/* be no mem_allocators[nid] is out of range */
 			pr_err("Too many local NUMA nodes. OBMM rebuild required.\n");
 			return -EOPNOTSUPP;
 		}
@@ -637,6 +645,12 @@ int ubmempool_allocator_init(void)
 	if (ret)
 		return ret;
 
+	mempool_kobj = kobject_create_and_add("obmm_mempool", kernel_kobj);
+	if (!mempool_kobj) {
+		pr_err("Failed to create mempool sysfs directory\n");
+		return -ENOMEM;
+	}
+
 	for_each_online_local_node(i) {
 		ret = mem_allocator_init_one(i, aid);
 		if (ret)
@@ -652,6 +666,8 @@ failed:
 		if (j < i)
 			mem_allocator_uninit_one(j);
 	}
+	kobject_put(mempool_kobj);
+	mempool_kobj = NULL;
 
 	return ret;
 }
@@ -667,5 +683,10 @@ void ubmempool_allocator_exit(void)
 			continue;
 
 		mem_allocator_uninit_one(i);
+	}
+
+	if (mempool_kobj) {
+		kobject_put(mempool_kobj);
+		mempool_kobj = NULL;
 	}
 }

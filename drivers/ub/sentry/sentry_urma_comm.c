@@ -566,7 +566,7 @@ static void release_all_resource(void)
  */
 int str_to_eid(const char *eid_str, union ubcore_eid *eid)
 {
-	if (strlen(eid_str) != EID_MAX_LEN - 1) {
+	if (!eid_str || !eid || strlen(eid_str) != EID_MAX_LEN - 1) {
 		pr_err("eid str %s len is invalid, failed to transfer\n", eid_str);
 		return -EINVAL;
 	}
@@ -1084,6 +1084,11 @@ int match_index_by_remote_ub_eid(union ubcore_eid remote_eid, int *node_index, i
 {
 	int i, j;
 
+	if (!node_index || !die_index) {
+		pr_err("Invalid param, failed to match index\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < sentry_urma_ctx.local_eid_num_configured; i++) {
 		if (!sentry_urma_dev[i].is_created) {
 			pr_err("invalid value for sentry_urma_dev[%d].is_created\n", i);
@@ -1123,8 +1128,7 @@ EXPORT_SYMBOL(match_index_by_remote_ub_eid);
  */
 int sentry_create_urma_resource(union ubcore_eid eid[], int eid_num)
 {
-	int ret;
-	int i;
+	int ret, i;
 
 	/* Prepare for new device matching by cleaning up old resources */
 	release_all_resource();
@@ -1227,6 +1231,11 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 	int eid_num = 0;
 	char *eid_part;
 
+	if (!eid_buf || !sepstr) {
+		pr_err("Invalid param, failed to process multi eid string\n");
+		return -EINVAL;
+	}
+
 	while ((eid_part = strsep(&eid_buf, sepstr)) != NULL) {
 		if (eid_num >= eid_max_num) {
 			pr_err("Invalid eid format: max num %d, current input exceeds\n",
@@ -1234,7 +1243,7 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 			return -EINVAL;
 		}
 
-		if (strlen(eid_part) > EID_MAX_LEN) {
+		if (strlen(eid_part) >= EID_MAX_LEN) {
 			pr_err("Invalid eid format: str too long: %s\n", eid_part);
 			return -EINVAL;
 		}
@@ -1245,7 +1254,8 @@ int process_multi_eid_string(char *eid_buf, char eid_array[][EID_MAX_LEN],
 			return -EINVAL;
 		}
 
-		memcpy(eid_array[eid_num], eid_part, EID_MAX_LEN);
+		memset(eid_array[eid_num], 0, EID_MAX_LEN);
+		memcpy(eid_array[eid_num], eid_part, strnlen(eid_part, EID_MAX_LEN));
 		eid_num++;
 	}
 
@@ -2070,6 +2080,12 @@ int urma_send(const char *buf, size_t len, const char *dst_eid, int die_index)
 	if (!g_is_created_ubcore_resource)
 		return -ENODEV;
 
+	/* at broadcast mode, dst_eid is NULL */
+	if (!buf || len > URMA_SEND_DATA_MAX_LEN || strlen(buf) > len) {
+		pr_err("%s: Invalid param, failed to send data\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!dst_eid && die_index >= 0) {
 		/* Broadcast mode: send to all nodes */
 		cnt = urma_send_to_all_nodes(buf, len, die_index);
@@ -2146,8 +2162,8 @@ int urma_recv(char **buf_arr, size_t len)
 			int tmp_die_index = die_index;
 
 			/* Extract message from completion context */
-			ret = snprintf(recv_msg, len, "%s", (char *)sentry_urma_ctx.urma_recv_cr[i].user_ctx);
-			if ((size_t)ret >= len) {
+			ret = snprintf(recv_msg, sizeof(recv_msg), "%s", (char *)sentry_urma_ctx.urma_recv_cr[i].user_ctx);
+			if ((size_t)ret >= sizeof(recv_msg)) {
 				pr_warn("urma recv: msg size exceeds max len %lu\n", len);
 				continue;
 			}
@@ -2250,7 +2266,7 @@ static int __init sentry_urma_comm_init(void)
 {
 	int ret = 0;
 
-	sentry_urma_ctx.proc_dir = proc_mkdir_mode(PROC_DEVICE_PATH, 0550, NULL);
+	sentry_urma_ctx.proc_dir = proc_mkdir_mode(PROC_DEVICE_PATH, PROC_DIR_PERMISSION, NULL);
 	if (!sentry_urma_ctx.proc_dir) {
 		pr_err("create /proc/%s dir failed\n", PROC_DEVICE_PATH);
 		return -ENOMEM;

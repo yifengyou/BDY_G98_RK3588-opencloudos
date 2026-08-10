@@ -31,8 +31,10 @@ int export_flags_to_region_flags(unsigned long *region_flags, unsigned long user
 {
 	*region_flags = 0;
 
-	if (user_flags & (~OBMM_EXPORT_FLAG_MASK))
+	if (user_flags & (~OBMM_EXPORT_FLAG_MASK)) {
+		pr_err("undefined flags specified in export flags parameter %#lx.\n", user_flags);
 		return -EINVAL;
+	}
 	if (user_flags & OBMM_EXPORT_FLAG_ALLOW_MMAP)
 		*region_flags |= OBMM_REGION_FLAG_ALLOW_MMAP;
 	if (user_flags & OBMM_EXPORT_FLAG_FAST)
@@ -69,7 +71,7 @@ static int setup_ummu(struct obmm_export_region *e_reg)
 		return retval;
 
 	/* register the memory region through UMMU */
-	pr_info("call ummu_core_alloc_tdev(), priv_len=%u, tid=%u\n", attr.priv_len, tokenid);
+	pr_debug("call ummu_core_alloc_tdev(), priv_len=%u, tid=%u\n", attr.priv_len, tokenid);
 	e_reg->ummu_dev = ummu_core_alloc_tdev(&attr, &tokenid);
 	if (e_reg->ummu_dev == NULL) {
 		pr_err("Failed to create UMMU device\n");
@@ -81,7 +83,7 @@ static int setup_ummu(struct obmm_export_region *e_reg)
 		 dev_name(e_reg->ummu_dev));
 
 	/* DMA mapping */
-	pr_info("call dma_map_sgtable(..., dir=DMA_BIDIRECTIONAL, attrs=0)\n");
+	pr_debug("call dma_map_sgtable(..., dir=DMA_BIDIRECTIONAL, attrs=0)\n");
 	retval = dma_map_sgtable(e_reg->ummu_dev, &e_reg->sgt, DMA_BIDIRECTIONAL, 0);
 	if (retval) {
 		pr_err("Failed to map sgtable on UMMU. ret=%pe\n", ERR_PTR(retval));
@@ -200,7 +202,7 @@ int obmm_unexport(const struct obmm_cmd_unexport *cmd_unexport)
 	struct obmm_region *reg;
 	struct obmm_export_region *e_reg;
 
-	pr_info("%s: mem_id=%llu, flags=%#llx.\n", __func__, cmd_unexport->mem_id,
+	pr_debug("%s: mem_id=%llu, flags=%#llx.\n", __func__, cmd_unexport->mem_id,
 		cmd_unexport->flags);
 	if (!validate_obmm_mem_id(cmd_unexport->mem_id))
 		return -ENOENT;
@@ -228,7 +230,7 @@ int obmm_unexport(const struct obmm_cmd_unexport *cmd_unexport)
 	uninit_obmm_region(reg);
 	free_export_region(e_reg);
 
-	pr_info("%s: mem_id=%llu completed.\n", __func__, cmd_unexport->mem_id);
+	pr_debug("%s: mem_id=%llu completed.\n", __func__, cmd_unexport->mem_id);
 	return 0;
 
 err_unexport_common:

@@ -32,7 +32,7 @@
 #define PANIC_TIMEOUT_MS_MAX		3600000
 #define KERNEL_REBOOT_TIMEOUT_MS_MIN	0
 #define KERNEL_REBOOT_TIMEOUT_MS_MAX	3600000
-#define LOCAL_EID_MAX_LEN		(EID_MAX_LEN * 2 + 1 + 1)
+#define LOCAL_EID_MAX_LEN		(EID_MAX_LEN * MAX_DIE_NUM + 1 + 1)
 
 #undef pr_fmt
 #define pr_fmt(fmt) "[sentry][remote client]: " fmt
@@ -144,7 +144,7 @@ int remote_event_handler(enum sentry_msg_helper_msg_type remote_type,
 	bool uvb_send_success = false;
 	bool urma_send_success = false;
 	enum sentry_msg_helper_msg_type remote_ack_type;
-	char send_data[MAX_DIE_NUM][URMA_SEND_DATA_MAX_LEN];
+	char send_data[MAX_DIE_NUM][URMA_SEND_DATA_MAX_LEN] = {0};
 	uint64_t start_count, current_count;
 	uint64_t code_run_count, code_run_times_ms;
 	uint64_t counts_per_sec = arch_timer_get_cntfrq();
@@ -805,8 +805,8 @@ static ssize_t proc_reporter_eid_write(struct file *file, const char __user *ubu
 {
 	int ret;
 	int eid_num = 0;
-	char eid_str_buf[LOCAL_EID_MAX_LEN];
-	char eid_str_buf_tmp[LOCAL_EID_MAX_LEN];
+	char eid_str_buf[LOCAL_EID_MAX_LEN] = {0};
+	char eid_str_buf_tmp[LOCAL_EID_MAX_LEN] = {0};
 	char eid_str_array[MAX_DIE_NUM][EID_MAX_LEN] = {0};
 	union ubcore_eid eid_ub_buf[MAX_DIE_NUM] = {0};
 
@@ -1035,14 +1035,15 @@ static int __init sentry_remote_reporter_init(void)
 	if (ret)
 		return ret;
 
-	sentry_client_ctx.msg_str = kzalloc(MAX_NODE_NUM * 2 * sizeof(char *), GFP_KERNEL);
+	sentry_client_ctx.msg_str = kzalloc(MAX_NODE_NUM * MAX_DIE_NUM * sizeof(char *),
+										GFP_KERNEL);
 	if (!sentry_client_ctx.msg_str) {
 		pr_err("Failed to allocate memory for msg_str\n");
 		ret = -ENOMEM;
 		goto stop_kthread;
 	}
 
-	for (i = 0; i < MAX_NODE_NUM * 2; i++) {
+	for (i = 0; i < MAX_NODE_NUM * MAX_DIE_NUM; i++) {
 		sentry_client_ctx.msg_str[i] = kzalloc(URMA_SEND_DATA_MAX_LEN, GFP_KERNEL);
 		if (!sentry_client_ctx.msg_str[i]) {
 			pr_err("Failed to allocate memory for msg_str[%d]\n", i);
@@ -1079,7 +1080,7 @@ unregister_panic:
 unregister_kernel_reboot:
 	unregister_reboot_notifier(&kernel_reboot_notifier);
 free_msg_str:
-	free_char_array(sentry_client_ctx.msg_str, MAX_NODE_NUM * 2);
+	free_char_array(sentry_client_ctx.msg_str, MAX_NODE_NUM * MAX_DIE_NUM);
 stop_kthread:
 	sentry_panic_reporter_exit();
 	return ret;
@@ -1099,7 +1100,7 @@ static void __exit sentry_remote_reporter_exit(void)
 	unregister_reboot_notifier(&kernel_reboot_notifier);
 	pr_info("Kernel reboot handler unregistered\n");
 
-	free_char_array(sentry_client_ctx.msg_str, MAX_NODE_NUM * 2);
+	free_char_array(sentry_client_ctx.msg_str, MAX_NODE_NUM * MAX_DIE_NUM);
 
 	if (sentry_client_ctx.panic_proc_dir)
 		proc_remove(sentry_client_ctx.panic_proc_dir);

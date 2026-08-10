@@ -34,7 +34,7 @@ static long smh_dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 	switch (cmd) {
 	case SMH_MSG_ACK: {
-		struct sentry_msg_helper_msg cmd_msg;
+		struct sentry_msg_helper_msg cmd_msg = {0};
 
 		if (copy_from_user(&cmd_msg, (void __user *)arg, sizeof(cmd_msg)))
 			return -EFAULT;
