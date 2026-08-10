@@ -111,7 +111,9 @@ void ub_msg_pkt_header_init(struct msg_pkt_header *header, struct ub_entity *uen
 	cnth->nth_nlp = NTH_NLP_WITH_TPH;
 	cnth->scna = scna;
 	cnth->dcna = dcna;
-	cnth->mgmt = is_p_device(uent) ? 0 : 1;
+	cnth->mgmt = (is_p_device(uent) ||
+		      (uent->pool && uent_type(uent) == UB_TYPE_CONTROLLER))
+		      ? 0 : 1;
 
 	header->ctph_nlp = CTPH_NLP_UPI_40BITS_UEID;
 	header->tp_opcode = CTPH_OPCODE_NOT_CNP;
@@ -189,8 +191,8 @@ static int ub_sync_cfg_rsp_check(struct ub_entity *uent,
 				     rsp_header->msgetah.code);
 }
 
-void ub_sync_cfg_rsp_handle(struct cfg_msg_pld_rsp *rsp, u8 size,
-			    u64 pos, bool write, u32 *val)
+static void ub_sync_cfg_rsp_handle(struct cfg_msg_pld_rsp *rsp, u8 size,
+				   u64 pos, bool write, u32 *val)
 {
 #define UB_CFG_REG_SIZE 4
 	u8 pos_in_reg = pos % UB_CFG_REG_SIZE;
@@ -236,6 +238,19 @@ static void ub_msg_pkt_req_init(struct ub_entity *uent, u8 size, u64 pos, u32 *v
 	req->req_addr = pos / sizeof(u32);
 }
 
+static bool ub_entity_is_disconnected(struct ub_entity *uent)
+{
+	struct ub_entity *pri = uent;
+
+	if (uent->pool && uent_type(uent) == UB_TYPE_CONTROLLER)
+		return false; /* Pool entity not consider here. */
+
+	while (pri->entity_idx != 0)
+		pri = pri->pue;
+
+	return ub_entity_test_priv_flag(pri, UB_ENTITY_DISCONNECTED);
+}
+
 static int ub_sync_cfg(struct ub_entity *uent, u8 size, u64 pos, bool iswrite,
 		       u32 *val)
 {
@@ -244,6 +259,9 @@ static int ub_sync_cfg(struct ub_entity *uent, u8 size, u64 pos, bool iswrite,
 	struct msg_info info = {};
 	u8 sub_msg_code;
 	int ret;
+
+	if (ub_entity_is_disconnected(uent))
+		return -ETIMEDOUT;
 
 	if (!pos_size_valid(pos, size)) {
 		ub_err(uent, "pos or size invalid, pos=%#llx, size=%#x\n", pos,

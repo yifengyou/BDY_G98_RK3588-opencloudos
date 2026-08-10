@@ -134,7 +134,7 @@ struct ummu_data_info {
 	enum ummu_ebit_state e_bit;
 	enum ummu_grant_op_type op;
 	struct ummu_mapt_info *mapt_info;
-	uint8_t lvl;
+	u8 lvl;
 };
 
 struct ummu_domain;

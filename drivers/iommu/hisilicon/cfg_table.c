@@ -274,15 +274,14 @@ static void free_os_meta(struct kref *ref)
 	kfree(meta);
 }
 
-static int os_meta_get_kv_index(struct os_meta *meta, eid_t eid, int type,
-				u32 *kv_index)
+static int os_meta_get_kv_index(struct os_meta *meta, eid_t eid, u32 *kv_index)
 {
 	struct eid_info *info;
 	int ret = -ENOENT;
 
 	guard(spinlock)(&ummu_global);
 	list_for_each_entry(info, &meta->eids, node)
-		if (info->eid == eid && info->eid_type == type) {
+		if (info->eid == eid) {
 			*kv_index = info->kv_index;
 			ret = 0;
 			break;
@@ -1148,6 +1147,7 @@ void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 		core_to_ummu_device(u_domain->base_domain.core_dev);
 	u64 ent0, ent2, ent3;
 
+	memset(target, 0, sizeof(*target));
 	ent0 = TECT_ENT0_V |
 		FIELD_PREP(TECT_ENT0_ST_MODE, TECT_ENT0_ST_MODE_S2) |
 		FIELD_PREP(TECT_ENT0_PRIV_SEL, TECT_ENT0_PRIV_SEL_PRIV) |
@@ -1164,11 +1164,9 @@ void ummu_build_s2_domain_tecte(struct ummu_domain *u_domain,
 		ent2 |= TECT_ENT2_S2_HDF;
 
 	ent3 = u_domain->cfgs.s2_cfg.vttbr & TECT_ENT3_S2_TTBR;
-	 *target = (struct ummu_tecte_data) {
-		.data[0] = cpu_to_le64(ent0),
-		.data[2] = cpu_to_le64(ent2),
-		.data[3] = cpu_to_le64(ent3),
-	};
+	target->data[0] = cpu_to_le64(ent0);
+	target->data[2] = cpu_to_le64(ent2);
+	target->data[3] = cpu_to_le64(ent3);
 }
 
 static bool check_tecte_can_set(const struct ummu_tecte_data *tecte,
@@ -1229,23 +1227,22 @@ void ummu_device_write_tecte(struct ummu_device *ummu, u32 deid,
 	ummu_device_prefetch_cfg(ummu, deid, UMMU_INVALID_TID);
 }
 
-bool ummu_check_dev_to_vm(struct ummu_master *master)
+bool dev_work_on_local(struct ummu_master *master)
 {
 	struct ub_entity *uent;
 
-	if (!dev_is_ub(master->dev))
-		return false;
-
-	uent = to_ub_entity(master->dev);
-	if (!ub_bi_is_dynamic(uent->bi))
-		return false;
-
+	if (dev_is_ub(master->dev)) {
+		uent = to_ub_entity(master->dev);
+		if (ub_bi_is_dynamic(uent->bi))
+			return false;
+	}
 	return true;
 }
 
 int ummu_add_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enum eid_type type)
 {
 	struct ummu_device *ummu = core_to_ummu_device(core_dev);
+	const struct ummu_capability *cap;
 	struct ummu_tecte_data target;
 	struct os_meta *meta = NULL;
 	u32 kv_index;
@@ -1253,11 +1250,14 @@ int ummu_add_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, enu
 
 	meta = ummu_get_os_meta_by_guid((const guid_t *)guid);
 	if (!meta) {
+		cap = ummu_get_cap();
+		if (!cap)
+			return -EINVAL;
 		/*
 		 * os_meta is a singleton, and its release time is
 		 * when no EID is attached to it.
 		 */
-		ret = ummu_alloc_os_meta(ummu_get_cap(), guid, &meta);
+		ret = ummu_alloc_os_meta(cap, guid, &meta);
 		if (ret)
 			return ret;
 	}
@@ -1295,7 +1295,7 @@ void ummu_del_eid(struct ummu_core_device *core_dev, guid_t *guid, eid_t eid, en
 		return;
 	}
 
-	ret = os_meta_get_kv_index(meta, eid, type, &kv_index);
+	ret = os_meta_get_kv_index(meta, eid, &kv_index);
 	if (ret) {
 		dev_err(ummu->dev, "invalid eid:eid_high(0x%llx), eid_low(0x%llx)",
 			(u64)(eid >> EID_HIGH_SZ_SHIFT), (u64)eid);
@@ -1331,16 +1331,35 @@ int ummu_device_init_hash_table(struct ummu_device *ummu)
 	kv_size = PAGE_ALIGN(ents * HASH_ENTRY_SIZE_BYTES);
 	cam_size = PAGE_ALIGN(CAM_TABLE_DEPTH * HASH_ENTRY_SIZE_BYTES);
 
-	kv_addr = (void *)devm_get_free_pages(
-		ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size + cam_size));
-	if (!kv_addr) {
-		dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
-			kv_size + cam_size);
-		return -ENOMEM;
+	if (!(ummu->cap.options & UMMU_OPT_KV_CAM_CONTINUITY)) {
+		kv_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size));
+		if (!kv_addr) {
+			dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
+				kv_size);
+			return -ENOMEM;
+		}
+		kv_phys = virt_to_phys(kv_addr);
+		cam_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(cam_size));
+		if (!cam_addr) {
+			dev_err(ummu->dev, "allocate cam table failed(%zu bytes).\n",
+				cam_size);
+			return -ENOMEM;
+		}
+		cam_phys = virt_to_phys(cam_addr);
+	} else {
+		kv_addr = (void *)devm_get_free_pages(
+			ummu->dev, GFP_KERNEL | __GFP_ZERO, get_order(kv_size + cam_size));
+		if (!kv_addr) {
+			dev_err(ummu->dev, "allocate kv table failed(%zu bytes).\n",
+				kv_size + cam_size);
+			return -ENOMEM;
+		}
+		kv_phys = virt_to_phys(kv_addr);
+		cam_addr = kv_addr + kv_size;
+		cam_phys = kv_phys + kv_size;
 	}
-	kv_phys = virt_to_phys(kv_addr);
-	cam_addr = kv_addr + kv_size;
-	cam_phys = kv_phys + kv_size;
 
 	ummu->hash_tbl_cfg.bank_depth = KV_TABLE_DEPTH;
 	ummu->hash_tbl_cfg.bank_num = KV_TABLE_BANK_NUM;

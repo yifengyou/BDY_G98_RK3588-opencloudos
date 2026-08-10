@@ -83,9 +83,6 @@ void ummu_core_del_eid(guid_t *guid, eid_t eid, enum eid_type type)
 {
 	struct eid_info *info, *next;
 
-	if (WARN_ON(type >= EID_TYPE_MAX))
-		return;
-
 	mutex_lock(&global_device_lock);
 	if (global_core_device) {
 		global_core_device->ops->del_eid(global_core_device, guid, eid, type);

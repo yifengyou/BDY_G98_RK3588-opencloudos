@@ -6,7 +6,6 @@
 
 #include <linux/delay.h>
 #include <linux/ummu_core.h>
-#include <ub/ubase/ubase_comm_hw.h>
 #include <ub/ubase/ubase_comm_mbx.h>
 
 #include "ubase_cmd.h"
@@ -133,6 +132,7 @@ static void ubase_parse_dev_caps_comm(struct ubase_dev *udev,
 {
 	struct ubase_caps *dev_caps = &udev->caps.dev_caps;
 
+	udev->node_type = resp->node_type;
 	dev_caps->num_ceq_vectors = le16_to_cpu(resp->ceq_vector_num);
 	dev_caps->num_aeq_vectors = le16_to_cpu(resp->aeq_vector_num);
 	dev_caps->num_misc_vectors = le16_to_cpu(resp->misc_vector_num);
@@ -901,6 +901,7 @@ void ubase_hw_uninit(struct ubase_dev *udev)
 
 	if (!test_bit(UBASE_STATE_RST_HANDLING_B, &udev->state_bits)) {
 		ubase_ctrlq_disable_remote(udev);
+		__ubase_deactivate_dev(udev);
 		ubase_destroy_ctx_res(udev);
 	}
 

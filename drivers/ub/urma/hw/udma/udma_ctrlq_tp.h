@@ -4,6 +4,7 @@
 #ifndef __UDMA_CTRLQ_TP_H__
 #define __UDMA_CTRLQ_TP_H__
 
+#include <linux/wait.h>
 #include "udma_common.h"
 
 #define UDMA_EID_SIZE		16
@@ -13,6 +14,7 @@
 #define UDMA_UE_NUM		64
 #define UDMA_MAX_UE_IDX		256
 #define UDMA_MAX_TPID_NUM	5
+#define UDMA_CTRLQ_SER_TYPE_UBMEM 5
 
 #define UDMA_CTRLQ_UBMEM_INFO_NUM (96)
 #define UDMA_TPN_CNT_MASK 0x1F
@@ -26,6 +28,7 @@ enum udma_ctrlq_cmd_code_type {
 	UDMA_CMD_CTRLQ_DEACTIVE_TP,
 	UDMA_CMD_CTRLQ_SET_TP_ATTR,
 	UDMA_CMD_CTRLQ_GET_TP_ATTR,
+	UDMA_CMD_CTRLQ_GET_TP_INFO,
 	UDMA_CMD_CTRLQ_MAX
 };
 
@@ -120,7 +123,7 @@ struct udma_ctrlq_check_tp_active_req_data {
 struct udma_ctrlq_check_tp_active_req_info {
 	uint32_t num : 8;
 	uint32_t rsv : 24;
-	struct udma_ctrlq_check_tp_active_req_data data[];
+	struct udma_ctrlq_check_tp_active_req_data data[0];
 };
 
 struct udma_ctrlq_check_tp_active_rsp_data {
@@ -131,7 +134,7 @@ struct udma_ctrlq_check_tp_active_rsp_data {
 struct udma_ctrlq_check_tp_active_rsp_info {
 	uint32_t num : 8;
 	uint32_t rsv : 24;
-	struct udma_ctrlq_check_tp_active_rsp_data data[];
+	struct udma_ctrlq_check_tp_active_rsp_data data[0];
 };
 
 struct udma_ctrlq_get_tp_list_req_data {
@@ -153,6 +156,24 @@ struct udma_ue_tp_info {
 	uint32_t start_tpn : 24;
 };
 
+struct udma_ctrlq_tp_info_req_data {
+	uint32_t tp_id : 24;
+	uint32_t rsv : 8;
+};
+
+struct udma_ctrlq_tp_info_resp_data {
+	uint32_t tp_id : 24;
+	uint32_t rsv : 8;
+	uint32_t rep_start_tpn : 24;
+	uint32_t req_tpn_cnt : 8;
+	uint32_t resp_start_tpn : 24;
+	uint32_t resp_tpn_cnt : 8;
+	uint32_t normal_tp_cnt : 8;
+	uint32_t error_tp_cnt : 8;
+	uint32_t deactive_tp_cnt : 8;
+	uint32_t rsv1 : 8;
+};
+
 struct udma_ue_idx_table {
 	uint32_t num;
 	uint8_t ue_idx[UDMA_UE_NUM];
@@ -169,6 +190,18 @@ struct udma_ctrlq_tp_attr {
 
 struct udma_ctrlq_get_tp_attr_req {
 	struct udma_ctrlq_tpid tpid;
+};
+
+struct udma_tp_cmdq_info {
+	struct xarray seq_tbl;
+	uint32_t seq_num;
+	struct mutex seq_lock;
+};
+
+struct udma_tp_cmdq_wait_info {
+	struct completion ret_completion;
+	uint32_t seq_num;
+	int ret;
 };
 
 struct udma_ctrlq_set_tp_attr_req {
@@ -207,10 +240,14 @@ int udma_get_tp_list(struct ubcore_device *dev, struct ubcore_get_tp_cfg *tpid_c
 		     uint32_t *tp_cnt, struct ubcore_tp_info *tp_list,
 		     struct ubcore_udata *udata);
 
-void udma_ctrlq_destroy_tpid_list(struct udma_dev *dev, struct xarray *ctrlq_tpid_table,
-				  bool is_need_flush);
+void udma_ctrlq_destroy_tpid_list(struct xarray *ctrlq_tpid_table);
+int udma_ctrlq_tpn_flush_done(struct udma_dev *dev, struct xarray *ctrlq_tpid_table,
+			      uint32_t tp_id, bool is_udata);
 int udma_ctrlq_set_active_tp_ex(struct udma_dev *dev,
 				struct ubcore_active_tp_cfg *active_cfg);
+int udma_k_ctrlq_deactive_tp(struct udma_dev *udev, union ubcore_tp_handle tp_handle,
+			     struct ubcore_udata *udata);
+
 int udma_ctrlq_query_ubmem_info(struct ubcore_device *dev, struct ubcore_ucontext *uctx,
 				struct ubcore_user_ctl_in *in, struct ubcore_user_ctl_out *out);
 
@@ -220,9 +257,10 @@ int udma_set_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 int udma_get_tp_attr(struct ubcore_device *dev, const uint64_t tp_handle,
 		    uint8_t *tp_attr_cnt, uint32_t *tp_attr_bitmap,
 		    struct ubcore_tp_attr_value *tp_attr, struct ubcore_udata *udata);
-int send_resp_to_ue(struct udma_dev *udma_dev, struct ubcore_resp *req_host,
-		    uint8_t dst_ue_idx, uint16_t opcode);
-int send_req_to_mue(struct udma_dev *udma_dev, struct ubcore_req *req, uint16_t opcode);
+int udma_send_msg_to_ue(struct udma_dev *udma_dev, struct udma_entity_buf *add_buf,
+				   uint8_t dst_ue_idx, uint16_t opcode);
+int udma_recv_tp_resp_from_mue(struct udma_dev *udev, struct udma_entity_msg *resp, uint32_t len);
+int udma_send_tp_resp_to_ue(struct udma_dev *udev, struct udma_entity_msg *req, int ret);
 int udma_active_tp(struct ubcore_device *dev, struct ubcore_active_tp_cfg *active_cfg);
 int udma_deactive_tp(struct ubcore_device *dev, union ubcore_tp_handle tp_handle,
 		     struct ubcore_udata *udata);

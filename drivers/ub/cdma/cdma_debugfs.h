@@ -4,8 +4,9 @@
 #ifndef __CDMA_DEBUGFS_H__
 #define __CDMA_DEBUGFS_H__
 
-#include <linux/auxiliary_bus.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
+
+struct cdma_dev;
 
 enum cdma_dbg_dentry_type {
 	CDMA_DBG_DENTRY_CONTEXT,
@@ -52,7 +53,7 @@ struct cdma_dbgfs {
 	struct cdma_dbgfs_cfg cfg;
 };
 
-int cdma_dbg_init(struct auxiliary_device *adev);
-void cdma_dbg_uninit(struct auxiliary_device *adev);
+int cdma_dbg_init(struct cdma_dev *cdev);
+void cdma_dbg_uninit(struct cdma_dev *cdev);
 
 #endif /* __CDMA_DEBUGFS_H__ */

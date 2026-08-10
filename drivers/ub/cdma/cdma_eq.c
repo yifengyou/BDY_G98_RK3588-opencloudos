@@ -167,7 +167,7 @@ int cdma_reg_ae_event(struct auxiliary_device *adev)
 		}
 	}
 
-	dev_dbg(cdma_dev->dev, "cdma register ae event, ret = %d.\n", ret);
+	dev_info(cdma_dev->dev, "cdma register ae event, ret = %d.\n", ret);
 
 	return ret;
 }

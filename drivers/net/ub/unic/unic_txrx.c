@@ -300,13 +300,17 @@ static void unic_multi_cq_res_destroy(struct unic_dev *unic_dev,
 
 void unic_destroy_cq(struct unic_dev *unic_dev, u32 num, enum unic_cq_type type)
 {
+	struct auxiliary_device *adev = unic_dev->comdev.adev;
+	enum ubase_reset_stage reset_stage;
+
 	if (!num)
 		return;
 
 	/* The hardware does not access the configured memory after the reset,
 	 * directly destroy the cq.
 	 */
-	if (test_bit(UNIC_STATE_RESETTING, &unic_dev->state))
+	reset_stage = ubase_get_reset_stage(adev);
+	if (reset_stage == UBASE_RESET_STAGE_UNINIT)
 		goto cq_res_destroy;
 
 	unic_destroy_multi_jfc_context(unic_dev, type, num);

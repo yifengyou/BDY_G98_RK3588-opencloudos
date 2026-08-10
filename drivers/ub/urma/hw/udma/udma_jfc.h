@@ -63,6 +63,7 @@ struct udma_jfc {
 	uint64_t stars_chnl_addr;
 	bool stars_en;
 	uint32_t cq_shift;
+	struct sg_table *sgt;
 };
 
 struct udma_jfc_ctx {

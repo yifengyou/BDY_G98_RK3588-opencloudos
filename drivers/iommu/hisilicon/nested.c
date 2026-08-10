@@ -254,4 +254,3 @@ struct iommufd_viommu *ummu_viommu_alloc(struct device *dev,
 	return NULL;
 }
 
-MODULE_IMPORT_NS(IOMMUFD);

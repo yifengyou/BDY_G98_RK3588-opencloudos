@@ -266,6 +266,7 @@ int ubase_send_cmd(struct ubase_dev *udev,
 	int ret;
 
 	spin_lock_bh(&csq->lock);
+	atomic_inc(&udev->hw.cmdq.csq_cnt);
 	if (test_bit(UBASE_STATE_CMD_DISABLE, &udev->hw.state)) {
 		ret = -EBUSY;
 		goto err_unlock;
@@ -301,6 +302,7 @@ err_clr_cmdq:
 		ubase_warn(udev,
 			   "cleaned %dBD, need to clean %dBD.\n", cleaned, num);
 err_unlock:
+	atomic_dec(&udev->hw.cmdq.csq_cnt);
 	spin_unlock_bh(&csq->lock);
 
 	return ret;
@@ -366,6 +368,8 @@ int ubase_cmd_init(struct ubase_dev *udev)
 
 	ubase_cmd_init_regs(udev);
 
+	atomic_set(&udev->hw.cmdq.csq_cnt, 0);
+
 	clear_bit(UBASE_STATE_CMD_DISABLE, &udev->hw.state);
 
 	ret = ubase_cmd_query_version(udev);
@@ -388,9 +392,12 @@ err_queue_init:
 
 void ubase_cmd_disable(struct ubase_dev *udev)
 {
+#define UBASE_CMDQ_CLEAN_WAIT_TIME	4
+
 	__ubase_cmd_disable(udev);
 	/* wait to ensure the firmware completes csq commands. */
-	msleep(UBASE_CMDQ_CLEAR_WAIT_TIME);
+	while (atomic_read(&udev->hw.cmdq.csq_cnt))
+		msleep(UBASE_CMDQ_CLEAN_WAIT_TIME);
 
 	ubase_cmd_uninit_regs(udev);
 }

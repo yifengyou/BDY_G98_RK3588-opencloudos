@@ -237,13 +237,13 @@ static irqreturn_t ummu_pmu_handle_irq(int irq, void *data)
 	 * Find the counter index which overflowed if the bit was set and handle it.
 	 */
 	for (idx = 0; idx < UMMU_PMCG_MAX_COUNTERS; idx++) {
-		overflow = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_STS(idx + 1));
+		overflow = readl(ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_STS(idx + 1));
 		/*
 		 * As each counter will restart from 0 when it is overflowed,
 		 * extra processing is no need, just clear interrupt status.
 		 */
 		if (overflow)
-			writel_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_STS(idx + 1));
+			writel(0, ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_STS(idx + 1));
 	}
 
 	return IRQ_HANDLED;
@@ -276,10 +276,9 @@ static void ummu_pmu_write_msi_msg(struct msi_desc *desc, struct msi_msg *msg)
 static int ummu_pmu_setup_irq(struct ummu_pmu *ummu_pmu)
 {
 	unsigned long flags = IRQF_NOBALANCING | IRQF_SHARED | IRQF_NO_THREAD;
+	uint32_t val = UMMU_PMCG_INT_OVF_EN, irq;
 	struct device *dev = ummu_pmu->dev;
-	uint32_t val = UMMU_PMCG_INT_OVF_EN;
 	int ret;
-	uint32_t irq;
 
 	/* Clear MSI address reg */
 	writeq_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_OVF_USI_ADDR0);
@@ -347,10 +346,10 @@ static void ummu_pmu_enable(struct pmu *pmu)
 	struct ummu_pmu *ummu_pmu = to_ummu_pmu(pmu);
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
 	val |= UMMU_PMCG_GLB_CTRL_COMMON_ENABLE;
 	val &= ~UMMU_PMCG_GLB_CTRL_COMMON_CLR;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
 }
 
 static void ummu_pmu_disable(struct pmu *pmu)
@@ -358,77 +357,75 @@ static void ummu_pmu_disable(struct pmu *pmu)
 	struct ummu_pmu *ummu_pmu = to_ummu_pmu(pmu);
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
 	val &= ~UMMU_PMCG_GLB_CTRL_COMMON_ENABLE;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_GLB_CTRL);
 }
 
 static void ummu_pmu_counter_get_value(struct ummu_pmu *ummu_pmu, int idx,
 				       uint64_t *cnt0, uint64_t *cnt1)
 {
-	uint64_t val0_high, val0_low;
-	uint64_t val1_high, val1_low;
+	uint64_t val0_high, val0_low, val1_high, val1_low;
 
-	val0_low = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_L(idx + 1));
-	val0_high = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_H(idx + 1));
+	val0_low = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_L(idx + 1));
+	val0_high = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_H(idx + 1));
 	*cnt0 = val0_high << UMMU_PMCG_CFGR_SIZE | val0_low;
 
-	val1_low = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_L(idx + 1));
-	val1_high = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_H(idx + 1));
+	val1_low = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_L(idx + 1));
+	val1_high = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_H(idx + 1));
 	*cnt1 = val1_high << UMMU_PMCG_CFGR_SIZE | val1_low;
 }
 
 static void ummu_pmu_counter_set_value(struct ummu_pmu *ummu_pmu, int idx,
 				       uint64_t pre_cnt0, uint64_t pre_cnt1)
 {
-	uint64_t val0_high, val0_low;
-	uint64_t val1_high, val1_low;
+	uint64_t val0_high, val0_low, val1_high, val1_low;
 
 	val0_low = pre_cnt0 & GENMASK_ULL(UMMU_COUNTER_LEN, 0);
 	val0_high = pre_cnt0 >> UMMU_PMCG_CFGR_SIZE;
 	val1_low = pre_cnt1 & GENMASK_ULL(UMMU_COUNTER_LEN, 0);
 	val1_high = pre_cnt1 >> UMMU_PMCG_CFGR_SIZE;
 
-	writel_relaxed(val0_low, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_L(idx + 1));
-	writel_relaxed(val0_high, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_H(idx + 1));
-	writel_relaxed(val1_low, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_L(idx + 1));
-	writel_relaxed(val1_high, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_H(idx + 1));
+	writel(val0_low, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_L(idx + 1));
+	writel(val0_high, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT0_H(idx + 1));
+	writel(val1_low, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_L(idx + 1));
+	writel(val1_high, ummu_pmu->reg_base + UMMU_PMCG_COM_CNT1_H(idx + 1));
 }
 
 static void ummu_pmu_counter_enable(struct ummu_pmu *ummu_pmu, int idx)
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val |= UMMU_PMCG_COM_CTRL_EVENT_EN;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static void ummu_pmu_counter_disable(struct ummu_pmu *ummu_pmu, int idx)
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val &= ~UMMU_PMCG_COM_CTRL_EVENT_EN;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static void ummu_pmu_counter_clear_enable(struct ummu_pmu *ummu_pmu, int idx)
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val |= UMMU_PMCG_COM_CTRL_EVENT_CLR;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static void ummu_pmu_counter_clear_disable(struct ummu_pmu *ummu_pmu, int idx)
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val &= ~UMMU_PMCG_COM_CTRL_EVENT_CLR;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static bool ummu_pmu_validate_event_count(struct perf_event *event)
@@ -507,10 +504,10 @@ static void ummu_pmu_config_event_type(struct ummu_pmu *ummu_pmu,
 	uint32_t type = get_event(event) & UMMU_PMCG_COM_CTRL_EVENT_CODE;
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val &= ~UMMU_PMCG_COM_CTRL_EVENT_CODE;
 	val |= type;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static void ummu_pmu_config_event_filter(struct ummu_pmu *ummu_pmu,
@@ -522,21 +519,21 @@ static void ummu_pmu_config_event_filter(struct ummu_pmu *ummu_pmu,
 	uint32_t tid = get_token_id(event);
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
 	if (tid)
 		val |= tid;
 	if (master_id)
 		val |= master_id << UMMU_PMCG_MASTER_ID_SHIFT;
 
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
 	if (tect_tag)
 		val |= tect_tag;
 	if (user_def_id)
 		val |= user_def_id << UMMU_PMCG_USER_DEF_ID_SHIFT;
 
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
 }
 
 static void ummu_pmu_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
@@ -549,7 +546,7 @@ static void ummu_pmu_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
 	tect_tag_msk = get_tect_tag_flt_msk(event);
 	user_def_id_msk = get_user_define_id_flt_msk(event);
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
 
 	if (tid_msk) {
 		val &= ~UMMU_PMCG_FILT_MSK_L_TOKEN_ID;
@@ -560,9 +557,9 @@ static void ummu_pmu_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
 		val |= master_id_msk << UMMU_PMCG_MASTER_ID_MSK_SHIFT;
 	}
 
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
 
 	if (tect_tag_msk) {
 		val &= ~UMMU_PMCG_FILT_COND_H_TECT_TAG;
@@ -573,7 +570,7 @@ static void ummu_pmu_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
 		val |= user_def_id_msk << UMMU_PMCG_USER_DEF_ID_MSK_SHIFT;
 	}
 
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
 }
 
 static void ummu_pmu_config_event(struct ummu_pmu *ummu_pmu,
@@ -590,10 +587,10 @@ static void ummu_pmu_config_overflow_int_mask(struct ummu_pmu *ummu_pmu,
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_MSK(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_MSK(idx + 1));
 	val &= ~UMMU_PMCG_CNT0_OVERFLOW_INT_MSK;
 	val &= ~UMMU_PMCG_CNT1_OVERFLOW_INT_MSK;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_MSK(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_OVF_INT_MSK(idx + 1));
 }
 
 static void ummu_pmu_event_start(struct perf_event *event, int flags)
@@ -666,6 +663,9 @@ static void ummu_pmu_event_update(struct perf_event *event)
 
 	local64_set(&event->count,
 		    ummu_pmu_calculate(get_event(event), new_cnt0, new_cnt1));
+
+	dev_dbg(ummu_pmu->dev, "pmu event [0x%x] idx [%d] cnt0 [%llu] cnt1 [%llu].\n",
+		get_event(event), idx, new_cnt0, new_cnt1);
 }
 
 static void ummu_pmu_reset_config_event_type(struct ummu_pmu *ummu_pmu,
@@ -673,9 +673,9 @@ static void ummu_pmu_reset_config_event_type(struct ummu_pmu *ummu_pmu,
 {
 	uint32_t val;
 
-	val = readl_relaxed(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	val = readl(ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 	val &= ~UMMU_PMCG_COM_CTRL_EVENT_CODE;
-	writel_relaxed(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
+	writel(val, ummu_pmu->reg_base + UMMU_PMCG_COM_CTRL(idx + 1));
 }
 
 static void ummu_pmu_reset_config_event_filter(struct ummu_pmu *ummu_pmu,
@@ -683,8 +683,8 @@ static void ummu_pmu_reset_config_event_filter(struct ummu_pmu *ummu_pmu,
 					       int idx)
 {
 	/* register default value equals to 0x0 */
-	writel_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
-	writel_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
+	writel(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_L(idx + 1));
+	writel(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_COND_H(idx + 1));
 }
 
 static void ummu_pmu_reset_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
@@ -692,9 +692,9 @@ static void ummu_pmu_reset_config_event_filter_mask(struct ummu_pmu *ummu_pmu,
 						    int idx)
 {
 	/* register default value equals to 0x0000000000000000 */
-	writel_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
+	writel(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_L(idx + 1));
 
-	writel_relaxed(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
+	writel(0, ummu_pmu->reg_base + UMMU_PMCG_FILT_MSK_H(idx + 1));
 }
 
 static void ummu_pmu_reset_config_event(struct ummu_pmu *ummu_pmu,

@@ -10,6 +10,16 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/types.h>
 
+#define UBASE_AEQ_CTX_SIZE	64
+#define UBASE_CEQ_CTX_SIZE	64
+#define UBASE_JFS_CTX_SIZE	256
+#define UBASE_JFR_CTX_SIZE	64
+#define UBASE_JFC_CTX_SIZE	128
+#define UBASE_TP_CTX_SIZE	256
+#define UBASE_TPG_CTX_SIZE	64
+#define UBASE_RC_CTX_SIZE	256
+#define UBASE_JTG_CTX_SIZE	8
+
 /**
  * struct ubase_cmd_mailbox - mailbox cmmand address
  * @buf: virtual address
@@ -18,6 +28,10 @@
 struct ubase_cmd_mailbox {
 	void *buf;
 	dma_addr_t dma;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 /**
@@ -32,6 +46,10 @@ struct ubase_mbx_attr {
 	__le32 rsv : 8;
 	u8 op;
 	u8 mbx_ue_id;
+	KABI_RESERVE(1)
+	KABI_RESERVE(2)
+	KABI_RESERVE(3)
+	KABI_RESERVE(4)
 };
 
 enum ubase_mbox_opcode {

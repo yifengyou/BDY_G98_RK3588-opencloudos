@@ -99,6 +99,8 @@ int ub_device_reset(struct ub_entity *ent)
 		return -EIO;
 	}
 
+	ub_entity_assign_priv_flag(ent, UB_ENTITY_DISCONNECTED, true);
+
 	device_unlock(&ent->dev);
 	ub_info(ent, "device reset success\n");
 

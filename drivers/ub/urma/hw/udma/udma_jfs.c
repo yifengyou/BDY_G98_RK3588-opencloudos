@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
+#include <linux/iommu.h>
 #include <linux/random.h>
 #include <linux/mm.h>
 #include <ub/urma/ubcore_uapi.h>
@@ -31,20 +32,26 @@ int udma_alloc_u_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 
 	sq->sqe_bb_cnt = ucmd->sqe_bb_cnt;
 	sq->buf.entry_cnt = ucmd->buf_len >> WQE_BB_SIZE_SHIFT;
+	sq->buf.addr = ucmd->buf_addr;
+	sq->buf.len = ucmd->buf_len;
+
 	if (sq->non_pin) {
-		sq->buf.addr = ucmd->buf_addr;
+		if (dev->caps.sva_sep_mode_en) {
+			dev_err(dev->dev, "sep mode not support non_pin.\n");
+			ret = -EINVAL;
+		}
+		return ret;
 	} else if (ucmd->is_hugepage) {
-		sq->buf.addr = ucmd->buf_addr;
-		if (udma_occupy_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr)) {
-			dev_err(dev->dev, "failed to create sq, va not map.\n");
-			return -EINVAL;
+		if (!udma_alloc_u_hugepage(sq->udma_ctx, sq->buf.addr, sq->buf.len)) {
+			dev_err(dev->dev, "failed to create sq.\n");
+			return -ENOMEM;
 		}
 		sq->buf.is_hugepage = true;
 	} else {
-		ret = pin_queue_addr(dev, ucmd->buf_addr, ucmd->buf_len, &sq->buf);
-		if (ret) {
-			dev_err(dev->dev, "failed to pin sq, ret = %d.\n", ret);
-			return ret;
+		sq->buf.page_priv = udma_get_map_page_priv(sq->udma_ctx, sq->buf.addr, sq->buf.len);
+		if (sq->buf.page_priv == NULL) {
+			dev_err(dev->dev, "failed to get sq page.\n");
+			return -EINVAL;
 		}
 	}
 
@@ -67,7 +74,8 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 	sq->tid = dev->tid;
 	sq->lock_free = jfs_cfg->flag.bs.lock_free;
 
-	sqe_bb_cnt = sq_cal_wqebb_num(SQE_WRITE_NOTIFY_CTL_LEN, jfs_cfg->max_sge);
+	sqe_bb_cnt = sq_cal_wqebb_num(SQE_WRITE_NOTIFY_CTL_LEN,
+				      get_max_sge_num(jfs_cfg->max_sge, sq->max_inline_size));
 	sq->sqe_bb_cnt = sqe_bb_cnt > (uint32_t)MAX_WQEBB_NUM ? (uint32_t)MAX_WQEBB_NUM :
 			 sqe_bb_cnt;
 
@@ -84,14 +92,11 @@ int udma_alloc_k_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq,
 
 	sq->wrid = kcalloc(1, sq->buf.entry_cnt * sizeof(uint64_t), GFP_KERNEL);
 	if (!sq->wrid) {
-		dev_err(dev->dev,
-			"failed to alloc wrid for jfs id = %u when entry cnt = %u.\n",
-			sq->id, sq->buf.entry_cnt);
 		udma_k_free_buf(dev, &sq->buf);
 		return -ENOMEM;
 	}
 
-	udma_alloc_kernel_db(dev, sq);
+	udma_set_kernel_db_addr(dev, sq);
 	sq->kva_curr = sq->buf.kva;
 
 	return 0;
@@ -110,9 +115,9 @@ void udma_free_sq_buf(struct udma_dev *dev, struct udma_jetty_queue *sq)
 		return;
 
 	if (sq->buf.is_hugepage) {
-		udma_return_u_hugepage(sq->udma_ctx, (void *)sq->buf.addr);
+		udma_free_u_hugepage(sq->udma_ctx, sq->buf.addr);
 	} else {
-		unpin_queue_addr(sq->buf.umem);
+		udma_put_map_page_priv(sq->udma_ctx, sq->buf.page_priv);
 	}
 }
 
@@ -299,6 +304,15 @@ static int udma_get_user_jfs_cmd(struct udma_dev *dev, struct udma_jfs *jfs,
 	return 0;
 }
 
+static void free_jfs_id(struct udma_jfs *jfs, struct udma_dev *dev)
+{
+	if (jfs->sq.id < dev->caps.jetty.start_idx)
+		udma_id_free(&dev->rsvd_jetty_ida_table, jfs->sq.id);
+	else
+		udma_adv_id_free(&dev->jetty_table.bitmap_table,
+				 jfs->sq.id, false);
+}
+
 static int udma_alloc_jfs_sq(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 			     struct udma_jfs *jfs, struct ubcore_udata *udata)
 {
@@ -320,7 +334,7 @@ static int udma_alloc_jfs_sq(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 
 	ret = xa_err(xa_store(&dev->jetty_table.xa, jfs->sq.id, &jfs->sq, GFP_KERNEL));
 	if (ret) {
-		dev_err(dev->dev, "failed to store_sq(%u), ret=%d.", jfs->sq.id, ret);
+		dev_err(dev->dev, "failed to store_sq(%u), ret=%d.\n", jfs->sq.id, ret);
 		goto err_store_sq;
 	}
 
@@ -336,11 +350,7 @@ static int udma_alloc_jfs_sq(struct udma_dev *dev, struct ubcore_jfs_cfg *cfg,
 err_alloc_sq_buf:
 	xa_erase(&dev->jetty_table.xa, jfs->sq.id);
 err_store_sq:
-	if (jfs->sq.id < dev->caps.jetty.start_idx)
-		udma_id_free(&dev->rsvd_jetty_ida_table, jfs->sq.id);
-	else
-		udma_adv_id_free(&dev->jetty_table.bitmap_table,
-				 jfs->sq.id, false);
+	free_jfs_id(jfs, dev);
 err_alloc_id:
 err_get_user_cmd:
 	return ret;
@@ -388,11 +398,7 @@ struct ubcore_jfs *udma_create_jfs(struct ubcore_device *ub_dev,
 err_create_hw_jfs:
 	udma_free_sq_buf(dev, &jfs->sq);
 	xa_erase(&dev->jetty_table.xa, jfs->sq.id);
-	if (jfs->sq.id < dev->caps.jetty.start_idx)
-		udma_id_free(&dev->rsvd_jetty_ida_table, jfs->sq.id);
-	else
-		udma_adv_id_free(&dev->jetty_table.bitmap_table,
-				 jfs->sq.id, false);
+	free_jfs_id(jfs, dev);
 err_alloc_sq:
 	kfree(jfs);
 	return NULL;
@@ -419,11 +425,7 @@ static void udma_free_jfs(struct ubcore_jfs *jfs)
 	else
 		kfree(ujfs->sq.wrid);
 
-	if (ujfs->sq.id < dev->caps.jetty.start_idx)
-		udma_id_free(&dev->rsvd_jetty_ida_table, ujfs->sq.id);
-	else
-		udma_adv_id_free(&dev->jetty_table.bitmap_table,
-				 ujfs->sq.id, false);
+	free_jfs_id(ujfs, dev);
 
 	kfree(ujfs);
 }
@@ -550,8 +552,8 @@ int udma_modify_jfs(struct ubcore_jfs *jfs, struct ubcore_jfs_attr *attr,
 	}
 
 	if (udma_jfs->sq.state == attr->state) {
-		dev_info(udma_dev->dev, "jfs state has been %s.\n",
-			 to_state_name(attr->state));
+		dev_info_ratelimited(udma_dev->dev, "jfs state has been %s.\n",
+				     to_state_name(attr->state));
 		return 0;
 	}
 
@@ -653,7 +655,7 @@ static void udma_copy_from_sq(struct udma_jetty_queue *sq, uint32_t wqebb_cnt,
 	remain = sq->buf.entry_cnt - (sq->ci & (sq->buf.entry_cnt - 1));
 	offset = (sq->ci & (sq->buf.entry_cnt - 1)) * UDMA_JFS_WQEBB_SIZE;
 	field_h = remain > wqebb_cnt ? wqebb_cnt : remain;
-	field_l = wqebb_cnt > field_h ? wqebb_cnt - field_h : 0;
+	field_l = wqebb_cnt - field_h;
 
 	memcpy(tmp_sq, sq->buf.kva + offset, field_h * sizeof(*tmp_sq));
 
@@ -1117,7 +1119,7 @@ static void udma_copy_to_sq(struct udma_jetty_queue *sq, uint32_t wqebb_cnt,
 	uint32_t field_l;
 
 	field_h = remain > wqebb_cnt ? wqebb_cnt : remain;
-	field_l = wqebb_cnt > field_h ? wqebb_cnt - field_h : 0;
+	field_l = wqebb_cnt - field_h;
 
 	memcpy(sq->kva_curr, tmp_sq, field_h * sizeof(*tmp_sq));
 
@@ -1189,12 +1191,6 @@ static int udma_post_one_wr(struct udma_jetty_queue *sq, struct ubcore_jfs_wr *w
 	sq->pi += wqebb_cnt;
 
 	return 0;
-}
-
-static inline void udma_k_update_sq_db(struct udma_jetty_queue *sq)
-{
-	uint32_t *db_addr = sq->db_addr;
-	*db_addr = sq->pi;
 }
 
 #ifdef ST64B

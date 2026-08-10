@@ -21,9 +21,6 @@ UBASE Driver Support Library
 .. kernel-doc:: include/ub/ubase/ubase_comm_eq.h
    :functions:
 
-.. kernel-doc:: include/ub/ubase/ubase_comm_hw.h
-   :functions:
-
 .. kernel-doc:: include/ub/ubase/ubase_comm_mbx.h
    :functions:
 

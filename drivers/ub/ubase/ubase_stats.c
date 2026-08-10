@@ -79,12 +79,14 @@ void ubase_clear_eth_port_stats(struct auxiliary_device *adev)
 EXPORT_SYMBOL(ubase_clear_eth_port_stats);
 
 /**
- * ubase_get_ub_port_stats() - get ub port stats
+ * ubase_get_ub_port_stats() - (deprecated) get ub port stats
  * @adev: auxiliary device
  * @port_id: port id
  * @data: ub date link layer stats
  *
  * The function is used to get ub port stats.
+ *
+ * Deprecated, don't use this function in new code.
  *
  * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
  * Return: 0 on success, negative error code otherwise
@@ -125,6 +127,16 @@ int __ubase_get_eth_port_stats(struct ubase_dev *udev,
 	return 0;
 }
 
+/**
+ * ubase_get_eth_port_stats() - get eth port stats
+ * @adev: auxiliary device
+ * @data: eth mac stats
+ *
+ * The function is used to get eth port stats.
+ *
+ * Context: Process context. Takes and releases <lock>, BH-safe. Sleep.
+ * Return: 0 on success, negative error code otherwise
+ */
 int ubase_get_eth_port_stats(struct auxiliary_device *adev,
 			     struct ubase_eth_mac_stats *data)
 {

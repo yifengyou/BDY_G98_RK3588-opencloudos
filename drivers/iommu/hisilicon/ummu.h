@@ -31,6 +31,8 @@ struct ummu_l1_tct_desc {
 	phys_addr_t	l2ptr_phys;
 };
 
+bool ummu_sva_indep_page_table_enable(void);
+
 enum ummu_device_msi_index {
 	EVTQ_MSI_INDEX,
 	GERROR_MSI_INDEX,
@@ -89,6 +91,7 @@ enum ummu_sva_mode {
 	UMMU_MODE_KSVA,
 	UMMU_MODE_SVA,
 	UMMU_MODE_SVA_DISABLE_PTB,
+	UMMU_MODE_SVA_SEPARATE_PG,
 	UMMU_MODE_END,
 };
 
@@ -153,20 +156,18 @@ struct ummu_capability {
 #define UMMU_FEAT_HA			BIT(12)
 #define UMMU_FEAT_HD			BIT(13)
 #define UMMU_FEAT_MTM			BIT(14)
-#define UMMU_FEAT_TT_LE			BIT(15)
-#define UMMU_FEAT_TT_BE			BIT(16)
-#define UMMU_FEAT_COHERENCY		BIT(17)
-#define UMMU_FEAT_BBML1			BIT(18)
-#define UMMU_FEAT_BBML2			BIT(19)
-#define UMMU_FEAT_VAX			BIT(20)
-#define UMMU_FEAT_BTM			BIT(21)
-#define UMMU_FEAT_SVA			BIT(22)
-#define UMMU_FEAT_E2H			BIT(23)
-#define UMMU_FEAT_MAPT			BIT(24)
-#define UMMU_FEAT_RANGE_PLBI		BIT(25)
-#define UMMU_FEAT_TOKEN_CHK		BIT(26)
-#define UMMU_FEAT_PERMQ			BIT(27)
-#define UMMU_FEAT_NESTING		BIT(28)
+#define UMMU_FEAT_COHERENCY		BIT(15)
+#define UMMU_FEAT_BBML1			BIT(16)
+#define UMMU_FEAT_BBML2			BIT(17)
+#define UMMU_FEAT_VAX			BIT(18)
+#define UMMU_FEAT_BTM			BIT(19)
+#define UMMU_FEAT_SVA			BIT(20)
+#define UMMU_FEAT_E2H			BIT(21)
+#define UMMU_FEAT_MAPT			BIT(22)
+#define UMMU_FEAT_RANGE_PLBI		BIT(23)
+#define UMMU_FEAT_TOKEN_CHK		BIT(24)
+#define UMMU_FEAT_PERMQ			BIT(25)
+#define UMMU_FEAT_NESTING		BIT(26)
 	u32 features;
 	u32 deid_bits;
 	u32 tid_bits;
@@ -180,6 +181,7 @@ struct ummu_capability {
 #define UMMU_OPT_CHK_MAPT_CONTINUITY	(1UL << 3)
 #define UMMU_OPT_MCMDQ_DECREASE		(1UL << 4)
 #define UMMU_OPT_SYNC_WITH_PLBI		(1UL << 5)
+#define UMMU_OPT_KV_CAM_CONTINUITY	(1UL << 6)
 	u32 options;
 
 #define UMMU_MAX_ASIDS			(1UL << 16)
@@ -256,7 +258,7 @@ struct ummu_device_helper {
 struct ummu_device {
 	struct device *dev;
 	void __iomem *base;
-	void __iomem *ucmdq_ctrl_page;
+	void __iomem *permq_ctrl_page;
 
 	struct ummu_capability cap;
 

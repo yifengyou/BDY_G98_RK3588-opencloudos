@@ -86,6 +86,8 @@ static void ubase_handle_activate_req(struct ubase_dev *udev, void *data,
 	if (!ubase_activate_proxy_supported(udev))
 		return;
 
+	udev->act_ctx.other.shutdown = req->shutdown;
+
 	ue = container_of(udev->dev, struct ub_entity, dev);
 	if (req->activate)
 		ret = ubase_activate_ue(udev, ue, msn, bus_ue_id);

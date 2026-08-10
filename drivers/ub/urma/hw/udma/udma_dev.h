@@ -16,6 +16,7 @@ extern bool cqe_mode;
 extern uint32_t jfr_sleep_time;
 extern uint32_t jfc_arm_mode;
 extern bool dump_aux_info;
+extern bool hugepage_enable;
 
 #define UBCORE_MAX_DEV_NAME 64
 
@@ -50,6 +51,15 @@ extern bool dump_aux_info;
 #define UDMA_CQE_SIZE 64
 
 #define UDMA_MAX_GRANT_SIZE 0xFFFFFFFFF000
+
+#define UDMA_FAULT_MODULE_ID	(2)
+#define UDMA_FAULT_EVENT_PROBE	(0)
+#define UDMA_FAULT_EVENT_REMOVE	(1)
+
+#define UDMA_FAULT_EVENT_ID_PROBE	(UDMA_FAULT_MODULE_ID << 24 | \
+					UDMA_FAULT_EVENT_PROBE)
+#define UDMA_FAULT_EVENT_ID_REMOVE	(UDMA_FAULT_MODULE_ID << 24 | \
+					UDMA_FAULT_EVENT_REMOVE)
 
 enum udma_status {
 	UDMA_NORMAL,
@@ -133,7 +143,6 @@ struct udma_dev {
 	struct mutex db_mutex;
 	struct udma_dfx_info *dfx_info;
 	uint32_t status;
-	struct udma_dev_debugfs *dbgfs;
 	uint32_t ue_num;
 	struct udma_ex_jfc_addr cq_addr_array[UDMA_JFC_TYPE_NUM];
 	uint32_t ue_id;
@@ -151,7 +160,8 @@ struct udma_dev {
 	struct mutex disable_ue_rx_mutex;
 	struct mutex hugepage_lock;
 	struct list_head hugepage_list;
-	uint32_t total_hugepage_num;
+	atomic_t hugepage_seq;
+	struct udma_tp_cmdq_info *wait_cmdq_info;
 };
 
 #define UDMA_ERR_MSG_LEN	128

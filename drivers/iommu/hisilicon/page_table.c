@@ -61,7 +61,7 @@ static int ummu_get_pgtable_cfg(struct ummu_domain *ummu_domain,
 
 	cfg->pgtbl_ops =
 		alloc_io_pgtable_ops(cfg->fmt, &cfg->pgtbl_cfg, ummu_domain);
-	if (WARN_ON(!cfg->pgtbl_ops)) {
+	if (!cfg->pgtbl_ops) {
 		pr_err("alloc page table failed, check page table config!\n");
 		return -ENOMEM;
 	}
