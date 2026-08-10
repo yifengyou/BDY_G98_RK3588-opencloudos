@@ -14,6 +14,9 @@
 
 #include <ub/urma/ubcore_types.h>
 
+#define UBCORE_DEF_CONN_TIMEOUT 16384
+#define UBCORE_CONN_MAX_TIMEOUT 30000 /* maximum timeout 30s */
+
 struct ubcore_session;
 
 typedef void (*ubcore_session_callback)(struct ubcore_device *dev,

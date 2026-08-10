@@ -120,6 +120,7 @@ enum uburma_cmd {
 	UBURMA_CMD_GET_JETTY_OPT,
 	UBURMA_CMD_ACTIVE_JETTY,
 	UBURMA_CMD_DEACTIVE_JETTY,
+	UBURMA_CMD_GET_JFCE_CNT,
 	UBURMA_CMD_MAX
 };
 
@@ -696,6 +697,8 @@ struct uburma_cmd_import_jfr_ex {
 		uint64_t tag;
 		uint32_t tx_psn;
 		uint32_t rx_psn;
+		uint64_t stag;
+		uint64_t dtag;
 	} in;
 	struct {
 		uint32_t tpn;
@@ -856,6 +859,9 @@ struct uburma_cmd_import_jetty_ex {
 		uint64_t tag;
 		uint32_t tx_psn;
 		uint32_t rx_psn;
+		/* correspond to upper layer business */
+		uint64_t stag;
+		uint64_t dtag;
 	} in;
 	struct {
 		uint32_t tpn;
@@ -1170,7 +1176,6 @@ struct uburma_cmd_device_cap {
 	uint32_t max_fetch_and_xor_size;
 	union ubcore_atomic_feat atomic_feat; /* refer to urma_atomic_feature_t */
 	uint16_t trans_mode;
-	uint16_t sub_trans_mode_cap;
 	uint16_t congestion_ctrl_alg;
 	uint32_t ceq_cnt;
 	uint32_t max_tp_in_tpg;
@@ -1356,6 +1361,16 @@ struct uburma_cmd_get_dmac {
 	} in;
 	struct {
 		uint8_t mac[UBCORE_MAC_BYTES];
+	} out;
+};
+
+struct uburma_cmd_get_jfce_cnt {
+	struct {
+		uint32_t threshold;
+	} in;
+	struct {
+		uint64_t jfce_total_cnt;
+		uint64_t jfce_thresh_cnt;
 	} out;
 };
 

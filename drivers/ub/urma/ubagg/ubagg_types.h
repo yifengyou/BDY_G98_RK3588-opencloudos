@@ -81,8 +81,11 @@ struct ubagg_jetty_id {
 
 struct ubagg_jetty_exchange_info {
 	struct ubagg_jetty_id slaves[UBAGG_DEV_MAX_NUM];
-	int dev_num;
 	bool is_multipath;
+	uint8_t enabled_indices[UBAGG_DEV_MAX_NUM];
+	uint32_t enabled_count;
+	bool is_health_check_enable;
+	struct ubagg_seg_exchange_info health_check_seg;
 };
 
 struct ubagg_jetty_hash_node {
@@ -121,6 +124,7 @@ struct ubagg_physical_device {
 struct ubagg_device {
 	struct ubcore_device ub_dev;
 	char master_dev_name[UBAGG_MAX_DEV_NAME_LEN];
+	union ubcore_eid bonding_eid;
 	int slave_dev_num;
 	char slave_dev_name[UBAGG_MAX_DEV_NUM][UBAGG_MAX_DEV_NAME_LEN];
 	struct ubagg_hash_table ubagg_ht[UBAGG_HT_MAX];

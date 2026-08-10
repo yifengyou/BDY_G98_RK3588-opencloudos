@@ -36,6 +36,14 @@ static int page_level = IPOURMA_DEF_PAGE_LEVEL;
 module_param(page_level, int, 0644);
 MODULE_PARM_DESC(page_level, "register 2^page_level bytes memory at once, should be in [12, 21]");
 
+int ipourma_ctp_sl = IPOURMA_DEFAULT_CTP_SL;
+module_param_named(ctp_sl, ipourma_ctp_sl, int, 0644);
+MODULE_PARM_DESC(ipourma_ctp_sl, "ctp sl, default 3 in ipourma");
+
+int ipourma_utp_sl = IPOURMA_DEFAULT_UTP_SL;
+module_param_named(utp_sl, ipourma_utp_sl, int, 0644);
+MODULE_PARM_DESC(ipourma_utp_sl, "utp sl, default 0 in ipourma");
+
 static int ipourma_ubcore_add_device(struct ubcore_device *ubc_dev);
 static void ipourma_ubcore_remove_device(struct ubcore_device *ubc_dev, void *client_ctx);
 static void ipourma_unregister_netdev(struct ipourma_dev_priv *priv);
@@ -305,7 +313,6 @@ static void ipourma_unregister_netdev(struct ipourma_dev_priv *priv)
 	ipourma_flush_register_wq(priv);
 	ipourma_unregister_sysfs(priv);
 	unregister_netdev(priv->dev);
-	ipourma_reset_rings(priv);
 	ipourma_cleanup_res(priv->dev);
 	ipourma_unalloc_netdev(priv->dev);
 }
@@ -336,26 +343,25 @@ static void ipourma_do_eid_change_handler(struct ubcore_event *event,
 	eid = ub_dev->eid_table.eid_entries[eid_idx].eid;
 	spin_unlock(&ub_dev->eid_table.lock);
 
+	priv = ubcore_get_client_ctx_data(ub_dev, &g_ipourma_ubcore_client);
+	if (IS_ERR_OR_NULL(priv))
+		return;
 	if (eid_is_empty(&eid)) {
 		netdev_warn(priv->dev, "get an empty eid. eid index:%u\n", eid_idx);
 		return;
 	}
 
-	priv = ubcore_get_client_ctx_data(ub_dev, &g_ipourma_ubcore_client);
-	if (!IS_ERR_OR_NULL(priv)) {
-		if (!eid_is_empty(&priv->eid_info[eid_idx].eid)) {
-			netdev_info(priv->dev, "get an old eid, index:%u, eid:"EID_FMT"\n",
-			eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
-			return;
-		}
-		priv->eid_info[eid_idx].eid = eid;
-		priv->eid_info[eid_idx].eid_index = eid_idx;
-		netdev_info(priv->dev, " get a new eid, index:%u, eid:"EID_FMT"\n",
-			eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
-		atomic_add(1, &(priv->need_set_ip_route));
-		ipourma_create_new_eid(priv, eid_idx);
-		priv->eid_count++;
+	if (!eid_is_empty(&priv->eid_info[eid_idx].eid)) {
+		netdev_info(priv->dev, "get an old eid, index:%u, eid:"EID_FMT"\n",
+		eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
+		return;
 	}
+	priv->eid_info[eid_idx].eid = eid;
+	priv->eid_info[eid_idx].eid_index = eid_idx;
+	netdev_info(priv->dev, " get a new eid, index:%u, eid:"EID_FMT"\n",
+		eid_idx, EID_ARGS(priv->eid_info[eid_idx].eid));
+	ipourma_create_new_eid(priv, eid_idx);
+	priv->eid_count++;
 	return;
 unlock_table_out:
 	spin_unlock(&ub_dev->eid_table.lock);
@@ -428,6 +434,8 @@ static void __exit ipourma_exit(void)
 {
 	ubcore_unregister_client(&g_ipourma_ubcore_client);
 	unregister_netdevice_notifier(&ipourma_netdev_nb);
+	ipourma_unregister_debugfs();
+	ipourma_netlink_uninit();
 }
 #if !defined(CONFIG_IPOURMA_TEST) && !defined(CONFIG_IPOURMA_KFUZZ)
 

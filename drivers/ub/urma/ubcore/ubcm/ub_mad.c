@@ -176,7 +176,7 @@ ubmad_update_device_priv_resources(struct ubmad_device_priv *dev_priv,
 	if (memcmp(&dev_priv->eid_info.eid, &eid_info->eid,
 		   sizeof(union ubcore_eid)) == 0 &&
 	    dev_priv->eid_info.eid_index == eid_info->eid_index) {
-		ubcore_log_warn(
+		ubcore_log_warn_rl(
 			"eid_info is not changed, no need to update rsrc\n");
 		return 0;
 	}
@@ -274,14 +274,14 @@ static int ubmad_ubc_eid_ops(struct ubcore_device *dev,
 	ret = ubcore_get_main_primary_eid(&eid_info->eid, &main_primary_eid);
 	if (ret != 0) {
 		mutex_unlock(&g_ubc_eid_lock);
-		ubcore_log_err("Invalid eid "EID_FMT".\n", EID_ARGS(eid_info->eid));
+		ubcore_log_err_rl("Invalid eid "EID_FMT".\n", EID_ARGS(eid_info->eid));
 		return -1;
 	}
 
 	if (memcmp(&eid_info->eid, &main_primary_eid,
 		sizeof(union ubcore_eid)) != 0) {
 		mutex_unlock(&g_ubc_eid_lock);
-		ubcore_log_warn("No need to operate current eid "EID_FMT".\n",
+		ubcore_log_warn_rl("No need to operate current eid "EID_FMT".\n",
 			EID_ARGS(eid_info->eid));
 		return 0;
 	}
@@ -352,7 +352,7 @@ static struct ubcore_jfr *ubmad_create_jfr(struct ubmad_device_priv *dev_priv,
 	jfr_cfg.id = 0U;
 	jfr_cfg.depth = UBMAD_JFR_DEPTH;
 	jfr_cfg.flag.bs.token_policy = UBCORE_TOKEN_NONE;
-	jfr_cfg.trans_mode = UBCORE_TP_RM;
+	jfr_cfg.trans_mode = UBCORE_TP_UM;
 	jfr_cfg.eid_index = dev_priv->eid_info.eid_index;
 	jfr_cfg.max_sge = UBMAD_JFR_MAX_SGE_NUM;
 	jfr_cfg.jfc = jfc_r;
@@ -371,7 +371,8 @@ static int ubmad_jetty_set_priority(struct ubmad_device_priv *dev_priv,
 	ret = ubcore_query_device_attr(dev_priv->device, &attr);
 	if (ret == 0) {
 		for (i = 0; i < UBCORE_MAX_PRIORITY_CNT; ++i) {
-			if (attr.dev_cap.priority_info[i].tp_type.bs.ctp == 1) {
+			/* No priority supports utp currently, so rtp priority used */
+			if (attr.dev_cap.priority_info[i].tp_type.bs.rtp == 1) {
 				jetty_cfg->priority = i;
 				ubcore_log_info(
 					"ubmad create jetty set priority : %d, tp_type : ctp\n", i);
@@ -400,10 +401,10 @@ ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 
 	jetty_cfg.id = jetty_id;
 	jetty_cfg.flag.bs.share_jfr = 1;
-	jetty_cfg.trans_mode = UBCORE_TP_RM;
+	jetty_cfg.trans_mode = UBCORE_TP_UM;
 	jetty_cfg.eid_index = dev_priv->eid_info.eid_index;
 	jetty_cfg.jfs_depth = UBMAD_JFS_DEPTH;
-	jetty_cfg.priority = 0; /* Highest priority */
+	jetty_cfg.priority = 0;
 	ret = ubmad_jetty_set_priority(dev_priv, &jetty_cfg);
 	if (ret)
 		ubcore_log_info("ubmad create jetty set priority : 0\n");
@@ -419,7 +420,7 @@ ubmad_create_jetty(struct ubmad_device_priv *dev_priv, struct ubcore_jfc *jfc_s,
 	return ubcore_create_jetty(dev_priv->device, &jetty_cfg, NULL, NULL);
 }
 
-static struct ubmad_tjetty *
+struct ubmad_tjetty *
 ubmad_get_tjetty_lockless(struct ubmad_jetty_resource *rsrc, uint32_t hash,
 			  union ubcore_eid *dst_eid)
 {
@@ -457,6 +458,32 @@ static void ubmad_release_tjetty(struct kref *kref)
 	struct ubmad_tjetty *tjetty =
 		container_of(kref, struct ubmad_tjetty, kref);
 	int ret;
+	struct ubmad_ini_rtbuffer *ini_rtbuffer;
+	struct ubmad_tgt_hash_node *tgt_hash_node;
+	struct hlist_node *next;
+	unsigned long flag;
+	uint32_t idx;
+
+
+	spin_lock_irqsave(&tjetty->ini_rt_spinlock, flag);
+	for (idx = 0; idx < UBMAD_INI_RTBUFFER_SIZE; idx++) {
+		hlist_for_each_entry_safe(ini_rtbuffer, next,
+					  &tjetty->ini_rt_hlist[idx], node) {
+			hlist_del(&ini_rtbuffer->node);
+			kfree(ini_rtbuffer);
+		}
+	}
+	spin_unlock_irqrestore(&tjetty->ini_rt_spinlock, flag);
+
+	spin_lock_irqsave(&tjetty->tgt_hash_lock, flag);
+	for (idx = 0; idx < UBMAD_TGT_HASH_SIZE; idx++) {
+		hlist_for_each_entry_safe(tgt_hash_node, next,
+					  &tjetty->tgt_hash_hlist[idx], node) {
+			hlist_del(&tgt_hash_node->node);
+			kfree(tgt_hash_node);
+		}
+	}
+	spin_unlock_irqrestore(&tjetty->tgt_hash_lock, flag);
 
 	ubmad_uninit_msn_mgr(&tjetty->msn_mgr);
 
@@ -477,9 +504,9 @@ static int ubmad_fill_get_tp_cfg(struct ubcore_device *dev,
 {
 	uint32_t eid_index = cfg->eid_index;
 
-	get_tp_cfg->flag.bs.ctp = 1;
+	get_tp_cfg->flag.bs.ctp = 0;
 	get_tp_cfg->flag.bs.rtp = 0;
-	get_tp_cfg->flag.bs.utp = 0;
+	get_tp_cfg->flag.bs.utp = 1;
 
 	get_tp_cfg->trans_mode = cfg->trans_mode;
 
@@ -575,7 +602,7 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 	tjetty_cfg.id.id = rsrc->jetty_id;
 	tjetty_cfg.id.eid = *dst_eid;
 	tjetty_cfg.flag.bs.token_policy = UBCORE_TOKEN_NONE;
-	tjetty_cfg.trans_mode = UBCORE_TP_RM;
+	tjetty_cfg.trans_mode = UBCORE_TP_UM;
 	tjetty_cfg.type = UBCORE_JETTY;
 	tjetty_cfg.eid_index = rsrc->jetty->jetty_cfg.eid_index;
 	new_target = ubmad_import_jetty_compat(device, &tjetty_cfg, NULL);
@@ -585,6 +612,19 @@ struct ubmad_tjetty *ubmad_import_jetty(struct ubcore_device *device,
 		goto free;
 	}
 	new_tjetty->tjetty = new_target;
+
+	int idx;
+
+	for (idx = 0; idx < UBMAD_INI_RTBUFFER_SIZE; idx++)
+		INIT_HLIST_HEAD(&new_tjetty->ini_rt_hlist[idx]);
+	spin_lock_init(&new_tjetty->ini_rt_spinlock);
+	for (idx = 0; idx < UBMAD_TGT_HASH_SIZE; idx++)
+		INIT_HLIST_HEAD(&new_tjetty->tgt_hash_hlist[idx]);
+	for (idx = 0; idx < UBMAD_TGT_RTBUFFER_SIZE; idx++)
+		new_tjetty->tgt_rt_buffer[idx].msn = 0;
+	spin_lock_init(&new_tjetty->tgt_hash_lock);
+	atomic64_set(&new_tjetty->tgt_idx_gen, 1);
+	new_tjetty->rsrc = rsrc;
 
 	ubmad_init_msn_mgr(&new_tjetty->msn_mgr);
 
@@ -661,7 +701,7 @@ static struct ubcore_target_seg *ubmad_register_seg(struct ubcore_device *dev,
 	struct ubcore_seg_cfg cfg = { 0 };
 	struct ubcore_target_seg *ret;
 
-	seg_va = kzalloc(seg_len, GFP_KERNEL);
+	seg_va = vzalloc(seg_len);
 	if (IS_ERR_OR_NULL(seg_va))
 		return ERR_PTR(-ENOMEM);
 	flag.bs.token_policy = UBCORE_TOKEN_NONE;
@@ -681,7 +721,7 @@ static struct ubcore_target_seg *ubmad_register_seg(struct ubcore_device *dev,
 	return ret;
 
 free:
-	kfree(seg_va);
+	vfree(seg_va);
 	return ret;
 }
 
@@ -690,7 +730,7 @@ static void ubmad_unregister_seg(struct ubcore_target_seg *seg)
 	uint64_t va = seg->seg.ubva.va;
 
 	(void)ubcore_unregister_seg(seg);
-	kfree((void *)va);
+	vfree((void *)va);
 }
 
 static int ubmad_create_seg(struct ubmad_jetty_resource *rsrc,
@@ -825,9 +865,6 @@ static int ubmad_init_jetty_rsrc(struct ubmad_jetty_resource *rsrc,
 		INIT_HLIST_HEAD(&rsrc->tjetty_hlist[idx]);
 	spin_lock_init(&rsrc->tjetty_hlist_lock);
 
-	/* reliable communication */
-	ubmad_init_seid_hlist(rsrc);
-
 	return 0;
 destroy_seg:
 	ubmad_destroy_seg(rsrc);
@@ -842,15 +879,45 @@ del_jfc_s:
 	return ret;
 }
 
+static void ubmad_delete_jetty(struct ubcore_jetty *jetty)
+{
+	uint32_t jetty_id = jetty->jetty_id.id;
+	int ret;
+
+	ret = ubcore_delete_jetty(jetty);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jetty, id: %u, ret: %d.\n",
+			jetty_id, ret);
+}
+
+static void ubmad_delete_jfr(struct ubcore_jfr *jfr)
+{
+	uint32_t jfr_id = jfr->jfr_id.id;
+	int ret;
+
+	ret = ubcore_delete_jfr(jfr);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jfr, id: %u, ret: %d.\n",
+			jfr_id, ret);
+}
+
+static void ubmad_delete_jfc(struct ubcore_jfc *jfc)
+{
+	uint32_t jfc_id = jfc->id;
+	int ret;
+
+	ret = ubcore_delete_jfc(jfc);
+	if (ret != 0)
+		ubcore_log_err("Failed to delete jfc, id: %u, ret: %d.\n",
+			jfc_id, ret);
+}
+
 static void ubmad_uninit_jetty_rsrc(struct ubmad_jetty_resource *rsrc)
 {
 	struct ubmad_tjetty *tjetty;
 	struct hlist_node *next;
 	unsigned long flag;
 	int i;
-
-	/* reliable communication */
-	ubmad_uninit_seid_hlist(rsrc);
 
 	/* tjetty */
 	spin_lock_irqsave(&rsrc->tjetty_hlist_lock, flag);
@@ -864,16 +931,16 @@ static void ubmad_uninit_jetty_rsrc(struct ubmad_jetty_resource *rsrc)
 	spin_unlock_irqrestore(&rsrc->tjetty_hlist_lock, flag);
 
 	ubmad_destroy_seg(rsrc);
-	(void)ubcore_delete_jetty(rsrc->jetty);
+	ubmad_delete_jetty(rsrc->jetty);
 	rsrc->jetty = NULL;
 
-	(void)ubcore_delete_jfr(rsrc->jfr);
+	ubmad_delete_jfr(rsrc->jfr);
 	rsrc->jfr = NULL;
 
-	(void)ubcore_delete_jfc(rsrc->jfc_r);
+	ubmad_delete_jfc(rsrc->jfc_r);
 	rsrc->jfc_r = NULL;
 
-	(void)ubcore_delete_jfc(rsrc->jfc_s);
+	ubmad_delete_jfc(rsrc->jfc_s);
 	rsrc->jfc_s = NULL;
 }
 
@@ -1025,6 +1092,10 @@ static void ubmad_release_device_priv(struct kref *kref)
 	drain_workqueue(dev_priv->rt_wq);
 	destroy_workqueue(dev_priv->rt_wq);
 
+	/* connection */
+	drain_workqueue(dev_priv->conn_wq);
+	destroy_workqueue(dev_priv->conn_wq);
+
 	/* rsrc */
 	ubmad_destroy_device_priv_resources(dev_priv);
 
@@ -1061,10 +1132,25 @@ static int ubmad_open_device(struct ubcore_device *device)
 	}
 
 	/* reliable communication */
-	dev_priv->rt_wq = alloc_workqueue("%s", 0, 0, "ubmad rt_wq");
+	dev_priv->rt_wq = alloc_workqueue("%s",
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM, 0, "ubmad rt_wq");
 	if (IS_ERR_OR_NULL(dev_priv->rt_wq)) {
 		ubcore_log_err("create rt_wq failed. dev_name: %s\n",
 			     device->dev_name);
+		ubmad_destroy_device_priv_resources(dev_priv);
+		ubcore_unregister_event_handler(dev_priv->device,
+						&dev_priv->handler);
+		kfree(dev_priv);
+		return -1;
+	}
+
+	dev_priv->conn_wq = alloc_workqueue("%s",
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM, 0, "ubmad conn_wq");
+	if (IS_ERR_OR_NULL(dev_priv->conn_wq)) {
+		ubcore_log_err("create conn_wq failed. dev_name: %s\n",
+			     device->dev_name);
+		drain_workqueue(dev_priv->rt_wq);
+		destroy_workqueue(dev_priv->rt_wq);
 		ubmad_destroy_device_priv_resources(dev_priv);
 		ubcore_unregister_event_handler(dev_priv->device,
 						&dev_priv->handler);
@@ -1278,12 +1364,14 @@ struct ubmad_agent *ubmad_register_agent(struct ubcore_device *device,
 		return ERR_PTR(-ENOMEM);
 	kref_init(&agent_priv->kref);
 
-	agent_priv->jfce_wq_s = alloc_workqueue("%s", 0, 0, "ubmad jfce_wq_s");
+	agent_priv->jfce_wq_s = alloc_workqueue("%s",
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM, 0, "ubmad jfce_wq_s");
 	if (IS_ERR_OR_NULL(agent_priv->jfce_wq_s)) {
 		ubcore_log_err("alloc agent_priv workqueue_s failed.\n");
 		goto err_alloc_wq_s;
 	}
-	agent_priv->jfce_wq_r = alloc_workqueue("%s", 0, 0, "ubmad jfce_wq_r");
+	agent_priv->jfce_wq_r = alloc_workqueue("%s",
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM, 0, "ubmad jfce_wq_r");
 	if (IS_ERR_OR_NULL(agent_priv->jfce_wq_r)) {
 		ubcore_log_err("alloc agent_priv workqueue_r failed.\n");
 		goto err_alloc_wq_r;

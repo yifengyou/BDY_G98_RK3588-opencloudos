@@ -10,6 +10,9 @@
 
 #include "ipourma_types.h"
 
+extern int ipourma_ctp_sl;
+extern int ipourma_utp_sl;
+
 void ipourma_ub_size_init(void);
 void ipourma_uninit_rings_by_eid(struct ipourma_dev_priv *priv, u32 eid_idx);
 void ipourma_uninit_rx_bufs(struct ipourma_dev_priv *priv, u32 eid_idx);

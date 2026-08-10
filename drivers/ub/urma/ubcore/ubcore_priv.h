@@ -14,6 +14,7 @@
 
 #include <linux/jhash.h>
 #include <linux/types.h>
+#include <linux/ktime.h>
 #include <ub/urma/ubcore_types.h>
 #include "ubcore_tp.h"
 
@@ -32,6 +33,11 @@
 #define UBCORE_TYPICAL_TIMEOUT 30000 /* 30s */
 #define UBCORE_DESTROY_TIMEOUT 2000 /* 2s */
 #define UCBORE_DEFAULT_UPI 0
+
+#define UBCORE_NS_TO_MS            1000000
+#define UBCORE_DRV_TP_THRESHOLD_MS 1
+#define UBCORE_EXC_THRESHOLD_MS    20
+#define UBCORE_WQ_THRESHOLD_MS     10
 
 enum ubcore_uvs_state {
 	UBCORE_UVS_STATE_DEAD = 0,
@@ -90,6 +96,8 @@ struct ubcore_global_file {
 	struct ubcore_uvs_instance *uvs;
 };
 
+extern uint32_t ubcore_max_retry_cnt;
+
 static inline struct ubcore_ucontext *
 ubcore_get_uctx(struct ubcore_udata *udata)
 {
@@ -103,7 +111,7 @@ ubcore_check_trans_mode_valid(enum ubcore_transport_mode trans_mode)
 	       trans_mode == UBCORE_TP_UM;
 }
 
-/* combine sub_trans_mode and share_tp -> uint16_t? */
+/* combine order_type and share_tp -> uint16_t? */
 static inline bool is_create_rc_shared_tp(enum ubcore_transport_mode trans_mode,
 					  uint32_t order_type,
 					  uint32_t share_tp)
@@ -197,6 +205,11 @@ static inline uint32_t ubcore_get_vtpn_hash(struct ubcore_hash_table *ht,
 static inline uint32_t ubcore_get_ex_tp_hash(uint64_t *tp_handle)
 {
 	return jhash(tp_handle, sizeof(uint64_t), 0);
+}
+
+static inline uint32_t ubcore_get_rm_tp_hash(struct ubcore_rm_tp_key *key)
+{
+	return jhash(key, sizeof(struct ubcore_rm_tp_key), 0);
 }
 
 static inline bool ubcore_is_ub_device(struct ubcore_device *dev)
