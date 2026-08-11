@@ -238,7 +238,7 @@ void wbc_account_cgroup_owner(struct writeback_control *wbc, struct page *page,
 int cgroup_writeback_by_id(u64 bdi_id, int memcg_id,
 			   enum wb_reason reason, struct wb_completion *done);
 void cgroup_sync(struct mem_cgroup *memcg);
-void cgroup_writeback_umount(void);
+void cgroup_writeback_umount(struct super_block *sb);
 bool cleanup_offline_cgwb(struct bdi_writeback *wb);
 
 /**
@@ -310,6 +310,8 @@ static inline void wbc_init_bio(struct writeback_control *wbc, struct bio *bio)
 		bio_associate_blkg_from_css(bio, wbc->wb->blkcg_css);
 }
 
+void inode_switch_wbs_work_fn(struct work_struct *work);
+
 #else	/* CONFIG_CGROUP_WRITEBACK */
 
 static inline void inode_attach_wb(struct inode *inode, struct folio *folio)
@@ -345,7 +347,7 @@ static inline void wbc_account_cgroup_owner(struct writeback_control *wbc,
 {
 }
 
-static inline void cgroup_writeback_umount(void)
+static inline void cgroup_writeback_umount(struct super_block *sb)
 {
 }
 
