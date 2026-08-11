@@ -305,7 +305,7 @@ static ssize_t qat_vf_resume_write(struct file *filp, const char __user *buf,
 	offs = &filp->f_pos;
 
 	if (*offs < 0 ||
-	    check_add_overflow((loff_t)len, *offs, &end))
+	    check_add_overflow(len, *offs, &end))
 		return -EOVERFLOW;
 
 	if (end > mig_dev->state_size)
@@ -678,6 +678,8 @@ static const struct pci_device_id qat_vf_vfio_pci_table[] = {
 	{ PCI_DRIVER_OVERRIDE_DEVICE_VFIO(PCI_VENDOR_ID_INTEL, 0x4941) },
 	{ PCI_DRIVER_OVERRIDE_DEVICE_VFIO(PCI_VENDOR_ID_INTEL, 0x4943) },
 	{ PCI_DRIVER_OVERRIDE_DEVICE_VFIO(PCI_VENDOR_ID_INTEL, 0x4945) },
+	/* Intel QAT GEN6 6xxx VF device */
+	{ PCI_DRIVER_OVERRIDE_DEVICE_VFIO(PCI_VENDOR_ID_INTEL, 0x4949) },
 	{}
 };
 MODULE_DEVICE_TABLE(pci, qat_vf_vfio_pci_table);
@@ -699,5 +701,5 @@ module_pci_driver(qat_vf_vfio_pci_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Xin Zeng <xin.zeng@intel.com>");
-MODULE_DESCRIPTION("QAT VFIO PCI - VFIO PCI driver with live migration support for Intel(R) QAT GEN4 device family");
+MODULE_DESCRIPTION("QAT VFIO PCI - VFIO PCI driver with live migration support for Intel(R) QAT device family");
 MODULE_IMPORT_NS(CRYPTO_QAT);

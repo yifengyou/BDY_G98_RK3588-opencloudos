@@ -62,7 +62,7 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 			break;
 		}
 
-		ret = adf_dev_down(accel_dev, true);
+		ret = adf_dev_down(accel_dev);
 		if (ret)
 			return ret;
 
@@ -76,7 +76,7 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 		} else if (ret) {
 			dev_err(dev, "Failed to start device qat_dev%d\n",
 				accel_id);
-			adf_dev_down(accel_dev, true);
+			adf_dev_down(accel_dev);
 			return ret;
 		}
 		break;
@@ -117,17 +117,19 @@ static int adf_sysfs_update_dev_config(struct adf_accel_dev *accel_dev,
 static ssize_t cfg_services_store(struct device *dev, struct device_attribute *attr,
 				  const char *buf, size_t count)
 {
+	char services[ADF_CFG_MAX_VAL_LEN_IN_BYTES] = { };
 	struct adf_hw_device_data *hw_data;
 	struct adf_accel_dev *accel_dev;
 	int ret;
 
-	ret = sysfs_match_string(adf_cfg_services, buf);
-	if (ret < 0)
-		return ret;
-
 	accel_dev = adf_devmgr_pci_to_accel_dev(to_pci_dev(dev));
 	if (!accel_dev)
 		return -EINVAL;
+
+	ret = adf_parse_service_string(accel_dev, buf, count, services,
+				       ADF_CFG_MAX_VAL_LEN_IN_BYTES);
+	if (ret)
+		return ret;
 
 	if (adf_dev_started(accel_dev)) {
 		dev_info(dev, "Device qat_dev%d must be down to reconfigure the service.\n",
@@ -135,7 +137,7 @@ static ssize_t cfg_services_store(struct device *dev, struct device_attribute *a
 		return -EINVAL;
 	}
 
-	ret = adf_sysfs_update_dev_config(accel_dev, adf_cfg_services[ret]);
+	ret = adf_sysfs_update_dev_config(accel_dev, services);
 	if (ret < 0)
 		return ret;
 
@@ -271,6 +273,8 @@ static ssize_t rp2srv_show(struct device *dev, struct device_attribute *attr,
 		return sysfs_emit(buf, "%s\n", ADF_CFG_SYM);
 	case ASYM:
 		return sysfs_emit(buf, "%s\n", ADF_CFG_ASYM);
+	case DECOMP:
+		return sysfs_emit(buf, "%s\n", ADF_CFG_DECOMP);
 	default:
 		break;
 	}
