@@ -7,6 +7,15 @@
 bool nonpriv_prot_sock_flag[PROT_SOCK];
 EXPORT_SYMBOL(nonpriv_prot_sock_flag);
 
+bool check_nonpriv_prot_sock(int num)
+{
+	if (num <= 0 || num >= PROT_SOCK)
+		return false;
+
+	return READ_ONCE(nonpriv_prot_sock_flag[num]);
+}
+EXPORT_SYMBOL(check_nonpriv_prot_sock);
+
 static int netbind_proc_show(struct seq_file *m, void *v)
 {
 	int i;

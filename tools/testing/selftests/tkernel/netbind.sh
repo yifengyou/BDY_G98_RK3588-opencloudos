@@ -4,7 +4,10 @@
 KSFT_SKIP=4
 PROC_FILE=/proc/tkernel/nonpriv_netbind
 PORT=83
-TESTS=9
+OUT_OF_RANGE_PORT=1500
+DEFAULT_PORT_START=1024
+RAISED_PORT_START=2048
+TESTS=12
 test_no=0
 failures=0
 
@@ -40,7 +43,10 @@ remove_port()
 
 run_helper()
 {
-	"$helper" "$PORT"
+	family=${1:-4}
+	port=${2:-$PORT}
+	port_start=${3:-$DEFAULT_PORT_START}
+	"$helper" "$family" "$port" "$port_start"
 	return $?
 }
 
@@ -105,10 +111,23 @@ result $? "allowlisted port is reported through procfs"
 run_helper
 result $? "unprivileged bind succeeds for an allowlisted port"
 
+run_helper 6
+result $? "IPv6 bind succeeds for an allowlisted port"
+
 remove_port
 run_helper
 rc=$?
 [ "$rc" -eq 1 ]
 result $? "unprivileged bind is denied after allowlist removal"
+
+run_helper 4 "$OUT_OF_RANGE_PORT" "$RAISED_PORT_START"
+rc=$?
+[ "$rc" -eq 1 ]
+result $? "IPv4 port above the allowlist is denied with a raised threshold"
+
+run_helper 6 "$OUT_OF_RANGE_PORT" "$RAISED_PORT_START"
+rc=$?
+[ "$rc" -eq 1 ]
+result $? "IPv6 port above the allowlist is denied with a raised threshold"
 
 [ "$failures" -eq 0 ]
