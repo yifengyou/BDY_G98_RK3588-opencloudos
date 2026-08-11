@@ -313,7 +313,9 @@ struct header_ops {
 	int	(*create) (struct sk_buff *skb, struct net_device *dev,
 			   unsigned short type, const void *daddr,
 			   const void *saddr, unsigned int len);
-	int	(*parse)(const struct sk_buff *skb, unsigned char *haddr);
+	int	(*parse)(const struct sk_buff *skb,
+			 const struct net_device *dev,
+			 unsigned char *haddr);
 	int	(*cache)(const struct neighbour *neigh, struct hh_cache *hh, __be16 type);
 	void	(*cache_update)(struct hh_cache *hh,
 				const struct net_device *dev,
@@ -321,17 +323,7 @@ struct header_ops {
 	bool	(*validate)(const char *ll_header, unsigned int len);
 	__be16	(*parse_protocol)(const struct sk_buff *skb);
 
-	/*
-	 * KABI-safe replacement for parse() that receives the correct
-	 * net_device pointer, preventing infinite recursion in stacked
-	 * bonding.  dev_parse_header() prefers dev_parse() over parse()
-	 * when both are set.  Out-of-tree modules that only provide
-	 * parse() will continue to work via the fallback path.
-	 */
-	KABI_USE(1,
-		int (*dev_parse)(const struct sk_buff *skb,
-				 const struct net_device *dev,
-				 unsigned char *haddr));
+	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 };
 
@@ -3240,25 +3232,9 @@ static inline int dev_parse_header(const struct sk_buff *skb,
 {
 	const struct net_device *dev = skb->dev;
 
-	/*
-	 * Prefer dev_parse() (KABI-safe) which receives the correct
-	 * dev pointer.  Fall back to the legacy parse() for out-of-tree
-	 * modules that have not been updated.
-	 */
-	if (!dev->header_ops)
+	if (!dev->header_ops || !dev->header_ops->parse)
 		return 0;
-
-	if (dev->header_ops->dev_parse)
-		return dev->header_ops->dev_parse(skb, dev, haddr);
-	if (dev->header_ops->parse) {
-		pr_warn_once("%s: using legacy header_ops->parse(), "
-				    "may cause issues in stacked bonding, "
-				    "please update driver to use dev_parse()\n",
-				    dev->name);
-		return dev->header_ops->parse(skb, haddr);
-	}
-
-	return 0;
+	return dev->header_ops->parse(skb, dev, haddr);
 }
 
 static inline __be16 dev_parse_header_protocol(const struct sk_buff *skb)
