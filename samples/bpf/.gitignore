@@ -41,6 +41,7 @@ xdp_adjust_tail
 xdp_fwd
 xdp_router_ipv4
 xdp_tx_iptunnel
+hisock/hisock_cmd
 testfile.img
 hbm_out.log
 iperf.*

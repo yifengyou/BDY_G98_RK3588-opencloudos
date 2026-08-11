@@ -62,6 +62,9 @@ to_cgroup_bpf_attach_type(enum bpf_attach_type attach_type)
 	CGROUP_ATYPE(CGROUP_INET4_GETSOCKNAME);
 	CGROUP_ATYPE(CGROUP_INET6_GETSOCKNAME);
 	CGROUP_ATYPE(CGROUP_INET_SOCK_RELEASE);
+#ifdef CONFIG_HISOCK
+	CGROUP_ATYPE(HISOCK_EGRESS);
+#endif
 	default:
 		return CGROUP_BPF_ATTACH_TYPE_INVALID;
 	}
@@ -147,6 +150,11 @@ int __cgroup_bpf_run_filter_getsockopt(struct sock *sk, int level,
 int __cgroup_bpf_run_filter_getsockopt_kern(struct sock *sk, int level,
 					    int optname, void *optval,
 					    int *optlen, int retval);
+
+#ifdef CONFIG_HISOCK
+int __cgroup_bpf_run_hisock_egress(struct sock *sk, struct sk_buff *skb,
+				   enum cgroup_bpf_attach_type atype);
+#endif
 
 static inline enum bpf_cgroup_storage_type cgroup_storage_type(
 	struct bpf_map *map)
@@ -399,6 +407,20 @@ static inline bool cgroup_bpf_sock_enabled(struct sock *sk,
 	__ret;								       \
 })
 
+#ifdef CONFIG_HISOCK
+#define BPF_CGROUP_RUN_PROG_HISOCK_EGRESS(sk, skb)			       \
+({									       \
+	int __ret = HISOCK_PASS;					       \
+	if (cgroup_bpf_enabled(HISOCK_EGRESS) && sk) {			       \
+		typeof(sk) __sk = sk_to_full_sk(sk);			       \
+		if (sk_fullsock(__sk) && __sk == skb_to_full_sk(skb))	       \
+			__ret = __cgroup_bpf_run_hisock_egress(__sk, skb,      \
+							       HISOCK_EGRESS); \
+	}								       \
+	__ret;								       \
+})
+#endif
+
 int cgroup_bpf_prog_attach(const union bpf_attr *attr,
 			   enum bpf_prog_type ptype, struct bpf_prog *prog);
 int cgroup_bpf_prog_detach(const union bpf_attr *attr,
@@ -496,6 +518,9 @@ static inline int bpf_percpu_cgroup_storage_update(struct bpf_map *map,
 					    optlen, retval) ({ retval; })
 #define BPF_CGROUP_RUN_PROG_SETSOCKOPT(sock, level, optname, optval, optlen, \
 				       kernel_optval) ({ 0; })
+#ifdef CONFIG_HISOCK
+#define BPF_CGROUP_RUN_PROG_HISOCK_EGRESS(sk, skb) ({ HISOCK_PASS; })
+#endif
 
 #endif /* CONFIG_CGROUP_BPF */
 
