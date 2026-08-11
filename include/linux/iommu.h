@@ -275,7 +275,7 @@ struct iommu_domain {
 			struct mm_struct *mm;
 			int users;
 #ifdef CONFIG_IOMMU_KSVA
-			KABI_FILL_HOLE(u32 isolated_pasid)
+			u32 isolated_pasid;
 #endif
 			/*
 			 * Next iommu_domain in mm->iommu_mm->sva-domains list
@@ -917,7 +917,7 @@ struct iommu_device {
 	struct fwnode_handle *fwnode;
 	struct device *dev;
 	struct iommu_group *singleton_group;
-	KABI_FILL_HOLE(u32 min_pasids)
+	u32 min_pasids;
 	u32 max_pasids;
 
 	KABI_RESERVE(1);
