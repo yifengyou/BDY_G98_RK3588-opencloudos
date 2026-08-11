@@ -14,9 +14,9 @@
 #include "adf_4xxx_hw_data.h"
 
 static const struct pci_device_id adf_pci_tbl[] = {
-	{ PCI_VDEVICE(INTEL, ADF_4XXX_PCI_DEVICE_ID), },
-	{ PCI_VDEVICE(INTEL, ADF_401XX_PCI_DEVICE_ID), },
-	{ PCI_VDEVICE(INTEL, ADF_402XX_PCI_DEVICE_ID), },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_QAT_4XXX) },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_QAT_401XX) },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_QAT_402XX) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, adf_pci_tbl);
@@ -81,7 +81,7 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	adf_init_hw_data_4xxx(accel_dev->hw_device, ent->device);
 
 	pci_read_config_byte(pdev, PCI_REVISION_ID, &accel_pci_dev->revid);
-	pci_read_config_dword(pdev, ADF_GEN4_FUSECTL4_OFFSET, &hw_data->fuses);
+	pci_read_config_dword(pdev, ADF_GEN4_FUSECTL4_OFFSET, &hw_data->fuses[ADF_FUSECTL4]);
 
 	/* Get Accelerators and Accelerators Engines masks */
 	hw_data->accel_mask = hw_data->get_accel_mask(hw_data);
@@ -165,7 +165,7 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return ret;
 
 out_err_dev_stop:
-	adf_dev_down(accel_dev, false);
+	adf_dev_down(accel_dev);
 out_err:
 	adf_cleanup_accel(accel_dev);
 	return ret;
@@ -179,8 +179,15 @@ static void adf_remove(struct pci_dev *pdev)
 		pr_err("QAT: Driver removal failed\n");
 		return;
 	}
-	adf_dev_down(accel_dev, false);
+	adf_dev_down(accel_dev);
 	adf_cleanup_accel(accel_dev);
+}
+
+static void adf_shutdown(struct pci_dev *pdev)
+{
+	struct adf_accel_dev *accel_dev = adf_devmgr_pci_to_accel_dev(pdev);
+
+	adf_dev_down(accel_dev);
 }
 
 static struct pci_driver adf_driver = {
@@ -188,6 +195,7 @@ static struct pci_driver adf_driver = {
 	.name = ADF_4XXX_DEVICE_NAME,
 	.probe = adf_probe,
 	.remove = adf_remove,
+	.shutdown = adf_shutdown,
 	.sriov_configure = adf_sriov_configure,
 	.err_handler = &adf_err_handler,
 };
