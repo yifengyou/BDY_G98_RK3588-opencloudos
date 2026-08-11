@@ -76,7 +76,7 @@ union { \
 #define KABI_ADD(_new)					_new
 #define KABI_EXTEND(_new)				_KABI_ARGS(_new;)
 #define KABI_EXTEND_ENUM(_new)				_new,
-#define KABI_FILL_HOLE(_new)				_new
+#define KABI_FILL_HOLE(_new)				_new;
 #define KABI_RENAME(_orig, _new)			_new
 #define KABI_DEPRECATE(_type, _orig) \
 	_KABI_ARGS(_type kabi_deprecate##_orig)
@@ -94,7 +94,7 @@ union { \
 #else
 #define KABI_REPLACE(_orig, _new)			_new
 #endif
-#define KABI_EXCLUDE(_elem)		_elem
+#define KABI_EXCLUDE(_elem)		_elem;
 #define KABI_BROKEN_INSERT_ENUM(_new)			_new
 #define KABI_BROKEN_REMOVE_ENUM(_orig)
 

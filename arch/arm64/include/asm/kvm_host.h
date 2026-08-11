@@ -244,7 +244,7 @@ struct kvm_arch {
 
 	/* Mandated version of PSCI */
 	u32 psci_version;
-	KABI_FILL_HOLE(refcount_t pinned);
+	KABI_FILL_HOLE(refcount_t pinned)
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 

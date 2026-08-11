@@ -523,7 +523,7 @@ struct thread_struct {
 #endif
 
 	/* Floating point and extended processor state */
-	KABI_EXCLUDE(struct fpu		fpu);
+	KABI_EXCLUDE(struct fpu		fpu)
 	/*
 	 * WARNING: 'fpu' is dynamically-sized.  It *MUST* be at
 	 * the end.
