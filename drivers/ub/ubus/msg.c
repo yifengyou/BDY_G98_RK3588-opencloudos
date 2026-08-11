@@ -11,7 +11,6 @@
 
 #include "pool.h"
 #include "link.h"
-#include "task.h"
 #include "msg.h"
 
 u8 err_to_msg_rsp(int err)
@@ -38,7 +37,6 @@ u8 err_to_msg_rsp(int err)
 		return UB_MSG_RSP_UNKNOWN;
 	}
 }
-EXPORT_SYMBOL_GPL(err_to_msg_rsp);
 
 static LIST_HEAD(message_device_list);
 static DEFINE_SPINLOCK(message_device_lock);
@@ -170,10 +168,6 @@ struct workqueue_struct *get_rx_msg_wq(u8 msg_code)
 }
 
 static atomic_t msg_rx_flag;
-int get_msg_rx_flag(void)
-{
-	return atomic_read(&msg_rx_flag);
-}
 
 int message_rx_init(void)
 {
@@ -182,17 +176,12 @@ int message_rx_init(void)
 		NULL, NULL, "pool wq", NULL
 	};
 	struct workqueue_struct *q;
-	int i, ret;
-
-	ret = ub_delay_task_wq_init();
-	if (ret)
-		return ret;
+	int i;
 
 	for (i = 0; i < UB_MSG_CODE_NUM; i++) {
 		if (!msg_name[i])
 			continue;
-		q = alloc_ordered_workqueue(msg_name[i],
-					    WQ_HIGHPRI);
+		q = create_singlethread_workqueue(msg_name[i]);
 		if (!q) {
 			pr_err("alloc workqueue[%d] failed\n", i);
 			message_rx_uninit();
@@ -223,13 +212,10 @@ void message_rx_uninit(void)
 		q = rx_msg_wq[i];
 		if (q) {
 			flush_workqueue(q);
-			ub_cancel_retry_work_sync();
 			destroy_workqueue(q);
 			rx_msg_wq[i] = NULL;
 		}
 	}
-
-	ub_delay_task_wq_uninit();
 }
 
 static struct ub_rx_msg_task *

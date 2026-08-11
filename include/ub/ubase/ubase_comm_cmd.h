@@ -32,8 +32,6 @@ enum ubase_opcode_type {
 	/* Generic commands */
 	UBASE_OPC_QUERY_FW_VER		= 0x0001,
 	UBASE_OPC_QUERY_CTL_INFO	= 0x0003,
-	UBASE_OPC_QUERY_DTU_INFO	= 0x0005,
-	UBASE_OPC_CONFIG_DTU_TBL	= 0x0006,
 	UBASE_OPC_NOTIFY_DRV_CAPS	= 0x0007,
 	UBASE_OPC_QUERY_COMM_RSRC_PARAM	= 0x0030,
 	UBASE_OPC_QUERY_NIC_RSRC_PARAM	= 0x0031,
@@ -47,7 +45,6 @@ enum ubase_opcode_type {
 	UBASE_OPC_DFX_BA_REG		= 0x0043,
 	UBASE_OPC_DFX_TP_REG		= 0x0044,
 	UBASE_OPC_DFX_TA_REG		= 0x0045,
-	UBASE_OPC_QUERY_UE_TA_RSRC	= 0x0046,
 	UBASE_OPC_QUERY_BUS_EID		= 0x0047,
 	UBASE_OPC_DFX_HIMAC_REG		= 0x0048,
 	UBASE_OPC_QUERY_UBCL_CONFIG	= 0x0050,
@@ -111,7 +108,7 @@ enum ubase_opcode_type {
 
 	/* Mailbox commands */
 	UBASE_OPC_POST_MB		= 0x7000,
-	UBASE_OPC_QUERY_MB_ST		= 0x7001,
+	UBASE_OPC_QUERY_MB_ST		= 0X7001,
 
 	/* Ubctl commands */
 	UBASE_OPC_QUERY_PORT_BITMAP	= 0xA017,
@@ -128,20 +125,6 @@ enum ubase_opcode_type {
 	UBASE_OPC_UE2UE_UBASE		= 0xF00E,
 	UBASE_OPC_ACTIVATE_REQ		= 0xF00F,
 	UBASE_OPC_ACTIVATE_RESP		= 0xF010,
-	UBASE_OPC_UE_ISOLATED_NOTIFY	= 0xF011,
-	UBASE_OPC_QUERY_UE_ISOLATED_STATE = 0xF012,
-	UBASE_OPC_SET_CTX_VA_REQ	= 0xF013,
-	UBASE_OPC_UPDATE_CTX_VA_STATUS	= 0xF014,
-	UBASE_OPC_UE_RESET_NOTIFY	= 0xF015,
-	UBASE_OPC_PROXY_TO_UBASE	= 0xF017,
-	UBASE_OPC_PROXY_TO_UDMA		= 0xF018,
-	UBASE_OPC_UE_TO_PROXY		= 0xF019,
-	UBASE_OPC_SET_CTX_VA_RESP	= 0xF01A,
-};
-
-enum ubase_ue_to_proxy_module {
-	UBASE_MODULE_UDMA_TO_PROXY = 0x01,
-	UBASE_MODULE_UBASE_TO_PROXY = 0x02,
 };
 
 /**
@@ -178,64 +161,6 @@ struct ubase_crq_event_nb {
 	KABI_RESERVE(2)
 	KABI_RESERVE(3)
 	KABI_RESERVE(4)
-};
-
-/**
- * struct ubase_proxy_req_msg - ubase proxy request message structure
- * @bus_ue_id: bus ub entity id
- * @mbx_ue_id: mailbox ub entity id
- * @module: module that sends this request message
- * @opcode: mailbox opcode
- * @seq_num: message sequence number
- * @tag: mailbox queue id
- * @data_len: valid length of request message data
- * @data: request message data
- */
-struct ubase_proxy_req_msg {
-	__le16 bus_ue_id;
-	__le16 mbx_ue_id;
-	u16 module;
-	u16 opcode;
-	u32 seq_num;
-	u16 tag;
-	u16 data_len;
-	u8 data[];
-};
-
-/**
- * struct ubase_proxy_resp_msg - ubase proxy response message structure
- * @bus_ue_id: bus ub entity id
- * @mbx_ue_id: mailbox ub entity id
- * @seq_num: message sequence number
- * @ret: return value of the request message execution result
- * @rsv: reserved bits
- * @data_len: valid length of response message data
- * @data: response message data
- */
-struct ubase_proxy_resp_msg {
-	__le16 bus_ue_id;
-	__le16 mbx_ue_id;
-	u32 seq_num;
-	int ret;
-	u8 rsv[2];
-	u16 data_len;
-	u8 data[];
-};
-
-/**
- * struct ubase_proxy_set_ctx_va_cmd - ubase proxy set context va command structure
- * @bus_ue_id: bus ub entity id
- * @mbx_ue_id: mailbox ub entity id
- * @ctx_type: context va type
- * @result: result of context va configuration
- * @resv: reserved bits
- */
-struct ubase_proxy_set_ctx_va_cmd {
-	__le16	bus_ue_id;
-	__le16	mbx_ue_id;
-	__le16	ctx_type;
-	u16	result;
-	u8	resv[16];
 };
 
 /**
