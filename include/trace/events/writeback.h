@@ -572,7 +572,6 @@ TRACE_EVENT(global_dirty_state,
 
 #define KBps(x)			((x) << (PAGE_SHIFT - 10))
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 TRACE_EVENT(blkcg_dirty_ratelimit,
 
 	TP_PROTO(unsigned long bps,
@@ -640,7 +639,6 @@ TRACE_EVENT(blkcg_calc_task_ratelimit,
 		  __entry->task_ratelimit
 	)
 );
-#endif
 
 TRACE_EVENT(bdi_dirty_ratelimit,
 

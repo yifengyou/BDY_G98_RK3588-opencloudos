@@ -1506,7 +1506,6 @@ static int tg_print_rwstat_recursive(struct seq_file *sf, void *v)
 	return 0;
 }
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 static int tg_set_buffered_write_bps(struct cgroup_subsys_state *css,
 				     struct cftype *cft,
 				     u64 val)
@@ -1515,7 +1514,8 @@ static int tg_set_buffered_write_bps(struct cgroup_subsys_state *css,
 
 	if (blkcg) {
 		blkcg->buffered_write_bps = val;
-		blkcg->dirty_ratelimit = INIT_DIRTY_BW;
+		if (!blkcg->dirty_ratelimit)
+			blkcg->dirty_ratelimit = INIT_DIRTY_BW;
 	}
 	return 0;
 }
@@ -1527,7 +1527,6 @@ static u64 tg_read_buffered_write_bps(struct cgroup_subsys_state *css,
 		return (u64)blkcg->buffered_write_bps;
 	return 0;
 }
-#endif
 
 static u64 tg_prfill_throttle_stat(struct seq_file *sf, struct blkg_policy_data *pd,
 			       int off)
@@ -1908,7 +1907,20 @@ static struct cftype throtl_files[] = {
 		.write = tg_set_limit,
 		.private = LIMIT_MAX,
 	},
-	{ }	/* terminate */
+	{
+		.name = "buffer_write_bps",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = tg_read_buffered_write_bps,
+		.write_u64 = tg_set_buffered_write_bps,
+		.private = 256,
+	},
+	{
+		.name = "readwrite_dynamic_ratio",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = blkcg_print_readwrite_ratio,
+		.write = blkcg_set_readwrite_ratio,
+	},
+	{}	/* terminate */
 };
 
 static void throtl_shutdown_wq(struct request_queue *q)

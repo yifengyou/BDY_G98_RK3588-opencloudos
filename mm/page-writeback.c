@@ -1695,9 +1695,7 @@ static inline void wb_dirty_limits(struct dirty_throttle_control *dtc)
 	}
 }
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 EXPORT_TRACEPOINT_SYMBOL_GPL(blkcg_dirty_ratelimit);
-#endif
 
 /*
  * balance_dirty_pages() must be called by processes which are generating dirty
@@ -1714,9 +1712,7 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 	struct dirty_throttle_control * const gdtc = &gdtc_stor;
 	struct dirty_throttle_control * const mdtc = mdtc_valid(&mdtc_stor) ?
 						     &mdtc_stor : NULL;
-	struct dirty_throttle_control *sdtc = (
-			IS_ENABLED(CONFIG_BLK_DEV_THROTTLING_CGROUP_V1) ?
-			gdtc : NULL);
+	struct dirty_throttle_control *sdtc = gdtc;
 	unsigned long nr_reclaimable;	/* = file_dirty */
 	long period;
 	long pause;
@@ -1724,16 +1720,18 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 	long min_pause;
 	int nr_dirtied_pause;
 	bool dirty_exceeded = false;
-	unsigned long task_ratelimit;
-	unsigned long dirty_ratelimit;
+	unsigned long task_ratelimit = 0;
+	unsigned long dirty_ratelimit = 0;
 	struct backing_dev_info *bdi = wb->bdi;
 	bool strictlimit = bdi->capabilities & BDI_CAP_STRICTLIMIT;
 	unsigned long start_time = jiffies;
 	int ret = 0;
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+#ifdef CONFIG_BLK_CGROUP
 	struct blkcg *blkcg = get_task_blkcg(current);
-	struct blkcg *parent_blkcg;
+#else
+	struct blkcg *blkcg = NULL;
 #endif
+	struct blkcg *parent_blkcg;
 
 	for (;;) {
 		unsigned long now = jiffies;
@@ -1741,6 +1739,7 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 		unsigned long m_dirty = 0;	/* stop bogus uninit warnings */
 		unsigned long m_thresh = 0;
 		unsigned long m_bg_thresh = 0;
+		bool from_free_run = false;
 
 		nr_reclaimable = global_node_page_state(NR_FILE_DIRTY);
 		gdtc->avail = global_dirtyable_memory();
@@ -1821,10 +1820,10 @@ free_running:
 			intv = dirty_poll_interval(dirty, thresh);
 			m_intv = ULONG_MAX;
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
-			if (blkcg && blkcg_buffered_write_bps_enabled(blkcg))
+			if (blkcg && blkcg_buffered_write_bps_enabled(blkcg)) {
+				from_free_run = true;
 				goto blkcg_bps;
-#endif
+			}
 
 			current->dirty_paused_when = now;
 			current->nr_dirtied = 0;
@@ -1905,14 +1904,11 @@ free_running:
 		task_ratelimit = ((u64)dirty_ratelimit * sdtc->pos_ratio) >>
 							RATELIMIT_CALC_SHIFT;
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
-		if (blkcg && blkcg_buffered_write_bps_enabled(blkcg) &&
-			task_ratelimit > blkcg_dirty_ratelimit(blkcg)) {
+		if (blkcg && blkcg_buffered_write_bps_enabled(blkcg)) {
 blkcg_bps:
-			if (likely(sysctl_buffered_write_bps_hierarchy)) {
+			if (likely(blkcg_buffered_hierarchy_enabled())) {
 				dirty_ratelimit = blkcg_dirty_ratelimit(blkcg);
 				parent_blkcg = blkcg;
-
 				while (parent_blkcg) {
 					if (blkcg_buffered_write_bps(parent_blkcg)) {
 						RUE_CALL_VOID(IO, blkcg_update_bandwidth,
@@ -1920,30 +1916,28 @@ blkcg_bps:
 						if (dirty_ratelimit > blkcg_dirty_ratelimit(parent_blkcg))
 							dirty_ratelimit = blkcg_dirty_ratelimit(parent_blkcg);
 					}
-
 					parent_blkcg = blkcg_parent(parent_blkcg);
 				}
 			} else {
 				RUE_CALL_VOID(IO, blkcg_update_bandwidth, blkcg);
-				dirty_ratelimit = blkcg_dirty_ratelimit(blkcg);
+				if (!dirty_ratelimit || dirty_ratelimit > blkcg_dirty_ratelimit(blkcg))
+					dirty_ratelimit = blkcg_dirty_ratelimit(blkcg);
 			}
-			task_ratelimit = dirty_ratelimit;
 
+			if (from_free_run || task_ratelimit > dirty_ratelimit)
+				task_ratelimit = dirty_ratelimit;
 			trace_blkcg_calc_task_ratelimit(blkcg->css.cgroup->kn->name,
 					blkcg_buffered_write_bps(blkcg), blkcg_dirty_ratelimit(blkcg),
 					task_ratelimit);
 		}
-#endif
 
 		max_pause = wb_max_pause(wb, sdtc->wb_dirty);
 		min_pause = wb_min_pause(wb, max_pause,
 					 task_ratelimit, dirty_ratelimit,
 					 &nr_dirtied_pause);
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 		if (blkcg && blkcg_buffered_write_bps_enabled(blkcg) && max_pause == 1)
 			max_pause = MAX_PAUSE;
-#endif
 
 		if (unlikely(task_ratelimit == 0)) {
 			period = max_pause;
@@ -2038,7 +2032,7 @@ pause:
 		if (fatal_signal_pending(current))
 			break;
 	}
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+#ifdef CONFIG_BLK_CGROUP
 	css_put(&blkcg->css);
 #endif
 	return ret;
@@ -2697,8 +2691,10 @@ static void folio_account_dirtied(struct folio *folio,
 		struct address_space *mapping)
 {
 	struct inode *inode = mapping->host;
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+#ifdef CONFIG_BLK_CGROUP
 	struct blkcg *blkcg = get_task_blkcg(current);
+#else
+	struct blkcg *blkcg = NULL;
 #endif
 #ifdef CONFIG_MEMCG
 	struct mem_cgroup *memcg;
@@ -2725,10 +2721,8 @@ static void folio_account_dirtied(struct folio *folio,
 		inode_attach_wb(inode, folio);
 		wb = inode_to_wb(inode);
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 		if (blkcg)
 			percpu_counter_add_batch(&blkcg->nr_dirtied, nr, WB_STAT_BATCH);
-#endif
 
 		__lruvec_stat_mod_folio(folio, NR_FILE_DIRTY, nr);
 		__zone_stat_mod_folio(folio, NR_ZONE_WRITE_PENDING, nr);
@@ -2741,7 +2735,7 @@ static void folio_account_dirtied(struct folio *folio,
 
 		mem_cgroup_track_foreign_dirty(folio, wb);
 	}
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+#ifdef CONFIG_BLK_CGROUP
 	css_put(&blkcg->css);
 #endif
 }

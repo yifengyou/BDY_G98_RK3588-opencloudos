@@ -69,9 +69,7 @@
 #include <linux/psi.h>
 #endif
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 #include <linux/blk-cgroup.h>
-#endif
 
 #include "../lib/kstrtox.h"
 

@@ -222,13 +222,11 @@ struct throtl_grp {
 
 #ifdef CONFIG_BLK_CGROUP
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 /*
  * Initial write bandwidth: 1000 MB/s (wb_init is 100 MB/s)
  * The bandwidth will be updated via blkcg_update_bandwidth()
  */
 #define INIT_DIRTY_BW     (1000 << (20 - PAGE_SHIFT))
-#endif
 
 extern struct cgroup_subsys_state * const blkcg_root_css;
 
@@ -301,13 +299,11 @@ struct blkcg {
 	struct blkcg_dkstats		*dkstats_hint;
 #endif
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
 	struct percpu_counter           nr_dirtied;
 	unsigned long                   bw_time_stamp;
 	unsigned long                   dirtied_stamp;
 	unsigned long                   dirty_ratelimit;
 	unsigned long long              buffered_write_bps;
-#endif
 
 	unsigned int			readwrite_dynamic_ratio;
 
@@ -450,10 +446,6 @@ static inline struct blkcg *blkcg_parent(struct blkcg *blkcg)
 	return css_to_blkcg(blkcg->css.parent);
 }
 
-#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
-extern unsigned int sysctl_buffered_write_bps_hierarchy __read_mostly;
-extern unsigned int sysctl_skip_throttle_prio_req __read_mostly;
-
 static inline uint64_t blkcg_buffered_write_bps(struct blkcg *blkcg)
 {
 	return blkcg->buffered_write_bps;
@@ -464,19 +456,34 @@ static inline unsigned long blkcg_dirty_ratelimit(struct blkcg *blkcg)
 	return blkcg->dirty_ratelimit;
 }
 
+#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+extern unsigned int sysctl_skip_throttle_prio_req __read_mostly;
+extern unsigned int sysctl_buffered_write_bps_hierarchy __read_mostly;
+#endif
+
+static inline bool blkcg_buffered_hierarchy_enabled(void)
+{
+#ifdef CONFIG_BLK_DEV_THROTTLING_CGROUP_V1
+	return sysctl_buffered_write_bps_hierarchy || cgroup_subsys_on_dfl(io_cgrp_subsys);
+#else
+	return cgroup_subsys_on_dfl(io_cgrp_subsys);
+#endif
+}
+
 static inline int blkcg_buffered_write_bps_enabled(struct blkcg *blkcg)
 {
 	if (!rue_io_enabled())
 		return 0;
 
-	if (!sysctl_buffered_write_bps_hierarchy)
+	if (!blkcg_buffered_hierarchy_enabled()) {
 		return blkcg_buffered_write_bps(blkcg);
+	} else {
+		while (blkcg) {
+			if (blkcg->buffered_write_bps)
+				return blkcg_buffered_write_bps(blkcg);
 
-	while (blkcg) {
-		if (blkcg->buffered_write_bps)
-			return blkcg_buffered_write_bps(blkcg);
-
-		blkcg = blkcg_parent(blkcg);
+			blkcg = blkcg_parent(blkcg);
+		}
 	}
 
 	return 0;
@@ -496,7 +503,6 @@ static inline struct blkcg *get_task_blkcg(struct task_struct *tsk)
 
 	return container_of(css, struct blkcg, css);
 }
-#endif
 
 #else	/* CONFIG_BLK_CGROUP */
 
