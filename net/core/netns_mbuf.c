@@ -111,10 +111,9 @@ static int netns_mbuf_show(struct seq_file *s, void *v)
 	if (!pd->snapshot->mring)
 		return 0;
 
-	memset(udesc->buf, 0, sizeof(udesc->buf));
 	ret = pd->snapshot->ops->read(pd->snapshot, udesc);
 	if (ret > 0)
-		seq_printf(s, "%s", udesc->buf);
+		seq_write(s, udesc->buf, ret);
 	return 0;
 }
 
