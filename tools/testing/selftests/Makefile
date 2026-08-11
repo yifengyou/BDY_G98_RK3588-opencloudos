@@ -91,6 +91,7 @@ TARGETS += timens
 ifneq (1, $(quicktest))
 TARGETS += timers
 endif
+TARGETS += tkernel
 TARGETS += tmpfs
 TARGETS += tpm2
 TARGETS += tty
