@@ -286,7 +286,8 @@ check_commit() {
 	return $ret
 }
 
-if ! git_logs=$(git log --no-walk=sorted --no-decorate --pretty=oneline --first-parent "${COMMITS[*]}"); then
+if ! git_logs=$(git log --no-walk=sorted --no-decorate --pretty=oneline \
+		--first-parent "${COMMITS[@]}"); then
 	die "Failed to parse git references '${COMMITS[*]}'"
 	exit 1
 fi
