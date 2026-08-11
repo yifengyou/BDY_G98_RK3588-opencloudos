@@ -66,15 +66,21 @@ Kill Hook / Kill Block (``CONFIG_TKERNEL_KILL_BLOCK``)
 --------------------------------------------------------
 
 Intercepts kill signals and blocks them based on configurable rules.
-A whitelist interface at ``/proc/whitelist`` allows administrators to
-protect specific processes from being killed (e.g. by Kubernetes
-eviction).  Depends on cgroups for scope control.
+A whitelist interface at ``/proc/kill_block/whitelist`` allows
+administrators to exempt matching source, destination, and cgroup
+combinations from blocking.  Statistics are exposed through
+``/proc/kill_block/stat``, and the feature is controlled by
+``/proc/sys/kernel/sig_kill_block``.  It depends on cgroups for scope
+control.
 
 Kill Protect (``CONFIG_TKERNEL_KILL_PROTECT``)
 -------------------------------------------------
 
 Protects specific processes from SIGKILL and SIGTERM.  Simpler than
-kill block; operates on a per-process basis rather than per-cgroup.
+kill block; it matches process command names rather than cgroups.  Rules
+are configured through ``/proc/kill_protect/blacklist``, statistics are
+reported through ``/proc/kill_protect/stat``, and the feature is
+controlled by ``/proc/sys/kernel/sig_kill_protect``.
 
 Async Fork (``CONFIG_ASYNC_FORK``)
 ------------------------------------
@@ -91,11 +97,13 @@ At runtime, ``vm.memcg_async`` controls integration with the RUE memory
 quality-of-service implementation.  Enabling it requires the RUE module to
 be installed.
 
-Sysctl Interface
-================
+Sysctl interfaces
+=================
 
 TKernel registers a top-level sysctl directory at
-``/proc/sys/tkernel/`` for global feature parameters.
+``/proc/sys/tkernel/`` for global feature parameters.  Individual
+features can also register controls in standard sysctl directories; the
+kill block and kill protect controls are under ``/proc/sys/kernel/``.
 
 Building
 ========
