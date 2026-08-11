@@ -8,17 +8,13 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <ub/ubase/ubase_comm_debugfs.h>
-#include <ub/ubase/ubase_comm_eq.h>
 
 #include "ubase_cmd.h"
 #include "ubase_ctx_debugfs.h"
 #include "ubase_dev.h"
 #include "ubase_hw.h"
-#include "ubase_mailbox.h"
-#include "ubase_proxy_debugfs.h"
 #include "ubase_qos_debugfs.h"
 #include "ubase_stats.h"
-#include "ubase_tp.h"
 #include "ubase_debugfs.h"
 
 static struct dentry *ubase_dbgfs_root;
@@ -26,7 +22,6 @@ static struct dentry *ubase_dbgfs_root;
 static int ubase_dbg_dump_rst_info(struct seq_file *s, void *data)
 {
 	struct ubase_dev *udev = dev_get_drvdata(s->private);
-	int i;
 
 	seq_printf(s, "ELR reset count: %u\n", udev->reset_stat.elr_reset_cnt);
 	seq_printf(s, "port reset count: %u\n", udev->reset_stat.port_reset_cnt);
@@ -35,11 +30,6 @@ static int ubase_dbg_dump_rst_info(struct seq_file *s, void *data)
 	seq_printf(s, "HW reset done count: %u\n", udev->reset_stat.hw_reset_done_cnt);
 	seq_printf(s, "reset fail count: %u\n", udev->reset_stat.reset_fail_cnt);
 	seq_printf(s, "udev state: 0x%lx\n", udev->state_bits);
-	seq_printf(s, "udev status: 0x%lx\n", udev->status);
-
-	for (i = 0; i < UBASE_DRV_MAX; i++)
-		seq_printf(s, "adev[%d] dev_id %d status: 0x%lx\n",
-			   i, udev->dev_id, udev->priv.adev_status[i]);
 
 	return 0;
 }
@@ -56,8 +46,6 @@ static void ubase_dbg_dump_caps_bits(struct seq_file *s, struct ubase_dev *udev)
 	PRINT_CAP(ctrlq, ubase_dev_ctrlq_supported);
 	PRINT_CAP(eth_mac, ubase_dev_eth_mac_supported);
 	PRINT_CAP(mac_stats, ubase_dev_mac_stats_supported);
-	PRINT_CAP(mbx, ubase_dev_mbx_supported);
-	PRINT_CAP(mbx_proxy, ubase_dev_mbx_proxy_supported);
 	PRINT_CAP(prealloc, __ubase_dev_prealloc_supported);
 	PRINT_CAP(udma, ubase_dev_udma_supported);
 	PRINT_CAP(unic, ubase_dev_unic_supported);
@@ -67,9 +55,6 @@ static void ubase_dbg_dump_caps_bits(struct seq_file *s, struct ubase_dev *udev)
 		PRINT_CAP(ip_over_urma_utp, ubase_ip_over_urma_utp_supported);
 	PRINT_CAP(activate_proxy, ubase_activate_proxy_supported);
 	PRINT_CAP(utp, ubase_utp_supported);
-	PRINT_CAP(dtu, ubase_dev_dtu_supported);
-	PRINT_CAP(usc, ubase_dev_usc_supported);
-	PRINT_CAP(ucp, ubase_ucp_supported);
 	PRINT_CAP(pmu_irq, ubase_pmu_irq_supported);
 }
 
@@ -158,7 +143,7 @@ static void ubase_dbg_dump_adev_caps(struct seq_file *s,
 		{"\tcqe_size: %hu\n", caps->cqe_size},
 		{"\tjtg_max_cnt: %u\n", caps->jtg_max_cnt},
 		{"\trc_max_cnt: %u\n", caps->rc_max_cnt},
-		{"\trc_que_depth: %u\n", caps->rc_que_depth},
+		{"\trc_depth: %u\n", caps->rc_que_depth},
 		{"\tprealloc_mem_dma_len: %llu\n", caps->pmem.dma_len},
 	};
 	int i;
@@ -317,6 +302,7 @@ static int ubase_dbg_dump_activate_record(struct seq_file *s, void *data)
 	}
 
 	mutex_unlock(&record->lock);
+
 	return 0;
 }
 
@@ -443,38 +429,6 @@ static int ubase_dbg_dump_prealloc_mem_info(struct seq_file *s, void *data)
 	seq_printf(s, "status:%s\n", status ? "enabled" : "disabled");
 	seq_printf(s, "comm_page_cnt:%u\n", pmem_info->comm.page_cnt);
 	seq_printf(s, "udma_page_cnt:%u\n", pmem_info->udma.page_cnt);
-
-	return 0;
-}
-
-static int ubase_dbg_dump_limit_log_cnt(struct seq_file *s, void *data)
-{
-#define UBASE_PRINT_LOG_CNT(name) \
-	seq_printf(s, #name "_cnt:%u\n", udev->log_rs.name##_cnt)
-
-	struct ubase_dev *udev = dev_get_drvdata(s->private);
-
-	UBASE_PRINT_LOG_CNT(ctrlq_other_seq_invalid);
-	UBASE_PRINT_LOG_CNT(ctrlq_wait_resp_timeout);
-	UBASE_PRINT_LOG_CNT(ctrlq_crq_pi_invalid);
-	UBASE_PRINT_LOG_CNT(ctrlq_space_insuffice);
-	UBASE_PRINT_LOG_CNT(ue_send_ctrlq_to_cmdq_fail);
-	UBASE_PRINT_LOG_CNT(ctrlq_is_disabled);
-	UBASE_PRINT_LOG_CNT(ctrlq_msg_queue_wait_timeout);
-	UBASE_PRINT_LOG_CNT(ctrlq_seq_insuffice);
-	UBASE_PRINT_LOG_CNT(send_ctrlq_unsup_resp_fail);
-	UBASE_PRINT_LOG_CNT(send_ue_ctrlq_msg_to_cmdq_fail);
-	UBASE_PRINT_LOG_CNT(mbx_buff_not_empty);
-	UBASE_PRINT_LOG_CNT(cmdq_is_disable);
-	UBASE_PRINT_LOG_CNT(mailbox_cmd_timeout);
-	UBASE_PRINT_LOG_CNT(cmdq_space_insuffice);
-	UBASE_PRINT_LOG_CNT(post_mailbox_fail);
-	UBASE_PRINT_LOG_CNT(wait_mbox_fail);
-	UBASE_PRINT_LOG_CNT(aeq_event_type_exceed_max);
-	UBASE_PRINT_LOG_CNT(arq_queue_full);
-	UBASE_PRINT_LOG_CNT(send_ue_ctrlq_msg_fail);
-	UBASE_PRINT_LOG_CNT(proxy_resp_seq_invalid);
-	UBASE_PRINT_LOG_CNT(err_msn_in_act_resp);
 
 	return 0;
 }
@@ -768,14 +722,6 @@ static struct ubase_dbg_cmd_info ubase_dbg_cmd[] = {
 		.read_func = ubase_dbg_dump_tm_port_info,
 	},
 	{
-		.name = "ue_isolated_state",
-		.dentry_index = UBASE_DBG_DENTRY_ROOT,
-		.property = UBASE_SUP_URMA | UBASE_SUP_UBL_ETH,
-		.support = __ubase_dbg_dentry_support,
-		.init = __ubase_dbg_seq_file_init,
-		.read_func = ubase_dbg_dump_ue_isolated_state,
-	},
-	{
 		.name = "prealloc_mem_info",
 		.dentry_index = UBASE_DBG_DENTRY_ROOT,
 		.property = UBASE_SUP_URMA | UBASE_SUP_UBL_ETH,
@@ -790,14 +736,6 @@ static struct ubase_dbg_cmd_info ubase_dbg_cmd[] = {
 		.support = __ubase_dbg_dentry_support,
 		.init = __ubase_dbg_seq_file_init,
 		.read_func = ubase_dbg_dump_initial_qset_info,
-	},
-	{
-		.name = "limit_log_cnt",
-		.dentry_index = UBASE_DBG_DENTRY_ROOT,
-		.property = UBASE_SUP_ALL | UBASE_SUP_UBL_ETH,
-		.support = __ubase_dbg_dentry_support,
-		.init = __ubase_dbg_seq_file_init,
-		.read_func = ubase_dbg_dump_limit_log_cnt,
 	},
 };
 

@@ -36,7 +36,6 @@ MODULE_PARM_DESC(sva_separated_mode,
 	"Enable user-mode SVA with an independent page table (no process page table sharing).");
 
 static u16 ummu_chip_identifier;
-bool hw_bypass;
 
 bool ummu_sva_separated_enabled(void)
 {
@@ -161,19 +160,17 @@ static void ummu_device_hw_probe_iidr(struct ummu_device *ummu)
 	 * ummu enables chip_identifier to perform some specialized operations.
 	 */
 	reg = readl_relaxed(ummu->base + UMMU_IIDR);
-	if (ummu_chip_identifier == HISI_VENDOR_ID) {
-		if (!FIELD_GET(IIDR_PROD_ID, reg)) {
-			ummu->cap.options |= UMMU_OPT_DOUBLE_PLBI;
-			ummu->cap.options |= UMMU_OPT_KCMD_PLBI;
-			ummu->cap.options |= UMMU_OPT_CHK_MAPT_CONTINUITY;
-			ummu->cap.options |= UMMU_OPT_MCMDQ_DECREASE;
-			ummu->cap.options |= UMMU_OPT_SYNC_WITH_PLBI;
-			ummu->cap.options |= UMMU_OPT_KV_CAM_CONTINUITY;
-			ummu->cap.features &= ~UMMU_FEAT_STALLS;
-		} else {
-			ummu->cap.options |= UMMU_OPT_UMAU;
-		}
+	if ((ummu_chip_identifier == HISI_VENDOR_ID) &&
+	    !FIELD_GET(IIDR_PROD_ID, reg)) {
+		ummu->cap.options |= UMMU_OPT_DOUBLE_PLBI;
+		ummu->cap.options |= UMMU_OPT_KCMD_PLBI;
+		ummu->cap.options |= UMMU_OPT_CHK_MAPT_CONTINUITY;
+		ummu->cap.options |= UMMU_OPT_MCMDQ_DECREASE;
+		ummu->cap.options |= UMMU_OPT_SYNC_WITH_PLBI;
+		ummu->cap.options |= UMMU_OPT_KV_CAM_CONTINUITY;
+		ummu->cap.features &= ~UMMU_FEAT_STALLS;
 	}
+
 	dev_notice(ummu->dev, "features 0x%08x, options 0x%08x.\n",
 		   ummu->cap.features, ummu->cap.options);
 }
@@ -345,10 +342,6 @@ static int ummu_device_hw_probe_cap2(struct ummu_device *ummu)
 		ummu->cap.features |= UMMU_FEAT_BTM;
 	else
 		dev_warn(ummu->dev, "don't support BTM!\n");
-
-	if (FIELD_GET(CAP2_HW_BYPASS, reg))
-		hw_bypass = true;
-
 	return 0;
 }
 
@@ -624,8 +617,7 @@ static int ummu_device_reset(struct ummu_device *ummu)
 static void release_ummu_dev_res(void *data)
 {
 	struct ummu_device *ummu = (struct ummu_device *)data;
-	ummu_device_free_mcmdq(ummu);
-	ummu_device_free_evtq(ummu);
+
 	ummu_iopf_queue_free(ummu);
 	ummu_device_uninit_permqs(ummu);
 }
@@ -738,8 +730,7 @@ static int ummu_device_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (!hw_bypass)
-		(void)ummu_global_identity_pgtbl_init(ummu);
+	(void)ummu_global_identity_pgtbl_init(ummu);
 
 	return 0;
 
@@ -823,9 +814,7 @@ static void __exit ummu_driver_unregister(struct platform_driver *drv)
 {
 	platform_driver_unregister(drv);
 	ummu_free_global_meta();
-	if (!hw_bypass)
-		ummu_global_identity_pgtbl_free();
-
+	ummu_global_identity_pgtbl_free();
 	logic_ummu_device_exit();
 }
 

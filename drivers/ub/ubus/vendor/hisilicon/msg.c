@@ -620,18 +620,7 @@ static int hi_message_send(struct message_device *mdev, struct msg_info *info,
 int hi_message_sync_request_sched(struct message_device *mdev,
 				  struct msg_info *info, u8 code)
 {
-	int ret, i = 1;
-
-	while (1) {
-		ret = hi_message_sync(mdev, info, PROTOCOL_MSG, code, true);
-		if (ret != -ETIMEDOUT)
-			return ret;
-
-		i++;
-
-		if (!msg_retry || i > RETRY_COUNT)
-			return -ETIMEDOUT;
-	}
+	return hi_message_sync(mdev, info, PROTOCOL_MSG, code, true);
 }
 
 int hi_message_private(struct message_device *mdev, struct msg_info *info,
