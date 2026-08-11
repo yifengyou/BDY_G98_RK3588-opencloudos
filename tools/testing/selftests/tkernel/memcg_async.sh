@@ -8,7 +8,6 @@ CGROUP_ROOT=/sys/fs/cgroup
 PRESSURE_HIGH=67108864
 PRESSURE_SIZE_MB=48
 TESTS=10
-rue_testmod_loaded=0
 cgroup_dir=
 pressure_file=
 
@@ -28,12 +27,7 @@ cleanup()
 	if [ -n "$cgroup_dir" ]; then
 		rmdir "$cgroup_dir" 2>/dev/null || true
 	fi
-	if [ "$rue_testmod_loaded" -eq 1 ]; then
-		write_value "$ASYNC" 0 || true
-		rmmod rue_testmod 2>/dev/null || true
-	else
-		write_value "$ASYNC" "$old_async" || true
-	fi
+	write_value "$ASYNC" "$old_async" || true
 }
 
 setup_memory_pressure()
@@ -90,13 +84,6 @@ pressure_is_below_memory_high()
 	[ "$current" -lt "$PRESSURE_HIGH" ]
 }
 
-load_rue_testmod()
-{
-	[ -r "$script_dir/rue_testmod.ko" ] || return 1
-	insmod "$script_dir/rue_testmod.ko" 2>/dev/null || return 1
-	rue_testmod_loaded=1
-}
-
 echo "TAP version 13"
 
 [ "$(id -u)" -eq 0 ] || ksft_skip_all "root privileges are required"
@@ -108,14 +95,8 @@ old_async=$(cat "$ASYNC")
 trap cleanup EXIT
 trap 'exit 1' INT TERM
 
-# The handler intentionally rejects writes until a RUE implementation is
-# installed. Load the kselftest-only provider when the system has no provider.
-if ! write_value "$ASYNC" 0; then
-	load_rue_testmod || ksft_skip_all \
-		"the RUE provider and rue_testmod.ko are unavailable"
-	write_value "$ASYNC" 0 || ksft_skip_all \
-		"rue_testmod did not activate the RUE interface"
-fi
+# RUE providers are maintained separately from the kernel selftests.
+write_value "$ASYNC" 0 || ksft_skip_all "an active RUE provider is required"
 ksft_plan "$TESTS"
 
 [ "$(cat "$ASYNC")" -eq 0 ]
