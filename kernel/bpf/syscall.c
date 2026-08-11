@@ -2525,6 +2525,16 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 		if (expected_attach_type == BPF_NETFILTER)
 			return 0;
 		return -EINVAL;
+#ifdef CONFIG_HISOCK
+	case BPF_PROG_TYPE_HISOCK:
+		switch (expected_attach_type) {
+		case BPF_HISOCK_EGRESS:
+		case BPF_HISOCK_INGRESS:
+			return 0;
+		default:
+			return -EINVAL;
+		}
+#endif
 	case BPF_PROG_TYPE_SYSCALL:
 	case BPF_PROG_TYPE_EXT:
 		if (expected_attach_type)
@@ -2553,6 +2563,9 @@ static bool is_net_admin_prog_type(enum bpf_prog_type prog_type)
 	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
 	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
 	case BPF_PROG_TYPE_CGROUP_SYSCTL:
+#ifdef CONFIG_HISOCK
+	case BPF_PROG_TYPE_HISOCK:
+#endif
 	case BPF_PROG_TYPE_SOCK_OPS:
 	case BPF_PROG_TYPE_EXT: /* extends any prog */
 	case BPF_PROG_TYPE_NETFILTER:
@@ -3816,6 +3829,11 @@ attach_type_to_prog_type(enum bpf_attach_type attach_type)
 	case BPF_CGROUP_GETSOCKOPT:
 	case BPF_CGROUP_SETSOCKOPT:
 		return BPF_PROG_TYPE_CGROUP_SOCKOPT;
+#ifdef CONFIG_HISOCK
+	case BPF_HISOCK_EGRESS:
+	case BPF_HISOCK_INGRESS:
+		return BPF_PROG_TYPE_HISOCK;
+#endif
 	case BPF_TRACE_ITER:
 	case BPF_TRACE_RAW_TP:
 	case BPF_TRACE_FENTRY:
@@ -3974,6 +3992,14 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 	case BPF_PROG_TYPE_SCHED_CLS:
 		ret = tcx_prog_attach(attr, prog);
 		break;
+#ifdef CONFIG_HISOCK
+	case BPF_PROG_TYPE_HISOCK:
+		if (attr->attach_type == BPF_HISOCK_EGRESS)
+			ret = cgroup_bpf_prog_attach(attr, ptype, prog);
+		else if (attr->attach_type == BPF_HISOCK_INGRESS)
+			ret = hisock_ingress_prog_attach(attr, prog);
+		break;
+#endif
 	default:
 		ret = -EINVAL;
 	}
@@ -4035,6 +4061,14 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 	case BPF_PROG_TYPE_SCHED_CLS:
 		ret = tcx_prog_detach(attr, prog);
 		break;
+#ifdef CONFIG_HISOCK
+	case BPF_PROG_TYPE_HISOCK:
+		if (attr->attach_type == BPF_HISOCK_EGRESS)
+			ret = cgroup_bpf_prog_detach(attr, ptype);
+		else if (attr->attach_type == BPF_HISOCK_INGRESS)
+			ret = hisock_ingress_prog_detach(attr);
+		break;
+#endif
 	default:
 		ret = -EINVAL;
 	}
@@ -4081,6 +4115,9 @@ static int bpf_prog_query(const union bpf_attr *attr,
 	case BPF_CGROUP_GETSOCKOPT:
 	case BPF_CGROUP_SETSOCKOPT:
 	case BPF_LSM_CGROUP:
+#ifdef CONFIG_HISOCK
+	case BPF_HISOCK_EGRESS:
+#endif
 		return cgroup_bpf_prog_query(attr, uattr);
 	case BPF_LIRC_MODE2:
 		return lirc_prog_query(attr, uattr);
@@ -5043,6 +5080,9 @@ static int link_create(union bpf_attr *attr, bpfptr_t uattr)
 	case BPF_PROG_TYPE_CGROUP_DEVICE:
 	case BPF_PROG_TYPE_CGROUP_SYSCTL:
 	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
+#ifdef CONFIG_HISOCK
+	case BPF_PROG_TYPE_HISOCK:
+#endif
 		ret = cgroup_bpf_link_attach(attr, prog);
 		break;
 	case BPF_PROG_TYPE_EXT:
