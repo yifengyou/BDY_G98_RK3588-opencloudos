@@ -16,14 +16,14 @@
 #include <linux/tick.h>
 #include <linux/sched/sysctl.h>
 
+#include "internal.h"
+
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
 #endif
 #ifndef arch_irq_stat
 #define arch_irq_stat() 0
 #endif
-
-extern u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu);
 
 u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
 {

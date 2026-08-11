@@ -15,6 +15,8 @@
 #include <linux/tick.h>
 #include <linux/sched/sysctl.h>
 
+#include "internal.h"
+
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
 #endif
@@ -24,7 +26,6 @@
 
 extern u64 get_idle_time(struct kernel_cpustat *kcs, int cpu);
 extern u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu);
-extern void show_all_irqs(struct seq_file *p);
 
 #ifdef arch_idle_time
 u64 get_iowait_time_bt(struct kernel_cpustat *kcs, int cpu)
@@ -193,7 +194,7 @@ int bt_show_stat(struct seq_file *p, void *v)
 	return __show_stat(p, v, false);
 }
 
-int iowait_show_stat(struct seq_file *p, void *v)
+static int iowait_show_stat(struct seq_file *p, void *v)
 {
 	return __show_stat(p, v, true);
 }
