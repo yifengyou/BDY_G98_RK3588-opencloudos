@@ -1643,7 +1643,7 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 		return -ESRCH;
 
 	default:
-		printk(KERN_INFO "unknown getsockopt command %d\n", cmd);
+		pr_info("unknown getsockopt command %d\n", cmd);
 		return -EINVAL;
 	}
 

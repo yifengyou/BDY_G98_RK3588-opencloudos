@@ -116,6 +116,7 @@ nvbios_M0203Em(struct nvkm_bios *bios, u8 ramcfg, u8 *ver, u8 *hdr,
 	while ((data = nvbios_M0203Ep(bios, ++idx, ver, hdr, info))) {
 		switch (M0203T.type) {
 		case M0203T_TYPE_RAMCFG:
+		case M0203T_TYPE_GB100:
 			if (info->strap != ramcfg)
 				continue;
 			return data;
