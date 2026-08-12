@@ -381,7 +381,7 @@ static int sxe2_ptp_ts_mode_set(struct sxe2_adapter *adapter,
 
 int sxe2_ptp_hwts_set(struct sxe2_adapter *adapter, struct ifreq *ifr)
 {
-	struct hwtstamp_config config;
+	struct hwtstamp_config config = { 0 };
 	int err;
 
 	if (adapter->ptp_ctxt.status != PTP_READY)
