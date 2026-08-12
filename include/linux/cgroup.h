@@ -881,6 +881,9 @@ __poll_t cgroup_sli_monitor_poll(struct kernfs_open_file *of, poll_table *pt);
 struct cgroup_subsys_state *cgroupfs_get_parent_role_cgroup(
 		struct task_struct *task, int type, int cgrp_id);
 int cpu_get_max_cpus(struct task_struct *p);
+#ifdef CONFIG_CGROUPFS
+int cpu_cgroupfs_quota_show(struct seq_file *m, void *v);
+#endif
 
 #ifdef CONFIG_CGROUP_BPF
 static inline void cgroup_bpf_get(struct cgroup *cgrp)

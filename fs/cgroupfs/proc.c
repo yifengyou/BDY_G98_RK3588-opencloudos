@@ -18,7 +18,6 @@ extern int cpuset_cgroupfs_loadavg_show(struct seq_file *m, void *v);
 #ifdef CONFIG_BLK_CGROUP_DISKSTATS
 extern int blkcg_cgroupfs_dkstats_show(struct seq_file *m, void *v);
 #endif
-extern int cpu_cgroupfs_quota_show(struct seq_file *m, void *v);
 extern int mem_cgroupfs_vmstat_show(struct seq_file *m, void *v);
 
 static int cgroup_fs_show(struct seq_file *m, void *v)
@@ -79,4 +78,3 @@ void cgroupfs_set_cgroup_fops(cgroupfs_entry_t *en)
 {
 	en->e_fops = &cgroupfs_file_ops;
 };
-
