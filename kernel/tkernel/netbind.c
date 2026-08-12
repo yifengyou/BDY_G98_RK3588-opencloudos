@@ -25,7 +25,8 @@ static int netbind_proc_open(struct inode *inode, struct file *file)
 static ssize_t netbind_proc_write(struct file *file, const char __user *buf,
 		size_t length, loff_t *ppos)
 {
-	int port, en;
+	unsigned int port;
+	int en;
 	char *buffer, *p;
 	int err;
 
@@ -58,11 +59,11 @@ static ssize_t netbind_proc_write(struct file *file, const char __user *buf,
 	if (*p < '0' || *p > '9')
 		goto out;
 
-	port = simple_strtoul(p, &p, 0);
-	if (*p != '\n' && *p != '\r' && *p != '\0')
+	p = strim(p);
+	if (kstrtouint(p, 0, &port))
 		goto out;
 
-	if (port <= 0 || port >= PROT_SOCK)
+	if (!port || port >= PROT_SOCK)
 		goto out;
 
 	nonpriv_prot_sock_flag[port] = en;

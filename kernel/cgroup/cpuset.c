@@ -3207,7 +3207,6 @@ static s64 cpuset_read_s64(struct cgroup_subsys_state *css, struct cftype *cft)
 	return 0;
 }
 
-extern int cpu_get_max_cpus(struct task_struct *p);
 static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v,
 					struct cpuset *cs, int max_cpu,
 					bool show_scx_stat __maybe_unused)

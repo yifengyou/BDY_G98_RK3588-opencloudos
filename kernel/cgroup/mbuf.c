@@ -210,15 +210,15 @@ static ssize_t mbuf_read(struct mbuf_slot *mb, struct mbuf_user_desc *udesc)
 
 		if (c < ' ' || c >= 127 || c == '\\')
 			continue;
-		else
-			udesc->buf[len++] = c;
 
-		if (len >= tbuf_len)
+		if (len >= tbuf_len - 2)
 			break;
+
+		udesc->buf[len++] = c;
 	}
 
-	len = len >= tbuf_len ? tbuf_len - 1 : len;
-	udesc->buf[len] = '\n';
+	udesc->buf[len++] = '\n';
+	udesc->buf[len] = '\0';
 	udesc->user_seq++;
 	ret = len;
 
@@ -495,14 +495,15 @@ static ssize_t rd_mbuf_read(struct mbuf_slot *mb, struct mbuf_user_desc *udesc)
 
 		if (c < ' ' || c >= 127 || c == '\\')
 			continue;
-		else
-			udesc->buf[len++] = c;
-		if (len >= tbuf_len)
+
+		if (len >= tbuf_len - 2)
 			break;
+
+		udesc->buf[len++] = c;
 	}
 
-	len = len >= tbuf_len ? tbuf_len - 1 : len;
-	udesc->buf[len] = '\n';
+	udesc->buf[len++] = '\n';
+	udesc->buf[len] = '\0';
 	udesc->user_seq++;
 	ret = len;
 	return ret;

@@ -1,5 +1,8 @@
 #ifndef __LINUX_CGROUPFS_H
 #define __LINUX_CGROUPFS_H
+
+#include <linux/cgroup.h>
+
 #define CGROUPFS_TYPE_MEMINFO		(1 << 0)
 #define CGROUPFS_TYPE_CPUINFO		(1 << 1)
 #define CGROUPFS_TYPE_STAT		(1 << 2)
@@ -15,7 +18,6 @@
 #define CGROUPFS_TYPE_NORMAL_DIR	(1 << 22)
 #define CGROUPFS_TYPE_AUTO_MOUNT	(1 << 23)
 
-extern int cpu_get_max_cpus(struct task_struct *p);
 extern int cpuset_cgroupfs_get_cpu_count(void);
 
 #ifdef CONFIG_X86

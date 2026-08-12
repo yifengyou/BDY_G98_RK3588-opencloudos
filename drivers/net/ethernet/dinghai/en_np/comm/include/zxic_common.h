@@ -231,7 +231,7 @@ typedef struct file ZXIC_FILE;
 #if ZXIC_REAL("开关")
 ZXIC_VOID zxic_comm_set_print_en(ZXIC_UINT32 enable);
 ZXIC_RTN32 zxic_comm_get_print_en(ZXIC_VOID);
-ZXIC_VOID zxic_comm_set_print_level(ZXIC_TRACE_LEVEL debug_level);
+ZXIC_VOID zxic_comm_set_print_level(ZXIC_UINT32 debug_level);
 ZXIC_RTN32 zxic_comm_get_print_level(ZXIC_VOID);
 #endif
 #if ZXIC_REAL("功能")
