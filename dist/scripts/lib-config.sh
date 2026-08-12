@@ -26,21 +26,27 @@ _get_config_cross_compiler () {
 }
 
 get_config_val() {
-	# If it's y/m/n/0-9, return plain text, else get from .config
+	# If it's a tristate or numeric literal, return plain text, else get it
+	# from .config. Kconfig decimal and hexadecimal literals may contain more
+	# than one digit.
 	#
 	# To be more accurate, maybe we need to check right/left-value?
 	case $1 in
-		n )
-			;;
-		y|m|[0-9] )
-			echo "$1" ;;
-		* )
-			local _val
-			_val=$(grep "^CONFIG_$1=" "$2")
-			_val=${_val#*=}
-			echo "${_val:-not set}"
-			;;
+		y|m|n )
+			echo "$1"
+			return ;;
+		* ) ;;
 	esac
+
+	if [[ $1 =~ ^[0-9]+$ || $1 =~ ^0[xX][0-9a-fA-F]+$ ]]; then
+		echo "$1"
+		return
+	fi
+
+	local _val
+	_val=$(grep "^CONFIG_$1=" "$2")
+	_val=${_val#*=}
+	echo "${_val:-not set}"
 }
 
 # Eval a Kconfig condition statement
