@@ -244,7 +244,7 @@ struct kvm_arch {
 
 	/* Mandated version of PSCI */
 	u32 psci_version;
-	KABI_FILL_HOLE(refcount_t pinned);
+	refcount_t pinned;
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 
@@ -653,10 +653,10 @@ struct kvm_vcpu_arch {
 
 #ifdef CONFIG_ARM64_HDBSS
 	/* HDBSS registers info */
-	KABI_EXTEND(struct {
+	struct {
 		u64 br_el2;
 		u64 prod_el2;
-	} hdbss)
+	} hdbss;
 #endif
 #ifdef CONFIG_KVM_HISI_VIRT
 	/* pCPUs this vCPU can be scheduled on. Pure copy of current->cpus_ptr */

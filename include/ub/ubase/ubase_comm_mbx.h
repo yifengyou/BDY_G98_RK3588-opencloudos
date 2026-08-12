@@ -29,7 +29,8 @@
 struct ubase_cmd_mailbox {
 	void *buf;
 	dma_addr_t dma;
-	KABI_USE(1, atomic_t count);
+	atomic_t count;
+	KABI_RESERVE(1)
 	KABI_RESERVE(2)
 	KABI_RESERVE(3)
 	KABI_RESERVE(4)
