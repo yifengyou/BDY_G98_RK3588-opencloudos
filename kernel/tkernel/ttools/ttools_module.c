@@ -197,6 +197,9 @@ static int ttools_init(void)
 
 	ttools_chardev_ops.owner = THIS_MODULE;
 	ret = misc_register(&ttools_dev);
+	if (ret)
+		return ret;
+
 	ptrace_pre_hook = ttools_ptrace_hook;
 	smp_wmb();
 	smp_call_function(flush_icache_1, NULL, 1);
