@@ -1676,7 +1676,7 @@ static int netatop_thread(void *dummy)
 int
 init_module()
 {
-	int i;
+	int i, ret;
 
 	/*
 	** initialize caches for taskinfo and sockinfo
@@ -1713,11 +1713,9 @@ init_module()
 	/*
 	** register getsockopt for user space communication
 	*/
-	if (nf_register_sockopt(&sockopts) < 0) {
-		kmem_cache_destroy(ticache);
-		kmem_cache_destroy(sicache);
-		return -1;
-	}
+	ret = nf_register_sockopt(&sockopts);
+	if (ret < 0)
+		goto destroy_caches;
 
 	/*
 	** create a new kernel mode thread for time-driven garbage collection
@@ -1726,10 +1724,8 @@ init_module()
 	knetatop_task = kthread_create(netatop_thread, NULL, "knetatop");
 
 	if (IS_ERR(knetatop_task)) {
-		nf_unregister_sockopt(&sockopts);
-		kmem_cache_destroy(ticache);
-		kmem_cache_destroy(sicache);
-		return -1;
+		ret = PTR_ERR(knetatop_task);
+		goto unregister_sockopt;
 	}
 
 	/*
@@ -1745,13 +1741,21 @@ init_module()
 	hookout_ipv4.pf		= PF_INET;		// IPV4 packets
 	hookout_ipv4.priority	= NF_IP_PRI_FIRST;	// highest prio
 
-	nf_register_net_hook(&init_net, &hookin_ipv4);			// register hook
-	nf_register_net_hook(&init_net, &hookout_ipv4);		// register hook
+	ret = nf_register_net_hook(&init_net, &hookin_ipv4);
+	if (ret)
+		goto stop_thread;
+
+	ret = nf_register_net_hook(&init_net, &hookout_ipv4);
+	if (ret)
+		goto unregister_hookin;
 
 	/*
 	** create a /proc-entry to produce status-info on request
 	*/
-	proc_create("netatop", 0444, NULL, &netatop_proc_fops);
+	if (!proc_create("netatop", 0444, NULL, &netatop_proc_fops)) {
+		ret = -ENOMEM;
+		goto unregister_hookout;
+	}
 
 	/*
 	** all admi prepared; kick off kernel mode thread
@@ -1759,6 +1763,19 @@ init_module()
 	wake_up_process(knetatop_task);
 
 	return 0;		// return success
+
+unregister_hookout:
+	nf_unregister_net_hook(&init_net, &hookout_ipv4);
+unregister_hookin:
+	nf_unregister_net_hook(&init_net, &hookin_ipv4);
+stop_thread:
+	kthread_stop(knetatop_task);
+unregister_sockopt:
+	nf_unregister_sockopt(&sockopts);
+destroy_caches:
+	kmem_cache_destroy(ticache);
+	kmem_cache_destroy(sicache);
+	return ret;
 }
 
 /*
