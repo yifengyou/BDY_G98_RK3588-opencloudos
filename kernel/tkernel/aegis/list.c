@@ -146,7 +146,7 @@ static const struct proc_ops hook_info_fops = {
 static ssize_t fops_statistics_read(struct file *file, char __user *buf,
 						size_t count, loff_t *ppos)
 {
-	int ret, i;
+	int i;
 	struct statistics_info statistics_information = {};
 	unsigned int copied = sizeof(struct statistics_info);
 
@@ -162,8 +162,9 @@ static ssize_t fops_statistics_read(struct file *file, char __user *buf,
 	}
 
 	statistics_information.version = STATISTIC_VERSION;
-	ret = copy_to_user(buf, &statistics_information, copied);
-	return copied - ret;
+	if (copy_to_user(buf, &statistics_information, copied))
+		return -EFAULT;
+	return copied;
 }
 
 static const struct proc_ops stats_info_fops = {
