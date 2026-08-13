@@ -281,7 +281,7 @@ int hook_info_func_register(void)
 	}
 	return 0;
 err:
-	for (i = i - 1; i >= 0; i++) {
+	for (i = i - 1; i >= 0; i--) {
 		type = hook_info_array[i].type;
 		hook_func_array[type] = 0;
 	}
