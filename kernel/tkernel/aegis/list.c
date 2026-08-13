@@ -188,7 +188,6 @@ int hook_info_proc_create(void)
 			ret = -ENOMEM;
 			goto err;
 		}
-		mutex_init(&hook_info_array[i].readlock);
 	}
 
 	if (!proc_create("statistics_info", 0400, hook_dir_entry, &stats_info_fops)) {
@@ -298,12 +297,14 @@ void hook_info_func_unregister(void)
 	}
 }
 
-void init_wait_queue(void)
+static void init_hook_info_sync(void)
 {
 	int i;
 
-	for (i = 0; hook_info_array[i].dir; i++)
+	for (i = 0; hook_info_array[i].dir; i++) {
+		mutex_init(&hook_info_array[i].readlock);
 		init_waitqueue_head(&hook_info_array[i].wait_queue);
+	}
 }
 
 int list_module_init(void)
@@ -315,6 +316,8 @@ int list_module_init(void)
 	if (ret)
 		goto list_err;
 
+	init_hook_info_sync();
+
 	ret = hook_info_proc_create();
 	if (ret)
 		goto proc_err;
@@ -322,8 +325,6 @@ int list_module_init(void)
 	ret = hook_info_func_register();
 	if (ret)
 		goto func_err;
-
-	init_wait_queue();
 
 	return 0;
 
