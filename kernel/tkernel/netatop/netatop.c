@@ -1573,6 +1573,8 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 			exittail = NULL;
 
 		nre--;
+		if (nre == 0)
+			wake_up_interruptible(&exitlist_empty);
 
 		spin_unlock_irqrestore(&exitlock, tflags);
 
@@ -1584,11 +1586,10 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 		npt.tc		= tip->tc;
 		npt.btime	= tip->btime;
 		memcpy(npt.command, tip->command, COMLEN);
+		kmem_cache_free(ticache, tip);
 
 		if (copy_to_user(user, &npt, *len) != 0)
 			return -EFAULT;
-
-		kmem_cache_free(ticache, tip);
 
 		return 0;
 
