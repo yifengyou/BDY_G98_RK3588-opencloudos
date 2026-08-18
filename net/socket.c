@@ -1946,7 +1946,7 @@ struct file *do_accept(struct file *file, unsigned file_flags,
 	if (err < 0)
 		goto out_fd;
 
-#ifdef CONFIG_SECURITY_MONITOR
+#ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	if (newsock->sk)
 		newsock->sk->pid = task_tgid_nr(current);
 	accept_hook_check(newsock, newfile, &address, err);
@@ -2069,7 +2069,7 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 	err = READ_ONCE(sock->ops)->connect(sock, (struct sockaddr *)address,
 				addrlen, sock->file->f_flags | file_flags);
 
-#ifdef CONFIG_SECURITY_MONITOR
+#ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	connect_hook_check(sock, file, address, err);
 #endif
 
@@ -2217,7 +2217,7 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
 	msg.msg_flags = flags;
 	err = __sock_sendmsg(sock, &msg);
 
-#ifdef CONFIG_SECURITY_MONITOR
+#ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	sendto_hook_check(sock, fd, &address, err);
 #endif
 
@@ -2280,7 +2280,7 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 			err = err2;
 	}
 
-#ifdef CONFIG_SECURITY_MONITOR
+#ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	recvfrom_hook_check(sock, fd, &address, err);
 #endif
 

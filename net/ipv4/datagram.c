@@ -78,7 +78,7 @@ int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len
 
 	sk_dst_set(sk, &rt->dst);
 	err = 0;
-#ifdef CONFIG_SECURITY_MONITOR
+#ifdef CONFIG_TKERNEL_SECURITY_MONITOR
 	sock_hook_check(sk);
 #endif
 
