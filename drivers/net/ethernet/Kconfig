@@ -200,5 +200,6 @@ source "drivers/net/ethernet/xircom/Kconfig"
 source "drivers/net/ethernet/northlink/Kconfig"
 source "drivers/net/ethernet/dinghai/Kconfig"
 source "drivers/net/ethernet/guangruntong/Kconfig"
+source "drivers/net/ethernet/yusur/Kconfig"
 
 endif # ETHERNET

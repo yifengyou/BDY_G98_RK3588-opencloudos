@@ -1,0 +1,11 @@
+#define CMDLINE_DEF(_symbol, _idx, _type) #_symbol,
+static const char * const cmdline_field_name[YK3_CMDLINE_FIELD_END] = {
+#include "yk3_cmdline.def"
+};
+#undef CMDLINE_DEF
+
+#define CMDLINE_DEF(_symbol, _idx, _type) (_type),
+static const int cmdline_field_type[YK3_CMDLINE_FIELD_END] = {
+#include "yk3_cmdline.def"
+};
+#undef CMDLINE_DEF

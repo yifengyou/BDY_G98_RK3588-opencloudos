@@ -113,3 +113,4 @@ obj-$(CONFIG_NET_VENDOR_NORTHLINK) += northlink/
 obj-$(CONFIG_THIRDPARTY_TCNIC_NET) += tcnic/
 obj-$(CONFIG_NET_VENDOR_DINGHAI) += dinghai/
 obj-$(CONFIG_NET_VENDOR_GRT) += guangruntong/
+obj-$(CONFIG_NET_VENDOR_YUSUR) += yusur/
