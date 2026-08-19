@@ -57,10 +57,11 @@ int main(int argc, char **argv)
 	socklen_t addr_len;
 	char *end;
 	long port, port_start;
-	int family, fd;
+	int family, protocol, fd;
 
-	if (argc != 4) {
-		fprintf(stderr, "usage: %s FAMILY PORT UNPRIVILEGED_PORT_START\n",
+	if (argc != 4 && argc != 5) {
+		fprintf(stderr,
+			"usage: %s FAMILY PORT UNPRIVILEGED_PORT_START [tcp|sctp]\n",
 			argv[0]);
 		return 2;
 	}
@@ -95,6 +96,16 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
+	protocol = IPPROTO_TCP;
+	if (argc == 5) {
+		if (!strcmp(argv[4], "sctp"))
+			protocol = IPPROTO_SCTP;
+		else if (strcmp(argv[4], "tcp")) {
+			fprintf(stderr, "invalid protocol: %s\n", argv[4]);
+			return 2;
+		}
+	}
+
 	if (unshare(CLONE_NEWNET)) {
 		perror("unshare(CLONE_NEWNET)");
 		return errno == EPERM ? KSFT_SKIP : 2;
@@ -110,8 +121,12 @@ int main(int argc, char **argv)
 		return KSFT_SKIP;
 	}
 
-	fd = socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	fd = socket(family, SOCK_STREAM | SOCK_CLOEXEC, protocol);
 	if (fd < 0) {
+		if (protocol == IPPROTO_SCTP &&
+		    (errno == EPROTONOSUPPORT || errno == ESOCKTNOSUPPORT ||
+		     errno == EAFNOSUPPORT))
+			return KSFT_SKIP;
 		perror("socket");
 		return 2;
 	}
