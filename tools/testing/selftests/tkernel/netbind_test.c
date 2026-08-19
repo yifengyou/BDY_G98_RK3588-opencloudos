@@ -16,18 +16,18 @@
 
 #define KSFT_SKIP 4
 
-static int configure_unprivileged_port_start(void)
+static int configure_unprivileged_port_start(const char *value)
 {
 	static const char path[] =
 		"/proc/sys/net/ipv4/ip_unprivileged_port_start";
-	static const char value[] = "1024\n";
+	size_t length = strlen(value);
 	int fd;
 
 	fd = open(path, O_WRONLY | O_CLOEXEC);
 	if (fd < 0)
 		return -1;
 
-	if (write(fd, value, sizeof(value) - 1) != sizeof(value) - 1) {
+	if (write(fd, value, length) != (ssize_t)length) {
 		close(fd);
 		return -1;
 	}
@@ -51,23 +51,47 @@ static int drop_privileges(void)
 
 int main(int argc, char **argv)
 {
-	struct sockaddr_in addr = {
-		.sin_family = AF_INET,
-		.sin_addr.s_addr = htonl(INADDR_ANY),
-	};
+	struct sockaddr_storage addr = {};
+	struct sockaddr_in *addr4 = (struct sockaddr_in *)&addr;
+	struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&addr;
+	socklen_t addr_len;
 	char *end;
-	long port;
-	int fd;
+	long port, port_start;
+	int family, fd;
 
-	if (argc != 2) {
-		fprintf(stderr, "usage: %s PORT\n", argv[0]);
+	if (argc != 4) {
+		fprintf(stderr, "usage: %s FAMILY PORT UNPRIVILEGED_PORT_START\n",
+			argv[0]);
 		return 2;
 	}
 
 	errno = 0;
-	port = strtol(argv[1], &end, 10);
+	port = strtol(argv[2], &end, 10);
 	if (errno || *end || port < 1 || port > 65535) {
-		fprintf(stderr, "invalid port: %s\n", argv[1]);
+		fprintf(stderr, "invalid port: %s\n", argv[2]);
+		return 2;
+	}
+	errno = 0;
+	port_start = strtol(argv[3], &end, 10);
+	if (errno || *end || port_start < 1 || port_start > 65535) {
+		fprintf(stderr, "invalid unprivileged port start: %s\n", argv[3]);
+		return 2;
+	}
+
+	if (!strcmp(argv[1], "4")) {
+		family = AF_INET;
+		addr4->sin_family = AF_INET;
+		addr4->sin_addr.s_addr = htonl(INADDR_ANY);
+		addr4->sin_port = htons(port);
+		addr_len = sizeof(*addr4);
+	} else if (!strcmp(argv[1], "6")) {
+		family = AF_INET6;
+		addr6->sin6_family = AF_INET6;
+		addr6->sin6_addr = in6addr_any;
+		addr6->sin6_port = htons(port);
+		addr_len = sizeof(*addr6);
+	} else {
+		fprintf(stderr, "invalid address family: %s\n", argv[1]);
 		return 2;
 	}
 
@@ -76,7 +100,7 @@ int main(int argc, char **argv)
 		return errno == EPERM ? KSFT_SKIP : 2;
 	}
 
-	if (configure_unprivileged_port_start()) {
+	if (configure_unprivileged_port_start(argv[3])) {
 		perror("configure ip_unprivileged_port_start");
 		return KSFT_SKIP;
 	}
@@ -86,14 +110,13 @@ int main(int argc, char **argv)
 		return KSFT_SKIP;
 	}
 
-	fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	fd = socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
 		perror("socket");
 		return 2;
 	}
 
-	addr.sin_port = htons(port);
-	if (!bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
+	if (!bind(fd, (struct sockaddr *)&addr, addr_len)) {
 		close(fd);
 		return 0;
 	}
