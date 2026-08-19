@@ -121,14 +121,15 @@ unlock:
 /* helper function */
 static void str_escape(char *s, const char *esc)
 {
-	char *p = s;
-	while (p && *p != '\0') {
-		char c = *p++;
-		while (c != '\0' && strchr(esc, c))
-			c = *p++;
-		*s++ = c;
+	char *src = s;
+	char *dst = s;
+
+	while (*src) {
+		if (!strchr(esc, *src))
+			*dst++ = *src;
+		src++;
 	}
-	*s = '\0';
+	*dst = '\0';
 }
 
 /*
