@@ -15,10 +15,12 @@
 #include <linux/kernel.h>
 #include <linux/kallsyms.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/percpu.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/sizes.h>
+#include <linux/slab.h>
 #include <linux/stacktrace.h>
 #include <linux/timer.h>
 #include <linux/uaccess.h>
@@ -42,12 +44,13 @@ struct per_stack {
 };
 
 struct latency_data {
+	raw_spinlock_t lock;
 	u64 last_timestamp;
 	unsigned long stack_index;
 	struct per_stack stacks[MAX_STACK_ENTRIES];
 	unsigned long total_entries;
 	unsigned long entries[MAX_STACK_ENTRIES];
-	unsigned long latency_count[MAX_LATENCY_RECORD];
+	atomic_long_t latency_count[MAX_LATENCY_RECORD];
 
 	/* Task command names */
 	char comms[MAX_STACK_ENTRIES_INDEX][TASK_COMM_LEN];
@@ -59,6 +62,21 @@ struct latency_data {
 		u64 msecs:63;
 		u64 plus:1;
 	} latency[MAX_STACK_ENTRIES_INDEX];
+};
+
+struct stack_snapshot {
+	unsigned int nr_entries;
+	unsigned int first_entry;
+};
+
+struct latency_snapshot {
+	unsigned long stack_index;
+	struct stack_snapshot stacks[MAX_STACK_ENTRIES_INDEX];
+	unsigned long entries[MAX_STACK_ENTRIES];
+	char comms[MAX_STACK_ENTRIES_INDEX][TASK_COMM_LEN];
+	pid_t pids[MAX_STACK_ENTRIES_INDEX];
+	u64 msecs[MAX_STACK_ENTRIES_INDEX];
+	bool plus[MAX_STACK_ENTRIES_INDEX];
 };
 
 struct per_cpu_detect_data {
@@ -73,6 +91,7 @@ static u64 freq_ms = 10;
 static u64 irq_latency_ms = 30;
 static unsigned int check_enable;
 static int irqlatency_hp_state;
+static DEFINE_MUTEX(control_lock);
 
 static struct per_cpu_detect_data __percpu *detect_data;
 
@@ -84,17 +103,19 @@ static bool save_stack(u64 latency, unsigned int isirq, unsigned int soft_in_irq
 	unsigned long nr_entries, stack_index;
 	struct per_stack *pstack;
 	struct latency_data *lat_data;
+	bool saved = false;
 
 	lat_data = isirq ? this_cpu_ptr(&detect_data->irq_data) :
 		      this_cpu_ptr(&detect_data->softirq_data);
 
+	raw_spin_lock(&lat_data->lock);
 	stack_index = lat_data->stack_index;
 	if (unlikely(stack_index >= MAX_STACK_ENTRIES_INDEX - 1))
-		return false;
+		goto unlock;
 
 	nr_entries = lat_data->total_entries;
 	if (unlikely(nr_entries >= MAX_STACK_ENTRIES - 1))
-		return false;
+		goto unlock;
 
 	strlcpy(lat_data->comms[stack_index], current->comm, TASK_COMM_LEN);
 	lat_data->pids[stack_index] = current->pid;
@@ -115,27 +136,30 @@ static bool save_stack(u64 latency, unsigned int isirq, unsigned int soft_in_irq
 
 	if (unlikely(lat_data->total_entries >= MAX_STACK_ENTRIES - 1)) {
 		pr_info("BUG: MAX_STACK_ENTRIES too low!");
-
-		return false;
+		goto unlock;
 	}
+	saved = true;
 
-	return true;
+unlock:
+	raw_spin_unlock(&lat_data->lock);
+	return saved;
 }
 
 static bool record_latency(u64 delta, unsigned int isirq, unsigned int soft_in_irq)
 {
 	int index = 0;
-	u64 throttle = freq_ms << 1;
+	u64 frequency = READ_ONCE(freq_ms);
+	u64 throttle = frequency << 1;
 
 	if (delta < throttle)
 		return false;
 
-	if (unlikely(delta >= irq_latency_ms))
+	if (unlikely(delta >= READ_ONCE(irq_latency_ms)))
 		save_stack(delta, isirq, soft_in_irq);
 
-	delta -= freq_ms;
+	delta -= frequency;
 	delta >>= 1;
-	while (delta >= freq_ms) {
+	while (delta >= frequency) {
 		index++;
 		delta >>= 1;
 	}
@@ -143,10 +167,17 @@ static bool record_latency(u64 delta, unsigned int isirq, unsigned int soft_in_i
 	if (unlikely(index >= MAX_LATENCY_RECORD))
 		index = MAX_LATENCY_RECORD - 1;
 
-	if (isirq)
-		__this_cpu_inc(detect_data->irq_data.latency_count[index]);
-	else if (!soft_in_irq)
-		__this_cpu_inc(detect_data->softirq_data.latency_count[index]);
+	if (isirq) {
+		atomic_long_t *count;
+
+		count = this_cpu_ptr(&detect_data->irq_data.latency_count[index]);
+		atomic_long_inc(count);
+	} else if (!soft_in_irq) {
+		atomic_long_t *count;
+
+		count = this_cpu_ptr(&detect_data->softirq_data.latency_count[index]);
+		atomic_long_inc(count);
+	}
 
 	return true;
 }
@@ -156,14 +187,19 @@ static void reset_latency_trace(void *data)
 	int i;
 	struct per_cpu_detect_data *detect_data = data;
 
+	raw_spin_lock(&detect_data->irq_data.lock);
 	detect_data->irq_data.total_entries = 0;
 	detect_data->irq_data.stack_index = 0;
+	raw_spin_unlock(&detect_data->irq_data.lock);
+
+	raw_spin_lock(&detect_data->softirq_data.lock);
 	detect_data->softirq_data.total_entries = 0;
 	detect_data->softirq_data.stack_index = 0;
+	raw_spin_unlock(&detect_data->softirq_data.lock);
 
 	for (i = 0; i < MAX_LATENCY_RECORD; i++) {
-		detect_data->irq_data.latency_count[i] = 0;
-		detect_data->softirq_data.latency_count[i] = 0;
+		atomic_long_set(&detect_data->irq_data.latency_count[i], 0);
+		atomic_long_set(&detect_data->softirq_data.latency_count[i], 0);
 	}
 }
 
@@ -177,7 +213,8 @@ static void softirq_timer_func(struct timer_list *softirq_timer)
 
 	record_latency(NS_TO_MS(delta), 0, 0);
 
-	mod_timer(softirq_timer, jiffies + msecs_to_jiffies(freq_ms));
+	mod_timer(softirq_timer,
+		  jiffies + msecs_to_jiffies(READ_ONCE(freq_ms)));
 }
 
 static enum hrtimer_restart irq_hrtimer_func(struct hrtimer *irq_timer)
@@ -189,17 +226,18 @@ static enum hrtimer_restart irq_hrtimer_func(struct hrtimer *irq_timer)
 
 	if (record_latency(NS_TO_MS(delta), 1, 0))
 		__this_cpu_write(detect_data->softirq_data.last_timestamp, now);
-	else if (check_enable == 2 &&
+	else if (READ_ONCE(check_enable) == 2 &&
 		 !__this_cpu_read(detect_data->soft_in_irq)) {
 		delta = now - __this_cpu_read(
 				detect_data->softirq_data.last_timestamp);
-		if (unlikely(NS_TO_MS(delta) >= irq_latency_ms + freq_ms)) {
+		if (unlikely(NS_TO_MS(delta) >= READ_ONCE(irq_latency_ms) +
+			     READ_ONCE(freq_ms))) {
 			record_latency(NS_TO_MS(delta), 0, 1);
 			__this_cpu_write(detect_data->soft_in_irq, 1);
 		}
 	}
 
-	hrtimer_forward_now(irq_timer, ms_to_ktime(freq_ms));
+	hrtimer_forward_now(irq_timer, ms_to_ktime(READ_ONCE(freq_ms)));
 
 	return HRTIMER_RESTART;
 }
@@ -214,10 +252,11 @@ static void percpu_timers_start(void *data)
 	detect_data->irq_data.last_timestamp = now;
 	detect_data->softirq_data.last_timestamp = now;
 
-	hrtimer_start_range_ns(irq_timer, ms_to_ktime(freq_ms),
+	hrtimer_start_range_ns(irq_timer, ms_to_ktime(READ_ONCE(freq_ms)),
 			       0, HRTIMER_MODE_REL_PINNED);
 
-	softirq_timer->expires = jiffies + msecs_to_jiffies(freq_ms);
+	softirq_timer->expires =
+		jiffies + msecs_to_jiffies(READ_ONCE(freq_ms));
 	add_timer_on(softirq_timer, smp_processor_id());
 }
 
@@ -281,7 +320,7 @@ static void latency_timers_stop(void)
 
 static int enable_show(struct seq_file *m, void *ptr)
 {
-	seq_printf(m, "%d\n", check_enable);
+	seq_printf(m, "%d\n", READ_ONCE(check_enable));
 
 	return 0;
 }
@@ -302,14 +341,15 @@ static ssize_t enable_write(struct file *file, const char __user *buf,
 	if (enable > 2)
 		return -EINVAL;
 
+	mutex_lock(&control_lock);
 	if (enable == check_enable)
-		return count;
+		goto unlock;
 
 	cpus_read_lock();
 	if (!enable) {
 		WRITE_ONCE(check_enable, 0);
 		latency_timers_stop();
-	} else if (!READ_ONCE(check_enable)) {
+	} else if (!check_enable) {
 		WRITE_ONCE(check_enable, enable);
 		latency_timers_start();
 	} else {
@@ -317,6 +357,8 @@ static ssize_t enable_write(struct file *file, const char __user *buf,
 	}
 	cpus_read_unlock();
 
+unlock:
+	mutex_unlock(&control_lock);
 	return count;
 }
 
@@ -330,7 +372,7 @@ static const struct proc_ops enable_fops = {
 
 static int freq_show(struct seq_file *m, void *ptr)
 {
-	seq_printf(m, "%llu\n", freq_ms);
+	seq_printf(m, "%llu\n", READ_ONCE(freq_ms));
 
 	return 0;
 }
@@ -345,14 +387,17 @@ static ssize_t freq_write(struct file *file, const char __user *buf,
 {
 	unsigned long freq;
 
-	if (check_enable)
-		return -EINVAL;
-
 	if (kstrtoul_from_user(buf, count, 0, &freq))
 		return -EINVAL;
 
+	mutex_lock(&control_lock);
+	if (check_enable) {
+		mutex_unlock(&control_lock);
+		return -EINVAL;
+	}
+
 	if (freq == freq_ms)
-		return count;
+		goto unlock;
 
 	if (freq < MIN_FREQ_MS)
 		freq = MIN_FREQ_MS;
@@ -362,8 +407,10 @@ static ssize_t freq_write(struct file *file, const char __user *buf,
 	if (freq > (irq_latency_ms >> 1))
 		freq = irq_latency_ms >> 1;
 
-	freq_ms = freq;
+	WRITE_ONCE(freq_ms, freq);
 
+unlock:
+	mutex_unlock(&control_lock);
 	return count;
 }
 
@@ -377,7 +424,7 @@ static const struct proc_ops freq_fops = {
 
 static int lat_show(struct seq_file *m, void *ptr)
 {
-	seq_printf(m, "%llu\n", irq_latency_ms);
+	seq_printf(m, "%llu\n", READ_ONCE(irq_latency_ms));
 
 	return 0;
 }
@@ -392,14 +439,17 @@ static ssize_t lat_write(struct file *file, const char __user *buf,
 {
 	unsigned long lat_ms;
 
-	if (check_enable)
-		return -EINVAL;
-
 	if (kstrtoul_from_user(buf, count, 0, &lat_ms))
 		return -EINVAL;
 
+	mutex_lock(&control_lock);
+	if (check_enable) {
+		mutex_unlock(&control_lock);
+		return -EINVAL;
+	}
+
 	if (lat_ms == irq_latency_ms)
-		return count;
+		goto unlock;
 
 	if (lat_ms < (MIN_FREQ_MS >> 1))
 		lat_ms = MIN_FREQ_MS >> 1;
@@ -409,8 +459,10 @@ static ssize_t lat_write(struct file *file, const char __user *buf,
 	if (lat_ms < (freq_ms << 1))
 		lat_ms = freq_ms << 1;
 
-	irq_latency_ms = lat_ms;
+	WRITE_ONCE(irq_latency_ms, lat_ms);
 
+unlock:
+	mutex_unlock(&control_lock);
 	return count;
 }
 
@@ -433,56 +485,80 @@ static ssize_t trace_stack_write(struct file *file, const char __user *buf,
 	if (!lat) {
 		int cpu;
 
+		mutex_lock(&control_lock);
+		cpus_read_lock();
 		for_each_online_cpu(cpu)
 			smp_call_function_single(cpu, reset_latency_trace,
 				per_cpu_ptr(detect_data, cpu), true);
+		cpus_read_unlock();
+		mutex_unlock(&control_lock);
 		return count;
 	}
 
 	return -EINVAL;
 }
 
-static void trace_stack_print(struct seq_file *m, struct per_stack *stack)
+static void snapshot_latency_data(struct latency_data *lat_data,
+				  struct latency_snapshot *snapshot)
 {
+	unsigned long flags;
+	unsigned long stack_index;
 	int i;
 
-	if (WARN_ON(!stack->perstack))
-		return;
-
-	for (i = 0; i < stack->nr_entries; i++)
-		seq_printf(m, "%*c%pS\n", 5, ' ', (void *)stack->perstack[i]);
+	raw_spin_lock_irqsave(&lat_data->lock, flags);
+	stack_index = min_t(unsigned long, lat_data->stack_index,
+			    MAX_STACK_ENTRIES_INDEX);
+	snapshot->stack_index = stack_index;
+	memcpy(snapshot->entries, lat_data->entries,
+	       sizeof(snapshot->entries));
+	for (i = 0; i < stack_index; i++) {
+		snapshot->stacks[i].nr_entries =
+			lat_data->stacks[i].nr_entries;
+		snapshot->stacks[i].first_entry =
+			lat_data->stacks[i].perstack - lat_data->entries;
+		memcpy(snapshot->comms[i], lat_data->comms[i], TASK_COMM_LEN);
+		snapshot->pids[i] = lat_data->pids[i];
+		snapshot->msecs[i] = lat_data->latency[i].msecs;
+		snapshot->plus[i] = lat_data->latency[i].plus;
+	}
+	raw_spin_unlock_irqrestore(&lat_data->lock, flags);
 }
 
-static void trace_stack_irq_show(struct seq_file *m, void *v, unsigned int isirq)
+static void trace_stack_print(struct seq_file *m,
+			      const struct latency_snapshot *snapshot,
+			      const struct stack_snapshot *stack)
+{
+	unsigned int i;
+
+	for (i = 0; i < stack->nr_entries; i++)
+		seq_printf(m, "%*c%pS\n", 5, ' ',
+			   (void *)snapshot->entries[stack->first_entry + i]);
+}
+
+static void trace_stack_irq_show(struct seq_file *m, unsigned int isirq,
+				 struct latency_snapshot *snapshot)
 {
 	int cpu;
 
 	for_each_online_cpu(cpu) {
 		int i;
-		u64 stack_index;
 		struct latency_data *lat_data;
 
 		lat_data = isirq ? per_cpu_ptr(&detect_data->irq_data, cpu) :
 			per_cpu_ptr(&detect_data->softirq_data, cpu);
 
-		/*
-		 * Paired with smp_store_release() in the save_trace().
-		 */
-		stack_index = smp_load_acquire(&lat_data->stack_index);
-		if (!stack_index)
+		snapshot_latency_data(lat_data, snapshot);
+		if (!snapshot->stack_index)
 			continue;
 
 		seq_printf(m, " cpu: %d\n", cpu);
 
-		for (i = 0; i < stack_index; i++) {
-			u64 msecs, plus;
-
-			msecs = lat_data->latency[i].msecs;
-			plus = lat_data->latency[i].plus;
+		for (i = 0; i < snapshot->stack_index; i++) {
 			seq_printf(m, "%*cCOMMAND: %s PID: %d LATENCY: %llu%s\n",
-				5, ' ', lat_data->comms[i], lat_data->pids[i],
-				msecs, plus ? "+ms" : "ms");
-			trace_stack_print(m, lat_data->stacks + i);
+				5, ' ', snapshot->comms[i], snapshot->pids[i],
+				snapshot->msecs[i],
+				snapshot->plus[i] ? "+ms" : "ms");
+			trace_stack_print(m, snapshot, snapshot->stacks + i);
 			seq_putc(m, '\n');
 
 			cond_resched();
@@ -492,16 +568,23 @@ static void trace_stack_irq_show(struct seq_file *m, void *v, unsigned int isirq
 
 static int trace_stack_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "irq_latency_ms: %llu\n\n", irq_latency_ms);
+	struct latency_snapshot *snapshot;
+
+	snapshot = kzalloc(sizeof(*snapshot), GFP_KERNEL);
+	if (!snapshot)
+		return -ENOMEM;
+
+	seq_printf(m, "irq_latency_ms: %llu\n\n", READ_ONCE(irq_latency_ms));
 
 	seq_puts(m, " irq:\n");
-	trace_stack_irq_show(m, v, true);
+	trace_stack_irq_show(m, true, snapshot);
 
 	seq_putc(m, '\n');
 
 	seq_puts(m, " softirq:\n");
-	trace_stack_irq_show(m, v, false);
+	trace_stack_irq_show(m, false, snapshot);
 
+	kfree(snapshot);
 	return 0;
 }
 
@@ -573,7 +656,7 @@ static void trace_dist_show_irq(struct seq_file *m, void *v, unsigned int isirq)
 
 	for_each_online_cpu(cpu) {
 		int i;
-		unsigned long *count;
+		atomic_long_t *count;
 
 		count = isirq ?
 			per_cpu_ptr(detect_data->irq_data.latency_count, cpu) :
@@ -581,11 +664,11 @@ static void trace_dist_show_irq(struct seq_file *m, void *v, unsigned int isirq)
 				    cpu);
 
 		for (i = 0; i < MAX_LATENCY_RECORD; i++)
-			latency_count[i] += count[i];
+			latency_count[i] += atomic_long_read(&count[i]);
 	}
 
 	trace_histogram_show(m, isirq ? "irq-disable:" : "softirq-disable:",
-		       latency_count, MAX_LATENCY_RECORD, freq_ms);
+		       latency_count, MAX_LATENCY_RECORD, READ_ONCE(freq_ms));
 }
 
 static int trace_dist_show(struct seq_file *m, void *v)
@@ -612,10 +695,21 @@ static int __init trace_latency_init(void)
 {
 	struct proc_dir_entry *latency_dir;
 	int ret = -ENOMEM;
+	int cpu, i;
 
 	detect_data = alloc_percpu(struct per_cpu_detect_data);
 	if (!detect_data)
 		return -ENOMEM;
+	for_each_possible_cpu(cpu) {
+		struct per_cpu_detect_data *data = per_cpu_ptr(detect_data, cpu);
+
+		raw_spin_lock_init(&data->irq_data.lock);
+		raw_spin_lock_init(&data->softirq_data.lock);
+		for (i = 0; i < MAX_LATENCY_RECORD; i++) {
+			atomic_long_set(&data->irq_data.latency_count[i], 0);
+			atomic_long_set(&data->softirq_data.latency_count[i], 0);
+		}
+	}
 
 	latency_dir = proc_mkdir("irq_latency", NULL);
 	if (!latency_dir)
@@ -657,9 +751,11 @@ free_data:
 
 static void __exit trace_latency_exit(void)
 {
+	remove_proc_subtree("irq_latency", NULL);
+	mutex_lock(&control_lock);
 	WRITE_ONCE(check_enable, 0);
 	cpuhp_remove_state(irqlatency_hp_state);
-	remove_proc_subtree("irq_latency", NULL);
+	mutex_unlock(&control_lock);
 	free_percpu(detect_data);
 	pr_info("Unload irq latency check module!\n");
 }
