@@ -70,8 +70,8 @@ static ssize_t blacklist_write(struct file *file, const char __user *ubuf,
 				list_del(&rule->node);
 				kfree(rule);
 			}
-			write_unlock(&blacklist_lock);
 			atomic_set(&kp_rule_cnt, 0);
+			write_unlock(&blacklist_lock);
 			return count;
 		}
 		return -EINVAL;
@@ -100,8 +100,8 @@ static ssize_t blacklist_write(struct file *file, const char __user *ubuf,
 			}
 		}
 		list_add(&rule->node, &blacklist_list);
-		write_unlock(&blacklist_lock);
 		atomic_inc(&kp_rule_cnt);
+		write_unlock(&blacklist_lock);
 	} else if (strcmp(token[0], "del") == 0) {
 		cnt = min_t(size_t, TASK_COMM_LEN - 1, strlen(token[1]));
 		strncpy(comm, token[1], cnt);
@@ -111,9 +111,9 @@ static ssize_t blacklist_write(struct file *file, const char __user *ubuf,
 		list_for_each_entry_safe(rule, tmp, &blacklist_list, node) {
 			if (strcmp(rule->comm, comm) == 0) {
 				list_del(&rule->node);
+				atomic_dec(&kp_rule_cnt);
 				write_unlock(&blacklist_lock);
 				kfree(rule);
-				atomic_dec(&kp_rule_cnt);
 				return count;
 			}
 		}

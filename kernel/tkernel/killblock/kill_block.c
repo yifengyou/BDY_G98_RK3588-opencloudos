@@ -75,8 +75,8 @@ static ssize_t whitelist_write(struct file *file, const char __user *ubuf,
 				list_del(&rule->node);
 				kfree(rule);
 			}
-			write_unlock(&whitelist_lock);
 			atomic_set(&kb_rule_cnt, 0);
+			write_unlock(&whitelist_lock);
 			return count;
 		}
 		return -EINVAL;
@@ -111,8 +111,8 @@ static ssize_t whitelist_write(struct file *file, const char __user *ubuf,
 			}
 		}
 		list_add(&rule->node, &whitelist_list);
-		write_unlock(&whitelist_lock);
 		atomic_inc(&kb_rule_cnt);
+		write_unlock(&whitelist_lock);
 	} else if (!strcmp(token[0], "del")) {
 		write_lock(&whitelist_lock);
 		list_for_each_entry_safe(rule, tmp, &whitelist_list, node) {
@@ -120,9 +120,9 @@ static ssize_t whitelist_write(struct file *file, const char __user *ubuf,
 			    !strcasecmp(rule->dst_comm, token[2]) &&
 			    !strcasecmp(rule->dst_cgrp, token[3])) {
 				list_del(&rule->node);
+				atomic_dec(&kb_rule_cnt);
 				write_unlock(&whitelist_lock);
 				kfree(rule);
-				atomic_dec(&kb_rule_cnt);
 				return count;
 			}
 		}
