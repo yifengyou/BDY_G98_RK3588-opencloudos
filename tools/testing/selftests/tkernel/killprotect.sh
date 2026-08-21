@@ -5,7 +5,7 @@ SYSCTL=/proc/sys/kernel/sig_kill_protect
 RULES=/proc/kill_protect/blacklist
 STAT=/proc/kill_protect/stat
 PARALLEL_SENDERS=8
-TESTS=12
+TESTS=15
 target_pid=
 module_loaded=0
 
@@ -190,6 +190,30 @@ ksft_result $? "concurrent protection events are all accounted"
 write_rule "del $target_comm"
 ksft_result $? "the blacklist rule can be removed"
 
+if write_rule "del $target_comm"; then
+	rc=1
+else
+	rc=0
+fi
+ksft_result "$rc" "removing a missing blacklist rule is rejected"
+
+long_comm=$(printf 'b%.0s' $(seq 20))
+write_rule "add $long_comm"
+tail -n +2 "$RULES" | grep -qx "$(printf '%s' "$long_comm" | cut -c 1-15)"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+	write_rule "del $(printf '%s' "$long_comm" | cut -c 1-15)" || rc=1
+fi
+ksft_result "$rc" "an oversized comm token is truncated to 15 chars"
+
+write_rule "add $target_comm"
+write_rule "flush"
+rc=$?
+grep -qx "$target_comm" "$RULES" && rc=1
+rules_after=$(awk '/^rule count:/ { print $3 }' "$STAT")
+[ "$rc" -eq 0 ] && [ -n "$rules_after" ] && [ "$rules_after" = "0" ]
+ksft_result $? "flush clears the blacklist and resets the rule count"
+
 "$helper" send "$sender_comm" "$target_pid" 15 >/dev/null 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && wait_for_exit; then
@@ -198,7 +222,7 @@ if [ "$rc" -eq 0 ] && wait_for_exit; then
 else
 	rc=1
 fi
-ksft_result "$rc" "SIGTERM is delivered after removing the rule"
+ksft_result "$rc" "SIGTERM is delivered after flush removes the rules"
 
 reload_module
 rc=$?

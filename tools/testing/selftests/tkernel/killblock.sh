@@ -5,7 +5,7 @@ SYSCTL=/proc/sys/kernel/sig_kill_block
 RULES=/proc/kill_block/whitelist
 STAT=/proc/kill_block/stat
 PARALLEL_SENDERS=8
-TESTS=12
+TESTS=19
 target_pid=
 module_loaded=0
 
@@ -191,6 +191,58 @@ ksft_result "$rc" "a matching whitelist rule allows SIGTERM"
 
 write_rule "del $sender_comm $target_comm *"
 ksft_result $? "the whitelist rule can be removed"
+
+if write_rule "del $sender_comm $target_comm *"; then
+	rc=1
+else
+	rc=0
+fi
+ksft_result "$rc" "removing a missing whitelist rule is rejected"
+
+write_rule "add $sender_comm $target_comm *"
+if write_rule "add $sender_comm $target_comm *"; then
+	rc=1
+else
+	rc=0
+fi
+ksft_result "$rc" "a duplicate whitelist rule is rejected"
+
+rule_cnt=$(awk 'END { print NR - 1 }' "$RULES")
+[ "$rule_cnt" -eq 1 ]
+ksft_result $? "a rejected duplicate leaves the rule list unchanged"
+
+long_cgrp=$(printf 'a%.0s' $(seq 70))
+write_rule "add $sender_comm $target_comm $long_cgrp"
+cut -f3 "$RULES" | tail -n +2 | grep -qx "$(printf '%s' "$long_cgrp" | cut -c 1-63)"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+	write_rule "del $sender_comm $target_comm $(printf '%s' "$long_cgrp" | cut -c 1-63)" ||
+		rc=1
+fi
+ksft_result "$rc" "an oversized cgroup token is truncated to 63 chars"
+
+write_rule "flush"
+rc=$?
+rule_cnt=$(awk 'END { print NR - 1 }' "$RULES")
+[ "$rule_cnt" -eq 0 ] || rc=1
+ksft_result "$rc" "flush clears the whitelist"
+
+if write_rule "del $sender_comm $target_comm *"; then
+	rc=1
+else
+	rc=0
+fi
+ksft_result "$rc" "rules are gone after flush"
+
+start_target || ksft_skip_all "could not restart the signal target"
+write_rule "add $sender_comm $target_comm *"
+"$helper" send "$sender_comm" "$target_pid" 15 >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 0 ] && wait_for_exit && { target_pid=; rc=0; } || rc=1
+ksft_result "$rc" "a rule added after flush works again"
+
+start_target || ksft_skip_all "could not restart the signal target"
+write_sysctl 1 >/dev/null
 
 if write_sysctl 3; then
 	rc=1
