@@ -561,11 +561,12 @@ static ssize_t trace_stack_write(struct file *file, const char __user *buf,
 		int cpu;
 
 		mutex_lock(&control_lock);
-		cpus_read_lock();
-		for_each_online_cpu(cpu)
-			smp_call_function_single(cpu, reset_latency_trace,
-				per_cpu_ptr(detect_data, cpu), true);
-		cpus_read_unlock();
+		if (READ_ONCE(detector_state) == IRQLATENCY_EXITING) {
+			mutex_unlock(&control_lock);
+			return -ENODEV;
+		}
+		for_each_possible_cpu(cpu)
+			reset_latency_trace(per_cpu_ptr(detect_data, cpu));
 		mutex_unlock(&control_lock);
 		return count;
 	}
@@ -611,11 +612,13 @@ static void trace_stack_print(struct seq_file *m,
 }
 
 static void trace_stack_irq_show(struct seq_file *m, unsigned int isirq,
-				 struct latency_snapshot *snapshot)
+				 struct latency_snapshot *snapshot,
+				 const struct cpumask *cpus,
+				 const struct cpumask *online)
 {
 	int cpu;
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, cpus) {
 		int i;
 		struct latency_data *lat_data;
 
@@ -626,7 +629,10 @@ static void trace_stack_irq_show(struct seq_file *m, unsigned int isirq,
 		if (!snapshot->stack_index)
 			continue;
 
-		seq_printf(m, " cpu: %d\n", cpu);
+		if (cpumask_test_cpu(cpu, online))
+			seq_printf(m, " cpu: %d\n", cpu);
+		else
+			seq_printf(m, " cpu: %d (offline)\n", cpu);
 
 		for (i = 0; i < snapshot->stack_index; i++) {
 			seq_printf(m, "%*cCOMMAND: %s PID: %d LATENCY: %llu%s\n",
@@ -643,24 +649,40 @@ static void trace_stack_irq_show(struct seq_file *m, unsigned int isirq,
 
 static int trace_stack_show(struct seq_file *m, void *v)
 {
+	cpumask_var_t cpus, online;
 	struct latency_snapshot *snapshot;
+	int ret = -ENOMEM;
 
 	snapshot = kzalloc(sizeof(*snapshot), GFP_KERNEL);
 	if (!snapshot)
 		return -ENOMEM;
+	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
+		goto free_snapshot;
+	if (!zalloc_cpumask_var(&online, GFP_KERNEL))
+		goto free_cpus;
+
+	cpus_read_lock();
+	cpumask_copy(cpus, cpu_possible_mask);
+	cpumask_copy(online, cpu_online_mask);
+	cpus_read_unlock();
 
 	seq_printf(m, "irq_latency_ms: %llu\n\n", READ_ONCE(irq_latency_ms));
 
 	seq_puts(m, " irq:\n");
-	trace_stack_irq_show(m, true, snapshot);
+	trace_stack_irq_show(m, true, snapshot, cpus, online);
 
 	seq_putc(m, '\n');
 
 	seq_puts(m, " softirq:\n");
-	trace_stack_irq_show(m, false, snapshot);
+	trace_stack_irq_show(m, false, snapshot, cpus, online);
 
+	ret = 0;
+	free_cpumask_var(online);
+free_cpus:
+	free_cpumask_var(cpus);
+free_snapshot:
 	kfree(snapshot);
-	return 0;
+	return ret;
 }
 
 static int trace_stack_open(struct inode *inode, struct file *file)
@@ -724,12 +746,13 @@ static bool trace_histogram_show(struct seq_file *m, const char *header,
 	return true;
 }
 
-static void trace_dist_show_irq(struct seq_file *m, void *v, unsigned int isirq)
+static void trace_dist_show_irq(struct seq_file *m, unsigned int isirq,
+				const struct cpumask *cpus)
 {
 	int cpu;
 	unsigned long latency_count[MAX_LATENCY_RECORD] = { 0 };
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, cpus) {
 		int i;
 		atomic_long_t *count;
 
@@ -748,8 +771,18 @@ static void trace_dist_show_irq(struct seq_file *m, void *v, unsigned int isirq)
 
 static int trace_dist_show(struct seq_file *m, void *v)
 {
-	trace_dist_show_irq(m, v, 1);
-	trace_dist_show_irq(m, v, 0);
+	cpumask_var_t cpus;
+
+	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpus_read_lock();
+	cpumask_copy(cpus, cpu_possible_mask);
+	cpus_read_unlock();
+
+	trace_dist_show_irq(m, 1, cpus);
+	trace_dist_show_irq(m, 0, cpus);
+	free_cpumask_var(cpus);
 
 	return 0;
 }
