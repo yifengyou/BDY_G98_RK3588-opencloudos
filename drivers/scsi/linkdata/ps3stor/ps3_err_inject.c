@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 
 #include <linux/random.h>
 
@@ -15,478 +16,532 @@
 #include "ps3_inject.h"
 #include "ps3_cmd_statistics.h"
 #include <linux/kthread.h>
+#include "ps3_kernel_version.h"
 
 #ifdef PS3_SUPPORT_INJECT
 
 struct ps3_rec_work_context g_work_que_recovery;
 struct ps3_rec_work_context g_work_que_probe;
 
-static Ps3Injection_t g_ps3_err_scene[PS3_ERR_SCENE_NUM];
-static Bool is_inject_init = PS3_FALSE;
-static U64 sgl_addr;
+static struct Ps3Injection g_ps3_err_scene[PS3_ERR_SCENE_NUM];
+static unsigned char is_inject_init = PS3_FALSE;
+static unsigned long long sgl_addr;
 
-void ps3_err_inject_sleep(U32 ms, U16 err_type)
+static inline unsigned int ps3_prandom_u32_max(unsigned int ep_ro)
+{
+#if defined(PS3_INJECT_PRANDOWM)
+	return prandom_u32_max(ep_ro);
+#else
+	return get_random_u32_below(ep_ro);
+#endif
+}
+
+static inline unsigned int ps3_prandom_u32(void)
+{
+#if defined(PS3_INJECT_PRANDOWM)
+	return prandom_u32();
+#else
+	return get_random_u32();
+#endif
+}
+
+void ps3_err_inject_sleep(unsigned int ms, unsigned short err_type)
 {
 	if ((err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) &&
-		g_ps3_err_scene[err_type - 1].active) {
+	     err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) &&
+	    g_ps3_err_scene[err_type - 1].active) {
 		ps3_msleep(ms);
 	}
 }
 
-void ps3_err_inject_sleep_rand(U32 min, U32 max, U16 err_type)
+void ps3_err_inject_sleep_rand(unsigned int min, unsigned int max,
+			       unsigned short err_type)
 {
-	U16 slepp_ms = min;
+	unsigned short slepp_ms = min;
+
 	if ((err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) &&
-		g_ps3_err_scene[err_type - 1].active) {
-		slepp_ms = min + prandom_u32_max(max - min);
+	     err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) &&
+	    g_ps3_err_scene[err_type - 1].active) {
+		slepp_ms = min + ps3_prandom_u32_max(max - min);
 		ps3_msleep(slepp_ms);
 	}
 }
 
-void ps3_err_inject_err_type_valid(U16 err_type)
+void ps3_err_inject_err_type_valid(unsigned short err_type)
 {
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
 		g_ps3_err_scene[err_type - 1].active = PS3_TRUE;
 	}
 }
 
-void ps3_err_inject_err_type_clean(U16 err_type)
+void ps3_err_inject_err_type_clean(unsigned short err_type)
 {
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
 		g_ps3_err_scene[err_type - 1].active = PS3_FALSE;
 	}
 }
 
-Bool ps3_err_inject_err_type_get(U16 err_type)
+unsigned char ps3_err_inject_err_type_get(unsigned short err_type)
 {
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
 		return g_ps3_err_scene[err_type - 1].type;
 	}
 
 	return PS3_FALSE;
 }
 
-void ps3_err_inject_wait_pre(U16 err_type_wait)
+void ps3_err_inject_wait_pre(unsigned short err_type_wait)
 {
-	while(g_ps3_err_scene[err_type_wait-1].active &&
-		!g_ps3_err_scene[err_type_wait-1].is_hit_pre) {
-		msleep(5);
+	while (g_ps3_err_scene[err_type_wait - 1].active &&
+	       !g_ps3_err_scene[err_type_wait - 1].is_hit_pre) {
+		msleep(20);
 	}
 }
 
-void ps3_err_inject_wait_post(U16 err_type_wait)
+void ps3_err_inject_wait_post(unsigned short err_type_wait)
 {
-	while(g_ps3_err_scene[err_type_wait-1].active &&
-		!g_ps3_err_scene[err_type_wait-1].is_hit_pre) {
-		msleep(5);
+	while (g_ps3_err_scene[err_type_wait - 1].active &&
+	       !g_ps3_err_scene[err_type_wait - 1].is_hit_pre) {
+		msleep(20);
 	}
 }
 
-void inject_register(U16 err_type, injectCallback callback)
+void inject_register(unsigned short err_type, int (*callback)(void *userData, ...))
 {
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
 		g_ps3_err_scene[err_type - 1].callback = callback;
 	}
-
-    return ;
 }
 
-void inject_active_intf(U16 err_type, U16 count)
+void inject_active_intf(unsigned short err_type, unsigned short count)
 {
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
 		g_ps3_err_scene[err_type - 1].active = PS3_TRUE;
 		g_ps3_err_scene[err_type - 1].count = count;
 		g_ps3_err_scene[err_type - 1].is_hit_pre = PS3_FALSE;
 		g_ps3_err_scene[err_type - 1].is_hit_post = PS3_FALSE;
 	}
-
-    return ;
 }
-void inject_execute_callback(U16 err_type, void * data)
+void inject_execute_callback(unsigned short err_type, void *data)
 {
-	S32 ret = PS3_SUCCESS;
+	int ret = PS3_SUCCESS;
 
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE &&
-			g_ps3_err_scene[err_type-1].count != 0) {
-			g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
-			if (g_ps3_err_scene[err_type-1].callback != NULL) {
-				ret = g_ps3_err_scene[err_type-1].callback(data);
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE &&
+		    g_ps3_err_scene[err_type - 1].count != 0) {
+			g_ps3_err_scene[err_type - 1].is_hit_pre = PS3_TRUE;
+			if (g_ps3_err_scene[err_type - 1].callback != NULL) {
+				ret = g_ps3_err_scene[err_type - 1].callback(
+					data);
 			}
-			g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-			if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-				g_ps3_err_scene[err_type-1].count--;
+			g_ps3_err_scene[err_type - 1].is_hit_post = PS3_TRUE;
+			if (g_ps3_err_scene[err_type - 1].count > 0 &&
+			    ret == PS3_SUCCESS) {
+				g_ps3_err_scene[err_type - 1].count--;
 			}
 		}
 	}
-
-	return ;
 }
 
-void inject_execute_callback_at_time(U16 err_type, void * data)
+void inject_execute_callback_at_time(unsigned short err_type, void *data)
 {
-	S32 ret = PS3_SUCCESS;
+	int ret = PS3_SUCCESS;
 
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
-
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE) {
-			if (g_ps3_err_scene[err_type-1].count > 1) {
-				g_ps3_err_scene[err_type-1].count--;
-			} else if (g_ps3_err_scene[err_type-1].count == 1) {
-				g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
-				if (g_ps3_err_scene[err_type-1].callback != NULL) {
-					ret = g_ps3_err_scene[err_type-1].callback(data);
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE) {
+			if (g_ps3_err_scene[err_type - 1].count > 1) {
+				g_ps3_err_scene[err_type - 1].count--;
+			} else if (g_ps3_err_scene[err_type - 1].count == 1) {
+				g_ps3_err_scene[err_type - 1].is_hit_pre =
+					PS3_TRUE;
+				if (g_ps3_err_scene[err_type - 1].callback !=
+				    NULL) {
+					ret = g_ps3_err_scene[err_type - 1]
+						      .callback(data);
 				}
-				g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-				if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-					g_ps3_err_scene[err_type-1].count--;
-				}
-			}
-		}
-	}
-
-	return;
-}
-
-void inject_execute_callback_relevance_wait_pre(U16 err_type, U16 err_type_wait, void * data)
-{
-	S32 ret = PS3_SUCCESS;
-	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE &&
-			g_ps3_err_scene[err_type_wait-1].active == PS3_TRUE &&
-			g_ps3_err_scene[err_type-1].count != 0) {
-			g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
-			while(g_ps3_err_scene[err_type_wait-1].active &&
-				!g_ps3_err_scene[err_type_wait-1].is_hit_pre) {
-				msleep(5);
-			}
-			if (g_ps3_err_scene[err_type-1].callback != NULL) {
-				ret = g_ps3_err_scene[err_type-1].callback(data);
-			}
-			g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-			if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-				g_ps3_err_scene[err_type-1].count--;
-			}
-		}
-	}
-
-	return ;
-}
-
-void inject_execute_callback_relevance_wait_post(U16 err_type, U16 err_type_wait, void * data)
-{
-	S32 ret = PS3_SUCCESS;
-	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE &&
-			g_ps3_err_scene[err_type_wait-1].active == PS3_TRUE &&
-			g_ps3_err_scene[err_type-1].count != 0) {
-			g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
-			while(g_ps3_err_scene[err_type_wait-1].active &&
-				!g_ps3_err_scene[err_type_wait-1].is_hit_post) {
-				msleep(5);
-			}
-			if (g_ps3_err_scene[err_type-1].callback != NULL) {
-				ret = g_ps3_err_scene[err_type-1].callback(data);
-			}
-			g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-			if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-				g_ps3_err_scene[err_type-1].count--;
-			}
-		}
-	}
-
-	return ;
-}
-
-void inject_execute_callback_at_time_relevance_wait_pre(U16 err_type,
-	U16 err_type_wait, void * data)
-{
-	S32 ret = PS3_SUCCESS;
-	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
-
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE) {
-			if (g_ps3_err_scene[err_type-1].count > 1) {
-				g_ps3_err_scene[err_type-1].count--;
-			} else if (g_ps3_err_scene[err_type-1].count == 1) {
-				g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
-
-				while(g_ps3_err_scene[err_type_wait-1].active &&
-					!g_ps3_err_scene[err_type_wait-1].is_hit_pre) {
-					msleep(5);
-				}
-
-				if (g_ps3_err_scene[err_type-1].callback != NULL) {
-				ret = g_ps3_err_scene[err_type-1].callback(data);
-			}
-				g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-				if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-					g_ps3_err_scene[err_type-1].count--;
+				g_ps3_err_scene[err_type - 1].is_hit_post =
+					PS3_TRUE;
+				if (g_ps3_err_scene[err_type - 1].count > 0 &&
+				    ret == PS3_SUCCESS) {
+					g_ps3_err_scene[err_type - 1].count--;
 				}
 			}
 		}
 	}
-
-	return;
 }
 
-void inject_execute_callback_at_time_relevance_wait_post(U16 err_type,
-	U16 err_type_wait, void * data)
+void inject_execute_callback_relevance_wait_pre(unsigned short err_type,
+						unsigned short err_type_wait,
+						void *data)
 {
-	S32 ret = PS3_SUCCESS;
+	int ret = PS3_SUCCESS;
+
 	if (err_type < PS3_ERR_SCENE_NUM &&
-		err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE &&
+		    g_ps3_err_scene[err_type_wait - 1].active == PS3_TRUE &&
+		    g_ps3_err_scene[err_type - 1].count != 0) {
+			g_ps3_err_scene[err_type - 1].is_hit_pre = PS3_TRUE;
+			while (g_ps3_err_scene[err_type_wait - 1].active &&
+			       !g_ps3_err_scene[err_type_wait - 1].is_hit_pre) {
+				msleep(20);
+			}
+			if (g_ps3_err_scene[err_type - 1].callback != NULL) {
+				ret = g_ps3_err_scene[err_type - 1].callback(
+					data);
+			}
+			g_ps3_err_scene[err_type - 1].is_hit_post = PS3_TRUE;
+			if (g_ps3_err_scene[err_type - 1].count > 0 &&
+			    ret == PS3_SUCCESS) {
+				g_ps3_err_scene[err_type - 1].count--;
+			}
+		}
+	}
+}
 
-		if (g_ps3_err_scene[err_type-1].active == PS3_TRUE) {
-			if (g_ps3_err_scene[err_type-1].count > 1) {
-				g_ps3_err_scene[err_type-1].count--;
-			} else if (g_ps3_err_scene[err_type-1].count == 1) {
-				g_ps3_err_scene[err_type-1].is_hit_pre = PS3_TRUE;
+void inject_execute_callback_relevance_wait_post(unsigned short err_type,
+						 unsigned short err_type_wait,
+						 void *data)
+{
+	int ret = PS3_SUCCESS;
 
-				while(g_ps3_err_scene[err_type_wait-1].active &&
-					!g_ps3_err_scene[err_type_wait-1].is_hit_post) {
-					msleep(5);
+	if (err_type < PS3_ERR_SCENE_NUM &&
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE &&
+		    g_ps3_err_scene[err_type_wait - 1].active == PS3_TRUE &&
+		    g_ps3_err_scene[err_type - 1].count != 0) {
+			g_ps3_err_scene[err_type - 1].is_hit_pre = PS3_TRUE;
+			while (g_ps3_err_scene[err_type_wait - 1].active &&
+			       !g_ps3_err_scene[err_type_wait - 1].is_hit_post) {
+				msleep(20);
+			}
+			if (g_ps3_err_scene[err_type - 1].callback != NULL) {
+				ret = g_ps3_err_scene[err_type - 1].callback(
+					data);
+			}
+			g_ps3_err_scene[err_type - 1].is_hit_post = PS3_TRUE;
+			if (g_ps3_err_scene[err_type - 1].count > 0 &&
+			    ret == PS3_SUCCESS) {
+				g_ps3_err_scene[err_type - 1].count--;
+			}
+		}
+	}
+}
+
+void inject_execute_callback_at_time_relevance_wait_pre(
+	unsigned short err_type, unsigned short err_type_wait, void *data)
+{
+	int ret = PS3_SUCCESS;
+
+	if (err_type < PS3_ERR_SCENE_NUM &&
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE) {
+			if (g_ps3_err_scene[err_type - 1].count > 1) {
+				g_ps3_err_scene[err_type - 1].count--;
+			} else if (g_ps3_err_scene[err_type - 1].count == 1) {
+				g_ps3_err_scene[err_type - 1].is_hit_pre =
+					PS3_TRUE;
+				while (g_ps3_err_scene[err_type_wait - 1]
+					       .active &&
+				       !g_ps3_err_scene[err_type_wait - 1]
+						.is_hit_pre) {
+					msleep(20);
 				}
 
-				if (g_ps3_err_scene[err_type-1].callback != NULL) {
-				ret = g_ps3_err_scene[err_type-1].callback(data);
-			}
-				g_ps3_err_scene[err_type-1].is_hit_post = PS3_TRUE;
-				if(g_ps3_err_scene[err_type-1].count > 0 && ret == PS3_SUCCESS){
-					g_ps3_err_scene[err_type-1].count--;
+				if (g_ps3_err_scene[err_type - 1].callback !=
+				    NULL) {
+					ret = g_ps3_err_scene[err_type - 1]
+						      .callback(data);
+				}
+				g_ps3_err_scene[err_type - 1].is_hit_post =
+					PS3_TRUE;
+				if (g_ps3_err_scene[err_type - 1].count > 0 &&
+				    ret == PS3_SUCCESS) {
+					g_ps3_err_scene[err_type - 1].count--;
 				}
 			}
 		}
 	}
-
-	return;
 }
 
-S32 force_ioctl_cmd_dead(void * ptr)
+void inject_execute_callback_at_time_relevance_wait_post(
+	unsigned short err_type, unsigned short err_type_wait, void *data)
+{
+	int ret = PS3_SUCCESS;
+
+	if (err_type < PS3_ERR_SCENE_NUM &&
+	    err_type >= PS3_ERR_IJ_WATCHDOG_CONCURY) {
+		if (g_ps3_err_scene[err_type - 1].active == PS3_TRUE) {
+			if (g_ps3_err_scene[err_type - 1].count > 1) {
+				g_ps3_err_scene[err_type - 1].count--;
+			} else if (g_ps3_err_scene[err_type - 1].count == 1) {
+				g_ps3_err_scene[err_type - 1].is_hit_pre =
+					PS3_TRUE;
+
+				while (g_ps3_err_scene[err_type_wait - 1]
+					       .active &&
+				       !g_ps3_err_scene[err_type_wait - 1]
+						.is_hit_post) {
+					msleep(20);
+				}
+
+				if (g_ps3_err_scene[err_type - 1].callback !=
+				    NULL) {
+					ret = g_ps3_err_scene[err_type - 1]
+						      .callback(data);
+				}
+				g_ps3_err_scene[err_type - 1].is_hit_post =
+					PS3_TRUE;
+				if (g_ps3_err_scene[err_type - 1].count > 0 &&
+				    ret == PS3_SUCCESS) {
+					g_ps3_err_scene[err_type - 1].count--;
+				}
+			}
+		}
+	}
+}
+
+static int force_ioctl_cmd_dead(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 
-	if (cmd == NULL) {
+	if (cmd == NULL)
 		goto end;
-	}
-	if (PS3_MGR_CMD_TYPE(cmd) == PS3_CMD_IOCTL) {
+	if (PS3_MGR_CMD_TYPE(cmd) == PS3_CMD_IOCTL)
 		cmd->cmd_state.state = PS3_CMD_STATE_DEAD;
-	}
 end:
 	return PS3_SUCCESS;
 }
-S32 force_ioctl_cmd_pending(void * ptr)
+static int force_ioctl_cmd_pending(void *ptr)
 {
-	*(S32 *)ptr = 1;
+	*(int *)ptr = 1;
 	return PS3_SUCCESS;
 }
 
-S32 force_ioctl_cmd_sig_interrupt(void * ptr)
+static int force_ioctl_cmd_sig_interrupt(void *ptr)
 {
-	*(S32 *)ptr = 1;
+	*(int *)ptr = 1;
 	return PS3_SUCCESS;
 }
 
-S32 force_ioctl_cmd_interrupt(void * ptr)
+static int force_ioctl_cmd_interrupt(void *ptr)
 {
-	*(S32 *)ptr = -PS3_FAILED;
+	*(int *)ptr = -PS3_FAILED;
 	return PS3_SUCCESS;
 }
-S32 force_ioctl_cmd_no_resp(void * ptr)
+static int force_ioctl_cmd_no_resp(void *ptr)
 {
-	*(S32 *)ptr = -PS3_TIMEOUT;
+	*(int *)ptr = -PS3_TIMEOUT;
 	return PS3_SUCCESS;
 }
-S32 force_mgr_cmd_no_resp(void * ptr)
+static int force_mgr_cmd_no_resp(void *ptr)
 {
-	*(S32 *)ptr = -PS3_TIMEOUT;
-	return PS3_SUCCESS;
-}
-
-S32 force_return_fail(void * ptr)
-{
-	*(S32 *)ptr = -PS3_FAILED;
-	return PS3_SUCCESS;
-}
-S32 force_ioctl_cmd_abort_no_resp(void * ptr)
-{
-	*(S32 *)ptr = -PS3_CMD_NO_RESP;
+	*(int *)ptr = -PS3_TIMEOUT;
 	return PS3_SUCCESS;
 }
 
-S32 force_ioctl_cmd_force_done(void * ptr)
+static int force_return_fail(void *ptr)
+{
+	*(int *)ptr = -PS3_FAILED;
+	return PS3_SUCCESS;
+}
+static int force_ioctl_cmd_abort_no_resp(void *ptr)
+{
+	*(int *)ptr = -PS3_CMD_NO_RESP;
+	return PS3_SUCCESS;
+}
+
+static int force_ioctl_cmd_force_done(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	msleep(500);
 	complete(&cmd->sync_done);
 	return PS3_SUCCESS;
 }
 
-S32 ioctl_cmd_retry_done(void * ptr)
+static int ioctl_cmd_retry_done(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	cmd->retry_cnt = 3;
 	return PS3_SUCCESS;
 }
 
-S32 force_ioctl_cmd_recovery_cancel(void * ptr)
+static int force_ioctl_cmd_recovery_cancel(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	S32 ret;
-	ret = ps3_hard_recovery_request(cmd->instance);
+	int ret;
+
+	ret = ps3_hard_recovery_request(cmd->instance, PS3_FALSE);
 	if (ret == -PS3_FAILED) {
 		LOG_ERROR("hno:%u  hard recovery request failed\n",
-			PS3_HOST(cmd->instance));
+			  PS3_HOST(cmd->instance));
 		return -PS3_FAILED;
 	}
-	while(ps3_atomic_read(&cmd->instance->state_machine.state) != PS3_INSTANCE_STATE_RECOVERY){
+	while (ps3_atomic_read(&cmd->instance->state_machine.state) !=
+	       PS3_INSTANCE_STATE_RECOVERY) {
 		msleep(50);
 	}
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_instance_normal(void * ptr)
+static int wait_instance_normal(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	while(ps3_atomic_read(&instance->state_machine.state) != PS3_INSTANCE_STATE_OPERATIONAL &&
-		ps3_atomic_read(&instance->state_machine.state) != PS3_INSTANCE_STATE_PRE_OPERATIONAL){
-		msleep(5);
+	while (ps3_atomic_read(&instance->state_machine.state) !=
+		       PS3_INSTANCE_STATE_OPERATIONAL &&
+	       ps3_atomic_read(&instance->state_machine.state) !=
+		       PS3_INSTANCE_STATE_PRE_OPERATIONAL) {
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-S32 wait_instance_operational(void * ptr)
+static int wait_instance_operational(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	while(ps3_atomic_read(&instance->state_machine.state) != PS3_INSTANCE_STATE_OPERATIONAL){
-		msleep(5);
+	while (ps3_atomic_read(&instance->state_machine.state) !=
+	       PS3_INSTANCE_STATE_OPERATIONAL) {
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
-S32 host_reset_wait_decide_normal(void * ptr)
+static int host_reset_wait_decide_normal(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_INFO("inject host_reset_wait_decide_normal enter,recovery_state:%d\n",
-		instance->recovery_context->recovery_state);
 
-	while(instance->recovery_context->host_reset_state == PS3_HOST_RESET_INIT){
-		msleep(5);
+	LOG_INFO(
+		"inject %s enter,recovery_state:%d\n",
+		__func__, instance->recovery_context->recovery_state);
+
+	while (instance->recovery_context->host_reset_state ==
+	       PS3_HOST_RESET_INIT) {
+		msleep(20);
 	}
 
 	msleep(50);
 
-	LOG_INFO("inject host_reset_wait_decide_normal end,host_reset_state:%d\n",
-		instance->recovery_context->host_reset_state);
+	LOG_INFO(
+		"%s end,host_reset_state:%d\n",
+		__func__, instance->recovery_context->host_reset_state);
 	return PS3_SUCCESS;
 }
 
-S32 force_instance_unload(void * ptr)
+static int force_instance_unload(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->state_machine.is_load = PS3_FALSE;
-    return PS3_SUCCESS;
-}
-
-S32 force_instance_state_unnormal(void * ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	ps3_instance_state_transfer(instance, PS3_INSTANCE_STATE_OPERATIONAL,
-		PS3_INSTANCE_STATE_RECOVERY);
-    return PS3_SUCCESS;
-}
-
-S32 force_instance_state_pci_err(void * ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	instance->state_machine.is_pci_err_recovery = PS3_TRUE;
-    return PS3_SUCCESS;
-}
-
-S32 force_instance_state_normal(void * ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	ps3_atomic_set(&instance->state_machine.state, PS3_INSTANCE_STATE_OPERATIONAL);
 	return PS3_SUCCESS;
 }
 
-S32 wait_instance_unnormal(void * ptr)
+static int force_instance_state_unnormal(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	while(ps3_atomic_read(&instance->state_machine.state) == PS3_INSTANCE_STATE_OPERATIONAL){
-		msleep(5);
+	ps3_instance_state_transfer(instance, PS3_INSTANCE_STATE_OPERATIONAL,
+				    PS3_INSTANCE_STATE_RECOVERY);
+	return PS3_SUCCESS;
+}
+
+static int force_instance_state_pci_err(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	instance->state_machine.is_pci_err_recovery = PS3_TRUE;
+	return PS3_SUCCESS;
+}
+
+static int force_instance_state_normal(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	ps3_atomic_set(&instance->state_machine.state,
+		       PS3_INSTANCE_STATE_OPERATIONAL);
+	return PS3_SUCCESS;
+}
+
+static int wait_instance_unnormal(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	while (ps3_atomic_read(&instance->state_machine.state) ==
+	       PS3_INSTANCE_STATE_OPERATIONAL) {
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-S32 wait_instance_unnormal_and_set_flag(void * ptr)
+static int wait_instance_unnormal_and_set_flag(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	Bool flag = PS3_FALSE;
-	while(ps3_atomic_read(&instance->state_machine.state) == PS3_INSTANCE_STATE_OPERATIONAL) {
+	unsigned char flag = PS3_FALSE;
+
+	while (ps3_atomic_read(&instance->state_machine.state) ==
+	       PS3_INSTANCE_STATE_OPERATIONAL) {
 		if (!flag) {
 			instance->reserved[0] = 0x11;
 			flag = PS3_TRUE;
 		}
-		msleep(5);
+		msleep(20);
 	}
 	msleep(1000);
 	return PS3_SUCCESS;
 }
 
-S32 wait_ioc_ready(void * ptr)
+static int wait_ioc_ready(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 ioc_state = 0;
-	if (instance->recovery_context->heartbeat_recovery != PS3_HEARTBEAT_HARDRESET_RECOVERY) {
+	unsigned int ioc_state = 0;
+
+	if (instance->recovery_context->heartbeat_recovery !=
+	    PS3_HEARTBEAT_HARDRESET_RECOVERY) {
 		goto l_out;
 	}
 
-	LOG_INFO("wait_ioc_ready inject\n");
+	LOG_INFO("%s inject\n", __func__);
 	ioc_state = instance->ioc_adpter->ioc_state_get(instance);
-	while(ioc_state != PS3_FW_STATE_READY){
+	while (ioc_state != PS3_FW_STATE_READY) {
 		ioc_state = instance->ioc_adpter->ioc_state_get(instance);
-		msleep(5);
+		msleep(20);
 	}
 
 l_out:
 	return PS3_SUCCESS;
 }
 
-static void force_work_queue_unull_test(struct work_struct* work)
+static void force_work_queue_unull_test(struct work_struct *work)
 {
-	LOG_INFO("force_work_queue_unull_test inject\n");
+	LOG_INFO("%s inject\n", __func__);
 
-	(void) work;
-	return;
+	(void)work;
 }
 
-S32 force_work_queue_unull(void * ptr)
+static int force_work_queue_unull(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	struct work_struct* recovery_irq_work = &instance->recovery_irq_work;
-	S8 request_irq_queue_name[PS3_RECOVERY_IRQ_NAME_MAX_LENTH];
-	LOG_INFO("force_work_queue_unull inject\n");
+	struct work_struct *recovery_irq_work = &instance->recovery_irq_work;
+	char request_irq_queue_name[PS3_RECOVERY_IRQ_NAME_MAX_LENGTH];
 
-	memset(request_irq_queue_name, 0, PS3_RECOVERY_IRQ_NAME_MAX_LENTH);
+	LOG_INFO("%s inject\n", __func__);
+
+	memset(request_irq_queue_name, 0, PS3_RECOVERY_IRQ_NAME_MAX_LENGTH);
 	INIT_WORK(recovery_irq_work, force_work_queue_unull_test);
 
-	snprintf(request_irq_queue_name, PS3_RECOVERY_IRQ_NAME_MAX_LENTH,
-		"ps3_irq_recovery_start_service_host%d", instance->host->host_no);
+	snprintf(request_irq_queue_name, PS3_RECOVERY_IRQ_NAME_MAX_LENGTH,
+		 "ps3_irq_recov%d",
+		 instance->host->host_no);
 
 	instance->recovery_irq_queue =
 		create_singlethread_workqueue(request_irq_queue_name);
@@ -494,440 +549,482 @@ S32 force_work_queue_unull(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_work_queue_failed(void * ptr)
+static int force_work_queue_failed(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
-	LOG_INFO("force_work_queue_failed\n");
+	int *ret = (int *)ptr;
+
+	LOG_INFO("%s\n", __func__);
 	*ret = -PS3_FAILED;
 
 	return PS3_SUCCESS;
 }
 
-S32 force_fw_state_ff(void * ptr)
+static int force_fw_state_ff(void *ptr)
 {
-	U64 *heartbeat_value = (U64 *)ptr;
-	LOG_INFO("force_fw_state_ff\n");
+	unsigned long long *heartbeat_value = (unsigned long long *)ptr;
+
+	LOG_INFO("%s\n", __func__);
 	*heartbeat_value = U64_MAX;
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_remove_is_load_flag(void *ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_INFO("wait_remove_is_load_flag\n");
-	while(instance->state_machine.is_load){
-		msleep(5);
-	}
-	return PS3_SUCCESS;
-}
-
-S32 wait_reco_dump_valid(void * ptr)
+static int wait_remove_is_load_flag(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	while(instance->dump_context.is_hard_recovered == 0){
-		msleep(5);
-
-	}
+	LOG_INFO("%s\n", __func__);
+	while (instance->state_machine.is_load)
+		msleep(20);
 	return PS3_SUCCESS;
 }
 
-S32 force_ret_fail(void * ptr)
+static int wait_reco_dump_valid(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	while (instance->dump_context.is_hard_recovered == 0)
+		msleep(20);
+	return PS3_SUCCESS;
+}
+
+static int force_ret_fail(void *ptr)
+{
+	int *ret = (int *)ptr;
+
 	*ret = -PS3_FAILED;
 	return PS3_SUCCESS;
 }
 
-S32 force_reg_fail(void * ptr)
+static int force_reg_fail(void *ptr)
 {
-	U64 *ret = (U64 *)ptr;
+	unsigned long long *ret = (unsigned long long *)ptr;
+
 	*ret = U64_MAX;
 	return PS3_SUCCESS;
 }
 
-S32 force_ready_failed(void * ptr)
+static int force_ready_failed(void *ptr)
 {
-	U32 *fw_cur_state = (U32 *)ptr;
+	unsigned int *fw_cur_state = (unsigned int *)ptr;
+
 	*fw_cur_state = PS3_FW_STATE_START;
 	return PS3_SUCCESS;
 }
 
-S32 force_ioc_critical(void * ptr)
+static int force_ioc_critical(void *ptr)
 {
-	U32 *fw_cur_state = (U32 *)ptr;
+	unsigned int *fw_cur_state = (unsigned int *)ptr;
+
 	*fw_cur_state = PS3_FW_STATE_CRITICAL;
 	return PS3_SUCCESS;
 }
 
-S32 force_change_sgl_addr_to_page_mode_5(void * ptr)
+static int force_recovery_state_shallow(void * ptr)
 {
-	U64 *addr = (U64 *)ptr;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	instance->recovery_context->recovery_state = PS3_HARD_RECOVERY_SHALLOW;
+	return PS3_SUCCESS;
+}
+
+static int force_recovery_halt_break(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	if (instance->ioc_adpter->ioc_state_get(instance) == PS3_FW_STATE_HALT &&
+			instance->recovery_context->heartbeat_recovery != PS3_HEARTBEAT_HARDRESET_DECIDE) {
+		ps3_atomic_set(&instance->state_machine.state, PS3_INSTANCE_STATE_DEAD);
+	}
+	instance->recovery_context->heartbeat_recovery = PS3_HEARTBEAT_HARDRESET_DECIDE;
+	return PS3_SUCCESS;
+}
+
+static int force_recovery_halt_break_1(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	if (PS3_IOC_STATE_HALT_SUPPORT(instance) &&
+			instance->recovery_context->heartbeat_recovery != PS3_HEARTBEAT_HARDRESET_DECIDE) {
+		instance->ioc_adpter->ioc_force_to_halt(instance);
+		ps3_atomic_set(&instance->state_machine.state, PS3_INSTANCE_STATE_DEAD);
+	}
+	instance->is_ioc_halt_support = PS3_FALSE;
+	return PS3_SUCCESS;
+}
+
+static int force_recovery_doorbell_done(void * ptr)
+{
+	U64 *value = (U64 *)ptr;
+	*value = U64_MAX;
+	return PS3_SUCCESS;
+}
+
+static int force_change_sgl_addr_to_page_mode_5(void * ptr)
+{
+	unsigned long long *addr = (unsigned long long *)ptr;
+
 	sgl_addr = *addr;
 	*addr = 0xfffffc5600000;
 	return PS3_SUCCESS;
 }
 
-S32 force_sgl_addr_restore(void * ptr)
+static int force_sgl_addr_restore(void *ptr)
 {
-	U64 *addr = (U64 *)ptr;
+	unsigned long long *addr = (unsigned long long *)ptr;
+
 	*addr = sgl_addr;
 	return PS3_SUCCESS;
 }
 
-S32 force_atu_support_failed(void * ptr)
+static int force_atu_support_failed(void *ptr)
 {
-	U8 *bit_pos = (U8 *)ptr;
+	unsigned char *bit_pos = (unsigned char *)ptr;
+
 	*bit_pos = 0xe0;
 	return PS3_SUCCESS;
 }
 
-S32 force_reg_zero(void * ptr)
+static int force_reg_zero(void *ptr)
 {
-	U64 *reg = (U64 *)ptr;
+	unsigned long long *reg = (unsigned long long *)ptr;
+
 	*reg = 0x0;
 	return PS3_SUCCESS;
 }
 
-S32 force_scan_host_delay(void * ptr)
+static int force_scan_host_delay(void *ptr)
 {
-	U32 times = *(U32 *)ptr;
+	unsigned int times = *(unsigned int *)ptr;
+
 	LOG_INFO("inject ps3_scsi_scan_host dalay start:%u\n", times);
-	while(times) {
+	while (times) {
 		msleep(100);
 		times -= 100;
 	}
 	LOG_INFO("inject ps3_scsi_scan_host dalay end:%u\n", times);
 	return PS3_SUCCESS;
 }
-S32 force_scan_host_fail(void * ptr)
+static int force_scan_host_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->is_scan_host_finish = PS3_FALSE;
 	return PS3_SUCCESS;
 }
 
-S32 force_ignore_task_io(void * ptr)
+static int force_ignore_task_io(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	U8 type;
-	S32 ret = PS3_FAILED;
+	unsigned char type;
+	int ret = PS3_FAILED;
 
-	if (cmd == NULL) {
+	if (cmd == NULL)
 		goto end;
-	}
 	type = PS3_SCSI_CMD_TYPE(ps3_scsih_cdb_rw_type_get(cmd->scmd->cmnd));
 	if (ps3_scsih_is_rw_type(type)) {
 		cmd->cmd_state.state = PS3_CMD_STATE_PROCESS;
 		init_completion(&cmd->sync_done);
 
-		LOG_INFO("inject force_ignore_task_io CFID %u no resp\n", cmd->index);
+		LOG_INFO("inject %s CFID %u no resp\n",
+			 __func__, cmd->index);
 		ret = PS3_SUCCESS;
 	}
 end:
 	return ret;
 }
 
-S32 force_ignore_task_abort(void * ptr)
+static int force_ignore_task_abort(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	S32 ret = PS3_FAILED;
+	int ret = PS3_FAILED;
 
-	if (cmd == NULL) {
+	if (cmd == NULL)
 		goto end;
-	}
 	if (PS3_MGR_CMD_TYPE(cmd) == PS3_CMD_SCSI_TASK_MANAGEMENT &&
-		PS3_MGR_CMD_SUBTYPE(cmd) == PS3_TASK_CMD_SCSI_TASK_ABORT) {
+	    PS3_MGR_CMD_SUBTYPE(cmd) == PS3_TASK_CMD_SCSI_TASK_ABORT) {
 		cmd->cmd_state.state = PS3_CMD_STATE_PROCESS;
 		init_completion(&cmd->sync_done);
-		LOG_INFO("inject force_ignore_task_abort CFID %u no resp\n", cmd->index);
+		LOG_INFO("inject %s CFID %u no resp\n",
+			 __func__, cmd->index);
 		ret = PS3_SUCCESS;
 	}
 end:
 	return ret;
 }
-S32 force_ignore_task_reset(void * ptr)
+static int force_ignore_task_reset(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	S32 ret = PS3_FAILED;
+	int ret = PS3_FAILED;
 
-	if (cmd == NULL) {
+	if (cmd == NULL)
 		goto end;
-	}
 	if (PS3_MGR_CMD_TYPE(cmd) == PS3_CMD_SCSI_TASK_MANAGEMENT &&
-		PS3_MGR_CMD_SUBTYPE(cmd) == PS3_TASK_CMD_SCSI_TASK_RESET) {
+	    PS3_MGR_CMD_SUBTYPE(cmd) == PS3_TASK_CMD_SCSI_TASK_RESET) {
 		cmd->cmd_state.state = PS3_CMD_STATE_PROCESS;
 		init_completion(&cmd->sync_done);
-		LOG_INFO("inject force_ignore_task_reset CFID %u no resp\n", cmd->index);
+		LOG_INFO("inject %s CFID %u no resp\n",
+			 __func__, cmd->index);
 		ret = PS3_SUCCESS;
 	}
 end:
 	return ret;
 }
-S32 force_event_handle(void * ptr)
+static int force_event_handle(void *ptr)
 {
-	struct ps3_instance *instance = (struct ps3_instance*)ptr;
-	schedule_delayed_work(&instance->event_context.delay_work->event_work, 0);
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	schedule_delayed_work(&instance->event_context.delay_work->event_work,
+			      0);
 	return PS3_SUCCESS;
 }
-S32 force_del_disk(void * ptr)
+static int force_del_disk(void *ptr)
 {
 	struct scsi_device *sdev = (struct scsi_device *)ptr;
-	if (sdev) {
+
+	if (sdev)
 		sdev = NULL;
-	}
 	return PS3_SUCCESS;
 }
 
-S32 force_priv_data_null(void * ptr)
+static int force_priv_data_null(void *ptr)
 {
 	struct scsi_device *sdev = (struct scsi_device *)ptr;
-	struct ps3_instance *instance = (struct ps3_instance*)(sdev->host->hostdata);
+	struct ps3_instance *instance =
+		(struct ps3_instance *)(sdev->host->hostdata);
 
-	if(sdev->hostdata != NULL) {
+	if (sdev->hostdata != NULL)
 		ps3_kfree(instance, sdev->hostdata);
-	}
 	sdev->hostdata = NULL;
 	return PS3_SUCCESS;
 }
-S32 force_wait_hard_flag(void * ptr)
+static int force_wait_hard_flag(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 180*HZ;
-	while (instance->hardreset_event != 1) {
+	unsigned int wait_time = 180 * HZ;
+
+	while (ps3_atomic_read(&instance->hardreset_event) != 1) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
-	LOG_INFO("event wait hard flag %d\n",
-		instance->hardreset_event);
+	LOG_INFO("event wait hard flag %d\n", ps3_atomic_read(&instance->hardreset_event));
 	return PS3_SUCCESS;
 }
-S32 force_int_wait_hard_flag(void * ptr)
+static int force_int_wait_hard_flag(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 10*HZ;
-	while (instance->hardreset_event != 0) {
+	unsigned int wait_time = 10 * HZ;
+
+	while (ps3_atomic_read(&instance->hardreset_event) != 0) {
 		ps3_mdelay(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
-	LOG_INFO("int wait hard flag %d\n",
-		instance->hardreset_event);
+	LOG_INFO("int wait hard flag %d\n", ps3_atomic_read(&instance->hardreset_event));
 	return PS3_SUCCESS;
 }
 
-S32 force_int_wait_hard_subcribe(void * ptr)
+static int force_int_wait_hard_subcribe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 10*HZ;
+	unsigned int wait_time = 10 * HZ;
 
-	while (instance->recovery_context->recovery_state != PS3_HARD_RECOVERY_SHALLOW) {
+	while (instance->recovery_context->recovery_state !=
+	       PS3_HARD_RECOVERY_SHALLOW) {
 		ps3_mdelay(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
 	LOG_INFO("int wait hard recovery finish %d\n",
-		instance->recovery_context->recovery_state);
+		 instance->recovery_context->recovery_state);
 	return PS3_SUCCESS;
 }
 
-S32 force_wait_hard_subcribe(void * ptr)
+static int force_wait_hard_subcribe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 180*HZ;
-	while (instance->recovery_context->recovery_state != PS3_HARD_RECOVERY_SHALLOW) {
+	unsigned int wait_time = 180 * HZ;
+
+	while (instance->recovery_context->recovery_state !=
+	       PS3_HARD_RECOVERY_SHALLOW) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
-	while (instance->recovery_context->recovery_state != PS3_HARD_RECOVERY_FINISH) {
+	while (instance->recovery_context->recovery_state !=
+	       PS3_HARD_RECOVERY_FINISH) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
 	LOG_INFO("event wait hard recovery finish %d\n",
-		instance->recovery_context->recovery_state);
+		 instance->recovery_context->recovery_state);
 	return PS3_SUCCESS;
 }
 
-S32 force_wait_event_int(void * ptr)
+static int force_wait_event_int(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 180*HZ;
-	while (instance->event_context.subwork != 1) {
+	unsigned int wait_time = 180 * HZ;
+
+	while (ps3_atomic_read(&instance->event_context.subwork) != 1) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
 	LOG_INFO("recovery wait event int %d\n",
-		instance->event_context.subwork);
+		 ps3_atomic_read(&instance->event_context.subwork));
 	return PS3_SUCCESS;
 }
 
-S32 force_wait_event_proc(void * ptr)
+static int force_wait_event_proc(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 180*HZ;
-	while (instance->event_context.subwork != 1) {
-		ps3_msleep(1);
+	unsigned int wait_time = 180 * HZ;
+
+	while (ps3_atomic_read(&instance->event_context.subwork) != 1) {
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
 
-	ps3_msleep(100*HZ);
+	ps3_msleep(100 * HZ);
 	LOG_INFO("recovery wait event proc %d\n",
-		instance->event_context.subwork);
+		 ps3_atomic_read(&instance->event_context.subwork));
 	return PS3_SUCCESS;
 }
 
-S32 force_wait_event_subscribe(void * ptr)
+static int force_wait_event_subscribe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 wait_time = 180*HZ;
-	while (instance->event_context.subwork != 1) {
+	unsigned int wait_time = 180 * HZ;
+
+	while (ps3_atomic_read(&instance->event_context.subwork) != 1) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
-	while (instance->event_context.subwork != 0) {
+	while (ps3_atomic_read(&instance->event_context.subwork) != 0) {
 		ps3_msleep(1);
 		wait_time--;
-		if (wait_time == 0) {
+		if (wait_time == 0)
 			break;
-		}
 	}
 	LOG_INFO("recovery wait event subc %d\n",
-		instance->event_context.subwork);
+		 ps3_atomic_read(&instance->event_context.subwork));
 	return PS3_SUCCESS;
 }
 
-S32 force_hard_ready_failed(void * ptr)
+static int force_hard_ready_failed(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState = PS3_FW_STATE_FAULT;
-	LOG_INFO("force_hard_ready_failed success \n");
+	instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
+		PS3_FW_STATE_FAULT;
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_func0_running_1(void * ptr)
+static int wait_recovery_func0_running_1(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserve[0] = 0xcc;
 
-	while (instance->reserve[0] == 0xcc) {
-		msleep(10);
-	}
-	LOG_INFO("wait_recovery_func0_running_1 success \n");
+	while (instance->reserve[0] == 0xcc)
+		msleep(20);
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
-S32 wait_recovery_func1_probe(void * ptr)
+static int wait_recovery_func1_probe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_INFO("wait_recovery_func1_probe in \n");
-	while (instance->peer_instance == NULL) {
-		msleep(10);
-	}
-	LOG_INFO("wait_recovery_func1_probe success \n");
+
+	LOG_INFO("%s in\n", __func__);
+	while (instance->peer_instance == NULL)
+		msleep(20);
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_func1_remove(void * ptr)
+static int wait_recovery_func1_remove(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserve[0] = 0xb0;
 
-	while (instance->reserve[0] == 0xb0) {
-		msleep(10);
-	}
-	LOG_INFO("wait_recovery_func1_remove success \n");
+	while (instance->reserve[0] == 0xb0)
+		msleep(20);
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
-S32 wait_recovery_req_func1_remove(void * ptr)
+static int wait_recovery_req_func1_remove(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserve[0] = 0xb1;
 
-	while (instance->reserve[0] == 0xb1) {
-		msleep(10);
-	}
-	LOG_INFO("wait_recovery_func1_remove success \n");
+	while (instance->reserve[0] == 0xb1)
+		msleep(20);
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_func0_running_2(void * ptr)
+static int wait_recovery_func0_running_2(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserve[0] = 0;
-	if(instance->peer_instance) {
+	if (instance->peer_instance)
 		instance->peer_instance->reserve[0] = 0;
-	}
-	LOG_INFO("wait_recovery_func0_running_2 \n");
+	LOG_INFO("%s\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 force_trigger_log_fail(void * ptr)
+static int force_trigger_log_fail(void *ptr)
 {
-	U8 * ret = (U8 *)ptr;
+	unsigned char *ret = (unsigned char *)ptr;
+
 	*ret = PS3_FALSE;
 
 	return PS3_SUCCESS;
 }
-S32 force_event_cmd_null(void * ptr)
+static int force_event_cmd_null(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->event_context.event_cmd = NULL;
 
 	return PS3_SUCCESS;
 }
 
-S32 force_event_cmd_init(void * ptr)
+static int force_event_cmd_init(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_cmd *cmd = instance->event_context.event_cmd;
+
 	cmd->cmd_state.state = PS3_CMD_STATE_INIT;
 
 	return PS3_SUCCESS;
 }
-S32 force_cmd_done(void * ptr)
+
+static int force_aborted_cmd_done(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	U8 reply_flags = PS3_SUCCESS;
-
-	ps3_scsih_io_done(cmd, reply_flags);
-
-	return PS3_SUCCESS;
-}
-S32 force_aborted_cmd_done(void * ptr)
-{
-	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	U16 aborted_cmd_frame_id = 0;
-	U8 reply_flags = PS3_SUCCESS;
-	PS3MgrTaskReqFrame_s *mgr_task_req_frame = NULL;
+	unsigned short aborted_cmd_frame_id = 0;
+	unsigned char reply_flags = PS3_SUCCESS;
+	struct PS3MgrTaskReqFrame *mgr_task_req_frame = NULL;
 	struct ps3_instance *instance = cmd->instance;
 
 	mgr_task_req_frame = &cmd->req_frame->taskReq;
@@ -938,10 +1035,11 @@ S32 force_aborted_cmd_done(void * ptr)
 
 	return PS3_SUCCESS;
 }
-S32 force_stop_aborted_cmd_done(void * ptr)
+static int force_stop_aborted_cmd_done(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	ps3_hard_recovery_request(instance);
+
+	ps3_hard_recovery_request(instance, PS3_FALSE);
 
 	ps3_recovery_cancel_work_sync(instance);
 
@@ -949,11 +1047,11 @@ S32 force_stop_aborted_cmd_done(void * ptr)
 }
 
 #ifdef PS3_UT
-S32 force_scsi_cmd_done(void * ptr)
+static int force_scsi_cmd_done(void *ptr)
 {
 	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ptr;
-	U8 reply_flags = PS3_SUCCESS;
-	U16 cmd_frame_id = 0;
+	unsigned char reply_flags = PS3_SUCCESS;
+	unsigned short cmd_frame_id = 0;
 	struct ps3_cmd *aborted_cmd;
 	struct ps3_instance *instance = scsi_host_data(scmd);
 
@@ -965,70 +1063,73 @@ S32 force_scsi_cmd_done(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_set_ioc_in_security(void *ptr)
+static int force_set_ioc_in_security(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
-    writeq_fake(0x1, &instance->reg_set->reg_f.Excl_reg.ps3Debug7);
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-    return PS3_SUCCESS;
+	writeq_fake(0x1, &instance->reg_set->reg_f.Excl_reg.ps3Debug7);
+
+	return PS3_SUCCESS;
 }
-S32 force_set_ioc_running(void *ptr)
+static int force_set_ioc_running(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	unsigned long long state;
 
 	if (instance->reg_set != NULL) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_RUNNING;
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_RUNNING;
 	}
 	state = instance->ioc_adpter->ioc_state_get(instance);
 
 	LOG_WARN("ioc state [%llu]\n", state);
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 
 #else
-S32 force_set_ioc_in_security(void *ptr)
+static int force_set_ioc_in_security(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	PS3_IOC_REG_WRITE(instance, reg_f.Excl_reg, ps3Debug7, 0x1);
 
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
-S32 force_set_ioc_running(void *ptr)
+static int force_set_ioc_running(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	unsigned long long state;
 
-	PS3_IOC_REG_READ_WITH_CHECK(instance, reg_f.Excl_reg, ps3SocFwState, state);
+	PS3_IOC_REG_READ_WITH_CHECK(instance, reg_f.Excl_reg, ps3SocFwState,
+				    state);
 	state |= PS3_FW_STATE_RUNNING;
 	PS3_IOC_REG_WRITE(instance, reg_f.Excl_reg, ps3SocFwState, state);
 
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 #endif
-S32 force_set_ioc_fault(void * ptr)
+static int force_set_ioc_fault(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	unsigned long long state;
 
 	if (instance->reg_set != NULL) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_FAULT;
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_FAULT;
 	}
 	state = instance->ioc_adpter->ioc_state_get(instance);
 
 	LOG_WARN("ioc state [%llu]\n", state);
 	return PS3_SUCCESS;
 }
-S32 force_set_ioc_halt(void * ptr)
+static int force_set_ioc_halt(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	unsigned long long state;
 
 	if (instance->reg_set != NULL) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_HALT;
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_HALT;
 	}
 	state = instance->ioc_adpter->ioc_state_get(instance);
 
@@ -1036,102 +1137,106 @@ S32 force_set_ioc_halt(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_set_f0_ioc_critical(void * ptr)
+static int force_set_f0_ioc_critical(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	unsigned long long state;
 
 	if (instance->reg_set != NULL && instance->peer_instance != NULL &&
-			ps3_get_pci_function(instance->peer_instance->pdev) == PS3_FUNC_ID_0) {
-		instance->peer_instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_CRITICAL;
+	    ps3_get_pci_function(instance->peer_instance->pdev) ==
+		    PS3_FUNC_ID_0) {
+		instance->peer_instance->reg_set->reg_f.Excl_reg.ps3SocFwState
+			.reg.ps3SocFwState = PS3_FW_STATE_CRITICAL;
 	}
 	state = instance->peer_instance->ioc_adpter->ioc_state_get(instance);
-	while (ps3_atomic_read(&instance->recovery_context->hardreset_ref) == 0) {
-		msleep(5);
+	while (ps3_atomic_read(&instance->recovery_context->hardreset_ref) ==
+	       0) {
+		msleep(20);
 	}
 	LOG_WARN("ioc state [%llu]\n", state);
 	return PS3_SUCCESS;
 }
 
-S32 set_qos_share_cnt(void *ptr)
+static int set_qos_share_cnt(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	ps3_atomic_set(&instance->qos_context.tg_ctx.share_free_cnt, 1);
 
 	return PS3_SUCCESS;
 }
-S32 force_event_cmd_dead(void *ptr)
+static int force_event_cmd_dead(void *ptr)
 {
-	S32 *cur_state = (S32 *)ptr;
+	int *cur_state = (int *)ptr;
+
 	*cur_state = PS3_INSTANCE_STATE_RECOVERY;
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_irq_disable(void * ptr)
+static int wait_irq_disable(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
 
 	instance->reserved[0] = 0;
-	while(ps3_irq_is_enable(&instance->irq_context)) {
-		msleep(1);
-	}
+	while (ps3_irq_is_enable(&instance->irq_context))
+		msleep(20);
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_ioctl_detect_irq_disable(void * ptr)
+static int wait_ioctl_detect_irq_disable(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while(instance->reserved[0] != 0xab) {
-		msleep(1);
-	}
+
+	while (instance->reserved[0] != 0xab)
+		msleep(20);
 
 	return PS3_SUCCESS;
 }
 
-S32 set_send_ioctl_block_flag(void * ptr)
+static int set_send_ioctl_block_flag(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
 
-	if (cmd->req_frame->mgrReq.reqHead.cmdType == PS3_CMD_IOCTL) {
+	if (cmd->req_frame->mgrReq.reqHead.cmdType == PS3_CMD_IOCTL)
 		instance->reserved[0] = 0xab;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_has_scsi_pending_io(void * ptr)
+static int force_has_scsi_pending_io(void *ptr)
 {
-	Bool *found = (Bool *)ptr;
+	unsigned char *found = (unsigned char *)ptr;
+
 	*found = PS3_TRUE;
 	return PS3_SUCCESS;
 }
 #ifdef PS3_UT
-void scsi_cmd_create(struct scsi_cmnd *s_cmd, struct ps3_instance *instance)
+static void scsi_cmd_create(struct scsi_cmnd *s_cmd, struct ps3_instance *instance)
 {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
-	unsigned char scsi_cmnd_tmp[] = {0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
-		0x00, 0x08, 0x00, 0x00};
+#if defined(PS3_CMD_CREATE_INJECT)
+	unsigned char scsi_cmnd_tmp[] = { 0x2a, 0x00, 0x00, 0x00, 0x08,
+					  0x00, 0x00, 0x08, 0x00, 0x00 };
 	struct scsi_device *device;
 #if defined DRIVER_SUPPORT_PRIV_BUSY
-	struct ps3_scsi_priv_data *device_priv_data = (struct ps3_scsi_priv_data*)s_cmd->device->hostdata;
+	struct ps3_scsi_priv_data *device_priv_data =
+		(struct ps3_scsi_priv_data *)s_cmd->device->hostdata;
 #endif
 	memset(s_cmd, 0, sizeof(*s_cmd));
-	s_cmd->cmnd = (U8 *)kmalloc(32, GFP_KERNEL);
+	s_cmd->cmnd = kmalloc(32, GFP_KERNEL);
 	memset(s_cmd->cmnd, 0, sizeof(unsigned char) * 32);
-	SCMD_GET_REQUEST(s_cmd) = (struct request *)kmalloc(sizeof(struct request), GFP_KERNEL);
+	SCMD_GET_REQUEST(s_cmd) = kmalloc(sizeof(struct request), GFP_KERNEL);
 	instance->host->can_queue = instance->cmd_context.max_scsi_cmd_count;
 	instance->cmd_attr.nvme_page_size = PAGE_SIZE;
 	s_cmd->sense_buffer = (unsigned char *)kmalloc(96, GFP_KERNEL);
 
 	memcpy(s_cmd->cmnd, scsi_cmnd_tmp, 10);
-	device = (struct scsi_device *)kmalloc(sizeof(struct scsi_device), GFP_KERNEL);
+	device = kmalloc(sizeof(struct scsi_device), GFP_KERNEL);
 	s_cmd->device = device;
-	s_cmd->device->host =  instance->host;
+	s_cmd->device->host = instance->host;
 	SCMD_GET_REQUEST(s_cmd)->tag = 88;
 	s_cmd->cmd_len = 10;
 
@@ -1143,7 +1248,7 @@ void scsi_cmd_create(struct scsi_cmnd *s_cmd, struct ps3_instance *instance)
 	instance->irq_context.high_iops_io_count.counter = 62;
 #endif
 }
-void scsi_cmd_free(struct scsi_cmnd *s_cmd)
+static void scsi_cmd_free(struct scsi_cmnd *s_cmd)
 {
 	kfree(s_cmd->cmnd);
 	kfree(SCMD_GET_REQUEST(s_cmd));
@@ -1151,47 +1256,147 @@ void scsi_cmd_free(struct scsi_cmnd *s_cmd)
 	kfree(s_cmd->device);
 }
 
-S32 force_host_reset(void * ptr)
+static int force_host_reset(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-
-	S32 ret_check = 0;
-
+	int ret_check = 0;
 	struct scsi_cmnd pending_scsi_cmd;
+
 	scsi_cmd_create(&pending_scsi_cmd, instance);
-	ret_check = instance->host->hostt->eh_host_reset_handler(&pending_scsi_cmd);
+	ret_check =
+		instance->host->hostt->eh_host_reset_handler(&pending_scsi_cmd);
 	LOG_WARN("host reset [%d]\n", ret_check);
 	scsi_cmd_free(&pending_scsi_cmd);
 	return PS3_SUCCESS;
 }
 #endif
-S32 force_return_false(void * ptr)
+static int force_return_false(void *ptr)
 {
-	Bool *found = (Bool *)ptr;
+	unsigned char *found = (unsigned char *)ptr;
+
 	*found = PS3_FALSE;
 	return PS3_SUCCESS;
 }
 
-S32 force_return_true(void * ptr)
+static int force_return_true(void *ptr)
 {
-	Bool *ret = (Bool *)ptr;
-	LOG_WARN("force_return_true in \n");
+	unsigned char *ret = (unsigned char *)ptr;
+
+	LOG_WARN("%s in\n", __func__);
 	*ret = PS3_TRUE;
-	LOG_WARN("force_return_true in \n");
+	LOG_WARN("%s in\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 force_scsi_priv_data_null(void * ptr)
+static int force_ioc_not_running(void *ptr)
 {
-	S32 ret_check = 0;
-	struct scsi_cmnd *s_cmd = (struct scsi_cmnd *)ptr;
-	if (s_cmd->device) {
-		 s_cmd->device->hostdata = NULL;
-	}
-	return ret_check;
+	unsigned int *ioc_state = (unsigned int *)ptr;
+
+	if (ioc_state)
+		*ioc_state = PS3_FW_STATE_RUNNING + 1;
+
+	return PS3_SUCCESS;
 }
-S32 force_scsi_task_cmd_error(void * ptr)
+static int force_ioc_running(void *ptr)
+{
+	unsigned int *ioc_state = (unsigned int *)ptr;
+
+	if (ioc_state)
+		*ioc_state = PS3_FW_STATE_RUNNING;
+
+	return PS3_SUCCESS;
+}
+
+static int force_pcie_err(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	instance->state_machine.is_pci_err_recovery = PS3_TRUE;
+	return PS3_SUCCESS;
+}
+static int force_ptr_null(void **ptr)
+{
+	if (*ptr)
+		*ptr = NULL;
+	return PS3_SUCCESS;
+}
+static int wait_task_mgr_busy(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	while (!instance->task_manager_host_busy)
+		ps3_msleep(10);
+	return PS3_SUCCESS;
+}
+static int wait_pd_clear(void *ptr)
+{
+	struct ps3_qos_pd_mgr *qos_pd_mgr = (struct ps3_qos_pd_mgr *)ptr;
+
+	while (!qos_pd_mgr->clearing)
+		ps3_msleep(100);
+	return PS3_SUCCESS;
+}
+
+static int reset_target_pause(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	while (instance->reserved[0] != 0xab)
+		ps3_msleep(10);
+	return PS3_SUCCESS;
+}
+
+static int set_send_cmd_task_mgr_busy_flag(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	instance->reserved[0] = 0xab;
+	return PS3_SUCCESS;
+}
+
+static int wait_qos_vd_send(void *ptr)
+{
+	struct ps3_qos_pd_mgr *qos_pd_mgr = (struct ps3_qos_pd_mgr *)ptr;
+
+	while ((qos_pd_mgr->vd_id == 0) ||
+	       (ps3_atomic_read(&qos_pd_mgr->pd_used_quota) >=
+		qos_pd_mgr->pd_quota)) {
+		msleep(20);
+	}
+
+	return PS3_SUCCESS;
+}
+
+static int force_pdlist_cmd_retry(void *ptr)
+{
+	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+	struct ps3_instance *instance = cmd->instance;
+
+	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_BUSY;
+	LOG_WARN("hno:%u force complete task mgr CFID:%d\n", PS3_HOST(instance),
+		 cmd->index);
+
+	return PS3_SUCCESS;
+}
+
+#ifdef PS3_UT
+void ps3_wait_probe_rand_finish(void)
+{
+	LOG_WARN("enter %s\n", __func__);
+	while (g_work_que_probe.state != 1)
+		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
+	if (g_work_que_probe._queue != NULL) {
+		if (!cancel_delayed_work_sync(&g_work_que_probe._work))
+			flush_workqueue(g_work_que_probe._queue);
+
+		destroy_workqueue(g_work_que_probe._queue);
+		g_work_que_probe._queue = NULL;
+	}
+	LOG_WARN("quit %s\n", __func__);
+}
+
+static int force_scsi_task_cmd_error(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
@@ -1199,194 +1404,114 @@ S32 force_scsi_task_cmd_error(void * ptr)
 	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_TM_FAILED;
 	cmd->cmd_state.state = PS3_CMD_STATE_COMPLETE;
 	complete(&cmd->sync_done);
-	LOG_WARN("hno:%u force complete task mgr CFID:%d\n",
-		PS3_HOST(instance), cmd->index);
-	return PS3_SUCCESS;
-}
-S32 force_ioc_not_running(void * ptr)
-{
-	U32 * ioc_state = (U32 *)ptr;
-	if(ioc_state) {
-		*ioc_state = PS3_FW_STATE_RUNNING + 1;
-	}
-
-	return PS3_SUCCESS;
-}
-S32 force_ioc_running(void * ptr)
-{
-	U32 * ioc_state = (U32 *)ptr;
-	if(ioc_state) {
-		*ioc_state = PS3_FW_STATE_RUNNING;
-	}
-
+	LOG_WARN("hno:%u force complete task mgr CFID:%d\n", PS3_HOST(instance),
+		 cmd->index);
 	return PS3_SUCCESS;
 }
 
-S32 force_task_cmd_alloc_null(void ** ptr)
+static int force_task_cmd_alloc_null(void **ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)*ptr;
 	struct ps3_instance *instance = NULL;
-	if(cmd) {
+
+	if (cmd) {
 		instance = (struct ps3_instance *)cmd->instance;
 		ps3_mgr_cmd_free(instance, cmd);
 		*ptr = NULL;
 	}
 	return PS3_SUCCESS;
 }
-S32 force_pcie_err(void * ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	instance->state_machine.is_pci_err_recovery = PS3_TRUE;
-    return PS3_SUCCESS;
-}
-S32 force_ptr_null(void ** ptr)
-{
-	if (*ptr) {
-		*ptr = NULL;
-	}
-	return PS3_SUCCESS;
-}
-S32 wait_task_mgr_busy(void *ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while (!instance->task_manager_host_busy) {
-		ps3_msleep(10);
-	}
-	return PS3_SUCCESS;
-}
-S32 wait_pd_clear(void * ptr)
-{
-	struct ps3_qos_pd_mgr *qos_pd_mgr = (struct ps3_qos_pd_mgr *)ptr;
-	while (!qos_pd_mgr->clearing) {
-		ps3_msleep(100);
-	}
-	return PS3_SUCCESS;
-}
 
-S32 reset_target_pause(void *ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while(instance->reserved[0] != 0xab) {
-		ps3_msleep(10);
-	}
-	return PS3_SUCCESS;
-}
-
-S32 set_send_cmd_task_mgr_busy_flag(void *ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	instance->reserved[0] = 0xab;
-	return PS3_SUCCESS;
-}
-
-S32 wait_qos_vd_send(void * ptr)
-{
-	struct ps3_qos_pd_mgr *qos_pd_mgr = (struct ps3_qos_pd_mgr *)ptr;
-	while((qos_pd_mgr->vd_id == 0) ||
-		(ps3_atomic_read(&qos_pd_mgr->pd_used_quota) >=
-			qos_pd_mgr->pd_quota)) {
-		msleep(1);
-	}
-
-	return PS3_SUCCESS;
-}
-S32 force_smp_cmd_error(void * ptr)
+static int force_smp_cmd_error(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
 
-	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_SMP_BACKEND_ERR;
+	cmd->resp_frame->normalRespFrame.respStatus =
+		PS3_DRV_MGR_SMP_BACKEND_ERR;
 	cmd->cmd_state.state = PS3_CMD_STATE_COMPLETE;
 	complete(&cmd->sync_done);
-	LOG_WARN("hno:%u force complete task mgr CFID:%d\n",
-		PS3_HOST(instance), cmd->index);
+	LOG_WARN("hno:%u force complete task mgr CFID:%d\n", PS3_HOST(instance),
+		 cmd->index);
 
 	return PS3_SUCCESS;
 }
 
-S32  force_pdlist_cmd_retry(void * ptr)
+static int force_get_linkerrors_cmd_error(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
 
-	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_BUSY;
-	LOG_WARN("hno:%u force complete task mgr CFID:%d\n",
-		PS3_HOST(instance), cmd->index);
-
-	return PS3_SUCCESS;
-}
-
-S32 force_get_linkerrors_cmd_error(void * ptr)
-{
-	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	struct ps3_instance *instance = cmd->instance;
-
-	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_LINK_GET_BACKEND_ERR;
+	cmd->resp_frame->normalRespFrame.respStatus =
+		PS3_DRV_MGR_LINK_GET_BACKEND_ERR;
 	cmd->cmd_state.state = PS3_CMD_STATE_COMPLETE;
 	complete(&cmd->sync_done);
-	LOG_WARN("hno:%u force complete task mgr CFID:%d\n",
-		PS3_HOST(instance), cmd->index);
+	LOG_WARN("hno:%u force complete task mgr CFID:%d\n", PS3_HOST(instance),
+		 cmd->index);
 
 	return PS3_SUCCESS;
 }
-S32 force_sas_phy_ctrl_cmd_error(void * ptr)
+
+static int force_sas_phy_ctrl_cmd_error(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
 	struct ps3_instance *instance = cmd->instance;
 
-	cmd->resp_frame->normalRespFrame.respStatus = PS3_DRV_MGR_PHY_CTL_BACKEND_ERR;
+	cmd->resp_frame->normalRespFrame.respStatus =
+		PS3_DRV_MGR_PHY_CTL_BACKEND_ERR;
 	cmd->cmd_state.state = PS3_CMD_STATE_COMPLETE;
 	complete(&cmd->sync_done);
-	LOG_WARN("hno:%u force complete task mgr CFID:%d\n",
-		PS3_HOST(instance), cmd->index);
+	LOG_WARN("hno:%u force complete task mgr CFID:%d\n", PS3_HOST(instance),
+		 cmd->index);
 
 	return PS3_SUCCESS;
 }
-
-S32 force_instance_state_to_unnormal(void *ptr)
+#endif
+static int force_instance_state_to_unnormal(void *ptr)
 {
-	S32 * state = (S32 *)ptr;
-	if(state) {
+	int *state = (int *)ptr;
+
+	if (state)
 		*state = PS3_INSTANCE_STATE_RECOVERY;
-    }
 
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
-S32 force_instance_state_to_dead(void *ptr)
+static int force_instance_state_to_dead(void *ptr)
 {
-	S32 * state = (S32 *)ptr;
-	if(state) {
+	int *state = (int *)ptr;
+
+	if (state)
 		*state = PS3_INSTANCE_STATE_DEAD;
-    }
 
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 
-S32 ps3_sas_encl_id_get_failed(void *ptr)
+static int ps3_sas_encl_id_get_failed(void *ptr)
 {
-	U8 *encl_id = (U8 *)ptr;
-	if(encl_id) {
-		*encl_id = PS3_SAS_INVALID_ID;
-    }
+	unsigned char *encl_id = (unsigned char *)ptr;
 
-    return PS3_SUCCESS;
+	if (encl_id)
+		*encl_id = PS3_SAS_INVALID_ID;
+
+	return PS3_SUCCESS;
 }
 
-S32 ps3_sas_rphy_parent_sas_addr_get_failed(void *ptr)
+static int ps3_sas_rphy_parent_sas_addr_get_failed(void *ptr)
 {
 	u64 *encl_id = (u64 *)ptr;
-	if(encl_id) {
-		*encl_id = PS3_SAS_INVALID_SAS_ADDR;
-    }
 
-    return PS3_SUCCESS;
+	if (encl_id)
+		*encl_id = PS3_SAS_INVALID_SAS_ADDR;
+
+	return PS3_SUCCESS;
 }
 
-S32 force_mgr_cmd_alloc_null(void ** ptr)
+static int force_mgr_cmd_alloc_null(void **ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)*ptr;
 	struct ps3_instance *instance = NULL;
-	if(cmd) {
+
+	if (cmd) {
 		instance = (struct ps3_instance *)cmd->instance;
 		ps3_mgr_cmd_free(instance, cmd);
 		*ptr = NULL;
@@ -1395,111 +1520,134 @@ S32 force_mgr_cmd_alloc_null(void ** ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_cmd_polling(void ** ptr)
+static int force_cmd_polling(void **ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	if(cmd) {
+
+	if (cmd)
 		cmd->is_force_polling = 1;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_pci_err_recovery(void ** ptr)
+static int force_pci_err_recovery(void **ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	if(instance) {
+
+	if (instance)
 		instance->state_machine.is_pci_err_recovery = PS3_TRUE;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 cli_wait_recovery(void *ptr)
+static int cli_wait_recovery(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	Bool flag = PS3_FALSE;
-	while (ps3_atomic_read(&instance->state_machine.state) != PS3_INSTANCE_STATE_READY) {
+	unsigned char flag = PS3_FALSE;
+
+	while (ps3_atomic_read(&instance->state_machine.state) !=
+	       PS3_INSTANCE_STATE_READY) {
 		if (!flag) {
 			instance->reserve[0] = 1;
 			flag = PS3_TRUE;
 		}
-		msleep(10);
+		msleep(20);
 	}
 	instance->reserve[1] = 1;
-	while (ps3_atomic_read(&instance->state_machine.state) != PS3_INSTANCE_STATE_OPERATIONAL) {
-		msleep(10);
+	while (ps3_atomic_read(&instance->state_machine.state) !=
+	       PS3_INSTANCE_STATE_OPERATIONAL) {
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-S32 recovery_wait_cli(void *ptr)
+static int recovery_wait_cli(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while (instance->reserve[1] != 1) {
-		msleep(10);
-	}
+
+	while (instance->reserve[1] != 1)
+		msleep(20);
 	instance->reserve[1] = 0;
 	return PS3_SUCCESS;
 }
 
-S32 force_blk_rq_bytes_invalid(void * ptr)
+static int force_blk_rq_bytes_invalid(void *ptr)
 {
 	struct request *req = (struct request *)ptr;
 
-	if(req) {
+	if (req)
 		req->__data_len = U32_MAX;
-	}
 	return PS3_SUCCESS;
 }
-S32 wait_cmd_done(void * ptr)
+static int wait_cmd_done(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserved[0] = 0xab;
-	while(instance->reserved[0] == 0xab) {
-		msleep(10);
-	}
+	while (instance->reserved[0] == 0xab)
+		msleep(20);
 	return PS3_SUCCESS;
 }
 
-S32 wait_cmd_send_block(void * ptr)
+static int wait_cmd_send_block(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while(instance->reserved[0] == 0) {
+
+	while (instance->reserved[0] == 0) {
 		instance->reserved[1] = 0xcd;
-		msleep(10);
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-S32 set_r1x_conflict_process_flag(void *ptr)
+static int qos_waitq_notify_block(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
+	while (instance->reserved[0] == 0) {
+		msleep(20);
+		instance->reserved[1] = 0xcd;
+	}
+
+	instance->reserved[1] = 0xef;
+	while (instance->reserved[1] == 0xef) {
+		msleep(20);
+	}
+
+	return PS3_SUCCESS;
+}
+
+static int set_r1x_conflict_process_flag(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserved[0] = 0xab;
 	return PS3_SUCCESS;
 }
 
-S32 force_task_mgr_busy(void * ptr)
+static int force_task_mgr_busy(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->task_manager_host_busy = PS3_TRUE;
 	return PS3_SUCCESS;
 }
 
-S32 block_in_cmd_send(void * ptr)
+static int block_in_cmd_send(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserved[0] = 0xab;
-	while(instance->reserved[0] == 0xab) {
-		msleep(10);
-	}
+	while (instance->reserved[0] == 0xab)
+		msleep(20);
 	return PS3_SUCCESS;
 }
 
-S32 create_pd_worker_fail(void * ptr)
+static int create_pd_worker_fail(void *ptr)
 {
 	struct ps3_qos_pd_context *qos_pd_ctx = NULL;
 	struct workqueue_struct **work_queues = NULL;
+
 	qos_pd_ctx = (struct ps3_qos_pd_context *)ptr;
 	work_queues = qos_pd_ctx->work_queues;
 
@@ -1512,20 +1660,23 @@ S32 create_pd_worker_fail(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_tag_waitq_fail(void *ptr)
+static int create_tag_waitq_fail(void *ptr)
 {
-	struct ps3_qos_tg_context *qos_tg_ctx = (struct ps3_qos_tg_context *)ptr;
+	struct ps3_qos_tg_context *qos_tg_ctx =
+		(struct ps3_qos_tg_context *)ptr;
+
 	if (qos_tg_ctx->vd_cmd_waitqs != NULL) {
 		ps3_vfree(qos_tg_ctx->instance, qos_tg_ctx->vd_cmd_waitqs);
 		qos_tg_ctx->vd_cmd_waitqs = NULL;
-
 	}
 	return PS3_SUCCESS;
 }
 
-S32 create_tag_workq_fail(void *ptr)
+static int create_tag_workq_fail(void *ptr)
 {
-	struct ps3_qos_tg_context *qos_tg_ctx = (struct ps3_qos_tg_context *)ptr;
+	struct ps3_qos_tg_context *qos_tg_ctx =
+		(struct ps3_qos_tg_context *)ptr;
+
 	if (qos_tg_ctx->work_queue != NULL) {
 		destroy_workqueue(qos_tg_ctx->work_queue);
 		qos_tg_ctx->work_queue = NULL;
@@ -1534,10 +1685,11 @@ S32 create_tag_workq_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_vd_mgrs_fail(void *ptr)
+static int create_vd_mgrs_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_qos_vd_context *qos_vd_ctx = &instance->qos_context.vd_ctx;
+
 	if (qos_vd_ctx->qos_vd_mgrs != NULL) {
 		ps3_vfree(instance, qos_vd_ctx->qos_vd_mgrs);
 		qos_vd_ctx->qos_vd_mgrs = NULL;
@@ -1545,22 +1697,23 @@ S32 create_vd_mgrs_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_vd_workq_fail(void *ptr)
+static int create_vd_workq_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_qos_vd_context *qos_vd_ctx = &instance->qos_context.vd_ctx;
+
 	if (qos_vd_ctx->work_queues != NULL) {
 		ps3_vfree(instance, qos_vd_ctx->work_queues);
 		qos_vd_ctx->work_queues = NULL;
 	}
 	return PS3_SUCCESS;
-
 }
 
-S32 create_vd_worker_fail(void *ptr)
+static int create_vd_worker_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_qos_vd_context *qos_vd_ctx = &instance->qos_context.vd_ctx;
+
 	if (qos_vd_ctx->work_queues[0] != NULL) {
 		destroy_workqueue(qos_vd_ctx->work_queues[0]);
 		qos_vd_ctx->work_queues[0] = NULL;
@@ -1568,10 +1721,11 @@ S32 create_vd_worker_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_pd_mgrs_fail(void *ptr)
+static int create_pd_mgrs_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_qos_pd_context *qos_pd_ctx = &instance->qos_context.pd_ctx;
+
 	if (qos_pd_ctx->qos_pd_mgrs != NULL) {
 		ps3_vfree(instance, qos_pd_ctx->qos_pd_mgrs);
 		qos_pd_ctx->qos_pd_mgrs = NULL;
@@ -1579,11 +1733,13 @@ S32 create_pd_mgrs_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_pd_waitq_fail(void *ptr)
+static int create_pd_waitq_fail(void *ptr)
 {
-	struct ps3_qos_pd_context *qos_pd_ctx = (struct ps3_qos_pd_context *)ptr;
+	struct ps3_qos_pd_context *qos_pd_ctx =
+		(struct ps3_qos_pd_context *)ptr;
 	struct ps3_qos_pd_mgr *qos_pd_mgr = &qos_pd_ctx->qos_pd_mgrs[2];
 	struct ps3_instance *instance = qos_pd_mgr->instance;
+
 	if (qos_pd_mgr->waitqs != NULL) {
 		ps3_vfree(instance, qos_pd_mgr->waitqs);
 		qos_pd_mgr->waitqs = NULL;
@@ -1591,10 +1747,11 @@ S32 create_pd_waitq_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_pd_workq_fail(void *ptr)
+static int create_pd_workq_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 	struct ps3_qos_pd_context *qos_pd_ctx = &instance->qos_context.pd_ctx;
+
 	if (qos_pd_ctx->work_queues != NULL) {
 		ps3_vfree(instance, qos_pd_ctx->work_queues);
 		qos_pd_ctx->work_queues = NULL;
@@ -1602,28 +1759,64 @@ S32 create_pd_workq_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_cmd_vd_seq_change(void *ptr)
+static int create_pd_reply_info_fail(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_qos_pd_context *qos_pd_ctx = &instance->qos_context.pd_ctx;
+
+	if (qos_pd_ctx->reply_info != NULL) {
+		ps3_vfree(instance, qos_pd_ctx->reply_info);
+		qos_pd_ctx->reply_info = NULL;
+	}
+	return PS3_SUCCESS;
+}
+
+static int create_pd_state_fail(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_qos_pd_context *qos_pd_ctx = &instance->qos_context.pd_ctx;
+	if (qos_pd_ctx->reply_info[0].processed_pd_state != NULL) {
+		ps3_vfree(instance, qos_pd_ctx->reply_info[0].processed_pd_state);
+		qos_pd_ctx->reply_info[0].processed_pd_state = NULL;
+	}
+	return PS3_SUCCESS;
+}
+
+static int create_pd_id_fail(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_qos_pd_context *qos_pd_ctx = &instance->qos_context.pd_ctx;
+	if (qos_pd_ctx->reply_info[0].processed_pd_id != NULL) {
+		ps3_vfree(instance, qos_pd_ctx->reply_info[0].processed_pd_id);
+		qos_pd_ctx->reply_info[0].processed_pd_id = NULL;
+	}
+	return PS3_SUCCESS;
+}
+
+static int force_cmd_vd_seq_change(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	cmd->req_frame->hwReq.reqHead.virtDiskSeq = 0xFF;
 	return PS3_SUCCESS;
 }
 
-S32 force_u64_zero(void *ptr)
+static int force_u64_zero(void *ptr)
 {
-	*(U64 *)ptr = 0;
+	*(unsigned long long *)ptr = 0;
 	return PS3_SUCCESS;
 }
 
-S32 force_fifo_depth_zero(void *ptr)
+static int force_fifo_depth_zero(void *ptr)
 {
-	*(U64 *)ptr = 0;
+	*(unsigned long long *)ptr = 0;
 	return PS3_SUCCESS;
 }
 
-S32 create_mgr_waitq_fail(void *ptr)
+static int create_mgr_waitq_fail(void *ptr)
 {
 	struct ps3_qos_softq_mgr *softq_mgr = (struct ps3_qos_softq_mgr *)ptr;
+
 	if (softq_mgr->waitqs) {
 		ps3_vfree(softq_mgr->instance, softq_mgr->waitqs);
 		softq_mgr->waitqs = NULL;
@@ -1632,9 +1825,10 @@ S32 create_mgr_waitq_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_mgr_worker_fail(void *ptr)
+static int create_mgr_worker_fail(void *ptr)
 {
 	struct ps3_qos_softq_mgr *softq_mgr = (struct ps3_qos_softq_mgr *)ptr;
+
 	if (softq_mgr->work_queue) {
 		destroy_workqueue(softq_mgr->work_queue);
 		softq_mgr->work_queue = NULL;
@@ -1643,9 +1837,10 @@ S32 create_mgr_worker_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_cmd_waitq_fail(void *ptr)
+static int create_cmd_waitq_fail(void *ptr)
 {
 	struct ps3_qos_softq_mgr *softq_mgr = (struct ps3_qos_softq_mgr *)ptr;
+
 	if (softq_mgr->waitqs) {
 		ps3_vfree(softq_mgr->instance, softq_mgr->waitqs);
 		softq_mgr->waitqs = NULL;
@@ -1653,9 +1848,10 @@ S32 create_cmd_waitq_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 create_cmd_worker_fail(void *ptr)
+static int create_cmd_worker_fail(void *ptr)
 {
 	struct ps3_qos_softq_mgr *softq_mgr = (struct ps3_qos_softq_mgr *)ptr;
+
 	if (softq_mgr->id == 1 && softq_mgr->work_queue) {
 		destroy_workqueue(softq_mgr->work_queue);
 		softq_mgr->work_queue = NULL;
@@ -1663,20 +1859,21 @@ S32 create_cmd_worker_fail(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32  wait_for_dead_or_pre_operational(void *ptr)
+static int wait_for_dead_or_pre_operational(void *ptr)
 {
-	U32 wait_cnt = 180 * 3;
-	S32 cur_state = PS3_INSTANCE_STATE_INIT;
-	U32 idx = 0;
+	unsigned int wait_cnt = 180 * 3;
+	int cur_state = PS3_INSTANCE_STATE_INIT;
+	unsigned int idx = 0;
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	LOG_INFO("hno:%u  wait dead or pre_operational begin\n", PS3_HOST(instance));
+	LOG_INFO("hno:%u  wait dead or pre_operational begin\n",
+		 PS3_HOST(instance));
 	for (idx = 0; idx < wait_cnt; idx++) {
 		cur_state = ps3_atomic_read(&instance->state_machine.state);
 		if ((cur_state == PS3_INSTANCE_STATE_PRE_OPERATIONAL) ||
-			(cur_state == PS3_INSTANCE_STATE_OPERATIONAL) ||
-			(cur_state == PS3_INSTANCE_STATE_DEAD) ||
-			(cur_state == PS3_INSTANCE_STATE_QUIT)) {
+		    (cur_state == PS3_INSTANCE_STATE_OPERATIONAL) ||
+		    (cur_state == PS3_INSTANCE_STATE_DEAD) ||
+		    (cur_state == PS3_INSTANCE_STATE_QUIT)) {
 			break;
 		}
 
@@ -1685,44 +1882,29 @@ S32  wait_for_dead_or_pre_operational(void *ptr)
 
 	if (idx >= wait_cnt) {
 		LOG_WARN("hno:%u  wait dead or pre_operational timeout!\n",
-			PS3_HOST(instance));
+			 PS3_HOST(instance));
 	}
 
 	if ((cur_state != PS3_INSTANCE_STATE_PRE_OPERATIONAL) &&
-		(cur_state != PS3_INSTANCE_STATE_OPERATIONAL) &&
-		(cur_state != PS3_INSTANCE_STATE_DEAD)) {
+	    (cur_state != PS3_INSTANCE_STATE_OPERATIONAL) &&
+	    (cur_state != PS3_INSTANCE_STATE_DEAD)) {
 		LOG_WARN("hno:%u  wait dead or pre_operational failed!\n",
-			PS3_HOST(instance));
+			 PS3_HOST(instance));
 		return -PS3_FAILED;
-
 	}
 
-	LOG_INFO("hno:%u  wait dead or pre_operational success!\n", PS3_HOST(instance));
+	LOG_INFO("hno:%u  wait dead or pre_operational success!\n",
+		 PS3_HOST(instance));
 	return PS3_SUCCESS;
 }
-S32  force_init_cmd_failed(void *ptr)
+static int force_init_cmd_failed(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	unsigned long long state;
 
 	if (instance->reg_set != NULL) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_UNDEFINED;
-	}
-	state = instance->ioc_adpter->ioc_state_get(instance);
-
-	LOG_WARN("ioc state [%llu]\n", state);
-    return PS3_SUCCESS;
-}
-
-S32  force_recovery_init_cmd_failed(void *ptr)
-{
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
-
-	if (instance->reg_set != NULL && instance->reserve[0]) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_UNDEFINED;
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_UNDEFINED;
 	}
 	state = instance->ioc_adpter->ioc_state_get(instance);
 
@@ -1730,13 +1912,29 @@ S32  force_recovery_init_cmd_failed(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32  force_recovery_operation_cmd_failed(void *ptr)
+static int force_recovery_init_cmd_failed(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	unsigned long long state;
+
+	if (instance->reg_set != NULL && instance->reserve[0]) {
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_UNDEFINED;
+	}
+	state = instance->ioc_adpter->ioc_state_get(instance);
+
+	LOG_WARN("ioc state [%llu]\n", state);
+	return PS3_SUCCESS;
+}
+
+static int force_recovery_operation_cmd_failed(void *ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	unsigned long long state;
 
 	if (instance->reserve[0]) {
-		ps3_atomic_set(&instance->state_machine.state, PS3_INSTANCE_STATE_RECOVERY);
+		ps3_atomic_set(&instance->state_machine.state,
+			       PS3_INSTANCE_STATE_RECOVERY);
 	}
 	state = ps3_atomic_read(&instance->state_machine.state);
 
@@ -1744,31 +1942,33 @@ S32  force_recovery_operation_cmd_failed(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32  force_init_cmd_running_failed(void *ptr)
+static int force_init_cmd_running_failed(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U64 state;
+	unsigned long long state;
+
 	if (instance->reg_set != NULL) {
-		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
-			PS3_FW_STATE_FAULT;
+		instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg
+			.ps3SocFwState = PS3_FW_STATE_FAULT;
 	}
 	state = instance->ioc_adpter->ioc_state_get(instance);
 
 	LOG_WARN("ioc state [%llu]\n", state);
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 
-S32 err_abort_block(void * ptr)
+static int err_abort_block(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while(instance->reserved2[0] == 0) {
+
+	while (instance->reserved2[0] == 0) {
 		instance->reserved2[1] = 0xcd;
-		msleep(10);
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-static void ps3_test_recovery_call(struct work_struct* work)
+static void ps3_test_recovery_call(struct work_struct *work)
 {
 	struct ps3_instance *instance = NULL;
 
@@ -1777,209 +1977,197 @@ static void ps3_test_recovery_call(struct work_struct* work)
 
 	LOG_WARN("ps3_test_reco_call enter\n");
 
-	ps3_hard_recovery_request(instance);
+	ps3_hard_recovery_request(instance, PS3_FALSE);
 	g_work_que_recovery.state = 1;
 	LOG_WARN("ps3_test_reco_call quit\n");
 }
-void ps3_start_recovery_rand_thread(struct ps3_instance *instance)
+static void ps3_start_recovery_rand_thread(struct ps3_instance *instance)
 {
-	char _queue_name[32] = {"test_reco"};
+	char _queue_name[32] = { "test_reco" };
 
 	INIT_DELAYED_WORK(&g_work_que_recovery._work, ps3_test_recovery_call);
 
 	g_work_que_recovery._queue = create_singlethread_workqueue(_queue_name);
-	if (g_work_que_recovery._queue == NULL) {
+	if (g_work_que_recovery._queue == NULL)
 		return;
-	}
 
 	g_work_que_recovery.instance = instance;
 	g_work_que_recovery.state = 0;
 
-	queue_delayed_work(g_work_que_recovery._queue, &g_work_que_recovery._work,
-		msecs_to_jiffies(prandom_u32() % 800));
+	queue_delayed_work(g_work_que_recovery._queue,
+			   &g_work_que_recovery._work,
+			   msecs_to_jiffies(ps3_prandom_u32() % 800));
 }
 
-static void ps3_test_probe_call(struct work_struct* work)
+static void ps3_test_probe_call(struct work_struct *work)
 {
 	struct ps3_instance *instance = NULL;
-	U32 idx = 0;
+	unsigned int idx = 0;
+
 	(void)work;
 	instance = g_work_que_probe.instance;
 
-	LOG_WARN("ps3_test_probe_call enter\n");
+	LOG_WARN("%s enter\n", __func__);
 
-	if (instance->peer_instance == NULL) {
-		return ;
-	}
+	if (instance->peer_instance == NULL)
+		return;
 	instance->peer_instance->is_probe_finish = false;
 	g_work_que_probe.state = 1;
-	while (idx++ < 10000) {
-		msleep(10);
-	}
-	
+	while (idx++ < 10000)
+		msleep(20);
+
 	instance->peer_instance->is_probe_finish = true;
-	LOG_WARN("ps3_test_probe_call quit\n");
+	LOG_WARN("%s quit\n", __func__);
 }
-void ps3_start_probe_rand_thread(struct ps3_instance *instance)
+static void ps3_start_probe_rand_thread(struct ps3_instance *instance)
 {
-	char _queue_name[32] = {"test_probe"};
+	char _queue_name[32] = { "test_probe" };
 
 	INIT_DELAYED_WORK(&g_work_que_probe._work, ps3_test_probe_call);
 
 	g_work_que_probe._queue = create_singlethread_workqueue(_queue_name);
-	if (g_work_que_probe._queue == NULL) {
+	if (g_work_que_probe._queue == NULL)
 		return;
-	}
 
 	g_work_que_probe.instance = instance;
 	g_work_que_probe.state = 0;
 
 	queue_delayed_work(g_work_que_probe._queue, &g_work_que_probe._work,
-		msecs_to_jiffies(prandom_u32() % 800));
+			   msecs_to_jiffies(ps3_prandom_u32() % 800));
 }
-S32 wait_recovery_req_func1_probe(void * ptr)
+static int wait_recovery_req_func1_probe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	ps3_start_probe_rand_thread(instance);
-	while (g_work_que_probe.state != 1) {
+	while (g_work_que_probe.state != 1)
 		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
-	}
-	LOG_INFO("wait_recovery_func1_probe success \n");
+	LOG_INFO("%s success\n", __func__);
 
 	return PS3_SUCCESS;
 }
-void ps3_wait_probe_rand_finish(void)
-{
-	LOG_WARN("enter ps3_wait_probe_rand_finish\n");
-	while (g_work_que_probe.state != 1) {
-		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
-	}
-	if (g_work_que_probe._queue != NULL) {
-		if (!cancel_delayed_work_sync(&g_work_que_probe._work)) {
-			flush_workqueue(g_work_que_probe._queue);
-		}
 
-		destroy_workqueue(g_work_que_probe._queue);
-		g_work_que_probe._queue = NULL;
-	}
-	LOG_WARN("quit ps3_wait_probe_rand_finish\n");
-}
-
-S32  force_hard_reset_request(void *ptr)
+static int force_hard_reset_request(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	if (instance->peer_instance != NULL) {
 		ps3_start_recovery_rand_thread(instance->peer_instance);
-		while (ps3_atomic_read(&instance->recovery_context->hardreset_ref) == 0) {
-			msleep(5);
+		while (ps3_atomic_read(
+			       &instance->recovery_context->hardreset_ref) ==
+		       0) {
+			msleep(20);
 		}
 	} else {
-		ps3_hard_recovery_request(instance);
+		ps3_hard_recovery_request(instance, PS3_FALSE);
 	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_hard_reset_request_1(void *ptr)
+static int force_hard_reset_request_1(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("enter force_hard_reset_request_1\n");
-	if (instance->reserve[0] == 0) {
-		ps3_hard_recovery_request(instance);
-	} else {
-		ps3_hard_recovery_request(instance->peer_instance);
-	}
-	cancel_work_sync(&instance->recovery_context->recovery_work);
-	LOG_WARN("enter force_hard_reset_request_1 end\n");
+
+	LOG_WARN("enter %s\n", __func__);
+	if (instance->reserve[0] == 0)
+		ps3_hard_recovery_request(instance, PS3_FALSE);
+	else
+		ps3_hard_recovery_request(instance->peer_instance, PS3_FALSE);
+	ps3_cancel_work_sync(&instance->recovery_context->recovery_work);
+	LOG_WARN("enter %s end\n", __func__);
 
 	return PS3_SUCCESS;
 }
 
-S32 force_instance_null(void *ptr)
+static int force_instance_null(void *ptr)
 {
 	struct ps3_instance **instance = (struct ps3_instance **)ptr;
-	LOG_WARN("enter force_instance_null\n");
+
+	LOG_WARN("enter %s\n", __func__);
 	*instance = NULL;
-	LOG_WARN("force_instance_null end\n");
+	LOG_WARN("%s end\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 force_half_reset(void *ptr)
+static int force_half_reset(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("enter force_half_reset\n");
+
+	LOG_WARN("enter %s\n", __func__);
 	instance->is_half_hard_reset = PS3_DRV_TRUE;
-	LOG_WARN("force_half_reset end\n");
+	LOG_WARN("%s end\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 force_half_reset_false(void *ptr)
+static int force_half_reset_false(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("enter force_half_reset_false\n");
+
+	LOG_WARN("enter %s\n", __func__);
 	instance->is_half_hard_reset = PS3_DRV_FALSE;
-	LOG_WARN("force_half_reset_false end\n");
+	LOG_WARN("%s end\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 force_web_subscribe_failed(void *ptr)
+static int force_web_subscribe_failed(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	LOG_WARN("enter force_half_reset_false\n");
+	LOG_WARN("enter %s\n", __func__);
 	ps3_atomic_set(&instance->webSubscribe_context.is_subscribe, 1);
 	ps3_atomic_set(&instance->cmd_statistics.cmd_delivering, 1);
-	LOG_WARN("force_half_reset_false end\n");
+	LOG_WARN("%s end\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 force_cmd_delivering_zero(void *ptr)
+static int force_cmd_delivering_zero(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
-	LOG_WARN("enter force_cmd_delivering_zero\n");
+	LOG_WARN("enter %s\n", __func__);
 	ps3_atomic_set(&instance->cmd_statistics.cmd_delivering, 0);
-	LOG_WARN("force_cmd_delivering_zero end\n");
+	LOG_WARN("%s end\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32  force_async_hard_reset_request(void *ptr)
+static int force_async_hard_reset_request(void *ptr)
 {
-    struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	ps3_start_recovery_rand_thread(instance);
 
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 
-S32  change_fw_state_to_halt_in_recover_prepare(void *ptr)
+static int change_fw_state_to_halt_in_recover_prepare(void *ptr)
 {
-	U32 *p_ioc_state = (U32 *)ptr;
+	unsigned int *p_ioc_state = (unsigned int *)ptr;
+
 	*p_ioc_state = PS3_FW_STATE_HALT;
 
 	return PS3_SUCCESS;
 }
 
-S32  wait_scsi_cmd_done_fail(void *ptr)
+static int wait_scsi_cmd_done_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserved[0] = 0xab;
-	while (*instance->scsi_cmd_deliver != 0) {
+	while (*instance->scsi_cmd_deliver != 0)
 		ps3_msleep(10);
-	}
 	return PS3_SUCCESS;
 }
 void ps3_wait_recovery_rand_finish(void)
 {
 	LOG_WARN("enter ps3_wait_reco_rand_finish\n");
-	while (g_work_que_recovery.state != 1) {
+	while (g_work_que_recovery.state != 1)
 		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
-	}
 	if (g_work_que_recovery._queue != NULL) {
-		if (!cancel_delayed_work_sync(&g_work_que_recovery._work)) {
+		if (!cancel_delayed_work_sync(&g_work_que_recovery._work))
 			flush_workqueue(g_work_que_recovery._queue);
-		}
-		while (g_work_que_recovery.instance->recovery_context->recovery_state != \
-			PS3_HARD_RECOVERY_FINISH) {
+		while (g_work_que_recovery.instance->recovery_context
+			       ->recovery_state != PS3_HARD_RECOVERY_FINISH) {
 			ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
 		}
 
@@ -1989,24 +2177,27 @@ void ps3_wait_recovery_rand_finish(void)
 	LOG_WARN("quit ps3_wait_reco_rand_finish\n");
 }
 
-S32 force_hard_recovery_request_nosupport_fail(void *ptr)
+static int force_hard_recovery_request_nosupport_fail(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	instance = instance;
+
+	(void)instance;
 	ps3_hard_reset_enable_modify(0);
-    return PS3_SUCCESS;
+	return PS3_SUCCESS;
 }
 
-S32 force_seq_cmd(void *ptr)
+static int force_seq_cmd(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	cmd->io_attr.seq_flag = SCSI_RW_SEQ_CMD;
 	return PS3_SUCCESS;
 }
 
-S32 wait_cmd_free(void *ptr)
+static int wait_cmd_free(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	while (cmd->r1x_peer_cmd != NULL) {
 		cmd->instance->reserved2[0] = 0xcd;
 		ps3_msleep(20);
@@ -2014,19 +2205,20 @@ S32 wait_cmd_free(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 wait_abort_flag(void *ptr)
+static int wait_abort_flag(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	while (cmd->is_aborting != 1) {
+
+	while (cmd->is_aborting != 1)
 		ps3_msleep(20);
-	}
 	return PS3_SUCCESS;
 }
 
-S32 wait_cmd_alloc1(void *ptr)
+static int wait_cmd_alloc1(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	Bool is_first = PS3_TRUE;
+	unsigned char is_first = PS3_TRUE;
+
 	while (cmd->trace_id != 0xff) {
 		if (is_first) {
 #ifdef PS3_UT
@@ -2040,113 +2232,131 @@ S32 wait_cmd_alloc1(void *ptr)
 	return PS3_SUCCESS;
 }
 
-S32 wait_cmd_alloc2(void *ptr)
+static int wait_cmd_alloc2(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	while (cmd->scmd == NULL) {
+
+	while (cmd->scmd == NULL)
 		ps3_msleep(20);
-	}
 #ifdef PS3_UT
 	cmd->scmd->is_in_err += 1;
 #endif
 	return PS3_SUCCESS;
 }
 
-S32 set_abort_count(void *ptr)
+static int set_abort_count(void *ptr)
 {
 #ifdef PS3_UT
 	struct scsi_cmnd *s_cmnd = (struct scsi_cmnd *)ptr;
+
 	s_cmnd->abort_count++;
 #endif
 	return PS3_SUCCESS;
 }
-S32 wait_cmd_alloc(void *ptr)
+static int wait_cmd_alloc(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	while (cmd->trace_id != 0xff) {
+
+	while (cmd->trace_id != 0xff)
 		ps3_msleep(20);
-	}
 	cmd->trace_id = 0;
 	return PS3_SUCCESS;
 }
 
-S32 set_cmd_tid_flag(void *ptr)
+static int set_cmd_tid_flag(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	cmd->trace_id = 0xff;
 	return PS3_SUCCESS;
 }
 
-S32 set_cmd_io_rw_flag_unkown(void * ptr)
+static int set_cmd_io_rw_flag_unknown(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
-	cmd->io_attr.rw_flag = PS3_SCSI_CMD_TYPE_UNKOWN;
+
+	cmd->io_attr.rw_flag = PS3_SCSI_CMD_TYPE_UNKNOWN;
 	return PS3_SUCCESS;
 }
 
-S32 set_soft_zone_type_unkown(void * ptr)
+static int set_soft_zone_type_unknown(void *ptr)
 {
-	U8 *type = (U8 *)ptr;
+	unsigned char *type = (unsigned char *)ptr;
+
 	*type = PS3_DEV_TYPE_UNKNOWN;
 	return PS3_SUCCESS;
 }
 
-S32 force_rand_cmd(void *ptr)
+static int force_rand_cmd(void *ptr)
 {
 	struct ps3_cmd *cmd = (struct ps3_cmd *)ptr;
+
 	cmd->io_attr.seq_flag = SCSI_RW_RANDOM_CMD;
 	return PS3_SUCCESS;
 }
 
-S32 force_ret_recovery(void * ptr)
+static int force_ret_recovery(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
-	if(ret) {
+	int *ret = (int *)ptr;
+
+	if (ret)
 		*ret = -PS3_RECOVERED;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_return_zero(void * ptr)
+static int force_return_zero(void *ptr)
 {
-	*(S32 *)ptr = 0;
+	*(int *)ptr = 0;
 	return PS3_SUCCESS;
 }
 
-S32 force_return_invalid(void * ptr)
+static int force_return_invalid(void *ptr)
 {
-	*(S32 *)ptr = 0x80;
+	*(int *)ptr = 0x80;
 	return PS3_SUCCESS;
 }
 
-S32 force_ret_failed(void * ptr)
+static int force_ret_failed(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
-	if(ret) {
+	int *ret = (int *)ptr;
+
+	if (ret)
 		*ret = -PS3_FAILED;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_cmd_not_mgr_cmd(void * ptr)
+static int force_cmd_not_mgr_cmd(void *ptr)
 {
-	U16 *index = (U16 *)ptr;
+	unsigned short *index = (unsigned short *)ptr;
+
 	*index = 0;
 	return PS3_SUCCESS;
 }
 
-S32 force_phy_count_zero(void * ptr)
+static int force_phy_count_zero(void *ptr)
 {
-	U8 *phy_count = (U8 *)ptr;
+	unsigned char *phy_count = (unsigned char *)ptr;
+
 	*phy_count = 0;
 	return PS3_SUCCESS;
 }
 
-S32 force_doorbell_failed(void * ptr)
+static int force_doorbell_failed_start(void * ptr)
 {
-	U32 *fw_cur_state = (U32 *)ptr;
+	unsigned int *fw_cur_state = (unsigned int *)ptr;
+
+	LOG_INFO("force doorbell failed start\n");
+	*fw_cur_state = PS3_FW_STATE_START;
+	LOG_INFO("force doorbell failed end\n");
+
+	return PS3_SUCCESS;
+}
+
+static int force_doorbell_failed(void * ptr)
+{
+	unsigned int *fw_cur_state = (unsigned int *)ptr;
 
 	LOG_INFO("force doorbell failed start\n");
 	*fw_cur_state = PS3_FW_STATE_READY;
@@ -2155,117 +2365,118 @@ S32 force_doorbell_failed(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_vd_count_err(void * ptr)
+static int force_vd_count_err(void *ptr)
 {
-	U16 *count = (U16 *)ptr;
-	if(count) {
+	unsigned short *count = (unsigned short *)ptr;
+
+	if (count)
 		*count = 2;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_chan_err(void * ptr)
+static int force_chan_err(void *ptr)
 {
-	U8 *chan = (U8 *)ptr;
-	if(chan) {
+	unsigned char *chan = (unsigned char *)ptr;
+
+	if (chan)
 		*chan = 255;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_dev_err(void * ptr)
+static int force_dev_err(void *ptr)
 {
 	struct PS3Dev *dev = (struct PS3Dev *)ptr;
-	if(dev) {
+
+	if (dev)
 		dev->softChan = 15;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_target_err(void * ptr)
+static int force_target_err(void *ptr)
 {
-	U16 *target = (U16 *)ptr;
-	if(target) {
+	unsigned short *target = (unsigned short *)ptr;
+
+	if (target)
 		*target = 65535;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_diskpos_err(void * ptr)
+static int force_diskpos_err(void *ptr)
 {
-	U32 *disk_id = (U32 *)ptr;
-	if(disk_id) {
+	unsigned int *disk_id = (unsigned int *)ptr;
+
+	if (disk_id)
 		*disk_id = 0;
-	}
 
 	return PS3_SUCCESS;
 }
-S32 force_s32_zero(void * ptr)
+static int force_s32_zero(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
-	if(ret) {
+	int *ret = (int *)ptr;
+
+	if (ret)
 		*ret = 0;
-	}
 
 	return PS3_SUCCESS;
 }
-S32 force_s32_letter_zero(void * ptr)
+static int force_s32_letter_zero(void *ptr)
 {
-	S32 *ret = (S32 *)ptr;
-	if(ret) {
+	int *ret = (int *)ptr;
+
+	if (ret)
 		*ret = 0;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_align_err(void * ptr)
+static int force_align_err(void *ptr)
 {
-	U8 *align = (U8 *)ptr;
-	if(align) {
+	unsigned char *align = (unsigned char *)ptr;
+
+	if (align)
 		*align = 16;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_lun_err(void * ptr)
+static int force_lun_err(void *ptr)
 {
-	U64 *lun = (U64 *)ptr;
-	if(lun) {
+	unsigned long long *lun = (unsigned long long *)ptr;
+
+	if (lun)
 		*lun = 1;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_dev_type_err(void * ptr)
+static int force_dev_type_err(void *ptr)
 {
-	U8 *type = (U8 *)ptr;
-	if(type) {
+	unsigned char *type = (unsigned char *)ptr;
+
+	if (type)
 		*type = 0;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_pd_state_err(void * ptr)
+static int force_pd_state_err(void *ptr)
 {
-	U8 *align = (U8 *)ptr;
-	if(align) {
+	unsigned char *align = (unsigned char *)ptr;
+
+	if (align)
 		*align = DEVICE_STATE_OUTING;
-	}
 
 	return PS3_SUCCESS;
 }
 
-S32 force_thread_null(void * ptr)
+static int force_thread_null(void *ptr)
 {
 	struct ps3_r1x_lock_mgr *mgr = (struct ps3_r1x_lock_mgr *)ptr;
+
 	if (mgr->conflict_send_th != NULL) {
 		mgr->thread_stop = PS3_TRUE;
 		complete(&mgr->thread_sync);
@@ -2275,229 +2486,315 @@ S32 force_thread_null(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 wait_pcie_err(void * ptr)
+static int wait_pcie_err(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
 	LOG_INFO("wait pcie err start\n");
 	instance->reserve[0] = 1;
-	while(!ps3_pci_err_recovery_get(instance)){
+	while (!ps3_pci_err_recovery_get(instance))
 		msleep(50);
-	}
 	LOG_INFO("wait pcie err end\n");
 
 	return PS3_SUCCESS;
 }
 
-S32 set_iops_channel(void * ptr)
+static int set_iops_channel(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	if (ps3_get_pci_function(instance->pdev) == PS3_FUNC_ID_1) {
+
+	if (ps3_get_pci_function(instance->pdev) == PS3_FUNC_ID_1)
 		instance->irq_context.high_iops_msix_vectors = 16;
-	}
 	return PS3_SUCCESS;
 }
-S32 force_pcie_frozen(void * ptr)
+static int force_pcie_frozen(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reg_set = NULL;
 	return PS3_SUCCESS;
 }
 
-S32 for_mod_so_addr(void * ptr)
+static int for_mod_so_addr(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->so_start_addr = PCIE_DMA_HOST_ADDR_BIT_POS_SET(0x5000);
 	instance->so_end_addr = PCIE_DMA_HOST_ADDR_BIT_POS_SET(0x10000);
 	return PS3_SUCCESS;
 }
-S32 force_pci_ioremap_fail(void ** ptr)
+static int force_pci_ioremap_fail(void **ptr)
 {
 	iounmap(*ptr);
 	*ptr = NULL;
 
 	return PS3_SUCCESS;
 }
-S32 wait_recovery_req_coming(void * ptr)
+
+static int check_reserved02(void * ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 count = 0;
-	LOG_INFO("wait_recovery_req in \n");
-	while (1){	
-		if (ps3_atomic_read(&instance->recovery_context->hardreset_ref) != 0) {
+	instance->reserve[2] = 1;
+	LOG_WARN("check reserved02 done\n");
+	return PS3_SUCCESS;
+}
+
+static int check_reserved03(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	instance->reserve[3] = 1;
+	LOG_WARN("check reserved03 done\n");
+	return PS3_SUCCESS;
+}
+
+static int check_reserved10(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	instance->reserved[0] = 1;
+	LOG_WARN("check reserved10 done\n");
+	return PS3_SUCCESS;
+}
+
+static int check_suspend_or_remove(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	while(instance->state_machine.is_load && !instance->is_suspend) {
+		ps3_msleep(1000);
+	}
+	LOG_WARN("instance remove/shutdown or suspend\n");
+	return PS3_SUCCESS;
+}
+
+static int check_event_null(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	while(instance->event_context.event_cmd != NULL) {
+		ps3_msleep(1000);
+	}
+	LOG_WARN("event_cmd null\n");
+	return PS3_SUCCESS;
+}
+
+static int wait_reserved03_end(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	while(!instance->reserve[3]) {
+		ps3_msleep(100);
+	}
+	LOG_WARN("reserve[3] set 1\n");
+	return PS3_SUCCESS;
+}
+
+static int check_reserved01_to_unload(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	instance->reserve[1] = 1;
+	while(instance->state_machine.is_load && !instance->is_suspend) {
+		ps3_msleep(100);
+		LOG_WARN("wait unload\n");
+	}
+	LOG_WARN("check unload done\n");
+	return PS3_SUCCESS;
+}
+
+static int check_half_recovery(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	while(!instance->is_half_hard_reset) {
+		ps3_msleep(100);
+	}
+	LOG_WARN("check half recovery\n");
+	return PS3_SUCCESS;
+}
+static int wait_recovery_req_coming(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	unsigned int count = 0;
+
+	LOG_INFO("wait_recovery_req in\n");
+	while (1) {
+		if (ps3_atomic_read(
+			    &instance->recovery_context->hardreset_ref) != 0) {
 			break;
 		}
-		if (count == 10000) {
+		if (count == 10000)
 			break;
-		}
 		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
 		count++;
 	}
 
-	LOG_INFO("wait_recovery_req success \n");
+	LOG_INFO("wait_recovery_req success\n");
 
 	return PS3_SUCCESS;
 }
-S32 wait_hard_recovery_req(void * ptr)
+
+static int wait_hard_recovery_req(void * ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	U32 count = 0;
-	LOG_INFO("wait_recovery_req in \n");
-	while (1){	
-		if (instance->recovery_context->recovery_state == PS3_HARD_RECOVERY_SHALLOW || 
-			instance->recovery_context->recovery_state == PS3_HARD_RECOVERY_DECIDE) {
+	unsigned int count = 0;
+
+	LOG_INFO("wait_recovery_req in\n");
+	while (1) {
+		if (instance->recovery_context->recovery_state ==
+			    PS3_HARD_RECOVERY_SHALLOW ||
+		    instance->recovery_context->recovery_state ==
+			    PS3_HARD_RECOVERY_DECIDE) {
 			break;
 		}
-		if (count == 10000) {
+		if (count == 10000)
 			break;
-		}
 		ps3_msleep(PS3_LOOP_TIME_INTERVAL_100MS);
 		count++;
 	}
 
-	LOG_INFO("wait_recovery_req success \n");
+	LOG_INFO("wait_recovery_req success\n");
 
 	return PS3_SUCCESS;
 }
 
-S32 force_u8_1(void * ptr)
+static int force_u8_1(void *ptr)
 {
-	U8 *ret = (U8 *)ptr;
-	if(ret) {
+	unsigned char *ret = (unsigned char *)ptr;
+
+	if (ret)
 		*ret = 1;
-	}
 
 	return PS3_SUCCESS;
 }
-S32 force_multi_hard_req(void * ptr)
+static int force_multi_hard_req(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->recovery_context->recovery_state = PS3_HARD_RECOVERY_SHALLOW;
 
 	return PS3_SUCCESS;
 }
-S32 force_multi_hard_req_pending(void * ptr)
+static int force_multi_hard_req_pending(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	if (instance->recovery_context->parall_hardreset_state == PS3_PARALLEL_HARDRESET_STATE_PENDING) {
-		instance->recovery_context->parall_hardreset_state = PS3_PARALLEL_HARDRESET_STATE_CONTINUE;
+
+	if (instance->recovery_context->parall_hardreset_state ==
+	    PS3_PARALLEL_HARDRESET_STATE_PENDING) {
+		instance->recovery_context->parall_hardreset_state =
+			PS3_PARALLEL_HARDRESET_STATE_CONTINUE;
 	}
 	return PS3_SUCCESS;
 }
-S32 force_recovery_wq_null(void * ptr)
+static int force_recovery_wq_null(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->recovery_context->recovery_wq = NULL;
 	return PS3_SUCCESS;
 }
-S32 force_recovery_state_dead(void * ptr)
+static int force_recovery_state_dead(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	ps3_atomic_set(&instance->state_machine.state,
-		PS3_INSTANCE_STATE_DEAD);
+
+	ps3_atomic_set(&instance->state_machine.state, PS3_INSTANCE_STATE_DEAD);
 	return PS3_SUCCESS;
 }
-S32 force_recovery_support_false(void * ptr)
+static int force_recovery_support_false(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
 
 	instance->is_hard_recovery_support = false;
 	return PS3_SUCCESS;
 }
-S32 force_memory_alloc_failed(void ** ptr)
+static int force_memory_alloc_failed(void **ptr)
 {
 	kfree(*ptr);
 
 	*ptr = NULL;
 	return PS3_SUCCESS;
 }
-S32 force_web_subcribe(void * ptr)
+static int force_web_subcribe(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	ps3_atomic_set(&instance->webSubscribe_context.is_subscribe, 1);
 
 	return PS3_SUCCESS;
 }
-S32 force_instance_probe_failed(void * ptr)
+static int force_instance_probe_failed(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->state_machine.is_load = PS3_FALSE;
 
 	return PS3_SUCCESS;
 }
 
-S32 force_func_id_invalid(void ** ptr)
+static int force_func_id_invalid(void **ptr)
 {
 	(void)ptr;
-	ps3_avaliable_func_id_modify(PS3_FUNC_ID_1);
+	ps3_available_func_id_modify(PS3_FUNC_ID_1);
 
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_request(void *ptr)
+static int wait_recovery_request(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	while (instance->recovery_context->recovery_state != PS3_HARD_RECOVERY_DECIDE &&
-		instance->recovery_context->recovery_state != PS3_HARD_RECOVERY_SHALLOW) {
-		msleep(10);
+
+	while (instance->recovery_context->recovery_state !=
+		       PS3_HARD_RECOVERY_DECIDE &&
+	       instance->recovery_context->recovery_state !=
+		       PS3_HARD_RECOVERY_SHALLOW) {
+		msleep(20);
 	}
 	return PS3_SUCCESS;
 }
 
-S32 recovery_wait_conditional(void * ptr)
+static int recovery_wait_conditional(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+
 	instance->reserved[0] = 0xab;
-	while(instance->reserved[0] == 0xab) {
-		msleep(10);
-	}
+	while (instance->reserved[0] == 0xab)
+		msleep(20);
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_request_2(void *ptr)
+static int wait_recovery_request_2(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	ps3_hard_recovery_request(instance);
+
+	ps3_hard_recovery_request(instance, PS3_FALSE);
 	return PS3_SUCCESS;
 }
 
-S32 wait_f0_watchdog(void *ptr)
+static int wait_f0_watchdog(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("wait_f0_watchdog in \n");
-	if (ps3_get_pci_function(instance->pdev) == PS3_FUNC_ID_1) {
+
+	LOG_WARN("%s in\n", __func__);
+	if (ps3_get_pci_function(instance->pdev) == PS3_FUNC_ID_1)
 		goto l_out;
-	}
-	while (instance->recovery_context->recovery_state < PS3_HARD_RECOVERY_DECIDE) {
-		ps3_msleep(10);
+	while (instance->recovery_context->recovery_state <
+	       PS3_HARD_RECOVERY_DECIDE) {
+		ps3_msleep(20);
 	}
 l_out:
-	LOG_WARN("wait_f0_watchdog out \n");
+	LOG_WARN("%s out\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 wait_f0_watchdog_2(void *ptr)
+static int wait_f0_watchdog_2(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("wait_f0_watchdog_2 in \n");
-	while (instance->ioc_adpter->ioc_heartbeat_detect(instance) == 0) {
-		ps3_msleep(10);
-	}
-	LOG_WARN("wait_f0_watchdog_2 out \n");
+
+	LOG_WARN("%s in\n", __func__);
+	while (instance->ioc_adpter->ioc_heartbeat_detect(instance) == 0)
+		ps3_msleep(20);
+	LOG_WARN("%s out\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 wait_recovery_end(void * ptr)
+static int force_sas_port_create_fail(void *ptr)
 {
-	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	instance->reserved[0] = 0xff;
-	cancel_work_sync(&instance->recovery_context->recovery_work);
-	return PS3_SUCCESS;
-}
+	struct ps3_sas_port *sas_port = (struct ps3_sas_port *)ptr;
 
-S32 force_sas_port_create_fail(void * ptr)
-{
-	struct ps3_sas_port  *sas_port = (struct ps3_sas_port *)ptr;
 	if (sas_port->port != NULL) {
 		sas_port_delete(sas_port->port);
 		sas_port->port = NULL;
@@ -2505,154 +2802,252 @@ S32 force_sas_port_create_fail(void * ptr)
 	return PS3_SUCCESS;
 }
 
-S32 force_pcie_remove_break(void * ptr)
+static int force_pcie_remove_break(void *ptr)
 {
 	struct ps3_cmd_context *cmd_context = (struct ps3_cmd_context *)ptr;
-	LOG_WARN("force_pcie_remove_break in \n");
+	LOG_WARN("%s in\n", __func__);
 	cmd_context->reserved0[0] = 1;
-	LOG_WARN("force_pcie_remove_break out \n");
+	LOG_WARN("%s out\n", __func__);
 	return PS3_SUCCESS;
 }
 
-S32 check_pcie_remove_state(void * ptr)
+static int check_pcie_remove_state(void *ptr)
 {
 	struct ps3_instance *instance = (struct ps3_instance *)ptr;
-	LOG_WARN("check_pcie_remove_state in \n");
-	while(instance->cmd_context.reserved0[0] != 1) {
+
+	LOG_WARN("%s in\n", __func__);
+	while (instance->cmd_context.reserved0[0] != 1)
 		ps3_msleep(10000);
-	}
-	LOG_WARN("check_pcie_remove_state out \n");
+	LOG_WARN("%s out\n", __func__);
+	return PS3_SUCCESS;
+}
+
+static int check_suspend(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	LOG_WARN("check_suspend in \n");
+	instance->reserve[0] = 1;
+	LOG_WARN("check_suspend out \n");
+	return PS3_SUCCESS;
+}
+static int force_key_state_check_failed(void * ptr)
+{
+	unsigned int *read_count = (unsigned int *)ptr;
+	*read_count = 900;
+	return PS3_SUCCESS;
+}
+
+static int force_set_ioc_critical(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	U64 state;
+
+	instance->peer_instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
+		PS3_FW_STATE_CRITICAL;
+	state = instance->peer_instance->ioc_adpter->ioc_state_get(instance);
+	LOG_WARN("ioc state [%llu]\n", state);
+	return PS3_SUCCESS;
+}
+
+static int force_set_wait_count_max(void * ptr)
+{
+	unsigned int *count = (unsigned int *)ptr;
+	*count = 9000;
+	return PS3_SUCCESS;
+}
+
+static int force_set_ioc_ready(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	U64 state;
+
+	instance->peer_instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
+		PS3_FW_STATE_READY;
+	state = instance->peer_instance->ioc_adpter->ioc_state_get(instance);
+	LOG_WARN("ioc state [%llu]\n", state);
+	return PS3_SUCCESS;
+}
+
+static int force_set_ioc_wait(void * ptr)
+{
+	struct ps3_instance *instance = (struct ps3_instance *)ptr;
+	U64 state;
+
+	instance->peer_instance->reg_set->reg_f.Excl_reg.ps3SocFwState.reg.ps3SocFwState =
+		PS3_FW_STATE_WAIT;
+	state = instance->peer_instance->ioc_adpter->ioc_state_get(instance);
+	LOG_WARN("ioc state [%llu]\n", state);
+	return PS3_SUCCESS;
+}
+
+static int force_set_resp_err(void * ptr)
+{
+	unsigned int *respStatus = (unsigned int *)ptr;
+	*respStatus = SCSI_STATUS_BUSY;
 	return PS3_SUCCESS;
 }
 
 void active_err_inject(void)
 {
-	U32 idx = 0;
-	U32 *arr_base = ps3_err_inject_array_query();
-	U32 err_inject_num = ps3_err_inject_num_query();
-	LOG_DEBUG("active err_inject_num:%u\n",
-		err_inject_num);
+	unsigned int idx = 0;
+	unsigned int *arr_base = ps3_err_inject_array_query();
+	unsigned int err_inject_num = ps3_err_inject_num_query();
 
-	for(; idx < err_inject_num;)
-	{
+	LOG_DEBUG("active err_inject_num:%u\n", err_inject_num);
+
+	for (; idx < err_inject_num;) {
 		if ((arr_base[idx] >= PS3_ERR_IJ_WATCHDOG_CONCURY) &&
-			(arr_base[idx] < PS3_ERR_IJ_MAX_COUNT)) {
-			INJECT_ACTIVE(arr_base[idx], arr_base[idx + 1])
-			LOG_DEBUG("active err_inject:%u count:%u \n",
-				arr_base[idx], arr_base[idx + 1]);
+		    (arr_base[idx] < PS3_ERR_IJ_MAX_COUNT)) {
+			INJECT_ACTIVE(arr_base[idx], arr_base[idx + 1]);
+			LOG_DEBUG("active err_inject:%u count:%u\n",
+				  arr_base[idx], arr_base[idx + 1]);
 			idx += 2;
 		}
 	}
 }
+
 void inject_init(void)
 {
-	if(is_inject_init == PS3_TRUE) {
+	if (is_inject_init == PS3_TRUE)
 		return;
-	}
 	is_inject_init = PS3_TRUE;
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_DEAD,   force_ioctl_cmd_dead)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_PENDING,   force_ioctl_cmd_pending)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_SIG_INTERRUPT,   force_ioctl_cmd_sig_interrupt)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_INTERRUPT,   force_ioctl_cmd_interrupt)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_NO_RESP,   force_ioctl_cmd_no_resp)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_ABORT_FAIL,   force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_RECOVERY_CANCEL, force_ioctl_cmd_recovery_cancel)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_ABORT_NO_RESP,   force_ioctl_cmd_abort_no_resp)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_FORCE_DONE,   force_ioctl_cmd_force_done)
-	INJECT_REG(PS3_ERR_IJ_WAIT_NORMAL,   wait_instance_normal)
-	INJECT_REG(PS3_ERR_IJ_FIRMWARE_INIT_FAIL,   force_ret_fail)
-	INJECT_REG(PS3_ERR_IJ_SCSI_SCAN_HOST_DELAY,   force_scan_host_delay)
-	INJECT_REG(PS3_ERR_IJ_SCSI_SCAN_HOST_NOT_FINISH,   force_scan_host_fail)
-	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_IO,   force_ignore_task_io)
-	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_ABORT,   force_ignore_task_abort)
-	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_RESET,   force_ignore_task_reset)
-	INJECT_REG(PS3_ERR_IJ_EVENT_HANDLE,        force_event_handle)
-	INJECT_REG(PS3_ERR_IJ_DEL_SCSI_DEV1, force_del_disk)
-	INJECT_REG(PS3_ERR_IJ_DEL_SCSI_DEV2, force_del_disk)
-	INJECT_REG(PS3_ERR_IJ_R1X_DEL_SCSI_DEV1, force_del_disk)
-	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL1, force_priv_data_null)
-	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL2, force_priv_data_null)
-	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL3, force_priv_data_null)
-	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL4, force_priv_data_null)
-	INJECT_REG(PS3_ERR_IJ_R1X_PRIV_DATA_NULL1, force_priv_data_null)
-	INJECT_REG(PS3_ERR_IJ_HT_ABNORMAL1, force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_HT_ABNORMAL2, force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_EVENT_INT_WAIT_HARD_FLAG, force_int_wait_hard_flag)
-	INJECT_REG(PS3_ERR_IJ_EVENT_INT_WAIT_HARD_SUBCRIBE, force_int_wait_hard_subcribe)
-	INJECT_REG(PS3_ERR_IJ_EVENT_PROC_WAIT_HARD_FLAG, force_wait_hard_flag)
-	INJECT_REG(PS3_ERR_IJ_EVENT_PROC_WAIT_HARD_SUBCRIBE, force_wait_hard_subcribe)
-	INJECT_REG(PS3_ERR_IJ_EVENT_SUBC_WAIT_HARD_FLAG, force_wait_hard_flag)
-	INJECT_REG(PS3_ERR_IJ_EVENT_SUBC_WAIT_HARD_SUBCRIBE, force_wait_hard_subcribe)
-	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_INT, force_wait_event_int)
-	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_PROC, force_wait_event_proc)
-	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_SUBCRIBE, force_wait_event_subscribe)
-	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_INT, force_wait_event_int)
-	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_PROC, force_wait_event_proc)
-	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_SUBCRIBE, force_wait_event_subscribe)
-	INJECT_REG(PS3_ERR_IJ_STORE_NO_TRIGGER_LOG, force_trigger_log_fail)
-	INJECT_REG(PS3_ERR_IJ_DETECT_NO_TRIGGER_LOG, force_trigger_log_fail)
-	INJECT_REG(PS3_ERR_IJ_EVENT_CMD_NULL, force_event_cmd_null)
-	INJECT_REG(PS3_ERR_IJ_SUBC_EVENT_CMD_INIT, force_event_cmd_null)
-	INJECT_REG(PS3_ERR_IJ_SUBC_EVENT_CMD_INIT,force_event_cmd_init)
-	INJECT_REG(PS3_ERR_IJ_RESUBC_EVENT_CMD_INIT,force_event_cmd_init)
-	INJECT_REG(PS3_ERR_IJ_CANCEL_EVENT_CMD_FAIL, force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_CANCEL_VDPENDING_CMD_FAIL, force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_FW_STATE_RUNNING, force_return_fail)
-	INJECT_REG(PS3_ERR_IJ_SET_IOC_IN_SECURITY, force_set_ioc_in_security)
-	INJECT_REG(PS3_ERR_IJ_WAIT_UNNORMAL, wait_instance_unnormal)
-	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_RECO_VALID, wait_reco_dump_valid)
-	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_RECO_VALID_2, wait_reco_dump_valid)
-	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_NORMAL, wait_instance_normal)
-	INJECT_REG(PS3_ERR_IJ_WAIT_OPT, wait_instance_operational)
-	INJECT_REG(PS3_ERR_IJ_WAIT_READY, wait_ioc_ready)
-	INJECT_REG(PS3_ERR_IJ_HARD_WAIT_READY_FAILED_F1, force_hard_ready_failed)
-	INJECT_REG(PS3_ERR_IJ_HARD_WAIT_READY_FAILED_F0, force_hard_ready_failed)
-	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_FUNC0_RUNNING_1, wait_recovery_func0_running_1)
-	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_FUNC0_RUNNING_2, wait_recovery_func0_running_2)
-	INJECT_REG(PS3_ERR_IJ_FWSTATE_REMOVE, wait_remove_is_load_flag)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_RETRY_DONE,  ioctl_cmd_retry_done)
-	INJECT_REG(PS3_ERR_IJ_QOS_SET_SHARE_COUNT, set_qos_share_cnt)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_WAIT_UNNORMAL, wait_instance_unnormal_and_set_flag)
-	INJECT_REG(PS3_ERR_IJ_FORCE_EVENT_CMD_FAIL_DEAD, force_event_cmd_dead)
-	INJECT_REG(PS3_ERR_IJ_IOCTL_WAIT_IRQ_DISABLE, wait_irq_disable)
-	INJECT_REG(PS3_ERR_IJ_WAIT_IOCTL_IN_RECOVERY, wait_ioctl_detect_irq_disable)
-	INJECT_REG(PS3_ERR_IJ_WAIT_IOCTL_IN_DEVICE_RESET, wait_ioctl_detect_irq_disable)
-	INJECT_REG(PS3_ERR_IJ_SEND_IOCTL_BLOCK_MODE_FLAG, set_send_ioctl_block_flag)
-	INJECT_REG(PS3_ERR_IJ_FORCE_HAS_SCIS_PENDING_IO, force_has_scsi_pending_io)
-	INJECT_REG(PS3_ERR_IJ_HOST_RESET_WAIT_DECIDE, host_reset_wait_decide_normal)
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_DEAD, force_ioctl_cmd_dead);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_PENDING, force_ioctl_cmd_pending);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_SIG_INTERRUPT,
+		   force_ioctl_cmd_sig_interrupt);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_INTERRUPT, force_ioctl_cmd_interrupt);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_NO_RESP, force_ioctl_cmd_no_resp);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_ABORT_FAIL, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_RECOVERY_CANCEL,
+		   force_ioctl_cmd_recovery_cancel);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_ABORT_NO_RESP,
+		   force_ioctl_cmd_abort_no_resp);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_FORCE_DONE, force_ioctl_cmd_force_done);
+	INJECT_REG(PS3_ERR_IJ_WAIT_NORMAL, wait_instance_normal);
+	INJECT_REG(PS3_ERR_IJ_FIRMWARE_INIT_FAIL, force_ret_fail);
+	INJECT_REG(PS3_ERR_IJ_SCSI_SCAN_HOST_DELAY, force_scan_host_delay);
+	INJECT_REG(PS3_ERR_IJ_SCSI_SCAN_HOST_NOT_FINISH, force_scan_host_fail);
+	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_IO, force_ignore_task_io);
+	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_ABORT, force_ignore_task_abort);
+	INJECT_REG(PS3_ERR_IJ_IGNORE_TASK_RESET, force_ignore_task_reset);
+	INJECT_REG(PS3_ERR_IJ_EVENT_HANDLE, force_event_handle);
+	INJECT_REG(PS3_ERR_IJ_DEL_SCSI_DEV1, force_del_disk);
+	INJECT_REG(PS3_ERR_IJ_DEL_SCSI_DEV2, force_del_disk);
+	INJECT_REG(PS3_ERR_IJ_R1X_DEL_SCSI_DEV1, force_del_disk);
+	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL1, force_priv_data_null);
+	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL2, force_priv_data_null);
+	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL3, force_priv_data_null);
+	INJECT_REG(PS3_ERR_IJ_PRIV_DATA_NULL4, force_priv_data_null);
+	INJECT_REG(PS3_ERR_IJ_R1X_PRIV_DATA_NULL1, force_priv_data_null);
+	INJECT_REG(PS3_ERR_IJ_HT_ABNORMAL1, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_HT_ABNORMAL2, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_EVENT_INT_WAIT_HARD_FLAG,
+		   force_int_wait_hard_flag);
+	INJECT_REG(PS3_ERR_IJ_EVENT_INT_WAIT_HARD_SUBCRIBE,
+		   force_int_wait_hard_subcribe);
+	INJECT_REG(PS3_ERR_IJ_EVENT_PROC_WAIT_HARD_FLAG, force_wait_hard_flag);
+	INJECT_REG(PS3_ERR_IJ_EVENT_PROC_WAIT_HARD_SUBCRIBE,
+		   force_wait_hard_subcribe);
+	INJECT_REG(PS3_ERR_IJ_EVENT_SUBC_WAIT_HARD_FLAG, force_wait_hard_flag);
+	INJECT_REG(PS3_ERR_IJ_EVENT_SUBC_WAIT_HARD_SUBCRIBE,
+		   force_wait_hard_subcribe);
+	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_INT, force_wait_event_int);
+	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_PROC, force_wait_event_proc);
+	INJECT_REG(PS3_ERR_IJ_FLAG_WAIT_EVENT_SUBCRIBE,
+		   force_wait_event_subscribe);
+	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_INT, force_wait_event_int);
+	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_PROC, force_wait_event_proc);
+	INJECT_REG(PS3_ERR_IJ_HARD_SUBC_WAIT_EVENT_SUBCRIBE,
+		   force_wait_event_subscribe);
+	INJECT_REG(PS3_ERR_IJ_STORE_NO_TRIGGER_LOG, force_trigger_log_fail);
+	INJECT_REG(PS3_ERR_IJ_DETECT_NO_TRIGGER_LOG, force_trigger_log_fail);
+	INJECT_REG(PS3_ERR_IJ_EVENT_CMD_NULL, force_event_cmd_null);
+	INJECT_REG(PS3_ERR_IJ_SUBC_EVENT_CMD_INIT, force_event_cmd_null);
+	INJECT_REG(PS3_ERR_IJ_SUBC_EVENT_CMD_INIT, force_event_cmd_init);
+	INJECT_REG(PS3_ERR_IJ_RESUBC_EVENT_CMD_INIT, force_event_cmd_init);
+	INJECT_REG(PS3_ERR_IJ_CANCEL_EVENT_CMD_FAIL, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_CANCEL_VDPENDING_CMD_FAIL, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_FW_STATE_RUNNING, force_return_fail);
+	INJECT_REG(PS3_ERR_IJ_SET_IOC_IN_SECURITY, force_set_ioc_in_security);
+	INJECT_REG(PS3_ERR_IJ_WAIT_UNNORMAL, wait_instance_unnormal);
+	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_RECO_VALID, wait_reco_dump_valid);
+	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_RECO_VALID_2, wait_reco_dump_valid);
+	INJECT_REG(PS3_ERR_IJ_DUMP_WAIT_NORMAL, wait_instance_normal);
+	INJECT_REG(PS3_ERR_IJ_WAIT_OPT, wait_instance_operational);
+	INJECT_REG(PS3_ERR_IJ_WAIT_READY, wait_ioc_ready);
+	INJECT_REG(PS3_ERR_IJ_HARD_WAIT_READY_FAILED_F1,
+		   force_hard_ready_failed);
+	INJECT_REG(PS3_ERR_IJ_HARD_WAIT_READY_FAILED_F0,
+		   force_hard_ready_failed);
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_FUNC0_RUNNING_1,
+		   wait_recovery_func0_running_1);
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_FUNC0_RUNNING_2,
+		   wait_recovery_func0_running_2);
+	INJECT_REG(PS3_ERR_IJ_FWSTATE_REMOVE, wait_remove_is_load_flag);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_CMD_RETRY_DONE, ioctl_cmd_retry_done);
+	INJECT_REG(PS3_ERR_IJ_QOS_SET_SHARE_COUNT, set_qos_share_cnt);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_WAIT_UNNORMAL,
+		   wait_instance_unnormal_and_set_flag);
+	INJECT_REG(PS3_ERR_IJ_FORCE_EVENT_CMD_FAIL_DEAD, force_event_cmd_dead);
+	INJECT_REG(PS3_ERR_IJ_IOCTL_WAIT_IRQ_DISABLE, wait_irq_disable);
+	INJECT_REG(PS3_ERR_IJ_WAIT_IOCTL_IN_RECOVERY,
+		   wait_ioctl_detect_irq_disable);
+	INJECT_REG(PS3_ERR_IJ_WAIT_IOCTL_IN_DEVICE_RESET,
+		   wait_ioctl_detect_irq_disable);
+	INJECT_REG(PS3_ERR_IJ_SEND_IOCTL_BLOCK_MODE_FLAG,
+		   set_send_ioctl_block_flag);
+	INJECT_REG(PS3_ERR_IJ_FORCE_HAS_SCIS_PENDING_IO,
+		   force_has_scsi_pending_io);
+	INJECT_REG(PS3_ERR_IJ_HOST_RESET_WAIT_DECIDE,
+		   host_reset_wait_decide_normal);
 #ifdef PS3_UT
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE1_FORCE_ABORTED_CMD_DONE, force_scsi_cmd_done)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE2_FORCE_ABORTED_CMD_DONE, force_scsi_cmd_done)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID_FORCE_ABORTED_CMD_DONE, force_scsi_cmd_done)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID1_FORCE_ABORTED_CMD_DONE, force_scsi_cmd_done)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_SEND_FORCE_ABORTED_CMD_DONE, force_scsi_cmd_done)
-	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_ERROR, force_scsi_task_cmd_error)
-	INJECT_REG(PS3_ERR_IJ_RESET_CMD_ERROR, force_scsi_task_cmd_error)
-	INJECT_REG(PS3_ERR_IJ_SCSI_TASK_PRE_CHECK_FAILED, force_pcie_err)
-	INJECT_REG(	PS3_ERR_IJ_FORCE_INSTANCE_UNNORMAL, force_instance_state_unnormal)
-	INJECT_REG(PS3_ERR_IJ_TASK_CMD_ALLOC_FAILED, force_task_cmd_alloc_null)
-	INJECT_REG(PS3_ERR_IJ_SMP_CMD_ERROR, force_smp_cmd_error)
-	INJECT_REG(PS3_ERR_IJ_GET_LINKERRORS_CMD_ERROR, force_get_linkerrors_cmd_error)
-	INJECT_REG(PS3_ERR_IJ_PHY_CTRL_CMD_ERROR, force_sas_phy_ctrl_cmd_error)
-	INJECT_REG(PS3_ERR_IJ_PROBE_HOST_RESET, force_host_reset)
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE1_FORCE_ABORTED_CMD_DONE,
+		   force_scsi_cmd_done);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE2_FORCE_ABORTED_CMD_DONE,
+		   force_scsi_cmd_done);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID_FORCE_ABORTED_CMD_DONE,
+		   force_scsi_cmd_done);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID1_FORCE_ABORTED_CMD_DONE,
+		   force_scsi_cmd_done);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_SEND_FORCE_ABORTED_CMD_DONE,
+		   force_scsi_cmd_done);
+	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_ERROR, force_scsi_task_cmd_error);
+	INJECT_REG(PS3_ERR_IJ_RESET_CMD_ERROR, force_scsi_task_cmd_error);
+	INJECT_REG(PS3_ERR_IJ_SCSI_TASK_PRE_CHECK_FAILED, force_pcie_err);
+	INJECT_REG(PS3_ERR_IJ_FORCE_INSTANCE_UNNORMAL,
+		   force_instance_state_unnormal);
+	INJECT_REG(PS3_ERR_IJ_TASK_CMD_ALLOC_FAILED, force_task_cmd_alloc_null);
+	INJECT_REG(PS3_ERR_IJ_SMP_CMD_ERROR, force_smp_cmd_error);
+	INJECT_REG(PS3_ERR_IJ_GET_LINKERRORS_CMD_ERROR,
+		   force_get_linkerrors_cmd_error);
+	INJECT_REG(PS3_ERR_IJ_PHY_CTRL_CMD_ERROR, force_sas_phy_ctrl_cmd_error);
+	INJECT_REG(PS3_ERR_IJ_PROBE_HOST_RESET, force_host_reset);
 #else
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE1_FORCE_ABORTED_CMD_DONE, ps3_scsi_rw_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE2_FORCE_ABORTED_CMD_DONE, ps3_scsi_rw_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID_FORCE_ABORTED_CMD_DONE, ps3_scsi_rw_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID1_FORCE_ABORTED_CMD_DONE, ps3_scsi_rw_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_SEND_FORCE_ABORTED_CMD_DONE, ps3_scsi_rw_cmd_filter_handle)
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE1_FORCE_ABORTED_CMD_DONE,
+		   ps3_scsi_rw_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE2_FORCE_ABORTED_CMD_DONE,
+		   ps3_scsi_rw_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID_FORCE_ABORTED_CMD_DONE,
+		   ps3_scsi_rw_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_BULID1_FORCE_ABORTED_CMD_DONE,
+		   ps3_scsi_rw_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_SEND_FORCE_ABORTED_CMD_DONE,
+		   ps3_scsi_rw_cmd_filter_handle);
 
-	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_TIMEOUT, ps3_scsi_task_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_RESET_CMD_TIMEOUT, ps3_scsi_task_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_ERROR, ps3_scsi_task_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_RESET_CMD_ERROR, ps3_scsi_task_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_NORMAL, ps3_scsi_task_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_RESET_CMD_NORMAL, ps3_scsi_task_cmd_filter_handle)
+	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_TIMEOUT,
+		   ps3_scsi_task_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_RESET_CMD_TIMEOUT,
+		   ps3_scsi_task_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_ERROR, ps3_scsi_task_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_RESET_CMD_ERROR, ps3_scsi_task_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_ABORT_CMD_NORMAL, ps3_scsi_task_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_RESET_CMD_NORMAL, ps3_scsi_task_cmd_filter_handle);
 
-	INJECT_REG(PS3_ERR_IJ_SMP_CMD_TIMEOUT, ps3_mgr_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_SMP_CMD_ERROR, ps3_mgr_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_GET_LINKERRORS_CMD_ERROR, ps3_mgr_cmd_filter_handle)
-	INJECT_REG(PS3_ERR_IJ_PHY_CTRL_CMD_ERROR, ps3_mgr_cmd_filter_handle)
+	INJECT_REG(PS3_ERR_IJ_SMP_CMD_TIMEOUT, ps3_mgr_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_SMP_CMD_ERROR, ps3_mgr_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_GET_LINKERRORS_CMD_ERROR,
+		   ps3_mgr_cmd_filter_handle);
+	INJECT_REG(PS3_ERR_IJ_PHY_CTRL_CMD_ERROR, ps3_mgr_cmd_filter_handle);
 #endif
 	INJECT_REG(PS3_ERR_IJ_ABORT_PRE_DEAL_FORCE_ABORTED_CMD_DONE, force_aborted_cmd_done)
 	INJECT_REG(PS3_ERR_IJ_FORCE_STOP_ALL_CMD_DONE, force_stop_aborted_cmd_done)
@@ -2858,8 +3253,8 @@ void inject_init(void)
 	INJECT_REG(PS3_ERR_IJ_FORCE_PCIDRV_INIT_FAIL, force_ret_failed)
 	INJECT_REG(PS3_ERR_IJ_FORCE_VERFILE_INIT_FAIL, force_ret_failed)
 	INJECT_REG(PS3_ERR_IJ_FORCE_VERFILE2_INIT_FAIL, force_ret_failed)
-	INJECT_REG(PS3_ERR_IJ_IO_RW_FLAG_SET_UNKOWN, set_cmd_io_rw_flag_unkown)
-	INJECT_REG(PS3_ERR_IJ_SOFT_ZONE_TYPE_SET_UNKOWN, set_soft_zone_type_unkown)
+	INJECT_REG(PS3_ERR_IJ_IO_RW_FLAG_SET_UNKNOWN, set_cmd_io_rw_flag_unknown)
+	INJECT_REG(PS3_ERR_IJ_SOFT_ZONE_TYPE_SET_UNKNOWN, set_soft_zone_type_unknown)
 	INJECT_REG(PS3_ERR_IJ_WATCHDOG_WAIT_RUNNING, wait_ioc_ready)
 	INJECT_REG(PS3_ERR_IJ_WATCHDOG_IRQ_QUEUE, force_work_queue_unull)
 	INJECT_REG(PS3_ERR_IJ_WATCHDOG_IRQ_QUEUE_1, force_work_queue_failed)
@@ -2960,8 +3355,8 @@ void inject_init(void)
 	INJECT_REG(PS3_ERR_IJ_FORCE_START_DUL_RECOVERY, force_multi_hard_req)
 	INJECT_REG(PS3_ERR_IJ_WAIT_HARDRESET, wait_hard_recovery_req)
 	INJECT_REG(PS3_ERR_IJ_FORCE_DUL_RECOVERY_PENDING, force_multi_hard_req_pending)
-	INJECT_REG(PS3_ERR_IJ_FORCE_DESTORY_RECOVERY, force_recovery_wq_null)
-	INJECT_REG(PS3_ERR_IJ_FORCE_START_DESTORY_RECOVERY, force_recovery_wq_null)
+	INJECT_REG(PS3_ERR_IJ_FORCE_DESTROY_RECOVERY, force_recovery_wq_null)
+	INJECT_REG(PS3_ERR_IJ_FORCE_START_DESTROY_RECOVERY, force_recovery_wq_null)
 	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_STATE_DEAD, force_recovery_state_dead)
 	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_PEER_STATE_DEAD, force_recovery_state_dead)
 	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_NOT_SUPPORT, force_recovery_support_false)
@@ -2988,7 +3383,7 @@ void inject_init(void)
 	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_FAIL1, force_ioc_not_running)
 	INJECT_REG(PS3_ERR_IJ_WEB_SUBSCRIBE, force_web_subcribe)
 	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_FINISH_STATE_NOOPERATIONAL, force_instance_state_to_unnormal)
-	INJECT_REG(PS3_ERR_IJ_FORCE_HARD_INIT_RUNING_UNNORMAL, force_instance_probe_failed)
+	INJECT_REG(PS3_ERR_IJ_FORCE_HARD_INIT_RUNNING_UNNORMAL, force_instance_probe_failed)
 	INJECT_REG(PS3_ERR_IJ_FORCE_HARD_READY_PCIE_ERRL, force_pcie_err)
 	INJECT_REG(PS3_ERR_IJ_WAIT_PM_INSTANCE_NULL, force_instance_null)
 	INJECT_REG(PS3_ERR_IJ_WAIT_SUSPEND_HALT_RESET, force_half_reset)
@@ -3039,6 +3434,30 @@ void inject_init(void)
 	INJECT_REG(PS3_ERR_IJ_SGL_ADDR_PAGE_MODE_5, force_change_sgl_addr_to_page_mode_5)
 	INJECT_REG(PS3_ERR_IJ_SGL_ADDR_RESTORE, force_sgl_addr_restore)
 	INJECT_REG(PS3_ERR_IJ_FORCE_WAIT, NULL)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_STATE_SHALLOW, force_recovery_state_shallow)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_HALT_BREAK, force_recovery_halt_break)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_HALT_BREAK_1, force_recovery_halt_break_1)
+	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_DOORBELL_DONE, force_recovery_doorbell_done)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_1, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_2, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_3, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_4, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_5, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_6, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_PCIE_ERR_7, force_instance_state_pci_err)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_KEY_STATE_CHECK, force_key_state_check_failed)
+	INJECT_REG(PS3_ERR_IJ_BIT_POS_READ_ERR, force_trigger_log_fail)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_CRITICAL, force_set_ioc_critical)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_FAULT, force_set_ioc_fault)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_COUNT_MAX, force_set_wait_count_max)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_READY, force_set_ioc_ready)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_WAIT, force_set_ioc_wait)
+	INJECT_REG(PS3_ERR_IJ_WAIT_RUNNING_RESP_ERR, force_set_resp_err)
+	INJECT_REG(PS3_ERR_IJ_OP_EVENT_SUB_FAILED, force_ret_fail)
+	INJECT_REG(PS3_ERR_IJ_OP_PENDING_SUB_FAILED, force_ret_fail)
+	INJECT_REG(PS3_ERR_IJ_OP_WEB_SUB_FAILED, force_ret_fail)
+	INJECT_REG(PS3_ERR_IJ_COMPLETE_FAULT, force_set_ioc_fault)
 	INJECT_REG(PS3_ERR_IJ_PD_ATTR_WAIT_OS_SCAN, NULL)
 	INJECT_REG(PS3_ERR_IJ_OS_SCAN, NULL)
 	INJECT_REG(PS3_ERR_IJ_PD_ATTR_WAIT_PD_ATTR, NULL)
@@ -3070,20 +3489,44 @@ void inject_init(void)
 	INJECT_REG(PS3_ERR_IJ_DETECTED_REMOVE_BREAK, force_return_true)
 	INJECT_REG(PS3_ERR_IJ_DETECTED_REMOVE_BREAK_2, force_pcie_remove_break)
 	INJECT_REG(PS3_ERR_IJ_DETECTED_REMOVE_BREAK_3, check_pcie_remove_state)
+	INJECT_REG(PS3_ERR_IJ_CHECK_SUSPEND, check_suspend)
+	INJECT_REG(PS3_ERR_IJ_FORCE_RECOVERY_DOORBELL_START, force_doorbell_failed_start)
+	INJECT_REG(PS3_ERR_IJ_CMD_TIMEOUT_RECOVERY_CHECK, check_reserved01_to_unload)
+	INJECT_REG(PS3_ERR_IJ_HALF_RECOVERY_CHECK, check_half_recovery)
+	INJECT_REG(PS3_ERR_IJ_WITHOUT_DETAIL_BREAK_CHECK, check_reserved02)
+	INJECT_REG(PS3_ERR_IJ_DETAIL_BREAK_CHECK1, check_reserved03)
+	INJECT_REG(PS3_ERR_IJ_DETAIL_BREAK_CHECK2, check_reserved03)
+	INJECT_REG(PS3_ERR_IJ_DETAIL_BREAK_CHECK3, check_reserved03)
+	INJECT_REG(PS3_ERR_IJ_DETAIL_BREAK_CHECK4, check_reserved10)
+	INJECT_REG(PS3_ERR_IJ_EVENT_CMD_NULL_CHECK1, check_suspend_or_remove)
+	INJECT_REG(PS3_ERR_IJ_EVENT_CMD_NULL_CHECK2, check_suspend_or_remove)
+	INJECT_REG(PS3_ERR_IJ_CHECK_EVENT_CMD_NULL, check_event_null)
+	INJECT_REG(PS3_ERR_IJ_EVENT_WAIT_SUSPEND_END, wait_reserved03_end)
+	INJECT_REG(PS3_ERR_IJ_SUSPEND_END, check_reserved03)
+	INJECT_REG(PS3_ERR_IJ_REPLY_BLOCK, qos_waitq_notify_block)
+	INJECT_REG(PS3_ERR_IJ_QOS_PD_INIT_FAIL_5, create_pd_reply_info_fail)
+	INJECT_REG(PS3_ERR_IJ_QOS_PD_INIT_FAIL_6, create_pd_state_fail)
+	INJECT_REG(PS3_ERR_IJ_QOS_PD_INIT_FAIL_7, create_pd_id_fail)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET, host_reset_wait_decide_normal)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_1, host_reset_wait_decide_normal)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_2, host_reset_wait_decide_normal)
+	INJECT_REG(PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_3, host_reset_wait_decide_normal)
+	INJECT_REG(PS3_ERR_IJ_QOS_VD_IN_PD_Q_BLOCK, wait_cmd_send_block)
+	INJECT_REG(PS3_ERR_IJ_QOS_JBOD_IN_PD_Q_BLOCK, wait_cmd_send_block)
 
 	LOG_INFO("inject_init success\n");
 	ps3_inject_init();
-	return;
 }
 void inject_exit(void)
 {
-	U32 idx = 0;
-	for(idx = PS3_ERR_IJ_WATCHDOG_CONCURY ;idx < PS3_ERR_IJ_MAX_COUNT; idx++)
-	{
-		memset(&g_ps3_err_scene[idx - 1], 0, sizeof(Ps3Injection_t));
+	unsigned int idx = 0;
+
+	for (idx = PS3_ERR_IJ_WATCHDOG_CONCURY; idx < PS3_ERR_IJ_MAX_COUNT;
+	     idx++) {
+		memset(&g_ps3_err_scene[idx - 1], 0,
+		       sizeof(struct Ps3Injection));
 	}
 	ps3_inject_exit();
 	is_inject_init = PS3_FALSE;
 }
 #endif
-

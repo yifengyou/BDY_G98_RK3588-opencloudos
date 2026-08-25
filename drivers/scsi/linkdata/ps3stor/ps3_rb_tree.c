@@ -1,731 +1,588 @@
-
+// SPDX-License-Identifier: GPL-2.0
 #include "ps3_rb_tree.h"
-
-static void rbtNodeSetParent(Ps3RbNode_s *pNode,
-    Ps3RbNode_s *pParent)
+static void rbtNodeSetParent(struct Ps3RbNode *pNode, struct Ps3RbNode *pParent)
 {
-    pNode->pParentColor =
-        ((pNode->pParentColor & 3ULL) | ((uintptr_t)(void*)pParent));
+	pNode->pParentColor =
+		((pNode->pParentColor & 3ULL) | ((uintptr_t)(void *)pParent));
 }
 
-static void rbtNodeSetColor(Ps3RbNode_s *pNode, U32 color)
+static void rbtNodeSetColor(struct Ps3RbNode *pNode, unsigned int color)
 {
-    pNode->pParentColor = ((pNode->pParentColor & ~1ULL) | color);
+	pNode->pParentColor = ((pNode->pParentColor & ~1ULL) | color);
 }
 
-static void rbtRotateLeft(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode)
+static void rbtRotateLeft(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pRight = pNode->pRight;
-    Ps3RbNode_s *pParent = RBT_PARENT(pNode);
+	struct Ps3RbNode *pRight = pNode->pRight;
+	struct Ps3RbNode *pParent = RBT_PARENT(pNode);
 
-    pNode->pRight = pRight->pLeft;
-    if (NULL != pNode->pRight)
-    {
-        rbtNodeSetParent(pRight->pLeft, pNode);
-    }
+	pNode->pRight = pRight->pLeft;
+	if (pNode->pRight != NULL)
+		rbtNodeSetParent(pRight->pLeft, pNode);
 
-    pRight->pLeft = pNode;
-    rbtNodeSetParent(pRight, pParent);
+	pRight->pLeft = pNode;
+	rbtNodeSetParent(pRight, pParent);
 
-    if (NULL != pParent)
-    {
-        if (pNode == pParent->pLeft)
-        {
-            pParent->pLeft = pRight;
-        }
-        else
-        {
-            pParent->pRight = pRight;
-        }
-    }
-    else
-    {
-        pRoot->pRoot = pRight;
-    }
+	if (pParent != NULL) {
+		if (pNode == pParent->pLeft)
+			pParent->pLeft = pRight;
+		else
+			pParent->pRight = pRight;
+	} else {
+		pRoot->pRoot = pRight;
+	}
 
-    rbtNodeSetParent(pNode, pRight);
+	rbtNodeSetParent(pNode, pRight);
 }
 
-static void rbtRotateRight(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode)
+static void rbtRotateRight(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pLeft = pNode->pLeft;
-    Ps3RbNode_s *pParent = RBT_PARENT(pNode);
+	struct Ps3RbNode *pLeft = pNode->pLeft;
+	struct Ps3RbNode *pParent = RBT_PARENT(pNode);
 
-    pNode->pLeft = pLeft->pRight;
-    if (NULL != pNode->pLeft)
-    {
-        rbtNodeSetParent(pLeft->pRight, pNode);
-    }
+	pNode->pLeft = pLeft->pRight;
+	if (pNode->pLeft != NULL)
+		rbtNodeSetParent(pLeft->pRight, pNode);
 
-    pLeft->pRight = pNode;
-    rbtNodeSetParent(pLeft, pParent);
+	pLeft->pRight = pNode;
+	rbtNodeSetParent(pLeft, pParent);
 
-    if (NULL != pParent)
-    {
-        if (pNode == pParent->pRight)
-        {
-            pParent->pRight = pLeft;
-        }
-        else
-        {
-            pParent->pLeft = pLeft;
-        }
-    }
-    else
-    {
-        pRoot->pRoot = pLeft;
-    }
+	if (pParent != NULL) {
+		if (pNode == pParent->pRight)
+			pParent->pRight = pLeft;
+		else
+			pParent->pLeft = pLeft;
+	} else {
+		pRoot->pRoot = pLeft;
+	}
 
-    rbtNodeSetParent(pNode, pLeft);
+	rbtNodeSetParent(pNode, pLeft);
 }
 
-static void rbtColorAfterDel(Ps3RbRoot_s *pRoot,
-    Ps3RbNode_s *pNode, Ps3RbNode_s *pParent)
+static void rbtColorAfterDel(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode,
+			     struct Ps3RbNode *pParent)
 {
-    Ps3RbNode_s *pOther = NULL;
-    Ps3RbNode_s *pOLeft = NULL;
-    Ps3RbNode_s *pORight = NULL;
+	struct Ps3RbNode *pOther = NULL;
+	struct Ps3RbNode *pOLeft = NULL;
+	struct Ps3RbNode *pORight = NULL;
 
-    while (((NULL == pNode) || RBT_IS_BLACK(pNode)) &&
-        (pNode != pRoot->pRoot))
-    {
-        if (pParent->pLeft == pNode)
-        {
-            pOther = pParent->pRight;
+	while (((pNode == NULL) || RBT_IS_BLACK(pNode)) &&
+	       (pNode != pRoot->pRoot)) {
+		if (pParent->pLeft == pNode) {
+			pOther = pParent->pRight;
+			if (RBT_IS_RED(pOther)) {
+				RBT_SET_BLACK(pOther);
+				RBT_SET_RED(pParent);
+				rbtRotateLeft(pRoot, pParent);
+				pOther = pParent->pRight;
+			}
+			if (((pOther->pLeft == NULL) ||
+			     RBT_IS_BLACK(pOther->pLeft)) &&
+			    ((pOther->pRight == NULL) ||
+			     RBT_IS_BLACK(pOther->pRight))) {
+				RBT_SET_RED(pOther);
+				pNode = pParent;
+				pParent = RBT_PARENT(pNode);
 
-            if (RBT_IS_RED(pOther))
-            {
-                RBT_SET_BLACK(pOther);
-                RBT_SET_RED(pParent);
-                rbtRotateLeft(pRoot, pParent);
-                pOther = pParent->pRight;
-            }
+				continue;
+			}
+			if ((pOther->pRight == NULL) ||
+			    RBT_IS_BLACK(pOther->pRight)) {
+				pOLeft = pOther->pLeft;
+				if (pOLeft != NULL)
+					RBT_SET_BLACK(pOLeft);
 
-            if (((NULL == pOther->pLeft) || RBT_IS_BLACK(pOther->pLeft)) &&
-                ((NULL == pOther->pRight) || RBT_IS_BLACK(pOther->pRight)))
-            {
-                RBT_SET_RED(pOther);
-                pNode = pParent;
-                pParent = RBT_PARENT(pNode);
+				RBT_SET_RED(pOther);
+				rbtRotateRight(pRoot, pOther);
+				pOther = pParent->pRight;
+			}
 
-                continue ;
-            }
+			rbtNodeSetColor(pOther, RBT_COLOR(pParent));
+			RBT_SET_BLACK(pParent);
 
-            if ((NULL == pOther->pRight) || RBT_IS_BLACK(pOther->pRight))
-            {
-                pOLeft = pOther->pLeft;
-                if (NULL != pOLeft)
-                {
-                    RBT_SET_BLACK(pOLeft);
-                }
+			if (pOther->pRight != NULL)
+				RBT_SET_BLACK(pOther->pRight);
 
-                RBT_SET_RED(pOther);
-                rbtRotateRight(pRoot, pOther);
-                pOther = pParent->pRight;
-            }
+			rbtRotateLeft(pRoot, pParent);
+			pNode = pRoot->pRoot;
 
-            rbtNodeSetColor(pOther, RBT_COLOR(pParent));
-            RBT_SET_BLACK(pParent);
+			break;
+		}
+		pOther = pParent->pLeft;
+		if (RBT_IS_RED(pOther)) {
+			RBT_SET_BLACK(pOther);
+			RBT_SET_RED(pParent);
 
-            if (NULL != pOther->pRight)
-            {
-                RBT_SET_BLACK(pOther->pRight);
-            }
+			rbtRotateRight(pRoot, pParent);
+			pOther = pParent->pLeft;
+		}
+		if (((pOther->pLeft == NULL) || RBT_IS_BLACK(pOther->pLeft)) &&
+		    ((pOther->pRight == NULL) ||
+		     RBT_IS_BLACK(pOther->pRight))) {
+			RBT_SET_RED(pOther);
+			pNode = pParent;
+			pParent = RBT_PARENT(pNode);
 
-            rbtRotateLeft(pRoot, pParent);
-            pNode = pRoot->pRoot;
+			continue;
+		}
+		if ((pOther->pLeft == NULL) || RBT_IS_BLACK(pOther->pLeft)) {
+			pORight = pOther->pRight;
+			if (pORight != NULL)
+				RBT_SET_BLACK(pORight);
 
-            break;
-        }
+			RBT_SET_RED(pOther);
+			rbtRotateLeft(pRoot, pOther);
+			pOther = pParent->pLeft;
+		}
 
-        pOther = pParent->pLeft;
+		rbtNodeSetColor(pOther, RBT_COLOR(pParent));
+		RBT_SET_BLACK(pParent);
 
-        if (RBT_IS_RED(pOther))
-        {
-            RBT_SET_BLACK(pOther);
-            RBT_SET_RED(pParent);
+		if (pOther->pLeft != NULL)
+			RBT_SET_BLACK(pOther->pLeft);
 
-            rbtRotateRight(pRoot, pParent);
-            pOther = pParent->pLeft;
-        }
+		rbtRotateRight(pRoot, pParent);
+		pNode = pRoot->pRoot;
 
-        if (((NULL == pOther->pLeft) || RBT_IS_BLACK(pOther->pLeft)) &&
-            ((NULL == pOther->pRight) || RBT_IS_BLACK(pOther->pRight)))
-        {
-            RBT_SET_RED(pOther);
-            pNode = pParent;
-            pParent = RBT_PARENT(pNode);
+		break;
+	}
 
-            continue ;
-        }
-
-        if ((NULL == pOther->pLeft) || RBT_IS_BLACK(pOther->pLeft))
-        {
-            pORight = pOther->pRight;
-            if (NULL != pORight)
-            {
-                RBT_SET_BLACK(pORight);
-            }
-
-            RBT_SET_RED(pOther);
-            rbtRotateLeft(pRoot, pOther);
-            pOther = pParent->pLeft;
-        }
-
-        rbtNodeSetColor(pOther, RBT_COLOR(pParent));
-        RBT_SET_BLACK(pParent);
-
-        if (NULL != pOther->pLeft)
-        {
-            RBT_SET_BLACK(pOther->pLeft);
-        }
-
-        rbtRotateRight(pRoot, pParent);
-        pNode = pRoot->pRoot;
-
-        break;
-    }
-
-    if (NULL != pNode)
-    {
-        RBT_SET_BLACK(pNode);
-    }
+	if (pNode != NULL)
+		RBT_SET_BLACK(pNode);
 }
 
-void rbtDelNodeDo(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode)
+static void rbtDelNodeDo(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pParent = NULL;
-    Ps3RbNode_s *pChild = NULL;
-    Ps3RbNode_s *pOld = NULL;
-    U32 color = 0;
+	struct Ps3RbNode *pParent = NULL;
+	struct Ps3RbNode *pChild = NULL;
+	struct Ps3RbNode *pOld = NULL;
+	unsigned int color = 0;
 
-    if (NULL == pNode->pLeft)
-    {
-        pChild = pNode->pRight;
-    }
-    else if (NULL == pNode->pRight)
-    {
-        pChild = pNode->pLeft;
-    }
-    else
-    {
-        pOld = pNode;
+	if (pNode->pLeft == NULL) {
+		pChild = pNode->pRight;
+	} else if (pNode->pRight == NULL) {
+		pChild = pNode->pLeft;
+	} else {
+		pOld = pNode;
 
-        pNode = pNode->pRight;
-        while (NULL != pNode->pLeft)
-        {
-            pNode = pNode->pLeft;
-        }
+		pNode = pNode->pRight;
+		while (pNode->pLeft != NULL)
+			pNode = pNode->pLeft;
 
-        pChild = pNode->pRight;
-        pParent = RBT_PARENT(pNode);
-        color = RBT_COLOR(pNode);
+		pChild = pNode->pRight;
+		pParent = RBT_PARENT(pNode);
+		color = RBT_COLOR(pNode);
 
-        if (NULL != pChild)
-        {
-            rbtNodeSetParent(pChild, pParent);
-        }
+		if (pChild != NULL)
+			rbtNodeSetParent(pChild, pParent);
 
-        if (pParent == pOld)
-        {
-            pParent->pRight = pChild;
-            pParent = pNode;
-        }
-        else
-        {
-            pParent->pLeft = pChild;
-        }
+		if (pParent == pOld) {
+			pParent->pRight = pChild;
+			pParent = pNode;
+		} else {
+			pParent->pLeft = pChild;
+		}
 
-        pNode->pParentColor = pOld->pParentColor;
-        pNode->pRight = pOld->pRight;
-        pNode->pLeft = pOld->pLeft;
+		pNode->pParentColor = pOld->pParentColor;
+		pNode->pRight = pOld->pRight;
+		pNode->pLeft = pOld->pLeft;
 
-        if (NULL != RBT_PARENT(pOld))
-        {
-            if (RBT_PARENT(pOld)->pLeft == pOld)
-            {
-                RBT_PARENT(pOld)->pLeft = pNode;
-            }
-            else
-            {
-                RBT_PARENT(pOld)->pRight = pNode;
-            }
-        }
-        else
-        {
-            pRoot->pRoot = pNode;
-        }
+		if (RBT_PARENT(pOld) != NULL) {
+			if (RBT_PARENT(pOld)->pLeft == pOld)
+				RBT_PARENT(pOld)->pLeft = pNode;
+			else
+				RBT_PARENT(pOld)->pRight = pNode;
+		} else {
+			pRoot->pRoot = pNode;
+		}
 
-        rbtNodeSetParent(pOld->pLeft, pNode);
-        if (NULL != pOld->pRight)
-        {
-            rbtNodeSetParent(pOld->pRight, pNode);
-        }
+		rbtNodeSetParent(pOld->pLeft, pNode);
+		if (pOld->pRight != NULL)
+			rbtNodeSetParent(pOld->pRight, pNode);
 
-        goto l_color;
-    }
+		goto l_color;
+	}
 
-    pParent = RBT_PARENT(pNode);
-    color = RBT_COLOR(pNode);
+	pParent = RBT_PARENT(pNode);
+	color = RBT_COLOR(pNode);
 
-    if (NULL != pChild)
-    {
-        rbtNodeSetParent(pChild, pParent);
-    }
+	if (pChild != NULL)
+		rbtNodeSetParent(pChild, pParent);
 
-    if (NULL != pParent)
-    {
-        if (pParent->pLeft == pNode)
-        {
-            pParent->pLeft = pChild;
-        }
-        else
-        {
-            pParent->pRight = pChild;
-        }
-    }
-    else
-    {
-        pRoot->pRoot = pChild;
-    }
+	if (pParent != NULL) {
+		if (pParent->pLeft == pNode)
+			pParent->pLeft = pChild;
+		else
+			pParent->pRight = pChild;
+	} else {
+		pRoot->pRoot = pChild;
+	}
 
 l_color:
-    if (color == RBT_BLACK)
-    {
-        rbtColorAfterDel(pRoot, pChild, pParent);
-    }
+	if (color == RBT_BLACK)
+		rbtColorAfterDel(pRoot, pChild, pParent);
 }
 
-static Ps3RbNode_s* rbtFindNodeDo(Ps3RbRoot_s *pRoot, void *pKey,
-    Ps3RbTreeOps_s *pOps, Bool intent_addnode, Ps3RbNode_s **ppParent,
-    Ps3RbNode_s ***pppLinker)
+static struct Ps3RbNode *rbtFindNodeDo(struct Ps3RbRoot *pRoot, void *pKey,
+				       struct Ps3RbTreeOps *pOps,
+				       unsigned char intent_addnode,
+				       struct Ps3RbNode **ppParent,
+				       struct Ps3RbNode ***pppLinker)
 {
-    Ps3RbNode_s *pNode = NULL;
-    Ps3RbNode_s *pParent = NULL;
-    Ps3RbNode_s **ppLinker = NULL;
-    void *pKeyCur = NULL;
-    Ps3Cmp_e cmprc = PS3_EQ;
+	struct Ps3RbNode *pNode = NULL;
+	struct Ps3RbNode *pParent = NULL;
+	struct Ps3RbNode **ppLinker = NULL;
+	void *pKeyCur = NULL;
+	enum Ps3Cmp cmprc = PS3_EQ;
 
-    BUG_ON(NULL == pOps->cmpkey);
-    BUG_ON((NULL == pOps->getkey) &&
-        (!testBitNonAtomic(RBTBF_KEYOFFSET_ENABLE, (volatile ULong *)&pOps->flags)));
+	BUG_ON(pOps->cmpkey == NULL);
+	BUG_ON((pOps->getkey == NULL) &&
+	       (!testBitNonAtomic(RBTBF_KEYOFFSET_ENABLE,
+				  (unsigned long *)&pOps->flags)));
 
-    ppLinker = &pRoot->pRoot;
-    while (NULL != (*ppLinker))
-    {
-        pParent = (*ppLinker);
+	ppLinker = &pRoot->pRoot;
+	while (NULL != (*ppLinker)) {
+		pParent = (*ppLinker);
 
-        pKeyCur = ps3RbNodeGetKey(pParent, pOps);
-        cmprc = pOps->cmpkey(pKey, pKeyCur);
-        if (PS3_LT == cmprc)
-        {
-            ppLinker = &pParent->pLeft;
-        }
-        else if (PS3_GT == cmprc)
-        {
-            ppLinker = &pParent->pRight;
-        }
-        else if ((PS3_TRUE == intent_addnode) &&
-            testBitNonAtomic(RBTBF_CONFLICT_ENABLE, (volatile ULong *)&pOps->flags))
-        {
-            ppLinker = &pParent->pLeft;
-        }
-        else
-        {
-            pNode = pParent;
-            break ;
-        }
-    }
+		pKeyCur = ps3RbNodeGetKey(pParent, pOps);
+		cmprc = pOps->cmpkey(pKey, pKeyCur);
+		if (cmprc == PS3_LT) {
+			ppLinker = &pParent->pLeft;
+		} else if (cmprc == PS3_GT) {
+			ppLinker = &pParent->pRight;
+		} else if ((intent_addnode == PS3_TRUE) &&
+			   testBitNonAtomic(
+				   RBTBF_CONFLICT_ENABLE,
+				   (unsigned long *)&pOps->flags)) {
+			ppLinker = &pParent->pLeft;
+		} else {
+			pNode = pParent;
+			break;
+		}
+	}
 
-    if (NULL != pppLinker)
-    {
-        (*pppLinker) = ppLinker;
-    }
+	if (pppLinker != NULL)
+		(*pppLinker) = ppLinker;
 
-    if (NULL != ppParent)
-    {
-        if (NULL != pNode)
-        {
-            (*ppParent) = RBT_PARENT(pNode);
-        }
-        else
-        {
-            (*ppParent) = pParent;
-        }
-    }
+	if (ppParent != NULL) {
+		if (pNode != NULL)
+			(*ppParent) = RBT_PARENT(pNode);
+		else
+			(*ppParent) = pParent;
+	}
 
-    return pNode;
+	return pNode;
 }
 
-void ps3RbtColorAfterAdd(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode)
+void ps3RbtColorAfterAdd(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pGparent = NULL;
-    Ps3RbNode_s *pParent = NULL;
-    Ps3RbNode_s *pUncle = NULL;
-    Ps3RbNode_s *pTmp = NULL;
+	struct Ps3RbNode *pGparent = NULL;
+	struct Ps3RbNode *pParent = NULL;
+	struct Ps3RbNode *pUncle = NULL;
+	struct Ps3RbNode *pTmp = NULL;
 
-    while (1)
-    {
-        pParent = RBT_PARENT(pNode);
-        if ((NULL == pParent) || RBT_IS_BLACK(pParent))
-        {
-            break ;
-        }
+	while (1) {
+		pParent = RBT_PARENT(pNode);
+		if ((pParent == NULL) || RBT_IS_BLACK(pParent))
+			break;
 
-        pGparent = RBT_PARENT(pParent);
-        if (pParent == pGparent->pLeft)
-        {
-            pUncle = pGparent->pRight;
-            if ((NULL != pUncle) && RBT_IS_RED(pUncle))
-            {
-                RBT_SET_BLACK(pUncle);
-                RBT_SET_BLACK(pParent);
-                RBT_SET_RED(pGparent);
+		pGparent = RBT_PARENT(pParent);
+		if (pParent == pGparent->pLeft) {
+			pUncle = pGparent->pRight;
+			if ((pUncle != NULL) && RBT_IS_RED(pUncle)) {
+				RBT_SET_BLACK(pUncle);
+				RBT_SET_BLACK(pParent);
+				RBT_SET_RED(pGparent);
 
-                pNode = pGparent;
-                continue ;
-            }
+				pNode = pGparent;
+				continue;
+			}
 
-            if (pParent->pRight == pNode)
-            {
-                rbtRotateLeft(pRoot, pParent);
+			if (pParent->pRight == pNode) {
+				rbtRotateLeft(pRoot, pParent);
 
-                pTmp = pParent;
-                pParent = pNode;
-                pNode = pTmp;
-            }
+				pTmp = pParent;
+				pParent = pNode;
+				pNode = pTmp;
+			}
 
-            RBT_SET_BLACK(pParent);
-            RBT_SET_RED(pGparent);
-            rbtRotateRight(pRoot, pGparent);
-        }
-        else
-        {
-            pUncle = pGparent->pLeft;
-            if ((NULL != pUncle) && RBT_IS_RED(pUncle))
-            {
-                RBT_SET_BLACK(pUncle);
-                RBT_SET_BLACK(pParent);
-                RBT_SET_RED(pGparent);
+			RBT_SET_BLACK(pParent);
+			RBT_SET_RED(pGparent);
+			rbtRotateRight(pRoot, pGparent);
+		} else {
+			pUncle = pGparent->pLeft;
+			if ((pUncle != NULL) && RBT_IS_RED(pUncle)) {
+				RBT_SET_BLACK(pUncle);
+				RBT_SET_BLACK(pParent);
+				RBT_SET_RED(pGparent);
 
-                pNode = pGparent;
-                continue ;
-            }
+				pNode = pGparent;
+				continue;
+			}
 
-            if (pParent->pLeft == pNode)
-            {
-                rbtRotateRight(pRoot, pParent);
+			if (pParent->pLeft == pNode) {
+				rbtRotateRight(pRoot, pParent);
 
-                pTmp = pParent;
-                pParent = pNode;
-                pNode = pTmp;
-            }
+				pTmp = pParent;
+				pParent = pNode;
+				pNode = pTmp;
+			}
 
-            RBT_SET_BLACK(pParent);
-            RBT_SET_RED(pGparent);
-            rbtRotateLeft(pRoot, pGparent);
-        }
-    }
+			RBT_SET_BLACK(pParent);
+			RBT_SET_RED(pGparent);
+			rbtRotateLeft(pRoot, pGparent);
+		}
+	}
 
-    RBT_SET_BLACK(pRoot->pRoot);
+	RBT_SET_BLACK(pRoot->pRoot);
 }
 
-Ps3RbNode_s* ps3RbtHeadNode(Ps3RbRoot_s *pRoot)
+struct Ps3RbNode *ps3RbtHeadNode(struct Ps3RbRoot *pRoot)
 {
-    Ps3RbNode_s *pNode = NULL;
+	struct Ps3RbNode *pNode = NULL;
 
-    pNode = pRoot->pRoot;
-    if (NULL == pNode)
-    {
-        goto end;
-    }
+	pNode = pRoot->pRoot;
+	if (pNode == NULL)
+		goto end;
 
-    while (NULL != pNode->pLeft)
-    {
-        pNode = pNode->pLeft;
-    }
+	while (pNode->pLeft != NULL)
+		pNode = pNode->pLeft;
 
 end:
-    return pNode;
+	return pNode;
 }
 
-Ps3RbNode_s* ps3RbtTailNode(Ps3RbRoot_s *pRoot)
+struct Ps3RbNode *ps3RbtTailNode(struct Ps3RbRoot *pRoot)
 {
-    Ps3RbNode_s *pNode = NULL;
+	struct Ps3RbNode *pNode = NULL;
 
-    pNode = pRoot->pRoot;
-    if (NULL == pNode)
-    {
-        goto end;
-    }
+	pNode = pRoot->pRoot;
+	if (pNode == NULL)
+		goto end;
 
-    while (NULL != pNode->pRight)
-    {
-        pNode = pNode->pRight;
-    }
+	while (pNode->pRight != NULL)
+		pNode = pNode->pRight;
 
 end:
-    return pNode;
+	return pNode;
 }
 
-Ps3RbNode_s* ps3RbtPrevNode(Ps3RbNode_s *pNode)
+struct Ps3RbNode *ps3RbtPrevNode(struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pParent = NULL;
+	struct Ps3RbNode *pParent = NULL;
 
-    if (NULL == pNode)
-    {
-        goto end;
-    }
+	if (pNode == NULL)
+		goto end;
 
-    if (NULL != pNode->pLeft)
-    {
-        pNode = pNode->pLeft;
-        while (NULL != pNode->pRight)
-        {
-            pNode = pNode->pRight;
-        }
+	if (pNode->pLeft != NULL) {
+		pNode = pNode->pLeft;
+		while (pNode->pRight != NULL)
+			pNode = pNode->pRight;
 
-        return pNode;
-    }
+		return pNode;
+	}
+	while (1) {
+		pParent = RBT_PARENT(pNode);
+		if ((pParent == NULL) || (pNode != pParent->pLeft))
+			goto end;
 
-    while (1)
-    {
-        pParent = RBT_PARENT(pNode);
-        if ((NULL == pParent) || (pNode != pParent->pLeft))
-        {
-            goto end;
-        }
-
-        pNode = pParent;
-    }
+		pNode = pParent;
+	}
 
 end:
-    return pParent;
+	return pParent;
 }
 
-Ps3RbNode_s* ps3RbtNextNode(Ps3RbNode_s *pNode)
+struct Ps3RbNode *ps3RbtNextNode(struct Ps3RbNode *pNode)
 {
-    Ps3RbNode_s *pParent = NULL;
+	struct Ps3RbNode *pParent = NULL;
 
-    if (NULL == pNode)
-    {
-        goto end;
-    }
+	if (pNode == NULL)
+		goto end;
 
-    if (NULL != pNode->pRight)
-    {
-        pNode = pNode->pRight;
-        while (NULL != pNode->pLeft)
-        {
-            pNode = pNode->pLeft;
-        }
+	if (pNode->pRight != NULL) {
+		pNode = pNode->pRight;
+		while (pNode->pLeft != NULL)
+			pNode = pNode->pLeft;
 
-        return pNode;
-    }
+		return pNode;
+	}
 
-    while (1)
-    {
-        pParent = RBT_PARENT(pNode);
-        if ((NULL == pParent) || (pNode != pParent->pRight))
-        {
-            goto end;
-        }
+	while (1) {
+		pParent = RBT_PARENT(pNode);
+		if ((pParent == NULL) || (pNode != pParent->pRight))
+			goto end;
 
-        pNode = pParent;
-    }
+		pNode = pParent;
+	}
 
 end:
-    return pParent;
+	return pParent;
 }
 
-void ps3RbtReplaceNode(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNew,
-    Ps3RbNode_s *pVictim)
+void ps3RbtReplaceNode(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNew,
+		       struct Ps3RbNode *pVictim)
 {
-    Ps3RbNode_s *pParent = RBT_PARENT(pVictim);
+	struct Ps3RbNode *pParent = RBT_PARENT(pVictim);
 
-    if (NULL != pParent)
-    {
-        if (pVictim == pParent->pLeft)
-        {
-            pParent->pLeft = pNew;
-        }
-        else
-        {
-            pParent->pRight = pNew;
-        }
-    }
-    else
-    {
-        pRoot->pRoot = pNew;
-    }
+	if (pParent != NULL) {
+		if (pVictim == pParent->pLeft)
+			pParent->pLeft = pNew;
+		else
+			pParent->pRight = pNew;
+	} else {
+		pRoot->pRoot = pNew;
+	}
 
-    if (NULL != pVictim->pLeft)
-    {
-        rbtNodeSetParent(pVictim->pLeft, pNew);
-    }
+	if (pVictim->pLeft != NULL)
+		rbtNodeSetParent(pVictim->pLeft, pNew);
 
-    if (NULL != pVictim->pRight)
-    {
-        rbtNodeSetParent(pVictim->pRight, pNew);
-    }
+	if (pVictim->pRight != NULL)
+		rbtNodeSetParent(pVictim->pRight, pNew);
 
-    (*pNew) = (*pVictim);
+	(*pNew) = (*pVictim);
 }
 
-S32 ps3RbtDelNode(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode)
+int ps3RbtDelNode(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode)
 {
-    S32 rc = 0;
+	int rc = 0;
 
-    if (RBT_NODE_IS_EMPTY(pNode))
-    {
-        rc = -PS3_FAILED;
-        goto end;
-    }
+	if (RBT_NODE_IS_EMPTY(pNode)) {
+		rc = -PS3_FAILED;
+		goto end;
+	}
 
-    rbtDelNodeDo(pRoot, pNode);
-    ps3RbNodeInit(pNode);
+	rbtDelNodeDo(pRoot, pNode);
+	ps3RbNodeInit(pNode);
 
 end:
-    return rc;
+	return rc;
 }
 
-S32 ps3RbtAddNode(Ps3RbRoot_s *pRoot, Ps3RbNode_s *pNode,
-    Ps3RbTreeOps_s *pOps)
+int ps3RbtAddNode(struct Ps3RbRoot *pRoot, struct Ps3RbNode *pNode,
+		  struct Ps3RbTreeOps *pOps)
 {
-    Ps3RbNode_s *pParent = NULL;
-    Ps3RbNode_s **ppLinker = NULL;
-    void *pKey = NULL;
-    S32 rc = 0;
+	struct Ps3RbNode *pParent = NULL;
+	struct Ps3RbNode **ppLinker = NULL;
+	void *pKey = NULL;
+	int rc = 0;
 
-    BUG_ON((NULL == pOps->getkey) &&
-        (!testBitNonAtomic(RBTBF_KEYOFFSET_ENABLE, (volatile ULong *)&pOps->flags)));
+	BUG_ON((pOps->getkey == NULL) &&
+	       (!testBitNonAtomic(RBTBF_KEYOFFSET_ENABLE,
+				  (unsigned long *)&pOps->flags)));
 
-    if (!RBT_NODE_IS_EMPTY(pNode))
-    {
-        rc = -PS3_FAILED;
-        goto end;
-    }
+	if (!RBT_NODE_IS_EMPTY(pNode)) {
+		rc = -PS3_FAILED;
+		goto end;
+	}
 
-    pKey = ps3RbNodeGetKey(pNode, pOps);
-    if (NULL != rbtFindNodeDo(pRoot, pKey, pOps, PS3_TRUE, &pParent,
-        &ppLinker))
-    {
-        rc = -PS3_FAILED;
-        goto end;
-    }
+	pKey = ps3RbNodeGetKey(pNode, pOps);
+	if (NULL !=
+	    rbtFindNodeDo(pRoot, pKey, pOps, PS3_TRUE, &pParent, &ppLinker)) {
+		rc = -PS3_FAILED;
+		goto end;
+	}
 
-    ps3RbNodeLink(pNode, pParent, ppLinker);
-    ps3RbtColorAfterAdd(pRoot, pNode);
+	ps3RbNodeLink(pNode, pParent, ppLinker);
+	ps3RbtColorAfterAdd(pRoot, pNode);
 
 end:
-    return rc;
+	return rc;
 }
 
-Ps3RbNode_s* ps3RbtFindNode(Ps3RbRoot_s *pRoot, void *pKey,
-    Ps3RbTreeOps_s *pOps)
+struct Ps3RbNode *ps3RbtFindNode(struct Ps3RbRoot *pRoot, void *pKey,
+				 struct Ps3RbTreeOps *pOps)
 {
-    Ps3RbNode_s *pNode = NULL;
+	struct Ps3RbNode *pNode = NULL;
 
-    if (NULL == pKey)
-    {
-        pNode = ps3RbtHeadNode(pRoot);
-        goto end;
-    }
+	if (pKey == NULL) {
+		pNode = ps3RbtHeadNode(pRoot);
+		goto end;
+	}
 
-    pNode = rbtFindNodeDo(pRoot, pKey, pOps, PS3_FALSE, NULL, NULL);
+	pNode = rbtFindNodeDo(pRoot, pKey, pOps, PS3_FALSE, NULL, NULL);
 
 end:
-    return pNode;
+	return pNode;
 }
 
-Ps3RbNode_s* ps3RbtFindNextNode(Ps3RbRoot_s *pRoot, void *pKey,
-    Ps3RbTreeOps_s *pOps)
+struct Ps3RbNode *ps3RbtFindNextNode(struct Ps3RbRoot *pRoot, void *pKey,
+				     struct Ps3RbTreeOps *pOps)
 {
-    Ps3RbNode_s *pNode = NULL;
-    Ps3RbNode_s *pParent = NULL;
-    Ps3RbNode_s **ppLinker = NULL;
-    void *pKeyCur = NULL;
+	struct Ps3RbNode *pNode = NULL;
+	struct Ps3RbNode *pParent = NULL;
+	struct Ps3RbNode **ppLinker = NULL;
+	void *pKeyCur = NULL;
 
-    if (NULL == pKey)
-    {
-        pNode = ps3RbtHeadNode(pRoot);
-        goto end;
-    }
+	if (pKey == NULL) {
+		pNode = ps3RbtHeadNode(pRoot);
+		goto end;
+	}
 
-    pNode = rbtFindNodeDo(pRoot, pKey, pOps, PS3_FALSE, &pParent,
-        &ppLinker);
-    if (NULL != pNode)
-    {
-        pNode = ps3RbtNextNode(pNode);
+	pNode = rbtFindNodeDo(pRoot, pKey, pOps, PS3_FALSE, &pParent,
+			      &ppLinker);
+	if (pNode != NULL) {
+		pNode = ps3RbtNextNode(pNode);
 
-        if (!testBitNonAtomic(RBTBF_CONFLICT_ENABLE, (volatile ULong *)&pOps->flags))
-        {
-            goto end;
-        }
+		if (!testBitNonAtomic(RBTBF_CONFLICT_ENABLE,
+				      (unsigned long *)&pOps->flags)) {
+			goto end;
+		}
 
-        while (NULL != pNode)
-        {
-            pKeyCur = ps3RbNodeGetKey(pNode, pOps);
-            if (PS3_EQ != pOps->cmpkey(pKey, pKeyCur))
-            {
-                break;
-            }
+		while (pNode != NULL) {
+			pKeyCur = ps3RbNodeGetKey(pNode, pOps);
+			if (pOps->cmpkey(pKey, pKeyCur) != PS3_EQ)
+				break;
 
-            pNode = ps3RbtNextNode(pNode);
-        }
+			pNode = ps3RbtNextNode(pNode);
+		}
 
-        goto end;
-    }
+		goto end;
+	}
 
-    if (NULL == pParent)
-    {
-        goto end;
-    }
+	if (pParent == NULL)
+		goto end;
 
-    if (ppLinker == &pParent->pLeft)
-    {
-        pNode = pParent;
-        goto end;
-    }
+	if (ppLinker == &pParent->pLeft) {
+		pNode = pParent;
+		goto end;
+	}
 
-    pNode = ps3RbtNextNode(pParent);
+	pNode = ps3RbtNextNode(pParent);
 
 end:
-    return pNode;
+	return pNode;
 }
 
-void ps3RbtClean(Ps3RbRoot_s *pRoot)
+void ps3RbtClean(struct Ps3RbRoot *pRoot)
 {
-    Ps3RbNode_s *pNode = NULL;
+	struct Ps3RbNode *pNode = NULL;
 
-    pNode = ps3RbtHeadNode(pRoot);
-    while (NULL != pNode)
-    {
-        (void)ps3RbtDelNode(pRoot, pNode);
+	pNode = ps3RbtHeadNode(pRoot);
+	while (pNode != NULL) {
+		(void)ps3RbtDelNode(pRoot, pNode);
 
-        pNode = ps3RbtHeadNode(pRoot);
-    }
+		pNode = ps3RbtHeadNode(pRoot);
+	}
 }
 
-S32 ps3RbtTraverse(Ps3RbRoot_s *pRoot, ps3RbtreeVisitFunc visit,
-    void *p_ctxt)
+int ps3RbtTraverse(struct Ps3RbRoot *pRoot,
+		   int (*visit)(struct Ps3RbNode *pNode, void *pCtxt),
+		   void *p_ctxt)
 {
-    Ps3RbNode_s *pNode = NULL;
-    Ps3RbNode_s *pNext = NULL;
-    S32 rc = 0;
+	struct Ps3RbNode *pNode = NULL;
+	struct Ps3RbNode *pNext = NULL;
+	int rc = 0;
 
-    BUG_ON(NULL == visit);
+	BUG_ON(visit == NULL);
 
-    RBT_FOR_EACH_SAFE(pNode, pNext, pRoot)
-    {
-        rc = visit(pNode, p_ctxt);
-        if (rc < 0)
-        {
-            goto end;
-        }
-    }
+	RBT_FOR_EACH_SAFE(pNode, pNext, pRoot)
+	{
+		rc = visit(pNode, p_ctxt);
+		if (rc < 0)
+			goto end;
+	}
 
 end:
-    return rc;
+	return rc;
 }
-

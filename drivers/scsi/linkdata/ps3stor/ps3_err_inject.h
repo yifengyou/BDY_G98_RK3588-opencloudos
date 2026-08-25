@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 
 #ifndef _PS3_ERR_INJECT_H_
 #define _PS3_ERR_INJECT_H_
@@ -7,7 +8,7 @@
 #include "ps3_platform_utils.h"
 #include "ps3_htp_def.h"
 
-typedef enum {
+enum InjectType {
 	PS3_ERR_IJ_WATCHDOG_CONCURY = 1,      
 	PS3_ERR_IJ_STOP_DUMP_CONCURY = 2,     
 	PS3_ERR_IJ_SOFT_TO_HARD = 3,          
@@ -310,8 +311,8 @@ typedef enum {
 	PS3_ERR_IJ_FORCE_VERFILE2_INIT_FAIL,      
 	PS3_ERR_IJ_FORCE_RECOVERY_INIT_FAIL,      
 	PS3_ERR_IJ_FORCE_RECOVERY_OPE_FAIL,       
-	PS3_ERR_IJ_IO_RW_FLAG_SET_UNKOWN,         
-	PS3_ERR_IJ_SOFT_ZONE_TYPE_SET_UNKOWN,     
+	PS3_ERR_IJ_IO_RW_FLAG_SET_UNKNOWN,         
+	PS3_ERR_IJ_SOFT_ZONE_TYPE_SET_UNKNOWN,     
 	PS3_ERR_IJ_WATCHDOG_WAIT_RUNNING,         
 	PS3_ERR_IJ_WATCHDOG_IRQ_QUEUE,            
 	PS3_ERR_IJ_WATCHDOG_IRQ_QUEUE_1,          
@@ -411,8 +412,8 @@ typedef enum {
 	PS3_ERR_IJ_FORCE_DUL_RECOVERY,            
 	PS3_ERR_IJ_FORCE_START_DUL_RECOVERY,      
 	PS3_ERR_IJ_FORCE_DUL_RECOVERY_PENDING,    
-	PS3_ERR_IJ_FORCE_DESTORY_RECOVERY,        
-	PS3_ERR_IJ_FORCE_START_DESTORY_RECOVERY,  
+	PS3_ERR_IJ_FORCE_DESTROY_RECOVERY,        
+	PS3_ERR_IJ_FORCE_START_DESTROY_RECOVERY,  
 	PS3_ERR_IJ_FORCE_RECOVERY_STATE_DEAD,     
 	PS3_ERR_IJ_FORCE_RECOVERY_PEER_STATE_DEAD,
 	PS3_ERR_IJ_FORCE_RECOVERY_NOT_SUPPORT,    
@@ -439,7 +440,7 @@ typedef enum {
 	PS3_ERR_IJ_WAIT_RUNNING_FAIL, 
 	PS3_ERR_IJ_WEB_SUBSCRIBE,  	  
 	PS3_ERR_IJ_FORCE_RECOVERY_FINISH_STATE_NOOPERATIONAL,
-	PS3_ERR_IJ_FORCE_HARD_INIT_RUNING_UNNORMAL,
+	PS3_ERR_IJ_FORCE_HARD_INIT_RUNNING_UNNORMAL,
 	PS3_ERR_IJ_FORCE_HARD_READY_PCIE_ERRL,
 	PS3_ERR_IJ_WAIT_RUNNING_FAIL1,        
 	PS3_ERR_DUMP_ALLOC_FAILED,                
@@ -522,75 +523,131 @@ typedef enum {
 	PS3_ERR_IJ_DETECTED_REMOVE_BREAK,         
 	PS3_ERR_IJ_DETECTED_REMOVE_BREAK_2,       
 	PS3_ERR_IJ_DETECTED_REMOVE_BREAK_3,       
+	PS3_ERR_IJ_RECOVERY_STATE_SHALLOW,        
+	PS3_ERR_IJ_RECOVERY_HALT_BREAK,           
+	PS3_ERR_IJ_RECOVERY_HALT_BREAK_1,         
+	PS3_ERR_IJ_FORCE_RECOVERY_DOORBELL_DONE,  
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR,             
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_1,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_2,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_3,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_4,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_5,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_6,           
+	PS3_ERR_IJ_RECOVERY_PCIE_ERR_7,           
+	PS3_ERR_IJ_RECOVERY_KEY_STATE_CHECK,      
+	PS3_ERR_IJ_BIT_POS_READ_ERR,              
+	PS3_ERR_IJ_WAIT_RUNNING_CRITICAL,         
+	PS3_ERR_IJ_WAIT_RUNNING_FAULT,            
+	PS3_ERR_IJ_WAIT_RUNNING_COUNT_MAX,        
+	PS3_ERR_IJ_WAIT_RUNNING_READY,            
+	PS3_ERR_IJ_WAIT_RUNNING_WAIT,             
+	PS3_ERR_IJ_WAIT_RUNNING_RESP_ERR,         
+	PS3_ERR_IJ_OP_EVENT_SUB_FAILED,           
+	PS3_ERR_IJ_OP_PENDING_SUB_FAILED,         
+	PS3_ERR_IJ_OP_WEB_SUB_FAILED,             
+	PS3_ERR_IJ_COMPLETE_FAULT,                
+	PS3_ERR_IJ_FORCE_RECOVERY_DOORBELL_START, 
+	PS3_ERR_IJ_CHECK_SUSPEND,                 
+	PS3_ERR_IJ_CMD_TIMEOUT_RECOVERY_CHECK,    
+	PS3_ERR_IJ_HALF_RECOVERY_CHECK,           
+	PS3_ERR_IJ_WITHOUT_DETAIL_BREAK_CHECK,    
+	PS3_ERR_IJ_DETAIL_BREAK_CHECK1,           
+	PS3_ERR_IJ_DETAIL_BREAK_CHECK2,           
+	PS3_ERR_IJ_DETAIL_BREAK_CHECK3,           
+	PS3_ERR_IJ_CHECK_EVENT_CMD_NULL,          
+	PS3_ERR_IJ_EVENT_CMD_NULL_CHECK1,         
+	PS3_ERR_IJ_EVENT_CMD_NULL_CHECK2,         
+	PS3_ERR_IJ_DETAIL_BREAK_CHECK4,           
+	PS3_ERR_IJ_EVENT_WAIT_SUSPEND_END,        
+	PS3_ERR_IJ_SUSPEND_END,                   
+	PS3_ERR_IJ_REPLY_BLOCK,                   
+	PS3_ERR_IJ_QOS_PD_INIT_FAIL_5,            
+	PS3_ERR_IJ_QOS_PD_INIT_FAIL_6,            
+	PS3_ERR_IJ_QOS_PD_INIT_FAIL_7,            
+	PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET,      
+	PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_1,    
+	PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_2,    
+	PS3_ERR_IJ_RECOVERY_WAIT_HOST_RESET_3,    
+	PS3_ERR_IJ_QOS_VD_IN_PD_Q_BLOCK,          
+	PS3_ERR_IJ_QOS_JBOD_IN_PD_Q_BLOCK,        
 	PS3_ERR_IJ_MAX_COUNT,
-}InjectType_E;
+};
 struct ps3_rec_work_context {
 	struct delayed_work _work;
 	struct workqueue_struct *_queue;
 	struct ps3_instance *instance;
-	U32 state;
+	unsigned int state;
 };
 
 #ifdef PS3_SUPPORT_INJECT
 
 #define PS3_ERR_SCENE_NUM (1000)
 
-typedef S32 (*injectCallback)(void* userData, ...);
+typedef int (*injectCallback)(void* userData, ...);
 
 typedef struct Ps3Injection
 {
-	InjectType_E type;	
+	enum InjectType type;	
 	injectCallback callback;
-	Bool active;
-	U16 count;
-	U8 is_hit_pre:1;
-	U8 is_hit_post:1;
-	U8 reserved:6;
+	unsigned char active;
+	unsigned short count;
+	unsigned char is_hit_pre:1;
+	unsigned char is_hit_post:1;
+	unsigned char reserved:6;
 }Ps3Injection_t;
 
-void inject_register(U16 err_type, injectCallback callback);
-void inject_active_intf(U16 err_type, U16 count);
-void inject_execute_callback(U16 err_type, void * data);
-void inject_execute_callback_at_time(U16 err_type, void * data);
-void inject_execute_callback_relevance_wait_pre(U16 err_type, U16 err_type_wait, void * data);
-void inject_execute_callback_relevance_wait_post(U16 err_type, U16 err_type_wait, void * data);
-void inject_execute_callback_at_time_relevance_wait_pre(U16 err_type,
-	U16 err_type_wait, void * data);
-void inject_execute_callback_at_time_relevance_wait_post(U16 err_type,
-	U16 err_type_wait, void * data);
+void inject_register(unsigned short err_type, int (*callback)(void *userData, ...));
+void inject_active_intf(unsigned short err_type, unsigned short count);
+void inject_execute_callback(unsigned short err_type, void *data);
+void inject_execute_callback_at_time(unsigned short err_type, void *data);
+void inject_execute_callback_relevance_wait_pre(unsigned short err_type,
+						unsigned short err_type_wait,
+						void *data);
+void inject_execute_callback_relevance_wait_post(unsigned short err_type,
+						 unsigned short err_type_wait,
+						 void *data);
+void inject_execute_callback_at_time_relevance_wait_pre(
+	unsigned short err_type, unsigned short err_type_wait, void *data);
+void inject_execute_callback_at_time_relevance_wait_post(
+	unsigned short err_type, unsigned short err_type_wait, void *data);
 
-#define INJECT_REG(type, callback)  inject_register(type, (injectCallback)callback);
-#define INJECT_ACTIVE(type, count)  inject_active_intf(type, count);
-#define INJECT_START(type, data)	inject_execute_callback(type, data);
-#define INJECT_AT_TIMES(type, data)	inject_execute_callback_at_time(type, data);
-#define INJECT_START_WAIT_REV_PRE(type, type_wait, data) \
-	inject_execute_callback_relevance_wait_pre(type, type_wait, data);
-#define INJECT_START_WAIT_REV_POST(type, type_wait, data) \
-	inject_execute_callback_relevance_wait_post(type, type_wait, data);
-#define INJECT_START_AT_TIME_WAIT_REV_PRE(type, type_wait, data) \
-	inject_execute_callback_at_time_relevance_wait_pre(type, type_wait, data);
-#define INJECT_START_AT_TIME_WAIT_REV_POST(type, type_wait, data) \
-	inject_execute_callback_at_time_relevance_wait_post(type, type_wait, data);
+#define INJECT_REG(type, callback)                                             \
+	inject_register(type, (int (*)(void *userData, ...))callback);
+#define INJECT_ACTIVE(type, count) inject_active_intf(type, count);
+#define INJECT_START(type, data) inject_execute_callback(type, data);
+#define INJECT_AT_TIMES(type, data) inject_execute_callback_at_time(type, data)
+#define INJECT_START_WAIT_REV_PRE(type, type_wait, data);                       \
+	inject_execute_callback_relevance_wait_pre(type, type_wait, data)
+#define INJECT_START_WAIT_REV_POST(type, type_wait, data);                      \
+	inject_execute_callback_relevance_wait_post(type, type_wait, data)
+#define INJECT_START_AT_TIME_WAIT_REV_PRE(type, type_wait, data);               \
+	inject_execute_callback_at_time_relevance_wait_pre(type, type_wait,    \
+							   data);
+#define INJECT_START_AT_TIME_WAIT_REV_POST(type, type_wait, data)              \
+	inject_execute_callback_at_time_relevance_wait_post(type, type_wait,   \
+							    data);
 
 
 
 #define PS3_IJ_SLEEP(ms, err_t) do {ps3_err_inject_sleep((ms), (err_t));} while(0)
 #define PS3_IJ_SLEEP_RAND(min, max, err_t) do {ps3_err_inject_sleep_rand((min), (max), (err_t));} while(0)
 
-void ps3_err_inject_sleep(U32 ms, U16 err_type);
+void ps3_err_inject_sleep(unsigned int ms, unsigned short err_type);
 
-void ps3_err_inject_sleep_rand(U32 min, U32 max, U16 err_type);
+void ps3_err_inject_sleep_rand(unsigned int min, unsigned int max,
+			       unsigned short err_type);
 
-void ps3_err_inject_err_type_valid(U16 err_type);
+void ps3_err_inject_err_type_valid(unsigned short err_type);
 
-void ps3_err_inject_err_type_clean(U16 err_type);
+void ps3_err_inject_err_type_clean(unsigned short err_type);
 
-Bool ps3_err_inject_err_type_get(U16 err_type);
+unsigned char ps3_err_inject_err_type_get(unsigned short err_type);
 void active_err_inject(void);
 void ps3_wait_recovery_rand_finish(void);
 
-void ps3_err_inject_wait_pre(U16 err_type_wait);
-void ps3_err_inject_wait_post(U16 err_type_wait);
+void ps3_err_inject_wait_pre(unsigned short err_type_wait);
+void ps3_err_inject_wait_post(unsigned short err_type_wait);
 
 #define INJECT_PROBE_ACTIVE() active_err_inject();
 void inject_init(void);
