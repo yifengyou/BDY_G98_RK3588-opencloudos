@@ -1087,7 +1087,7 @@ gctaskexit()
 static void
 gcsockinfo()
 {
-	int		i;
+	int		i, tbucket;
 	struct sockinfo	*sip, *sipsave;
 	unsigned long	sflags, tflags;
 	struct pid	*pid;
@@ -1149,7 +1149,15 @@ gcsockinfo()
 			** sockinfo search
 			** if so, delete this sockinfo
 			*/
-			spin_lock_irqsave(&thash[sip->tgh].lock, tflags);
+			/*
+			** keep the bucket index in a local: the stale-reference
+			** branch below clears sip->tgh, and the shared unlock
+			** at the end of this block must use the bucket that
+			** was actually locked
+			*/
+			tbucket = sip->tgh;
+
+			spin_lock_irqsave(&thash[tbucket].lock, tflags);
 
 			/*
 			** the referenced thread group may have been moved to
@@ -1157,10 +1165,10 @@ gcsockinfo()
 			** read) while this sockinfo still points to it; drop
 			** the stale reference in that case
 			*/
-			if (taskinfo_in_hash(sip->tgh, sip->tgp)) {
+			if (taskinfo_in_hash(tbucket, sip->tgp)) {
 				if (sip->tgp->state == INDELETE) {
 					spin_unlock_irqrestore(
-						&thash[sip->tgh].lock, tflags);
+						&thash[tbucket].lock, tflags);
 					sipsave = sip->ch.next;
 					delete_sockinfo(sip);
 					sip = sipsave;
@@ -1193,7 +1201,7 @@ gcsockinfo()
 					if (pid == NULL) {
 						sip->tgp->state = INDELETE;
 						spin_unlock_irqrestore(
-							&thash[sip->tgh].lock, tflags);
+							&thash[tbucket].lock, tflags);
 
 						sipsave = sip->ch.next;
 						delete_sockinfo(sip);
@@ -1208,7 +1216,7 @@ gcsockinfo()
 				sip->tgh = 0;
 			}
 
-			spin_unlock_irqrestore(&thash[sip->tgh].lock, tflags);
+			spin_unlock_irqrestore(&thash[tbucket].lock, tflags);
 
 			/*
 			** check if this sockinfo has a relation with a thread
@@ -1224,7 +1232,13 @@ gcsockinfo()
 			** as 'indelete' during this sockinfo search
 			** if so, break connection
 			*/
-			spin_lock_irqsave(&thash[sip->thh].lock, tflags);
+			/*
+			** same as above: keep the bucket index local, the
+			** stale-reference branch clears sip->thh
+			*/
+			tbucket = sip->thh;
+
+			spin_lock_irqsave(&thash[tbucket].lock, tflags);
 
 			/*
 			** the referenced thread may have been moved to the
@@ -1232,10 +1246,10 @@ gcsockinfo()
 			** read) while this sockinfo still points to it; drop
 			** the stale reference in that case
 			*/
-			if (taskinfo_in_hash(sip->thh, sip->thp)) {
+			if (taskinfo_in_hash(tbucket, sip->thp)) {
 				if (sip->thp->state == INDELETE) {
 					spin_unlock_irqrestore(
-						&thash[sip->thh].lock, tflags);
+						&thash[tbucket].lock, tflags);
 					sip->thp = NULL;
 					sip = sip->ch.next;
 					continue;
@@ -1247,7 +1261,7 @@ gcsockinfo()
 				*/
 				if (sip->thp->state == CHECKED) {
 					spin_unlock_irqrestore(
-						&thash[sip->thh].lock, tflags);
+						&thash[tbucket].lock, tflags);
 					sip = sip->ch.next;
 					continue;
 				}
@@ -1273,7 +1287,7 @@ gcsockinfo()
 				sip->thh = 0;
 			}
 
-			spin_unlock_irqrestore(&thash[sip->thh].lock, tflags);
+			spin_unlock_irqrestore(&thash[tbucket].lock, tflags);
 
 			/*
 			** check if a TCP port has not been used
