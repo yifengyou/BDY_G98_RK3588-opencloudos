@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/delay.h>
 #include <net/sock.h>
 #include <linux/cpu.h>
 #include <linux/hook_frame.h>
@@ -15,10 +16,21 @@ const struct cpumask *hook_cpu_mask = cpu_online_mask;
 void hook_disable(void)
 {
 	mutex_lock(&hook_lock);
-	hook_info_flag = 0;
-	smp_wmb();
-	hook_info_func_unregister();
-	if (!module_putted && !hookinfo_nr()) {
+	if (hook_info_flag) {
+		hook_info_flag = 0;
+		smp_wmb();
+		hook_info_func_unregister();
+
+		/*
+		 * wait until all hook users which are still inside a hook
+		 * (they read hook_func_array before it was cleared) have
+		 * finished, so unloading the module is safe
+		 */
+		while (hookinfo_nr())
+			msleep(1);
+	}
+
+	if (!module_putted) {
 		module_put(THIS_MODULE);
 		module_putted = true;
 	}
