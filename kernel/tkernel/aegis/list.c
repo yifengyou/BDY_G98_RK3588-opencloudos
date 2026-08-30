@@ -83,13 +83,26 @@ void clear_cpu_list(void)
 
 void hookinfo_list_in(struct list_head *new, int type)
 {
-	struct list_head *list = this_cpu_ptr(hook_info_array[type].lists);
-	raw_spinlock_t *plock = this_cpu_ptr(hook_info_array[type].lock);
+	struct list_head *list;
+	raw_spinlock_t *plock;
+	atomic64_t *info_num;
 
-	raw_spin_lock_bh(plock);
+	/*
+	 * disable preemption/bh so the list, the lock and the counter all
+	 * belong to the same cpu; hook_info_read() pairs with this by
+	 * splicing a per-cpu list under that cpu's lock and decrementing
+	 * that cpu's info_num
+	 */
+	local_bh_disable();
+	list = this_cpu_ptr(hook_info_array[type].lists);
+	plock = this_cpu_ptr(hook_info_array[type].lock);
+	info_num = this_cpu_ptr(hook_info_array[type].info_num);
+
+	raw_spin_lock(plock);
 	list_add_tail(new, list);
-	raw_spin_unlock_bh(plock);
-	atomic64_inc(this_cpu_ptr(hook_info_array[type].info_num));
+	atomic64_inc(info_num);
+	raw_spin_unlock(plock);
+	local_bh_enable();
 
 	if (wq_has_sleeper(&hook_info_array[type].wait_queue))
 		wake_up_interruptible_poll(&hook_info_array[type].wait_queue, POLLIN);
