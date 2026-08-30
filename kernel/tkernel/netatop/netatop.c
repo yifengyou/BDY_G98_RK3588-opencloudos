@@ -1580,13 +1580,16 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 		** pass relevant info to user mode
 		** and free taskinfo struct
 		*/
+		memset(&npt, 0, sizeof npt);
 		npt.id		= tip->id;
 		npt.tc		= tip->tc;
 		npt.btime	= tip->btime;
 		memcpy(npt.command, tip->command, COMLEN);
 
-		if (copy_to_user(user, &npt, *len) != 0)
+		if (copy_to_user(user, &npt, *len) != 0) {
+			kmem_cache_free(ticache, tip);
 			return -EFAULT;
+		}
 
 		kmem_cache_free(ticache, tip);
 
