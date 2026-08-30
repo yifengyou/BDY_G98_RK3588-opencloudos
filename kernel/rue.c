@@ -91,6 +91,11 @@ int register_rue_ops(struct rue_ops *ops)
 
 	cpus_read_lock();
 	mutex_lock(&rue_mutex);
+	if (READ_ONCE(rue_installed)) {
+		ret = -EBUSY;
+		pr_warn("RUE: ops already installed, failed to register rue_ops");
+		goto out;
+	}
 	if (rue_used()) {
 		ret =  -EBUSY;
 		pr_warn("RUE: system corrupted, "
