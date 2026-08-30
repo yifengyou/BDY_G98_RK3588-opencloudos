@@ -18,6 +18,7 @@ void hook_disable(void)
 	mutex_lock(&hook_lock);
 	if (hook_info_flag) {
 		hook_info_flag = 0;
+		/* publish the flag before clearing the function array */
 		smp_wmb();
 		hook_info_func_unregister();
 
@@ -27,7 +28,7 @@ void hook_disable(void)
 		 * finished, so unloading the module is safe
 		 */
 		while (hookinfo_nr())
-			msleep(1);
+			usleep_range(1000, 2000);
 	}
 
 	if (!module_putted) {
