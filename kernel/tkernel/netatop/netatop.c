@@ -1170,7 +1170,7 @@ gcsockinfo()
 				/*
 				** check if referred thread group still exists;
 				** this step will be skipped if we already verified
-				** the existance of the thread group earlier during
+				** the existence of the thread group earlier during
 				** this garbage collection cycle
 				*/
 				if (sip->tgp->state != CHECKED) {
