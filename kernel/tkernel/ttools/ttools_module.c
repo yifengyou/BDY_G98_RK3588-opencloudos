@@ -52,6 +52,11 @@ static int ttools_ptrace_protect_task(struct task_struct *p_task)
 		}
 	}
 	if (!exist) {
+		/*
+		 * hold a reference to the task so the pointer stays valid
+		 * and cannot be reused by another task while protected
+		 */
+		get_task_struct(p_task);
 		pid_item->task = p_task;
 		list_add_tail(&pid_item->list, &ttools_protected_pids);
 	}
@@ -66,16 +71,21 @@ static int ttools_ptrace_protect_task(struct task_struct *p_task)
 static int ttools_ptrace_unprotect_task(struct task_struct *p_task)
 {
 	struct ttools_pid *p_item;
+	struct task_struct *task = NULL;
 
 	spin_lock(&ttools_pids_lock);
 	list_for_each_entry(p_item, &ttools_protected_pids, list) {
 		if (p_item->task == p_task) {
 			list_del(&p_item->list);
+			task = p_item->task;
 			kfree(p_item);
 			break;
 		}
 	}
 	spin_unlock(&ttools_pids_lock);
+
+	if (task)
+		put_task_struct(task);
 	return 0;
 }
 
@@ -104,15 +114,20 @@ static int ttools_ptrace_hook(long request, long pid, struct task_struct *task, 
 
 static void ttools_clean_task_list(void)
 {
-	struct ttools_pid *p_item;
-	struct ttools_pid *p_item2;
+	struct ttools_pid *p_item, *tmp;
+	struct task_struct *task;
+	LIST_HEAD(local);
 
 	spin_lock(&ttools_pids_lock);
-	list_for_each_entry_safe(p_item, p_item2, &ttools_protected_pids, list) {
-		list_del(&p_item->list);
-		kfree(p_item);
-	}
+	list_splice_init(&ttools_protected_pids, &local);
 	spin_unlock(&ttools_pids_lock);
+
+	list_for_each_entry_safe(p_item, tmp, &local, list) {
+		list_del(&p_item->list);
+		task = p_item->task;
+		kfree(p_item);
+		put_task_struct(task);
+	}
 }
 
 static int ttools_get_fd_refs_cnt(struct ttools_fd_ref *p_ref)
