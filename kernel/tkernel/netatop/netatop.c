@@ -588,6 +588,28 @@ unlocks:
 }
 
 /*
+** verify that the given taskinfo is still chained in the hash bucket
+** with the given index; the taskinfo of an exited task is moved to the
+** exitlist (and freed once it has been read) while sockinfo structures
+** may still reference it, so the taskinfo may only be used when this
+** function, called under the bucket lock, confirms the reference
+*/
+static int
+taskinfo_in_hash(int bucket, struct taskinfo *tip)
+{
+	struct taskinfo *walk = thash[bucket].ch.next;
+
+	while (walk != (void *)&thash[bucket].ch) {
+		if (walk == tip)
+			return 1;
+
+		walk = walk->ch.next;
+	}
+
+	return 0;
+}
+
+/*
 ** connect the sockinfo to the correct taskinfo and update the counters
 */
 static int
@@ -644,6 +666,21 @@ sock2task(char idtype, struct sockinfo *sip, struct taskinfo **tipp,
 		** lock existing task
 		*/
 		spin_lock_irqsave(&thash[*hash].lock, tflags);
+
+		/*
+		** the referenced taskinfo may have been moved to the
+		** exitlist after its task exited (and even been freed
+		** after having been read) while this sockinfo still
+		** points to it; verify it is still chained in the hash
+		** bucket and reconnect from scratch when it is not
+		*/
+		if (!taskinfo_in_hash(*hash, *tipp)) {
+			spin_unlock_irqrestore(&thash[*hash].lock, tflags);
+			*tipp	= NULL;
+			*hash	= 0;
+			return sock2task(idtype, sip, tipp, hash, skb, ndev,
+					in_syscall, direction);
+		}
 
 		/*
 		** check if socket has been passed to another process in the
@@ -1114,50 +1151,61 @@ gcsockinfo()
 			*/
 			spin_lock_irqsave(&thash[sip->tgh].lock, tflags);
 
-			if (sip->tgp->state == INDELETE) {
-				spin_unlock_irqrestore(&thash[sip->tgh].lock,
-									tflags);
-				sipsave = sip->ch.next;
-				delete_sockinfo(sip);
-				sip = sipsave;
-				continue;
-			}
-
 			/*
-			** check if referred thread group still exists;
-			** this step will be skipped if we already verified
-			** the existance of the thread group earlier during
-			** this garbage collection cycle
+			** the referenced thread group may have been moved to
+			** the exitlist (and even been freed after having been
+			** read) while this sockinfo still points to it; drop
+			** the stale reference in that case
 			*/
-			if (sip->tgp->state != CHECKED) {
-				/*
-				** connected thread group not yet verified
-				** during this cycle, so check if it still
-				** exists
-				** if not, mark the thread group as 'indelete'
-				** (it can not be deleted right now because
-				** we might find other sockinfo's referring
-				** to this thread group during the current
-				** cycle) and delete this sockinfo
-				** if the thread group exists, just mark
-				** it  as 'checked' for this cycle
-				*/
-				rcu_read_lock();
-				pid = find_vpid(sip->tgp->id);
-				rcu_read_unlock();
-
-				if (pid == NULL) {
-					sip->tgp->state = INDELETE;
+			if (taskinfo_in_hash(sip->tgh, sip->tgp)) {
+				if (sip->tgp->state == INDELETE) {
 					spin_unlock_irqrestore(
 						&thash[sip->tgh].lock, tflags);
-
 					sipsave = sip->ch.next;
 					delete_sockinfo(sip);
 					sip = sipsave;
 					continue;
-				} else {
-					sip->tgp->state = CHECKED;
 				}
+
+				/*
+				** check if referred thread group still exists;
+				** this step will be skipped if we already verified
+				** the existance of the thread group earlier during
+				** this garbage collection cycle
+				*/
+				if (sip->tgp->state != CHECKED) {
+					/*
+					** connected thread group not yet verified
+					** during this cycle, so check if it still
+					** exists
+					** if not, mark the thread group as 'indelete'
+					** (it can not be deleted right now because
+					** we might find other sockinfo's referring
+					** to this thread group during the current
+					** cycle) and delete this sockinfo
+					** if the thread group exists, just mark
+					** it  as 'checked' for this cycle
+					*/
+					rcu_read_lock();
+					pid = find_vpid(sip->tgp->id);
+					rcu_read_unlock();
+
+					if (pid == NULL) {
+						sip->tgp->state = INDELETE;
+						spin_unlock_irqrestore(
+							&thash[sip->tgh].lock, tflags);
+
+						sipsave = sip->ch.next;
+						delete_sockinfo(sip);
+						sip = sipsave;
+						continue;
+					} else {
+						sip->tgp->state = CHECKED;
+					}
+				}
+			} else {
+				sip->tgp = NULL;
+				sip->tgh = 0;
 			}
 
 			spin_unlock_irqrestore(&thash[sip->tgh].lock, tflags);
@@ -1178,40 +1226,51 @@ gcsockinfo()
 			*/
 			spin_lock_irqsave(&thash[sip->thh].lock, tflags);
 
-			if (sip->thp->state == INDELETE) {
-				spin_unlock_irqrestore(&thash[sip->thh].lock,
-									tflags);
-				sip->thp = NULL;
-				sip = sip->ch.next;
-				continue;
-			}
-
 			/*
-			** check if referred thread is already checked
-			** during this sockinfo search
+			** the referenced thread may have been moved to the
+			** exitlist (and even been freed after having been
+			** read) while this sockinfo still points to it; drop
+			** the stale reference in that case
 			*/
-			if (sip->thp->state == CHECKED) {
-				spin_unlock_irqrestore(&thash[sip->thh].lock,
-								tflags);
-				sip = sip->ch.next;
-				continue;
-			}
+			if (taskinfo_in_hash(sip->thh, sip->thp)) {
+				if (sip->thp->state == INDELETE) {
+					spin_unlock_irqrestore(
+						&thash[sip->thh].lock, tflags);
+					sip->thp = NULL;
+					sip = sip->ch.next;
+					continue;
+				}
 
-			/*
-			** connected thread not yet verified
-			** check if it still exists
-			** if not, mark it as 'indelete' and break connection
-			** if thread exists, mark it 'checked'
-			*/
-			rcu_read_lock();
-			pid = find_vpid(sip->thp->id);
-			rcu_read_unlock();
+				/*
+				** check if referred thread is already checked
+				** during this sockinfo search
+				*/
+				if (sip->thp->state == CHECKED) {
+					spin_unlock_irqrestore(
+						&thash[sip->thh].lock, tflags);
+					sip = sip->ch.next;
+					continue;
+				}
 
-			if (pid == NULL) {
-				sip->thp->state = INDELETE;
-				sip->thp = NULL;
+				/*
+				** connected thread not yet verified
+				** check if it still exists
+				** if not, mark it as 'indelete' and break connection
+				** if thread exists, mark it 'checked'
+				*/
+				rcu_read_lock();
+				pid = find_vpid(sip->thp->id);
+				rcu_read_unlock();
+
+				if (pid == NULL) {
+					sip->thp->state = INDELETE;
+					sip->thp = NULL;
+				} else {
+					sip->thp->state = CHECKED;
+				}
 			} else {
-				sip->thp->state = CHECKED;
+				sip->thp = NULL;
+				sip->thh = 0;
 			}
 
 			spin_unlock_irqrestore(&thash[sip->thh].lock, tflags);
