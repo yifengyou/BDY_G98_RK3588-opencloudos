@@ -1,4 +1,4 @@
-
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _PS3_CMD_COMPLETE_H_
 #define _PS3_CMD_COMPLETE_H_
 
@@ -7,13 +7,14 @@
 #include "ps3_instance_manager.h"
 #include "ps3_inner_data.h"
 
-S32 ps3_cmd_complete(struct ps3_irq *irq);
+int ps3_cmd_complete(struct ps3_irq *irq);
 
-S32 ps3_cmd_reply_polling(struct ps3_instance *instance,
-	struct ps3_cmd *cmd, ULong timeout, Bool ignore);
+int ps3_cmd_reply_polling(struct ps3_instance *instance, struct ps3_cmd *cmd,
+			  unsigned long timeout, unsigned char ignore);
 
-S32 ps3_cmd_reply_polling_when_recovery(struct ps3_instance *instance,
-	struct ps3_cmd *cmd, ULong timeout);
+int ps3_cmd_reply_polling_when_recovery(struct ps3_instance *instance,
+					struct ps3_cmd *cmd,
+					unsigned long timeout);
 
 void ps3_all_reply_fifo_complete(struct ps3_instance *instance);
 

@@ -1,143 +1,145 @@
-
+// SPDX-License-Identifier: GPL-2.0
 #include <scsi/scsi_eh.h>
 
-#include "ps3_nvme_spec.h"
+#include "ps3_htp_nvme_spec.h"
 #include "ps3_nvme_resp_to_scsi.h"
 #include "ps3_instance_manager.h"
 #include "ps3_htp_def.h"
 #include "ps3_htp.h"
 
 enum {
-	SENSE_KEY_NO_SENSE        = 0x00,
+	SENSE_KEY_NO_SENSE = 0x00,
 	SENSE_KEY_RECOVERED_ERROR = 0x01,
-	SENSE_KEY_NOT_READY       = 0x02,
-	SENSE_KEY_MEDIUM_ERROR    = 0x03,
-	SENSE_KEY_HARDWARE_ERROR  = 0x04,
+	SENSE_KEY_NOT_READY = 0x02,
+	SENSE_KEY_MEDIUM_ERROR = 0x03,
+	SENSE_KEY_HARDWARE_ERROR = 0x04,
 	SENSE_KEY_ILLEGAL_REQUEST = 0x05,
-	SENSE_KEY_UNIT_ATTENTION  = 0x06,
-	SENSE_KEY_DATA_PROTECT    = 0x07,
-	SENSE_KEY_BLANK_CHECK     = 0x08,
+	SENSE_KEY_UNIT_ATTENTION = 0x06,
+	SENSE_KEY_DATA_PROTECT = 0x07,
+	SENSE_KEY_BLANK_CHECK = 0x08,
 	SENSE_KEY_VENDOR_SPECIFIC = 0x09,
-	SENSE_KEY_COPY_ABORTED    = 0x0a,
+	SENSE_KEY_COPY_ABORTED = 0x0a,
 	SENSE_KEY_ABORTED_COMMAND = 0x0b,
 	SENSE_KEY_VOLUME_OVERFLOW = 0x0d,
-	SENSE_KEY_MISCOMPARE      = 0x0e,
-} ;
+	SENSE_KEY_MISCOMPARE = 0x0e,
+};
 
 enum {
-	SCSI_ASC_NO_ADDITIONAL_SENSE                = 0x00,
-	SCSI_ASC_PERIPHERAL_DEVICE_WRITE_FAULT      = 0x03,
-	SCSI_ASC_LOGICAL_UNIT_NOT_READY             = 0x04,
-	SCSI_ASC_WARNING                            = 0x0b,
-	SCSI_ASC_LOGICAL_BLOCK_GUARD_CHECK_FAILED   = 0x10,
-	SCSI_ASC_LOGICAL_BLOCK_APPTAG_CHECK_FAILED  = 0x10,
-	SCSI_ASC_LOGICAL_BLOCK_REFTAG_CHECK_FAILED  = 0x10,
-	SCSI_ASC_UNRECOVERED_READ_ERROR             = 0x11,
+	SCSI_ASC_NO_ADDITIONAL_SENSE = 0x00,
+	SCSI_ASC_PERIPHERAL_DEVICE_WRITE_FAULT = 0x03,
+	SCSI_ASC_LOGICAL_UNIT_NOT_READY = 0x04,
+	SCSI_ASC_WARNING = 0x0b,
+	SCSI_ASC_LOGICAL_BLOCK_GUARD_CHECK_FAILED = 0x10,
+	SCSI_ASC_LOGICAL_BLOCK_APPTAG_CHECK_FAILED = 0x10,
+	SCSI_ASC_LOGICAL_BLOCK_REFTAG_CHECK_FAILED = 0x10,
+	SCSI_ASC_UNRECOVERED_READ_ERROR = 0x11,
 	SCSI_ASC_MISCOMPARE_DURING_VERIFY_OPERATION = 0x1d,
-	SCSI_ASC_INVALID_COMMAND_OPERATION_CODE     = 0x20,
-	SCSI_ASC_ACCESS_DENIED                      = 0x20,
+	SCSI_ASC_INVALID_COMMAND_OPERATION_CODE = 0x20,
+	SCSI_ASC_ACCESS_DENIED = 0x20,
 	SCSI_ASC_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE = 0x21,
-	SCSI_ASC_INVALID_FIELD_IN_CDB               = 0x24,
-	SCSI_ASC_LOGICAL_UNIT_NOT_SUPPORTED         = 0x25,
-	SCSI_ASC_WRITE_PROTECTED                    = 0x27,
-	SCSI_ASC_FORMAT_COMMAND_FAILED              = 0x31,
-	SCSI_ASC_SAVING_PARAMETERS_NOT_SUPPORTED    = 0x39,
-	SCSI_ASC_INTERNAL_TARGET_FAILURE            = 0x44,
-	SCSI_ASC_DATA_PHASE_ERROR		            = 0x4b,
-} ;
+	SCSI_ASC_INVALID_FIELD_IN_CDB = 0x24,
+	SCSI_ASC_LOGICAL_UNIT_NOT_SUPPORTED = 0x25,
+	SCSI_ASC_WRITE_PROTECTED = 0x27,
+	SCSI_ASC_FORMAT_COMMAND_FAILED = 0x31,
+	SCSI_ASC_SAVING_PARAMETERS_NOT_SUPPORTED = 0x39,
+	SCSI_ASC_INTERNAL_TARGET_FAILURE = 0x44,
+	SCSI_ASC_DATA_PHASE_ERROR = 0x4b,
+};
 
-typedef enum ScsiAscq {
-	SCSI_ASCQ_CAUSE_NOT_REPORTABLE              = 0x00,
-	SCSI_ASCQ_BECOMING_READY                    = 0x01,
-	SCSI_ASCQ_FORMAT_COMMAND_FAILED             = 0x01,
-	SCSI_ASCQ_LOGICAL_BLOCK_GUARD_CHECK_FAILED  = 0x01,
+enum ScsiAscq {
+	SCSI_ASCQ_CAUSE_NOT_REPORTABLE = 0x00,
+	SCSI_ASCQ_BECOMING_READY = 0x01,
+	SCSI_ASCQ_FORMAT_COMMAND_FAILED = 0x01,
+	SCSI_ASCQ_LOGICAL_BLOCK_GUARD_CHECK_FAILED = 0x01,
 	SCSI_ASCQ_LOGICAL_BLOCK_APPTAG_CHECK_FAILED = 0x02,
-	SCSI_ASCQ_NO_ACCESS_RIGHTS                  = 0x02,
+	SCSI_ASCQ_NO_ACCESS_RIGHTS = 0x02,
 	SCSI_ASCQ_LOGICAL_BLOCK_REFTAG_CHECK_FAILED = 0x03,
-	SCSI_ASCQ_SANITIZE_COMMAND_FAILED 			= 0x03,
+	SCSI_ASCQ_SANITIZE_COMMAND_FAILED = 0x03,
 	SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_FORMAT_IN_PROGRESS = 0x04,
-	SCSI_ASCQ_DATA_OFFSET_ERROR                 = 0x05,
-	SCSI_ASCQ_POWER_LOSS_EXPECTED               = 0x08,
-	SCSI_ASCQ_INVALID_LU_IDENTIFIER             = 0x09,
-    SCSI_ASCQ_SDBP_INCOMING_BUFFER_OVERFLOW     = 0x0C,
-    SCSI_ASCQ_WARNING_MICROCODE_DIGITAL_SIGNATURE_VALIDATION_FAILURE = 0x13,
-	SCSI_ASCQ_ERASE_OPEARTION_IN_PROGRESS       = 0x18,
+	SCSI_ASCQ_DATA_OFFSET_ERROR = 0x05,
+	SCSI_ASCQ_POWER_LOSS_EXPECTED = 0x08,
+	SCSI_ASCQ_INVALID_LU_IDENTIFIER = 0x09,
+	SCSI_ASCQ_SDBP_INCOMING_BUFFER_OVERFLOW = 0x0C,
+	SCSI_ASCQ_WARNING_MICROCODE_DIGITAL_SIGNATURE_VALIDATION_FAILURE = 0x13,
+	SCSI_ASCQ_ERASE_OPEARTION_IN_PROGRESS = 0x18,
 	SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_SANITIZE_IN_PROGRESS = 0x1b,
-} ScsiAscq_e;
+};
 
-#define PS3_MEDIUM_ERROR_LEN	   (4)
-static void ps3_nvme_generic_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *cpl)
+#define PS3_MEDIUM_ERROR_LEN (4)
+static void
+ps3_nvme_generic_error_to_scsi_status(unsigned char nvmeSc,
+				      struct ps3_nvme_scsi_status *cpl)
 {
 	switch (nvmeSc) {
 	case NVME_SC_SUCCESS:
-		cpl->status   = SCSI_STATUS_GOOD;
+		cpl->status = SCSI_STATUS_GOOD;
 		cpl->senseKey = SENSE_KEY_NO_SENSE;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_INVALID_OPCODE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_INVALID_COMMAND_OPERATION_CODE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_INVALID_COMMAND_OPERATION_CODE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_INVALID_FIELD:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_INVALID_FIELD_IN_CDB;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_INVALID_FIELD_IN_CDB;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_DATA_TRANSFER_ERROR:
 	case NVME_SC_CAPACITY_EXCEEDED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MEDIUM_ERROR;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_ABORTED_POWER_LOSS:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc      = SCSI_ASC_WARNING;
-		cpl->ascq     = SCSI_ASCQ_POWER_LOSS_EXPECTED;
+		cpl->asc = SCSI_ASC_WARNING;
+		cpl->ascq = SCSI_ASCQ_POWER_LOSS_EXPECTED;
 		break;
 	case NVME_SC_INTERNAL_DEVICE_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_HARDWARE_ERROR;
-		cpl->asc      = SCSI_ASC_INTERNAL_TARGET_FAILURE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
-		break;	
+		cpl->asc = SCSI_ASC_INTERNAL_TARGET_FAILURE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		break;
 	case NVME_SC_ABORTED_BY_REQUEST:
 	case NVME_SC_ABORTED_SQ_DELETION:
 	case NVME_SC_ABORTED_FAILED_FUSED:
 	case NVME_SC_ABORTED_MISSING_FUSED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc	  = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq	  = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_INVALID_NAMESPACE_OR_FORMAT:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_ACCESS_DENIED;
-		cpl->ascq     = SCSI_ASCQ_INVALID_LU_IDENTIFIER;
+		cpl->asc = SCSI_ASC_ACCESS_DENIED;
+		cpl->ascq = SCSI_ASCQ_INVALID_LU_IDENTIFIER;
 		break;
 	case NVME_SC_LBA_OUT_OF_RANGE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_NAMESPACE_NOT_READY:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_NOT_READY;
-		cpl->asc      = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_RESERVATION_CONFLICT:
-		cpl->status   = SCSI_STATUS_RESERVATION_CONFLICT;
+		cpl->status = SCSI_STATUS_RESERVATION_CONFLICT;
 		cpl->senseKey = SENSE_KEY_NO_SENSE;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_SC_COMMAND_ID_CONFLICT:
 	case NVME_SC_COMMAND_SEQUENCE_ERROR:
@@ -148,83 +150,85 @@ static void ps3_nvme_generic_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_statu
 	case NVME_SC_SGL_DESCRIPTOR_TYPE_INVALID:
 	case NVME_SC_INVALID_CONTROLLER_MEM_BUF:
 	case NVME_SC_INVALID_PRP_OFFSET:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_DATA_PHASE_ERROR;
-		cpl->ascq     = SCSI_ASCQ_DATA_OFFSET_ERROR;
-		break;	
+		cpl->asc = SCSI_ASC_DATA_PHASE_ERROR;
+		cpl->ascq = SCSI_ASCQ_DATA_OFFSET_ERROR;
+		break;
 	case NVME_SC_ATOMIC_WRITE_UNIT_EXCEEDED:
 	case NVME_SC_INVALID_SGL_OFFSET:
 	case NVME_SC_HOSTID_INCONSISTENT_FORMAT:
 	case NVME_SC_KEEP_ALIVE_EXPIRED:
 	case NVME_SC_KEEP_ALIVE_INVALID:
 	case NVME_SC_FORMAT_IN_PROGRESS:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_NOT_READY;
-		cpl->asc      = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
-		cpl->ascq     = SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_FORMAT_IN_PROGRESS;
-		break;	
+		cpl->asc = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
+		cpl->ascq = SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_FORMAT_IN_PROGRESS;
+		break;
 	case NVME_SC_SANITIZE_FAILED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MEDIUM_ERROR;
-		cpl->asc      = SCSI_ASC_FORMAT_COMMAND_FAILED;
-		cpl->ascq     = SCSI_ASCQ_SANITIZE_COMMAND_FAILED;
-		break;	
+		cpl->asc = SCSI_ASC_FORMAT_COMMAND_FAILED;
+		cpl->ascq = SCSI_ASCQ_SANITIZE_COMMAND_FAILED;
+		break;
 	case NVME_SC_SANITIZE_IN_PROGRESS:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_NOT_READY;
-		cpl->asc      = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
-		cpl->ascq     = SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_SANITIZE_IN_PROGRESS;
-		break;	
+		cpl->asc = SCSI_ASC_LOGICAL_UNIT_NOT_READY;
+		cpl->ascq =
+			SCSI_ASCQ_LOGICAL_UNIT_NOT_READY_SANITIZE_IN_PROGRESS;
+		break;
 	case NVME_SC_NAMESPACE_IS_WRITE_PROTECTED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_DATA_PROTECT;
-		cpl->asc      = SCSI_ASC_WRITE_PROTECTED;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
-		break;	
+		cpl->asc = SCSI_ASC_WRITE_PROTECTED;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		break;
 	case NVME_SC_COMMAND_INTERRUPTED:
 	case NVME_SC_TRANSIENT_TRANSPORT_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	default:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	}
 }
 
-static void ps3_nvme_spec_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *cpl)
+static void ps3_nvme_spec_error_to_scsi_status(unsigned char nvmeSc,
+					       struct ps3_nvme_scsi_status *cpl)
 {
 	switch (nvmeSc) {
 	case NVME_CSC_COMPLETION_QUEUE_INVALID:
 	case NVME_CSC_ABORT_COMMAND_LIMIT_EXCEEDED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_CSC_INVALID_FORMAT:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_FORMAT_COMMAND_FAILED;
-		cpl->ascq     = SCSI_ASCQ_FORMAT_COMMAND_FAILED;
+		cpl->asc = SCSI_ASC_FORMAT_COMMAND_FAILED;
+		cpl->ascq = SCSI_ASCQ_FORMAT_COMMAND_FAILED;
 		break;
 	case NVME_CSC_CONFLICTING_ATTRIBUTES:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_INVALID_FIELD_IN_CDB;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_INVALID_FIELD_IN_CDB;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_CSC_ATTEMPTED_WRITE_TO_RO_RANGE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_DATA_PROTECT;
-		cpl->asc      = SCSI_ASC_WRITE_PROTECTED;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_WRITE_PROTECTED;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_CSC_INVALID_QUEUE_IDENTIFIER:
 	case NVME_CSC_MAXIMUM_QUEUE_SIZE_EXCEEDED:
@@ -235,16 +239,17 @@ static void ps3_nvme_spec_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *
 	case NVME_CSC_FIRMWARE_ACTIVATION_PROHIBITED:
 	case NVME_CSC_BOOT_PARTITION_WRITE_PROHIBITED:
 	case NVME_CSC_INVALID_FIRMWARE_SLOT:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc	  = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq	  = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_CSC_INVALID_FIRMWARE_IMAGE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc	  = SCSI_ASC_WARNING;
-		cpl->ascq	  = SCSI_ASCQ_WARNING_MICROCODE_DIGITAL_SIGNATURE_VALIDATION_FAILURE;
+		cpl->asc = SCSI_ASC_WARNING;
+		cpl->ascq =
+			SCSI_ASCQ_WARNING_MICROCODE_DIGITAL_SIGNATURE_VALIDATION_FAILURE;
 		break;
 	case NVME_CSC_INVALID_INTERRUPT_VECTOR:
 	case NVME_CSC_INVALID_LOG_PAGE:
@@ -255,10 +260,10 @@ static void ps3_nvme_spec_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *
 	case NVME_CSC_FEATURE_NOT_NAMESPACE_SPECIFIC:
 	case NVME_CSC_FIRMWARE_REQ_RESET:
 	case NVME_CSC_OVERLAPPING_RANGE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc	  = SCSI_ASC_INVALID_FIELD_IN_CDB;
-		cpl->ascq	  = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_INVALID_FIELD_IN_CDB;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_CSC_NAMESPACE_INSUFFICIENT_CAPACITY:
 	case NVME_CSC_NAMESPACE_ID_UNAVAILABLE:
@@ -269,78 +274,81 @@ static void ps3_nvme_spec_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *
 	case NVME_CSC_CONTROLLER_LIST_INVALID:
 
 	default:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	}
 }
 
-static void ps3_nvme_media_error_to_scsi_status(U8 nvmeSc, ps3_nvme_scsi_status *cpl)
+static void
+ps3_nvme_media_error_to_scsi_status(unsigned char nvmeSc,
+				    struct ps3_nvme_scsi_status *cpl)
 {
 	switch (nvmeSc) {
 	case NVME_MSC_WRITE_FAULTS:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MEDIUM_ERROR;
-		cpl->asc      = SCSI_ASC_PERIPHERAL_DEVICE_WRITE_FAULT;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_PERIPHERAL_DEVICE_WRITE_FAULT;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_MSC_UNRECOVERED_READ_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MEDIUM_ERROR;
-		cpl->asc      = SCSI_ASC_UNRECOVERED_READ_ERROR;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_UNRECOVERED_READ_ERROR;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_MSC_GUARD_CHECK_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc      = SCSI_ASC_LOGICAL_BLOCK_GUARD_CHECK_FAILED;
-		cpl->ascq     = SCSI_ASCQ_LOGICAL_BLOCK_GUARD_CHECK_FAILED;
+		cpl->asc = SCSI_ASC_LOGICAL_BLOCK_GUARD_CHECK_FAILED;
+		cpl->ascq = SCSI_ASCQ_LOGICAL_BLOCK_GUARD_CHECK_FAILED;
 		break;
 	case NVME_MSC_APPLICATION_TAG_CHECK_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc      = SCSI_ASC_LOGICAL_BLOCK_APPTAG_CHECK_FAILED;
-		cpl->ascq     = SCSI_ASCQ_LOGICAL_BLOCK_APPTAG_CHECK_FAILED;
+		cpl->asc = SCSI_ASC_LOGICAL_BLOCK_APPTAG_CHECK_FAILED;
+		cpl->ascq = SCSI_ASCQ_LOGICAL_BLOCK_APPTAG_CHECK_FAILED;
 		break;
 	case NVME_MSC_REFERENCE_TAG_CHECK_ERROR:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ABORTED_COMMAND;
-		cpl->asc      = SCSI_ASC_LOGICAL_BLOCK_REFTAG_CHECK_FAILED;
-		cpl->ascq     = SCSI_ASCQ_LOGICAL_BLOCK_REFTAG_CHECK_FAILED;
+		cpl->asc = SCSI_ASC_LOGICAL_BLOCK_REFTAG_CHECK_FAILED;
+		cpl->ascq = SCSI_ASCQ_LOGICAL_BLOCK_REFTAG_CHECK_FAILED;
 		break;
 	case NVME_MSC_COMPARE_FAILURE:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MISCOMPARE;
-		cpl->asc      = SCSI_ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	case NVME_MSC_ACCESS_DENIED:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_DATA_PROTECT;
-		cpl->asc      = SCSI_ASC_ACCESS_DENIED;
-		cpl->ascq     = SCSI_ASCQ_NO_ACCESS_RIGHTS;
+		cpl->asc = SCSI_ASC_ACCESS_DENIED;
+		cpl->ascq = SCSI_ASCQ_NO_ACCESS_RIGHTS;
 		break;
 	case NVME_MSC_DEALLOCATED_OR_UNWRITTEN_BLOCK:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_MEDIUM_ERROR;
-		cpl->asc	  = SCSI_ASC_UNRECOVERED_READ_ERROR;
-		cpl->ascq	  = SCSI_ASCQ_SDBP_INCOMING_BUFFER_OVERFLOW;
+		cpl->asc = SCSI_ASC_UNRECOVERED_READ_ERROR;
+		cpl->ascq = SCSI_ASCQ_SDBP_INCOMING_BUFFER_OVERFLOW;
 		break;
 	default:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	}
 }
 
-void ps3_nvme_error_to_scsi_status(PS3NvmeCmdStatus_s status, ps3_nvme_scsi_status *cpl)
+void ps3_nvme_error_to_scsi_status(struct PS3NvmeCmdStatus status,
+				   struct ps3_nvme_scsi_status *cpl)
 {
-	U8 sct = status.sct;
-	U8 sc = status.sc;
+	unsigned char sct = status.sct;
+	unsigned char sc = status.sc;
 
 	switch (sct) {
 	case NVME_SCT_GENERIC:
@@ -354,36 +362,36 @@ void ps3_nvme_error_to_scsi_status(PS3NvmeCmdStatus_s status, ps3_nvme_scsi_stat
 		break;
 	case NVME_SCT_VENDOR_SPECIFIC:
 	default:
-		cpl->status   = SCSI_STATUS_CHECK_CONDITION;
+		cpl->status = SCSI_STATUS_CHECK_CONDITION;
 		cpl->senseKey = SENSE_KEY_ILLEGAL_REQUEST;
-		cpl->asc      = SCSI_ASC_NO_ADDITIONAL_SENSE;
-		cpl->ascq     = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
+		cpl->asc = SCSI_ASC_NO_ADDITIONAL_SENSE;
+		cpl->ascq = SCSI_ASCQ_CAUSE_NOT_REPORTABLE;
 		break;
 	}
 }
 
 void ps3_nvme_resp_to_scsi_status(struct ps3_cmd *cmd)
 {
-	PS3NvmeCmdStatus_s status;
-	ps3_nvme_scsi_status cpl;
+	struct PS3NvmeCmdStatus status;
+	struct ps3_nvme_scsi_status cpl;
 
 	status.cmdStatus = cmd->reply_word.retStatus;
-	LOG_FILE_ERROR("trace_id:0x%llx host_no:%d tag:%d nvme status:"
-		"sc:%d sct:%d crd:%d more:%d dnr:%d p:%d\n",
-		cmd->trace_id, PS3_HOST(cmd->instance),
-		cmd->index, status.sc, status.sct, status.crd,
-		status.m, status.dnr, status.p);
+	LOG_FILE_ERROR("trace_id:0x%llx host_no:%d tag:%d nvme status:\n"
+		       "\tsc:%d sct:%d crd:%d more:%d dnr:%d p:%d\n",
+		       cmd->trace_id, PS3_HOST(cmd->instance), cmd->index,
+		       status.sc, status.sct, status.crd, status.m, status.dnr,
+		       status.p);
 
-	memset(&cpl, 0, sizeof(ps3_nvme_scsi_status));
+	memset(&cpl, 0, sizeof(struct ps3_nvme_scsi_status));
 	ps3_nvme_error_to_scsi_status(status, &cpl);
 
 	memset(cmd->resp_frame->sasRespFrame.data, 0, PS3_SENSE_BUFFER_SIZE);
 	scsi_build_sense_buffer(0, cmd->resp_frame->sasRespFrame.data,
-			cpl.senseKey, cpl.asc, cpl.ascq);
+				cpl.senseKey, cpl.asc, cpl.ascq);
 	if (cmd->reply_word.mode == PS3_REPLY_WORD_MODE_DIRECT_OK &&
-		cpl.senseKey == SENSE_KEY_MEDIUM_ERROR) {
-		memset(&cmd->resp_frame->sasRespFrame.data[3], 0xff, PS3_MEDIUM_ERROR_LEN);
+	    cpl.senseKey == SENSE_KEY_MEDIUM_ERROR) {
+		memset(&cmd->resp_frame->sasRespFrame.data[3], 0xff,
+		       PS3_MEDIUM_ERROR_LEN);
 	}
 	cmd->resp_frame->sasRespFrame.status = cpl.status;
-
 }

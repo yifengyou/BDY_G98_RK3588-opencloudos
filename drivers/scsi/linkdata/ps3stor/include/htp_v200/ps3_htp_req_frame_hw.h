@@ -1,98 +1,98 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _PS3_HTP_REQ_FRAME_HW_H_
 #define _PS3_HTP_REQ_FRAME_HW_H_
 
 #include "ps3_htp_def.h"
 
-#define ENCODE_CCS_XFERLEN(x)  (((U32)(x) >> 2)) 
-#define DECODE_CCS_XFERLEN(x)  (((U32)(x) << 2)) 
+#define ENCODE_CCS_XFERLEN(x) (((unsigned int)(x) >> 2))
+#define DECODE_CCS_XFERLEN(x) (((unsigned int)(x) << 2))
 
 #ifdef _WINDOWS
 #define __attribute__(x)
 #pragma pack(push, 1)
 #endif
 
-
 struct PS3NvmeSglDesc {
-    U64 addr;
-    union {
-        struct {
-            U8 reserved[7];
-            U8 subtype : 4;
-            U8 type : 4;   
-        } generic;         
+	unsigned long long addr;
+	union {
+		struct {
+			unsigned char reserved[7];
+			unsigned char subtype : 4;
+			unsigned char type : 4;   
+		} generic;                    
 
-        struct {
-            U32 length;
-            U8 reserved[3];
-            U8 subtype : 4;
-            U8 type : 4;   
-        } unkeyed;         
+		struct {
+			unsigned int length;      
+			unsigned char reserved[3];
+			unsigned char subtype : 4;
+			unsigned char type : 4;   
+		} unkeyed;                    
 
-        struct {
-            U64 length : 24;
-            U64 key : 32;   
-            U64 subtype : 4;
-            U64 type : 4;   
-        } keyed;
-    };
+		struct {
+			unsigned long long length : 24;
+			unsigned long long key : 32;   
+			unsigned long long subtype : 4;
+			unsigned long long type : 4;   
+		} keyed;
+	};
 };
 
 struct PS3NvmeCmdDw0_9 {
-    U16 opcode : 8;
-    U16 fuse : 2;
-    U16 reserved1 : 4;
-    U16 psdt : 2;
-    U16 cID;
+	unsigned short opcode : 8;   
+	unsigned short fuse : 2;     
+	unsigned short reserved1 : 4;
+	unsigned short psdt : 2;     
+	unsigned short cID;          
 
-    U32 nsID;
+	unsigned int nsID;
 
-    U32 reserved2;
-    U32 reserved3;
+	unsigned int reserved2;
+	unsigned int reserved3;
 
-    U64 mPtr;
+	unsigned long long mPtr;
 
 
-    union {
-        struct {
-            U64 prp1;              
-            U64 prp2;              
-        } prp;                     
-        struct PS3NvmeSglDesc sgl1;
+	union {
+		struct {
+			unsigned long long prp1;
+			unsigned long long prp2;
+		} prp;                      
+		struct PS3NvmeSglDesc sgl1; 
 
-    } dPtr;
+	} dPtr;
 };
 
 
-typedef struct PS3NvmeCommonCmd {
-    struct PS3NvmeCmdDw0_9 cDW0_9;
+struct PS3NvmeCommonCmd {
+	struct PS3NvmeCmdDw0_9 cDW0_9;
 
-    U32 cDW10;
-    U32 cDW11;
-    U32 cDW12;
-    U32 cDW13;
-    U32 cDW14;
-    U32 cDW15;
-} PS3NvmeCommonCmd_s;
+	unsigned int cDW10;
+	unsigned int cDW11;
+	unsigned int cDW12;
+	unsigned int cDW13;
+	unsigned int cDW14;
+	unsigned int cDW15;
+};
 
-typedef struct PS3NvmeRWCmd {
-    struct PS3NvmeCmdDw0_9 cDW0_9;
+struct PS3NvmeRWCmd {
+	struct PS3NvmeCmdDw0_9 cDW0_9;
 
-    U32 sLbaLo;
-    U32 sLbaHi;
-    U32 numLba;
-    U32 cDW13; 
-    U32 cDW14; 
-    U32 cDW15; 
-} PS3NvmeRWCmd_s;
+	unsigned int sLbaLo;
+	unsigned int sLbaHi;
+	unsigned int numLba;
+	unsigned int cDW13; 
+	unsigned int cDW14; 
+	unsigned int cDW15; 
+};
 
 
-typedef union PS3NvmeReqFrame {
-    PS3NvmeCommonCmd_s commonReqFrame;
-    PS3NvmeRWCmd_s rwReqFrame;
-} PS3NvmeReqFrame_u;
+union PS3NvmeReqFrame {
+	struct PS3NvmeCommonCmd commonReqFrame;
+	struct PS3NvmeRWCmd rwReqFrame;
+};
 
 #ifdef _WINDOWS
 #pragma pack(pop)
 #endif
 
-#endif 
+#endif

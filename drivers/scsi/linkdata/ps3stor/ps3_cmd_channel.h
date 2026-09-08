@@ -1,4 +1,4 @@
-
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _PS3_CMD_CHANNEL_H_
 #define _PS3_CMD_CHANNEL_H_
 
@@ -14,37 +14,38 @@
 #include "ps3_inner_data.h"
 #include "ps3_driver_log.h"
 #include "ps3_htp_ioctl.h"
+#include "ps3_kernel_version.h"
 
 #define PS3_DEFAULT_REQ_FRAME_SIZE (256)
 
 #define PS3_WAIT_SCSI_CMD_DONE_COUNT (1200)
 
 enum {
-	DMA_ALIGN_BYTES_4K	= 4096,
-	DMA_ALIGN_BYTES_2K	= 2048,
-	DMA_ALIGN_BYTES_1K	= 1024,
-	DMA_ALIGN_BYTES_512	= 512,
-	DMA_ALIGN_BYTES_256	= 256,
-	DMA_ALIGN_BYTES_128	= 128,
-	DMA_ALIGN_BYTES_64	= 64,
-	DMA_ALIGN_BYTES_16	= 16,
-	DMA_ALIGN_BYTES_4	= 4,
+	DMA_ALIGN_BYTES_4K = 4096,
+	DMA_ALIGN_BYTES_2K = 2048,
+	DMA_ALIGN_BYTES_1K = 1024,
+	DMA_ALIGN_BYTES_512 = 512,
+	DMA_ALIGN_BYTES_256 = 256,
+	DMA_ALIGN_BYTES_128 = 128,
+	DMA_ALIGN_BYTES_64 = 64,
+	DMA_ALIGN_BYTES_16 = 16,
+	DMA_ALIGN_BYTES_4 = 4,
 };
 
 enum {
-	PS3_CMD_STATE_INIT	= 0, 
-	PS3_CMD_STATE_PROCESS	= 1, 
-	PS3_CMD_STATE_COMPLETE	= 2, 
-	PS3_CMD_STATE_DEAD	= 3, 
+	PS3_CMD_STATE_INIT = 0,
+	PS3_CMD_STATE_PROCESS = 1,
+	PS3_CMD_STATE_COMPLETE = 2,
+	PS3_CMD_STATE_DEAD = 3,
 };
 enum {
-	PS3_CMD_FLAG_SOFTRESET	= 1,
-	PS3_CMD_FLAG_HARDRESET	= 2,
+	PS3_CMD_FLAG_SOFTRESET = 1,
+	PS3_CMD_FLAG_HARDRESET = 2,
 };
 
 enum {
-	PS3_R1X_MODE_NORMAL		= 0, 
-	PS3_R1X_MODE_PERF		= 1, 
+	PS3_R1X_MODE_NORMAL = 0,
+	PS3_R1X_MODE_PERF = 1,
 };
 
 #define PS3_CMD_EXT_BUF_DEFAULT_SIZE (4096)
@@ -52,201 +53,207 @@ enum {
 
 #define PS3_MIN_SCSI_CMD_COUNT (4096)
 
-static inline const S8 *namePS3CmdState(U32 s)
+static inline const char *namePS3CmdState(unsigned int s)
 {
-	static const S8 *myNames[] = {
-		[PS3_CMD_STATE_INIT]		= "PS3_CMD_STATE_INIT",
-		[PS3_CMD_STATE_PROCESS]		= "PS3_CMD_STATE_PROCESS",
-		[PS3_CMD_STATE_COMPLETE]	= "PS3_CMD_STATE_COMPLETE",
-		[PS3_CMD_STATE_DEAD]		= "PS3_CMD_STATE_DEAD"
+	static const char * const myNames[] = {
+		[PS3_CMD_STATE_INIT] = "PS3_CMD_STATE_INIT",
+		[PS3_CMD_STATE_PROCESS] = "PS3_CMD_STATE_PROCESS",
+		[PS3_CMD_STATE_COMPLETE] = "PS3_CMD_STATE_COMPLETE",
+		[PS3_CMD_STATE_DEAD] = "PS3_CMD_STATE_DEAD"
 	};
 
-	if (s > PS3_CMD_STATE_DEAD) {
+	if (s > PS3_CMD_STATE_DEAD)
 		return "PS3_CMD_STATE_INVALID";
-	}
 
 	return myNames[s];
 }
 
 struct ps3_cmd_state_t {
-	U8 state;
-	U8 reset_flag;
-	U8 reserived[6];
-	ps3_spinlock lock;
+	unsigned char state;
+	unsigned char reset_flag;
+	unsigned char reserived[6];
+	spinlock_t lock;
 };
-typedef union ps3_scsi_cdb_option {
-    struct {
-        U8 non_ncq : 1; 
-        U8 reserved0 : 1;
-        U8 reserved1 : 1;
-        U8 fua : 1;
-        U8 dpo : 1;
-        U8 protect : 3;
-    };
-    U8 option;
-} ps3_scsi_cdb_opts_u;
-
-struct ps3_scsi_io_attr
-{
-	Bool is_retry_cmd;	
-	U8  direct_flag; 	
-	U8  seq_flag;		
-	U8  dev_type;		
-	union
-	{
-		struct{
-			U8  rw_flag : 7;		
-			U8  is_confilct_check : 1;	
-		};
-		U8 rw_type;
+union ps3_scsi_cdb_option {
+	struct {
+		unsigned char non_ncq : 1;
+		unsigned char reserved0 : 1;
+		unsigned char reserved1 : 1;
+		unsigned char fua : 1;
+		unsigned char dpo : 1;
+		unsigned char protect : 3;
 	};
-	U32 num_blocks;		
-	U32 lba_lo;		
-	U32 lba_hi;		
+	unsigned char option;
+};
+
+struct ps3_scsi_io_attr {
+	unsigned char is_retry_cmd;
+	unsigned char direct_flag;
+	unsigned char seq_flag;
+	unsigned char dev_type;
+	union {
+		struct {
+			unsigned char rw_flag : 7;
+			unsigned char is_confilct_check : 1;
+		};
+		unsigned char rw_type;
+	};
+	unsigned int num_blocks;
+	unsigned int lba_lo;
+	unsigned int lba_hi;
 	const struct ps3_pd_entry *pd_entry;
 	const struct ps3_pd_entry *peer_pd_entry;
 	const struct PS3VDEntry *vd_entry;
 
-	U64 plba;	
-	U64 plba_back;	
-	U8  span_idx;	
-	U8  span_pd_idx;
-	U16 disk_id;	
-	Bool is_use_frontend_prp; 
-	U8  span_pd_idx_p;
-	U8  span_pd_idx_q;
-	U8 is_force_normal:1; 
-	U8 reserved:7;
-	ps3_scsi_cdb_opts_u cdb_opts;	
-	U8  cdb[PS3_FRAME_CDB_BUFLEN];	
-	U32 sgl_buf_len; 
-	U32 reserved1;
+	unsigned long long plba;
+	unsigned long long plba_back;
+	unsigned char span_idx;
+	unsigned char span_pd_idx;
+	unsigned short disk_id;
+	unsigned char is_use_frontend_prp;
+	unsigned char span_pd_idx_p;
+	unsigned char span_pd_idx_q;
+	unsigned char is_force_normal : 1;
+#ifdef PS3_NCQ_PRIO_SUPPORT
+	unsigned char is_ncq_prio_enable:1; 
+	unsigned char reserved:6;
+#else
+	unsigned char reserved:7;
+#endif
+	union ps3_scsi_cdb_option cdb_opts;
+	unsigned char cdb[PS3_FRAME_CDB_BUFLEN];
+	unsigned int sgl_buf_len;
+	unsigned char target_pd_state;
+	unsigned int reserved1;
 };
 
 struct ps3_ioctl_transient {
-	U16 sge_num;
-	U8 reserved[6];
+	unsigned short sge_num;
+	unsigned char reserved[6];
 	void *transient_buff[PS3_MAX_IOCTL_SGE_NUM];
 };
 
 #define PS3_QOS_MAX_PD_IN_VD (17)
 struct ps3_qos_member_pd_info {
-    U16  flat_disk_id;  
-    U16  strip_count;   
-    Bool get_quota;
+	unsigned short flat_disk_id;
+	unsigned short strip_count;
+	unsigned char get_quota;
 };
 
 #define PS3_QOS_MAX_CMDQ_ONE_CMD 2
 struct ps3_qos_cmdq_info {
-	U8  que_id;  		
-    Bool get_rc;
+	unsigned char que_id;
+	unsigned char get_rc;
 };
 
 struct ps3_cmd {
 	union PS3ReqFrame *req_frame;
-	U64 req_frame_phys;
+	unsigned long long req_frame_phys;
 	void *ext_buf;
-	U64 ext_buf_phys;
-	PS3RespFrame_u *resp_frame;
-	U64 resp_frame_phys;
+	unsigned long long ext_buf_phys;
+	union PS3RespFrame *resp_frame;
+	unsigned long long resp_frame_phys;
 	struct ps3_instance *instance;
 	union {
-		struct PS3CmdWord cmd_word;		
-		struct PS3InitCmdWord init_cmd_word;	
-		U64 cmd_word_value;			
+		struct PS3CmdWord cmd_word;
+		struct PS3InitCmdWord init_cmd_word;
+		unsigned long long cmd_word_value;
 	};
 
-	struct scsi_cmnd *scmd;	
+	struct scsi_cmnd *scmd;
 
 #ifndef _WINDOWS
 	struct list_head cmd_list;
 #else
-	SCSI_REQUEST_BLOCK *srb;
-	ps3_list_head cmd_list;
+	SCSI_REQUEST_BLOCK * srb;
+	struct list_head cmd_list;
 #endif
 
-	U64 trace_id;		
-	U16 index;		
-	U8 no_reply_word;
-	U8 is_force_polling;
-	U8 is_got_r1x;
-	U8 is_inserted_c_q;
-	U8 is_r1x_aborting;
-	Bool is_r1x_scsi_complete;
-	U16 r1x_read_pd;
+	unsigned long long trace_id;
+	unsigned short index;
+	unsigned char no_reply_word;
+	unsigned char is_force_polling;
+	unsigned char is_got_r1x;
+	unsigned char is_inserted_c_q;
+	unsigned char is_r1x_aborting;
+	unsigned char is_r1x_scsi_complete;
+	unsigned short r1x_read_pd;
 	struct ps3_cmd *r1x_peer_cmd;
-	U8 is_aborting;
-	U8 r1x_reply_flag;
-	U8 qos_processing;
-	U32 os_sge_map_count;	
+	unsigned char is_aborting;
+	unsigned char r1x_reply_flag;
+	unsigned char qos_processing;
+	unsigned int os_sge_map_count;
 	struct ps3_cmd_state_t cmd_state;
-	U16 time_out;
-	Bool is_interrupt; 
-	U8 szblock_cnt; 
-	U32 retry_cnt; 
-	void* node_buff; 
+	unsigned short time_out;
+	unsigned char is_interrupt;
+	unsigned char szblock_cnt;
+	unsigned int retry_cnt;
+	void *node_buff;
 #ifdef _WINDOWS
 	KEVENT sync_done;
 #else
-	struct completion sync_done;	
+	struct completion sync_done;
 #endif
-	S32 (*cmd_send_cb)(struct ps3_instance *, struct ps3_cmd *, U16 );
-	S32 (*cmd_receive_cb)(struct ps3_cmd *, U16);
+	int (*cmd_send_cb)(struct ps3_instance *, struct ps3_cmd *,
+			   unsigned short);
+	int (*cmd_receive_cb)(struct ps3_cmd *cmd, unsigned short reply_flags);
 	struct ps3_ioctl_transient *transient;
 	struct ps3_scsi_io_attr io_attr;
 #ifdef _WINDOWS
-	struct scsi_cmnd scmd_imp;	
+	struct scsi_cmnd scmd_imp;
 #endif
-	struct PS3ReplyWord reply_word; 
+	struct PS3ReplyWord reply_word;
 
 	struct list_head qos_list;
 	struct ps3_qos_member_pd_info target_pd[PS3_QOS_MAX_PD_IN_VD];
 	struct ps3_qos_cmdq_info cmdq_info[PS3_QOS_MAX_CMDQ_ONE_CMD];
-	U16 target_pd_count;
-	U16 first_over_quota_pd_idx;
-	U8 qos_waitq_flag;
-	U8 cmdq_count;
-	Bool flighting;  
+	unsigned short target_pd_count;
+	unsigned short first_over_quota_pd_idx;
+	unsigned char qos_waitq_flag;
+	unsigned char cmdq_count;
+	unsigned char flighting;
+	unsigned char vd_rd_outstand_flag;  
+	unsigned char vd_wr_outstand_flag;  
 };
 
-struct  ps3_cmd_context {
-	U32 max_cmd_count;
-	U32 max_scsi_cmd_count;
-	U32 max_mgr_cmd_count;
-	U32 max_prp_count; 
+struct ps3_cmd_context {
+	unsigned int max_cmd_count;
+	unsigned int max_scsi_cmd_count;
+	unsigned int max_mgr_cmd_count;
+	unsigned int max_prp_count;
 	struct ps3_cmd **cmd_buf;
 
-	dma_addr_t  init_frame_buf_phys;
-	U8 *init_frame_buf;
-	dma_addr_t      init_filter_table_phy_addr;
-	U8 *init_filter_table_buff;
+	dma_addr_t init_frame_buf_phys;
+	unsigned char *init_frame_buf;
+	dma_addr_t init_filter_table_phy_addr;
+	unsigned char *init_filter_table_buff;
 #ifndef _WINDOWS
-	struct dma_pool* req_frame_dma_pool;
+	struct dma_pool *req_frame_dma_pool;
 #endif
-	U32 req_frame_buf_size;
-	dma_addr_t      req_frame_buf_phys;
-	U8 *req_frame_buf;
+	unsigned int req_frame_buf_size;
+	dma_addr_t req_frame_buf_phys;
+	unsigned char *req_frame_buf;
 #ifndef _WINDOWS
-	struct dma_pool* response_frame_dma_pool;
+	struct dma_pool *response_frame_dma_pool;
 #endif
-	U32 response_frame_buf_size;
-	dma_addr_t      response_frame_buf_phys;
-	U8 *response_frame_buf;
+	unsigned int response_frame_buf_size;
+	dma_addr_t response_frame_buf_phys;
+	unsigned char *response_frame_buf;
 #ifndef _WINDOWS
-	struct dma_pool* ext_buf_dma_pool;
+	struct dma_pool *ext_buf_dma_pool;
 #endif
-	U32             ext_buf_size;
-	U32             ext_sge_frame_count;
+	unsigned int ext_buf_size;
+	unsigned int ext_sge_frame_count;
 #ifndef _WINDOWS
-	struct dma_pool* mgr_ext_buf_dma_pool;
+	struct dma_pool *mgr_ext_buf_dma_pool;
 #endif
-	U32             mgr_ext_buf_size;
+	unsigned int mgr_ext_buf_size;
 
-	dma_addr_t      init_frame_sys_info_phys;
-	U8 *init_frame_sys_info_buf;
-	U8 sgl_mode_support; 
-	U8 reserved0[1];
-	U16 max_host_sge_count;
+	dma_addr_t init_frame_sys_info_phys;
+	unsigned char *init_frame_sys_info_buf;
+	unsigned char sgl_mode_support;
+	unsigned char reserved0[1];
+	unsigned short max_host_sge_count;
 
 #ifndef _WINDOWS
 	struct list_head mgr_cmd_pool;
@@ -256,89 +263,106 @@ struct  ps3_cmd_context {
 	spinlock_t task_pool_lock;
 	spinlock_t r1x_scsi_pool_lock;
 #else
-	ps3_list_head mgr_cmd_pool;
-	ps3_list_head task_cmd_pool;
-	ps3_list_head scsi_cmd_pool;
-	ps3_spinlock mgr_pool_lock;
-	ps3_spinlock task_pool_lock;
-	ps3_spinlock scsi_pool_lock;
+	struct list_head mgr_cmd_pool;
+	struct list_head task_cmd_pool;
+	struct list_head scsi_cmd_pool;
+	spinlock_t mgr_pool_lock;
+	spinlock_t task_pool_lock;
+	spinlock_t scsi_pool_lock;
 
-	ps3_atomic64 trace_id;
+	atomic64_t trace_id;
 #endif
-	U16 max_r1x_cmd_count;
-	U8 reserved1[6];
+	unsigned short max_r1x_cmd_count;
+	unsigned char reserved1[6];
 };
 
-S32 ps3_cmd_context_init(struct ps3_instance *instance);
+int ps3_cmd_context_init(struct ps3_instance *instance);
 
 void ps3_cmd_context_exit(struct ps3_instance *instance);
 
 #ifndef _WINDOWS
-struct ps3_cmd *ps3_scsi_cmd_alloc(struct ps3_instance *instance, U32 tag);
+struct ps3_cmd *ps3_scsi_cmd_alloc(struct ps3_instance *instance,
+				   unsigned int tag);
 #else
 struct ps3_cmd *ps3_scsi_cmd_alloc(struct ps3_instance *instance);
 #endif
-S32 ps3_scsi_cmd_free(struct ps3_cmd *cmd);
+int ps3_scsi_cmd_free(struct ps3_cmd *cmd);
 
 struct ps3_cmd *ps3_mgr_cmd_alloc(struct ps3_instance *instance);
 
-S32 ps3_mgr_cmd_free_nolock(struct ps3_instance *instance, struct ps3_cmd *cmd);
-S32 ps3_mgr_cmd_free(struct ps3_instance *instance, struct ps3_cmd *cmd);
+int ps3_mgr_cmd_free_nolock(struct ps3_instance *instance, struct ps3_cmd *cmd);
+int ps3_mgr_cmd_free(struct ps3_instance *instance, struct ps3_cmd *cmd);
 
 struct ps3_cmd *ps3_task_cmd_alloc(struct ps3_instance *instance);
 
-S32 ps3_task_cmd_free(struct ps3_instance *instance, struct ps3_cmd *cmd);
+int ps3_task_cmd_free(struct ps3_instance *instance, struct ps3_cmd *cmd);
 
-S32 ps3_reply_cmd_dispatcher(struct ps3_instance *instance, U16 cmd_frame_id);
+int ps3_reply_cmd_dispatcher(struct ps3_instance *instance,
+			     unsigned short cmd_frame_id);
 
-S32 ps3_async_cmd_send(struct ps3_instance *instance, struct ps3_cmd *cmd);
+int ps3_async_cmd_send(struct ps3_instance *instance, struct ps3_cmd *cmd);
 
 #ifndef _WINDOWS
-S32 ps3_scsi_cmd_send(struct ps3_instance *instance, struct ps3_cmd *cmd, Bool need_prk_err);
+int ps3_scsi_cmd_send(struct ps3_instance *instance, struct ps3_cmd *cmd,
+		      unsigned char need_prk_err);
 #endif
 
-struct ps3_cmd *ps3_cmd_find(struct ps3_instance *instance, U16 cmd_frame_id);
+struct ps3_cmd *ps3_cmd_find(struct ps3_instance *instance,
+			     unsigned short cmd_frame_id);
 
-S32 ps3_cmd_dispatch(struct ps3_instance *instance, U16 cmd_frame_id,
-	struct PS3ReplyWord *reply_word);
+int ps3_cmd_dispatch(struct ps3_instance *instance, unsigned short cmd_frame_id,
+		     struct PS3ReplyWord *reply_word);
 
-struct ps3_cmd *ps3_r1x_peer_cmd_alloc(struct ps3_instance *instance, U32 index);
+struct ps3_cmd *ps3_r1x_peer_cmd_alloc(struct ps3_instance *instance,
+				       unsigned int index);
 
-Bool ps3_r1x_peer_cmd_free_nolock(struct ps3_cmd *cmd);
+unsigned char ps3_r1x_peer_cmd_free_nolock(struct ps3_cmd *cmd);
 
-static inline U16 ps3_cmd_frame_id(struct ps3_cmd *cmd)
+static inline unsigned short ps3_cmd_frame_id(struct ps3_cmd *cmd)
 {
 	return cmd->index;
 }
 
-static inline U64 ps3_cmd_trace_id(struct ps3_cmd *cmd)
+static inline unsigned long long ps3_cmd_trace_id(struct ps3_cmd *cmd)
 {
 	return cmd->trace_id;
 }
 
-static inline void ps3_cmd_trace_id_replace(struct ps3_cmd *cmd, U64 trace_id)
+static inline void ps3_cmd_trace_id_replace(struct ps3_cmd *cmd,
+					    unsigned long long trace_id)
 {
 	cmd->trace_id = trace_id;
 }
 
-Bool ps3_is_instance_state_allow_cmd_execute(struct ps3_instance *instance);
+unsigned char
+ps3_is_instance_state_allow_cmd_execute(struct ps3_instance *instance);
 
-S32 ps3_cmd_send_pre_check(struct ps3_instance *instance);
+int ps3_cmd_send_pre_check(struct ps3_instance *instance);
 
-void ps3_wait_scsi_cmd_done(struct ps3_instance *instance, Bool time_out);
+void ps3_wait_scsi_cmd_done(struct ps3_instance *instance,
+			    unsigned char time_out);
 
 void ps3_scsi_cmd_deliver_get(struct ps3_instance *instance);
 
 void ps3_scsi_cmd_deliver_put(struct ps3_instance *instance);
 
-void ps3_dma_addr_bit_pos_update(struct ps3_instance *instance, U8 bit_pos);
+void ps3_dma_addr_bit_pos_update(struct ps3_instance *instance,
+				 unsigned char bit_pos);
 
-Bool ps3_bit_pos_update(struct ps3_instance *instance);
+unsigned char ps3_bit_pos_update(struct ps3_instance *instance);
 
-void ps3_wait_mgr_cmd_done(struct ps3_instance *instance, Bool time_out);
+void ps3_wait_mgr_cmd_done(struct ps3_instance *instance,
+			   unsigned char time_out);
 
-S32 ps3_mgr_cmd_send_pre_check(struct ps3_instance *instance, Bool no_check);
+int ps3_mgr_cmd_send_pre_check(struct ps3_instance *instance,
+			       unsigned char no_check);
 
-S32 ps3_mgr_cmd_send_check(struct ps3_instance *instance, struct ps3_cmd *cmd);
+int ps3_mgr_cmd_send_check(struct ps3_instance *instance, struct ps3_cmd *cmd);
+
+int ps3_ext_sge_cnt_calc_hba(struct ps3_instance *instance);
+
+int ps3_ext_sge_cnt_calc_raid(struct ps3_instance *instance);
+
+void ps3_max_sge_cfg_hba(struct ps3_instance *instance);
 
 #endif

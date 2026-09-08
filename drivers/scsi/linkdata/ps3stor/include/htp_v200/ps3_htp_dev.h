@@ -1,333 +1,330 @@
-
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _PS3_HTP_DEV_H_
 #define _PS3_HTP_DEV_H_
 
 #include "ps3_htp_def.h"
 
-#define  PS3_MAX_CHANNEL_NUM    15
-#define  PS3_MAX_RANDOM_NUM     32
-#define  PS3_MAX_IV_NUM         16
-#define  PS3_SECURITY_CIPHER_NUM_MAX     2
-#define  PS3_STABLE_WRITES_MASK     (0x1)
+#define PS3_MAX_CHANNEL_NUM 15
+#define PS3_MAX_RANDOM_NUM 32
+#define PS3_MAX_IV_NUM 16
+#define PS3_SECURITY_CIPHER_NUM_MAX 2
+#define PS3_STABLE_WRITES_MASK (0x1)
 
 
 struct PS3IocCtrlProp {
-    U32 enableSnapshot          : 1;
-    U32 enableSoftReset   : 1;
-    U32 reserved1:30;
-    U32 reserved2;
+	unsigned int enableSnapshot : 1;
+	unsigned int enableSoftReset : 1;
+	unsigned int reserved1 : 30;
+	unsigned int reserved2;
 };
 
 
 struct PS3IocCtrlCapable {
-    U32 supportUnevenSpans  : 1;
-    U32 supportJbodSecure   : 1;
-    U32 supportNvmePassthru : 1;
-    U32 supportDirectCmd    : 1;
-    U32 supportAcceleration : 1;
-    U32 supportSataDirectCmd: 1;
-    U32 supportSataNcq      : 1;
-    U32 reserved1           : 25;
-    U32 reserved2[3];
+	unsigned int supportUnevenSpans : 1;
+	unsigned int supportJbodSecure : 1;
+	unsigned int supportNvmePassthru : 1;
+	unsigned int supportDirectCmd : 1;
+	unsigned int supportAcceleration : 1;
+	unsigned int supportSataDirectCmd : 1;
+	unsigned int supportSataNcq : 1;
+	unsigned int reserved1 : 25;
+	unsigned int reserved2[3];
 };
 
 #define PS3_IOC_CLUSTER_SERIAL_NO_SIZE 16
 
 struct PS3ChannelAttr {
-    U16 channelType : 4;   
-    U16 maxDevNum   : 12;  
+	unsigned short channelType : 4;
+	unsigned short maxDevNum : 12;
 };
 
 struct PS3ChannelInfo {
-    U8 channelNum;   
-    U8 reserved;
-    struct PS3ChannelAttr channels[PS3_MAX_CHANNEL_NUM];
+	unsigned char channelNum;
+	unsigned char reserved;
+	struct PS3ChannelAttr channels[PS3_MAX_CHANNEL_NUM];
 };
 
 struct PS3QosInfo {
-	U16 tfifoDepth;       
-	U16 sataHddQuota;       
-	U16 sataSsdQuota;       
-	U16 sasHddQuota;      
-	U16 sasSsdQuota;     
-	U16 nvmeVdQuota;      
-	U16 nvmeDirectQuota;  
-	U16 nvmeNormalQuota;  
+	unsigned short tfifoDepth;     
+	unsigned short sataHddQuota;   
+	unsigned short sataSsdQuota;   
+	unsigned short sasHddQuota;    
+	unsigned short sasSsdQuota;    
+	unsigned short nvmeVdQuota;    
+	unsigned short nvmeDirectQuota;
+	unsigned short nvmeNormalQuota;
 };
 
 
 struct PS3IocCtrlInfo {
 
-    U16 maxVdCount;
+	unsigned short maxVdCount;
 
-    U16 maxPdCount;
+	unsigned short maxPdCount;
 
+	unsigned int maxSectors;
+	struct PS3IocCtrlProp properties;
+	struct PS3IocCtrlCapable capabilities;
 
-    U32 maxSectors;
-    struct PS3IocCtrlProp properties;
-    struct PS3IocCtrlCapable capabilities;
+	unsigned char scsiTaskAbortTimeout;
+	unsigned char scsiTaskResetTimeout;
 
-    U8 scsiTaskAbortTimeout;
-    U8 scsiTaskResetTimeout;
+	unsigned short offsetOfVDID;
+	unsigned char reserved1[2];
 
-    U16 offsetOfVDID;
-    U8 reserved1[2];
+	unsigned short cancelTimeOut;
 
-    U16 cancelTimeOut;
+	unsigned int vdIOThreshold;
 
+	unsigned char iocPerfMode;
 
-    U32 vdIOThreshold;
+	unsigned char vdQueueNum;
 
-    U8 iocPerfMode;
+	unsigned char ioTimeOut;
+	unsigned char hwVdMaxIOSize : 4;
+	unsigned char reserved2 : 4;
 
-    U8 vdQueueNum;
+	struct PS3ChannelInfo channelInfo;
 
-    U8 ioTimeOut;
-    U8 hwVdMaxIOSize:4;
-    U8 reserved2:4;
+	struct PS3QosInfo qosInfo;
+	unsigned short isotoneTimeOut;
+	unsigned char reserved3[2];
 
-    struct PS3ChannelInfo channelInfo;
-
-    struct PS3QosInfo qosInfo;
-    U16 isotoneTimeOut;
-    U8 reserved3[2];
-
-    
-    U8 reserved4[32];
+	unsigned char reserved4[32];
 
 };
 
 struct PS3Dev {
-    union {
-        U16 phyDiskID;             
-        U16 virtDiskID;            
-    };
-    U16 softChan    : 4;           
-    U16 devID       : 12;          
+	union {
+		unsigned short phyDiskID; 
+		unsigned short virtDiskID;
+	};
+	unsigned short softChan : 4;  
+	unsigned short devID : 12;    
 };
 
-typedef union PS3DiskDev {
-    U32 diskID;                    
-    struct PS3Dev ps3Dev;          
-}PS3DiskDev_u;
+union PS3DiskDev {
+	unsigned int diskID; 
+	struct PS3Dev ps3Dev;
+};
 
 
 struct PS3DiskDevPos {
-    union {
-        struct {
-            U8  checkSum;           
-            U8  enclId;             
-            U8  phyId;              
-        };
-        U32 diskMagicNum;           
-    };
-    PS3DiskDev_u diskDev;           
+	union {
+		struct {
+			unsigned char checkSum;
+			unsigned char enclId;  
+			unsigned char phyId;   
+		};
+		unsigned int diskMagicNum; 
+	};
+	union PS3DiskDev diskDev;      
 };
-
 
 struct PS3PhyDevice {
-    struct PS3DiskDevPos diskPos;  
-    U8 diskState;                  
-    U8 configFlag;                 
-    U8 driverType:4;               
-    U8 mediumType:4;               
-    U8 reserved;
-    U8 reserved1[4];
+	struct PS3DiskDevPos diskPos;
+	unsigned char diskState;     
+	unsigned char configFlag;    
+	unsigned char driverType : 4;
+	unsigned char mediumType : 4;
+	unsigned char reserved;
+	unsigned char reserved1[4];
 };
 
-
 struct PS3VirtDevice {
-    struct PS3DiskDevPos diskPos;  
-    U8 accessPolicy;
-    U8 isHidden;                   
-    U8 diskState;                  
-    U8 reserved;
-    U8 reserved1[4];
+	struct PS3DiskDevPos diskPos;
+	unsigned char accessPolicy;
+	unsigned char isHidden; 
+	unsigned char diskState;
+	unsigned char reserved;
+	unsigned char reserved1[4];
 };
 
 union PS3Device {
-    struct PS3PhyDevice pd;        
-    struct PS3VirtDevice vd;       
+	struct PS3PhyDevice pd; 
+	struct PS3VirtDevice vd;
 };
 
 struct PS3DevList {
-    U16 count;                     
-    U8 reserved[6];
-    union PS3Device devs[0];       
+	unsigned short count;     
+	unsigned char reserved[6];
+	union PS3Device devs[0];  
 };
 
 struct PS3PDInfo {
-    struct PS3DiskDevPos diskPos;  
-    U8 diskState;                  
-    U8 configFlag;                 
-    U8 driverType:4;               
-    U8 mediumType:4;               
-    U8 scsiInterfaceType;          
-    U8 taskAbortTimeout;           
-    U8 taskResetTimeout;           
-    union {
-        struct {
-            U8 supportNCQ:1;       
-            U8 protect:1;          
-            U8 isDirectDisable:1;  
-            U8 reserved:5;         
-        };
-        U8 pdFlags;                
-    };
-    U8 reserved1;
-    U16 sectorSize;                
-    U8 reserved2[2];
-    U8 enclId;                     
-    U8 phyId;                      
-    U8 dmaAddrAlignShift;          
-    U8 dmaLenAlignShift;           
-    U8 reserved3[4];
-    U32 maxIOSize;                 
-    U32 devQueDepth;               
-    U16 normalQuota;               
-    U16 directQuota;               
-    U8 reserved4[20];
+	struct PS3DiskDevPos diskPos;   
+	unsigned char diskState;        
+	unsigned char configFlag;       
+	unsigned char driverType : 4;   
+	unsigned char mediumType : 4;   
+	unsigned char scsiInterfaceType;
+	unsigned char taskAbortTimeout; 
+	unsigned char taskResetTimeout; 
+	union {
+		struct {
+			unsigned char supportNCQ : 1;     
+			unsigned char protect : 1;        
+			unsigned char isDirectDisable : 1;
+			unsigned char supportNcqPrio:1;   
+			unsigned char reserved : 4;       
+		};
+		unsigned char pdFlags;                
+	};
+	unsigned char reserved1;
+	unsigned short sectorSize;      
+	unsigned char reserved2[2];
+	unsigned char enclId;           
+	unsigned char phyId;            
+	unsigned char dmaAddrAlignShift;
+	unsigned char dmaLenAlignShift; 
+	unsigned char reserved3[4];
+	unsigned int maxIOSize;         
+	unsigned int devQueDepth;       
+	unsigned short normalQuota;     
+	unsigned short directQuota;     
+	unsigned char reserved4[20];
 };
 
 
-struct PS3Extent   {
-    PS3DiskDev_u phyDiskID;        
-    U8  state;                     
-    U8  reserved[3];
+struct PS3Extent {
+	union PS3DiskDev phyDiskID; 
+	unsigned char state;        
+	unsigned char reserved[3];
 };
 
 struct PS3Span {
-    U32 spanStripeDataSize;        
-    U8 spanState;                  
-    U8 spanPdNum;                  
-    U8 reserved[2];
-    struct PS3Extent extent[PS3_MAX_PD_COUNT_IN_SPAN]; 
+	unsigned int spanStripeDataSize;
+	unsigned char spanState;        
+	unsigned char spanPdNum;        
+	unsigned char reserved[2];
+	struct PS3Extent extent[PS3_MAX_PD_COUNT_IN_SPAN];
 };
 
 struct PS3VDEntry {
-    struct PS3DiskDevPos diskPos;  
-    U16 sectorSize;                
-    U16 stripSize;                 
-    U32 stripeDataSize;            
-    U16 physDrvCnt;                
-    U16 diskGrpId;                 
-    U8 accessPolicy;               
+	struct PS3DiskDevPos diskPos;         
+	unsigned short sectorSize;            
+	unsigned short stripSize;             
+	unsigned int stripeDataSize;          
+	unsigned short physDrvCnt;            
+	unsigned short diskGrpId;             
+	unsigned char accessPolicy;           
 
-    U8 reserved1;
-    U8 dmaAddrAlignShift;          
-    U8 dmaLenAlignShift;           
-    U8 isDirectEnable:1;           
-    U8 isHidden:1;                 
-    U8 isNvme:1;                   
-    U8 isSsd:1;                    
-    U8 bdev_bdi_cap:2;             
-    U8 isWriteDirectEnable:1;      
-    U8 reserved2:1;
-    U8 raidLevel;                  
-    U8 spanCount;                  
-    U8 diskState;                  
-    U16 umapBlkDescCnt:3;          
-    U16 umapNumblk:13;             
-    U16 dev_busy_scale; 		
-    U64 startLBA;                  
-    U64 extentSize;                
-    U64 mapBlock;                  
-    U64 capacity;                  
-    U8 isTaskMgmtEnable;           
-    U8 taskAbortTimeout;           
-    U8 taskResetTimeout;           
-    U8 mapBlockVer;                
-    U32 maxIOSize;                 
-    U32 devQueDepth;               
-    U16 virtDiskSeq;               
-    U16 normalQuota;               
-    U16 directQuota;               
-    U16 reserved4[21];
-    struct PS3Span span[PS3_MAX_SPAN_IN_VD];   
-
+	unsigned char isReadNeedSeq:1;        
+	unsigned char isWriteNeedSeq:1;       
+	unsigned char reserved1:6;
+	unsigned char dmaAddrAlignShift;      
+	unsigned char dmaLenAlignShift;       
+	unsigned char isDirectEnable : 1;     
+	unsigned char isHidden : 1;           
+	unsigned char isNvme : 1;             
+	unsigned char isSsd : 1;              
+	unsigned char bdev_bdi_cap : 2;       
+	unsigned char isWriteDirectEnable : 1;
+	unsigned char reserved2 : 1;
+	unsigned char raidLevel;              
+	unsigned char spanCount;              
+	unsigned char diskState;              
+	unsigned short umapBlkDescCnt : 3;    
+	unsigned short umapNumblk : 13;       
+	unsigned short dev_busy_scale;        
+	unsigned long long startLBA;          
+	unsigned long long extentSize;        
+	unsigned long long mapBlock;          
+	unsigned long long capacity;          
+	unsigned char isTaskMgmtEnable;       
+	unsigned char taskAbortTimeout;       
+	unsigned char taskResetTimeout;       
+	unsigned char mapBlockVer;            
+	unsigned int maxIOSize;               
+	unsigned int devQueDepth;             
+	unsigned short virtDiskSeq;           
+	unsigned short normalQuota;           
+	unsigned short directQuota;           
+	unsigned short reserved4[21];
+	struct PS3Span span[PS3_MAX_SPAN_IN_VD];
 };
 
 struct PS3VDInfo {
-    U16 count;                     
-    U8 reserved[6];
-    struct PS3VDEntry vds[0];      
+	unsigned short count;     
+	unsigned char reserved[6];
+	struct PS3VDEntry vds[0]; 
 };
 
 struct PS3DrvSysInfo {
-    U8 version;
-    U8 systemIDLen;
-    U8 reserved[6];
-    U8 systemID[PS3_DRV_SYSTEM_ID_MAX_LEN];
+	unsigned char version;
+	unsigned char systemIDLen;
+	unsigned char reserved[6];
+	unsigned char systemID[PS3_DRV_SYSTEM_ID_MAX_LEN];
 };
 
 
 struct PS3PhyInfo {
-    U64 sasAddr;                       
-    U64 attachedSasAddr;               
-    U8 phyId;                          
-    U8 negLinkRate;                    
-    U8 slotId;                         
-    U8 attachDevType;                  
-    U8 initiatorPortProtocol:4;        
-    U8 targetPortProtocols:4;          
-    U8 attachInitiatorPortProtocol:4;  
-    U8 attachTargetPortProtocols:4;    
-    U8 minLinkRateHw:4;                
-    U8 maxLinkRateHw:4;                
-    U8 minLinkRate:4;                  
-    U8 maxLinkRate:4;                  
-    U8 enable:1;                       
-    U8 reserve:7;
-    U8 reserved[7];
+	unsigned long long sasAddr;                     
+	unsigned long long attachedSasAddr;             
+	unsigned char phyId;                            
+	unsigned char negLinkRate;                      
+	unsigned char slotId;                           
+	unsigned char attachDevType;                    
+	unsigned char initiatorPortProtocol : 4;        
+	unsigned char targetPortProtocols : 4;          
+	unsigned char attachInitiatorPortProtocol : 4;  
+	unsigned char attachTargetPortProtocols : 4;    
+	unsigned char minLinkRateHw : 4;                
+	unsigned char maxLinkRateHw : 4;                
+	unsigned char minLinkRate : 4;                  
+	unsigned char maxLinkRate : 4;                  
+	unsigned char enable : 1;                       
+	unsigned char reserve : 7;
+	unsigned char reserved[7];
 };
 
 
 struct PS3ExpanderInfo {
-    U64 sasAddr;        
-    U64 parentSasAddr;  
-    U8 parentId;        
-    U8 enclID;          
-    U8 devType;         
-    U8 phyCount;        
-    U8 reserved[4];
+	unsigned long long sasAddr;      
+	unsigned long long parentSasAddr;
+	unsigned char parentId;          
+	unsigned char enclID;            
+	unsigned char devType;           
+	unsigned char phyCount;          
+	unsigned char reserved[4];
 };
 
 
 struct PS3Expanders {
-    U8 count;                           
-    U8 reserved[7];
-    U64 hbaSasAddr[3];                  
-    struct PS3ExpanderInfo expanders[0];
+	unsigned char count;                
+	unsigned char reserved[7];
+	unsigned long long hbaSasAddr[3];   
+	struct PS3ExpanderInfo expanders[0];
 };
 
 struct PS3BiosInfo {
-    U8 biosState;                       
-    U8 biosMode;                        
+	unsigned char biosState;
+	unsigned char biosMode; 
 
-    U8 biosAbs;
-    U8 devMaxNum;                       
+	unsigned char biosAbs;
+	unsigned char devMaxNum;
 };
 
 struct PS3BootDriveInfo {
-    U8        hasBootDrive        :1;
-    U8        isPD                :1;
-    U8        reserved_9          :6;
-    U8        enclID  ;
-    U16       slotID  ;
-    U16       vdID    ;
-    U8        pad[2];
+	unsigned char hasBootDrive : 1;
+	unsigned char isPD : 1;
+	unsigned char reserved_9 : 6;
+	unsigned char enclID;
+	unsigned short slotID;
+	unsigned short vdID;
+	unsigned char pad[2];
 };
 
 struct PS3RandomInfo {
-    U8 randomNum[PS3_MAX_RANDOM_NUM];
-    U8 iv[PS3_MAX_IV_NUM];
+	unsigned char randomNum[PS3_MAX_RANDOM_NUM];
+	unsigned char iv[PS3_MAX_IV_NUM];
 };
 
 struct PS3SecurityPwHead {
-    U8    cipherNum;
-    U32   cipherLegth[PS3_SECURITY_CIPHER_NUM_MAX];
-    U32   cipherOffset[PS3_SECURITY_CIPHER_NUM_MAX];
-    U8    iv[PS3_MAX_IV_NUM];
+	unsigned char cipherNum;
+	unsigned int cipherLegth[PS3_SECURITY_CIPHER_NUM_MAX];
+	unsigned int cipherOffset[PS3_SECURITY_CIPHER_NUM_MAX];
+	unsigned char iv[PS3_MAX_IV_NUM];
 };
 
-#endif 
+#endif
