@@ -1,0 +1,17 @@
+#define CMDLINE_DEF(_symbol, _idx, _type) YK3_CMDLINE_FIELD(_symbol) = _idx,
+enum yk3_cmdline_field {
+#include "yk3_cmdline.def"
+	YK3_CMDLINE_FIELD_END
+};
+#undef CMDLINE_DEF
+
+#define CMDLINE_DEF(_symbol, _idx, _type) struct yk3_cmdline_var _symbol;
+struct yk3_cmdline_cfg {
+	union {
+		struct {
+			#include "yk3_cmdline.def"
+		};
+		struct yk3_cmdline_var field[YK3_CMDLINE_FIELD_END];
+	};
+};
+#undef CMDLINE_DEF
