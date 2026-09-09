@@ -68,8 +68,8 @@
     addl %ecx,%edx/* ecx is zerorest also */
     jmp Lavx2_copy_user_handle_tail
 
-    _ASM_EXTABLE_UA(300b, 303b)
-    _ASM_EXTABLE_UA(301b, 303b)
+    _ASM_EXTABLE_UA_TRAP(300b, 303b)
+    _ASM_EXTABLE_UA_TRAP(301b, 303b)
 
 .Lcopy_user_string:
 .endm
@@ -200,41 +200,41 @@ large_block_nt_unaligned_cpy:
     vzeroupper
     jmp Lavx2_copy_user_handle_tail
 
-    _ASM_EXTABLE_UA(32b, 88b)
-    _ASM_EXTABLE_UA(33b, 88b)
-    _ASM_EXTABLE_UA(34b, 88b)
-    _ASM_EXTABLE_UA(35b, 88b)
-    _ASM_EXTABLE_UA(36b, 88b)
-    _ASM_EXTABLE_UA(37b, 88b)
-    _ASM_EXTABLE_UA(38b, 88b)
-    _ASM_EXTABLE_UA(39b, 88b)
+    _ASM_EXTABLE_UA_TRAP(32b, 88b)
+    _ASM_EXTABLE_UA_TRAP(33b, 88b)
+    _ASM_EXTABLE_UA_TRAP(34b, 88b)
+    _ASM_EXTABLE_UA_TRAP(35b, 88b)
+    _ASM_EXTABLE_UA_TRAP(36b, 88b)
+    _ASM_EXTABLE_UA_TRAP(37b, 88b)
+    _ASM_EXTABLE_UA_TRAP(38b, 88b)
+    _ASM_EXTABLE_UA_TRAP(39b, 88b)
 
-    _ASM_EXTABLE_UA(40b, 88b)
-    _ASM_EXTABLE_UA(41b, 88b)
-    _ASM_EXTABLE_UA(42b, 88b)
-    _ASM_EXTABLE_UA(43b, 88b)
-    _ASM_EXTABLE_UA(44b, 88b)
-    _ASM_EXTABLE_UA(45b, 88b)
-    _ASM_EXTABLE_UA(46b, 88b)
-    _ASM_EXTABLE_UA(47b, 88b)
-    _ASM_EXTABLE_UA(48b, 88b)
-    _ASM_EXTABLE_UA(49b, 88b)
+    _ASM_EXTABLE_UA_TRAP(40b, 88b)
+    _ASM_EXTABLE_UA_TRAP(41b, 88b)
+    _ASM_EXTABLE_UA_TRAP(42b, 88b)
+    _ASM_EXTABLE_UA_TRAP(43b, 88b)
+    _ASM_EXTABLE_UA_TRAP(44b, 88b)
+    _ASM_EXTABLE_UA_TRAP(45b, 88b)
+    _ASM_EXTABLE_UA_TRAP(46b, 88b)
+    _ASM_EXTABLE_UA_TRAP(47b, 88b)
+    _ASM_EXTABLE_UA_TRAP(48b, 88b)
+    _ASM_EXTABLE_UA_TRAP(49b, 88b)
 
-    _ASM_EXTABLE_UA(50b, 88b)
-    _ASM_EXTABLE_UA(51b, 88b)
-    _ASM_EXTABLE_UA(52b, 88b)
-    _ASM_EXTABLE_UA(53b, 88b)
-    _ASM_EXTABLE_UA(54b, 88b)
-    _ASM_EXTABLE_UA(55b, 88b)
-    _ASM_EXTABLE_UA(56b, 88b)
-    _ASM_EXTABLE_UA(57b, 88b)
-    _ASM_EXTABLE_UA(58b, 88b)
-    _ASM_EXTABLE_UA(59b, 88b)
+    _ASM_EXTABLE_UA_TRAP(50b, 88b)
+    _ASM_EXTABLE_UA_TRAP(51b, 88b)
+    _ASM_EXTABLE_UA_TRAP(52b, 88b)
+    _ASM_EXTABLE_UA_TRAP(53b, 88b)
+    _ASM_EXTABLE_UA_TRAP(54b, 88b)
+    _ASM_EXTABLE_UA_TRAP(55b, 88b)
+    _ASM_EXTABLE_UA_TRAP(56b, 88b)
+    _ASM_EXTABLE_UA_TRAP(57b, 88b)
+    _ASM_EXTABLE_UA_TRAP(58b, 88b)
+    _ASM_EXTABLE_UA_TRAP(59b, 88b)
 
-    _ASM_EXTABLE_UA(60b, 88b)
-    _ASM_EXTABLE_UA(61b, 88b)
-    _ASM_EXTABLE_UA(62b, 88b)
-    _ASM_EXTABLE_UA(63b, 88b)
+    _ASM_EXTABLE_UA_TRAP(60b, 88b)
+    _ASM_EXTABLE_UA_TRAP(61b, 88b)
+    _ASM_EXTABLE_UA_TRAP(62b, 88b)
+    _ASM_EXTABLE_UA_TRAP(63b, 88b)
 SYM_FUNC_END(copy_user_avx2_pf64_nt_string)
 EXPORT_SYMBOL(copy_user_avx2_pf64_nt_string)
 
@@ -284,6 +284,7 @@ SYM_CODE_END(Lless_than_256_bytes_cpy)
 
 SYM_CODE_START_LOCAL(Lavx2_copy_user_handle_tail)
     movq %rdx,%rcx
+    /* eax contains the trap number supplied by the EX_TYPE_UACCESS_TRAP fixup. */
     cmp $X86_TRAP_MC,%eax       /* check if X86_TRAP_MC */
     je 3f
 

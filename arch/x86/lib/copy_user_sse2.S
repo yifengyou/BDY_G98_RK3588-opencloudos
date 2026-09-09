@@ -67,8 +67,8 @@
     addl %ecx,%edx/* ecx is zerorest also */
     jmp Lsse2_copy_user_handle_tail
 
-    _ASM_EXTABLE_UA(200b, 203b)
-    _ASM_EXTABLE_UA(201b, 203b)
+    _ASM_EXTABLE_UA_TRAP(200b, 203b)
+    _ASM_EXTABLE_UA_TRAP(201b, 203b)
 
 .Lcopy_user_string:
 .endm
@@ -159,29 +159,29 @@ SYM_FUNC_START(copy_user_sse2_opt_string)
     sfence
     jmp Lsse2_copy_user_handle_tail
 
-  _ASM_EXTABLE_UA(10b, 100b)
-  _ASM_EXTABLE_UA(11b, 100b)
-  _ASM_EXTABLE_UA(12b, 100b)
-  _ASM_EXTABLE_UA(13b, 100b)
-  _ASM_EXTABLE_UA(14b, 100b)
-  _ASM_EXTABLE_UA(15b, 100b)
-  _ASM_EXTABLE_UA(16b, 100b)
-  _ASM_EXTABLE_UA(17b, 100b)
-  _ASM_EXTABLE_UA(18b, 100b)
-  _ASM_EXTABLE_UA(19b, 100b)
+  _ASM_EXTABLE_UA_TRAP(10b, 100b)
+  _ASM_EXTABLE_UA_TRAP(11b, 100b)
+  _ASM_EXTABLE_UA_TRAP(12b, 100b)
+  _ASM_EXTABLE_UA_TRAP(13b, 100b)
+  _ASM_EXTABLE_UA_TRAP(14b, 100b)
+  _ASM_EXTABLE_UA_TRAP(15b, 100b)
+  _ASM_EXTABLE_UA_TRAP(16b, 100b)
+  _ASM_EXTABLE_UA_TRAP(17b, 100b)
+  _ASM_EXTABLE_UA_TRAP(18b, 100b)
+  _ASM_EXTABLE_UA_TRAP(19b, 100b)
 
-  _ASM_EXTABLE_UA(20b, 100b)
-  _ASM_EXTABLE_UA(21b, 100b)
-  _ASM_EXTABLE_UA(22b, 100b)
-  _ASM_EXTABLE_UA(23b, 100b)
-  _ASM_EXTABLE_UA(24b, 100b)
-  _ASM_EXTABLE_UA(25b, 100b)
-  _ASM_EXTABLE_UA(26b, 100b)
-  _ASM_EXTABLE_UA(27b, 100b)
-  _ASM_EXTABLE_UA(28b, 100b)
-  _ASM_EXTABLE_UA(29b, 100b)
+  _ASM_EXTABLE_UA_TRAP(20b, 100b)
+  _ASM_EXTABLE_UA_TRAP(21b, 100b)
+  _ASM_EXTABLE_UA_TRAP(22b, 100b)
+  _ASM_EXTABLE_UA_TRAP(23b, 100b)
+  _ASM_EXTABLE_UA_TRAP(24b, 100b)
+  _ASM_EXTABLE_UA_TRAP(25b, 100b)
+  _ASM_EXTABLE_UA_TRAP(26b, 100b)
+  _ASM_EXTABLE_UA_TRAP(27b, 100b)
+  _ASM_EXTABLE_UA_TRAP(28b, 100b)
+  _ASM_EXTABLE_UA_TRAP(29b, 100b)
 
-  _ASM_EXTABLE_UA(80b, 99b)
+  _ASM_EXTABLE_UA_TRAP(80b, 99b)
 SYM_FUNC_END(copy_user_sse2_opt_string)
 EXPORT_SYMBOL(copy_user_sse2_opt_string)
 
@@ -229,6 +229,7 @@ EXPORT_SYMBOL(fpu_save_xmm0_3)
 SYM_CODE_START_LOCAL(Lsse2_copy_user_handle_tail)
     movq %rdx,%rcx
     /*
+     * eax contains the trap number supplied by the EX_TYPE_UACCESS_TRAP fixup.
      * The trap number and error code are both 32 bits.
      */
     cmp $X86_TRAP_MC,%eax       /* check if X86_TRAP_MC */
