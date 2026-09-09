@@ -294,7 +294,12 @@ SYM_CODE_START_LOCAL(Lavx2_copy_user_handle_tail)
     ASM_CLAC
     RET
 
-3:  xorl %eax,%eax
+    /*
+     * Machine check: do not touch the faulting tail again, and report the
+     * bytes that were not copied.  Returning zero here would tell the
+     * caller that the whole transfer completed.
+     */
+3:  mov %rcx,%rax
     ASM_CLAC
     RET
 

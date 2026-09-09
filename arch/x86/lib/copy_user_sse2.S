@@ -240,13 +240,13 @@ SYM_CODE_START_LOCAL(Lsse2_copy_user_handle_tail)
     RET
 
     /*
-     * Return zero to pretend that this copy succeeded. This
-     * is counter-intuitive, but needed to prevent the code
-     * in lib/iov_iter.c from retrying and running back into
-     * the poison cache line again. The machine check handler
-     * will ensure that a SIGBUS is sent to the task.
+     * Machine check: do not touch the faulting tail again, and report the
+     * bytes that were not copied.  The previous "return zero to pretend
+     * success" behaviour relied on a SIGBUS that this path does not
+     * guarantee (the kernel COPYIN recovery runs kill_me_never()), and it
+     * makes the caller believe a truncated transfer completed.
      */
-3:  xorl %eax,%eax
+3:  mov %rcx,%rax
     ASM_CLAC
     RET
 
