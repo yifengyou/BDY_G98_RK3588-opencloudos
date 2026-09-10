@@ -165,7 +165,7 @@ endif
 ifneq ($(DIST),)
 override RPMFLAGS := --define "dist .$(DIST)" $(RPMFLAGS)
 $(info "NOTE: DIST is set, building for another distro $(DIST)")
-$(info "      You shoudn't do this unless you know what you are doing.")
+$(info "      You shouldn't do this unless you know what you are doing.")
 endif
 
 default: dist-help
@@ -283,7 +283,7 @@ dist-install-buildrequires: dist-specfile
 		else \
 		echo "Yum is not available for current user."; \
 		fi; \
-		echo "Error: Intallation failed."; \
+		echo "Error: Installation failed."; \
 		exit 1; \
 		fi
 
@@ -375,7 +375,7 @@ dist-help:
 	@echo  '`make dist-check`'
 	@echo  'And ensure there is no error.'
 	@echo
-	@echo  'For building a kernel RPM distrobution package:'
+	@echo  'For building a kernel RPM distribution package:'
 	@echo  '  dist, dist-rpms      - Alias to dist-rpm.'
 	@echo  '  dist-rpm             - Create the binary RPMS for the kernel and put it under:'
 	@echo  '                         $(RPM_RPMDIR)'
@@ -388,14 +388,14 @@ dist-help:
 	@echo  '  ARCH="$(ARCH)"'
 	@echo  '    Target ARCH used for binary/RPM build.'
 	@echo  '  SPEC_ARCH="$(SPEC_ARCH)"'
-	@echo  '    Targer ARCH coverted by spec/SRPM build.'
+	@echo  '    Target ARCH covered by spec/SRPM build.'
 	@echo  '  TAG="$(TAG)" (or COMMIT="$(COMMIT)")'
 	@echo  '    Specify a git tag or commit, and this Makefile will build the kernel from that version.'
 	@echo  '  RPMFLAGS="$(RPMFLAGS)"'
-	@echo  '    Extra RPM flags to be passed to rpmbuild for RPM bulding related commands.'
+	@echo  '    Extra RPM flags to be passed to rpmbuild for RPM building related commands.'
 	@echo  '  CONFIG="$(CONFIG)"'
 	@echo  '    Which kernel config to use, $(VENDOR_CAPITALIZED) build system supports multiple config targets,'
-	@echo  '    Avaiable targets:'
+	@echo  '    Available targets:'
 	@$(DISTDIR)/scripts/ls-config-targets.sh | xargs -n3 printf "	    %s	    %s	    %s\n"
 	@echo
 	@echo  'To make a new kernel version release:'
@@ -411,7 +411,7 @@ dist-help:
 	@echo  '  dist-check-commit		- Check commit message and patch.'
 	@printf "  				  \033[1;33m* Please at least ensure this check doesn't raise any error before submitting a patch.\033[0m\n"
 	@echo  '  dist-check-diff-config	- Check for invalid configs. If a CONFIG_XXX=y is set in config file but gone after make oldconfig,'
-	@echo  '  				  it it considered a invalid config. There are many potential resons causing this, changed or missing'
+	@echo  '  				  it is considered an invalid config. There are many potential reasons causing this, changed or missing'
 	@echo  '  				  config dependency, deprecated config, auto-select configs, this tool will also provide some hint.'
 	@echo  '  dist-check-dup-config		- Check for duplicated configs, '
 	@echo  '  dist-check-new-config		- Check for unset configs. If any config is not set, kbuild will prompt during built time.'
