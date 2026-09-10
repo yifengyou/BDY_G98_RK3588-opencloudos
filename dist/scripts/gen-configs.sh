@@ -10,10 +10,10 @@
 . "$(dirname "$(realpath "$0")")/lib-config.sh"
 
 # Populate basic config entries based on our config file tree
-populate_configs "$@"
+populate_configs "$@" || exit $?
 
 # Process the config files with make olddefconfig
-makedef_configs "$@"
+makedef_configs "$@" || exit $?
 
 # Check config values (eg. LOCALVERSION)
 sanity_check_configs "$@"
