@@ -60,10 +60,10 @@ static int recover_block_to_file(int devfd, int inofd, __u64 block, __u64 len, _
     off_t offset_dev, offset_ino, offset;
     ssize_t size, ret;
     char buf[sbp->sb_blocksize];
-    int i;
+    __u64 i;
 
     if ( mflag ){
-        return 0;
+        return 1;
     }
 
     offset_dev = lseek(devfd, start * sbp->sb_blocksize, SEEK_SET);
@@ -84,9 +84,14 @@ static int recover_block_to_file(int devfd, int inofd, __u64 block, __u64 len, _
         while (offset < sbp->sb_blocksize) {
             size = read(devfd, buf + offset, sbp->sb_blocksize - offset);
             if (size < 0) {
-                lseek(devfd, offset_dev + sbp->sb_blocksize, SEEK_SET);
+                if (errno == EINTR)
+                    continue;
                 perror("read(dev_fd)");
-                continue;
+                goto failed;
+            }
+            if (size == 0) {
+                fprintf(stderr, "read(dev_fd): unexpected end of device\n");
+                goto failed;
             }
             offset += size;
         }
@@ -95,9 +100,14 @@ static int recover_block_to_file(int devfd, int inofd, __u64 block, __u64 len, _
         while (offset != 0) {
             ret = write(inofd, buf + (sbp->sb_blocksize - offset), offset);
             if (ret < 0) {
-                lseek(inofd, offset_ino + sbp->sb_blocksize, SEEK_SET);
+                if (errno == EINTR)
+                    continue;
                 perror("write(inofd)");
-                continue;
+                goto failed;
+            }
+            if (ret == 0) {
+                fprintf(stderr, "write(inofd): no progress\n");
+                goto failed;
             }
             offset -= ret;
             //printf("ret: %llu\n", ret);
@@ -118,6 +128,31 @@ static int recover_block_to_file(int devfd, int inofd, __u64 block, __u64 len, _
         return 0;
     }
     return 1;
+
+failed:
+    fprintf(stderr, "Failed extent: file block %llu, device block %llu, block index %llu\n",
+            block, start, i);
+    return 0;
+}
+
+/* A short final block is returned to the caller; only EINTR is retried. */
+static ssize_t read_block(int fd, void *buf, size_t count)
+{
+    size_t done = 0;
+    ssize_t ret;
+
+    while (done < count) {
+        ret = read(fd, (char *)buf + done, count - done);
+        if (ret < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (ret == 0)
+            break;
+        done += ret;
+    }
+    return done;
 }
 
 static char *xfs_get_block(xfs_filblks_t blknum, uint32_t bsize)
@@ -138,12 +173,17 @@ static char *xfs_get_block(xfs_filblks_t blknum, uint32_t bsize)
     offset = lseek(fd, blknum * bsize, SEEK_SET);
     if (offset < 0) {
         perror("xfs_get_block: lseek()");
+        free(buf);
         return NULL;
     }
 
-    size = read(fd, buf, bsize);
-    if (size < 0) {
-        perror("xfs_get_block: read()");
+    size = read_block(fd, buf, bsize);
+    if (size != bsize) {
+        if (size < 0)
+            perror("xfs_get_block: read()");
+        else
+            fprintf(stderr, "xfs_get_block: short block read\n");
+        free(buf);
         return NULL;
     }
 
@@ -219,8 +259,10 @@ static int btree_block_travel(struct xfs_btree_block *block)
             if (buf == NULL) {
                 return 0;
             }
-            btree_block_travel((struct xfs_btree_block *) buf);
+            retval = btree_block_travel((struct xfs_btree_block *) buf);
             free(buf);
+            if (!retval)
+                return 0;
         }
     } else {
         /* do nothing! */
@@ -294,12 +336,16 @@ static int inode_extent_tree_travel(xfs_bmdr_block_t *rblock, int iflag)
                     fprintf(stderr, "inode_extent_tree_travel: btree_block_travel() error!\n");
                     return 0;
                 }
-                btree_block_travel((struct xfs_btree_block *) buf);
+                retval = btree_block_travel((struct xfs_btree_block *) buf);
                 /*
                 libxfs_readbufr(mp->m_ddev_targp, blknum, bp, sbp->sb_blocksize, 0);
                 inode_extent_tree_travel(bp->b_addr, 0);
                 */
                 free(buf);
+                if (!retval) {
+                    free(bp);
+                    return 0;
+                }
             }
             free(bp);
         } else {
@@ -545,7 +591,7 @@ static int disk_traverse(char *device, uint32_t bsize, uint16_t isize, uint16_t 
 
     offset = -1;
     inum = -1;
-    while ((size = read(fd, buf, bsize)) == bsize) {
+    while ((size = read_block(fd, buf, bsize)) == bsize) {
         if ( !nflag ){
             dir_travel(buf, isize, ipblock);
         }
@@ -589,12 +635,22 @@ static int disk_traverse(char *device, uint32_t bsize, uint16_t isize, uint16_t 
             recover_fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC | O_LARGEFILE, 0644);
             if (recover_fd < 0) {
                 perror("open(inode)");
-                continue;
+                close(fd);
+                return 0;
             }
             rblock = (xfs_bmdr_block_t *) XFS_DFORK_PTR(dinode, XFS_DATA_FORK);
             //printf("rblock addr - inode addr: %lu\n", (uint64_t)rblock - (uint64_t)dinode);
-            inode_extent_tree_travel(rblock, 1);
-            close(recover_fd);
+            if (!inode_extent_tree_travel(rblock, 1)) {
+                fprintf(stderr, "Recover error: %s\n", filename);
+                close(recover_fd);
+                close(fd);
+                return 0;
+            }
+            if (close(recover_fd) < 0) {
+                perror("close(inode)");
+                close(fd);
+                return 0;
+            }
         }
     }
 
@@ -731,12 +787,20 @@ int main(int argc, char **argv)
         INIT_HLIST_HEAD(&file_dir_htable[i]);
     }
     
-    disk_traverse(fsdevice, sbp->sb_blocksize, sbp->sb_inodesize, sbp->sb_inopblock);
+    retval = disk_traverse(fsdevice, sbp->sb_blocksize, sbp->sb_inodesize, sbp->sb_inopblock);
+    if (!retval) {
+        fprintf(stderr, "Recovery incomplete!\n");
+        close(device_fd);
+        exit(EXIT_FAILURE);
+    }
     
     if ( !nflag ){
         recover_dir();
     }
     
-    close(device_fd);
+    if (close(device_fd) < 0) {
+        perror("close(device)");
+        exit(EXIT_FAILURE);
+    }
     exit(0);
 }
