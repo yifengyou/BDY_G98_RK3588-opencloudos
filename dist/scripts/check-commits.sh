@@ -9,7 +9,7 @@
 usage()
 {
 	cat << EOF
-check-commit-msg.sh <commit>...
+check-commits.sh <commit>...
 
 	--extra-author		Who is triggering this check, check for corresponding signed-off-by in commit body
 				For example, if this script is triggered by a Merge Request, the one who submitted
@@ -17,13 +17,13 @@ check-commit-msg.sh <commit>...
 
 				Can be also enabled by setting EXTRA_AUTHOR=<author> in environmental variable.
 
-	--gen-report		Generate error report under corrent directory for each commit being checked
+	--gen-report		Generate error report under current directory for each commit being checked
 				in current directory.
 
 				Can be also enabled by setting GEN_REPORT=1 in environmental variable.
 
 	--output-dir <DIR>	Specify where the report should be put if '--gen-report' is used
-				 An directory path is expected.
+				 A directory path is expected.
 
 				Defaults to current directory.
 
@@ -322,7 +322,7 @@ echo "$git_logs" | {
 			fi
 		fi
 
-		# Newline as seperator
+		# Newline as separator
 		echo
 	done
 
