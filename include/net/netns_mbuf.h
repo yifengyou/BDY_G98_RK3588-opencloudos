@@ -8,8 +8,8 @@
 #ifndef __NETNS_MBUF
 #define __NETNS_MBUF
 
-#include<linux/proc_fs.h>
-#include<linux/mbuf.h>
+#include <linux/proc_fs.h>
+#include <linux/mbuf.h>
 
 #ifdef CONFIG_NETNS_MBUF
 struct net_mbuf {
