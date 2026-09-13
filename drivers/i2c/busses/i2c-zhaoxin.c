@@ -172,7 +172,7 @@ static int zxi2c_irq_xfer(struct zxi2c *i2c)
 }
 
 /* 'irq == true' means in interrupt context */
-int zxi2c_fifo_irq_xfer(struct zxi2c *i2c, bool irq)
+static int zxi2c_fifo_irq_xfer(struct zxi2c *i2c, bool irq)
 {
 	u16 i;
 	u8 tmp;
@@ -310,7 +310,7 @@ static int zxi2c_read(struct zxi2c *i2c, struct i2c_msg *msg, bool first)
 	return i2c->ret;
 }
 
-int zxi2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+static int zxi2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
 	struct i2c_msg *msg;
 	int i;
