@@ -28,18 +28,24 @@ static void init_zhaoxin_ext_capabilities(struct cpuinfo_x86 *c)
 	u32 ext_vmcs_cap = 0;
 	u32 proc_based_ctls3_high = 0;
 	u32 ign, msr_high;
-	int err;
 
 	if (!(boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN ||
 		boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR))
 		return;
 
-	err = rdmsr_safe(MSR_ZX_EXT_VMCS_CAPS, &ext_vmcs_cap, &ign);
+	if (rdmsr_safe(MSR_ZX_EXT_VMCS_CAPS, &ext_vmcs_cap, &ign))
+		return;
 
 	if (!(ext_vmcs_cap & MSR_ZX_VMCS_EXEC_CTL3_EN))
 		return;
 
-	err = rdmsr_safe(MSR_ZX_VMX_PROCBASED_CTLS3, &ign, &msr_high);
+	/*
+	 * If the MSR cannot be read there is no value to advertise, so leave
+	 * the tertiary controls capability cleared.
+	 */
+	if (rdmsr_safe(MSR_ZX_VMX_PROCBASED_CTLS3, &ign, &msr_high))
+		return;
+
 	if (!(msr_high & 0x1)) /* CTLS3 MSR doesn't exist */
 		proc_based_ctls3_high = 0x1; /* set PAUSEOPT(bit0) */
 	else
