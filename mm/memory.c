@@ -2872,7 +2872,7 @@ int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
  *
  * Return: %0 on success, negative error code otherwise.
  */
-int __remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
+static int __remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 		    unsigned long pfn, unsigned long size, pgprot_t prot,
 			unsigned int page_shift)
 {
