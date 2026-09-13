@@ -158,7 +158,7 @@ static int seq_mbuf_release(struct inode *ino, struct file *f)
 }
 
 /* when write clear the data */
-ssize_t seq_mbuf_write(struct file *f, const char __user *ubuf,
+static ssize_t seq_mbuf_write(struct file *f, const char __user *ubuf,
 		       size_t size, loff_t *_pos)
 {
 	struct seq_file *seq = f->private_data;
@@ -217,7 +217,7 @@ static int __net_init net_mbuf_init(struct net *net)
 	 */
 	net->mbuf.slot = mbuf_slot_alloc_v2((void *)net, NULL);
 	if (!net->mbuf.slot)
-		pr_err("fail alloc mbuf");
+		pr_err("fail alloc mbuf\n");
 
 	net->mbuf.twatcher = proc_net_mkdir(net, "twatcher", net->proc_net);
 	if (!net->mbuf.twatcher) {
