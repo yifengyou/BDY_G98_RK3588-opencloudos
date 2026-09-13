@@ -1045,7 +1045,7 @@ int proc_dointvec_minmax(struct ctl_table *table, int write,
 				do_proc_dointvec_minmax_conv, &param);
 }
 
-int proc_dointvec_max_map_count(struct ctl_table *table, int write,
+static int proc_dointvec_max_map_count(struct ctl_table *table, int write,
 		     void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 
@@ -1973,7 +1973,7 @@ int proc_do_large_bitmap(struct ctl_table *table, int write,
 unsigned long security_switch_min = 0x0 | SYSCTL_SET_MAGIC;
 unsigned long security_switch_max = 0xffffffff | SYSCTL_SET_MAGIC;
 
-int security_switch_handler(struct ctl_table *table, int write,
+static int security_switch_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
