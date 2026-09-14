@@ -7,7 +7,7 @@ PORT=83
 OUT_OF_RANGE_PORT=1500
 DEFAULT_PORT_START=1024
 RAISED_PORT_START=2048
-TESTS=12
+TESTS=16
 test_no=0
 failures=0
 
@@ -31,6 +31,22 @@ result()
 	fi
 }
 
+result_or_skip()
+{
+	rc=$1
+	expected=$2
+	description=$3
+
+	if [ "$rc" -eq "$KSFT_SKIP" ]; then
+		test_no=$((test_no + 1))
+		echo "ok $test_no - $description # SKIP protocol unavailable"
+		return
+	fi
+
+	[ "$rc" -eq "$expected" ]
+	result $? "$description"
+}
+
 port_is_listed()
 {
 	grep -qx "$PORT" "$PROC_FILE"
@@ -46,8 +62,48 @@ run_helper()
 	family=${1:-4}
 	port=${2:-$PORT}
 	port_start=${3:-$DEFAULT_PORT_START}
-	"$helper" "$family" "$port" "$port_start"
+	protocol=${4:-tcp}
+	"$helper" "$family" "$port" "$port_start" "$protocol"
 	return $?
+}
+
+stress_state_access()
+{
+	(
+		i=0
+		while [ "$i" -lt 200 ]; do
+			printf '+%s\n' "$PORT" > "$PROC_FILE" || exit 1
+			printf -- '-%s\n' "$PORT" > "$PROC_FILE" || exit 1
+			i=$((i + 1))
+		done
+	) &
+	writer=$!
+
+	workers=
+	for worker in 1 2 3 4; do
+		(
+			i=0
+			while [ "$i" -lt 25 ]; do
+				run_helper 4 >/dev/null 2>&1
+				rc=$?
+				[ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 1
+				i=$((i + 1))
+			done
+		) &
+		workers="$workers $!"
+	done
+
+	failed=0
+	while kill -0 "$writer" 2>/dev/null; do
+		cat "$PROC_FILE" >/dev/null || failed=1
+	done
+	wait "$writer" || failed=1
+	for worker in $workers; do
+		wait "$worker" || failed=1
+	done
+
+	remove_port
+	return "$failed"
 }
 
 invalid_write_is_rejected()
@@ -114,11 +170,23 @@ result $? "unprivileged bind succeeds for an allowlisted port"
 run_helper 6
 result $? "IPv6 bind succeeds for an allowlisted port"
 
+run_helper 4 "$PORT" "$DEFAULT_PORT_START" sctp
+result_or_skip $? 1 "SCTP/IPv4 bind remains denied with a TCP allowlist"
+
+run_helper 6 "$PORT" "$DEFAULT_PORT_START" sctp
+result_or_skip $? 1 "SCTP/IPv6 bind remains denied with a TCP allowlist"
+
+stress_state_access
+result $? "concurrent procfs access and bind checks complete"
+
 remove_port
 run_helper
 rc=$?
 [ "$rc" -eq 1 ]
 result $? "unprivileged bind is denied after allowlist removal"
+
+run_helper 4 "$PORT" "$DEFAULT_PORT_START" sctp
+result_or_skip $? 1 "SCTP bind is denied after allowlist removal"
 
 run_helper 4 "$OUT_OF_RANGE_PORT" "$RAISED_PORT_START"
 rc=$?

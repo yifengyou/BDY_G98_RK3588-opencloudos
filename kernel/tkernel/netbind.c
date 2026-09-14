@@ -20,7 +20,7 @@ static int netbind_proc_show(struct seq_file *m, void *v)
 {
 	int i;
 	for (i = 1; i < PROT_SOCK; i++) {
-		if (nonpriv_prot_sock_flag[i])
+		if (READ_ONCE(nonpriv_prot_sock_flag[i]))
 			seq_printf(m, "%d\n", i);
 	}
 	return 0;
@@ -75,7 +75,7 @@ static ssize_t netbind_proc_write(struct file *file, const char __user *buf,
 	if (!port || port >= PROT_SOCK)
 		goto out;
 
-	nonpriv_prot_sock_flag[port] = en;
+	WRITE_ONCE(nonpriv_prot_sock_flag[port], en);
 	err = length;
 
 out:
