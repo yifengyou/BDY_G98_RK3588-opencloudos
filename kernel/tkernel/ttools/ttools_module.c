@@ -204,7 +204,7 @@ static int ttools_init(void)
 	smp_wmb();
 	smp_call_function(flush_icache_1, NULL, 1);
 	pr_info("ttools " TTOOLS_VER " loaded\n");
-	return ret;
+	return 0;
 }
 
 static void ttools_exit(void)
