@@ -120,7 +120,7 @@ static bool cfs_subdir_insert(cgroupfs_entry_t *dir,
 	return true;
 }
 
-void cgroupfs_umount_remove_tree(cgroupfs_entry_t *root)
+static void cgroupfs_umount_remove_tree(cgroupfs_entry_t *root)
 {
 	cgroupfs_entry_t *en, *next;
 
@@ -152,8 +152,9 @@ void cgroupfs_umount_remove_tree(cgroupfs_entry_t *root)
 	write_unlock(&cgroupfs_subdir_lock);
 }
 
-cgroupfs_entry_t *cgroupfs_alloc_entry(const char *name,
-			cgroupfs_entry_t *parent, int cgroupfs_type)
+static cgroupfs_entry_t *cgroupfs_alloc_entry(const char *name,
+					      cgroupfs_entry_t *parent,
+					      int cgroupfs_type)
 {
 	cgroupfs_entry_t *p = kmalloc(sizeof(cgroupfs_entry_t), GFP_KERNEL);
 	if (!p)
@@ -172,7 +173,9 @@ cgroupfs_entry_t *cgroupfs_alloc_entry(const char *name,
 	return p;
 }
 
-struct dentry *cgroupfs_iop_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
+static struct dentry *cgroupfs_iop_lookup(struct inode *dir,
+					  struct dentry *dentry,
+					  unsigned int flags)
 {
 	int cpu;
 	cgroupfs_entry_t *sub, *parent = dir->i_private;
@@ -212,7 +215,7 @@ const struct inode_operations cgroupfs_inode_operations = {
 	.lookup = cgroupfs_iop_lookup,
 };
 
-int cgroupfs_readdir(struct file *file, struct dir_context *ctx)
+static int cgroupfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	cgroupfs_entry_t *next;
 	int i, cpu, skip;
@@ -519,7 +522,7 @@ static struct file_system_type cgroupfs_type = {
 	.kill_sb	= cgroupfs_kill_sb,
 };
 
-int __init cgroupfs_init(void)
+static int __init cgroupfs_init(void)
 {
 	printk("register cgroupfs\n");
 	return register_filesystem(&cgroupfs_type);
