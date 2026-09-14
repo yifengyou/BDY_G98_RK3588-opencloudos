@@ -90,6 +90,7 @@ TKernel documentation
    tkernel/tkernel
    tkernel/irq-latency
    tkernel/cgroup-v2-mbuf
+   tkernel/cgroupfs
 
 Firmware-related documentation
 ==============================
