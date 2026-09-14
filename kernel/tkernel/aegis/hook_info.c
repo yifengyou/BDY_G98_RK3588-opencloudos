@@ -494,11 +494,11 @@ tty_err:
 	*buf -= exec_info->inf_size;
 	readsize -= exec_info->inf_size;
 info_err:
-	*buf -= exec_info->my->size;
-	readsize -= exec_info->my->size;
+	*buf -= exec_info->my_size;
+	readsize -= exec_info->my_size;
 my_err:
-	*buf -= exec_info->parent->size;
-	readsize -= exec_info->parent->size;
+	*buf -= exec_info->pa_size;
+	readsize -= exec_info->pa_size;
 par_err:
 	*buf -= headlen;
 	readsize -= headlen;
