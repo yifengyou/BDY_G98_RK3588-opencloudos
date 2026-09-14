@@ -2,9 +2,11 @@
 #ifndef _ASM_X86_FPU_SCHED_H
 #define _ASM_X86_FPU_SCHED_H
 
+#include <linux/percpu.h>
 #include <linux/sched.h>
 
 #include <asm/cpufeature.h>
+#include <asm/fpu/api.h>
 #include <asm/fpu/types.h>
 
 #include <asm/trace/fpu.h>
@@ -98,7 +100,15 @@ static inline void switch_kernel_fpu_prepare(struct task_struct *prev, int cpu)
 static inline void fpregs_restore_kernelregs(struct fpu *kfpu)
 {
 	kernel_fpu_states_restore(NULL, (void *)get_fpu_registers_pos(kfpu, MAX_FPU_CTX_SIZE),
-						MAX_FPU_CTX_SIZE);
+				  MAX_FPU_CTX_SIZE);
+	/*
+	 * The hardware SIMD registers no longer hold any task's user FPU
+	 * state. Invalidate the owner context, otherwise a task which still
+	 * owns the FPU on this CPU can skip the XRSTOR on its next return to
+	 * user space and run with the LMC register contents.
+	 * Callers hold preemption disabled.
+	 */
+	__this_cpu_write(fpu_fpregs_owner_ctx, NULL);
 }
 
 /* Loading of the complete FPU state immediately. */

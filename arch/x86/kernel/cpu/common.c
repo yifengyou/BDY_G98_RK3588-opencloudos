@@ -2487,7 +2487,6 @@ void __init arch_cpu_finalize_init(void)
 	cpu_select_mitigations();
 
 	arch_smt_update();
-	update_lmc_branch_cond();
 
 	if (IS_ENABLED(CONFIG_X86_32)) {
 		/*
@@ -2507,6 +2506,12 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	fpu__init_system();
 	fpu__init_cpu();
+
+	/*
+	 * fpu__init_system() sizes the LMC scratch area, so the static key
+	 * can only be enabled once it has run.
+	 */
+	update_lmc_branch_cond();
 
 	alternative_instructions();
 

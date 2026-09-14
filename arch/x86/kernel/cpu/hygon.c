@@ -18,6 +18,7 @@
 #include <asm/page.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/jump_label.h>
 #include <asm/resctrl.h>
 
 #include "cpu.h"
@@ -384,6 +385,8 @@ cpu_dev_register(hygon_cpu_dev);
 
 #if defined(CONFIG_X86_HYGON_LMC_SSE2_ON) || \
 	defined(CONFIG_X86_HYGON_LMC_AVX2_ON)
+extern struct static_key_false hygon_lmc_key;
+
 struct hygon_c86_info {
 	unsigned int nt_cpy_mini_len;
 };
@@ -397,30 +400,29 @@ void set_c86_features_para_invalid(void)
 
 unsigned int get_nt_block_copy_mini_len(void)
 {
-	unsigned int mini_len = hygon_c86_data.nt_cpy_mini_len;
-
-	return mini_len;
+	return READ_ONCE(hygon_c86_data.nt_cpy_mini_len);
 }
 EXPORT_SYMBOL(get_nt_block_copy_mini_len);
 
 static ssize_t show_nt_cpy_mini_len(struct kobject *kobj,
 				    struct kobj_attribute *attr, char *buf)
 {
-	return snprintf(buf, 40, "%d\n", hygon_c86_data.nt_cpy_mini_len);
+	return sysfs_emit(buf, "%u\n",
+			  READ_ONCE(hygon_c86_data.nt_cpy_mini_len));
 }
 
 static ssize_t store_nt_cpy_mini_len(struct kobject *kobj,
 				     struct kobj_attribute *attr,
 				     const char *buf, size_t count)
 {
-	unsigned long val;
+	unsigned int val;
 	ssize_t ret;
 
-	ret = kstrtoul(buf, 0, &val);
+	ret = kstrtouint(buf, 0, &val);
 	if (ret)
 		return ret;
 
-	hygon_c86_data.nt_cpy_mini_len = val;
+	WRITE_ONCE(hygon_c86_data.nt_cpy_mini_len, val);
 
 	return count;
 }
@@ -441,28 +443,37 @@ static struct kobject *c86_features_kobj;
 static int __init kobject_hygon_c86_init(void)
 {
 	int ret;
+	bool group_created = false;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_HYGON ||
+	    !static_branch_likely(&hygon_lmc_key)) {
+		ret = -ENODEV;
 		goto err_out;
+	}
 
 	c86_features_kobj = kobject_create_and_add("c86_features", NULL);
-
-	if (c86_features_kobj) {
-		ret = sysfs_create_group(c86_features_kobj,
-					 &hygon_c86_attr_group);
-		if (ret)
-			goto err_out;
+	if (!c86_features_kobj) {
+		ret = -ENOMEM;
+		goto err_out;
 	}
+
+	ret = sysfs_create_group(c86_features_kobj, &hygon_c86_attr_group);
+	if (ret)
+		goto err_out;
+	group_created = true;
 
 	return 0;
 err_out:
 	set_c86_features_para_invalid();
 	if (c86_features_kobj) {
-		sysfs_remove_group(c86_features_kobj, &hygon_c86_attr_group);
-		kobject_del(c86_features_kobj);
+		if (group_created)
+			sysfs_remove_group(c86_features_kobj,
+					   &hygon_c86_attr_group);
+		kobject_put(c86_features_kobj);
+		c86_features_kobj = NULL;
 	}
 
-	return -1;
+	return ret;
 }
 subsys_initcall(kobject_hygon_c86_init);
 

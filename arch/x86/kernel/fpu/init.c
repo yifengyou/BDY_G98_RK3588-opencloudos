@@ -137,22 +137,43 @@ static void __init fpu__init_system_generic(void)
 unsigned int fpu_kernel_nonatomic_xstate_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_nonatomic_xstate_size);
 
+static bool hygon_fpu_disabled;
+
 static int __init hygon_fpu_parse_cmdline(char *arg)
 {
-	if (!strcmp(arg, "off"))
-		fpu_kernel_nonatomic_xstate_size = 0;
-	else if ((!strcmp(arg, "on")) && (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)) {
-		if (arch_task_struct_size) {
-			pr_crit("Unsupported hygon_memcpy_opt duto arch_task_struct_size non inited\n");
-			return 0;
-		}
-		fpu_kernel_nonatomic_xstate_size = KERNEL_FPU_NONATOMIC_SIZE;
-	} else
-		pr_crit("Unsupported hygon_fpu param=%s, hygon_memcpy_opt may still be disabled\n", arg);
+	if (!strcmp(arg, "off")) {
+		hygon_fpu_disabled = true;
+		return 0;
+	}
+
+	if (!strcmp(arg, "on"))
+		return 0;
+
+	hygon_fpu_disabled = true;
+	pr_crit("Unsupported hygon_fpu param=%s, hygon_memcpy_opt disabled\n",
+		arg);
 
 	return 0;
 }
 early_param("hygon_fpu", hygon_fpu_parse_cmdline);
+
+static void __init fpu__init_hygon_lmc(void)
+{
+	if (hygon_fpu_disabled ||
+	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		return;
+
+#ifdef CONFIG_X86_HYGON_LMC_SSE2_ON
+	if (!boot_cpu_has(X86_FEATURE_XMM2))
+		return;
+#else
+	if (!boot_cpu_has(X86_FEATURE_AVX2) ||
+	    !boot_cpu_has(X86_FEATURE_OSXSAVE))
+		return;
+#endif
+
+	fpu_kernel_nonatomic_xstate_size = KERNEL_FPU_NONATOMIC_SIZE;
+}
 #endif
 
 /*
@@ -252,5 +273,9 @@ void __init fpu__init_system(void)
 	fpu__init_system_generic();
 	fpu__init_system_xstate_size_legacy();
 	fpu__init_system_xstate(fpu_kernel_cfg.max_size);
+#if defined(CONFIG_X86_HYGON_LMC_SSE2_ON) || \
+	defined(CONFIG_X86_HYGON_LMC_AVX2_ON)
+	fpu__init_hygon_lmc();
+#endif
 	fpu__init_task_struct_size();
 }
