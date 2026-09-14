@@ -3708,8 +3708,7 @@ static struct memcg_global_reclaim {
 	struct mutex mutex;
 } memcg_global_reclaim_list;
 
-static int memcg_prio_hierarchy_count[CGROUP_PRIORITY_MAX + 1];
-static DEFINE_RWLOCK(memcg_prio_hierarchy_lock);
+static atomic_t memcg_prio_hierarchy_count[CGROUP_PRIORITY_MAX + 1];
 
 static int memcg_get_prio(struct mem_cgroup *memcg)
 {
@@ -3720,13 +3719,7 @@ static int memcg_prio_reclaimd_run(void);
 
 static int memcg_get_prio_hierarchy_count(int prio)
 {
-	int ret;
-
-	read_lock(&memcg_prio_hierarchy_lock);
-	ret = memcg_prio_hierarchy_count[prio];
-	read_unlock(&memcg_prio_hierarchy_lock);
-
-	return ret;
+	return atomic_read(&memcg_prio_hierarchy_count[prio]);
 }
 
 static bool memcg_reclaim_prio_exist(void)
@@ -3751,10 +3744,8 @@ static int memcg_notify_prio_change(struct mem_cgroup *memcg,
 		spin_unlock(&p->lock);
 
 		atomic_long_dec(&p->count);
-		write_lock(&memcg_prio_hierarchy_lock);
 		for (i = 1; i <= old_prio; i++)
-			memcg_prio_hierarchy_count[i]--;
-		write_unlock(&memcg_prio_hierarchy_lock);
+			atomic_dec(&memcg_prio_hierarchy_count[i]);
 	}
 
 	if (new_prio) {
@@ -3764,10 +3755,8 @@ static int memcg_notify_prio_change(struct mem_cgroup *memcg,
 		spin_unlock(&p->lock);
 
 		atomic_long_inc(&p->count);
-		write_lock(&memcg_prio_hierarchy_lock);
 		for (i = 1; i <= new_prio; i++)
-			memcg_prio_hierarchy_count[i]++;
-		write_unlock(&memcg_prio_hierarchy_lock);
+			atomic_inc(&memcg_prio_hierarchy_count[i]);
 
 		wakeup_memcg_priod();
 	}
