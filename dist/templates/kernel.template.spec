@@ -701,6 +701,11 @@ BuildConfig() {
 	./copy-drivers.sh without_mlnx
 	popd
 
+	%ifarch loongarch64
+		# Check whether "LoongArch megaraid_sas ordering fixes" is exist
+		grep -q CONFIG_LOONGARCH ${_KernSrc}/drivers/scsi/megaraid_sas/megaraid_sas_fusion.c || exit 1
+	%endif
+
 	mkdir -p $_KernBuild
 	pushd $_KernBuild
 	cp $1 .config

@@ -3752,6 +3752,9 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 	while (d_val.u.low != cpu_to_le32(UINT_MAX) &&
 	       d_val.u.high != cpu_to_le32(UINT_MAX)) {
 
+#ifdef CONFIG_LOONGARCH
+		__smp_rmb();
+#endif
 		smid = le16_to_cpu(reply_desc->SMID);
 		cmd_fusion = fusion->cmd_list[smid - 1];
 		scsi_io_req = (struct MPI2_RAID_SCSI_IO_REQUEST *)
@@ -4053,6 +4056,13 @@ irqreturn_t megasas_isr_fusion(int irq, void *devp)
 		return IRQ_HANDLED;
 	}
 
+#ifdef CONFIG_LOONGARCH
+	/*
+	 * There is no guarantee of sequence between DMA
+	 * and interrupts on the Loongson platform.
+	 */
+	udelay(30);
+#endif
 	return complete_cmd_fusion(instance, irq_context->MSIxIndex, irq_context) ? IRQ_HANDLED : IRQ_NONE;
 }
 
