@@ -188,10 +188,13 @@ static const struct proc_ops whitelist_fops = {
 
 static int stat_proc_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "root %lld\n", atomic64_read(&kb_cnt_root));
-	seq_printf(m, "child %lld\n", atomic64_read(&kb_cnt_child));
-	atomic64_set(&kb_cnt_root, 0);
-	atomic64_set(&kb_cnt_child, 0);
+	/*
+	 * Use xchg to read and clear each counter in one atomic
+	 * step. A plain read followed by set(0) can silently drop
+	 * a blocked signal accounted between the two.
+	 */
+	seq_printf(m, "root %lld\n", atomic64_xchg(&kb_cnt_root, 0));
+	seq_printf(m, "child %lld\n", atomic64_xchg(&kb_cnt_child, 0));
 	return 0;
 }
 
