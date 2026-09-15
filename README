@@ -1,4 +1,34 @@
-Linux kernel
+Part1, Clarify which changes are accepted into OCK
+============
+Since its founding, OpenCloudOS-Kernel (hereafter OCK) has always welcomed
+and encouraged partners to submit PRs for bug fixes and new features, and
+will continue to treat every submission with an open and responsive
+attitude.
+
+With the rapid advance of AI, however, a new tension is emerging: AI is
+becoming ever more efficient at automatically spotting suspicious issues,
+generating patches and filing PRs, while its ability to automatically
+review patches is still limited — patch quality still has to be judged by
+humans, and both before and after a patch is merged we need to develop
+matching test cases and run stress tests.
+
+In other words, AI has greatly scaled up the "production side" of PRs
+without scaling up the "acceptance side" to the same degree. PRs
+mass-produced by AI consume exactly the limited manpower that OCK has.
+
+For this reason, OCK asks community partners to give priority to PRs that
+fix functional problems, improve performance, or add new features, and to
+refrain from submitting PRs mass-produced by AI.
+
+For more details, see:
+https://gitee.com/OpenCloudOS/OpenCloudOS-Kernel/wikis/%E5%A6%82%E4%BD%95%E5%90%88%E5%85%A5%E4%BB%A3%E7%A0%81/%E6%AC%A2%E8%BF%8E%E5%93%AA%E4%BA%9B%E4%BF%AE%E6%94%B9%E7%9A%84%E5%90%88%E5%85%A5?sort_id=18123691
+
+Thank you to every partner for your interest in and contributions to
+OpenCloudOS-Kernel. We share the same goal: with limited manpower, keep
+OCK evolving continuously and healthily, without compromising stability.
+
+
+Part2, Linux kernel
 ============
 
 There are several guides for kernel developers and users. These guides can
