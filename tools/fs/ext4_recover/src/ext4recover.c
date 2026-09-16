@@ -10,6 +10,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include <fcntl.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,9 +98,14 @@ static int recover_block_to_file(int devfd, int inofd, __le32 block, __le16 len,
         while (offset < blocksize) {
             size = read(devfd, buf + offset, blocksize - offset);
             if (size < 0) {
-                lseek(devfd, offset_dev + blocksize, SEEK_SET);
+                if (errno == EINTR)
+                    continue;
                 perror("read(dev_fd)");
-                continue;
+                goto failed;
+            }
+            if (size == 0) {
+                fprintf(stderr, "read(dev_fd): unexpected end of device\n");
+                goto failed;
             }
             offset += size;
         }
@@ -108,9 +114,14 @@ static int recover_block_to_file(int devfd, int inofd, __le32 block, __le16 len,
         while (offset != 0) {
             ret = write(inofd, buf + (blocksize - offset), offset);
             if (ret < 0) {
-                lseek(inofd, offset_ino + blocksize, SEEK_SET);
+                if (errno == EINTR)
+                    continue;
                 perror("write(inofd)");
-                continue;
+                goto failed;
+            }
+            if (ret == 0) {
+                fprintf(stderr, "write(inofd): no progress\n");
+                goto failed;
             }
             offset -= ret;
             //printf("ret: %llu\n", ret);
@@ -131,6 +142,11 @@ static int recover_block_to_file(int devfd, int inofd, __le32 block, __le16 len,
         return 0;
     }
     return 1;
+
+failed:
+    fprintf(stderr, "Failed extent: file block %u, device block %llu, block index %d\n",
+            block, start, i);
+    return 0;
 }
 
 static int dump_dir_extent(struct ext3_extent_header *eh) {
@@ -197,8 +213,10 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
         //printf("eh->eh_depth < 4\n");
         for (i = 1; i < eh->eh_entries + 1; i++) {
             retval = ext2fs_get_mem(blocksize, &buf);
-            if (retval)
-                return;
+            if (retval) {
+                com_err(program_name, retval, "allocating extent buffer");
+                return 0;
+            }
 
             memset(buf, 0, blocksize);
             ei = EXT_FIRST_INDEX(eh) + i - 1;
@@ -206,8 +224,11 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
                   ((__u64) ext2fs_le16_to_cpu(ei->ei_leaf_hi) << 32);
             retval = io_channel_read_blk64(handle->fs->io,
                                            blk, 1, buf);
-            if (retval)
-                return retval;
+            if (retval) {
+                com_err(program_name, retval, "reading extent block %llu", blk);
+                ext2fs_free_mem(&buf);
+                return 0;
+            }
             next = (struct ext3_extent_header *) buf;
             //printf("Recursive\n");
             retval = extent_tree_travel(handle, next);
@@ -215,6 +236,8 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
                 fprintf(stderr, "extent_tree_travel()\n");
             }
             ext2fs_free_mem(&buf);
+            if (!retval)
+                return 0;
             //printf("Recursive end\n");
         }
     } else {
@@ -251,15 +274,19 @@ static int prase_ino_extent(ext2_extent_handle_t handle) {
               ((__u64) ext2fs_le16_to_cpu(ix->ei_leaf_hi) << 32);
         retval = io_channel_read_blk64(handle->fs->io,
                                        blk, 1, buf);
-        if (retval)
-            return retval;
+        if (retval) {
+            com_err(program_name, retval, "reading extent block %llu", blk);
+            ext2fs_free_mem(&buf);
+            return 0;
+        }
 
         next = (struct ext3_extent_header *) buf;
         //printf("bbbbbbbbbbbbbb\n");
         retval = extent_tree_travel(handle, next);
         if (!retval) {
             fprintf(stderr, "extent_tree_travel()");
-            return retval;
+            ext2fs_free_mem(&buf);
+            return 0;
         }
         //printf("cccccccccccccccccc\n");
         /* for last extent */
@@ -297,9 +324,10 @@ int main(int argc, char **argv) {
     ext2_filsys fs;
     int use_blocksize = 0;
     int flags;
+    int status = EXIT_FAILURE;
     __u32 imax;
     struct ext2_inode inode;
-    ext2_extent_handle_t handle;
+    ext2_extent_handle_t handle = NULL;
     char filename[BUFSIZ];
 
     if (argc != 2) {
@@ -343,6 +371,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
     imax = fs->super->s_inodes_count;
+    recover_fd = -1;
     for (icount = 3; icount < imax + 1; icount++) {
         flag = 0;
 
@@ -351,7 +380,7 @@ int main(int argc, char **argv) {
         if (retval) {
             com_err(program_name, retval, "%s",
                     "while reading journal inode");
-            continue;
+            goto out;
         }
         if (is_inode_extent_clear(&inode)) {
             continue;
@@ -362,31 +391,50 @@ int main(int argc, char **argv) {
         recover_fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC | O_LARGEFILE, 0640);
         if (recover_fd < 0) {
             perror("open(inode)");
-            continue;
+            goto out;
         }
 
         retval = ext2fs_extent_open(fs, icount, &handle);
-        if (retval)
-            return;
+        if (retval) {
+            com_err(program_name, retval, "opening extents for inode %u", icount);
+            goto out;
+        }
 
         retval = prase_ino_extent(handle);
         if (!retval) {
-            fprintf(stderr, "Recover error!\n");
-            close(recover_fd);
-            close(device_fd);
-            exit(1);
+            fprintf(stderr, "Recover error: %s\n", filename);
+            goto out;
         }
         if (flag) {
             fflush(stdout);
         }
 
-        close(recover_fd);
+        ext2fs_extent_free(handle);
+        handle = NULL;
+        retval = close(recover_fd);
+        recover_fd = -1;
+        if (retval < 0) {
+            perror("close(inode)");
+            goto out;
+        }
     }
 
-    close(device_fd);
-
-    fprintf(stderr, "Recover success!\n");
-
-    exit(0);
+    status = EXIT_SUCCESS;
+out:
+    if (handle)
+        ext2fs_extent_free(handle);
+    if (recover_fd >= 0)
+        close(recover_fd);
+    if (close(device_fd) < 0) {
+        perror("close(device)");
+        status = EXIT_FAILURE;
+    }
+    retval = ext2fs_close(fs);
+    if (retval) {
+        com_err(program_name, retval, "closing filesystem");
+        status = EXIT_FAILURE;
+    }
+    fprintf(stderr, status == EXIT_SUCCESS ? "Recover success!\n" :
+            "Recovery incomplete!\n");
+    return status;
 }
-
