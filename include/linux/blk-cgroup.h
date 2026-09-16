@@ -504,6 +504,8 @@ static inline struct blkcg *get_task_blkcg(struct task_struct *tsk)
 	return container_of(css, struct blkcg, css);
 }
 
+int blkcg_cgroupfs_dkstats_show(struct seq_file *m, void *v);
+
 #else	/* CONFIG_BLK_CGROUP */
 
 #define blkcg_root_css	((struct cgroup_subsys_state *)ERR_PTR(-EINVAL))
