@@ -48,6 +48,37 @@ The detector is controlled through ``/proc/irq_latency/``:
     Reports the accumulated IRQ-disable and softirq-disable latency
     distributions.
 
+Runtime and CPU Hotplug
+=======================
+
+Enable, disable, CPU hotplug, and module exit are serialized through a
+single runtime state machine.  A CPU that comes online starts its timers
+only when detection is enabled.  Taking a CPU offline synchronously stops
+both of its timers before the hotplug operation completes.
+
+Stack records and histogram counters are retained when a CPU goes offline.
+The stack report marks such CPUs with ``(offline)``, and the distribution
+continues to include their counters.  Write 0 to ``trace_stack`` to clear
+records and counters for both online and offline CPUs.
+
+Readers copy the possible and online CPU masks while holding the CPU read
+lock, then release that lock before copying records and formatting output.
+Consequently, a long stack report does not hold up a CPU hotplug operation.
+
+Module exit changes the detector to an exiting state before removing its
+proc controls.  The registered CPU hotplug teardown then cancels every
+per-CPU timer before the per-CPU storage is released.
+
+Runtime Impact
+==============
+
+Loading the module allocates fixed-size storage for every possible CPU.
+Periodic timers do not run until detection is enabled.  While enabled, the
+existing sampling cost is controlled by ``freq_ms``; using a lower value
+increases timer and interrupt activity on every online CPU.  State changes,
+CPU hotplug, and trace reads add only bounded synchronization outside the
+normal sampling path.
+
 Example
 =======
 
@@ -74,4 +105,14 @@ Each record shows:
 
 Records are kept per-CPU in fixed-size storage.  Once that storage is
 full, new stack records are dropped until 0 is written to
-``trace_stack``.  The report separates IRQ and softirq records.
+``trace_stack``.  Records survive CPU offline and are marked accordingly.
+The report separates IRQ and softirq records.
+
+Selftests
+=========
+
+``tools/testing/selftests/tkernel/irqlatency.sh`` exercises concurrent
+state changes, CPU hotplug, trace reads, and module unload.  The hotplug and
+unload cases are intended for a dedicated test system rather than a
+production host.  The test restores a CPU that it takes offline and unloads
+the module only when the test loaded that module itself.
