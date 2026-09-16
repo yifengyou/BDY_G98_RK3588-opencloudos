@@ -74,7 +74,8 @@ struct mbuf_slot *mbuf_slot_alloc_v2(void *owner, struct mbuf_operations *ops);
 void mbuf_free(struct cgroup *cg);
 
 ssize_t mbuf_print(struct cgroup *cgrp, const char *fmt, ...);
-void snapshot_mbuf(struct mbuf_slot *, struct mbuf_slot*, seqlock_t *);
+void snapshot_mbuf(struct mbuf_slot *dst, struct mbuf_slot *src,
+		   seqlock_t *lock);
 u32 get_mbuf_slot_len(void);
 void mbuf_free_slot(struct mbuf_slot *slot);
 void mbuf_reset(struct mbuf_slot *mbuf);
