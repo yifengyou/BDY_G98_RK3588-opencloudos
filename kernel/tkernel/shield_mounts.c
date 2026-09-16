@@ -99,6 +99,7 @@ unlock:
 
 static int shield_mounts_search_and_del(struct mount_pair *item)
 {
+	int ret = -ENOENT;
 	struct mount_pair *p;
 
 	write_lock(&shield_mounts_lock);
@@ -109,13 +110,14 @@ static int shield_mounts_search_and_del(struct mount_pair *item)
 			list_del(&p->list);
 			kfree(p);
 			shield_mounts_count--;
+			ret = 0;
 			goto unlock;
 		}
 	}
 
 unlock:
 	write_unlock(&shield_mounts_lock);
-	return 0;
+	return ret;
 }
 
 /* helper function */
