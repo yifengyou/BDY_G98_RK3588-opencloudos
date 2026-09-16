@@ -1384,12 +1384,31 @@ wipetaskinfo()
 }
 
 /*
-** remove all taskinfo structs from exit list
+** remove all taskinfo structs from exit list, regardless of how long
+** they have been there; used when the module is unloaded
 */
 static void
 wipetaskexit()
 {
-	gctaskexit();
+	unsigned long	flags;
+	struct taskinfo	*tip;
+
+	spin_lock_irqsave(&exitlock, flags);
+
+	while ((tip = exithead) != NULL) {
+		exithead = tip->ch.next;
+		kmem_cache_free(ticache, tip);
+		nre--;
+	}
+	exittail = NULL;
+
+	spin_unlock_irqrestore(&exitlock, flags);
+
+	/*
+	** list is empty now; wakeup waiters for emptylist
+	*/
+	if (waitqueue_active(&exitlist_empty))
+		wake_up_interruptible(&exitlist_empty);
 }
 
 /*
