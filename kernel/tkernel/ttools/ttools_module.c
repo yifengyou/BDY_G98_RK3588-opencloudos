@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/compat.h>
 #include <linux/errno.h>
 #include <linux/percpu.h>
 #include <linux/mm.h>
@@ -184,9 +185,51 @@ static long ttools_dev_ioctl(struct file *filp,
 	return ret;
 }
 
+#ifdef CONFIG_COMPAT
+struct compat_ttools_fd_ref {
+	compat_int_t fd;
+	compat_long_t ref_cnt;
+};
+
+#define COMPAT_TTOOLS_GET_FD_REFS_CNT \
+	_IOWR(TTOOLS_IO, 0x02, struct compat_ttools_fd_ref)
+
+static long ttools_dev_compat_ioctl(struct file *filp,
+				    unsigned int cmd, unsigned long arg)
+{
+	void __user *argp = compat_ptr(arg);
+	struct compat_ttools_fd_ref compat_ref;
+	struct ttools_fd_ref fd_ref;
+	int ret;
+
+	/* Keep the argument-free commands and the native-layout ABI working. */
+	if (cmd != COMPAT_TTOOLS_GET_FD_REFS_CNT)
+		return ttools_dev_ioctl(filp, cmd, (unsigned long)argp);
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (copy_from_user(&compat_ref, argp, sizeof(compat_ref)))
+		return -EFAULT;
+
+	fd_ref.fd = compat_ref.fd;
+	ret = ttools_get_fd_refs_cnt(&fd_ref);
+	if (ret)
+		return ret;
+	if (fd_ref.ref_cnt != (compat_long_t)fd_ref.ref_cnt)
+		return -EOVERFLOW;
+
+	compat_ref.ref_cnt = fd_ref.ref_cnt;
+	if (copy_to_user(argp, &compat_ref, sizeof(compat_ref)))
+		return -EFAULT;
+	return 0;
+}
+#endif
+
 static struct file_operations ttools_chardev_ops = {
 	.unlocked_ioctl = ttools_dev_ioctl,
-	.compat_ioctl   = ttools_dev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = ttools_dev_compat_ioctl,
+#endif
 	.llseek		= noop_llseek,
 };
 
