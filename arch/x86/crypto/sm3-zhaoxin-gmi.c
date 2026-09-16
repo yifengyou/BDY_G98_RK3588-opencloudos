@@ -58,7 +58,7 @@ static int gmi_available(void)
 	return -ENODEV;
 }
 
-void sm3_generic_block_fn(struct sm3_state *sst, const u8 *inp, int blockcnt)
+static void sm3_generic_block_fn(struct sm3_state *sst, const u8 *inp, int blockcnt)
 {
 	unsigned long in, out, cnt;
 
@@ -137,7 +137,7 @@ static inline int zx_sm3_base_finish(struct shash_desc *desc, u8 *out)
 	return 0;
 }
 
-int zx_sm3_update(struct shash_desc *desc, const u8 *data, unsigned int len)
+static int zx_sm3_update(struct shash_desc *desc, const u8 *data, unsigned int len)
 {
 	return sm3_base_do_update(desc, data, len, sm3_generic_block_fn);
 }
@@ -150,7 +150,7 @@ static int zx_sm3_final(struct shash_desc *desc, u8 *out)
 	return zx_sm3_base_finish(desc, out);
 }
 
-int zx_sm3_finup(struct shash_desc *desc, const u8 *data, unsigned int len, u8 *hash)
+static int zx_sm3_finup(struct shash_desc *desc, const u8 *data, unsigned int len, u8 *hash)
 {
 	sm3_base_do_update(desc, data, len, sm3_generic_block_fn);
 
