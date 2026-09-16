@@ -257,7 +257,7 @@ out:
 	return ret;
 }
 
-int shield_mounts_release(struct inode *inode, struct file *file)
+static int shield_mounts_release(struct inode *inode, struct file *file)
 {
 	return single_release(inode, file);
 }
