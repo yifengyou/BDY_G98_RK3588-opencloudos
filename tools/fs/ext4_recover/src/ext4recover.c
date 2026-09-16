@@ -149,11 +149,41 @@ failed:
     return 0;
 }
 
+static int valid_extent_block(struct ext3_extent_header *header)
+{
+    unsigned int capacity, entries, max;
+
+    capacity = (blocksize - sizeof(*header)) / sizeof(struct ext3_extent);
+    entries = ext2fs_le16_to_cpu(header->eh_entries);
+    max = ext2fs_le16_to_cpu(header->eh_max);
+    return ext2fs_le16_to_cpu(header->eh_magic) == EXT3_EXT_MAGIC &&
+	   ext2fs_le16_to_cpu(header->eh_depth) <= 4 &&
+	   max > 0 && max <= capacity && entries <= max;
+}
+
+static int recover_unwritten_extent(__u32 block, __u16 len)
+{
+    struct stat st;
+    off_t end = ((__u64)block + len) * blocksize;
+
+    /* Valid extents do not overlap; the output was opened with O_TRUNC. */
+    if (fstat(recover_fd, &st) < 0) {
+	perror("fstat(inode)");
+	return 0;
+    }
+    if (st.st_size < end && ftruncate(recover_fd, end) < 0) {
+	perror("ftruncate(inode)");
+	return 0;
+    }
+    return 1;
+}
+
 static int dump_dir_extent(struct ext3_extent_header *eh) {
     struct ext3_extent *ee;
     int i;
-    __le32 ee_block;
-    __le16 ee_len;
+    __u32 ee_block;
+    __u16 ee_len;
+    int unwritten, entries;
     __u64 ee_start;
     char *buf;
     __u32 headbuflen = 4;
@@ -167,22 +197,30 @@ static int dump_dir_extent(struct ext3_extent_header *eh) {
     ee = EXT_FIRST_EXTENT(eh);
 //printf("eh->eh_entries: %d\n", eh->eh_entries);
 //printf("eh->eh_max: %d\n", eh->eh_max);
-    if (ext2fs_le16_to_cpu(eh->eh_entries) > 340) {
-        return 1;
-    } else if (ext2fs_le16_to_cpu(eh->eh_magic) != EXT3_EXT_MAGIC) {
-        return 1;
-    } else if (ext2fs_le16_to_cpu(eh->eh_max) != 340) {
+    if (!valid_extent_block(eh)) {
         return 1;
     }
-    for (i = 1; i < eh->eh_entries + 1; i++) {
+    entries = ext2fs_le16_to_cpu(eh->eh_entries);
+    for (i = 0; i < entries; i++) {
         ee_block = ext2fs_le32_to_cpu(ee->ee_block);
-        ee_len = ext2fs_le32_to_cpu(ee->ee_len);
+	ee_len = ext2fs_le16_to_cpu(ee->ee_len);
+	/* 0x8000 is an initialized extent of 32768 blocks. */
+	unwritten = ee_len > 0x8000;
+	if (unwritten)
+	    ee_len -= 0x8000;
+	if (!ee_len) {
+	    fprintf(stderr, "Invalid zero-length extent for inode %u\n", icount);
+	    return 0;
+	}
         ee_start = (((__u64) ext2fs_le16_to_cpu(ee->ee_start_hi) << 32) +
                     (__u64) ext2fs_le32_to_cpu(ee->ee_start));
         printf("%u %u %u %llu\n", icount, ee_block, ee_len, ee_start);
         fflush(stdout);
 
-        retval = recover_block_to_file(device_fd, recover_fd, ee_block, ee_len, ee_start);
+	if (unwritten)
+	    retval = recover_unwritten_extent(ee_block, ee_len);
+	else
+	    retval = recover_block_to_file(device_fd, recover_fd, ee_block, ee_len, ee_start);
         if (!retval) {
             fprintf(stderr, "recover_block_to_file()\n");
             return 0;
@@ -196,22 +234,26 @@ static int dump_dir_extent(struct ext3_extent_header *eh) {
 static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_header *eh) {
     struct ext3_extent_header *next;
     struct ext3_extent_idx *ei;
-    int i, retval;
+    int i, retval, depth, entries;
     char *buf;
     blk64_t blk;
 
+    if (!valid_extent_block(eh))
+	return 1;
+    depth = ext2fs_le16_to_cpu(eh->eh_depth);
+    entries = ext2fs_le16_to_cpu(eh->eh_entries);
     //printf("Enter extent_tree_travel
-    if (eh->eh_depth == 0) {
+    if (depth == 0) {
         //printf("dump_dir_extent\n");
         retval = dump_dir_extent(eh);
         if (!retval) {
             fprintf(stderr, "dump_dir_extent()\n");
             return retval;
         }
-    } else if (eh->eh_depth <= 4) {
+    } else if (depth <= 4) {
         flag = 1;
         //printf("eh->eh_depth < 4\n");
-        for (i = 1; i < eh->eh_entries + 1; i++) {
+	for (i = 0; i < entries; i++) {
             retval = ext2fs_get_mem(blocksize, &buf);
             if (retval) {
                 com_err(program_name, retval, "allocating extent buffer");
@@ -219,7 +261,7 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
             }
 
             memset(buf, 0, blocksize);
-            ei = EXT_FIRST_INDEX(eh) + i - 1;
+	    ei = EXT_FIRST_INDEX(eh) + i;
             blk = ext2fs_le32_to_cpu(ei->ei_leaf) +
                   ((__u64) ext2fs_le16_to_cpu(ei->ei_leaf_hi) << 32);
             retval = io_channel_read_blk64(handle->fs->io,
@@ -230,6 +272,10 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
                 return 0;
             }
             next = (struct ext3_extent_header *) buf;
+	    if (ext2fs_le16_to_cpu(next->eh_depth) != depth - 1) {
+		ext2fs_free_mem(&buf);
+		continue;
+	    }
             //printf("Recursive\n");
             retval = extent_tree_travel(handle, next);
             if (!retval) {
@@ -248,7 +294,7 @@ static int extent_tree_travel(ext2_extent_handle_t handle, struct ext3_extent_he
 }
 
 static int prase_ino_extent(ext2_extent_handle_t handle) {
-    int i, retval;
+    int i, retval, entries, indexes;
     struct ext3_extent_idx *ix;
     struct ext3_extent_header *next;
     char *buf;
@@ -256,6 +302,10 @@ static int prase_ino_extent(ext2_extent_handle_t handle) {
     struct ext3_extent_header *eh;
 
     eh = (struct ext3_extent_header *) handle->inode->i_block;
+    entries = ext2fs_le16_to_cpu(eh->eh_entries);
+    if (entries > 4)
+	return 0;
+    indexes = entries ? entries : 4;
 
 //	printf("aaaaaaaaaaaaaa\n");
     retval = ext2fs_get_mem(blocksize, &buf);
@@ -266,12 +316,24 @@ static int prase_ino_extent(ext2_extent_handle_t handle) {
 //		printf("next->eh_max: %d\n", next->eh_max);
 //		printf("next->eh_entries: %d\n", next->eh_entries);
     memset(buf, 0, blocksize);
-    for (i = 1; i <= 4; i++) {
+    /* Use valid root counts, probing residual slots only if the count was
+     * cleared. A partially filled child does not imply the last root index.
+     */
+    for (i = 1; i <= indexes; i++) {
         ix = EXT_FIRST_INDEX(eh) + i - 1;
 
 
         blk = ext2fs_le32_to_cpu(ix->ei_leaf) +
               ((__u64) ext2fs_le16_to_cpu(ix->ei_leaf_hi) << 32);
+	if (!blk)
+	    continue;
+	if (blk >= ext2fs_blocks_count(handle->fs->super)) {
+	    if (!entries)
+		continue;
+	    fprintf(stderr, "Invalid root extent block %llu\n", blk);
+	    ext2fs_free_mem(&buf);
+	    return 0;
+	}
         retval = io_channel_read_blk64(handle->fs->io,
                                        blk, 1, buf);
         if (retval) {
@@ -287,12 +349,6 @@ static int prase_ino_extent(ext2_extent_handle_t handle) {
             fprintf(stderr, "extent_tree_travel()");
             ext2fs_free_mem(&buf);
             return 0;
-        }
-        //printf("cccccccccccccccccc\n");
-        /* for last extent */
-        if (next->eh_entries < 340) {
-//		printf("dddddddddddddddddddd\n");
-            break;
         }
     };
     ext2fs_free_mem(&buf);
