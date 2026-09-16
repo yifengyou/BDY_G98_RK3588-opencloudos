@@ -53,6 +53,7 @@ static inline int sched_info_on(void)
 
 #ifdef CONFIG_SCHEDSTATS
 void force_schedstat_enabled(void);
+void update_last_queued(void);
 #endif
 
 #endif /* _LINUX_SCHED_STAT_H */
