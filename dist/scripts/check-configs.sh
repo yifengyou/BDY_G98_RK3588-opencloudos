@@ -37,14 +37,15 @@ EOF
 # Use make listnewconfig to check new Kconfigs
 check_new_configs() {
 	# First generate plain concated config files
-	populate_configs "$@"
+	populate_configs "$@" || return
 
 	# Check if there are unset config
 	_check_new_kconfigs() {
 		local arch=$1 config_file=$2 base_file=$3 base_configs new_configs
 
 		echo_green "=== Checking $config_file..."
-		new_configs=$(config_make "$arch" KCONFIG_CONFIG="$config_file" --no-print-directory listnewconfig)
+		new_configs=$(config_make "$arch" KCONFIG_CONFIG="$config_file" \
+			--no-print-directory listnewconfig) || return
 
 		if [ -n "$new_configs" ]; then
 			echo_yellow "=== Following configs are not set properly:"
@@ -129,14 +130,14 @@ check_diff_configs() {
 	ALL_CONFIGS=$(find "$TOPDIR" -name "Kconfig*" -exec grep -h "^config .*" {} + | sed "s/^config //")
 
 	# First generate plain concated config files
-	populate_configs "$@"
+	populate_configs "$@" || return
 
 	_make_a_copy() {
 		cp "$2" "$2.orig"
 	}
-	for_each_config_product _make_a_copy "$@"
+	for_each_config_product _make_a_copy "$@" || return
 
-	makedef_configs "$@"
+	makedef_configs "$@" || return
 
 	# Check why a config is not enabled
 	_check_config_issue() {

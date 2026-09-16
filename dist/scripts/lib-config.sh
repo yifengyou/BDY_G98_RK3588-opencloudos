@@ -181,6 +181,7 @@ kconfig_parser() {
 config_make() {
 	local arch=$1; shift
 	local config_cross_compiler config_arch
+	local ret=0
 
 	pushd "$TOPDIR" >/dev/null || die "Not in a valid git repo."
 
@@ -191,9 +192,10 @@ config_make() {
 		die "Unsupported arch $arch"
 	fi
 
-	make ARCH="$config_arch" CROSS_COMPILE="$config_cross_compiler" "$@"
+	make ARCH="$config_arch" CROSS_COMPILE="$config_cross_compiler" "$@" || ret=$?
 
 	popd >/dev/null || die "Failed popd"
+	return "$ret"
 }
 
 # Dedup, and filter valid config lines, print the sanitized content sorted by config name.
@@ -288,10 +290,13 @@ for_each_config_target () {
 	for target in "${hierarchy[@]}"; do
 		# split target_conf by space is what we want here
 		target="${target#_-}"
-		# shellcheck disable=SC2086
-		_match $target && "$callback" "${target#_-}" ${target_conf[$i]}
+		if _match "$target"; then
+			# shellcheck disable=SC2086
+			"$callback" "$target" ${target_conf[$i]} || return
+		fi
 		i=$(( i + 1 ))
 	done
+	return 0
 }
 
 # Iterate populated config files
@@ -332,8 +337,9 @@ for_each_config_product () {
 				fi
 			done
 
-			$_wrapper_cb "$arch" "$config_product" "${config_files[@]}"
+			"$_wrapper_cb" "$arch" "$config_product" "${config_files[@]}" || return
 		done
+		return 0
 	}
 
 	for_each_config_target _wrapper "$@"
@@ -341,7 +347,9 @@ for_each_config_product () {
 
 # Simply concat the backing config files in order into a single files for each config target
 populate_configs () {
-	_merge_config () {
+	_merge_config () (
+		# A failed fragment read must not be hidden by the sanitizer.
+		set -o pipefail
 		local target=$1; shift
 		local config_basename output_config
 		for arch in "${CONFIG_ARCH[@]}"; do
@@ -351,13 +359,13 @@ populate_configs () {
 			echo "Populating $config_basename from base configs..."
 
 			for conf in "$@"; do
-				cat "$conf/default.config"
+				cat "$conf/default.config" || return
 				if [[ -e "$conf/$arch.config" ]]; then
-					cat "$conf/$arch.config"
+					cat "$conf/$arch.config" || return
 				fi
-			done | config_sanitizer > "$output_config"
+			done | config_sanitizer > "$output_config" || return
 		done
-	}
+	)
 
 	for_each_config_target _merge_config "$@"
 }
@@ -375,14 +383,11 @@ makedef_configs () {
 
 			if ! [ -f "$populated_config" ]; then
 				error "Config not found: '$populated_config'"
-				continue
+				return 1
 			fi
 
-			pushd "$TOPDIR" > /dev/null || exit 1
-
-			config_make "$arch" KCONFIG_CONFIG="$populated_config" olddefconfig
-
-			popd > /dev/null || return
+			config_make "$arch" KCONFIG_CONFIG="$populated_config" \
+				olddefconfig || return
 		done
 	}
 
