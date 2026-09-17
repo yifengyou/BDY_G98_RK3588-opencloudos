@@ -1603,7 +1603,7 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 	int			bt;
 	struct taskinfo		*tip;
 	char			tasktype = 't';
-	struct netpertask	npt;
+	struct netpertask	npt = {};
 	unsigned long		tflags;
 
 	/*
