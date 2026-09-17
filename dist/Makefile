@@ -427,7 +427,7 @@ dist-help:
 	@echo
 	@echo  'Configuration targets:'
 	@echo  '  dist-configs			- Generate dist config files, using config matrix in:'
-	@echo  '  				  $(DISTDIR)/config/'
+	@echo  '  				  $(DISTDIR)/configs/'
 	@echo  '  dist-config			- Generate config, and override .config file with the config corresponding'
 	@echo  '				  to arch $(BUILD_ARCH)'
 	@echo
