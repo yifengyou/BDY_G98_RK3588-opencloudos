@@ -137,7 +137,7 @@ static inline int zx_sm3_base_finish(struct shash_desc *desc, u8 *out)
 	return 0;
 }
 
-static int zx_sm3_update(struct shash_desc *desc, const u8 *data, unsigned int len)
+int zx_sm3_update(struct shash_desc *desc, const u8 *data, unsigned int len)
 {
 	return sm3_base_do_update(desc, data, len, sm3_generic_block_fn);
 }
@@ -150,7 +150,7 @@ static int zx_sm3_final(struct shash_desc *desc, u8 *out)
 	return zx_sm3_base_finish(desc, out);
 }
 
-static int zx_sm3_finup(struct shash_desc *desc, const u8 *data, unsigned int len, u8 *hash)
+int zx_sm3_finup(struct shash_desc *desc, const u8 *data, unsigned int len, u8 *hash)
 {
 	sm3_base_do_update(desc, data, len, sm3_generic_block_fn);
 
