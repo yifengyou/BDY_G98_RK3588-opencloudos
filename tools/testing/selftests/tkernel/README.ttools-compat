@@ -1,0 +1,26 @@
+TTools native and compat ioctl tests
+===================================
+
+Load ttools (CONFIG_TKERNEL_TTOOLS=m) and run as root with CAP_SYS_ADMIN.
+The test creates only its own eventfd and temporary anonymous mappings,
+and removes its own ptrace protection before exiting.
+
+Build and run on x86_64 with a multilib compiler and libc:
+
+  make -C tools/testing/selftests/tkernel
+  cd tools/testing/selftests/tkernel
+  ./ttools_ioctl
+  ./ttools_compat.sh
+
+The second invocation requires CONFIG_IA32_EMULATION=y (CONFIG_COMPAT=y).
+It skips explicitly if the 32-bit helper or runtime is unavailable. For
+other architectures, use CC32 to select a 32-bit compiler, for example
+CC32=arm-linux-gnueabihf-gcc on an arm64 host with compat support. Both
+helpers can be built statically by adding LDFLAGS=-static.
+
+The same source is compiled for both ABIs using the existing ttools
+header. It tests exact eventfd reference counts, invalid descriptors,
+input and output faults, an ABI-sized buffer ending at a guard page,
+permission checks, and unchanged command dispatch. It also checks the
+explicit 64-bit layout that existing compat applications could already
+use. It does not replace the general ptrace behavior tests.
