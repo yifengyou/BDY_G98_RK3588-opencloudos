@@ -1681,10 +1681,8 @@ getsockopt(struct sock *sk, int cmd, void __user *user, int *len)
 		memcpy(npt.command, tip->command, COMLEN);
 		kmem_cache_free(ticache, tip);
 
-		if (copy_to_user(user, &npt, *len) != 0) {
-			kmem_cache_free(ticache, tip);
+		if (copy_to_user(user, &npt, *len) != 0)
 			return -EFAULT;
-		}
 
 		return 0;
 
