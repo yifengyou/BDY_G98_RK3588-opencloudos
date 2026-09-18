@@ -998,7 +998,7 @@ get_taskinfo(pid_t id, char type)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)
 	tip->btime	= div_u64((current->start_boottime +
 				(boottime.tv_sec * NSEC_PER_SEC +
-					boottime.tv_sec)), NSEC_PER_SEC);
+					boottime.tv_nsec)), NSEC_PER_SEC);
 #else
 	// current->start_boottime is type u64
 	tip->btime 	= current->start_boottime.tv_sec + boottime.tv_sec;
