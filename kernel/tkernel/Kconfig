@@ -74,7 +74,7 @@ config TKERNEL_KILL_HOOK
 config TKERNEL_KILL_BLOCK
 	tristate "block kill signal"
 	default m
-	depends on CGROUPS
+	depends on CGROUP_SCHED
 	select GLOB
 	select TKERNEL_KILL_HOOK
 	help
