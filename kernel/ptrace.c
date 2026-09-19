@@ -1444,6 +1444,12 @@ COMPAT_SYSCALL_DEFINE4(ptrace, compat_long_t, request, compat_long_t, pid,
 		goto out;
 	}
 
+	if (ptrace_pre_hook) {
+		ret = ptrace_pre_hook(request, pid, child, addr, data);
+		if (ret)
+			goto out_put_task_struct;
+	}
+
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);
 		goto out_put_task_struct;
