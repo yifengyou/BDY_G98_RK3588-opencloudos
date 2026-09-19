@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
 
-TEST_GEN_FILES := netbind_test shield_mounts_test signal_test ttools_test
+TEST_GEN_FILES := netbind_test shield_mounts_test signal_test ttools_test \
+	aegis_readerr_test
 TEST_PROGS := netbind.sh killprotect.sh killblock.sh irqlatency.sh \
-	memcg_async.sh shield_mounts.sh cgroupfs.sh ttools.sh
+	memcg_async.sh shield_mounts.sh cgroupfs.sh ttools.sh \
+	aegis_readerr.sh
 TEST_FILES := tkernel.sh
 
 TEST_GEN_PROGS += ttools_ioctl
@@ -20,6 +22,9 @@ TTOOLS_CAN_BUILD_32 := $(shell \
 	$(CC32) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -x c - -o /dev/null >/dev/null 2>&1 && echo 1)
 
 TTOOLS_HDRS := ../../../../kernel/tkernel/ttools/ttools.h ../kselftest.h
+$(OUTPUT)/aegis_readerr_test: aegis_readerr_test.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -Wall -Wextra -o $@ $< $(LDFLAGS) $(LDLIBS)
+
 $(OUTPUT)/ttools_ioctl: ttools_ioctl.c $(TTOOLS_HDRS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -Wall -Wextra -o $@ $< $(LDFLAGS) $(LDLIBS)
 
