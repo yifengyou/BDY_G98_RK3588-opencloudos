@@ -54,18 +54,57 @@ static int try_attach(pid_t pid)
 	return 2;
 }
 
-static int run_attach_child(void)
+/*
+ * Fork a child that optionally marks itself ptrace-protected (and
+ * optionally unprotects itself again), then try to attach to it from
+ * the parent.  The protection covers the task that issued the ioctl,
+ * so the child must be the one to protect itself for the attach to be
+ * denied.  A pipe handshake makes sure the parent only attaches after
+ * the child performed its ioctls, otherwise the attach could race
+ * ahead of the protection.
+ * Returns 0 when the child was traced (and detached again), 1 when
+ * the attach was denied, 2 on harness errors.
+ */
+static int run_attach_child(int protect, int unprotect)
 {
+	int syncfd[2];
 	pid_t pid;
 	int rc;
+	char b;
+
+	if (pipe(syncfd))
+		return 2;
 
 	pid = fork();
-	if (pid < 0)
+	if (pid < 0) {
+		close(syncfd[0]);
+		close(syncfd[1]);
 		return 2;
+	}
 	if (pid == 0) {
+		close(syncfd[0]);
+		if (protect && ioctl(dev_fd, TTOOLS_PTRACE_PROTECT)) {
+			perror("TTOOLS_PTRACE_PROTECT");
+			_exit(2);
+		}
+		if (unprotect && ioctl(dev_fd, TTOOLS_PTRACE_UNPROTECT)) {
+			perror("TTOOLS_PTRACE_UNPROTECT");
+			_exit(2);
+		}
+		if (write(syncfd[1], "r", 1) != 1)
+			_exit(2);
 		pause();
 		_exit(0);
 	}
+	close(syncfd[1]);
+
+	if (read(syncfd[0], &b, 1) != 1) {
+		close(syncfd[0]);
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
+		return 2;
+	}
+	close(syncfd[0]);
 
 	rc = try_attach(pid);
 
@@ -93,23 +132,13 @@ int main(int argc, char **argv)
 	}
 
 	if (!strcmp(command, "attach_unprotected"))
-		return run_attach_child();
+		return run_attach_child(0, 0);
 
-	if (!strcmp(command, "attach_protected")) {
-		if (ioctl(dev_fd, TTOOLS_PTRACE_PROTECT)) {
-			perror("TTOOLS_PTRACE_PROTECT");
-			return 2;
-		}
-		return run_attach_child();
-	}
+	if (!strcmp(command, "attach_protected"))
+		return run_attach_child(1, 0);
 
-	if (!strcmp(command, "attach_unprotected_again")) {
-		if (ioctl(dev_fd, TTOOLS_PTRACE_UNPROTECT)) {
-			perror("TTOOLS_PTRACE_UNPROTECT");
-			return 2;
-		}
-		return run_attach_child();
-	}
+	if (!strcmp(command, "attach_unprotected_again"))
+		return run_attach_child(1, 1);
 
 	if (!strcmp(command, "fd_refs")) {
 		memset(&ref, 0, sizeof(ref));

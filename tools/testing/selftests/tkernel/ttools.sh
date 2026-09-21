@@ -50,8 +50,9 @@ ksft_result $? "an unprotected process can be ptraced"
 "$helper" attach_protected
 rc=$?
 [ "$rc" -eq 1 ]
+assert_rc=$?
 was_protected=1
-ksft_result $? "a protected process rejects PTRACE_ATTACH"
+ksft_result "$assert_rc" "a protected process rejects PTRACE_ATTACH"
 
 "$helper" attach_unprotected_again
 rc=$?
