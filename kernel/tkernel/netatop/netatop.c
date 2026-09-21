@@ -387,10 +387,18 @@ ipv4_hookin(HOOK_ARG_TYPE, struct sk_buff *skb, HOOK_STATE_ARGS)
 	if (skb == NULL)		// useless socket buffer?
 		return NF_ACCEPT;
 
+	iph = (struct iphdr *)skb_network_header(skb);
+
+	/* non-first fragments carry no transport header; their
+	 * "ports" cannot be identified, so do not account them
+	 * (and do not create sockinfo structs keyed on garbage)
+	 */
+	if (iph->frag_off & htons(IP_OFFSET))
+		return NF_ACCEPT;
+
 	/*
 	** get pointer to IP header and transport header
 	*/
-	iph = (struct iphdr *)skb_network_header(skb);
 	trh = ((char *)iph + (iph->ihl * 4));
 
 	/*
@@ -433,10 +441,18 @@ ipv4_hookout(HOOK_ARG_TYPE, struct sk_buff *skb, HOOK_STATE_ARGS)
 	if (skb == NULL)		// useless socket buffer?
 		return NF_ACCEPT;
 
+	iph = (struct iphdr *)skb_network_header(skb);
+
+	/* non-first fragments carry no transport header; their
+	 * "ports" cannot be identified, so do not account them
+	 * (and do not create sockinfo structs keyed on garbage)
+	 */
+	if (iph->frag_off & htons(IP_OFFSET))
+		return NF_ACCEPT;
+
 	/*
 	** get pointer to IP header and transport header
 	*/
-	iph = (struct iphdr *)skb_network_header(skb);
 	trh = skb_transport_header(skb);
 
 	/*
