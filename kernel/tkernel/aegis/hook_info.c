@@ -524,14 +524,21 @@ retry:
 			ret = info->to_user_func(info_head, &buf, count, cpu);
 			if (ret < 0) {
 				put_online_cpus();
-				return len;
+				/*
+				 * A serializer error must not be reported as
+				 * a plain end of stream: with no complete
+				 * event copied the error is the only
+				 * meaningful result, otherwise return the
+				 * accumulated length as a short read.
+				 */
+				return len ? len : ret;
 			}
 			count -= ret;
 			len += ret;
 			list_del(info_head);
 			kfree(info_head);
 			atomic64_dec(per_cpu_ptr(hook_info_array[info->type].info_num,
-							hook_info_array[info->type].last_cpu));
+						hook_info_array[info->type].last_cpu));
 		}
 
 		plock = per_cpu_ptr(info->lock, cpu);
