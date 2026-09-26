@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
+#include <linux/delay.h>
 #include <asm/cacheflush.h>
 #include <asm/loongson.h>
 
@@ -98,3 +99,145 @@ static void pci_fixup_vgadev(struct pci_dev *pdev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, PCI_DEVICE_ID_LOONGSON_DC1, pci_fixup_vgadev);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, PCI_DEVICE_ID_LOONGSON_DC2, pci_fixup_vgadev);
+
+#define DEV_LS2K3000_DC 0x7a46
+#define DEV_LS2K2000_DC 0x7a36
+#define DEV_LS2K2000_GPU 0x7a25
+#define DEV_LS2K3000_GPU 0x7a35
+#define LS2K2000_DC_OFFSET 0x1240
+#define LS2K3000_DC_OFFSET 0
+#define LS2K2000_DC_CRTC_OFFSET 0x10
+#define LS2K3000_DC_CRTC_OFFSET 0x400
+#define LS2K_DC_OUTPUT_ENABLE 0x100
+#define LS2K_DC_BAR_SIZE 0x10000
+#define LS2K_DC_NUM_MAX 2
+
+static u32 save_status[LS2K_DC_NUM_MAX] = { 0 };
+static void loongson_dma_hangs_fixup(struct pci_dev *pdev, bool open)
+{
+	void __iomem *dc_reg, *base, *regbase;
+	u32 val, count, i, crtc_offset, device;
+
+	base = pdev->bus->ops->map_bus(pdev->bus, pdev->devfn + 1, 0);
+	device = readw(base + PCI_DEVICE_ID);
+
+	crtc_offset = (device == DEV_LS2K3000_DC) ? LS2K3000_DC_CRTC_OFFSET :
+		      (device == DEV_LS2K2000_DC) ? LS2K2000_DC_CRTC_OFFSET :
+						    0;
+	regbase = ioremap(readq(base + PCI_BASE_ADDRESS_0) & ~0xffull,
+			  LS2K_DC_BAR_SIZE);
+	if (!regbase) {
+		pci_err(pdev, "Failed to ioremap\n");
+		return;
+	}
+
+	dc_reg = regbase + ((device == DEV_LS2K2000_DC) ? LS2K2000_DC_OFFSET :
+							  LS2K3000_DC_OFFSET);
+
+	for (i = 0; i < LS2K_DC_NUM_MAX; i++, dc_reg += crtc_offset) {
+		count = 0;
+
+		val = readl(dc_reg);
+
+		if (!open)
+			save_status[i] = val;
+
+		/* If the status is turned off at startup,
+		 * there is no need to fixup.
+		 */
+		if (!(save_status[i] & LS2K_DC_OUTPUT_ENABLE)) {
+			pci_info(pdev,
+				 "dma hangs no fixup at reg[0x%llx] : 0x%x\n",
+				 (u64)dc_reg & 0xffff, save_status[i]);
+			continue;
+		}
+
+		if (open)
+			val |= LS2K_DC_OUTPUT_ENABLE;
+		else
+			val &= ~LS2K_DC_OUTPUT_ENABLE;
+
+		/* ensure value active */
+		mb();
+		writel(val, dc_reg);
+
+		while (open ? (!(readl(dc_reg) & LS2K_DC_OUTPUT_ENABLE)) :
+			      (readl(dc_reg) & LS2K_DC_OUTPUT_ENABLE)) {
+			if (count++ > 50)
+				break;
+			udelay(1000);
+		}
+
+		pci_info(pdev, "dma hangs fixup at reg[0x%llx] : 0x%x\n",
+			 (u64)dc_reg & 0xffff, val);
+	}
+
+	iounmap(regbase);
+}
+
+static void loongson_dma_hangs_early_quirk(struct pci_dev *pdev)
+{
+	loongson_dma_hangs_fixup(pdev, false);
+}
+
+static void loongson_dma_hangs_final_quirk(struct pci_dev *pdev)
+{
+	loongson_dma_hangs_fixup(pdev, true);
+}
+
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_LOONGSON, DEV_LS2K2000_GPU,
+			loongson_dma_hangs_early_quirk);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_LOONGSON, DEV_LS2K3000_GPU,
+			loongson_dma_hangs_early_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, DEV_LS2K2000_GPU,
+			loongson_dma_hangs_final_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, DEV_LS2K3000_GPU,
+			loongson_dma_hangs_final_quirk);
+
+static void loongson_display_quirk(struct pci_dev *dev)
+{
+	u32 val;
+	u64 mask, size;
+	u64 max_size = 0;
+	int i, num = 0;
+	struct pci_bus *bus = dev->bus;
+
+	/* return if HT not exist */
+	if (cpu_pabits < 47)
+		return;
+
+	if (!dev->bus->number) {
+		if (!(dev->vendor == PCI_VENDOR_ID_LOONGSON &&
+		      (dev->device == 0x7a15 || dev->device == 0x7a25)))
+			return;
+	} else {
+		while (!pci_is_root_bus(bus->parent))
+			bus = bus->parent;
+
+		/* ensure slot is 7a2000 */
+		if (bus->self->vendor != PCI_VENDOR_ID_LOONGSON ||
+		    bus->self->device < 0x7a39)
+			return;
+	}
+
+	max_size = 0;
+	for (i = 0; i < DEVICE_COUNT_RESOURCE; i++) {
+		if (dev->resource[i].flags & IORESOURCE_MEM) {
+			size = dev->resource[i].end - dev->resource[i].start;
+			if (size > max_size) {
+				max_size = size;
+				num = i;
+			}
+		}
+	}
+
+	mask = ~(dev->resource[num].end - dev->resource[num].start);
+	val = (dev->resource[num].start >> (24 - 16)) |
+	      ((mask >> 24) & 0xffff);
+	writel(val, (void *)TO_UNCACHE(0xefdfb000174));
+	writel(0x80000000, (void *)TO_UNCACHE(0xefdfb000170));
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, 0x7a15, loongson_display_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_LOONGSON, 0x7a25, loongson_display_quirk);
+DECLARE_PCI_FIXUP_CLASS_FINAL(PCI_ANY_ID, PCI_ANY_ID,
+			      PCI_BASE_CLASS_DISPLAY, 16, loongson_display_quirk);
