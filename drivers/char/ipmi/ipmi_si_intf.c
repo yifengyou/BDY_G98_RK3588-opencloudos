@@ -1882,7 +1882,8 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 	}
 
 	if (!io->io_setup) {
-		if (io->addr_space == IPMI_IO_ADDR_SPACE) {
+		if (IS_ENABLED(CONFIG_HAS_IOPORT) &&
+		    io->addr_space == IPMI_IO_ADDR_SPACE) {
 			io->io_setup = ipmi_si_port_setup;
 		} else if (io->addr_space == IPMI_MEM_ADDR_SPACE) {
 			io->io_setup = ipmi_si_mem_setup;
@@ -2104,9 +2105,9 @@ static int __init init_ipmi_si(void)
 
 	ipmi_si_platform_init();
 
-	ipmi_si_ls2k500_init();
-
 	ipmi_si_pci_init();
+
+	ipmi_si_ls2k_init();
 
 	ipmi_si_parisc_init();
 
@@ -2289,9 +2290,9 @@ static void cleanup_ipmi_si(void)
 
 	ipmi_si_pci_shutdown();
 
-	ipmi_si_parisc_shutdown();
+	ipmi_si_ls2k_shutdown();
 
-	ipmi_si_ls2k500_shutdown();
+	ipmi_si_parisc_shutdown();
 
 	ipmi_si_platform_shutdown();
 
