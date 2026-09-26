@@ -38,7 +38,7 @@
 static inline void arch_atomic_##op(int i, atomic_t *v)			\
 {									\
 	__asm__ __volatile__(						\
-	"am"#asm_op".w" " $zero, %1, %0	\n"				\
+	"am"#asm_op"_db.w $zero, %1, %0\n"				\
 	: "+ZB" (v->counter)						\
 	: "r" (I)							\
 	: "memory");							\
@@ -198,7 +198,7 @@ static inline int arch_atomic_sub_if_positive(int i, atomic_t *v)
 static inline void arch_atomic64_##op(long i, atomic64_t *v)		\
 {									\
 	__asm__ __volatile__(						\
-	"am"#asm_op".d " " $zero, %1, %0	\n"			\
+	"am"#asm_op"_db.d $zero, %1, %0\n"				\
 	: "+ZB" (v->counter)						\
 	: "r" (I)							\
 	: "memory");							\
