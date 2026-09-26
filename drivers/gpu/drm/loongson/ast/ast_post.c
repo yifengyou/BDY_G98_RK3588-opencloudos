@@ -727,10 +727,9 @@ static void finetuneDQSI(struct ast_private *ast)
 					if (dlli > pass[dqidly][dqsip][1])
 						pass[dqidly][dqsip][1] =
 							(u16)dlli;
-				}
-				if (passcnt[dqsip] >= 5)
+				} else if (passcnt[dqsip] >= 5) {
 					break;
-				if (!cbr_scan3(ast)) {
+				} else {
 					pass[dqidly][dqsip][0] = 0xff;
 					pass[dqidly][dqsip][1] = 0x0;
 				}
