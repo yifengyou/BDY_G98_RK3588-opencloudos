@@ -49,7 +49,7 @@
 #define LOONGSON_PWM_CTRL_REG_DZONE	BIT(10) /* Anti-dead Zone Enable Bit */
 
 /* default input clk frequency for the ACPI case */
-#define LOONGSON_PWM_FREQ_DEFAULT	50000 /* Hz */
+#define LOONGSON_PWM_FREQ_DEFAULT	50000000 /* Hz */
 
 struct pwm_loongson_ddata {
 	struct pwm_chip	chip;
@@ -100,6 +100,14 @@ static void pwm_loongson_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 	struct pwm_loongson_ddata *ddata = to_pwm_loongson_ddata(chip);
 
 	val = pwm_loongson_readl(ddata, LOONGSON_PWM_REG_CTRL);
+	if (val & LOONGSON_PWM_CTRL_REG_INVERT) {
+		pwm_loongson_writel(ddata, 0, LOONGSON_PWM_REG_DUTY);
+	} else {
+		val = pwm_loongson_readl(ddata, LOONGSON_PWM_REG_PERIOD);
+		pwm_loongson_writel(ddata, val, LOONGSON_PWM_REG_DUTY);
+	}
+
+	val = pwm_loongson_readl(ddata, LOONGSON_PWM_REG_CTRL);
 	val &= ~LOONGSON_PWM_CTRL_REG_EN;
 	pwm_loongson_writel(ddata, val, LOONGSON_PWM_REG_CTRL);
 }
@@ -119,7 +127,7 @@ static int pwm_loongson_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 static int pwm_loongson_config(struct pwm_chip *chip, struct pwm_device *pwm,
 			       u64 duty_ns, u64 period_ns)
 {
-	u32 duty, period;
+	u64 duty, period;
 	struct pwm_loongson_ddata *ddata = to_pwm_loongson_ddata(chip);
 
 	/* duty = duty_ns * ddata->clk_rate / NSEC_PER_SEC */
