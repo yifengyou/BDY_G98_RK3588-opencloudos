@@ -1482,13 +1482,13 @@ struct rq {
 	ktime_t 		hrtick_time;
 #endif
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+	unsigned long long	rq_non_scx_cpu_time;
+#endif
 #ifdef CONFIG_SCHEDSTATS
 	/* latency stats */
 	struct sched_info	rq_sched_info;
 	unsigned long long	rq_cpu_time;
-#ifdef CONFIG_SCHED_CLASS_EXT
-	unsigned long long	rq_non_scx_cpu_time;
-#endif
 	/* sys_sched_yield() stats */
 	unsigned int		yld_count;
 

@@ -177,3 +177,11 @@ sphinx_*/
 # Tencent dist files
 /dist/rpm
 /dist/workdir
+
+# kdev
+/kernel-devel/
+/kernel-headers/
+/kos-debug/
+/kos/
+/release/
+
