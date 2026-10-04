@@ -110,6 +110,7 @@ struct rk_iommu {
 	struct clk_bulk_data *clocks;
 	int num_clocks;
 	bool reset_disabled;
+	bool enabled;
 	struct iommu_device iommu;
 	struct list_head node; /* entry in rk_iommu_domain.iommus */
 	struct iommu_domain *domain; /* domain to which iommu is attached */
@@ -918,9 +919,9 @@ static void rk_iommu_disable(struct rk_iommu *iommu)
 	}
 	rk_iommu_disable_stall(iommu);
 	clk_bulk_disable(iommu->num_clocks, iommu->clocks);
-}
 
-/* Must be called with iommu powered on and attached */
+	iommu->enabled = false;
+}
 static int rk_iommu_enable(struct rk_iommu *iommu)
 {
 	struct iommu_domain *domain = iommu->domain;
@@ -952,6 +953,8 @@ out_disable_stall:
 	rk_iommu_disable_stall(iommu);
 out_disable_clocks:
 	clk_bulk_disable(iommu->num_clocks, iommu->clocks);
+	if (!ret)
+		iommu->enabled = true;
 	return ret;
 }
 
@@ -1316,7 +1319,10 @@ static int __maybe_unused rk_iommu_suspend(struct device *dev)
 {
 	struct rk_iommu *iommu = dev_get_drvdata(dev);
 
-	if (!iommu || iommu->domain == &rk_identity_domain)
+	if (!iommu || !iommu->enabled)
+		return 0;
+
+	if (iommu->domain == &rk_identity_domain)
 		return 0;
 
 	rk_iommu_disable(iommu);
@@ -1327,7 +1333,10 @@ static int __maybe_unused rk_iommu_resume(struct device *dev)
 {
 	struct rk_iommu *iommu = dev_get_drvdata(dev);
 
-	if (!iommu || iommu->domain == &rk_identity_domain)
+	if (!iommu || !iommu->enabled)
+		return 0;
+
+	if (iommu->domain == &rk_identity_domain)
 		return 0;
 
 	return rk_iommu_enable(iommu);
