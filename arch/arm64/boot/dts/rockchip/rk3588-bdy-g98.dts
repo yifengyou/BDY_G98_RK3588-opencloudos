@@ -564,9 +564,29 @@
 };
 
 /* ===== HDMI / Display ===== */
-/* NOTE: hdmi0, hdptxphy0, vop, vop_mmu, vp0 nodes are not present in this
- * upstream rk3588s.dtsi, so HDMI / VOP display output is unavailable here.
- */
+&hdptxphy_hdmi0 {
+	status = "okay";
+};
+
+&hdmi0 {
+	status = "okay";
+};
+
+&hdmi0_in_vp0 {
+	status = "okay";
+};
+
+&vop_mmu {
+	status = "okay";
+};
+
+&vop {
+	status = "okay";
+};
+
+&vp0_out_hdmi0 {
+	status = "okay";
+};
 
 /* ===== Other ===== */
 
