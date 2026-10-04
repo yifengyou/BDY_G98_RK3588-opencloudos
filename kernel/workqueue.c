@@ -3672,6 +3672,23 @@ bool cancel_delayed_work_sync(struct delayed_work *dwork)
 EXPORT_SYMBOL(cancel_delayed_work_sync);
 
 /**
+ * disable_delayed_work_sync - Disable, cancel and drain a delayed work item
+ * @dwork: delayed work item to disable
+ *
+ * Disable, cancel and drain a delayed work item. Equivalent to
+ * cancel_delayed_work_sync() in kernels without the full work-disable
+ * infrastructure.
+ *
+ * Return:
+ * %true if @dwork was pending, %false otherwise.
+ */
+bool disable_delayed_work_sync(struct delayed_work *dwork)
+{
+	return cancel_delayed_work_sync(dwork);
+}
+EXPORT_SYMBOL_GPL(disable_delayed_work_sync);
+
+/**
  * schedule_on_each_cpu - execute a function synchronously on each online CPU
  * @func: the function to call
  *

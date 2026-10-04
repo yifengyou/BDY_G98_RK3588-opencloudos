@@ -1,4 +1,4 @@
-name: bdy g98 OpenEuler linux-6.6
+name: bdy g98 OpenCloudOS linux-6.6
 
 on:
   repository_dispatch:
